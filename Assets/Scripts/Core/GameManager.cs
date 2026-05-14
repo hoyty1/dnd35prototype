@@ -219,6 +219,16 @@ public partial class GameManager : MonoBehaviour
     [SerializeField] private AIService _aiService;
     [SerializeField] private CombatFlowService _combatFlowService;
     [SerializeField] private EconomyService _economyService;
+    [SerializeField] private SummoningService _summoningService;
+    [SerializeField] private EncounterService _encounterService;
+    [SerializeField] private SpellApplicationService _spellApplicationService;
+
+    /// <summary>Centralized summoning service. Manages summoned creature lifecycle.</summary>
+    public SummoningService Summoning => _summoningService;
+    /// <summary>Centralized encounter service. Manages combat encounter lifecycle.</summary>
+    public EncounterService Encounters => _encounterService;
+    /// <summary>Centralized spell application service. Manages spell effect application and queries.</summary>
+    public SpellApplicationService SpellApplication => _spellApplicationService;
 
     private ConfusedBehaviorController _confusedBehaviorController;
     private CharmedBehaviorController _charmedBehaviorController;
@@ -477,6 +487,16 @@ public partial class GameManager : MonoBehaviour
             _economyService.PartyStash = PartyStash;
         else
             PartyStash = _economyService.PartyStash;
+
+        // ── New extracted services ──
+        _summoningService ??= gameObject.GetComponent<SummoningService>() ?? gameObject.AddComponent<SummoningService>();
+        _summoningService.Initialize(this, () => CombatUI);
+
+        _encounterService ??= gameObject.GetComponent<EncounterService>() ?? gameObject.AddComponent<EncounterService>();
+        _encounterService.Initialize(this, () => CombatUI);
+
+        _spellApplicationService ??= gameObject.GetComponent<SpellApplicationService>() ?? gameObject.AddComponent<SpellApplicationService>();
+        _spellApplicationService.Initialize(this, () => CombatUI, _conditionService);
 
         _confusedBehaviorController ??= new ConfusedBehaviorController();
         _charmedBehaviorController ??= new CharmedBehaviorController();
