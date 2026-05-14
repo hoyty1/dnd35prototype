@@ -173,7 +173,7 @@ public class StatusEffectManager : MonoBehaviour
             effect.IsTotalConcealment = false;
             effect.ConcealmentSource = spell.Name;
         }
-        else if (spell.SpellId == "displacement")
+        else if (spell.SpellId == SpellNames.DISPLACEMENT)
         {
             effect.MissChance = 50;
             effect.IsTotalConcealment = true;

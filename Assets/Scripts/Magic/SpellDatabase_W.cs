@@ -74,5 +74,70 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Wind wall deflection not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // WIND WALL  (PHB p.302)
+        // Evocation [Air]
+        // Level: Air 2, Cleric 3, Druid 3, Ranger 2, Sor/Wiz 3
+        // Components: V, S, M/DF (a tiny fan and a feather of an exotic bird)
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Effect: Wall up to 10 ft./level long and 5 ft./level high (S)
+        // Duration: 1 round/level
+        // Saving Throw: None; see text
+        // Spell Resistance: Yes
+        //
+        // An invisible vertical curtain of wind appears. It is 2 feet thick
+        // and of considerable strength. It is a roaring blast sufficient to
+        // blow away any bird smaller than an eagle, or tear papers and
+        // similar materials from unsuspecting hands. (An occupant of the
+        // wall takes 3d6 nonlethal damage if Tiny or smaller.)
+        //
+        // Tiny and smaller flying creatures cannot pass through the barrier.
+        // Loose materials and cloth garments fly upward when caught in it.
+        // Arrows and bolts are deflected upward and miss, while bigger
+        // ranged weapons (such as spears) and gases (such as a dragon's
+        // breath weapon or a cloudkill cloud) are unaffected.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.WIND_WALL,
+                    Name = "Wind Wall",
+                    Description = "Evocation [Air]. An invisible vertical wall of wind up to 10 ft/level long and 5 ft/level high. "
+                        + "Deflects arrows, bolts, and tiny/smaller flying creatures (cannot pass). Disperses gases and fog. "
+                        + "Larger ranged weapons (spears, javelins) pass through unaffected. Tiny or smaller occupants take 3d6 nonlethal. "
+                        + "Duration 1 round/level. No save. SR: Yes. PHB p.302",
+                    SpellLevel = 3,
+                    School = "Evocation [Air]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Cleric", 3),
+                        new SpellAvailability("Druid", 3),
+                        new SpellAvailability("Ranger", 2),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Line,
+                    // Length scales 2 squares per CL (10 ft per CL); height 1 square per CL
+                    // Default placeholder size = 10 squares (50 ft) — runtime resolution scales by caster level
+                    AoESizeSquares = 10,
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 1, // legacy fallback; runtime uses scaled duration
+                    IsDismissible = false,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

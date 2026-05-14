@@ -1363,6 +1363,30 @@ public class CharacterController : MonoBehaviour
         return statusMgr != null ? Mathf.Max(0, statusMgr.GetRemainingRounds(SpellNames.BLUR)) : 0;
     }
 
+    /// <summary>
+    /// True if the character is currently affected by Displacement (PHB p.222),
+    /// which grants a 50% miss chance as if it had total concealment.
+    /// True Seeing negates this.
+    /// </summary>
+    public bool HasActiveDisplacementEffect
+    {
+        get
+        {
+            StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+            return statusMgr != null && statusMgr.HasEffect(SpellNames.DISPLACEMENT) && statusMgr.GetRemainingRounds(SpellNames.DISPLACEMENT) > 0;
+        }
+    }
+
+    /// <summary>
+    /// Returns the number of rounds remaining for the Displacement effect, or 0
+    /// if no Displacement effect is active.
+    /// </summary>
+    public int GetDisplacementRemainingRounds()
+    {
+        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        return statusMgr != null ? Mathf.Max(0, statusMgr.GetRemainingRounds(SpellNames.DISPLACEMENT)) : 0;
+    }
+
     public void ApplyMelfsAcidArrowEffect(int remainingDamageRounds, CharacterController caster)
     {
         int rounds = Mathf.Max(0, remainingDamageRounds);

@@ -1,6 +1,6 @@
 // ============================================================================
 // GameManager_NewSpells.cs — Resolution logic for Lightning Bolt, Fireball,
-// Daylight, Rage, and Hold Person spells (PHB 3.5e).
+// Daylight, Rage, Hold Person, Displacement, and Wind Wall spells (PHB 3.5e).
 // Part of the GameManager partial class.
 // ============================================================================
 using System.Collections.Generic;
@@ -315,5 +315,174 @@ public partial class GameManager
         Debug.Log($"[GameManager] Hold Person applied Paralyzed+Helpless to {target.Stats.CharacterName} for {holdRounds} rounds (CL {casterLevel})");
 
         return null;
+    }
+
+    // ================================================================
+    //  DISPLACEMENT — 50% Miss Chance Buff (PHB p.222)
+    // ================================================================
+
+    /// <summary>
+    /// Applies the Displacement spell effect to a target.
+    /// Per PHB p.222: Subject appears about 2 ft from its true location, gaining a
+    /// 50% miss chance as if it had total concealment. True Seeing negates this.
+    /// Duration: 1 round/level (D).
+    ///
+    /// The actual MissChance/IsTotalConcealment fields on the ActiveSpellEffect are
+    /// configured by StatusEffectManager.AddEffect (see StatusEffectManager.cs lines
+    /// where spell.SpellId == "displacement" sets MissChance=50).
+    /// Called from ApplySpellBuff when the spell matches.
+    /// </summary>
+    private ActiveSpellEffect ApplyDisplacementBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
+    {
+        CharacterController recipient = target ?? caster;
+        if (recipient == null || recipient.Stats == null || spell == null)
+            return null;
+
+        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        if (recipientStatusMgr == null)
+            recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+        recipientStatusMgr.Init(recipient.Stats);
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
+            spell,
+            caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,
+            casterLevel);
+
+        if (effect != null)
+        {
+            SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+            if (recipientSpellComp != null)
+                recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+            string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
+            bool selfCast = recipient == caster;
+            string castLine = selfCast
+                ? $"<color=#88FFEE>👻 {casterName} casts Displacement on self!</color>"
+                : $"<color=#88FFEE>👻 {casterName} casts Displacement on {recipient.Stats.CharacterName}!</color>";
+
+            CombatUI?.ShowCombatLog(castLine);
+            CombatUI?.ShowCombatLog($"<color=#A6F3FF>   {recipient.Stats.CharacterName}'s outline shimmers and shifts about 2 ft from its true position.</color>");
+            CombatUI?.ShowCombatLog($"<color=#A6F3FF>   Attacks against {recipient.Stats.CharacterName} have 50% miss chance ({effect.GetDurationDisplayString()}, {Mathf.Max(0, effect.RemainingRounds)} rounds). True Seeing negates.</color>");
+        }
+
+        UpdateAllStatsUI();
+        return effect;
+    }
+
+    // ================================================================
+    //  WIND WALL — Persistent Line Area Effect (PHB p.302)
+    // ================================================================
+
+    /// <summary>
+    /// Resolves Wind Wall spell: creates a WindWallAreaEffect along a line.
+    /// Per PHB p.302:
+    ///   - Wall up to 10 ft/level long and 5 ft/level high (S)
+    ///   - Duration: 1 round/level
+    ///   - Deflects arrows, bolts, and tiny/smaller flying creatures
+    ///   - Disperses gases and fog
+    ///   - Tiny or smaller occupants take 3d6 nonlethal damage
+    /// </summary>
+    private bool TryResolveWindWallSpell(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells,
+        out string log)
+    {
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (!string.Equals(spell.SpellId, SpellNames.WIND_WALL, System.StringComparison.Ordinal))
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+        // Length scales 2 squares per CL (10 ft per CL); use the AoE cells from targeting,
+        // but cap length to caster level squares for safety.
+        int maxLengthSquares = Mathf.Max(2, casterLevel * 2);
+
+        Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
+        Vector2Int centerCell = SquareGridUtils.WorldToGrid(centerPosition);
+
+        // Determine wall direction from caster facing (or from caster -> centerCell vector)
+        Vector2Int direction = ComputeWindWallDirection(caster.GridPosition, centerCell);
+
+        CreateWindWallArea(centerPosition, centerCell, maxLengthSquares, direction, durationRounds, casterLevel, caster, aoeCells);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"💨 {caster.Stats.CharacterName} casts Wind Wall!");
+        sb.AppendLine($"  Wall: {maxLengthSquares} squares long, {Mathf.Max(1, casterLevel)} squares high (5 ft/level)");
+        sb.AppendLine($"  Duration: {durationRounds} round(s)");
+        sb.AppendLine("  • Deflects arrows, bolts, and tiny/smaller flying creatures");
+        sb.AppendLine("  • Disperses gases and fog (Strong wind)");
+        sb.AppendLine("  • Larger ranged weapons (spears) pass through");
+        sb.AppendLine("  • Tiny or smaller occupants take 3d6 nonlethal damage");
+        sb.AppendLine("  • No save; SR: Yes");
+
+        if (targets != null && targets.Count > 0)
+        {
+            sb.Append("  In wall area: ");
+            for (int i = 0; i < targets.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(targets[i] != null && targets[i].Stats != null ? targets[i].Stats.CharacterName : "Unknown");
+            }
+            sb.AppendLine();
+        }
+
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
+        return true;
+    }
+
+    /// <summary>
+    /// Computes the wind wall facing direction (orthogonal Vector2Int) from
+    /// the caster towards the wall center cell. Defaults to East if degenerate.
+    /// </summary>
+    private Vector2Int ComputeWindWallDirection(Vector2Int casterCell, Vector2Int centerCell)
+    {
+        int dx = centerCell.x - casterCell.x;
+        int dy = centerCell.y - casterCell.y;
+
+        if (Mathf.Abs(dx) >= Mathf.Abs(dy))
+            return dx >= 0 ? new Vector2Int(1, 0) : new Vector2Int(-1, 0);
+
+        return dy >= 0 ? new Vector2Int(0, 1) : new Vector2Int(0, -1);
+    }
+
+    /// <summary>
+    /// Creates a WindWallAreaEffect at the specified position aligned along a line.
+    /// Provided cells (from targeting) are used as the wall's footprint when supplied;
+    /// otherwise we generate them along the perpendicular of the caster->center direction.
+    /// </summary>
+    public void CreateWindWallArea(
+        Vector3 centerPosition,
+        Vector2Int centerCell,
+        int lengthSquares,
+        Vector2Int direction,
+        int durationRounds,
+        int casterLevel,
+        CharacterController caster,
+        HashSet<Vector2Int> providedCells = null)
+    {
+        GameObject windWallObject = new GameObject("WindWall_Area");
+        windWallObject.transform.position = centerPosition;
+
+        WindWallAreaEffect windWall = windWallObject.AddComponent<WindWallAreaEffect>();
+        windWall.CenterPosition = centerPosition;
+        windWall.CenterCell = centerCell;
+        windWall.LengthSquares = Mathf.Max(2, lengthSquares);
+        windWall.HeightSquares = Mathf.Max(1, casterLevel);
+        windWall.WallDirection = direction == Vector2Int.zero ? new Vector2Int(1, 0) : direction;
+        windWall.RoundsRemaining = Mathf.Max(1, durationRounds);
+        windWall.CasterLevel = Mathf.Max(1, casterLevel);
+        windWall.Caster = caster;
+
+        if (providedCells != null && providedCells.Count > 0)
+            windWall.SetExplicitCells(providedCells);
     }
 }

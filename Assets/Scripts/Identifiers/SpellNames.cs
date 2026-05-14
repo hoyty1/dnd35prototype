@@ -597,5 +597,11 @@ namespace DND35e.Identifiers
         /// <summary>Rage (spell id: rage)</summary>
         public const string RAGE = "rage";
 
+        /// <summary>Displacement (spell id: displacement)</summary>
+        public const string DISPLACEMENT = "displacement";
+
+        /// <summary>Wind Wall (spell id: wind_wall)</summary>
+        public const string WIND_WALL = "wind_wall";
+
     }
 }

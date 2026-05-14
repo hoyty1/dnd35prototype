@@ -538,6 +538,62 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // DISPLACEMENT  (PHB p.222)
+        // Illusion (Glamer)
+        // Level: Bard 3, Sor/Wiz 3
+        // Components: V, M (a small loop of leather)
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Creature touched
+        // Duration: 1 round/level (D)
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        //
+        // The subject of this spell appears to be about 2 feet away from
+        // its true location. The creature benefits from a 50% miss chance
+        // as if it had total concealment. Unlike actual total concealment,
+        // displacement does not prevent enemies from targeting the creature
+        // normally. True seeing reveals its true location and negates the miss
+        // chance.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DISPLACEMENT,
+                    Name = "Displacement",
+                    Description = "Illusion (Glamer). Subject appears about 2 ft from its true location, gaining a 50% miss chance "
+                        + "as if it had total concealment. Does not prevent targeting; True Seeing negates. "
+                        + "Duration 1 round/level (D). Will negates (harmless). SR: Yes (harmless). PHB p.222",
+                    SpellLevel = 3,
+                    School = "Illusion (Glamer)",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 3),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    BuffBonusType = BonusType.Concealment,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 1, // legacy fallback; runtime uses scaled duration
+                    IsDismissible = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = false,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("detect_magic_clr", SpellNames.DETECT_MAGIC_WIZ, "Cleric", 0);
         RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);

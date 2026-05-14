@@ -39,4 +39,7 @@ public static class AreaEffectColors
     public static readonly Color AntimagicField = new Color(0.7f, 0.5f, 0.9f, 0.5f);
     public static readonly Color Silence = new Color(0.6f, 0.7f, 0.9f, 0.4f);
     public static readonly Color Glitterdust = new Color(1.0f, 0.84f, 0.2f, 0.45f);
+
+    // Wind / air
+    public static readonly Color WindWall = new Color(0.7f, 0.85f, 1.0f, 0.45f);
 }

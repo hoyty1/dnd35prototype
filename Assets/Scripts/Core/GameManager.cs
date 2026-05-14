@@ -14634,6 +14634,32 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            // Wind Wall — persistent line area effect that deflects ranged attacks and disperses fog/smoke
+            if (TryResolveWindWallSpell(caster, _pendingSpell, targets, aoeCells, out string windWallLog))
+            {
+                _lastCombatLog = windWallLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
             if (string.Equals(_pendingSpell.SpellId, SpellNames.HYPNOTISM, StringComparison.Ordinal))
             {
                 ResolveHypnotismSpell(caster, targets, aoeCells);
@@ -16781,6 +16807,11 @@ public partial class GameManager : MonoBehaviour
 
             UpdateAllStatsUI();
             return effect;
+        }
+
+        if (spell != null && spell.SpellId == SpellNames.DISPLACEMENT)
+        {
+            return ApplyDisplacementBuff(caster, target, spell, spellComp);
         }
 
         if (spell != null && spell.SpellId == SpellNames.RESIST_ENERGY)
