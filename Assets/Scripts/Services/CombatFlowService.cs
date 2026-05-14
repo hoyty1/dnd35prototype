@@ -1063,8 +1063,11 @@ public class CombatFlowService : MonoBehaviour
         {
             foreach (var eff in consumedAmmo.ActiveSpellEffects)
             {
-                if (eff != null && !string.IsNullOrEmpty(eff.BonusDamageDice))
+                if (eff == null) continue;
+                if (!string.IsNullOrEmpty(eff.BonusDamageDice))
                     enchantInfo += $" [+{eff.BonusDamageDice} {eff.BonusDamageType}]";
+                if (eff.CritThreatRangeModifier != 0)
+                    enchantInfo += $" [Keen]";
             }
         }
 

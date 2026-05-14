@@ -999,6 +999,7 @@ public partial class GameManager : MonoBehaviour
         _pendingAnimateRopeItem = null;
         _pendingMagicWeaponItem = null;
         _pendingKeenEdgeItem = null;
+        _pendingKeenEdgeIsAmmo = false;
         _pendingGreaterMagicWeaponItem = null;
         _pendingResistEnergyType = null;
         _pendingProtectionFromEnergyType = null;
@@ -10515,6 +10516,7 @@ public partial class GameManager : MonoBehaviour
         _pendingProtectionFromEnergyType = null;
         _pendingMagicWeaponItem = null;
         _pendingKeenEdgeItem = null;
+        _pendingKeenEdgeIsAmmo = false;
         _pendingGreaterMagicWeaponItem = null;
         _pendingDisguiseSelfRace = null;
         _pendingSummonSelection = null;
@@ -13392,6 +13394,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSpellFromHeldCharge = false;
             _pendingMagicWeaponItem = null;
             _pendingKeenEdgeItem = null;
+            _pendingKeenEdgeIsAmmo = false;
             _pendingGreaterMagicWeaponItem = null;
             _pendingResistEnergyType = null;
             _pendingProtectionFromEnergyType = null;

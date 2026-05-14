@@ -32,7 +32,8 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.KEEN_EDGE,
                     Name = "Keen Edge",
-                    Description = "Transmutation. Doubles the threat range of one slashing or piercing weapon. "
+                    Description = "Transmutation. Doubles the threat range of one slashing or piercing weapon, "
+                        + "or up to fifty projectiles. "
                         + "Does not stack with keen weapon property or Improved Critical feat. "
                         + "Duration 10 min/level. Components: V, S. PHB p.246",
                     SpellLevel = 3,

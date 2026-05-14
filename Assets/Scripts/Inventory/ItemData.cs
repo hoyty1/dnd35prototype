@@ -987,6 +987,12 @@ public class ItemData
                     string details = "";
                     if (!string.IsNullOrEmpty(eff.BonusDamageDice))
                         details += $" +{eff.BonusDamageDice} {eff.BonusDamageType}";
+                    if (eff.CritThreatRangeModifier != 0)
+                    {
+                        int ammoBaseThreat = CritThreatMin > 0 ? CritThreatMin : 20;
+                        int keenThreat = Mathf.Max(2, ammoBaseThreat + eff.CritThreatRangeModifier);
+                        details += $" Keen (threat {keenThreat}-20)";
+                    }
                     if (eff.EnhancementBonusAttack > 0 || eff.EnhancementBonusDamage > 0)
                         details += $" (+{eff.EnhancementBonusAttack} atk/+{eff.EnhancementBonusDamage} dmg)";
                     stats += $"\n{label}{details} ({eff.GetDurationDisplayString()}, {eff.EnchantedAmmoRemaining} enchanted)";
