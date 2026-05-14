@@ -175,6 +175,37 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Blink (PHB p.206) ──
+        // Transmutation. Sor/Wiz 3. Personal range. 1 round/level (D).
+        // Subject blinks back and forth between Material and Ethereal Plane.
+        // Defensive: 50% miss chance (20% if attacker can see invisible OR strike ethereal, 0% if both).
+        // Offensive: 20% miss chance on own attacks, +2 attack bonus (invisible), deny target Dex to AC.
+        // Spells targeting blinking creature: 50% failure. Area spells: half damage.
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.BLINK,
+                    Name = "Blink",
+                    Description = "You blink back and forth between the Material and Ethereal Planes. Attacks against you have a 50% miss chance. Your attacks have a 20% miss chance but gain +2 (invisible). Duration 1 round/level (D). PHB p.206",
+                    SpellLevel = 3,
+                    School = "Transmutation",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    BuffType = "blink",
+                    BuffBonusType = BonusType.Untyped,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.BLUR,

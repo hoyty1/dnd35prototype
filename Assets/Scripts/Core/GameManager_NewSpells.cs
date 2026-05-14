@@ -1,6 +1,6 @@
 // ============================================================================
 // GameManager_NewSpells.cs — Resolution logic for Lightning Bolt, Fireball,
-// Daylight, Rage, Hold Person, Displacement, Wind Wall, Invisibility Sphere,
+// Daylight, Rage, Hold Person, Displacement, Blink, Wind Wall, Invisibility Sphere,
 // Halt Undead, Ray of Exhaustion, Vampiric Touch, Flame Arrow, Keen Edge,
 // and Greater Magic Weapon spells (PHB 3.5e).
 // Part of the GameManager partial class.
@@ -109,9 +109,17 @@ public partial class GameManager
                 if (savePassed)
                     damage = Mathf.Max(0, damage / 2);
 
+                // D&D 3.5e PHB p.206: Blinking creatures take half damage from area attacks
+                // (they are partially on the Ethereal Plane). This stacks with Reflex halving.
+                bool targetIsBlinking = target.HasActiveBlinkEffect;
+                if (targetIsBlinking)
+                    damage = Mathf.Max(0, damage / 2);
+
                 damage = Mathf.Max(damage > 0 ? 1 : 0, damage);
 
                 sb.AppendLine($"  Reflex save: d20({reflexRoll}) + {reflexMod} = {reflexTotal} vs DC {saveDc} → {(savePassed ? "SAVED (half)" : "FAILED (full)")}");
+                if (targetIsBlinking)
+                    sb.AppendLine($"  Blink: area damage halved (target partially ethereal)");
 
                 int hpBefore = target.Stats.CurrentHP;
                 target.Stats.TakeDamage(damage);
@@ -367,6 +375,67 @@ public partial class GameManager
             CombatUI?.ShowCombatLog(castLine);
             CombatUI?.ShowCombatLog($"<color=#A6F3FF>   {recipient.Stats.CharacterName}'s outline shimmers and shifts about 2 ft from its true position.</color>");
             CombatUI?.ShowCombatLog($"<color=#A6F3FF>   Attacks against {recipient.Stats.CharacterName} have 50% miss chance ({effect.GetDurationDisplayString()}, {Mathf.Max(0, effect.RemainingRounds)} rounds). True Seeing negates.</color>");
+        }
+
+        UpdateAllStatsUI();
+        return effect;
+    }
+
+    // ================================================================
+    //  BLINK — Ethereal/Material Plane Shifting (PHB p.206)
+    // ================================================================
+
+    /// <summary>
+    /// Applies the Blink spell effect to the caster (Personal range).
+    /// Per PHB p.206: Subject blinks between Material and Ethereal Planes randomly.
+    ///
+    /// Defensive benefits:
+    ///   - 50% miss chance vs physical attacks (ethereal, not invisible)
+    ///   - 20% miss chance if attacker can see invisible OR strike ethereal
+    ///   - 0% miss chance if attacker can do BOTH
+    ///   - Blind-Fight feat doesn't help
+    ///   - 50% miss chance vs targeted spells
+    ///   - Half damage from area attacks
+    ///   - Half damage from falling
+    ///
+    /// Offensive penalties/bonuses:
+    ///   - 20% miss chance on own attacks
+    ///   - 20% failure chance on own spells
+    ///   - +2 attack bonus (strikes as invisible)
+    ///   - Denies target Dex bonus to AC
+    ///
+    /// Duration: 1 round/level (D).
+    /// </summary>
+    private ActiveSpellEffect ApplyBlinkBuff(CharacterController caster, SpellData spell, SpellcastingComponent spellComp)
+    {
+        if (caster == null || caster.Stats == null || spell == null)
+            return null;
+
+        StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
+        if (statusMgr == null)
+            statusMgr = caster.gameObject.AddComponent<StatusEffectManager>();
+        statusMgr.Init(caster.Stats);
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        ActiveSpellEffect effect = statusMgr.AddEffect(
+            spell,
+            caster.Stats.CharacterName,
+            casterLevel);
+
+        if (effect != null)
+        {
+            SpellcastingComponent casterSpellComp = caster.GetComponent<SpellcastingComponent>();
+            if (casterSpellComp != null)
+                casterSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+            // Apply the Blinking condition
+            caster.ApplyCondition(CombatConditionType.Blinking, effect.RemainingRounds, spell.Name);
+
+            string casterName = caster.Stats.CharacterName;
+            CombatUI?.ShowCombatLog($"<color=#88CCFF>✨ {casterName} casts Blink!</color>");
+            CombatUI?.ShowCombatLog($"<color=#A6D4FF>   {casterName} begins blinking between the Material and Ethereal Planes.</color>");
+            CombatUI?.ShowCombatLog($"<color=#A6D4FF>   Defensive: 50% miss chance vs attacks ({effect.GetDurationDisplayString()}).</color>");
+            CombatUI?.ShowCombatLog($"<color=#A6D4FF>   Offensive: 20% miss chance, but +2 attack & deny Dex to AC.</color>");
         }
 
         UpdateAllStatsUI();

@@ -693,6 +693,16 @@ public static class ConditionRules
             CoupDeGraceVulnerable = true
         });
 
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Blinking,
+            DisplayName = "Blinking",
+            ShortLabel = "BK",
+            Description = "Rapidly shifting between Material and Ethereal Planes. 50% miss chance vs attacks (reduced by attacker capabilities). Own attacks have 20% miss chance but gain +2 and deny Dex to AC.",
+            StackingRule = ConditionStackingRule.Refresh,
+            MovementMultiplier = 1f
+        });
+
         // Existing project-specific states retained.
         Add(new ConditionDefinition
         {

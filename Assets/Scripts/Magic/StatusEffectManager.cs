@@ -179,6 +179,15 @@ public class StatusEffectManager : MonoBehaviour
             effect.IsTotalConcealment = false;
             effect.ConcealmentSource = spell.Name;
         }
+        else if (spell.SpellId == SpellNames.BLINK)
+        {
+            // Blink's miss chance is handled dynamically in GetMissChance based on attacker capabilities.
+            // Base 50% miss chance, reduced to 20% if attacker can see invisible OR strike ethereal, 0% if both.
+            // We set MissChance=50 as the default and override in CharacterController.GetMissChance.
+            effect.MissChance = 50;
+            effect.IsTotalConcealment = false;
+            effect.ConcealmentSource = spell.Name;
+        }
         else if (spell.SpellId == SpellNames.INVISIBILITY
                  || spell.SpellId == SpellNames.INVISIBILITY_SPHERE
                  || spell.SpellId == "greater_invisibility"

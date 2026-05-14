@@ -163,6 +163,19 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (_character.HasActiveBlinkEffect)
+        {
+            int rounds = _character.GetBlinkRemainingRounds();
+            list.Add(new IconData
+            {
+                Key = "Blink",
+                ShortLabel = "BK",
+                Tooltip = $"Blink\nEthereal concealment (50% miss chance)\n20% miss chance on own attacks\n+2 attack vs targets that can't see invisible\nDeny target Dex to AC\n20% spell failure on own spells\nHalf damage from area attacks\nDuration: {rounds} rounds",
+                Color = new Color(0.55f, 0.40f, 0.95f, 0.92f),
+                Duration = rounds
+            });
+        }
+
         if (statusMgr != null && statusMgr.HasEffect(SpellNames.SEE_INVISIBLE))
         {
             int rounds = statusMgr.GetRemainingRounds(SpellNames.SEE_INVISIBLE);

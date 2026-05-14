@@ -47,6 +47,8 @@ public enum CombatConditionType
     Turned,
     Unconscious,
 
+    Blinking,
+
     // Existing project tactical / status states
     Poisoned,
     Bleeding,

@@ -57,6 +57,9 @@ namespace DND35e.Identifiers
         /// <summary>Blindness/Deafness - Bard variant (spell id: blindness_deafness_brd)</summary>
         public const string BLINDNESS_DEAFNESS_BRD = "blindness_deafness_brd";
 
+        /// <summary>Blink (spell id: blink)</summary>
+        public const string BLINK = "blink";
+
         /// <summary>Blur (spell id: blur)</summary>
         public const string BLUR = "blur";
 

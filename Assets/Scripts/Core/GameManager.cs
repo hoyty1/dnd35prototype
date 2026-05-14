@@ -13574,6 +13574,54 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            // D&D 3.5e PHB p.206: Blinking caster has a 20% spell failure chance.
+            // The caster may be on the Ethereal Plane when the spell is cast, causing it to fizzle.
+            // This is checked separately from (and in addition to) arcane spell failure from armor.
+            if (caster.HasActiveBlinkEffect)
+            {
+                int blinkSpellRoll = UnityEngine.Random.Range(1, 101);
+                if (blinkSpellRoll <= 20)
+                {
+                    bool consumedOnBlink = ConsumePendingSpellSlot(
+                        spellComp,
+                        _pendingSpell,
+                        _pendingMetamagic,
+                        hasMetamagicApplied,
+                        slotLevelToConsume,
+                        isSpontaneous,
+                        spontaneousLevel,
+                        spontaneousSacrificedSpellId);
+
+                    if (!consumedOnBlink)
+                    {
+                        ClearSpellcastResourceSnapshot();
+                        Debug.LogError($"[GameManager] Blink spell failure path: failed to consume level {slotLevelToConsume} spell slot!");
+                        ShowActionChoices();
+                        return;
+                    }
+
+                    HandleConcentrationOnCasting(caster, _pendingSpell);
+                    CombatUI?.ShowCombatLog($"⚡ {caster.Stats.CharacterName}'s {_pendingSpell.Name} fizzles! (Blink spell failure: rolled {blinkSpellRoll} ≤ 20%)");
+                    UpdateAllStatsUI();
+                    Grid.ClearAllHighlights();
+
+                    _pendingSpell = null;
+                    _pendingSpellFromHeldCharge = false;
+                    _pendingMetamagic = null;
+                    _pendingAnimateRopeItem = null;
+                    _pendingResistEnergyType = null;
+                    _pendingProtectionFromEnergyType = null;
+
+                    ClearSpellcastResourceSnapshot();
+                    StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                    return;
+                }
+                else
+                {
+                    CombatUI?.ShowCombatLog($"⚡ Blink spell check: {caster.Stats.CharacterName} rolled {blinkSpellRoll} > 20% (spell proceeds).");
+                }
+            }
+
             // Consume spell slot
             // Cantrips are unlimited — CastSpellFromSlot handles this (no slot consumed)
             // Both Wizards and Clerics use slot-based system
@@ -13672,6 +13720,41 @@ public partial class GameManager : MonoBehaviour
 
                 StartCoroutine(AfterAttackDelay(caster, 1.0f));
                 return;
+            }
+
+            // ── BLINK TARGET SPELL FAILURE ──
+            // D&D 3.5e PHB p.206: Individually targeted spells have a 50% chance
+            // to fail against a blinking creature (the target may be on the Ethereal Plane).
+            // This does not apply to area spells or self-targeted spells.
+            if (target != null && target != caster && target.HasActiveBlinkEffect
+                && _pendingSpell.TargetType != SpellTargetType.Self
+                && _pendingSpell.TargetType != SpellTargetType.Area)
+            {
+                int blinkTargetRoll = UnityEngine.Random.Range(1, 101);
+                if (blinkTargetRoll <= 50)
+                {
+                    string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+                    CombatUI?.ShowCombatLog($"🌀 {_pendingSpell.Name} fails to reach {targetName}! Target is on the Ethereal Plane. (Blink: rolled {blinkTargetRoll} ≤ 50%)");
+                    UpdateAllStatsUI();
+                    Grid.ClearAllHighlights();
+
+                    _pendingSpell = null;
+                    _pendingSpellFromHeldCharge = false;
+                    _pendingMetamagic = null;
+                    _pendingAnimateRopeItem = null;
+                    _pendingResistEnergyType = null;
+                    _pendingProtectionFromEnergyType = null;
+                    _pendingDisguiseSelfRace = null;
+                    ResetPendingGreaseCastMode();
+
+                    StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                    return;
+                }
+                else
+                {
+                    string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+                    CombatUI?.ShowCombatLog($"🌀 Blink target check: {targetName} rolled {blinkTargetRoll} > 50% (spell connects).");
+                }
             }
 
             SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, forceTargetToFailSave, caster, target);
@@ -16887,6 +16970,11 @@ public partial class GameManager : MonoBehaviour
         if (spell != null && spell.SpellId == SpellNames.DISPLACEMENT)
         {
             return ApplyDisplacementBuff(caster, target, spell, spellComp);
+        }
+
+        if (spell != null && spell.SpellId == SpellNames.BLINK)
+        {
+            return ApplyBlinkBuff(caster, spell, spellComp);
         }
 
         if (spell != null && spell.SpellId == SpellNames.RESIST_ENERGY)
@@ -22032,6 +22120,18 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
+        // D&D 3.5e: Blinking NPC caster has 20% spell failure chance
+        if (npc.HasActiveBlinkEffect)
+        {
+            int blinkNpcRoll = UnityEngine.Random.Range(1, 101);
+            if (blinkNpcRoll <= 20)
+            {
+                CombatUI?.ShowCombatLog($"⚡ {npc.Stats.CharacterName}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkNpcRoll} ≤ 20%)");
+                UpdateAllStatsUI();
+                return true;
+            }
+        }
+
         BreakInvisibilityOnHostileSpellCast(npc, spell, target, null);
 
         // ── COUNTERSPELL CHECK (NPC spell cast path) ──
@@ -22052,6 +22152,21 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog(_lastCombatLog);
             UpdateAllStatsUI();
             return true;
+        }
+
+        // D&D 3.5e: 50% chance targeted spell fails against blinking target (NPC path)
+        if (target != null && target != npc && target.HasActiveBlinkEffect
+            && spell.TargetType != SpellTargetType.Self
+            && spell.TargetType != SpellTargetType.Area)
+        {
+            int blinkTargetRoll = UnityEngine.Random.Range(1, 101);
+            if (blinkTargetRoll <= 50)
+            {
+                string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+                CombatUI?.ShowCombatLog($"🌀 {spell.Name} fails to reach {targetName}! Target is on the Ethereal Plane. (Blink: rolled {blinkTargetRoll} ≤ 50%)");
+                UpdateAllStatsUI();
+                return true;
+            }
         }
 
         SpellResult result = SpellCaster.Cast(spell, npc.Stats, target.Stats, null, skipFriendlyTouchAttackRoll, forceTargetToFailSave, npc, target);
@@ -22187,6 +22302,10 @@ public partial class GameManager : MonoBehaviour
             bool saveSuccess = saveTotal >= 12;
             int damageToApply = saveSuccess ? Mathf.FloorToInt(rawDamage * 0.5f) : rawDamage;
 
+            // D&D 3.5e: Blinking creatures take half damage from area attacks
+            if (victim.HasActiveBlinkEffect)
+                damageToApply = Mathf.Max(damageToApply > 0 ? 1 : 0, damageToApply / 2);
+
             DamagePacket packet = new DamagePacket
             {
                 RawDamage = damageToApply,
@@ -22201,7 +22320,8 @@ public partial class GameManager : MonoBehaviour
             DamageResolutionResult mitigation = victim.Stats.ApplyIncomingDamage(damageToApply, packet);
             int finalDamage = mitigation.FinalDamage;
 
-            CombatUI?.ShowCombatLog($"   {victim.Stats.CharacterName}: Reflex d20({saveRoll}) + {victim.Stats.ReflexSave} = {saveTotal} {(saveSuccess ? "SUCCESS" : "FAIL")} | Acid {finalDamage} damage");
+            string blinkAreaNote = victim.HasActiveBlinkEffect ? " [Blink: halved]" : "";
+            CombatUI?.ShowCombatLog($"   {victim.Stats.CharacterName}: Reflex d20({saveRoll}) + {victim.Stats.ReflexSave} = {saveTotal} {(saveSuccess ? "SUCCESS" : "FAIL")} | Acid {finalDamage} damage{blinkAreaNote}");
 
             if (finalDamage > 0)
                 CheckConcentrationOnDamage(victim, finalDamage);

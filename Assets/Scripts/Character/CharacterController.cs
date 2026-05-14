@@ -1387,6 +1387,104 @@ public class CharacterController : MonoBehaviour
         return statusMgr != null ? Mathf.Max(0, statusMgr.GetRemainingRounds(SpellNames.DISPLACEMENT)) : 0;
     }
 
+    /// <summary>
+    /// True if the character is currently affected by Blink (PHB p.206),
+    /// rapidly shifting between Material and Ethereal Planes.
+    /// </summary>
+    public bool HasActiveBlinkEffect
+    {
+        get
+        {
+            StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+            return statusMgr != null && statusMgr.HasEffect(SpellNames.BLINK) && statusMgr.GetRemainingRounds(SpellNames.BLINK) > 0;
+        }
+    }
+
+    /// <summary>
+    /// Returns the number of rounds remaining for the Blink effect, or 0 if not active.
+    /// </summary>
+    public int GetBlinkRemainingRounds()
+    {
+        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        return statusMgr != null ? Mathf.Max(0, statusMgr.GetRemainingRounds(SpellNames.BLINK)) : 0;
+    }
+
+    /// <summary>
+    /// Calculates the Blink miss chance an attacker faces when attacking this blinking target.
+    /// Per PHB p.206:
+    ///   - Base 50% miss chance
+    ///   - 20% if attacker can see invisible OR strike ethereal (not both)
+    ///   - 0% if attacker can do BOTH (see invisible AND strike ethereal)
+    ///   - Blind-Fight feat does NOT help (target is ethereal, not merely invisible)
+    /// </summary>
+    public int GetBlinkMissChanceAgainst(CharacterController attacker)
+    {
+        if (!HasActiveBlinkEffect)
+            return 0;
+
+        bool canSeeInvisible = attacker != null && attacker.CanSeeInvisible(this);
+        bool canStrikeEthereal = attacker != null && attacker.HasGhostTouchWeapon();
+
+        if (canSeeInvisible && canStrikeEthereal)
+            return 0;   // Both: no miss chance
+        if (canSeeInvisible || canStrikeEthereal)
+            return 20;  // One of the two: reduced miss chance
+        return 50;       // Neither: full miss chance
+    }
+
+    /// <summary>
+    /// Returns true if this character has a Ghost Touch weapon equipped (can strike ethereal creatures).
+    /// Used for Blink miss chance reduction.
+    /// </summary>
+    public bool HasGhostTouchWeapon()
+    {
+        // Check equipped weapon for the Ghost Touch enchantment.
+        // Ghost Touch allows striking incorporeal/ethereal creatures.
+        // Uses VisualTags on ItemData for extensible enchantment tagging.
+        if (Stats == null) return false;
+        var mainWeapon = GetEquippedWeapon();
+        if (mainWeapon != null && mainWeapon.VisualTags != null && mainWeapon.VisualTags.Contains("ghost_touch"))
+            return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Returns the Blink attacker's own miss chance (20%) when attacking while blinking.
+    /// PHB p.206: The blinking creature's own attacks have a 20% miss chance.
+    /// </summary>
+    public int GetBlinkAttackerMissChance()
+    {
+        return HasActiveBlinkEffect ? 20 : 0;
+    }
+
+    /// <summary>
+    /// Returns +2 attack bonus for a blinking attacker (strikes as if invisible).
+    /// PHB p.206: Since the blinking creature is etheral, it appears invisible (briefly).
+    /// </summary>
+    public int GetBlinkAttackerBonus(CharacterController target)
+    {
+        if (!HasActiveBlinkEffect)
+            return 0;
+        // If the target can see invisible, no bonus
+        if (target != null && target.CanSeeInvisible(this))
+            return 0;
+        return 2;
+    }
+
+    /// <summary>
+    /// Returns true if a blinking attacker should deny the target's Dex bonus to AC.
+    /// PHB p.206: Blinking creature strikes as invisible.
+    /// </summary>
+    public bool BlinkDeniesDexToAC(CharacterController target)
+    {
+        if (!HasActiveBlinkEffect)
+            return false;
+        // If the target can see invisible creatures, they keep Dex
+        if (target != null && target.CanSeeInvisible(this))
+            return false;
+        return true;
+    }
+
     public void ApplyMelfsAcidArrowEffect(int remainingDamageRounds, CharacterController caster)
     {
         int rounds = Mathf.Max(0, remainingDamageRounds);
@@ -5755,6 +5853,11 @@ public class CharacterController : MonoBehaviour
         int invisibleAttackerBonus = GetInvisibleAttackerBonus(target);
         bool attackerWasInvisible = invisibleAttackerBonus > 0;
 
+        // D&D 3.5e PHB p.257: Blink grants +2 attack bonus (as if invisible) against targets
+        // that cannot see invisible creatures. Does NOT break on attack (unlike standard invisibility).
+        int blinkAttackerBonus = GetBlinkAttackerBonus(target);
+        bool blinkDenyDex = BlinkDeniesDexToAC(target);
+
         // D&D 3.5e PHB p.141: Defender who can't see attacker loses Dex bonus to AC.
         // Capture BEFORE breaking invisibility.
         bool denyTargetDexFromInvisibility = ShouldDenyTargetDexToAC(target);
@@ -5764,7 +5867,14 @@ public class CharacterController : MonoBehaviour
             deniedDexFromInvisibility = GetDexBonusAppliedToArmorClass(target);
         }
 
-        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus;
+        // Blink deny Dex to AC (stacks with invisibility deny — take the larger denied amount)
+        int deniedDexFromBlink = 0;
+        if (blinkDenyDex && target != null && target.Stats != null)
+        {
+            deniedDexFromBlink = GetDexBonusAppliedToArmorClass(target);
+        }
+
+        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus;
 
         // D&D 3.5e: making an attack roll (or attempting to attack) breaks standard invisibility.
         // Greater Invisibility does NOT break on attack (BreaksOnAttack=false).
@@ -5796,10 +5906,30 @@ public class CharacterController : MonoBehaviour
                 : $"{result.SpecialAttackNote} {note}";
         }
 
+        // Blink deny Dex to AC — only apply if it exceeds what invisibility already denied.
+        if (deniedDexFromBlink > 0 && deniedDexFromBlink > deniedDexFromInvisibility)
+        {
+            int additionalDexDenied = deniedDexFromBlink - deniedDexFromInvisibility;
+            targetAC -= additionalDexDenied;
+            string note = $"Blinking attacker: target denied DEX bonus to AC (-{deniedDexFromBlink}).";
+            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                ? note
+                : $"{result.SpecialAttackNote} {note}";
+        }
+
         // Log invisible attacker bonus in the attack note
         if (attackerWasInvisible)
         {
             string note = $"Invisible attacker: +{invisibleAttackerBonus} attack bonus.";
+            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                ? note
+                : $"{result.SpecialAttackNote} {note}";
+        }
+
+        // Log Blink attacker bonus
+        if (blinkAttackerBonus > 0)
+        {
+            string note = $"Blinking attacker: +{blinkAttackerBonus} attack bonus (target cannot see invisible).";
             result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
                 ? note
                 : $"{result.SpecialAttackNote} {note}";
@@ -5999,6 +6129,38 @@ public class CharacterController : MonoBehaviour
                         result.FinalDamageDealt = 0;
                         return result;
                     }
+                }
+            }
+
+            // ── Blink attacker 20% miss chance ──
+            // D&D 3.5e PHB p.206: While blinking, the attacker has a 20% chance of
+            // striking while on the Ethereal Plane, causing the attack to miss.
+            // This is separate from target concealment and applies even if concealment
+            // was bypassed. It represents the attacker's own planar instability.
+            int blinkAttackerMissChance = GetBlinkAttackerMissChance();
+            if (blinkAttackerMissChance > 0)
+            {
+                int blinkRoll = Random.Range(1, 101);
+                if (blinkRoll <= blinkAttackerMissChance)
+                {
+                    result.Hit = false;
+                    result.MissedDueToConcealment = true;
+                    result.Damage = 0;
+                    result.BaseDamageRoll = 0;
+                    result.RawTotalDamage = 0;
+                    result.FinalDamageDealt = 0;
+                    string blinkNote = $"Blink miss: attacker was ethereal when striking ({blinkAttackerMissChance}% chance, rolled {blinkRoll}).";
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? blinkNote
+                        : $"{result.SpecialAttackNote} {blinkNote}";
+                    return result;
+                }
+                else
+                {
+                    string blinkNote = $"Blink attacker roll: {blinkRoll} vs {blinkAttackerMissChance}% (attack proceeds).";
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? blinkNote
+                        : $"{result.SpecialAttackNote} {blinkNote}";
                 }
             }
 
@@ -7482,6 +7644,18 @@ public class CharacterController : MonoBehaviour
         if (effect == null)
             return 0;
 
+        // ── Blink: ethereal concealment, NOT visual ──
+        // Blinded attackers still face Blink miss chance (it's planar, not sight-based).
+        // Blind-Fight feat does not help against Blink either.
+        // Dynamic miss chance: 50% base, reduced to 20% if attacker can see invisible
+        // OR has ghost touch weapon, reduced to 0% if attacker has BOTH.
+        if (IsBlinkConcealmentEffect(effect))
+        {
+            if (attacker != null)
+                return GetBlinkMissChanceAgainst(attacker);
+            return Mathf.Clamp(effect.MissChance, 0, 100); // fallback to base 50%
+        }
+
         // Opponents who cannot see the subject ignore visual concealment effects such as Blur/Invisibility.
         // They still suffer their own blinded miss chance elsewhere in attack resolution.
         if (attacker != null && attacker.HasCondition(CombatConditionType.Blinded))
@@ -7522,6 +7696,18 @@ public class CharacterController : MonoBehaviour
         return string.Equals(spellId, SpellNames.INVISIBILITY, StringComparison.Ordinal)
                || string.Equals(spellId, "greater_invisibility", StringComparison.Ordinal)
                || string.Equals(spellId, "improved_invisibility", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Returns true if this ActiveSpellEffect is from the Blink spell.
+    /// Blink concealment is ethereal, not visual — it is NOT negated by blinded attackers
+    /// and its miss chance is dynamic based on attacker capabilities.
+    /// </summary>
+    private static bool IsBlinkConcealmentEffect(ActiveSpellEffect effect)
+    {
+        if (effect == null || effect.Spell == null)
+            return false;
+        return string.Equals(effect.Spell.SpellId, SpellNames.BLINK, StringComparison.Ordinal);
     }
 
     /// <summary>
