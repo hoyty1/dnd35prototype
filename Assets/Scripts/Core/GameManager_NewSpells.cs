@@ -1031,9 +1031,11 @@ public partial class GameManager
     // ================================================================
     //  FLAME ARROW — PHB 3.5e p.231
     //  Transmutation [Fire]. Sor/Wiz 3.
-    //  Targets up to 50 projectiles in caster's inventory.
+    //  Targets up to 50 projectiles (arrows, bolts, sling bullets, or
+    //  any other ammunition) in caster's inventory.
     //  Each deals +1d6 fire damage when shot.
     //  Duration: 10 min/level or until all charges discharged.
+    //  Does NOT apply to versatile throwing weapons (daggers, javelins).
     // ================================================================
 
     private static bool IsFlameArrowSpell(SpellData spell)
@@ -1042,8 +1044,10 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Resolves Flame Arrow by finding ammunition in the caster's inventory
-    /// and applying an ItemSpellEffect with BonusDamageDice="1d6", DamageType=fire.
+    /// Resolves Flame Arrow by finding all ammunition (arrows, bolts, sling bullets, etc.)
+    /// in the caster's inventory and applying an ItemSpellEffect with BonusDamageDice="1d6",
+    /// DamageType=fire. Works on any ItemType.Ammunition projectile; excludes versatile
+    /// throwing weapons (items that can be both thrown and used in melee, e.g. daggers, javelins).
     /// </summary>
     private bool TryResolveFlameArrowSpell(CharacterController caster, SpellData spell)
     {
@@ -1057,20 +1061,21 @@ public partial class GameManager
             return true;
         }
 
-        // Find all ammunition stacks in inventory
+        // Find all ammunition stacks in inventory (arrows, bolts, sling bullets, etc.)
+        // Exclude versatile throwing weapons (IsThrown items that can also be used in melee)
         var ammoStacks = new List<ItemData>();
         if (inventory.GeneralSlots != null)
         {
             foreach (var item in inventory.GeneralSlots)
             {
-                if (item != null && item.IsAmmunition && item.HasAmmoRemaining)
+                if (item != null && item.Type == ItemType.Ammunition && item.HasAmmoRemaining && !item.IsThrown)
                     ammoStacks.Add(item);
             }
         }
 
         if (ammoStacks.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no ammunition in inventory to enchant with Flame Arrow.");
+            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no projectiles in inventory to enchant with Flame Arrow.");
             return true;
         }
 
