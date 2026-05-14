@@ -284,9 +284,9 @@ namespace Tests.Magic
             AssertTrue(ok, "Small Air Elemental definition matches MM stats");
 
             bool immunities = def != null
-                              && def.CreatureImmunities != null
-                              && def.CreatureImmunities.immuneToPoison
-                              && def.CreatureImmunities.immuneToCriticalHits;
+                              && def.Immunities != null
+                              && def.Immunities.immuneToPoison
+                              && def.Immunities.immuneToCriticalHits;
             AssertTrue(immunities, "Small Air Elemental has elemental immunities");
         }
 
@@ -303,8 +303,8 @@ namespace Tests.Magic
             AssertTrue(ok, "Small Fire Elemental definition matches MM stats");
 
             bool fireImmune = def != null
-                              && def.CreatureImmunities != null
-                              && def.CreatureImmunities.immuneToFire;
+                              && def.Immunities != null
+                              && def.Immunities.immuneToFire;
             AssertTrue(fireImmune, "Small Fire Elemental is immune to fire");
         }
 
@@ -322,9 +322,9 @@ namespace Tests.Magic
             AssertTrue(ok, "Small Earth Elemental definition matches MM stats");
 
             bool immunities = def != null
-                              && def.CreatureImmunities != null
-                              && def.CreatureImmunities.immuneToPoison
-                              && def.CreatureImmunities.immuneToCriticalHits;
+                              && def.Immunities != null
+                              && def.Immunities.immuneToPoison
+                              && def.Immunities.immuneToCriticalHits;
             AssertTrue(immunities, "Small Earth Elemental has elemental immunities");
         }
 
@@ -342,9 +342,9 @@ namespace Tests.Magic
             AssertTrue(ok, "Small Water Elemental definition matches MM stats");
 
             bool immunities = def != null
-                              && def.CreatureImmunities != null
-                              && def.CreatureImmunities.immuneToPoison
-                              && def.CreatureImmunities.immuneToCriticalHits;
+                              && def.Immunities != null
+                              && def.Immunities.immuneToPoison
+                              && def.Immunities.immuneToCriticalHits;
             AssertTrue(immunities, "Small Water Elemental has elemental immunities");
         }
 
@@ -375,8 +375,8 @@ namespace Tests.Magic
             AssertTrue(ok, "Hell Hound definition matches MM stats");
 
             bool fireImmune = def != null
-                              && def.CreatureImmunities != null
-                              && def.CreatureImmunities.immuneToFire;
+                              && def.Immunities != null
+                              && def.Immunities.immuneToFire;
             AssertTrue(fireImmune, "Hell Hound is immune to fire");
 
             bool hasBreath = HasSpecialAbility(def, "Breath Weapon");
@@ -397,12 +397,12 @@ namespace Tests.Magic
             AssertTrue(ok, "Dretch definition matches MM stats");
 
             bool poisonImmune = def != null
-                                && def.CreatureImmunities != null
-                                && def.CreatureImmunities.immuneToPoison;
+                                && def.Immunities != null
+                                && def.Immunities.immuneToPoison;
             AssertTrue(poisonImmune, "Dretch is immune to poison");
 
             bool hasDR = def != null
-                         && def.DamageReduction > 0;
+                         && def.DamageReductionAmount > 0;
             AssertTrue(hasDR, "Dretch has damage reduction");
         }
 

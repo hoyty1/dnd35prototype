@@ -188,7 +188,7 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Fortitude",
-                    AllowsSpellResistance = true
+                    SpellResistanceApplies = true
                 });
 
         // Ranger gets it at level 2

@@ -92,43 +92,27 @@ public static class AreaControlSpellsTests
 
     private static CharacterStats BuildWizardStats(string name, int level)
     {
-        var stats = new CharacterStats
-        {
-            CharacterName = name,
-            CharacterClass = "Wizard",
-            Level = level,
-            INT = 18, // +4 mod
-            DEX = 14, // +2 mod
-            CON = 12, // +1 mod
-            STR = 10,
-            WIS = 12,
-            CHA = 8,
-            BaseHP = 20,
-            MoveRange = 6,
-            IsPlayerCharacter = false
-        };
-        stats.HP = stats.BaseHP;
+        // Constructor: (name, level, class, str, dex, con, wis, int, cha, bab, armorBonus, shieldBonus, damageDice, damageCount, bonusDamage, baseSpeed, atkRange, baseHitDieHP)
+        var stats = new CharacterStats(
+            name, level, "Wizard",
+            10, 14, 12, 12, 18, 8,  // STR=10, DEX=14, CON=12, WIS=12, INT=18, CHA=8
+            0, 0, 0,                 // bab, armorBonus, shieldBonus
+            4, 1, 0,                 // damageDice, damageCount, bonusDamage
+            6, 1, 20                 // baseSpeed (squares), atkRange, baseHitDieHP=20
+        );
         return stats;
     }
 
     private static CharacterStats BuildFighterStats(string name, int level)
     {
-        var stats = new CharacterStats
-        {
-            CharacterName = name,
-            CharacterClass = "Fighter",
-            Level = level,
-            STR = 16, // +3 mod
-            DEX = 12, // +1 mod
-            CON = 14, // +2 mod
-            INT = 10,
-            WIS = 10,
-            CHA = 8,
-            BaseHP = 40,
-            MoveRange = 6,
-            IsPlayerCharacter = false
-        };
-        stats.HP = stats.BaseHP;
+        // Constructor: (name, level, class, str, dex, con, wis, int, cha, bab, armorBonus, shieldBonus, damageDice, damageCount, bonusDamage, baseSpeed, atkRange, baseHitDieHP)
+        var stats = new CharacterStats(
+            name, level, "Fighter",
+            16, 12, 14, 10, 10, 8,  // STR=16, DEX=12, CON=14, WIS=10, INT=10, CHA=8
+            level, 0, 0,            // bab=level, armorBonus, shieldBonus
+            8, 1, 3,                // damageDice, damageCount, bonusDamage (STR mod +3)
+            6, 1, 40                // baseSpeed (squares), atkRange, baseHitDieHP=40
+        );
         return stats;
     }
 
@@ -405,7 +389,7 @@ public static class AreaControlSpellsTests
         var go = new GameObject("TestNauseated");
         var cc = go.AddComponent<CharacterController>();
         cc.Stats = BuildFighterStats("TestFighter", 5);
-        cc.Stats.HP = cc.Stats.BaseHP;
+        cc.Stats.CurrentHP = cc.Stats.TotalMaxHP;
 
         // Apply nauseated
         cc.ApplyNauseatedCondition(3, "Test Source");
