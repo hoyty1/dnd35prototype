@@ -267,6 +267,54 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // FLAME ARROW  (PHB p.231)
+        // Transmutation [Fire]
+        // Level: Sor/Wiz 3, Druid 2 (prototype: Wizard/Sorcerer 3)
+        // Components: V, S, M (a drop of oil and a small piece of flint)
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Target: Fifty projectiles, all of which must be in contact with each other at the time of casting
+        // Duration: 10 min./level
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // You turn ammunition (such as arrows, bolts, shuriken, and stones)
+        // into fiery projectiles. Each piece of ammunition deals an extra
+        // 1d6 points of fire damage to any target it hits. A flaming
+        // projectile can easily ignite a flammable object or structure,
+        // but it won't ignite a creature it strikes.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.FLAME_ARROW,
+                    Name = "Flame Arrow",
+                    Description = "Transmutation [Fire]. Turns up to 50 projectiles into fiery projectiles. "
+                        + "Each deals an extra 1d6 fire damage on hit. Duration 10 min/level or until discharged. "
+                        + "Components: V, S, M (a drop of oil and a small piece of flint). PHB p.231",
+                    SpellLevel = 3,
+                    School = "Transmutation [Fire]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 100,
+                    SpellResistanceApplies = false,
+                    AllowsSavingThrow = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.FOXS_CUNNING,

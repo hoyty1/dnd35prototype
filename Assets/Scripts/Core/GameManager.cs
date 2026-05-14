@@ -998,6 +998,8 @@ public partial class GameManager : MonoBehaviour
         _pendingSpellFromHeldCharge = false;
         _pendingAnimateRopeItem = null;
         _pendingMagicWeaponItem = null;
+        _pendingKeenEdgeItem = null;
+        _pendingGreaterMagicWeaponItem = null;
         _pendingResistEnergyType = null;
         _pendingProtectionFromEnergyType = null;
         _pendingDisguiseSelfRace = null;
@@ -10512,6 +10514,8 @@ public partial class GameManager : MonoBehaviour
         _pendingResistEnergyType = null;
         _pendingProtectionFromEnergyType = null;
         _pendingMagicWeaponItem = null;
+        _pendingKeenEdgeItem = null;
+        _pendingGreaterMagicWeaponItem = null;
         _pendingDisguiseSelfRace = null;
         _pendingSummonSelection = null;
         _pendingSummonListLevel = 0;
@@ -13387,6 +13391,8 @@ public partial class GameManager : MonoBehaviour
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             _pendingMagicWeaponItem = null;
+            _pendingKeenEdgeItem = null;
+            _pendingGreaterMagicWeaponItem = null;
             _pendingResistEnergyType = null;
             _pendingProtectionFromEnergyType = null;
             ShowActionChoices();
@@ -13408,6 +13414,12 @@ public partial class GameManager : MonoBehaviour
         }
 
         if (TryHandleMagicWeaponWeaponSelection(caster, target))
+            return;
+
+        if (TryHandleKeenEdgeWeaponSelection(caster, target))
+            return;
+
+        if (TryHandleGreaterMagicWeaponSelection(caster, target))
             return;
 
         CaptureSpellcastResourceSnapshot(caster);
@@ -17014,6 +17026,32 @@ public partial class GameManager : MonoBehaviour
         if (spell != null && spell.SpellId == SpellNames.MAGIC_WEAPON)
         {
             TryApplyMagicWeaponToPendingItem(caster, target, spell);
+            UpdateAllStatsUI();
+            return null;
+        }
+
+        // ===== FLAME ARROW — PHB p.231 =====
+        // Self-targeting spell that enchants ammunition in caster's inventory.
+        if (spell != null && spell.SpellId == SpellNames.FLAME_ARROW)
+        {
+            TryResolveFlameArrowSpell(caster, spell);
+            return null;
+        }
+
+        // ===== KEEN EDGE — PHB p.246 =====
+        // Doubles threat range of one slashing/piercing weapon.
+        if (spell != null && spell.SpellId == SpellNames.KEEN_EDGE)
+        {
+            TryApplyKeenEdgeToPendingItem(caster, target, spell);
+            UpdateAllStatsUI();
+            return null;
+        }
+
+        // ===== GREATER MAGIC WEAPON — PHB p.251 =====
+        // +1 enhancement per 4 CL (max +5) to one weapon.
+        if (spell != null && spell.SpellId == SpellNames.GREATER_MAGIC_WEAPON)
+        {
+            TryApplyGreaterMagicWeaponToPendingItem(caster, target, spell);
             UpdateAllStatsUI();
             return null;
         }

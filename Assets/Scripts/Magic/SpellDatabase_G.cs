@@ -153,6 +153,54 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // GREATER MAGIC WEAPON  (PHB p.251)
+        // Transmutation
+        // Level: Clr 4, Pal 3, Sor/Wiz 3
+        // Components: V, S, M/DF (powdered lime and carbon)
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Target: One weapon or fifty projectiles (all in contact)
+        // Duration: 1 hour/level
+        // Saving Throw: Will negates (harmless, object)
+        // Spell Resistance: Yes (harmless, object)
+        //
+        // Gives a weapon an enhancement bonus of +1 per four caster
+        // levels (maximum +5). Cannot create a weapon with an effective
+        // bonus higher than +5 from enhancement alone.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.GREATER_MAGIC_WEAPON,
+                    Name = "Greater Magic Weapon",
+                    Description = "Transmutation. Gives weapon +1 enhancement bonus per 4 caster levels (max +5 at CL 20). "
+                        + "Duration 1 hour/level. Components: V, S, M/DF (powdered lime and carbon). PHB p.251",
+                    SpellLevel = 3,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Cleric", 4),
+                        new SpellAvailability("Paladin", 3),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 600,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.GUIDANCE,

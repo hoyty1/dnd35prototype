@@ -1,7 +1,8 @@
 // ============================================================================
 // GameManager_NewSpells.cs — Resolution logic for Lightning Bolt, Fireball,
 // Daylight, Rage, Hold Person, Displacement, Wind Wall, Invisibility Sphere,
-// Halt Undead, Ray of Exhaustion, and Vampiric Touch spells (PHB 3.5e).
+// Halt Undead, Ray of Exhaustion, Vampiric Touch, Flame Arrow, Keen Edge,
+// and Greater Magic Weapon spells (PHB 3.5e).
 // Part of the GameManager partial class.
 // ============================================================================
 using System;
@@ -1024,6 +1025,354 @@ public partial class GameManager
         }
 
         Debug.Log($"[GameManager] Vampiric Touch: {caster.Stats.CharacterName} dealt {damage} negative damage to {target.Stats.CharacterName}, gained {tempHP} temp HP (CL {casterLevel}, {diceCount}d6)");
+        return true;
+    }
+
+    // ================================================================
+    //  FLAME ARROW — PHB 3.5e p.231
+    //  Transmutation [Fire]. Sor/Wiz 3.
+    //  Targets up to 50 projectiles in caster's inventory.
+    //  Each deals +1d6 fire damage when shot.
+    //  Duration: 10 min/level or until all charges discharged.
+    // ================================================================
+
+    private static bool IsFlameArrowSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.FLAME_ARROW, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Flame Arrow by finding ammunition in the caster's inventory
+    /// and applying an ItemSpellEffect with BonusDamageDice="1d6", DamageType=fire.
+    /// </summary>
+    private bool TryResolveFlameArrowSpell(CharacterController caster, SpellData spell)
+    {
+        if (!IsFlameArrowSpell(spell) || caster == null || caster.Stats == null)
+            return false;
+
+        var inventory = Combat_GetCharacterInventory(caster);
+        if (inventory == null)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no inventory for Flame Arrow.");
+            return true;
+        }
+
+        // Find all ammunition stacks in inventory
+        var ammoStacks = new List<ItemData>();
+        if (inventory.GeneralSlots != null)
+        {
+            foreach (var item in inventory.GeneralSlots)
+            {
+                if (item != null && item.IsAmmunition && item.HasAmmoRemaining)
+                    ammoStacks.Add(item);
+            }
+        }
+
+        if (ammoStacks.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no ammunition in inventory to enchant with Flame Arrow.");
+            return true;
+        }
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        string casterName = caster.Stats.CharacterName;
+
+        int totalEnchanted = 0;
+        int maxProjectiles = 50;
+
+        foreach (var ammo in ammoStacks)
+        {
+            if (totalEnchanted >= maxProjectiles)
+                break;
+
+            int toEnchant = Mathf.Min(ammo.Quantity, maxProjectiles - totalEnchanted);
+
+            var effect = new ItemSpellEffect(spell.SpellId, spell.Name, casterName, casterLevel, durationRounds)
+            {
+                BonusDamageDice = "1d6",
+                BonusDamageType = "fire",
+                EnchantedAmmoRemaining = toEnchant
+            };
+
+            ammo.AddOrReplaceItemSpellEffect(effect);
+            totalEnchanted += toEnchant;
+        }
+
+        CombatUI?.ShowCombatLog($"<color=#FF8844>🔥 {casterName} casts Flame Arrow — {totalEnchanted} projectiles now deal +1d6 fire damage [{durationRounds} rounds].</color>");
+        Debug.Log($"[GameManager] Flame Arrow: {casterName} enchanted {totalEnchanted} projectiles with +1d6 fire, CL {casterLevel}, {durationRounds} rounds");
+
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    // ================================================================
+    //  KEEN EDGE — PHB 3.5e p.246
+    //  Transmutation. Sor/Wiz 3.
+    //  Doubles the threat range of one slashing/piercing weapon.
+    //  Duration: 10 min/level.
+    // ================================================================
+
+    private static bool IsKeenEdgeSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.KEEN_EDGE, StringComparison.Ordinal);
+    }
+
+    private ItemData _pendingKeenEdgeItem;
+
+    private bool TryHandleKeenEdgeWeaponSelection(CharacterController caster, CharacterController target)
+    {
+        if (!IsKeenEdgeSpell(_pendingSpell))
+        {
+            _pendingKeenEdgeItem = null;
+            return false;
+        }
+
+        if (target == null || target.Stats == null)
+            return false;
+
+        if (_pendingKeenEdgeItem != null)
+            return false;
+
+        if (!TryGetKeenEdgeWeaponOptions(target, out List<ItemData> weaponOptions, out List<string> weaponLabels))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no eligible slashing/piercing weapon for Keen Edge.");
+            _pendingSpell = null;
+            _pendingKeenEdgeItem = null;
+            ShowActionChoices();
+            return true;
+        }
+
+        if (weaponOptions.Count == 1)
+        {
+            _pendingKeenEdgeItem = weaponOptions[0];
+            return false;
+        }
+
+        CombatUI?.ShowPickUpItemSelection(
+            actorName: caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster",
+            itemOptions: weaponLabels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= weaponOptions.Count)
+                {
+                    _pendingSpell = null;
+                    _pendingKeenEdgeItem = null;
+                    ShowActionChoices();
+                    return;
+                }
+
+                _pendingKeenEdgeItem = weaponOptions[selectedIndex];
+                PerformSpellCast(caster, target);
+            },
+            onCancel: () =>
+            {
+                _pendingSpell = null;
+                _pendingKeenEdgeItem = null;
+                ShowActionChoices();
+            },
+            titleOverride: "Keen Edge - Select Weapon",
+            bodyOverride: $"Choose which slashing/piercing weapon from {target.Stats.CharacterName}'s inventory to sharpen.",
+            optionButtonColorOverride: new Color(0.24f, 0.34f, 0.56f, 1f));
+        return true;
+    }
+
+    private static bool TryGetKeenEdgeWeaponOptions(CharacterController target, out List<ItemData> weapons, out List<string> labels)
+    {
+        weapons = new List<ItemData>();
+        labels = new List<string>();
+
+        var inventory = target.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inventory == null)
+            return false;
+
+        TryAddKeenEdgeOption(inventory.RightHandSlot, "Right Hand", weapons, labels);
+        TryAddKeenEdgeOption(inventory.LeftHandSlot, "Left Hand", weapons, labels);
+        TryAddKeenEdgeOption(inventory.HandsSlot, "Hands", weapons, labels);
+
+        if (inventory.GeneralSlots != null)
+        {
+            for (int i = 0; i < inventory.GeneralSlots.Length; i++)
+            {
+                ItemData item = inventory.GeneralSlots[i];
+                if (item == null) continue;
+                TryAddKeenEdgeOption(item, $"Backpack Slot {i + 1}", weapons, labels);
+            }
+        }
+
+        return weapons.Count > 0;
+    }
+
+    private static void TryAddKeenEdgeOption(ItemData item, string locationLabel, List<ItemData> weapons, List<string> labels)
+    {
+        if (item == null || !item.IsWeapon || weapons == null || labels == null)
+            return;
+
+        // Keen Edge only works on slashing or piercing weapons
+        string dmgType = item.DamageType != null ? item.DamageType.ToLowerInvariant() : "";
+        bool isSlashing = dmgType.Contains("slashing");
+        bool isPiercing = dmgType.Contains("piercing");
+        if (!isSlashing && !isPiercing)
+            return;
+
+        int currentThreat = item.CritThreatMin > 0 ? item.CritThreatMin : 20;
+        weapons.Add(item);
+        labels.Add($"{item.Name} ({locationLabel}, threat {currentThreat}-20)");
+    }
+
+    private bool TryApplyKeenEdgeToPendingItem(CharacterController caster, CharacterController target, SpellData spell)
+    {
+        if (!IsKeenEdgeSpell(spell))
+            return false;
+
+        ItemData weapon = _pendingKeenEdgeItem;
+        _pendingKeenEdgeItem = null;
+
+        if (weapon == null)
+        {
+            CombatUI?.ShowCombatLog("⚠ Keen Edge failed: no weapon selected.");
+            return true;
+        }
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int rounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
+
+        // Calculate threat range doubling: the "threat range" is (21 - CritThreatMin).
+        // E.g. 19-20 = range 2, doubled = range 4, new min = 17.
+        // E.g. 20 = range 1, doubled = range 2, new min = 19.
+        int baseThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
+        int threatRange = 21 - baseThreatMin; // how many values threaten (e.g. 2 for 19-20)
+        int doubledRange = threatRange * 2;
+        int newThreatMin = 21 - doubledRange;
+        int critModifier = newThreatMin - baseThreatMin; // negative number to lower the min
+
+        var effect = new ItemSpellEffect(spell.SpellId, spell.Name, casterName, casterLevel, rounds)
+        {
+            CritThreatRangeModifier = critModifier
+        };
+
+        weapon.AddOrReplaceItemSpellEffect(effect);
+
+        string recipientName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
+        CombatUI?.ShowCombatLog($"<color=#88FFEE>🗡 {spell.Name} sharpens {recipientName}'s {weapon.Name}: threat range doubled to {newThreatMin}-20 [{effect.GetDurationDisplayString()}].</color>");
+        Debug.Log($"[GameManager] Keen Edge: {weapon.Name} threat {baseThreatMin}-20 → {newThreatMin}-20 (modifier {critModifier}), CL {casterLevel}");
+
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    // ================================================================
+    //  GREATER MAGIC WEAPON — PHB 3.5e p.251
+    //  Transmutation. Clr 4, Pal 3, Sor/Wiz 3.
+    //  +1 enhancement bonus per 4 CL (max +5).
+    //  Duration: 1 hour/level.
+    // ================================================================
+
+    private static bool IsGreaterMagicWeaponSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.GREATER_MAGIC_WEAPON, StringComparison.Ordinal);
+    }
+
+    private ItemData _pendingGreaterMagicWeaponItem;
+
+    private bool TryHandleGreaterMagicWeaponSelection(CharacterController caster, CharacterController target)
+    {
+        if (!IsGreaterMagicWeaponSpell(_pendingSpell))
+        {
+            _pendingGreaterMagicWeaponItem = null;
+            return false;
+        }
+
+        if (target == null || target.Stats == null)
+            return false;
+
+        if (_pendingGreaterMagicWeaponItem != null)
+            return false;
+
+        if (!TryGetMagicWeaponInventoryOptions(target, out List<ItemData> weaponOptions, out List<string> weaponLabels))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no weapon in inventory to enchant with Greater Magic Weapon.");
+            _pendingSpell = null;
+            _pendingGreaterMagicWeaponItem = null;
+            ShowActionChoices();
+            return true;
+        }
+
+        if (weaponOptions.Count == 1)
+        {
+            _pendingGreaterMagicWeaponItem = weaponOptions[0];
+            return false;
+        }
+
+        CombatUI?.ShowPickUpItemSelection(
+            actorName: caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster",
+            itemOptions: weaponLabels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= weaponOptions.Count)
+                {
+                    _pendingSpell = null;
+                    _pendingGreaterMagicWeaponItem = null;
+                    ShowActionChoices();
+                    return;
+                }
+
+                _pendingGreaterMagicWeaponItem = weaponOptions[selectedIndex];
+                PerformSpellCast(caster, target);
+            },
+            onCancel: () =>
+            {
+                _pendingSpell = null;
+                _pendingGreaterMagicWeaponItem = null;
+                ShowActionChoices();
+            },
+            titleOverride: "Greater Magic Weapon - Select Weapon",
+            bodyOverride: $"Choose which weapon from {target.Stats.CharacterName}'s inventory to enchant.",
+            optionButtonColorOverride: new Color(0.24f, 0.34f, 0.56f, 1f));
+        return true;
+    }
+
+    private bool TryApplyGreaterMagicWeaponToPendingItem(CharacterController caster, CharacterController target, SpellData spell)
+    {
+        if (!IsGreaterMagicWeaponSpell(spell))
+            return false;
+
+        ItemData weapon = _pendingGreaterMagicWeaponItem;
+        _pendingGreaterMagicWeaponItem = null;
+
+        if (weapon == null)
+        {
+            CombatUI?.ShowCombatLog("⚠ Greater Magic Weapon failed: no weapon selected.");
+            return true;
+        }
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int rounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
+
+        // Enhancement bonus = +1 per 4 CL, max +5
+        int enhancementBonus = Mathf.Min(5, Mathf.Max(1, casterLevel / 4));
+
+        var effect = new ItemSpellEffect(spell.SpellId, spell.Name, casterName, casterLevel, rounds)
+        {
+            BonusType = BonusType.Enhancement,
+            EnhancementBonusAttack = enhancementBonus,
+            EnhancementBonusDamage = enhancementBonus,
+            CountsAsMagicForBypass = true
+        };
+
+        weapon.AddOrReplaceItemSpellEffect(effect);
+
+        int effectiveAttackBonus = weapon.GetEnhancementAttackBonus();
+        int effectiveDamageBonus = weapon.GetEnhancementDamageBonus();
+        string recipientName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
+
+        CombatUI?.ShowCombatLog($"<color=#88FFEE>✨ {spell.Name} enchants {recipientName}'s {weapon.Name}: +{enhancementBonus} enhancement for {effect.GetDurationDisplayString()} (CL {casterLevel}).</color>");
+        CombatUI?.ShowCombatLog($"<color=#88FFEE>🗡 {weapon.Name} effective enhancement now +{Mathf.Max(effectiveAttackBonus, effectiveDamageBonus)} (attack +{effectiveAttackBonus}, damage +{effectiveDamageBonus}); counts as magic: yes.</color>");
+        Debug.Log($"[GameManager] Greater Magic Weapon: {weapon.Name} +{enhancementBonus} enhancement, CL {casterLevel}, {rounds} rounds");
+
+        UpdateAllStatsUI();
         return true;
     }
 }

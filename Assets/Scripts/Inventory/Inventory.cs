@@ -406,7 +406,17 @@ public class Inventory
         else
             OwnerStats.AttackRange = weapon.AttackRange;
 
-        OwnerStats.CritThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
+        int baseThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
+        // Apply CritThreatRangeModifier from active spell effects (e.g. Keen Edge)
+        if (weapon.ActiveSpellEffects != null)
+        {
+            foreach (var eff in weapon.ActiveSpellEffects)
+            {
+                if (eff != null && eff.CritThreatRangeModifier != 0)
+                    baseThreatMin += eff.CritThreatRangeModifier;
+            }
+        }
+        OwnerStats.CritThreatMin = Mathf.Clamp(baseThreatMin, 2, 20);
         OwnerStats.CritMultiplier = weapon.CritMultiplier > 0 ? weapon.CritMultiplier : 2;
     }
 

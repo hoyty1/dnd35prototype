@@ -615,5 +615,14 @@ namespace DND35e.Identifiers
         /// <summary>Wind Wall (spell id: wind_wall)</summary>
         public const string WIND_WALL = "wind_wall";
 
+        /// <summary>Flame Arrow (spell id: flame_arrow)</summary>
+        public const string FLAME_ARROW = "flame_arrow";
+
+        /// <summary>Keen Edge (spell id: keen_edge)</summary>
+        public const string KEEN_EDGE = "keen_edge";
+
+        /// <summary>Greater Magic Weapon (spell id: greater_magic_weapon)</summary>
+        public const string GREATER_MAGIC_WEAPON = "greater_magic_weapon";
+
     }
 }

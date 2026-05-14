@@ -835,7 +835,32 @@ public class ItemData
             int enhancementDamage = GetEnhancementDamageBonus();
             if (enhancementAttack > 0 || enhancementDamage > 0)
             {
-                stats += $"\nEnhancement: +{enhancementAttack} attack, +{enhancementDamage} damage";
+                stats += $"\nEnhancement: +{Mathf.Max(enhancementAttack, enhancementDamage)} Enhancement";
+            }
+
+            // Show detailed enchantment info from active spell effects on weapon
+            if (ActiveSpellEffects != null)
+            {
+                foreach (var eff in ActiveSpellEffects)
+                {
+                    if (eff == null) continue;
+
+                    // Keen Edge: show doubled threat range
+                    if (eff.CritThreatRangeModifier != 0)
+                    {
+                        int baseThreat = CritThreatMin > 0 ? CritThreatMin : 20;
+                        int keenThreat = Mathf.Max(2, baseThreat + eff.CritThreatRangeModifier);
+                        stats += $"\nKeen Edge: Critical {keenThreat}-20 (Doubled Threat Range) [{eff.GetDurationDisplayString()}]";
+                    }
+
+                    // Flame Arrow / bonus damage dice
+                    if (!string.IsNullOrEmpty(eff.BonusDamageDice))
+                    {
+                        string dmgType = string.IsNullOrEmpty(eff.BonusDamageType) ? "" : $" {eff.BonusDamageType}";
+                        string chargeInfo = eff.EnchantedAmmoRemaining > 0 ? $" ({eff.EnchantedAmmoRemaining} charges)" : "";
+                        stats += $"\n{eff.BonusDamageDice}{dmgType} Damage{chargeInfo} [{eff.GetDurationDisplayString()}]";
+                    }
+                }
             }
             if (!string.IsNullOrEmpty(DamageType)) stats += $"\nType: {DamageType}";
             if (RangeIncrement > 0)
