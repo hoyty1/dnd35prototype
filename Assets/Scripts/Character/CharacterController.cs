@@ -3367,7 +3367,7 @@ public class CharacterController : MonoBehaviour
         }
 
         int dc = Mathf.Max(0, disease.FortitudeDC + dcModifier);
-        int roll = Random.Range(1, 21);
+        int roll = DiceService.D20("Disease exposure Fort save");
         int total = roll + Stats.FortitudeSave;
 
         LogAbilityScoreMessage($"🦠 {Stats.CharacterName} is exposed to {disease.Name} (Fort DC {dc}).");
@@ -3462,7 +3462,7 @@ public class CharacterController : MonoBehaviour
         }
 
         int dc = Mathf.Max(0, poison.FortitudeDC + dcModifier);
-        int roll = Random.Range(1, 21);
+        int roll = DiceService.D20("Poison initial Fort save");
         int total = roll + Stats.FortitudeSave;
 
         LogAbilityScoreMessage($"☠ {Stats.CharacterName} is exposed to {poison.Name} ({poison.Type}, Fort DC {dc}).");
@@ -3498,7 +3498,7 @@ public class CharacterController : MonoBehaviour
         }
 
         int dc = poison.PoisonData.FortitudeDC;
-        int roll = Random.Range(1, 21);
+        int roll = DiceService.D20("Poison secondary Fort save");
         int total = roll + Stats.FortitudeSave;
 
         LogAbilityScoreMessage($"☣ {Stats.CharacterName} makes secondary save vs {poison.PoisonData.Name} (DC {dc}).");
@@ -3549,7 +3549,7 @@ public class CharacterController : MonoBehaviour
             }
 
             int dc = active.DiseaseData.FortitudeDC;
-            int roll = Random.Range(1, 21);
+            int roll = DiceService.D20("Disease daily Fort save");
             int total = roll + Stats.FortitudeSave;
             bool success = total >= dc;
 
@@ -4106,7 +4106,7 @@ public class CharacterController : MonoBehaviour
         if (Stats == null || _currentHPState != HPState.Dying)
             return;
 
-        int roll = Random.Range(1, 21);
+        int roll = DiceService.D20("Stabilization check");
         int conMod = Stats.CONMod;
         int total = roll + conMod;
         const int dc = 10;
@@ -4310,54 +4310,32 @@ public class CharacterController : MonoBehaviour
         // so all attack entry points (single, full-attack, flurry, grapple strike, etc.) follow
         // the same rules and never roll against an empty square.
 
-        // === FEAT: Power Attack (melee only) ===
-        int powerAtkPenalty = 0;
-        int powerAtkDmgBonus = 0;
-        if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0 && !WeaponDisablesStrengthDamageBonuses(equippedWeapon))
-        {
-            powerAtkPenalty = -PowerAttackValue;
-            powerAtkDmgBonus = IsWeaponTwoHanded(equippedWeapon) ? PowerAttackValue * 2 : PowerAttackValue;
-        }
+        // === FEAT MODIFIERS (via AttackCalculator) ===
+        int distFeet = (rangeInfo != null) ? rangeInfo.DistanceFeet : 0;
+        bool hasValidRange = rangeInfo != null && !rangeInfo.IsMelee;
+        int baseCritMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
+        var featMods = AttackCalculator.CalculateAllFeatModifiers(
+            Stats, equippedWeapon, isRanged, isMelee,
+            IsWeaponTwoHanded(equippedWeapon), PowerAttackValue,
+            distFeet, hasValidRange,
+            WeaponDisablesStrengthDamageBonuses(equippedWeapon),
+            baseCritMin);
 
-        // === FEAT: Point Blank Shot (ranged, within 30 ft / 6 squares) ===
-        bool pointBlankActive = false;
-        int pbsAtkBonus = 0;
-        int pbsDmgBonus = 0;
-        if (isRanged && Stats.HasFeat("Point Blank Shot") && rangeInfo != null && rangeInfo.DistanceFeet <= 30)
-        {
-            pointBlankActive = true;
-            pbsAtkBonus = 1;
-            pbsDmgBonus = 1;
-        }
+        int powerAtkPenalty = featMods.PowerAttackPenalty;
+        int powerAtkDmgBonus = featMods.PowerAttackDamageBonus;
+        bool pointBlankActive = featMods.PointBlankShotActive;
+        int pbsAtkBonus = featMods.PointBlankShotAttackBonus;
+        int pbsDmgBonus = featMods.PointBlankShotDamageBonus;
+        int weaponFocusBonus = featMods.WeaponFocusBonus;
+        int weaponSpecBonus = featMods.WeaponSpecDamageBonus;
+        int abilityMod = featMods.AbilityMod;
+        string abilityName = featMods.AbilityName;
+        int combatExpertisePenalty = featMods.CombatExpertisePenalty;
 
-        // === FEAT: Weapon Focus (+1 attack) & Greater Weapon Focus (+1 attack) ===
-        int weaponFocusBonus = Stats.WeaponFocusAttackBonus;
-
-        // === FEAT: Weapon Specialization (+2 damage) & Greater (+2 damage) ===
-        int weaponSpecBonus = Stats.WeaponSpecDamageBonus;
-
-        // === FEAT: Weapon Finesse (DEX instead of STR for attack with light weapons) ===
-        int abilityMod = Stats.STRMod;
-        string abilityName = "STR";
-        if (isRanged)
-        {
-            abilityMod = Stats.DEXMod;
-            abilityName = "DEX";
-        }
-        else if (FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
-        {
-            abilityMod = Stats.DEXMod;
-            abilityName = "DEX(Finesse)";
+        if (abilityName == "DEX(Finesse)")
             Debug.Log($"[Feats] {Stats.CharacterName}: Weapon Finesse active, using DEX {Stats.DEXMod} for attack");
-        }
-
-        // === FEAT: Combat Expertise (trade attack for AC) ===
-        int combatExpertisePenalty = 0;
-        if (isMelee && Stats.HasFeat("Combat Expertise") && Stats.CombatExpertiseValue > 0)
-        {
-            combatExpertisePenalty = -Stats.CombatExpertiseValue;
-            Debug.Log($"[Feats] {Stats.CharacterName}: Combat Expertise -{Stats.CombatExpertiseValue} attack, +{Stats.CombatExpertiseValue} AC");
-        }
+        if (combatExpertisePenalty != 0)
+            Debug.Log($"[Feats] {Stats.CharacterName}: Combat Expertise {combatExpertisePenalty} attack, +{-combatExpertisePenalty} AC");
 
         // Prone: melee attacks take -4.
         int proneAttackPenalty = GetProneAttackModifier(isMelee);
@@ -4386,12 +4364,10 @@ public class CharacterController : MonoBehaviour
                           + weaponNonProfPenalty + armorNonProfPenalty + moraleAttackBonus + conditionAttackPenalty
                           + aidAnotherAttackBonus + damageModeProfile.AttackPenalty + additionalAttackModifier;
 
-        int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
-        // === FEAT: Improved Critical (double threat range) ===
-        critThreatMin = FeatManager.GetAdjustedCritThreatMin(Stats, critThreatMin);
+        int critThreatMin = featMods.CritThreatMin;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
-        int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
+        int totalFeatDmgBonus = featMods.TotalFeatDamageBonus;
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
         NaturalAttackDefinition naturalAttackForOnHit = null;
@@ -4563,63 +4539,31 @@ public class CharacterController : MonoBehaviour
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
 
-        // === FEAT: Power Attack (melee only) ===
-        int powerAtkPenalty = 0;
-        int powerAtkDmgBonus = 0;
-        if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0 && !WeaponDisablesStrengthDamageBonuses(equippedWeapon))
-        {
-            powerAtkPenalty = -PowerAttackValue;
-            powerAtkDmgBonus = IsWeaponTwoHanded(equippedWeapon) ? PowerAttackValue * 2 : PowerAttackValue;
-        }
+        // === FEAT MODIFIERS (via AttackCalculator) - Full Attack ===
+        int fullAtkDistFeet = (rangeInfo != null) ? rangeInfo.DistanceFeet : 0;
+        var fullAtkFeatMods = AttackCalculator.CalculateAllFeatModifiers(
+            Stats, equippedWeapon, isRanged, isMelee,
+            IsWeaponTwoHanded(equippedWeapon), PowerAttackValue,
+            fullAtkDistFeet, rangeInfo != null && !rangeInfo.IsMelee,
+            WeaponDisablesStrengthDamageBonuses(equippedWeapon),
+            critThreatMin, RapidShotEnabled);
 
-        // === FEAT: Point Blank Shot (ranged, within 30 ft) ===
-        bool pointBlankActive = false;
-        int pbsAtkBonus = 0;
-        int pbsDmgBonus = 0;
-        if (isRanged && Stats.HasFeat("Point Blank Shot") && rangeInfo != null && rangeInfo.DistanceFeet <= 30)
-        {
-            pointBlankActive = true;
-            pbsAtkBonus = 1;
-            pbsDmgBonus = 1;
-        }
-
-        // === FEAT: Weapon Focus & Greater Weapon Focus ===
-        int weaponFocusBonus = Stats.WeaponFocusAttackBonus;
-
-        // === FEAT: Weapon Specialization & Greater ===
-        int weaponSpecBonus = Stats.WeaponSpecDamageBonus;
-
-        // === FEAT: Weapon Finesse ===
-        int baseAbilityMod = Stats.STRMod;
-        string baseAbilityName = "STR";
-        if (isRanged)
-        {
-            baseAbilityMod = Stats.DEXMod;
-            baseAbilityName = "DEX";
-        }
-        else if (FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
-        {
-            baseAbilityMod = Stats.DEXMod;
-            baseAbilityName = "DEX(Finesse)";
-        }
-
-        // === FEAT: Combat Expertise ===
-        int combatExpertisePenalty = 0;
-        if (isMelee && Stats.HasFeat("Combat Expertise") && Stats.CombatExpertiseValue > 0)
-        {
-            combatExpertisePenalty = -Stats.CombatExpertiseValue;
-        }
+        int powerAtkPenalty = fullAtkFeatMods.PowerAttackPenalty;
+        int powerAtkDmgBonus = fullAtkFeatMods.PowerAttackDamageBonus;
+        bool pointBlankActive = fullAtkFeatMods.PointBlankShotActive;
+        int pbsAtkBonus = fullAtkFeatMods.PointBlankShotAttackBonus;
+        int pbsDmgBonus = fullAtkFeatMods.PointBlankShotDamageBonus;
+        int weaponFocusBonus = fullAtkFeatMods.WeaponFocusBonus;
+        int weaponSpecBonus = fullAtkFeatMods.WeaponSpecDamageBonus;
+        int baseAbilityMod = fullAtkFeatMods.AbilityMod;
+        string baseAbilityName = fullAtkFeatMods.AbilityName;
+        int combatExpertisePenalty = fullAtkFeatMods.CombatExpertisePenalty;
+        critThreatMin = fullAtkFeatMods.CritThreatMin;
+        bool rapidShotActive = fullAtkFeatMods.RapidShotActive;
+        int rapidShotPenalty = fullAtkFeatMods.RapidShotPenalty;
 
         // Prone: melee attacks take -4.
         int proneAttackPenalty = GetProneAttackModifier(isMelee);
-
-        // === FEAT: Improved Critical ===
-        critThreatMin = FeatManager.GetAdjustedCritThreatMin(Stats, critThreatMin);
-
-        // === FEAT: Rapid Shot (ranged, full attack only) ===
-        bool hasRapidShotFeat = Stats.HasFeat("Rapid Shot");
-        bool rapidShotActive = isRanged && hasRapidShotFeat && RapidShotEnabled;
-        int rapidShotPenalty = rapidShotActive ? -2 : 0;
 
         // Fighting Defensively: -4 attack while active.
         int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
@@ -4628,7 +4572,7 @@ public class CharacterController : MonoBehaviour
         bool preciseShotNegated = false;
         int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
 
-        int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
+        int totalFeatDmgBonus = fullAtkFeatMods.TotalFeatDamageBonus;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
@@ -5103,45 +5047,32 @@ public class CharacterController : MonoBehaviour
         bool isRanged = rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
 
-        int powerAtkPenalty = 0;
-        int powerAtkDmgBonus = 0;
-        if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0 && !WeaponDisablesStrengthDamageBonuses(mainWeapon))
-        {
-            powerAtkPenalty = -PowerAttackValue;
-            powerAtkDmgBonus = PowerAttackValue; // one-handed while dual-wielding
-        }
+        // Power Attack (via AttackCalculator) - always one-handed while dual-wielding
+        AttackCalculator.CalculatePowerAttack(Stats, PowerAttackValue, isMelee,
+            false /* never two-handed in dual-wield */, WeaponDisablesStrengthDamageBonuses(mainWeapon),
+            out int powerAtkPenalty, out int powerAtkDmgBonus);
 
-        bool pointBlankActive = false;
-        int pbsAtkBonus = 0;
-        int pbsDmgBonus = 0;
-        if (isRanged && Stats.HasFeat("Point Blank Shot") && rangeInfo != null && rangeInfo.DistanceFeet <= 30)
-        {
-            pointBlankActive = true;
-            pbsAtkBonus = 1;
-            pbsDmgBonus = 1;
-        }
+        // Point Blank Shot (via AttackCalculator)
+        int dualDistFeet = (rangeInfo != null) ? rangeInfo.DistanceFeet : 0;
+        AttackCalculator.CalculatePointBlankShot(Stats, isRanged, dualDistFeet,
+            out bool pointBlankActive, out int pbsAtkBonus, out int pbsDmgBonus);
 
         int mainWFBonus = FeatManager.GetWeaponFocusBonus(Stats, mainWeapon?.Name ?? "Unarmed");
         int offWFBonus = FeatManager.GetWeaponFocusBonus(Stats, offWeapon?.Name ?? "Unarmed");
         int mainWSBonus = FeatManager.GetWeaponSpecializationBonus(Stats, mainWeapon?.Name ?? "Unarmed");
         int offWSBonus = FeatManager.GetWeaponSpecializationBonus(Stats, offWeapon?.Name ?? "Unarmed");
 
+        // Weapon Finesse (via AttackCalculator)
         int finesseAtkAdjust = 0;
-        string abilityName = isRanged ? "DEX" : "STR";
-        int abilityMod = isRanged ? Stats.DEXMod : Stats.STRMod;
-        if (isMelee && FeatManager.ShouldUseWeaponFinesse(Stats, mainWeapon))
+        AttackCalculator.GetAttackAbilityModifier(Stats, mainWeapon, isRanged, out int abilityMod, out string abilityName);
+        if (isMelee && abilityName == "DEX(Finesse)")
         {
             finesseAtkAdjust = Stats.DEXMod - Stats.STRMod;
-            abilityName = "DEX";
-            abilityMod = Stats.DEXMod;
+            abilityName = "DEX"; // dual-wield labels use simpler name
         }
 
-        int combatExpertisePenalty = 0;
-        if (isMelee && Stats.HasFeat("Combat Expertise") && Stats.CombatExpertiseValue > 0)
-        {
-            int maxCE = FeatManager.GetMaxCombatExpertise(Stats);
-            combatExpertisePenalty = -Mathf.Min(Stats.CombatExpertiseValue, maxCE);
-        }
+        // Combat Expertise (via AttackCalculator)
+        int combatExpertisePenalty = AttackCalculator.CalculateCombatExpertisePenalty(Stats, isMelee);
 
         int proneAttackPenalty = GetProneAttackModifier(isMelee);
         int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
@@ -6099,7 +6030,7 @@ public class CharacterController : MonoBehaviour
                     {
                         missChance = blindedAttackerMissChance;
                         result.ConcealmentMissChance = missChance;
-                        int concealmentRoll = Random.Range(1, 101);
+                        int concealmentRoll = DiceService.Percentile("Concealment miss chance");
                         result.ConcealmentRoll = concealmentRoll;
 
                         if (concealmentRoll <= missChance)
@@ -6116,7 +6047,7 @@ public class CharacterController : MonoBehaviour
                 }
                 else
                 {
-                    int concealmentRoll = Random.Range(1, 101);
+                    int concealmentRoll = DiceService.Percentile("Blind-Fight concealment reroll");
                     result.ConcealmentRoll = concealmentRoll;
 
                     if (concealmentRoll <= missChance)
@@ -6140,7 +6071,7 @@ public class CharacterController : MonoBehaviour
             int blinkAttackerMissChance = GetBlinkAttackerMissChance();
             if (blinkAttackerMissChance > 0)
             {
-                int blinkRoll = Random.Range(1, 101);
+                int blinkRoll = DiceService.Percentile("Blink attacker miss chance");
                 if (blinkRoll <= blinkAttackerMissChance)
                 {
                     result.Hit = false;
@@ -6300,7 +6231,7 @@ public class CharacterController : MonoBehaviour
             bool targetIsSwarm = target != null && target.Stats != null && target.Stats.IsSwarm;
             if (targetIsSwarm && IsTorchWeapon(weapon))
             {
-                int torchDamage = UnityEngine.Random.Range(1, 4); // 1d3 fire vs swarms
+                int torchDamage = DiceService.Roll(1, 3, "Torch damage vs swarm"); // 1d3 fire vs swarms
                 rawWeaponDamage = torchDamage;
                 rawSneakDamage = 0;
                 rawTotalDamage = torchDamage;
@@ -7903,7 +7834,7 @@ public class CharacterController : MonoBehaviour
         var result = new GrappleCheckResult
         {
             CharacterName = Stats != null ? Stats.CharacterName : name,
-            BaseRoll = Random.Range(1, 21),
+            BaseRoll = DiceService.D20("Grapple check"),
             BaseAttackBonus = baseAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0),
             StrengthModifier = Stats != null ? Stats.STRMod : 0,
             SizeModifier = GetGrappleSizeModifier()
@@ -8106,7 +8037,7 @@ public class CharacterController : MonoBehaviour
         {
             case GrappleActionType.EscapeArtist:
             {
-                int roll = Random.Range(1, 21);
+                int roll = DiceService.D20("Escape Artist check");
                 int bonus = Stats.GetSkillBonus("Escape Artist");
                 int total = roll + bonus;
                 int dc = 20 + opponent.GetGrappleModifier();
@@ -8261,7 +8192,7 @@ public class CharacterController : MonoBehaviour
                 {
                     for (int i = 0; i < damageDiceCount; i++)
                     {
-                        int die = Random.Range(1, damageDiceSides + 1);
+                        int die = DiceService.RollDie(damageDiceSides, "Grapple damage");
                         damageRolls.Add(die);
                         rawDamage += die;
                     }
@@ -8479,7 +8410,7 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                int myRoll = Random.Range(1, 21);
+                int myRoll = DiceService.D20("Grapple opposed check (attacker)");
                 int myBaseModifier = GetGrappleModifier();
 
                 bool isOneVsOne = grappleOpponents.Count == 1;
@@ -8506,7 +8437,7 @@ public class CharacterController : MonoBehaviour
                     if (currentOpponent == null || currentOpponent.Stats == null || currentOpponent.Stats.IsDead)
                         continue;
 
-                    int oppRoll = Random.Range(1, 21);
+                    int oppRoll = DiceService.D20("Grapple opposed check (defender)");
                     int oppMod = currentOpponent.GetGrappleModifier();
                     int oppTotal = oppRoll + oppMod;
                     bool beatThisOpponent = myTotal > oppTotal;
@@ -8622,8 +8553,8 @@ public class CharacterController : MonoBehaviour
         myModifier = GetStrictOpposedGrappleModifierForUseOpponentWeapon(myBaseAttackBonusOverride);
         oppModifier = opponent.GetStrictOpposedGrappleModifierForUseOpponentWeapon();
 
-        myRoll = Random.Range(1, 21);
-        oppRoll = Random.Range(1, 21);
+        myRoll = DiceService.D20("Grapple move check (self)");
+        oppRoll = DiceService.D20("Grapple move check (opponent)");
         myTotal = myRoll + myModifier;
         oppTotal = oppRoll + oppModifier;
         return true;
@@ -9495,8 +9426,8 @@ public class CharacterController : MonoBehaviour
         if (IsBlockedBySummonedContactBarrier(target, out _))
             return BuildSummonedContactBarrierResult(target, "Trip");
 
-        int atkRoll = Random.Range(1, 21);
-        int defRoll = Random.Range(1, 21);
+        int atkRoll = DiceService.D20("Trip attack roll");
+        int defRoll = DiceService.D20("Trip defense roll");
         int attackBonus = attackBonusOverride ?? Stats.BaseAttackBonus;
         int atkTotal = atkRoll + attackBonus + Stats.STRMod + Stats.SizeModifier + Stats.TripAttackCheckBonus + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Trip") ? 4 : 0);
         int defAbility = Mathf.Max(target.Stats.STRMod, target.Stats.DEXMod);
@@ -9746,7 +9677,7 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        int touchRoll = Random.Range(1, 21);
+        int touchRoll = DiceService.D20("Touch attack");
         int attackBab = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
         int touchStr = Stats.STRMod;
         int touchSize = Stats.SizeModifier;
@@ -9944,8 +9875,8 @@ public class CharacterController : MonoBehaviour
 
         targetItem.EnsureDurabilityInitialized();
 
-        int attackRoll = Random.Range(1, 21);
-        int defenseRoll = Random.Range(1, 21);
+        int attackRoll = DiceService.D20("Sunder attack roll");
+        int defenseRoll = DiceService.D20("Sunder defense roll");
         int attackBab = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
         int improvedSunderBonus = Stats.HasFeat("Improved Sunder") ? 4 : 0;
         int handednessBonus = GetSunderHandednessModifier(attackerWeapon, targetItem);
@@ -10130,7 +10061,7 @@ public class CharacterController : MonoBehaviour
         var result = new BullRushCheckResult
         {
             CharacterName = Stats != null ? Stats.CharacterName : name,
-            BaseRoll = fixedRoll ?? Random.Range(1, 21),
+            BaseRoll = fixedRoll ?? DiceService.D20("Bull rush check"),
             BaseAttackBonus = bab,
             StrengthModifier = Stats != null ? Stats.STRMod : 0,
             SizeModifier = GetGrappleSizeModifier(),
@@ -10161,7 +10092,7 @@ public class CharacterController : MonoBehaviour
         var result = new BullRushCheckResult
         {
             CharacterName = Stats != null ? Stats.CharacterName : name,
-            BaseRoll = fixedRoll ?? Random.Range(1, 21),
+            BaseRoll = fixedRoll ?? DiceService.D20("Bull rush defense"),
             BaseAttackBonus = Stats != null ? Stats.BaseAttackBonus : 0,
             StrengthOrDexterityModifier = bestAbility,
             SizeModifier = GetGrappleSizeModifier(),
@@ -10264,8 +10195,8 @@ public class CharacterController : MonoBehaviour
         if (IsBlockedBySummonedContactBarrier(target, out _))
             return BuildSummonedContactBarrierResult(target, "Overrun");
 
-        int atkRoll = Random.Range(1, 21);
-        int defRoll = Random.Range(1, 21);
+        int atkRoll = DiceService.D20("Overrun attack roll");
+        int defRoll = DiceService.D20("Overrun defense roll");
 
         // D&D 3.5 overrun blocking check: opposed STR checks with size modifiers.
         // Use grapple-size scale (+/-4 per size category step), not attack/AC size modifier.
@@ -10307,8 +10238,8 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        int bluffRoll = Random.Range(1, 21);
-        int opposedRoll = Random.Range(1, 21);
+        int bluffRoll = DiceService.D20("Feint Bluff check");
+        int opposedRoll = DiceService.D20("Feint opposed check");
 
         int bluffBonus = Stats.GetSkillBonus("Bluff");
 
@@ -10444,7 +10375,7 @@ public class CharacterController : MonoBehaviour
 
         if (!diedFromDamage)
         {
-            fortRoll = Random.Range(1, 21);
+            fortRoll = DiceService.D20("Coup de Grace Fort save");
             fortTotal = fortRoll + target.Stats.FortitudeSave;
             fortSucceeded = fortTotal >= saveDC;
 
@@ -10544,8 +10475,8 @@ public class CharacterController : MonoBehaviour
         int defSizeDiffMod = GetDisarmSizeDifferenceModifier(defender, attacker);
         int defImprovedDisarmMod = defender.Stats.HasFeat("Improved Disarm") ? 4 : 0;
 
-        int atkRoll = Random.Range(1, 21);
-        int defRoll = Random.Range(1, 21);
+        int atkRoll = DiceService.D20("Disarm attack roll");
+        int defRoll = DiceService.D20("Disarm defense roll");
 
         int attackerBaseAttackBonusUsed = attackerBaseAttackBonusOverride ?? attacker.Stats.BaseAttackBonus;
         int attackerBaseAttackBonusRaw = attacker.Stats.BaseAttackBonus;
@@ -11173,7 +11104,7 @@ public class CharacterController : MonoBehaviour
     {
         dc = 15 + spellLevel;
         int bonus = Stats.GetSkillBonus("Spellcraft");
-        roll = Random.Range(1, 21);
+        roll = DiceService.D20("Counterspell Spellcraft check");
         total = roll + bonus;
         bool success = total >= dc;
         Debug.Log($"[Counterspell] {Stats.CharacterName}: Spellcraft check d20({roll}) + {bonus} = {total} vs DC {dc} → {(success ? "IDENTIFIED" : "FAILED")}");

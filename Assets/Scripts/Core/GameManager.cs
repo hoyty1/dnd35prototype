@@ -5558,7 +5558,7 @@ public partial class GameManager : MonoBehaviour
         if (data != null)
             disturbanceDc = Mathf.Max(1, data.DisturbanceSaveDC);
 
-        int saveRoll = UnityEngine.Random.Range(1, 21);
+        int saveRoll = DiceService.D20("Disturbance Will save");
         int saveTotal = saveRoll + target.Stats.WillSave;
         bool saveSucceeded = saveTotal >= disturbanceDc;
 
@@ -7783,7 +7783,7 @@ public partial class GameManager : MonoBehaviour
         {
             int total = 0;
             for (int i = 0; i < spell.HealCount; i++)
-                total += UnityEngine.Random.Range(1, spell.HealDice + 1);
+                total += DiceService.RollDie(spell.HealDice, "Spell healing die");
             total += spell.BonusHealing;
             return Mathf.Max(0, total);
         }
@@ -7799,7 +7799,7 @@ public partial class GameManager : MonoBehaviour
         {
             int total = 0;
             for (int i = 0; i < item.HealDiceCount; i++)
-                total += UnityEngine.Random.Range(1, item.HealDiceSides + 1);
+                total += DiceService.RollDie(item.HealDiceSides, "Item healing die");
             total += item.HealBonus;
             return Mathf.Max(0, total);
         }
@@ -11173,7 +11173,7 @@ public partial class GameManager : MonoBehaviour
         string checkLabel = useStrength ? "Strength" : "Escape Artist";
         string sourceLabel = fromAnimateRope ? "Animate Rope" : "Web";
 
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceService.D20("Escape check");
         int total = roll + bonus;
         bool success = total >= dc;
 
@@ -12113,7 +12113,7 @@ public partial class GameManager : MonoBehaviour
         if (asfChance <= 0)
             return false;
 
-        roll = UnityEngine.Random.Range(1, 101);
+        roll = DiceService.Percentile("Arcane spell failure");
 
         CombatUI?.ShowCombatLog($"ASF Check ({caster.Stats.CharacterName}, {spell.Name}): roll {roll}% vs {asfChance}%");
         return roll <= asfChance;
@@ -12381,12 +12381,12 @@ public partial class GameManager : MonoBehaviour
 
         if (info.LevelDifference == 1)
         {
-            int d3Roll = UnityEngine.Random.Range(1, 4);
+            int d3Roll = DiceService.Roll(1, 3, "Summon creature count 1d3");
             rollLog = $"Rolling for creature count: 1d3 = {d3Roll}";
             return d3Roll;
         }
 
-        int d4Roll = UnityEngine.Random.Range(1, 5);
+        int d4Roll = DiceService.D4("Summon creature count 1d4");
         int total = d4Roll + 1;
         rollLog = $"Rolling for creature count: 1d4+1 = [{d4Roll}] + 1 = {total}";
         return total;
@@ -13579,7 +13579,7 @@ public partial class GameManager : MonoBehaviour
             // This is checked separately from (and in addition to) arcane spell failure from armor.
             if (caster.HasActiveBlinkEffect)
             {
-                int blinkSpellRoll = UnityEngine.Random.Range(1, 101);
+                int blinkSpellRoll = DiceService.Percentile("Blink caster spell failure");
                 if (blinkSpellRoll <= 20)
                 {
                     bool consumedOnBlink = ConsumePendingSpellSlot(
@@ -13730,7 +13730,7 @@ public partial class GameManager : MonoBehaviour
                 && _pendingSpell.TargetType != SpellTargetType.Self
                 && _pendingSpell.TargetType != SpellTargetType.Area)
             {
-                int blinkTargetRoll = UnityEngine.Random.Range(1, 101);
+                int blinkTargetRoll = DiceService.Percentile("Blink target spell failure");
                 if (blinkTargetRoll <= 50)
                 {
                     string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
@@ -15057,8 +15057,8 @@ public partial class GameManager : MonoBehaviour
         int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
         int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
-        int hdPool = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 2d4
-        int fascinatedRounds = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 2d4
+        int hdPool = DiceService.RollMultiple(2, 4, "Hypnotism HD pool 2d4"); // 2d4
+        int fascinatedRounds = DiceService.RollMultiple(2, 4, "Fascinated rounds 2d4"); // 2d4
 
         List<CharacterController> candidates = new List<CharacterController>();
         for (int i = 0; i < targets.Count; i++)
@@ -15138,7 +15138,7 @@ public partial class GameManager : MonoBehaviour
             int srRoll = 0;
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
-                srRoll = UnityEngine.Random.Range(1, 21);
+                srRoll = DiceService.D20("Hypnotism SR check");
                 srTotal = srRoll + casterLevel;
                 if (srTotal < target.Stats.SpellResistance)
                 {
@@ -15147,7 +15147,7 @@ public partial class GameManager : MonoBehaviour
                 }
             }
 
-            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveRoll = DiceService.D20("Hypnotism Will save");
             int saveTotal = saveRoll + target.Stats.WillSave + saveContextModifier;
             bool saved = saveTotal >= saveDc;
             if (saved)
@@ -15252,7 +15252,7 @@ public partial class GameManager : MonoBehaviour
         int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
         int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
-        int hdPool = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 4d4
+        int hdPool = DiceService.RollMultiple(4, 4, "Sleep HD pool 4d4"); // 4d4
         int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(_pendingSpell, casterLevel));
 
         List<CharacterController> candidates = new List<CharacterController>();
@@ -15308,7 +15308,7 @@ public partial class GameManager : MonoBehaviour
 
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
-                int srRoll = UnityEngine.Random.Range(1, 21);
+                int srRoll = DiceService.D20("Sleep SR check");
                 int srTotal = srRoll + casterLevel;
                 if (srTotal < target.Stats.SpellResistance)
                 {
@@ -15317,7 +15317,7 @@ public partial class GameManager : MonoBehaviour
                 }
             }
 
-            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveRoll = DiceService.D20("Sleep Will save");
             int saveTotal = saveRoll + target.Stats.WillSave;
             if (saveTotal >= saveDc)
             {
@@ -15431,7 +15431,7 @@ public partial class GameManager : MonoBehaviour
             // Spell Resistance check
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
-                int srRoll = UnityEngine.Random.Range(1, 21);
+                int srRoll = DiceService.D20("Color Spray SR check");
                 int srTotal = srRoll + casterLevel;
                 if (srTotal < target.Stats.SpellResistance)
                 {
@@ -15441,7 +15441,7 @@ public partial class GameManager : MonoBehaviour
             }
 
             // Will save
-            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveRoll = DiceService.D20("Color Spray Will save");
             int saveTotal = saveRoll + target.Stats.WillSave;
             if (saveTotal >= saveDc)
             {
@@ -15521,7 +15521,7 @@ public partial class GameManager : MonoBehaviour
 
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
-                int srRoll = UnityEngine.Random.Range(1, 21);
+                int srRoll = DiceService.D20("Dazing Touch SR check");
                 int srTotal = srRoll + casterLevel;
                 if (srTotal < target.Stats.SpellResistance)
                 {
@@ -15530,7 +15530,7 @@ public partial class GameManager : MonoBehaviour
                 }
             }
 
-            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveRoll = DiceService.D20("Dazing Touch Will save");
             int saveTotal = saveRoll + target.Stats.WillSave;
             if (saveTotal >= saveDc)
             {
@@ -15597,14 +15597,14 @@ public partial class GameManager : MonoBehaviour
         if (hd <= 2)
         {
             hdTier = 1;
-            stage1Duration = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 2d4
-            stage2Duration = UnityEngine.Random.Range(1, 5); // 1d4
+            stage1Duration = DiceService.RollMultiple(2, 4, "Disease stage 1 duration 2d4"); // 2d4
+            stage2Duration = DiceService.D4("Disease stage 2 duration 1d4"); // 1d4
             stage3Duration = 1;
         }
         else if (hd <= 4)
         {
             hdTier = 2;
-            stage1Duration = UnityEngine.Random.Range(1, 5); // 1d4
+            stage1Duration = DiceService.D4("Disease stage 1 duration 1d4"); // 1d4
             stage2Duration = 1;
             stage3Duration = 0;
         }
@@ -15902,7 +15902,7 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        int frightenedRounds = UnityEngine.Random.Range(1, 5);
+        int frightenedRounds = DiceService.D4("Frightened duration 1d4");
         var fearData = new FrightenedConditionData
         {
             Caster = caster,
@@ -16063,7 +16063,7 @@ public partial class GameManager : MonoBehaviour
             if (distance > ghoulEffect.StenchRadiusSquares) continue;
 
             // Fort save vs sickened
-            int fortSave = UnityEngine.Random.Range(1, 21) + (creature.Stats != null ? creature.Stats.FortitudeSave : 0);
+            int fortSave = DiceService.D20("Ghoul Touch Fort save") + (creature.Stats != null ? creature.Stats.FortitudeSave : 0);
             bool saved = fortSave >= spellDC;
 
             if (saved)
@@ -16222,7 +16222,7 @@ public partial class GameManager : MonoBehaviour
     {
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
         int levelBonus = Mathf.Min(5, 1 + ((casterLevel - 1) / 2));
-        int d6 = UnityEngine.Random.Range(1, 7);
+        int d6 = DiceService.D6("Enervation damage");
         return d6 + levelBonus;
     }
 
@@ -16282,9 +16282,9 @@ public partial class GameManager : MonoBehaviour
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
-        int intDamage = UnityEngine.Random.Range(1, 7);
-        int wisDamage = UnityEngine.Random.Range(1, 7);
-        int chaDamage = UnityEngine.Random.Range(1, 7);
+        int intDamage = DiceService.D6("Touch of Idiocy INT damage");
+        int wisDamage = DiceService.D6("Touch of Idiocy WIS damage");
+        int chaDamage = DiceService.D6("Touch of Idiocy CHA damage");
 
         TouchOfIdiocyConditionData previous = target.ActiveTouchOfIdiocyEffect;
         if (previous != null)
@@ -16376,7 +16376,7 @@ public partial class GameManager : MonoBehaviour
         int diceSides = Mathf.Max(2, effectData.DamageDiceSides);
         int rolledDamage = 0;
         for (int i = 0; i < diceCount; i++)
-            rolledDamage += UnityEngine.Random.Range(1, diceSides + 1);
+            rolledDamage += DiceService.RollDie(diceSides, "Spectral Hand damage die");
 
         var packet = new DamagePacket
         {
@@ -16516,7 +16516,7 @@ public partial class GameManager : MonoBehaviour
             bool chooseBlindness = true;
             if (caster != null && !caster.IsPlayerControlled)
             {
-                chooseBlindness = UnityEngine.Random.Range(0, 2) == 0; // 50/50 for AI
+                chooseBlindness = DiceService.CoinFlip("Blindness/Deafness AI choice"); // 50/50 for AI
             }
 
             if (chooseBlindness)
@@ -16645,7 +16645,7 @@ public partial class GameManager : MonoBehaviour
         if (spell != null && spell.SpellId == SpellNames.ENERVATION)
         {
             string sourceName = spell.Name;
-            int negativeLevels = UnityEngine.Random.Range(1, 5);
+            int negativeLevels = DiceService.D4("Enervation negative levels 1d4");
             int total = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, sourceName);
             CombatUI?.ShowCombatLog($"<color=#9966CC>☠ {target.Stats.CharacterName} gains {negativeLevels} negative level(s) from Enervation (total {total}).</color>");
             return null;
@@ -17727,7 +17727,7 @@ public partial class GameManager : MonoBehaviour
             return true;
 
         int dc = 15 + Mathf.Max(0, spell.SpellLevel);
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceService.D20("Dispel Magic check");
         int bonus = Mathf.Max(0, caster.Stats.GetCasterLevel()) + GetSpellSaveAbilityModifier(caster, spell);
         int total = roll + bonus;
         bool success = total >= dc;
@@ -22123,7 +22123,7 @@ public partial class GameManager : MonoBehaviour
         // D&D 3.5e: Blinking NPC caster has 20% spell failure chance
         if (npc.HasActiveBlinkEffect)
         {
-            int blinkNpcRoll = UnityEngine.Random.Range(1, 101);
+            int blinkNpcRoll = DiceService.Percentile("Blink NPC caster spell failure");
             if (blinkNpcRoll <= 20)
             {
                 CombatUI?.ShowCombatLog($"⚡ {npc.Stats.CharacterName}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkNpcRoll} ≤ 20%)");
@@ -22159,7 +22159,7 @@ public partial class GameManager : MonoBehaviour
             && spell.TargetType != SpellTargetType.Self
             && spell.TargetType != SpellTargetType.Area)
         {
-            int blinkTargetRoll = UnityEngine.Random.Range(1, 101);
+            int blinkTargetRoll = DiceService.Percentile("Blink NPC target spell failure");
             if (blinkTargetRoll <= 50)
             {
                 string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
@@ -22295,9 +22295,9 @@ public partial class GameManager : MonoBehaviour
             CharacterController victim = victims[i];
             int rawDamage = 0;
             for (int d = 0; d < 6; d++)
-                rawDamage += UnityEngine.Random.Range(1, 5);
+                rawDamage += DiceService.D4("Fireball damage die");
 
-            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveRoll = DiceService.D20("Fireball Reflex save");
             int saveTotal = saveRoll + victim.Stats.ReflexSave;
             bool saveSuccess = saveTotal >= 12;
             int damageToApply = saveSuccess ? Mathf.FloorToInt(rawDamage * 0.5f) : rawDamage;
@@ -22333,7 +22333,7 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        int cooldown = UnityEngine.Random.Range(1, 5);
+        int cooldown = DiceService.D4("Acid spray cooldown 1d4");
         npc.ConfigureBombardierAcidSprayCooldown(cooldown);
         CombatUI?.ShowCombatLog($"⏱ Acid spray recharges in {cooldown} rounds.");
 
@@ -22687,7 +22687,7 @@ public partial class GameManager : MonoBehaviour
         if (isOwnSpell) return true;
 
         int clampedCL = Mathf.Min(casterLevel, 10);
-        int roll = UnityEngine.Random.Range(1, 21); // 1d20
+        int roll = DiceService.D20("Counterspell dispel check"); // 1d20
         int total = roll + clampedCL;
         int dc = 11 + targetSpellCasterLevel;
 
@@ -22702,7 +22702,7 @@ public partial class GameManager : MonoBehaviour
     public static int RollDispelCheck(int casterLevel)
     {
         int clampedCL = Mathf.Min(casterLevel, 10);
-        int roll = UnityEngine.Random.Range(1, 21); // 1d20
+        int roll = DiceService.D20("Counterspell Dispel Magic check"); // 1d20
         int total = roll + clampedCL;
         Debug.Log($"[DispelMagic] Dispel roll: 1d20({roll}) + CL({clampedCL}) = {total}");
         return total;
@@ -23178,7 +23178,7 @@ public partial class GameManager : MonoBehaviour
 
         // Dispel check: 1d20 + CL (max +10 for Dispel Magic) vs DC 11 + enemy CL
         int clCapped = Mathf.Min(counterCL, 10);
-        int d20Roll = UnityEngine.Random.Range(1, 21);
+        int d20Roll = DiceService.D20("NPC counterspell dispel check");
         int dispelTotal = d20Roll + clCapped;
         int dispelDC = 11 + enemyCL;
 
@@ -23238,7 +23238,7 @@ public partial class GameManager : MonoBehaviour
     public static bool PerformCounterspellDispelCheck(int counterCL, int enemyCL, int maxCLBonus = 10)
     {
         int clCapped = Mathf.Min(counterCL, maxCLBonus);
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceService.D20("NPC Dispel Magic counterspell check");
         int total = roll + clCapped;
         int dc = 11 + enemyCL;
         bool success = total >= dc;
