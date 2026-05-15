@@ -507,6 +507,21 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // ── Resilient Sphere (PHB p.263) ──
+        if (_character.Stats.ResilientSphereActive)
+        {
+            int sphereHP = _character.Stats.ResilientSphereCurrentHP;
+            int sphereMaxHP = _character.Stats.ResilientSphereMaxHP;
+            list.Add(new IconData
+            {
+                Key = "ResilientSphere",
+                ShortLabel = "🔮SPH",
+                Tooltip = $"Resilient Sphere\nTrapped: cannot move, attack, or cast.\nImmune to incoming damage.\nSphere HP: {sphereHP}/{sphereMaxHP} (Hardness 20)\nDuration: {_character.Stats.ResilientSphereDurationRounds} rd(s)",
+                Color = new Color(0.27f, 0.8f, 1f, 0.95f),
+                Duration = _character.Stats.ResilientSphereDurationRounds
+            });
+        }
+
         // ── Deafened (from Shout or other sources) ──
         if (_character.HasCondition(CombatConditionType.Deafened))
         {

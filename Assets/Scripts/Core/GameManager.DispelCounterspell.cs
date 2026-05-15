@@ -351,6 +351,17 @@ public partial class GameManager
             return;
         }
 
+        // --- Resilient Sphere (PHB p.263) ---
+        if (spellId == SpellNames.RESILIENT_SPHERE)
+        {
+            if (target.Stats != null && target.Stats.ResilientSphereActive)
+            {
+                ClearResilientSphereState(target);
+                CombatUI?.ShowCombatLog($"<color=#44CCFF>🔮 Resilient Sphere on {target.Stats.CharacterName} is dispelled!</color>");
+            }
+            return;
+        }
+
         // --- Blur ---
         // Blur is handled by StatusEffectManager.RemoveEffect() reversing the concealment stats.
         // No dedicated cleanup method needed.

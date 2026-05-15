@@ -672,5 +672,8 @@ namespace DND35e.Identifiers
         /// <summary>Wall of Ice (spell id: wall_of_ice)</summary>
         public const string WALL_OF_ICE = "wall_of_ice";
 
+        /// <summary>Otiluke's Resilient Sphere (spell id: resilient_sphere)</summary>
+        public const string RESILIENT_SPHERE = "resilient_sphere";
+
     }
 }

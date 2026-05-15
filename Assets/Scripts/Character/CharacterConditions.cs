@@ -194,6 +194,10 @@ public class CharacterConditions : MonoBehaviour
 
     public bool CanAttack()
     {
+        // Resilient Sphere prevents all actions (PHB p.263)
+        if (_character != null && _character.Stats != null && _character.Stats.ResilientSphereActive)
+            return false;
+
         List<StatusEffect> active = GetActiveConditions();
         for (int i = 0; i < active.Count; i++)
         {
@@ -207,6 +211,10 @@ public class CharacterConditions : MonoBehaviour
 
     public bool CanCastSpells()
     {
+        // Resilient Sphere prevents all actions including spellcasting (PHB p.263)
+        if (_character != null && _character.Stats != null && _character.Stats.ResilientSphereActive)
+            return false;
+
         List<StatusEffect> active = GetActiveConditions();
         for (int i = 0; i < active.Count; i++)
         {

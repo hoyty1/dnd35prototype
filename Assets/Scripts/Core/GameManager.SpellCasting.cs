@@ -1921,15 +1921,19 @@ public partial class GameManager
             if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && result.Success)
                 handledFireShield = TryResolveFireShieldSpellEffect(caster, target, _pendingSpell, result);
 
+            bool handledResilientSphere = false;
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && result.Success && !effectNegatedBySave)
+                handledResilientSphere = TryResolveResilientSphereSpellEffect(caster, target, _pendingSpell, result);
+
             bool handledAnimateRope = false;
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere)
                 handledAnimateRope = TryResolveAnimateRopeSpellEffect(caster, target, _pendingSpell, result);
 
             bool handledMirrorImage = false;
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledAnimateRope && result.Success && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && result.Success && !effectNegatedBySave)
                 handledMirrorImage = TryResolveMirrorImageSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -6005,6 +6009,14 @@ public partial class GameManager
                     }
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Fire Shield expires on {character.Stats.CharacterName}: retribution and energy resistance removed.</color>");
                 }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.RESILIENT_SPHERE, StringComparison.Ordinal))
+                {
+                    if (character.Stats != null && character.Stats.ResilientSphereActive)
+                    {
+                        ClearResilientSphereState(character);
+                        CombatUI?.ShowCombatLog($"<color=#44CCFF>⏱ Resilient Sphere expires on {character.Stats.CharacterName}: movement and actions restored.</color>");
+                    }
+                }
             }
 
             if (statusMgr.ActiveEffectCount > 0)
@@ -6040,6 +6052,8 @@ public partial class GameManager
                         character.UpdateSlowDuration(effect.RemainingRounds);
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.FIRE_SHIELD, StringComparison.Ordinal))
                         character.Stats.FireShieldDurationRounds = effect.RemainingRounds;
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.RESILIENT_SPHERE, StringComparison.Ordinal))
+                        character.Stats.ResilientSphereDurationRounds = effect.RemainingRounds;
 
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
                 }

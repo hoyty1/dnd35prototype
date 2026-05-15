@@ -1161,6 +1161,20 @@ public class CharacterStats
     /// <summary>Remaining rounds of Fire Shield duration.</summary>
     public int FireShieldDurationRounds;
 
+    // ========== RESILIENT SPHERE (PHB p.263) ==========
+    /// <summary>True while this character is trapped inside Otiluke's Resilient Sphere.</summary>
+    public bool ResilientSphereActive;
+    /// <summary>Caster level used when sphere was created (determines HP = 10 × CL).</summary>
+    public int ResilientSphereCasterLevel;
+    /// <summary>Remaining rounds of Resilient Sphere duration.</summary>
+    public int ResilientSphereDurationRounds;
+    /// <summary>Current HP of the Resilient Sphere (starts at 10 × CL).</summary>
+    public int ResilientSphereCurrentHP;
+    /// <summary>Maximum HP of the Resilient Sphere (10 × CL).</summary>
+    public int ResilientSphereMaxHP;
+    /// <summary>Reference to the caster who created the sphere (for dismissal).</summary>
+    public CharacterController ResilientSphereCaster;
+
     /// <summary>Rage Will save bonus (+2 while raging).</summary>
     public int RageWillBonus => IsRaging ? 2 : 0;
 
@@ -3060,6 +3074,48 @@ public class CharacterStats
 
         if (packet.Types == null || packet.Types.Count == 0)
             packet.Types = new HashSet<DamageType> { DamageType.Untyped };
+
+        // ── Resilient Sphere damage interception (PHB p.263) ──
+        // If target is enclosed in a Resilient Sphere, ALL incoming damage
+        // is redirected to the sphere (with Hardness 20 reduction).
+        // If the sphere is destroyed, excess damage passes through to the target.
+        if (ResilientSphereActive && GameManager.Instance != null)
+        {
+            int sphereResult = GameManager.Instance.TryDestroyResilientSphere(
+                OwnerCharacter, result.RawDamage, GameManager.SphereDestructionType.Damage);
+
+            if (sphereResult == -1)
+            {
+                // Sphere survived — all damage absorbed
+                result.ImmunityTriggered = true;
+                result.DamageAfterImmunity = 0;
+                result.DamageAfterResistance = 0;
+                result.FinalDamage = 0;
+                result.Notes.Add("Resilient Sphere absorbed all damage.");
+                return result;
+            }
+            else if (sphereResult > 0)
+            {
+                // Sphere destroyed — excess damage passes through
+                // Re-run with excess damage (sphere is already cleared)
+                result.RawDamage = sphereResult;
+                result.DamageAfterImmunity = sphereResult;
+                result.DamageAfterResistance = sphereResult;
+                result.FinalDamage = sphereResult;
+                result.Notes.Add($"Resilient Sphere shattered! {sphereResult} excess damage passes through.");
+                // Fall through to normal damage processing with reduced amount
+            }
+            else
+            {
+                // sphereResult == 0: sphere destroyed with no excess
+                result.ImmunityTriggered = true;
+                result.DamageAfterImmunity = 0;
+                result.DamageAfterResistance = 0;
+                result.FinalDamage = 0;
+                result.Notes.Add("Resilient Sphere shattered (no excess damage).");
+                return result;
+            }
+        }
 
         // Swarm trait immunity: weapon attacks do no damage unless the weapon attack is fire-based.
         if (Immunities != null && Immunities.immuneToWeaponDamage && packet.Source == AttackSource.Weapon)

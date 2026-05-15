@@ -96,6 +96,54 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // OTILUKE'S RESILIENT SPHERE  (PHB p.263)
+        // Evocation [Force]
+        // Level: Sor/Wiz 4
+        // Components: V, S, M (a hemisphere of clear crystal and a matching
+        //   hemisphere of gum arabic)
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Target: One Large or smaller creature
+        // Duration: 1 min./level (D)
+        // Saving Throw: Reflex negates
+        // Spell Resistance: Yes
+        //
+        // A globe of shimmering force encloses the target creature,
+        // making it immobile and immune to damage from outside.
+        // The sphere has Hardness 20 and 10 HP per caster level.
+        // Nothing can pass through the sphere, in or out.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.RESILIENT_SPHERE,
+                    Name = "Resilient Sphere",
+                    Description = "Evocation [Force]. A globe of shimmering force encloses the target creature, making it immobile and immune to damage from outside. The sphere has Hardness 20 and 10 HP per caster level. Nothing can pass through the sphere, in or out. A Disintegrate spell or Rod of Cancellation/Negation can destroy it. Duration 1 min/level (D). PHB p.263",
+                    SpellLevel = 4,
+                    School = "Evocation [Force]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Debuff,
+                    BuffType = SpellNames.RESILIENT_SPHERE,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("obscuring_mist_clr", SpellNames.OBSCURING_MIST, "Cleric", 1);
 
