@@ -2,7 +2,8 @@
 // GameManager_NewSpells.cs — Resolution logic for Lightning Bolt, Fireball,
 // Daylight, Rage, Hold Person, Displacement, Blink, Wind Wall, Invisibility Sphere,
 // Halt Undead, Ray of Exhaustion, Vampiric Touch, Flame Arrow, Keen Edge,
-// Greater Magic Weapon, Haste, Slow, Mass Enlarge Person, and Mass Reduce Person
+// Greater Magic Weapon, Haste, Slow, Mass Enlarge Person, Mass Reduce Person,
+// Bestow Curse, Greater Invisibility, Phantasmal Killer, and Rainbow Pattern
 // spells (PHB 3.5e).
 // Part of the GameManager partial class.
 // ============================================================================
@@ -2139,6 +2140,453 @@ public partial class GameManager
         target.CheckAbilityScoreZeroEffects();
 
         Debug.Log($"[Contagion] {casterName} -> {target.Stats.CharacterName}: contracted {diseaseData.Name} (immediate onset, DC {diseaseData.FortitudeDC})");
+        return true;
+    }
+
+    // ================================================================
+    //  BESTOW CURSE — PHB p.203
+    //  Necromancy. Clr 3, Sor/Wiz 4.
+    //  Melee touch attack. Will negates. SR: Yes.
+    //  Duration: Permanent.
+    //  Effects (choose one):
+    //    • -6 penalty to one ability score (minimum 1)
+    //    • -4 penalty on attack rolls, saves, ability checks, skill checks
+    //    • 50% chance each turn the creature can't act normally
+    // ================================================================
+
+    private static bool IsBestowCurseSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.BESTOW_CURSE, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The type of curse effect applied by Bestow Curse.
+    /// </summary>
+    public enum BestowCurseType
+    {
+        /// <summary>-6 penalty to one ability score (minimum 1).</summary>
+        AbilityPenalty,
+        /// <summary>-4 penalty on attack rolls, saves, ability checks, and skill checks.</summary>
+        GeneralPenalty,
+        /// <summary>50% chance each turn the creature can't act normally.</summary>
+        ActionLoss
+    }
+
+    /// <summary>
+    /// Resolves Bestow Curse: melee touch attack, Will negates, applies permanent curse.
+    /// AI/NPC casters pick a random curse type. PC casters also get random for now
+    /// (curse selection UI can be added later).
+    /// </summary>
+    private bool TryResolveBestowCurseSpellEffect(
+        CharacterController caster,
+        CharacterController target,
+        SpellData spell,
+        SpellResult result)
+    {
+        if (!IsBestowCurseSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (result == null)
+            return true;
+
+        // Melee touch missed → no effect (charge held)
+        if (result.RequiredAttackRoll && !result.AttackHit)
+        {
+            CombatUI?.ShowCombatLog($"❌ Bestow Curse touch misses {target.Stats.CharacterName}.");
+            return true;
+        }
+
+        // Will save negates
+        if (result.RequiredSave && result.SaveSucceeded)
+        {
+            CombatUI?.ShowCombatLog($"<color=#66CC66>🛡 {target.Stats.CharacterName} resists Bestow Curse with a Will save!</color>");
+            return true;
+        }
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+
+        // Choose a random curse type
+        BestowCurseType curseType = (BestowCurseType)UnityEngine.Random.Range(0, 3);
+        string curseDescription = "";
+
+        switch (curseType)
+        {
+            case BestowCurseType.AbilityPenalty:
+            {
+                // Pick a random ability score
+                AbilityType[] abilities = { AbilityType.STR, AbilityType.DEX, AbilityType.CON, AbilityType.INT, AbilityType.WIS, AbilityType.CHA };
+                AbilityType chosenAbility = abilities[UnityEngine.Random.Range(0, abilities.Length)];
+                int penalty = 6;
+
+                // Apply as ability damage (tracked, permanent until Remove Curse)
+                target.ApplyAbilityDamage(chosenAbility, penalty, "Bestow Curse");
+                curseDescription = $"-{penalty} {chosenAbility} penalty";
+
+                CombatUI?.ShowCombatLog($"<color=#8B0000>🔮 {target.Stats.CharacterName} is cursed! {curseDescription} (permanent).</color>");
+                CombatUI?.ShowCombatLog($"<color=#AA5555>   Ability reduced by {penalty} (minimum effective score of 1).</color>");
+                break;
+            }
+
+            case BestowCurseType.GeneralPenalty:
+            {
+                // Apply -4 penalty on attacks, saves, ability checks, skill checks
+                // Use the condition system to track this
+                target.ApplyCondition(CombatConditionType.BestowCurseGeneralPenalty, -1, "Bestow Curse");
+                curseDescription = "-4 on attacks, saves, ability checks, and skill checks";
+
+                CombatUI?.ShowCombatLog($"<color=#8B0000>🔮 {target.Stats.CharacterName} is cursed! {curseDescription} (permanent).</color>");
+                break;
+            }
+
+            case BestowCurseType.ActionLoss:
+            {
+                // 50% chance each turn the creature can't act
+                target.ApplyCondition(CombatConditionType.BestowCurseActionLoss, -1, "Bestow Curse");
+                curseDescription = "50% chance each turn to lose all actions";
+
+                CombatUI?.ShowCombatLog($"<color=#8B0000>🔮 {target.Stats.CharacterName} is cursed! {curseDescription} (permanent).</color>");
+                break;
+            }
+        }
+
+        // Track via StatusEffectManager for UI/dispel
+        if (target.StatusEffectManager != null)
+        {
+            target.StatusEffectManager.AddEffect(spell, casterName, casterLevel);
+        }
+
+        result.BuffApplied = true;
+        result.BuffDescription = $"Debuff: Bestow Curse — {curseDescription}.";
+
+        // Check if ability damage killed the target
+        target.CheckAbilityScoreZeroEffects();
+
+        Debug.Log($"[BestowCurse] {casterName} -> {target.Stats.CharacterName}: {curseDescription} (permanent)");
+        return true;
+    }
+
+    // ================================================================
+    //  GREATER INVISIBILITY — PHB p.245
+    //  Illusion (Glamer). Brd 4, Sor/Wiz 4.
+    //  Range: Personal or Touch.
+    //  Duration: 1 round/level (D) — Dismissible.
+    //  Like Invisibility but does NOT break when attacking.
+    // ================================================================
+
+    private static bool IsGreaterInvisibilitySpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.GREATER_INVISIBILITY, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Greater Invisibility: touch spell, applies invisibility that does NOT
+    /// break on attack. Duration: 1 round/level. Dismissible.
+    /// </summary>
+    private bool TryResolveGreaterInvisibilitySpellEffect(
+        CharacterController caster,
+        CharacterController target,
+        SpellData spell,
+        SpellResult result)
+    {
+        if (!IsGreaterInvisibilitySpell(spell) || caster == null || caster.Stats == null)
+            return false;
+
+        if (result == null)
+            return true;
+
+        // Determine recipient (self or touched ally)
+        CharacterController recipient = target ?? caster;
+        if (recipient == null || recipient.Stats == null)
+            return true;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
+        string casterName = caster.Stats.CharacterName ?? "Unknown";
+
+        // Create Greater Invisibility effect data — key difference: BreaksOnAttack = false
+        InvisibilityEffectData effectData = InvisibilityEffectData.CreateGreaterInvisibility(durationRounds, caster);
+        recipient.ApplyInvisibilityEffectData(effectData);
+
+        // Track via StatusEffectManager
+        if (recipient.StatusEffectManager != null)
+        {
+            recipient.StatusEffectManager.AddEffect(spell, casterName, casterLevel);
+        }
+
+        result.BuffApplied = true;
+        result.BuffDescription = $"Buff: Greater Invisibility for {durationRounds} round(s). Does NOT break on attack.";
+
+        CombatUI?.ShowCombatLog($"<color=#9966FF>✨ {recipient.Stats.CharacterName} becomes invisible (Greater Invisibility)!</color>");
+        CombatUI?.ShowCombatLog($"<color=#AA88FF>   Duration: {durationRounds} round(s). Does NOT break on attack.</color>");
+        CombatUI?.ShowCombatLog($"<color=#AA88FF>   +2 attack bonus, enemies denied Dex to AC, 50% miss chance.</color>");
+
+        Debug.Log($"[GreaterInvisibility] {casterName} -> {recipient.Stats.CharacterName}: {durationRounds} rounds, breaksOnAttack=false");
+        return true;
+    }
+
+    // ================================================================
+    //  PHANTASMAL KILLER — PHB p.260
+    //  Illusion (Phantasm) [Fear, Mind-Affecting]. Sor/Wiz 4.
+    //  Range: Medium (100 ft + 10 ft/level).
+    //  Will save to disbelieve.
+    //  If fails Will: Fort save or die (3d6 damage + shaken on Fort success).
+    //  SR: Yes. Mind-affecting, fear descriptor.
+    // ================================================================
+
+    private static bool IsPhantasmalKillerSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.PHANTASMAL_KILLER, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Phantasmal Killer: Will disbelieve, then Fort or die.
+    /// On Fort success: 3d6 damage + shaken for 1 round.
+    /// Mind-affecting, fear descriptor — undead/constructs/mindless immune.
+    /// </summary>
+    private bool TryResolvePhantasmalKillerSpellEffect(
+        CharacterController caster,
+        CharacterController target,
+        SpellData spell,
+        SpellResult result)
+    {
+        if (!IsPhantasmalKillerSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (result == null)
+            return true;
+
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+        string targetName = target.Stats.CharacterName ?? "Unknown";
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int saveDc = GetSpellSaveDC(caster, spell);
+
+        CombatUI?.ShowCombatLog($"<color=#6600CC>👻 {casterName} casts Phantasmal Killer on {targetName}!</color>");
+
+        // Mind-affecting immunity check
+        if (target.Stats.IsImmuneToMindAffecting())
+        {
+            result.Success = false;
+            result.NoEffectReason = $"{targetName} is immune to mind-affecting effects.";
+            CombatUI?.ShowCombatLog($"<color=#66CC66>🛡 {targetName} is immune to mind-affecting effects!</color>");
+            return true;
+        }
+
+        // Fear immunity check (undead, constructs, etc. are immune to fear)
+        if (!IsLivingCreatureForFearSpell(target))
+        {
+            result.Success = false;
+            result.NoEffectReason = $"{targetName} is immune to fear effects (not a living creature).";
+            CombatUI?.ShowCombatLog($"<color=#66CC66>🧟 {targetName} is immune to fear effects!</color>");
+            return true;
+        }
+
+        // SR check (done by pipeline if SpellResistanceApplies — but also handle manual check)
+        // The pipeline should handle SR, but if it didn't, trust the result
+
+        // Will save to disbelieve (this is the primary save from the spell pipeline)
+        if (result.RequiredSave && result.SaveSucceeded)
+        {
+            CombatUI?.ShowCombatLog($"<color=#66CC66>🛡 {targetName} disbelieves the phantasm (Will save)!</color>");
+            return true;
+        }
+
+        // Will save failed — now target must make a Fortitude save or die
+        CombatUI?.ShowCombatLog($"<color=#CC0000>😱 {targetName} fails to disbelieve the phantasm!</color>");
+        CombatUI?.ShowCombatLog($"<color=#CC3333>   Must make Fortitude save DC {saveDc} or die from fear!</color>");
+
+        SaveResult fortSave = SavingThrowResolver.ResolveFortitudeSave(target.Stats, saveDc, "Phantasmal Killer (Fort)");
+
+        string fortRollStr = $"d20({fortSave.Roll}) + {fortSave.Bonus} = {fortSave.Total} vs DC {saveDc}";
+
+        if (fortSave.Succeeded)
+        {
+            // Fort succeeded: 3d6 damage + shaken for 1 round
+            int damage = DiceService.RollMultiple(3, 6, "Phantasmal Killer 3d6 damage");
+
+            int hpBefore = target.Stats.CurrentHP;
+            target.Stats.TakeDamage(damage);
+            int hpAfter = target.Stats.CurrentHP;
+
+            result.DamageDealt = damage;
+
+            // Apply Shaken for 1 round
+            target.ApplyCondition(CombatConditionType.Shaken, 1, "Phantasmal Killer");
+
+            CombatUI?.ShowCombatLog($"<color=#CC9933>   Fort save: {fortRollStr} → SUCCESS!</color>");
+            CombatUI?.ShowCombatLog($"<color=#CC6600>   Takes {damage} damage ({hpBefore} → {hpAfter} HP) and is shaken for 1 round.</color>");
+
+            // Check if damage killed the target
+            if (hpAfter <= 0)
+            {
+                result.TargetKilled = true;
+                CombatUI?.ShowCombatLog($"<color=#FF3333>☠ {targetName} is slain by the phantasm's lingering terror!</color>");
+            }
+
+            Debug.Log($"[PhantasmalKiller] {casterName} -> {targetName}: Will failed, Fort succeeded. {damage} damage, shaken 1 round.");
+        }
+        else
+        {
+            // Fort failed: TARGET DIES
+            result.TargetKilled = true;
+
+            CombatUI?.ShowCombatLog($"<color=#FF0000>   Fort save: {fortRollStr} → FAILED!</color>");
+            CombatUI?.ShowCombatLog($"<color=#FF0000>💀 {targetName} DIES FROM FEAR! The phantasm's terror stops their heart!</color>");
+
+            Debug.Log($"[PhantasmalKiller] {casterName} -> {targetName}: Will failed, Fort failed. TARGET DIES.");
+        }
+
+        return true;
+    }
+
+    // ================================================================
+    //  RAINBOW PATTERN — PHB p.268
+    //  Illusion (Pattern) [Mind-Affecting]. Brd 4, Sor/Wiz 4.
+    //  Will negates. SR: Yes.
+    //  Fascinates creatures within 20-ft radius (up to 24 HD total).
+    //  Duration: Concentration + 1 round/level (D).
+    //  Fascinated creatures stand still, -4 to reaction skill checks.
+    //  New Will save each round on creature's turn to break free.
+    // ================================================================
+
+    private static bool IsRainbowPatternSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.RAINBOW_PATTERN, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Rainbow Pattern as an AoE fascination spell.
+    /// Fascinates creatures up to 24 HD total. Will negates. SR: Yes.
+    /// Mind-affecting — undead/constructs/mindless immune.
+    /// </summary>
+    private bool TryResolveRainbowPatternAoE(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells,
+        out string log)
+    {
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (!IsRainbowPatternSpell(spell))
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int saveDc = GetSpellSaveDC(caster, spell);
+        int maxHDTotal = 24;
+        int hdAffected = 0;
+
+        string casterName = caster.Stats.CharacterName ?? "Unknown";
+        int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level after concentration ends
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"✨ {casterName} casts Rainbow Pattern! (20-ft radius)");
+        sb.AppendLine($"  [Level {spell.SpellLevel}] {spell.School} [Mind-Affecting]");
+        sb.AppendLine($"  Will DC {saveDc} negates | Up to {maxHDTotal} HD total");
+        sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s) in area");
+        sb.AppendLine();
+
+        if (targets == null || targets.Count == 0)
+        {
+            sb.AppendLine("  No valid targets in area!");
+            log = sb.ToString();
+            return true;
+        }
+
+        // Sort targets by HD ascending (lower HD are affected first per PHB)
+        var sortedTargets = new List<CharacterController>(targets);
+        sortedTargets.Sort((a, b) =>
+        {
+            int aHd = a != null && a.Stats != null ? Mathf.Max(1, GetTargetHitDice(a)) : 0;
+            int bHd = b != null && b.Stats != null ? Mathf.Max(1, GetTargetHitDice(b)) : 0;
+            return aHd.CompareTo(bHd);
+        });
+
+        int targetIndex = 0;
+        foreach (CharacterController target in sortedTargets)
+        {
+            if (target == null || target.Stats == null || target.Stats.IsDead)
+                continue;
+
+            targetIndex++;
+            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            string targetName = target.Stats.CharacterName ?? "Unknown";
+
+            sb.AppendLine($"  --- Target {targetIndex}: {targetName} ({targetHd} HD) ---");
+
+            // Check HD cap
+            if (hdAffected + targetHd > maxHDTotal)
+            {
+                sb.AppendLine($"  {targetName}: Exceeds 24 HD cap ({hdAffected}/{maxHDTotal} HD used). Skipped.");
+                sb.AppendLine();
+                continue;
+            }
+
+            // Mind-affecting immunity check
+            if (target.Stats.IsImmuneToMindAffecting())
+            {
+                sb.AppendLine($"  🛡 {targetName} is immune to mind-affecting effects!");
+                sb.AppendLine();
+                continue;
+            }
+
+            // SR check
+            if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            {
+                bool srOvercome = SpellResolutionService.TryOvercomeSpellResistance(
+                    casterLevel, target.Stats.SpellResistance, "Rainbow Pattern SR", out int srRoll, out int srTotal);
+
+                sb.AppendLine($"  SR Check: d20({srRoll}) + {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
+
+                if (!srOvercome)
+                {
+                    sb.AppendLine($"  {targetName} resists Rainbow Pattern via Spell Resistance!");
+                    sb.AppendLine();
+                    continue;
+                }
+            }
+
+            // Will save negates
+            SaveResult willSave = SavingThrowResolver.ResolveWillSave(target.Stats, saveDc, "Rainbow Pattern");
+            string saveStr = $"d20({willSave.Roll}) + {willSave.Bonus} = {willSave.Total} vs DC {saveDc}";
+
+            if (willSave.Succeeded)
+            {
+                sb.AppendLine($"  Will save: {saveStr} → SUCCESS! Not fascinated.");
+                sb.AppendLine();
+                continue;
+            }
+
+            // Failed save — target is fascinated!
+            hdAffected += targetHd;
+            target.ApplyCondition(CombatConditionType.Fascinated, durationRounds, "Rainbow Pattern");
+
+            // Track via StatusEffectManager
+            if (target.StatusEffectManager != null)
+            {
+                target.StatusEffectManager.AddEffect(spell, casterName, casterLevel);
+            }
+
+            sb.AppendLine($"  Will save: {saveStr} → FAILED!");
+            sb.AppendLine($"  🌈 {targetName} is fascinated by the rainbow pattern! ({durationRounds} rounds)");
+            sb.AppendLine($"  (HD used: {hdAffected}/{maxHDTotal})");
+            sb.AppendLine();
+        }
+
+        if (hdAffected > 0)
+        {
+            sb.AppendLine($"  Total HD fascinated: {hdAffected}/{maxHDTotal}");
+        }
+        else
+        {
+            sb.AppendLine("  No creatures were fascinated.");
+        }
+
+        log = sb.ToString();
+        Debug.Log($"[RainbowPattern] {casterName}: {hdAffected} HD fascinated out of {maxHDTotal} max, {durationRounds} rounds duration");
         return true;
     }
 }

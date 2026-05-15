@@ -212,6 +212,27 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
+                    SpellId = SpellNames.PHANTASMAL_KILLER,
+                    Name = "Phantasmal Killer",
+                    Description = "Illusion (Phantasm) [Fear, Mind-Affecting]. Creates a phantasmal image of the most fearsome creature imaginable to the target. Will disbelieve, then Fort or die (3d6 on successful Fort, shaken 1 round). SR: Yes. PHB p.260",
+                    SpellLevel = 4, School = "Illusion",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
+                });
+
+        Register(new SpellData
+                {
                     SpellId = SpellNames.PYROTECHNICS,
                     Name = "Pyrotechnics",
                     Description = "Turns fire into blinding light or choking smoke. PHB p.267",

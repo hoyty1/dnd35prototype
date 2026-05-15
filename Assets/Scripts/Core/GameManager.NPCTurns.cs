@@ -981,15 +981,27 @@ public partial class GameManager
         if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && result.Success)
             handledContagion = TryResolveContagionSpellEffect(npc, target, spell, result);
 
+        bool handledBestowCurse = false;
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && result.Success)
+            handledBestowCurse = TryResolveBestowCurseSpellEffect(npc, target, spell, result);
+
+        bool handledGreaterInvisibility = false;
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && result.Success)
+            handledGreaterInvisibility = TryResolveGreaterInvisibilitySpellEffect(npc, target, spell, result);
+
+        bool handledPhantasmalKiller = false;
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && result.Success)
+            handledPhantasmalKiller = TryResolvePhantasmalKillerSpellEffect(npc, target, spell, result);
+
         bool handledAnimateRope = false;
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller)
             handledAnimateRope = TryResolveAnimateRopeSpellEffect(npc, target, spell, result);
 
         bool handledMirrorImage = false;
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledAnimateRope && result.Success && !effectNegatedBySave)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledAnimateRope && result.Success && !effectNegatedBySave)
             handledMirrorImage = TryResolveMirrorImageSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)

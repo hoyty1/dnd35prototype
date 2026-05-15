@@ -282,6 +282,37 @@ public static partial class SpellDatabase
         //
         // An affected creature also takes a -2 penalty to AC. The spell
         // does not stack with the barbarian's rage class feature.
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.RAINBOW_PATTERN,
+                    Name = "Rainbow Pattern",
+                    Description = "Illusion (Pattern) [Mind-Affecting]. A glowing rainbow fascinates creatures within 20-ft radius spread (up to 24 HD total). Fascinated creatures stand still. New Will save each round to break free. Duration: Concentration +1 round/level (D). PHB p.268",
+                    SpellLevel = 4, School = "Illusion",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AreaRadius = 4,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 20,
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    DurationType = DurationType.Concentration,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true
+                });
+
+        RegisterClassSpellAlias("rainbow_pattern_brd", SpellNames.RAINBOW_PATTERN, "Bard", 4);
+
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {

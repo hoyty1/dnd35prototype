@@ -1905,15 +1905,27 @@ public partial class GameManager
             if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && result.Success)
                 handledContagion = TryResolveContagionSpellEffect(caster, target, _pendingSpell, result);
 
+            bool handledBestowCurse = false;
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && result.Success)
+                handledBestowCurse = TryResolveBestowCurseSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledGreaterInvisibility = false;
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && result.Success)
+                handledGreaterInvisibility = TryResolveGreaterInvisibilitySpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledPhantasmalKiller = false;
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && result.Success)
+                handledPhantasmalKiller = TryResolvePhantasmalKillerSpellEffect(caster, target, _pendingSpell, result);
+
             bool handledAnimateRope = false;
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller)
                 handledAnimateRope = TryResolveAnimateRopeSpellEffect(caster, target, _pendingSpell, result);
 
             bool handledMirrorImage = false;
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledAnimateRope && result.Success && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledAnimateRope && result.Success && !effectNegatedBySave)
                 handledMirrorImage = TryResolveMirrorImageSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -2969,6 +2981,38 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Rainbow Pattern — AoE fascination (mind-affecting, up to 24 HD)
+            if (TryResolveRainbowPatternAoE(caster, _pendingSpell, targets, aoeCells, out string rainbowLog))
+            {
+                _lastCombatLog = rainbowLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                // Begin concentration tracking for Rainbow Pattern
+                if (_pendingSpell.DurationType == DurationType.Concentration)
+                {
+                    BeginConcentrationTracking(caster, null, _pendingSpell);
+                }
 
                 _pendingSpell = null;
                 _pendingMetamagic = null;

@@ -433,6 +433,64 @@ public class StatusEffectIndicator : MonoBehaviour
             }
         }
 
+        // Bestow Curse effects
+        if (_character.HasCondition(CombatConditionType.BestowCurseGeneralPenalty))
+        {
+            list.Add(new IconData
+            {
+                Key = "BestowCurseGeneral",
+                ShortLabel = "CRS",
+                Tooltip = "Bestow Curse (General)\n-4 penalty on attack rolls, saves,\nability checks, and skill checks.\nPermanent until removed.",
+                Color = new Color(0.55f, 0f, 0f, 0.95f),
+                Duration = -1
+            });
+        }
+        if (_character.HasCondition(CombatConditionType.BestowCurseActionLoss))
+        {
+            list.Add(new IconData
+            {
+                Key = "BestowCurseAction",
+                ShortLabel = "CRS",
+                Tooltip = "Bestow Curse (Action Loss)\n50% chance each turn to lose\nall actions.\nPermanent until removed.",
+                Color = new Color(0.55f, 0f, 0f, 0.95f),
+                Duration = -1
+            });
+        }
+
+        // Greater Invisibility
+        if (_character.HasActiveInvisibilityEffect && _character.ActiveInvisibilityEffect != null
+            && !_character.ActiveInvisibilityEffect.BreaksOnAttack)
+        {
+            InvisibilityEffectData gInvisData = _character.ActiveInvisibilityEffect;
+            int gInvisRounds = Mathf.Max(0, gInvisData.DurationRemainingRounds);
+            list.Add(new IconData
+            {
+                Key = "GreaterInvisibility",
+                ShortLabel = "GI",
+                Tooltip = $"Greater Invisibility\n+2 attack, enemies denied Dex to AC\n50% miss chance\nDoes NOT break on attack\nDuration: {gInvisRounds} round(s)",
+                Color = new Color(0.6f, 0.4f, 1f, 0.95f),
+                Duration = gInvisRounds
+            });
+        }
+
+        // Bestow Curse - ability penalty tracked via ability damage with "Bestow Curse" source
+        if (statusMgr != null && statusMgr.GetRemainingRounds(SpellNames.BESTOW_CURSE) != 0)
+        {
+            // Only show if not already showing a condition-based curse icon
+            if (!_character.HasCondition(CombatConditionType.BestowCurseGeneralPenalty)
+                && !_character.HasCondition(CombatConditionType.BestowCurseActionLoss))
+            {
+                list.Add(new IconData
+                {
+                    Key = "BestowCurseAbility",
+                    ShortLabel = "CRS",
+                    Tooltip = "Bestow Curse (Ability Penalty)\n-6 to one ability score.\nPermanent until removed.",
+                    Color = new Color(0.55f, 0f, 0f, 0.95f),
+                    Duration = -1
+                });
+            }
+        }
+
         return list;
     }
 

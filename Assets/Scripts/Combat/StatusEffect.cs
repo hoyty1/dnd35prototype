@@ -780,6 +780,32 @@ public static class ConditionRules
             MovementMultiplier = 1f
         });
 
+        // Bestow Curse conditions
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.BestowCurseGeneralPenalty,
+            DisplayName = "Cursed (General)",
+            ShortLabel = "CG",
+            Description = "Bestow Curse: -4 on attacks, saves, ability checks, and skill checks.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -4,
+            FortitudeModifier = -4,
+            ReflexModifier = -4,
+            WillModifier = -4,
+            SkillCheckModifier = -4,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.BestowCurseActionLoss,
+            DisplayName = "Cursed (Action Loss)",
+            ShortLabel = "CA",
+            Description = "Bestow Curse: 50% chance each turn to lose all actions.",
+            StackingRule = ConditionStackingRule.Refresh,
+            MovementMultiplier = 1f
+        });
+
         // Compatibility aliases.
         map[CombatConditionType.KnockedDown] = map[CombatConditionType.Prone].CloneFor(CombatConditionType.KnockedDown);
         map[CombatConditionType.Grappling] = map[CombatConditionType.Grappled].CloneFor(CombatConditionType.Grappling);

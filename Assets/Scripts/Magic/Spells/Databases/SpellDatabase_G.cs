@@ -242,5 +242,30 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.GREATER_INVISIBILITY,
+                    Name = "Greater Invisibility",
+                    Description = "Illusion (Glamer). Subject is invisible and can attack without breaking invisibility. +2 attack, enemies denied Dex to AC, 50% miss chance. 1 round/level (D). PHB p.245",
+                    SpellLevel = 4, School = "Illusion",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
+                });
+
+        RegisterClassSpellAlias("greater_invisibility_brd", SpellNames.GREATER_INVISIBILITY, "Bard", 4);
+
     }
 }

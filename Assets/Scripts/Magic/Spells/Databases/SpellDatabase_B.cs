@@ -50,6 +50,30 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
+                    SpellId = SpellNames.BESTOW_CURSE,
+                    Name = "Bestow Curse",
+                    Description = "Necromancy. Melee touch attack places a terrible curse on the target. Choose one: -6 to one ability score (min 1), -4 on attacks/saves/checks, or 50% chance each turn to act normally. Will negates. SR: Yes. Permanent until removed. PHB p.203",
+                    SpellLevel = 3, School = "Necromancy",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Permanent,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
+                });
+
+        RegisterClassSpellAlias("bestow_curse_wiz", SpellNames.BESTOW_CURSE, "Wizard", 4);
+        RegisterClassSpellAlias("bestow_curse_sor", SpellNames.BESTOW_CURSE, "Sorcerer", 4);
+
+        Register(new SpellData
+                {
                     SpellId = SpellNames.BEARS_ENDURANCE,
                     Name = "Bear's Endurance",
                     Description = "Subject gains +4 enhancement bonus to CON for 1 min/level. Grants +2 HP per Hit Die (real HP, not temporary). When spell ends, HP removed — can cause death. PHB p.203",

@@ -645,5 +645,17 @@ namespace DND35e.Identifiers
         /// <summary>Fear (spell id: fear)</summary>
         public const string FEAR = "fear";
 
+        /// <summary>Bestow Curse (spell id: bestow_curse)</summary>
+        public const string BESTOW_CURSE = "bestow_curse";
+
+        /// <summary>Greater Invisibility (spell id: greater_invisibility)</summary>
+        public const string GREATER_INVISIBILITY = "greater_invisibility";
+
+        /// <summary>Phantasmal Killer (spell id: phantasmal_killer)</summary>
+        public const string PHANTASMAL_KILLER = "phantasmal_killer";
+
+        /// <summary>Rainbow Pattern (spell id: rainbow_pattern)</summary>
+        public const string RAINBOW_PATTERN = "rainbow_pattern";
+
     }
 }

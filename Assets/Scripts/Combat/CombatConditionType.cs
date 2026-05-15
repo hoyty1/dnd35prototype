@@ -49,6 +49,10 @@ public enum CombatConditionType
 
     Blinking,
 
+    // Bestow Curse conditions (permanent until Remove Curse)
+    BestowCurseGeneralPenalty,
+    BestowCurseActionLoss,
+
     // Existing project tactical / status states
     Poisoned,
     Bleeding,
