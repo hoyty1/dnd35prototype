@@ -102,6 +102,9 @@ namespace DND35e.Identifiers
         /// <summary>Consecrate (spell id: consecrate)</summary>
         public const string CONSECRATE = "consecrate";
 
+        /// <summary>Contagion (spell id: contagion)</summary>
+        public const string CONTAGION = "contagion";
+
         /// <summary>Continual Flame (spell id: continual_flame)</summary>
         public const string CONTINUAL_FLAME = "continual_flame";
 

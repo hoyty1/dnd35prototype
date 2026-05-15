@@ -387,6 +387,52 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // Negative Levels (Energy Drained)
+        int negLevels = _character.NegativeLevelCount;
+        if (negLevels > 0)
+        {
+            int enervationRounds = statusMgr != null && statusMgr.HasEffect(SpellNames.ENERVATION)
+                ? statusMgr.GetRemainingRounds(SpellNames.ENERVATION)
+                : -1;
+            string durationStr = enervationRounds > 0
+                ? $"\nDuration: {enervationRounds} rounds ({Mathf.CeilToInt(enervationRounds / 600f)} hour(s))"
+                : "";
+            list.Add(new IconData
+            {
+                Key = "NegativeLevels",
+                ShortLabel = $"-{negLevels}",
+                Tooltip = $"Energy Drained ({negLevels} negative level{(negLevels > 1 ? "s" : "")})\n"
+                         + $"-{negLevels} on all attack rolls, saves, skill checks\n"
+                         + $"-{negLevels * 5} hit points\n"
+                         + $"-{negLevels} effective level(s){durationStr}",
+                Color = new Color(0.55f, 0.2f, 0.6f, 0.95f),
+                Duration = enervationRounds
+            });
+        }
+
+        // Active Diseases
+        if (_character.ActiveDiseases != null && _character.ActiveDiseases.Count > 0)
+        {
+            foreach (ActiveDisease disease in _character.ActiveDiseases)
+            {
+                if (disease == null || disease.DiseaseData == null) continue;
+                string statusStr = disease.IsIncubating
+                    ? $"Incubating ({disease.DaysUntilActive} day(s) remaining)"
+                    : $"Active ({disease.ConsecutiveSuccessfulSaves}/2 saves toward cure)";
+                list.Add(new IconData
+                {
+                    Key = $"Disease_{disease.DiseaseData.Name}",
+                    ShortLabel = "DIS",
+                    Tooltip = $"Disease: {disease.DiseaseData.Name}\n"
+                             + $"Status: {statusStr}\n"
+                             + $"Fort DC {disease.DiseaseData.FortitudeDC} daily\n"
+                             + $"{disease.DiseaseData.Description}",
+                    Color = new Color(0.75f, 0.55f, 0.2f, 0.95f),
+                    Duration = -1
+                });
+            }
+        }
+
         return list;
     }
 

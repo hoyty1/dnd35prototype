@@ -355,6 +355,25 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CONTAGION,
+                    Name = "Contagion",
+                    Description = "Melee touch attack infects the target with a chosen disease. Disease takes effect immediately (no incubation). Fortitude negates. PHB p.213",
+                    SpellLevel = 3, School = "Necromancy",
+                    ClassList = new[] { "Cleric", "Druid" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         // Aliases
         RegisterClassSpellAlias("cause_fear_clr", SpellNames.CAUSE_FEAR, "Cleric", 1);
         RegisterClassSpellAlias("comprehend_languages_clr", SpellNames.COMPREHEND_LANGUAGES, "Cleric", 1);
@@ -362,6 +381,10 @@ public static partial class SpellDatabase
         // Aliases — Cat's Grace: Druid 2, Ranger 2 (NOT Cleric)
         RegisterClassSpellAlias("cats_grace_drd", SpellNames.CATS_GRACE, "Druid", 2);
         RegisterClassSpellAlias("cats_grace_rgr", SpellNames.CATS_GRACE, "Ranger", 2);
+
+        // Aliases — Contagion: Sor/Wiz 4 (base is Clr 3/Dru 3)
+        RegisterClassSpellAlias("contagion_wiz", SpellNames.CONTAGION, "Wizard", 4);
+        RegisterClassSpellAlias("contagion_sor", SpellNames.CONTAGION, "Sorcerer", 4);
 
     }
 }

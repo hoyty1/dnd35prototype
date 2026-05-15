@@ -157,14 +157,19 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.ENERVATION,
                     Name = "Enervation",
-                    Description = "Ranged touch attack bestows 1d4 negative levels. No save. PHB p.226",
+                    Description = "Ranged touch attack bestows 1d4 negative levels. No save. Negative levels fade after CL hours. PHB p.226",
                     SpellLevel = 4, School = "Necromancy",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Close,
                     IsTouch = true,
                     IsRangedTouch = true,
                     EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
