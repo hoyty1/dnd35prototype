@@ -56,7 +56,7 @@ public static class SpellResolutionServiceTests
         return cc;
     }
 
-    private static SpellData MakeSpell(string name, SpellTargetType targetType = SpellTargetType.SingleTarget)
+    private static SpellData MakeSpell(string name, SpellTargetType targetType = SpellTargetType.SingleEnemy)
     {
         var spell = new SpellData();
         spell.Name = name;
