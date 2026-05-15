@@ -392,8 +392,10 @@ public class StatusEffectManager : MonoBehaviour
         // Size-changing transmutations overlap each other by definition.
         string newId = newSpell?.SpellId ?? string.Empty;
         string existingId = existing?.Spell?.SpellId ?? string.Empty;
-        bool newIsSizeShift = newId == SpellNames.ENLARGE_PERSON || newId == SpellNames.REDUCE_PERSON;
-        bool existingIsSizeShift = existingId == SpellNames.ENLARGE_PERSON || existingId == SpellNames.REDUCE_PERSON;
+        bool newIsSizeShift = newId == SpellNames.ENLARGE_PERSON || newId == SpellNames.REDUCE_PERSON
+            || newId == SpellNames.MASS_ENLARGE_PERSON || newId == SpellNames.MASS_REDUCE_PERSON;
+        bool existingIsSizeShift = existingId == SpellNames.ENLARGE_PERSON || existingId == SpellNames.REDUCE_PERSON
+            || existingId == SpellNames.MASS_ENLARGE_PERSON || existingId == SpellNames.MASS_REDUCE_PERSON;
         if (newIsSizeShift && existingIsSizeShift) return true;
         // If both modify the same ability score
         if (!string.IsNullOrEmpty(newSpell.BuffStatName) && !string.IsNullOrEmpty(existing.AppliedStatName))
@@ -691,16 +693,18 @@ public class StatusEffectManager : MonoBehaviour
             return;
         }
 
-        if (spellId == SpellNames.ENLARGE_PERSON || spellId == SpellNames.REDUCE_PERSON)
+        if (spellId == SpellNames.ENLARGE_PERSON || spellId == SpellNames.REDUCE_PERSON
+            || spellId == SpellNames.MASS_ENLARGE_PERSON || spellId == SpellNames.MASS_REDUCE_PERSON)
         {
-            int shift = (spellId == SpellNames.ENLARGE_PERSON) ? 1 : -1;
+            bool isEnlarge = spellId == SpellNames.ENLARGE_PERSON || spellId == SpellNames.MASS_ENLARGE_PERSON;
+            int shift = isEnlarge ? 1 : -1;
 
             if (applying)
             {
                 bool sizeChanged = TryApplySizeShift(shift);
                 effect.AppliedSizeCategoryShift = sizeChanged ? shift : 0;
 
-                if (spellId == SpellNames.ENLARGE_PERSON)
+                if (isEnlarge)
                 {
                     effect.AppliedStatName = "STR";
                     effect.AppliedStatBonus = 2;

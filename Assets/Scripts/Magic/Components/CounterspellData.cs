@@ -148,6 +148,8 @@ namespace DND35.Magic
             { "bane", "bless" },
             { "enlarge_person", "reduce_person" },
             { "reduce_person", "enlarge_person" },
+            { "mass_enlarge_person", "mass_reduce_person" },
+            { "mass_reduce_person", "mass_enlarge_person" },
         };
 
         /// <summary>

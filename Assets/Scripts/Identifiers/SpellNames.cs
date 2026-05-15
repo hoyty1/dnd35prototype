@@ -219,6 +219,9 @@ namespace DND35e.Identifiers
         /// <summary>Enlarge Person (spell id: enlarge_person)</summary>
         public const string ENLARGE_PERSON = "enlarge_person";
 
+        /// <summary>Enlarge Person, Mass (spell id: mass_enlarge_person)</summary>
+        public const string MASS_ENLARGE_PERSON = "mass_enlarge_person";
+
         /// <summary>Enthrall (spell id: enthrall)</summary>
         public const string ENTHRALL = "enthrall";
 
@@ -461,6 +464,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Reduce Person (spell id: reduce_person)</summary>
         public const string REDUCE_PERSON = "reduce_person";
+
+        /// <summary>Reduce Person, Mass (spell id: mass_reduce_person)</summary>
+        public const string MASS_REDUCE_PERSON = "mass_reduce_person";
 
         /// <summary>Remove Fear (spell id: remove_fear)</summary>
         public const string REMOVE_FEAR = "remove_fear";

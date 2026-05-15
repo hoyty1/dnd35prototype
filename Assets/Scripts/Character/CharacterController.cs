@@ -2915,6 +2915,7 @@ public class CharacterController : MonoBehaviour
             Stats.SlowACPenalty = 0;
             Stats.SlowReflexPenalty = 0;
             Stats.SlowSpeedMultiplier = 1f;
+            Stats.ResetCurrentSizeToBase(); // Ensure size resets on combat end/death
             Stats.ActiveProtectionFromArrowsEffect = null;
             if (Stats.ActiveResistEnergyEffects != null)
                 Stats.ActiveResistEnergyEffects.Clear();

@@ -56,6 +56,8 @@ namespace DND35e.Identifiers
         IceStorm = 401,
         GreaterInvisibility = 402,
         Stoneskin = 403,
+        MassEnlargePerson = 404,
+        MassReducePerson = 405,
 
         // 5th level (500-599)
         ConeOfCold = 500,

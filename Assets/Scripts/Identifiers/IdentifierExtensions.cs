@@ -138,6 +138,8 @@ namespace DND35e.Identifiers
             { SpellID.IceStorm, "ice_storm" },
             { SpellID.GreaterInvisibility, "greater_invisibility" },
             { SpellID.Stoneskin, "stoneskin" },
+            { SpellID.MassEnlargePerson, SpellNames.MASS_ENLARGE_PERSON },
+            { SpellID.MassReducePerson, SpellNames.MASS_REDUCE_PERSON },
 
             { SpellID.ConeOfCold, "cone_of_cold" },
             { SpellID.Teleport, "teleport" },

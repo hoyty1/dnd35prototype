@@ -276,6 +276,37 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // Size change spells: Enlarge/Reduce Person and Mass variants
+        if (statusMgr != null && (statusMgr.HasEffect(SpellNames.ENLARGE_PERSON) || statusMgr.HasEffect(SpellNames.MASS_ENLARGE_PERSON)))
+        {
+            string enlargeSpellId = statusMgr.HasEffect(SpellNames.MASS_ENLARGE_PERSON) ? SpellNames.MASS_ENLARGE_PERSON : SpellNames.ENLARGE_PERSON;
+            int rounds = statusMgr.GetRemainingRounds(enlargeSpellId);
+            string spellLabel = enlargeSpellId == SpellNames.MASS_ENLARGE_PERSON ? "Mass Enlarge Person" : "Enlarge Person";
+            list.Add(new IconData
+            {
+                Key = "EnlargePerson",
+                ShortLabel = "EN",
+                Tooltip = $"{spellLabel}\n+2 STR (size), -2 DEX (size)\n-1 size penalty to AC and attack\nSize category increased by 1\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.9f, 0.65f, 0.3f, 0.92f),
+                Duration = rounds
+            });
+        }
+
+        if (statusMgr != null && (statusMgr.HasEffect(SpellNames.REDUCE_PERSON) || statusMgr.HasEffect(SpellNames.MASS_REDUCE_PERSON)))
+        {
+            string reduceSpellId = statusMgr.HasEffect(SpellNames.MASS_REDUCE_PERSON) ? SpellNames.MASS_REDUCE_PERSON : SpellNames.REDUCE_PERSON;
+            int rounds = statusMgr.GetRemainingRounds(reduceSpellId);
+            string spellLabel = reduceSpellId == SpellNames.MASS_REDUCE_PERSON ? "Mass Reduce Person" : "Reduce Person";
+            list.Add(new IconData
+            {
+                Key = "ReducePerson",
+                ShortLabel = "RD",
+                Tooltip = $"{spellLabel}\n-2 STR (size), +2 DEX (size)\n+1 size bonus to AC and attack\nSize category decreased by 1\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.5f, 0.75f, 0.9f, 0.92f),
+                Duration = rounds
+            });
+        }
+
         if (statusMgr != null && statusMgr.HasEffect(SpellNames.PROTECTION_FROM_ARROWS))
         {
             int rounds = statusMgr.GetRemainingRounds(SpellNames.PROTECTION_FROM_ARROWS);

@@ -1107,7 +1107,8 @@ public partial class GameManager
             return false;
         }
 
-        bool isPersonTransmutation = spell.SpellId == SpellNames.ENLARGE_PERSON || spell.SpellId == SpellNames.REDUCE_PERSON;
+        bool isPersonTransmutation = spell.SpellId == SpellNames.ENLARGE_PERSON || spell.SpellId == SpellNames.REDUCE_PERSON
+            || spell.SpellId == SpellNames.MASS_ENLARGE_PERSON || spell.SpellId == SpellNames.MASS_REDUCE_PERSON;
         if (isPersonTransmutation)
         {
             // Person transmutations can target any humanoid creature (ally or enemy).
@@ -1179,6 +1180,8 @@ public partial class GameManager
         // Keep this explicit for known "harmless" spells we currently support with optional saves.
         if (spell.SpellId == SpellNames.ENLARGE_PERSON
             || spell.SpellId == SpellNames.REDUCE_PERSON
+            || spell.SpellId == SpellNames.MASS_ENLARGE_PERSON
+            || spell.SpellId == SpellNames.MASS_REDUCE_PERSON
             || spell.SpellId == SpellNames.BLUR)
         {
             return target == caster || IsAllyTeam(caster, target);
@@ -5057,6 +5060,11 @@ public partial class GameManager
         if (spell != null && spell.SpellId == SpellNames.SLOW)
         {
             return ApplySlowDebuff(caster, target, spell, spellComp);
+        }
+
+        if (spell != null && (spell.SpellId == SpellNames.MASS_ENLARGE_PERSON || spell.SpellId == SpellNames.MASS_REDUCE_PERSON))
+        {
+            return ApplyMassSizeChangeBuff(caster, target, spell, spellComp);
         }
 
         if (spell != null && spell.SpellId == SpellNames.RESIST_ENERGY)

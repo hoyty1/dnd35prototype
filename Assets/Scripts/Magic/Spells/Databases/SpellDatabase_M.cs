@@ -355,6 +355,110 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Mount/summoning not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // MASS ENLARGE PERSON  (PHB p.226)
+        // Transmutation
+        // Level: Sor/Wiz 4
+        // Components: V, S, M
+        // Casting Time: 1 round
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Targets: One humanoid creature/level, no two of which can be
+        //          more than 30 ft. apart
+        // Duration: 1 min./level (D)
+        // Saving Throw: Fortitude negates
+        // Spell Resistance: Yes
+        //
+        // This spell functions like Enlarge Person, except that it
+        // affects multiple creatures.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MASS_ENLARGE_PERSON,
+                    Name = "Mass Enlarge Person",
+                    Description = "As Enlarge Person, but affects one humanoid creature/level (no two more than 30 ft. apart). "
+                        + "+2 STR, -2 DEX, -1 size penalty to AC/attack. "
+                        + "Duration 1 min/level. Fort negates. SR: Yes. PHB p.226",
+                    SpellLevel = 4,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Buff,
+                    BuffStatName = "STR",
+                    BuffStatBonus = 2,
+                    BuffDurationRounds = 10, // Legacy fallback: 1 minute
+                    BuffType = "enlarge",
+                    BuffBonusType = BonusType.Size,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ──────────────────────────────────────────────────────────────
+        // MASS REDUCE PERSON  (PHB p.269)
+        // Transmutation
+        // Level: Sor/Wiz 4
+        // Components: V, S, M
+        // Casting Time: 1 round
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Targets: One humanoid creature/level, no two of which can be
+        //          more than 30 ft. apart
+        // Duration: 1 min./level (D)
+        // Saving Throw: Fortitude negates
+        // Spell Resistance: Yes
+        //
+        // This spell functions like Reduce Person, except that it
+        // affects multiple creatures.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MASS_REDUCE_PERSON,
+                    Name = "Mass Reduce Person",
+                    Description = "As Reduce Person, but affects one humanoid creature/level (no two more than 30 ft. apart). "
+                        + "-2 STR, +2 DEX, +1 size bonus to AC/attack. "
+                        + "Duration 1 min/level. Fort negates. SR: Yes. PHB p.269",
+                    SpellLevel = 4,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Buff,
+                    BuffStatName = "DEX",
+                    BuffStatBonus = 2,
+                    BuffDurationRounds = 10, // Legacy fallback: 1 minute
+                    BuffType = "reduce",
+                    BuffBonusType = BonusType.Size,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("magic_weapon_clr", SpellNames.MAGIC_WEAPON, "Cleric", 1);
         RegisterClassSpellAlias("mending_clr", SpellNames.MENDING, "Cleric", 0);
