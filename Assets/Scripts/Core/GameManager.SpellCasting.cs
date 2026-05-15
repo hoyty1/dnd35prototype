@@ -2912,6 +2912,12 @@ public partial class GameManager
                 return;
             }
 
+            if (string.Equals(_pendingSpell.SpellId, SpellNames.FEAR, StringComparison.Ordinal))
+            {
+                ResolveFearSpell(caster, targets, aoeCells);
+                return;
+            }
+
             if (TryResolveGlitterdustSpell(caster, _pendingSpell, targets, aoeCells, out string glitterdustLog))
             {
                 _lastCombatLog = glitterdustLog;
@@ -4286,6 +4292,185 @@ public partial class GameManager
         CombatUI?.ShowCombatLog($"😱 {targetName} fails Will save - Frightened for {frightenedRounds} rounds! Must flee from {casterName}. (-2 to attacks, saves, checks)");
         Debug.Log($"[GameManager] Scare: {targetName} frightened for {frightenedRounds} rounds by {casterName}");
         return true;
+    }
+
+    // ======================== FEAR SPELL HANDLER (Cone AoE) ========================
+
+    private static bool IsFearSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.FEAR, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolve the Fear spell (PHB p.229) as a cone AoE.
+    /// All living creatures in the 30-ft cone: Will partial.
+    /// Failed save → Panicked for 1 round/level.
+    /// Successful save → Shaken for 1 round.
+    /// </summary>
+    private void ResolveFearSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    {
+        if (caster == null || caster.Stats == null || _pendingSpell == null)
+            return;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int saveDc = 10 + _pendingSpell.SpellLevel + caster.Stats.GetPrimaryCastingModifier();
+        string casterName = caster.Stats.CharacterName;
+
+        var logBuilder = new System.Text.StringBuilder();
+        logBuilder.AppendLine("═══════════════════════════════════");
+        logBuilder.AppendLine($"✨ {casterName} casts Fear! (30-ft cone)");
+        logBuilder.AppendLine($"  Will DC {saveDc} | Targets in cone: {targets.Count} ({aoeCells.Count} squares)");
+        logBuilder.AppendLine();
+
+        int panickedCount = 0;
+        int shakenCount = 0;
+        int immuneCount = 0;
+
+        for (int i = 0; i < targets.Count; i++)
+        {
+            CharacterController target = targets[i];
+            if (target == null || target.Stats == null || target.Stats.IsDead)
+                continue;
+
+            string targetName = target.Stats.CharacterName;
+
+            // Check living creature (undead, constructs immune)
+            if (!IsLivingCreatureForFearSpell(target))
+            {
+                logBuilder.AppendLine($"  • {targetName}: Immune (not a living creature).");
+                immuneCount++;
+                continue;
+            }
+
+            // Check mind-affecting immunity
+            if (IsImmuneToMindAffecting(target))
+            {
+                logBuilder.AppendLine($"  • {targetName}: Immune to mind-affecting effects.");
+                immuneCount++;
+                continue;
+            }
+
+            // Spell Resistance check
+            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            {
+                int srRoll = DiceService.D20("Fear SR check");
+                int srTotal = srRoll + casterLevel;
+                if (srTotal < target.Stats.SpellResistance)
+                {
+                    logBuilder.AppendLine($"  • {targetName}: SR blocks Fear (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    immuneCount++;
+                    continue;
+                }
+            }
+
+            // Will save
+            int saveRoll = DiceService.D20("Fear Will save");
+            int saveTotal = saveRoll + target.Stats.WillSave;
+            bool saveSuccess = saveTotal >= saveDc;
+
+            if (saveSuccess)
+            {
+                // Successful save: Shaken for 1 round
+                if (_conditionService != null)
+                {
+                    _conditionService.ApplyCondition(
+                        target,
+                        CombatConditionType.Shaken,
+                        1,
+                        source: caster,
+                        sourceNameOverride: _pendingSpell.Name,
+                        sourceCategory: "Spell",
+                        sourceId: _pendingSpell.SpellId);
+                }
+                else
+                {
+                    target.ApplyCondition(CombatConditionType.Shaken, 1, casterName);
+                }
+
+                shakenCount++;
+                logBuilder.AppendLine($"  • {targetName}: Will d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} ≥ DC {saveDc} — Shaken for 1 round.");
+            }
+            else
+            {
+                // Failed save: Panicked for 1 round/level
+                int panickedRounds = Mathf.Max(1, casterLevel);
+
+                var fearData = new FrightenedConditionData
+                {
+                    Caster = caster,
+                    CasterName = casterName,
+                    RemainingRounds = panickedRounds,
+                    SourceSpellId = _pendingSpell.SpellId,
+                    SourceEffectName = _pendingSpell.Name
+                };
+
+                if (_conditionService != null)
+                {
+                    _conditionService.ApplyCondition(
+                        target,
+                        CombatConditionType.Panicked,
+                        panickedRounds,
+                        source: caster,
+                        data: fearData,
+                        sourceNameOverride: _pendingSpell.Name,
+                        sourceCategory: "Spell",
+                        sourceId: _pendingSpell.SpellId);
+                }
+                else
+                {
+                    target.ApplyCondition(CombatConditionType.Panicked, panickedRounds, casterName);
+                }
+
+                // Also apply ScareEffectData for the flee behavior integration
+                var scareData = new ScareEffectData
+                {
+                    CurrentFearLevel = FearLevel.Panicked,
+                    DurationRemainingRounds = panickedRounds,
+                    IsActive = true,
+                    AttackPenalty = -2,
+                    SavePenalty = -2,
+                    SkillPenalty = -2,
+                    AbilityCheckPenalty = -2,
+                    SourceSpellId = SpellNames.FEAR,
+                    SourceName = "Fear"
+                };
+                scareData.SetCaster(caster);
+                target.ApplyScareEffect(scareData);
+
+                panickedCount++;
+                logBuilder.AppendLine($"  • {targetName}: Will d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} < DC {saveDc} — PANICKED for {panickedRounds} rounds!");
+            }
+        }
+
+        logBuilder.AppendLine();
+        logBuilder.AppendLine($"Result: {panickedCount} panicked, {shakenCount} shaken, {immuneCount} immune/resisted");
+        logBuilder.AppendLine("═══════════════════════════════════");
+
+        CombatUI?.ShowCombatLog(logBuilder.ToString());
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+
+        if (AreAllNPCsDead())
+        {
+            Debug.Log("[CombatEnd] Victory condition met after Fear resolution.");
+            HandleCombatVictoryDetected("ResolveFearSpell");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        if (AreAllPlayerCharactersDead())
+        {
+            Debug.Log("[CombatEnd] Defeat condition met after Fear resolution.");
+            HandleCombatDefeatDetected("ResolveFearSpell");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        StartCoroutine(AfterAttackDelay(caster, 1.5f));
     }
 
     private static bool IsRayOfEnfeeblementSpell(SpellData spell)

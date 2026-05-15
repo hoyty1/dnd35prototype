@@ -22,7 +22,7 @@ public sealed class FrightenedBehaviorController
         if (gameManager == null || actor == null || actor.Stats == null || actor.Stats.IsDead)
             return false;
 
-        if (!actor.HasCondition(CombatConditionType.Frightened))
+        if (!actor.HasCondition(CombatConditionType.Frightened) && !actor.HasCondition(CombatConditionType.Panicked))
             return false;
 
         List<ConditionService.ActiveCondition> active = gameManager.GetActiveConditions(actor);
@@ -32,7 +32,10 @@ public sealed class FrightenedBehaviorController
         for (int i = 0; i < active.Count; i++)
         {
             ConditionService.ActiveCondition condition = active[i];
-            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Frightened)
+            if (condition == null)
+                continue;
+            CombatConditionType normalized = ConditionRules.Normalize(condition.Type);
+            if (normalized != CombatConditionType.Frightened && normalized != CombatConditionType.Panicked)
                 continue;
 
             CharacterController source = condition.Source;
@@ -68,9 +71,12 @@ public sealed class FrightenedBehaviorController
         if (source == null || source.Stats == null || source.Stats.IsDead)
         {
             gameManager.RemoveCondition(actor, CombatConditionType.Frightened);
+            gameManager.RemoveCondition(actor, CombatConditionType.Panicked);
             gameManager.CombatUI?.ShowCombatLog($"😌 {actor.Stats.CharacterName} is no longer frightened.");
             yield break;
         }
+
+        bool isPanicked = actor.HasCondition(CombatConditionType.Panicked);
 
         string actorName = actor.Stats.CharacterName;
         string sourceName = source.Stats.CharacterName;
@@ -85,7 +91,8 @@ public sealed class FrightenedBehaviorController
                 yield return gameManager.StartCoroutine(
                     gameManager.ExecuteWithdrawMovementForAI(actor, withdrawCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
 
-                gameManager.CombatUI?.ShowCombatLog($"😱 {actorName} flees in terror from {sourceName}.");
+                string fleeEmoji = isPanicked ? "😱💨" : "😱";
+                gameManager.CombatUI?.ShowCombatLog($"{fleeEmoji} {actorName} flees in terror from {sourceName}.{(isPanicked ? " (Panicked!)" : "")}");
                 yield return new WaitForSeconds(0.35f);
                 yield break;
             }
@@ -97,7 +104,7 @@ public sealed class FrightenedBehaviorController
                     gameManager.MoveCharacterAlongComputedPathForAI(actor, runCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
 
                 actor.Actions.UseFullRoundAction();
-                gameManager.CombatUI?.ShowCombatLog($"🏃 {actorName} runs from {sourceName}, provoking attacks of opportunity!");
+                gameManager.CombatUI?.ShowCombatLog($"🏃 {actorName} runs from {sourceName}, provoking attacks of opportunity!{(isPanicked ? " (Panicked!)" : "")}");
                 yield return new WaitForSeconds(0.35f);
                 yield break;
             }
@@ -112,14 +119,22 @@ public sealed class FrightenedBehaviorController
                     gameManager.MoveCharacterAlongComputedPathForAI(actor, fleeCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
 
                 ConsumeMoveAction(actor);
-                gameManager.CombatUI?.ShowCombatLog($"😱 {actorName} runs from {sourceName} in terror!");
+                gameManager.CombatUI?.ShowCombatLog($"😱 {actorName} runs from {sourceName} in terror!{(isPanicked ? " (Panicked!)" : "")}");
                 yield return new WaitForSeconds(0.35f);
                 yield break;
             }
         }
 
-        actor.SetFightingDefensively(true);
-        gameManager.CombatUI?.ShowCombatLog($"🛡 {actorName} is cornered by fear and fights defensively.");
+        // Panicked creatures cower when cornered (-2 AC, lose Dex bonus); frightened fight defensively
+        if (isPanicked)
+        {
+            gameManager.CombatUI?.ShowCombatLog($"😰 {actorName} is cornered and cowers in panic! (-2 AC, loses Dex bonus)");
+        }
+        else
+        {
+            actor.SetFightingDefensively(true);
+            gameManager.CombatUI?.ShowCombatLog($"🛡 {actorName} is cornered by fear and fights defensively.");
+        }
         yield return new WaitForSeconds(0.25f);
     }
 

@@ -639,5 +639,8 @@ namespace DND35e.Identifiers
         /// <summary>Slow (spell id: slow)</summary>
         public const string SLOW = "slow";
 
+        /// <summary>Fear (spell id: fear)</summary>
+        public const string FEAR = "fear";
+
     }
 }

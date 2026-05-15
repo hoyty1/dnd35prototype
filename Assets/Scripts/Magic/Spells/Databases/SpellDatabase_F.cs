@@ -315,6 +315,58 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // FEAR  (PHB p.229)
+        // Necromancy [Fear, Mind-Affecting]
+        // Level: Brd 3, Sor/Wiz 4
+        // Components: V, S, M (either the heart of a hen or a white feather)
+        // Casting Time: 1 standard action
+        // Range: 30 ft.
+        // Area: Cone-shaped burst
+        // Duration: 1 round/level or 1 round; see text
+        // Saving Throw: Will partial
+        // Spell Resistance: Yes
+        //
+        // An invisible cone of terror causes each living creature in
+        // the area to become panicked unless it succeeds on a Will save.
+        // If cornered, a panicked creature begins cowering.
+        // If the Will save succeeds, the creature is shaken for 1 round.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.FEAR,
+                    Name = "Fear",
+                    Description = "Necromancy [Fear, Mind-Affecting]. An invisible cone of terror causes each living creature in a 30-ft cone to become panicked (Will partial). Failed save: panicked for 1 round/level (flee, drop items, -2 penalties). Successful save: shaken for 1 round (-2 penalties). Does not affect undead, constructs, or other non-living creatures. Components: V, S, M. PHB p.229",
+                    SpellLevel = 4,
+                    School = "Necromancy",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 3),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeSquares = 6, // 30 ft = 6 squares
+                    AoEShapeType = AoEShape.Cone,
+                    AoESizeSquares = 6, // 30-ft cone = 6 squares length
+                    AoERangeSquares = 0, // Cone originates from caster
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 4, // Fallback; actual is caster level rounds
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.FOXS_CUNNING,
