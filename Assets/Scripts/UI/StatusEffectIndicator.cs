@@ -218,6 +218,32 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (_character.HasActiveHasteEffect)
+        {
+            int rounds = _character.GetHasteRemainingRounds();
+            list.Add(new IconData
+            {
+                Key = "Haste",
+                ShortLabel = "HS",
+                Tooltip = $"Haste\n+1 attack rolls\n+1 dodge AC\n+1 Reflex saves\n+30 ft movement speed\nExtra attack at full BAB on full attack\nCounters/dispels Slow\nDuration: {rounds} rounds",
+                Color = new Color(0.3f, 0.9f, 0.4f, 0.92f),
+                Duration = rounds
+            });
+        }
+
+        if (_character.HasActiveSlowEffect)
+        {
+            int rounds = _character.GetSlowRemainingRounds();
+            list.Add(new IconData
+            {
+                Key = "Slow",
+                ShortLabel = "SL",
+                Tooltip = $"Slow\n-1 attack rolls\n-1 AC\n-1 Reflex saves\nMovement speed halved\nNo full-round actions\nCounters/dispels Haste\nDuration: {rounds} rounds",
+                Color = new Color(0.6f, 0.45f, 0.75f, 0.92f),
+                Duration = rounds
+            });
+        }
+
         if (_character.ActiveTouchOfIdiocyEffect != null && _character.Stats != null)
         {
             TouchOfIdiocyConditionData idiocy = _character.ActiveTouchOfIdiocyEffect;

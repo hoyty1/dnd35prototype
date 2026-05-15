@@ -311,6 +311,33 @@ public partial class GameManager
             return;
         }
 
+        // --- Haste ---
+        if (spellId == SpellNames.HASTE)
+        {
+            target.ClearHasteEffect();
+            if (target.Stats != null)
+            {
+                target.Stats.HasteAttackBonus = 0;
+                target.Stats.HasteACBonus = 0;
+                target.Stats.HasteReflexBonus = 0;
+            }
+            return;
+        }
+
+        // --- Slow ---
+        if (spellId == SpellNames.SLOW)
+        {
+            target.ClearSlowEffect();
+            if (target.Stats != null)
+            {
+                target.Stats.SlowAttackPenalty = 0;
+                target.Stats.SlowACPenalty = 0;
+                target.Stats.SlowReflexPenalty = 0;
+                target.Stats.SlowSpeedMultiplier = 1f;
+            }
+            return;
+        }
+
         // --- Blur ---
         // Blur is handled by StatusEffectManager.RemoveEffect() reversing the concealment stats.
         // No dedicated cleanup method needed.

@@ -5049,6 +5049,16 @@ public partial class GameManager
             return ApplyBlinkBuff(caster, spell, spellComp);
         }
 
+        if (spell != null && spell.SpellId == SpellNames.HASTE)
+        {
+            return ApplyHasteBuff(caster, target, spell, spellComp);
+        }
+
+        if (spell != null && spell.SpellId == SpellNames.SLOW)
+        {
+            return ApplySlowDebuff(caster, target, spell, spellComp);
+        }
+
         if (spell != null && spell.SpellId == SpellNames.RESIST_ENERGY)
         {
             CharacterController recipient = target ?? caster;
@@ -5608,6 +5618,29 @@ public partial class GameManager
                 {
                     OnMirrorImageEffectExpired(character);
                 }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.HASTE, StringComparison.Ordinal))
+                {
+                    character.ClearHasteEffect();
+                    if (character.Stats != null)
+                    {
+                        character.Stats.HasteAttackBonus = 0;
+                        character.Stats.HasteACBonus = 0;
+                        character.Stats.HasteReflexBonus = 0;
+                    }
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Haste expires on {character.Stats.CharacterName}: attack, AC, Reflex, and speed bonuses removed.</color>");
+                }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SLOW, StringComparison.Ordinal))
+                {
+                    character.ClearSlowEffect();
+                    if (character.Stats != null)
+                    {
+                        character.Stats.SlowAttackPenalty = 0;
+                        character.Stats.SlowACPenalty = 0;
+                        character.Stats.SlowReflexPenalty = 0;
+                        character.Stats.SlowSpeedMultiplier = 1f;
+                    }
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Slow expires on {character.Stats.CharacterName}: penalties removed, full actions restored.</color>");
+                }
             }
 
             if (statusMgr.ActiveEffectCount > 0)
@@ -5637,6 +5670,10 @@ public partial class GameManager
                     {
                         SyncMirrorImageDurationForCaster(character, statusMgr);
                     }
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.HASTE, StringComparison.Ordinal))
+                        character.UpdateHasteDuration(effect.RemainingRounds);
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SLOW, StringComparison.Ordinal))
+                        character.UpdateSlowDuration(effect.RemainingRounds);
 
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
                 }

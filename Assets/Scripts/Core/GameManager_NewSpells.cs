@@ -2,7 +2,7 @@
 // GameManager_NewSpells.cs — Resolution logic for Lightning Bolt, Fireball,
 // Daylight, Rage, Hold Person, Displacement, Blink, Wind Wall, Invisibility Sphere,
 // Halt Undead, Ray of Exhaustion, Vampiric Touch, Flame Arrow, Keen Edge,
-// and Greater Magic Weapon spells (PHB 3.5e).
+// Greater Magic Weapon, Haste, and Slow spells (PHB 3.5e).
 // Part of the GameManager partial class.
 // ============================================================================
 using System;
@@ -1593,5 +1593,206 @@ public partial class GameManager
 
         UpdateAllStatsUI();
         return true;
+    }
+
+    // ================================================================
+    //  HASTE — Transmutation Speed Buff (PHB p.239)
+    // ================================================================
+
+    /// <summary>
+    /// Applies the Haste spell effect to a target.
+    /// Per PHB p.239:
+    ///   • +1 bonus on attack rolls
+    ///   • +1 dodge bonus to AC and Reflex saves
+    ///   • +30 ft. movement speed
+    ///   • One extra attack at full BAB on full attack action
+    ///   • Haste dispels and counters Slow
+    /// Duration: 1 round/level
+    /// </summary>
+    private ActiveSpellEffect ApplyHasteBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
+    {
+        CharacterController recipient = target ?? caster;
+        if (recipient == null || recipient.Stats == null || spell == null)
+            return null;
+
+        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        if (recipientStatusMgr == null)
+            recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+        recipientStatusMgr.Init(recipient.Stats);
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+        // If target has Slow, Haste dispels it
+        if (recipient.HasActiveSlowEffect)
+        {
+            recipient.ClearSlowEffect();
+            recipient.Stats.SlowAttackPenalty = 0;
+            recipient.Stats.SlowACPenalty = 0;
+            recipient.Stats.SlowReflexPenalty = 0;
+            recipient.Stats.SlowSpeedMultiplier = 1f;
+
+            // Remove Slow from StatusEffectManager
+            recipientStatusMgr.RemoveEffectsBySpellId(SpellNames.SLOW);
+
+            string casterName2 = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
+            CombatUI?.ShowCombatLog($"<color=#88FF88>⚡ {casterName2}'s Haste dispels Slow on {recipient.Stats.CharacterName}!</color>");
+        }
+
+        ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
+            spell,
+            caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,
+            casterLevel);
+
+        if (effect != null)
+        {
+            // Apply Haste bonuses to stats
+            recipient.Stats.HasteAttackBonus = 1;
+            recipient.Stats.HasteACBonus = 1;
+            recipient.Stats.HasteReflexBonus = 1;
+
+            // Apply custom effect data for extra attack tracking
+            recipient.ApplyHasteEffect(durationRounds, caster);
+
+            SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+            if (recipientSpellComp != null)
+                recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+            string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
+            bool selfCast = recipient == caster;
+            string castLine = selfCast
+                ? $"<color=#88FF88>⚡ {casterName} casts Haste on self!</color>"
+                : $"<color=#88FF88>⚡ {casterName} casts Haste on {recipient.Stats.CharacterName}!</color>";
+
+            CombatUI?.ShowCombatLog(castLine);
+            CombatUI?.ShowCombatLog($"<color=#AAFFAA>   +1 attack, +1 dodge AC, +1 Reflex, +30 ft speed, extra attack on full attack</color>");
+            CombatUI?.ShowCombatLog($"<color=#AAFFAA>   Duration: {durationRounds} rounds (CL {casterLevel})</color>");
+        }
+
+        UpdateAllStatsUI();
+        return effect;
+    }
+
+    // ================================================================
+    //  SLOW — Transmutation Speed Debuff (PHB p.280)
+    // ================================================================
+
+    /// <summary>
+    /// Applies the Slow spell effect to a target.
+    /// Per PHB p.280:
+    ///   • -1 penalty on attack rolls, AC, and Reflex saves
+    ///   • Movement speed halved (round down to nearest 5 ft)
+    ///   • Can only take single move or standard action (no full-round actions)
+    ///   • Slow counters and dispels Haste
+    /// Duration: 1 round/level. Will negates. SR: Yes.
+    /// </summary>
+    private ActiveSpellEffect ApplySlowDebuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
+    {
+        if (target == null || target.Stats == null || spell == null)
+            return null;
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int saveDc = GetSpellSaveDC(caster, spell);
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
+
+        CombatUI?.ShowCombatLog($"<color=#CC88FF>🐌 {casterName} casts Slow on {target.Stats.CharacterName}!</color>");
+
+        // Spell Resistance check
+        if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+        {
+            int srCheckRoll = DiceService.D20();
+            int srCheckTotal = srCheckRoll + casterLevel;
+            bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
+
+            CombatUI?.ShowCombatLog($"  SR Check: d20({srCheckRoll}) + {casterLevel} = {srCheckTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
+
+            if (!srOvercome)
+            {
+                CombatUI?.ShowCombatLog($"<color=#AAAAFF>  {target.Stats.CharacterName} resists Slow via Spell Resistance!</color>");
+                return null;
+            }
+        }
+
+        // Will save
+        if (spell.AllowsSavingThrow)
+        {
+            int saveRoll = DiceService.D20();
+            int saveTotal = saveRoll + target.Stats.WillSave;
+            bool saved = saveTotal >= saveDc;
+
+            CombatUI?.ShowCombatLog($"  Will Save: d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
+
+            if (saved)
+            {
+                CombatUI?.ShowCombatLog($"<color=#88FF88>  {target.Stats.CharacterName} resists the Slow spell!</color>");
+                return null;
+            }
+        }
+
+        // If target has Haste, Slow dispels it
+        StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+        if (targetStatusMgr == null)
+            targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+        targetStatusMgr.Init(target.Stats);
+
+        if (target.HasActiveHasteEffect)
+        {
+            target.ClearHasteEffect();
+            target.Stats.HasteAttackBonus = 0;
+            target.Stats.HasteACBonus = 0;
+            target.Stats.HasteReflexBonus = 0;
+
+            targetStatusMgr.RemoveEffectsBySpellId(SpellNames.HASTE);
+
+            CombatUI?.ShowCombatLog($"<color=#CC88FF>  🐌 Slow dispels Haste on {target.Stats.CharacterName}!</color>");
+        }
+
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+        ActiveSpellEffect effect = targetStatusMgr.AddEffect(
+            spell,
+            casterName,
+            casterLevel);
+
+        if (effect != null)
+        {
+            // Apply Slow penalties to stats
+            target.Stats.SlowAttackPenalty = -1;
+            target.Stats.SlowACPenalty = -1;
+            target.Stats.SlowReflexPenalty = -1;
+            target.Stats.SlowSpeedMultiplier = 0.5f;
+
+            // Apply custom effect data
+            target.ApplySlowEffect(durationRounds, caster);
+
+            SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+            if (targetSpellComp != null)
+                targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+            CombatUI?.ShowCombatLog($"<color=#CC88FF>  {target.Stats.CharacterName} is Slowed!</color>");
+            CombatUI?.ShowCombatLog($"<color=#DDAAFF>   -1 attack, -1 AC, -1 Reflex, half speed, no full-round actions</color>");
+            CombatUI?.ShowCombatLog($"<color=#DDAAFF>   Duration: {durationRounds} rounds (CL {casterLevel})</color>");
+        }
+
+        UpdateAllStatsUI();
+        return effect;
+    }
+
+    /// <summary>
+    /// Checks if Haste/Slow have active effects and whether they should be cleared.
+    /// Called by HasActiveHaste/HasActiveSlow public accessors.
+    /// </summary>
+    public bool HasActiveHaste(CharacterController character)
+    {
+        if (character == null)
+            return false;
+        return character.HasActiveHasteEffect;
+    }
+
+    public bool HasActiveSlow(CharacterController character)
+    {
+        if (character == null)
+            return false;
+        return character.HasActiveSlowEffect;
     }
 }

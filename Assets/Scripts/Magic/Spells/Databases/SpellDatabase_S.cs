@@ -353,6 +353,64 @@ public static partial class SpellDatabase
                 });
 
         // ──────────────────────────────────────────────────────────────
+        // SLOW  (PHB p.280)
+        // Transmutation
+        // Level: Brd 3, Sor/Wiz 3
+        // Components: V, S, M (a drop of molasses)
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Targets: One creature/level, no two of which can be more than
+        //          30 ft. apart
+        // Duration: 1 round/level
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        //
+        // An affected creature moves and attacks at a drastically
+        // slowed rate. A slowed creature can take only a single move
+        // action or standard action each turn, but not both (nor may
+        // it take full-round actions). Additionally, it takes a -1
+        // penalty on attack rolls, AC, and Reflex saves. A slowed
+        // creature moves at half its normal speed (round down to the
+        // next 5-foot increment), which affects the creature's jumping
+        // distance as normal for decreased speed.
+        // Multiple slow effects don't stack. Slow counters and dispels
+        // haste.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SLOW,
+                    Name = "Slow",
+                    Description = "Transmutation. Affected creature moves and attacks at a drastically slowed rate. "
+                        + "Can only take a single move action or standard action each turn (no full-round actions). "
+                        + "-1 penalty on attack rolls, AC, and Reflex saves. "
+                        + "Movement speed halved (round down to nearest 5 ft). "
+                        + "Slow counters and dispels Haste. "
+                        + "Duration 1 round/level. Will negates. SR: Yes. PHB p.280",
+                    SpellLevel = 3,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 3),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ──────────────────────────────────────────────────────────────
         // STINKING CLOUD  (PHB p.284)
         // Conjuration (Creation)
         // Level: Sor/Wiz 3

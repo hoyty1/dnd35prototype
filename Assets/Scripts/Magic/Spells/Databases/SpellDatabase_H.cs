@@ -360,6 +360,74 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // HASTE  (PHB p.239)
+        // Transmutation
+        // Level: Brd 3, Sor/Wiz 3
+        // Components: V, S, M (a shaving of licorice root)
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Targets: One creature/level, no two of which can be more than
+        //          30 ft. apart
+        // Duration: 1 round/level
+        // Saving Throw: Fortitude negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        //
+        // The transmuted creatures move and act more quickly than normal.
+        // This extra speed has several effects:
+        //   • +1 bonus on attack rolls
+        //   • +1 dodge bonus to AC and Reflex saves
+        //   • When making a full attack action, hasted creature may make
+        //     one extra attack with any weapon he is holding. The attack
+        //     is made using the creature's full base attack bonus, plus
+        //     any modifiers appropriate to the situation. (This effect is
+        //     not cumulative with similar effects, such as that provided
+        //     by a speed weapon, nor does it actually grant an extra action.)
+        //   • All of the hasted creature's modes of movement (including
+        //     land movement, burrow, climb, fly, and swim) increase by
+        //     30 feet, to a maximum of twice the subject's normal speed.
+        //   • Haste dispels and counters slow.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.HASTE,
+                    Name = "Haste",
+                    Description = "Transmutation. Transmuted creatures move and act more quickly. "
+                        + "+1 attack rolls, +1 dodge bonus to AC and Reflex saves, "
+                        + "+30 ft. movement speed, one extra attack at full BAB on full attack action. "
+                        + "Haste dispels and counters Slow. "
+                        + "Duration 1 round/level. Fort negates (harmless). SR: Yes (harmless). PHB p.239",
+                    SpellLevel = 3,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 3),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Buff,
+                    BuffAttackBonus = 1,
+                    BuffACBonus = 1,
+                    BuffSaveBonus = 1,
+                    BuffSpeedBonusFeet = 30,
+                    BuffType = "haste",
+                    BuffBonusType = BonusType.Untyped,
+                    BonusTypeExplicitlySet = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases / class-level variants
         RegisterAlias(SpellNames.HIDEOUS_LAUGHTER_LEGACY, SpellNames.HIDEOUS_LAUGHTER);
         RegisterClassSpellAlias("tashas_hideous_laughter_brd", SpellNames.HIDEOUS_LAUGHTER, "Bard", 1);

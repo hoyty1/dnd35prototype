@@ -1144,7 +1144,8 @@ public partial class GameManager
 
         bool canUseFullAttack = npc.Actions != null
             && npc.Actions.HasFullRoundAction
-            && npc.IsTargetInCurrentWeaponRange(target);
+            && npc.IsTargetInCurrentWeaponRange(target)
+            && !npc.HasActiveSlowEffect; // Slow prevents full-round actions (PHB p.280)
 
         if (canUseFullAttack)
         {

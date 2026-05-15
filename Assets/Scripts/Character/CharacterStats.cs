@@ -698,14 +698,14 @@ public class CharacterStats
     }
 
     /// <summary>Aggregate attack modifier from active conditions.</summary>
-    public int ConditionAttackPenalty => SumConditionValue(d => d.AttackModifier);
+    public int ConditionAttackPenalty => SumConditionValue(d => d.AttackModifier) + HasteAttackBonus + SlowAttackPenalty;
 
     /// <summary>Aggregate armor class modifier from active conditions.</summary>
     public int ConditionACPenalty => SumConditionValue(d => d.ArmorClassModifier);
 
     /// <summary>Aggregate saving throw modifiers from active conditions.</summary>
     public int ConditionFortitudeModifier => SumConditionValue(d => d.FortitudeModifier);
-    public int ConditionReflexModifier => SumConditionValue(d => d.ReflexModifier);
+    public int ConditionReflexModifier => SumConditionValue(d => d.ReflexModifier) + HasteReflexBonus + SlowReflexPenalty;
     public int ConditionWillModifier => SumConditionValue(d => d.WillModifier);
 
     /// <summary>Aggregate initiative modifier from active conditions.</summary>
@@ -1137,6 +1137,19 @@ public class CharacterStats
     /// spell is active, reset to 0 when it expires. Separate from barbarian rage.
     /// </summary>
     public int SpellRageACPenalty;
+
+    /// <summary>Haste spell bonuses (PHB p.239). +1 attack, +1 dodge AC, +1 Reflex.</summary>
+    public int HasteAttackBonus;
+    public int HasteACBonus;
+    public int HasteReflexBonus;
+
+    /// <summary>Slow spell penalties (PHB p.280). -1 attack, -1 AC, -1 Reflex.</summary>
+    public int SlowAttackPenalty;
+    public int SlowACPenalty;
+    public int SlowReflexPenalty;
+
+    /// <summary>Slow spell speed multiplier (0.5 = half speed). 1.0 = no penalty.</summary>
+    public float SlowSpeedMultiplier = 1f;
 
     /// <summary>Rage Will save bonus (+2 while raging).</summary>
     public int RageWillBonus => IsRaging ? 2 : 0;
@@ -2014,7 +2027,8 @@ public class CharacterStats
             // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
             int effectiveArmorBonus = Mathf.Max(ArmorBonus, SpellACBonus);
             return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty;
+                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty
+                   + HasteACBonus + SlowACPenalty;
         }
     }
 
@@ -2031,7 +2045,8 @@ public class CharacterStats
                 dexToAC = MaxDexBonus;
 
             return 10 + dexToAC + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty;
+                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty
+                   + HasteACBonus + SlowACPenalty;
         }
     }
 
@@ -2098,6 +2113,11 @@ public class CharacterStats
                 speed *= GetEncumbranceSpeedMultiplier(CurrentEncumbrance);
 
             speed *= ConditionMovementMultiplier;
+
+            // Slow spell halves speed (PHB p.280)
+            if (SlowSpeedMultiplier < 1f)
+                speed *= SlowSpeedMultiplier;
+
             int roundedToFive = Mathf.FloorToInt(Mathf.Max(0f, speed) / 5f) * 5;
             return Mathf.Max(0, roundedToFive);
         }

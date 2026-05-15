@@ -331,6 +331,8 @@ public class CharacterController : MonoBehaviour
     public GlitterdustEffectData ActiveGlitterdustEffect { get; private set; }
     public MelfsAcidArrowEffectData ActiveMelfsAcidArrowEffect { get; private set; }
     public BlindnessDeafnessEffectData ActiveBlindnessDeafnessEffect { get; private set; }
+    public HasteEffectData ActiveHasteEffect { get; private set; }
+    public SlowEffectData ActiveSlowEffect { get; private set; }
     public CommandUndeadEffectData ActiveCommandUndeadEffect { get; private set; }
     public FalseLifeEffectData ActiveFalseLifeEffect { get; private set; }
     public GhoulTouchEffectData ActiveGhoulTouchEffect { get; private set; }
@@ -1341,6 +1343,96 @@ public class CharacterController : MonoBehaviour
     public void ClearExpeditiousRetreatEffect()
     {
         ActiveExpeditiousRetreatEffect = null;
+    }
+
+    // ========== HASTE EFFECT (PHB p.239) ==========
+
+    /// <summary>True if the character is currently affected by Haste.</summary>
+    public bool HasActiveHasteEffect => ActiveHasteEffect != null && ActiveHasteEffect.DurationRemainingRounds > 0;
+
+    /// <summary>Returns the number of rounds remaining for the Haste effect, or 0 if not active.</summary>
+    public int GetHasteRemainingRounds()
+    {
+        return ActiveHasteEffect != null ? Mathf.Max(0, ActiveHasteEffect.DurationRemainingRounds) : 0;
+    }
+
+    public void ApplyHasteEffect(int durationRemainingRounds, CharacterController caster)
+    {
+        int rounds = Mathf.Max(0, durationRemainingRounds);
+        if (rounds <= 0)
+            return;
+
+        // Haste dispels Slow
+        if (HasActiveSlowEffect)
+            ClearSlowEffect();
+
+        ActiveHasteEffect = new HasteEffectData
+        {
+            AttackBonus = 1,
+            ACBonus = 1,
+            ReflexSaveBonus = 1,
+            SpeedBonusFeet = 30,
+            GrantsExtraAttack = true,
+            DurationRemainingRounds = rounds
+        };
+        ActiveHasteEffect.SetCaster(caster);
+    }
+
+    public void UpdateHasteDuration(int durationRemainingRounds)
+    {
+        if (ActiveHasteEffect == null)
+            return;
+        ActiveHasteEffect.DurationRemainingRounds = Mathf.Max(0, durationRemainingRounds);
+    }
+
+    public void ClearHasteEffect()
+    {
+        ActiveHasteEffect = null;
+    }
+
+    // ========== SLOW EFFECT (PHB p.280) ==========
+
+    /// <summary>True if the character is currently affected by Slow.</summary>
+    public bool HasActiveSlowEffect => ActiveSlowEffect != null && ActiveSlowEffect.DurationRemainingRounds > 0;
+
+    /// <summary>Returns the number of rounds remaining for the Slow effect, or 0 if not active.</summary>
+    public int GetSlowRemainingRounds()
+    {
+        return ActiveSlowEffect != null ? Mathf.Max(0, ActiveSlowEffect.DurationRemainingRounds) : 0;
+    }
+
+    public void ApplySlowEffect(int durationRemainingRounds, CharacterController caster)
+    {
+        int rounds = Mathf.Max(0, durationRemainingRounds);
+        if (rounds <= 0)
+            return;
+
+        // Slow dispels Haste
+        if (HasActiveHasteEffect)
+            ClearHasteEffect();
+
+        ActiveSlowEffect = new SlowEffectData
+        {
+            AttackPenalty = -1,
+            ACPenalty = -1,
+            ReflexSavePenalty = -1,
+            SpeedMultiplier = 0.5f,
+            BlocksFullRoundActions = true,
+            DurationRemainingRounds = rounds
+        };
+        ActiveSlowEffect.SetCaster(caster);
+    }
+
+    public void UpdateSlowDuration(int durationRemainingRounds)
+    {
+        if (ActiveSlowEffect == null)
+            return;
+        ActiveSlowEffect.DurationRemainingRounds = Mathf.Max(0, durationRemainingRounds);
+    }
+
+    public void ClearSlowEffect()
+    {
+        ActiveSlowEffect = null;
     }
 
     public bool HasActiveInvisibilityEffect => ActiveInvisibilityEffect != null && ActiveInvisibilityEffect.IsInvisible;
@@ -2806,6 +2898,8 @@ public class CharacterController : MonoBehaviour
         ActiveSeeInvisibilityEffect = null;
         ActiveGlitterdustEffect = null;
         ActiveMelfsAcidArrowEffect = null;
+        ActiveHasteEffect = null;
+        ActiveSlowEffect = null;
         _activeEnfeeblementEffect = null;
         _activeTouchOfIdiocyEffect = null;
         UpdateGlitterdustVisual(forceDisable: true);
@@ -2814,6 +2908,13 @@ public class CharacterController : MonoBehaviour
             Stats.SetEnfeeblementStrengthPenalty(0);
             Stats.LandSpeedEnhancementBonusFeet = 0;
             Stats.JumpEnhancementBonus = 0;
+            Stats.HasteAttackBonus = 0;
+            Stats.HasteACBonus = 0;
+            Stats.HasteReflexBonus = 0;
+            Stats.SlowAttackPenalty = 0;
+            Stats.SlowACPenalty = 0;
+            Stats.SlowReflexPenalty = 0;
+            Stats.SlowSpeedMultiplier = 1f;
             Stats.ActiveProtectionFromArrowsEffect = null;
             if (Stats.ActiveResistEnergyEffects != null)
                 Stats.ActiveResistEnergyEffects.Clear();
@@ -4685,6 +4786,13 @@ public class CharacterController : MonoBehaviour
         else if (RapidShotEnabled && hasRapidShotFeat && !isRanged)
         {
             Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: Rapid Shot ON but weapon is not ranged");
+        }
+
+        // Haste grants one extra attack at highest BAB (PHB p.239)
+        if (HasActiveHasteEffect && ActiveHasteEffect.GrantsExtraAttack)
+        {
+            allAttackBonuses.Add(attackBonuses[0]);
+            Debug.Log($"[FullAttack] Haste: extra attack at highest BAB, attack count → {allAttackBonuses.Count}");
         }
 
         if (startAttackIndex < 0)

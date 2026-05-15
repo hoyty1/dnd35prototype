@@ -627,5 +627,11 @@ namespace DND35e.Identifiers
         /// <summary>Greater Magic Weapon (spell id: greater_magic_weapon)</summary>
         public const string GREATER_MAGIC_WEAPON = "greater_magic_weapon";
 
+        /// <summary>Haste (spell id: haste)</summary>
+        public const string HASTE = "haste";
+
+        /// <summary>Slow (spell id: slow)</summary>
+        public const string SLOW = "slow";
+
     }
 }

@@ -7551,6 +7551,14 @@ public partial class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasFullRoundAction) return;
 
+        // Slow prevents full-round actions (PHB p.280)
+        if (pc.HasActiveSlowEffect)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is Slowed and cannot take full-round actions!");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         if (RedirectPinnedCharacterToGrappleMenu(pc, "full attacks"))
             return;
 
