@@ -182,6 +182,60 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
         return false;
     }
 
+    /// <summary>
+    /// Returns the WallOfIceAreaEffect that occupies the given cell, or null if none.
+    /// </summary>
+    public static WallOfIceAreaEffect GetWallAtCell(Vector2Int cell)
+    {
+        if (!AreaEffectManager.HasInstance)
+            return null;
+
+        List<WallOfIceAreaEffect> walls = AreaEffectManager.Instance.GetEffectsOfType<WallOfIceAreaEffect>();
+        if (walls == null)
+            return null;
+
+        for (int i = 0; i < walls.Count; i++)
+        {
+            WallOfIceAreaEffect wall = walls[i];
+            if (wall != null && wall.AffectedCells != null && wall.AffectedCells.Contains(cell))
+                return wall;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns all cells occupied by any active Wall of Ice.
+    /// </summary>
+    public static HashSet<Vector2Int> GetAllWallOfIceCells()
+    {
+        var result = new HashSet<Vector2Int>();
+        if (!AreaEffectManager.HasInstance)
+            return result;
+
+        List<WallOfIceAreaEffect> walls = AreaEffectManager.Instance.GetEffectsOfType<WallOfIceAreaEffect>();
+        if (walls == null)
+            return result;
+
+        for (int i = 0; i < walls.Count; i++)
+        {
+            WallOfIceAreaEffect wall = walls[i];
+            if (wall != null && wall.AffectedCells != null)
+            {
+                foreach (Vector2Int cell in wall.AffectedCells)
+                    result.Add(cell);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Returns a short description of the wall for UI display.
+    /// </summary>
+    public string GetWallInfoString()
+    {
+        return $"Wall of Ice — {WallHP}/{WallMaxHP} HP (Hardness 0)";
+    }
+
     public void SetExplicitCells(HashSet<Vector2Int> cells)
     {
         if (cells == null || cells.Count == 0)

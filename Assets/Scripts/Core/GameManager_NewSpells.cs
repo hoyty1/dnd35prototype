@@ -144,6 +144,45 @@ public partial class GameManager
             }
         }
 
+        // ── WALL OF ICE DAMAGE ──
+        // AoE spells also damage any Wall of Ice in the affected area.
+        if (aoeCells != null && AreaEffectManager.HasInstance)
+        {
+            // Collect walls hit by this AoE (may be multiple walls, or same wall hit by multiple cells)
+            var wallsHit = new Dictionary<WallOfIceAreaEffect, bool>();
+            foreach (Vector2Int cell in aoeCells)
+            {
+                WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell);
+                if (wall != null && !wallsHit.ContainsKey(wall))
+                    wallsHit[wall] = true;
+            }
+
+            foreach (var kvp in wallsHit)
+            {
+                WallOfIceAreaEffect wall = kvp.Key;
+                if (wall == null || wall.WallHP <= 0)
+                    continue;
+
+                // Roll separate damage for the wall (same dice as character damage)
+                int wallDamage = 0;
+                for (int i = 0; i < diceCount; i++)
+                    wallDamage += Random.Range(1, 7);
+
+                // No save for objects; fire is especially effective
+                sb.AppendLine($"  --- Wall of Ice ---");
+                sb.AppendLine($"  {damageType} damage to wall: {wallDamage}");
+
+                bool destroyed = wall.DealDamageToWall(wallDamage, isFireball);
+
+                if (destroyed)
+                    sb.AppendLine($"  💥 The Wall of Ice is destroyed by the {spellName}!");
+                else
+                    sb.AppendLine($"  Wall HP: {wall.WallHP}/{wall.WallMaxHP}");
+
+                sb.AppendLine();
+            }
+        }
+
         sb.Append("═══════════════════════════════════");
         log = sb.ToString();
         return true;
@@ -2812,6 +2851,44 @@ public partial class GameManager
             }
         }
 
+        // ── WALL OF ICE DAMAGE FROM ICE STORM ──
+        if (aoeCells != null && AreaEffectManager.HasInstance)
+        {
+            var wallsHit = new Dictionary<WallOfIceAreaEffect, bool>();
+            foreach (Vector2Int cell in aoeCells)
+            {
+                WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell);
+                if (wall != null && !wallsHit.ContainsKey(wall))
+                    wallsHit[wall] = true;
+            }
+
+            foreach (var kvp in wallsHit)
+            {
+                WallOfIceAreaEffect wall = kvp.Key;
+                if (wall == null || wall.WallHP <= 0)
+                    continue;
+
+                // 3d6 bludgeoning + 2d6 cold (no save for objects)
+                int wallBludg = 0;
+                for (int i = 0; i < 3; i++) wallBludg += Random.Range(1, 7);
+                int wallCold = 0;
+                for (int i = 0; i < 2; i++) wallCold += Random.Range(1, 7);
+                int wallTotal = wallBludg + wallCold;
+
+                sb.AppendLine($"  --- Wall of Ice ---");
+                sb.AppendLine($"  Bludgeoning + cold damage to wall: {wallTotal}");
+
+                bool destroyed = wall.DealDamageToWall(wallTotal, false);
+
+                if (destroyed)
+                    sb.AppendLine($"  💥 The Wall of Ice is destroyed by Ice Storm!");
+                else
+                    sb.AppendLine($"  Wall HP: {wall.WallHP}/{wall.WallMaxHP}");
+
+                sb.AppendLine();
+            }
+        }
+
         // Note about difficult terrain
         sb.AppendLine("  ❄ Area is covered in ice (difficult terrain for 1 round)");
         sb.Append("═══════════════════════════════════");
@@ -2945,6 +3022,42 @@ public partial class GameManager
                     HandleSummonDeathCleanup(target);
                     sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
                 }
+
+                sb.AppendLine();
+            }
+        }
+
+        // ── WALL OF ICE DAMAGE FROM SHOUT ──
+        // Sonic damage is especially effective against crystalline/brittle objects.
+        if (aoeCells != null && AreaEffectManager.HasInstance)
+        {
+            var wallsHit = new Dictionary<WallOfIceAreaEffect, bool>();
+            foreach (Vector2Int cell in aoeCells)
+            {
+                WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell);
+                if (wall != null && !wallsHit.ContainsKey(wall))
+                    wallsHit[wall] = true;
+            }
+
+            foreach (var kvp in wallsHit)
+            {
+                WallOfIceAreaEffect wall = kvp.Key;
+                if (wall == null || wall.WallHP <= 0)
+                    continue;
+
+                // 5d6 sonic (no save for objects)
+                int wallDamage = 0;
+                for (int i = 0; i < 5; i++) wallDamage += Random.Range(1, 7);
+
+                sb.AppendLine($"  --- Wall of Ice ---");
+                sb.AppendLine($"  Sonic damage to wall: {wallDamage}");
+
+                bool destroyed = wall.DealDamageToWall(wallDamage, false);
+
+                if (destroyed)
+                    sb.AppendLine($"  💥 The Wall of Ice is shattered by Shout!");
+                else
+                    sb.AppendLine($"  Wall HP: {wall.WallHP}/{wall.WallMaxHP}");
 
                 sb.AppendLine();
             }

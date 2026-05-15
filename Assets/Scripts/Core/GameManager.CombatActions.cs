@@ -110,9 +110,56 @@ public partial class GameManager
             }
         }
 
+        // ── WALL OF ICE TARGETING ──
+        // Also highlight Wall of Ice cells within attack range as valid targets.
+        // Walls can be attacked with melee or ranged weapons (Hardness 0).
+        bool hasWallTarget = false;
+        if (_pendingAttackMode != PendingAttackMode.CastSpell && _pendingAttackMode != PendingAttackMode.TemplateSmite)
+        {
+            HashSet<Vector2Int> wallCells = WallOfIceAreaEffect.GetAllWallOfIceCells();
+            if (wallCells.Count > 0)
+            {
+                foreach (Vector2Int wallCoord in wallCells)
+                {
+                    // Check if wall cell is within weapon range
+                    int dist = SquareGridUtils.ChebyshevDistance(pc.GridPosition, wallCoord);
+
+                    bool inRange;
+                    if (isRangedWeapon)
+                    {
+                        int maxRangeSq = rangeIncrement > 0
+                            ? RangeCalculator.GetMaxRangeSquares(rangeIncrement, isThrownWeapon)
+                            : pc.Stats.AttackRange;
+                        inRange = dist <= maxRangeSq;
+                    }
+                    else
+                    {
+                        inRange = dist >= meleeMinDistance && dist <= meleeMaxDistance;
+                    }
+
+                    if (!inRange)
+                        continue;
+
+                    SquareCell wallCell = Grid.GetCell(wallCoord);
+                    if (wallCell == null)
+                        continue;
+
+                    // Don't re-highlight if already highlighted as an enemy target
+                    if (_highlightedCells.Contains(wallCell))
+                        continue;
+
+                    wallCell.SetHighlight(HighlightType.AttackRange);
+                    _highlightedCells.Add(wallCell);
+                    hasWallTarget = true;
+                    hasTarget = true;
+                }
+            }
+        }
+
         if (hasTarget)
         {
             string flankMsg = anyFlanking ? " (FLANKING available! +2 to hit)" : "";
+            string wallMsg = hasWallTarget ? " | Wall of Ice can be targeted" : "";
             string modeStr = "";
             switch (_pendingAttackMode)
             {
@@ -141,7 +188,7 @@ public partial class GameManager
             }
 
             if (CombatUI.TurnIndicatorText != null && !CombatUI.TurnIndicatorText.text.Contains("DUAL WIELD"))
-                CombatUI.SetTurnIndicator($"{modeStr}: Click an enemy to attack!{flankMsg}{rangeMsg}");
+                CombatUI.SetTurnIndicator($"{modeStr}: Click an enemy to attack!{flankMsg}{wallMsg}{rangeMsg}");
         }
         else
         {
@@ -1065,6 +1112,18 @@ public partial class GameManager
 
         if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)
         {
+            // ── WALL OF ICE ATTACK ──
+            // Check if the clicked cell contains a destructible Wall of Ice
+            if (_highlightedCells.Contains(cell))
+            {
+                WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell.Coords);
+                if (wall != null)
+                {
+                    PerformPlayerAttackOnWall(pc, wall, cell.Coords);
+                    return;
+                }
+            }
+
             if (cell.Coords == pc.GridPosition || !_highlightedCells.Contains(cell))
             {
                 ShowActionChoices();
@@ -1842,6 +1901,133 @@ public partial class GameManager
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  WALL OF ICE ATTACK — Player attacks a destructible wall
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Performs a weapon attack against a Wall of Ice cell.
+    /// Wall of Ice: Hardness 0, so all damage applies. No attack roll needed
+    /// (wall is stationary and has no AC — auto-hit, PHB p.166 "Attacking Objects").
+    /// D&D 3.5e: Stationary objects have AC 5 effectively, but walls are large
+    /// stationary objects — attacks auto-hit in practice.
+    /// </summary>
+    private void PerformPlayerAttackOnWall(CharacterController attacker, WallOfIceAreaEffect wall, Vector2Int wallCell)
+    {
+        if (attacker == null || wall == null)
+            return;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        // Commit standard action for single attack
+        if (_pendingAttackMode == PendingAttackMode.Single ||
+            _pendingAttackMode == PendingAttackMode.FullAttack ||
+            _pendingAttackMode == PendingAttackMode.DualWield ||
+            _pendingAttackMode == PendingAttackMode.FlurryOfBlows)
+        {
+            if (!attacker.CommitStandardAction())
+            {
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available.");
+                ShowActionChoices();
+                return;
+            }
+        }
+
+        // Get weapon and calculate damage
+        ItemData weapon = attacker.GetEquippedMainWeapon();
+        string weaponName = weapon != null ? weapon.Name : "Unarmed strike";
+
+        // Roll weapon damage (auto-hit against stationary wall)
+        int damageCount, damageDice;
+        if (weapon != null)
+        {
+            weapon.GetScaledDamageDice(attacker.Stats.Size, out damageCount, out damageDice);
+        }
+        else
+        {
+            var unarmed = attacker.GetUnarmedDamage();
+            damageCount = unarmed.damageCount;
+            damageDice = unarmed.damageDice;
+        }
+
+        int damage = 0;
+        for (int i = 0; i < damageCount; i++)
+            damage += Random.Range(1, damageDice + 1);
+
+        // Add STR modifier to damage (melee and thrown)
+        bool isRanged = weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && !weapon.IsThrown;
+        if (!isRanged)
+        {
+            int strMod = CharacterStats.GetModifier(attacker.Stats.Strength);
+            // Two-handed weapons get 1.5x STR
+            bool isTwoHanded = weapon != null && weapon.IsTwoHanded;
+            if (isTwoHanded)
+                damage += Mathf.FloorToInt(strMod * 1.5f);
+            else
+                damage += strMod;
+        }
+
+        // Add enhancement bonus damage
+        if (weapon != null)
+        {
+            damage += weapon.GetEnhancementDamageBonus();
+        }
+
+        // Minimum 1 damage on a hit
+        damage = Mathf.Max(1, damage);
+
+        // Check if this is fire damage (fire weapons are especially effective)
+        bool isFire = false;
+        if (weapon != null && weapon.ActiveSpellEffects != null)
+        {
+            foreach (var eff in weapon.ActiveSpellEffects)
+            {
+                if (eff != null && !string.IsNullOrEmpty(eff.BonusDamageType) &&
+                    eff.BonusDamageType.IndexOf("fire", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    isFire = true;
+                    // Add bonus fire damage dice
+                    if (!string.IsNullOrEmpty(eff.BonusDamageDice))
+                    {
+                        // Parse "1d6" style bonus damage
+                        string[] parts = eff.BonusDamageDice.Split('d');
+                        if (parts.Length == 2 && int.TryParse(parts[0], out int bCount) && int.TryParse(parts[1], out int bDice))
+                        {
+                            for (int i = 0; i < bCount; i++)
+                                damage += Random.Range(1, bDice + 1);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Build combat log
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"🧊 {attacker.Stats.CharacterName} attacks Wall of Ice with {weaponName}!");
+        sb.AppendLine($"  Auto-hit (stationary object, Hardness 0)");
+        sb.AppendLine($"  Damage: {damage}{(isFire ? " (includes fire)" : "")}");
+
+        bool destroyed = wall.DealDamageToWall(damage, isFire);
+
+        if (destroyed)
+        {
+            sb.AppendLine($"  💥 The Wall of Ice is destroyed!");
+        }
+        else
+        {
+            sb.AppendLine($"  Wall HP: {wall.WallHP}/{wall.WallMaxHP}");
+        }
+        sb.Append("═══════════════════════════════════");
+
+        CombatUI?.ShowCombatLog(sb.ToString());
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+
+        StartCoroutine(AfterAttackDelay(attacker, 1.0f));
     }
 
     private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
