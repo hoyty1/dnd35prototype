@@ -338,6 +338,19 @@ public partial class GameManager
             return;
         }
 
+        // --- Fire Shield ---
+        if (spellId == SpellNames.FIRE_SHIELD)
+        {
+            if (target.Stats != null)
+            {
+                target.Stats.FireShieldActive = false;
+                target.Stats.FireShieldIsWarm = false;
+                target.Stats.FireShieldCasterLevel = 0;
+                target.Stats.FireShieldDurationRounds = 0;
+            }
+            return;
+        }
+
         // --- Blur ---
         // Blur is handled by StatusEffectManager.RemoveEffect() reversing the concealment stats.
         // No dedicated cleanup method needed.

@@ -1151,6 +1151,16 @@ public class CharacterStats
     /// <summary>Slow spell speed multiplier (0.5 = half speed). 1.0 = no penalty.</summary>
     public float SlowSpeedMultiplier = 1f;
 
+    // ========== FIRE SHIELD ==========
+    /// <summary>True while Fire Shield is active on this character.</summary>
+    public bool FireShieldActive;
+    /// <summary>True = Warm Shield (fire retribution, cold resist); False = Chill Shield (cold retribution, fire resist).</summary>
+    public bool FireShieldIsWarm;
+    /// <summary>Caster level of the Fire Shield effect (caps retribution damage).</summary>
+    public int FireShieldCasterLevel;
+    /// <summary>Remaining rounds of Fire Shield duration.</summary>
+    public int FireShieldDurationRounds;
+
     /// <summary>Rage Will save bonus (+2 while raging).</summary>
     public int RageWillBonus => IsRaging ? 2 : 0;
 

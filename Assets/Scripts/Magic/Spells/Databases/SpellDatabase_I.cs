@@ -181,5 +181,58 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // ICE STORM  (PHB p.243)
+        // Evocation [Cold]
+        // Level: Dru 4, Sor/Wiz 4
+        // Components: V, S, M/DF (a pinch of dust and a few drops of water)
+        // Casting Time: 1 standard action
+        // Range: Long (400 ft. + 40 ft./level)
+        // Area: Cylinder (20-ft. radius, 40 ft. high)
+        // Duration: 1 full round (see text)
+        // Saving Throw: None
+        // Spell Resistance: Yes
+        //
+        // Great hailstones pound down for 1 full round, dealing 3d6 bludgeoning
+        // and 2d6 cold damage. The hail does not permit a saving throw.
+        // A -4 penalty on Listen checks and a -4 to ranged attacks apply
+        // within the area. Movement at half speed. The ground in the area
+        // is covered with ice, which lasts 1 round.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.ICE_STORM,
+                    Name = "Ice Storm",
+                    Description = "Evocation [Cold]. Great hailstones pound down dealing 3d6 bludgeoning + 2d6 cold damage (no save) in a 20-ft radius cylinder. Area becomes icy difficult terrain for 1 round. SR: Yes. PHB p.243",
+                    SpellLevel = 4,
+                    School = "Evocation [Cold]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 4),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Long,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4, // 20-ft radius = 4 squares
+                    AoERangeSquares = 0, // use Long range profile
+                    AoEFilter = AoETargetFilter.All,
+                    AreaRadius = 4,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 6,
+                    DamageCount = 5, // 3d6 bludgeon + 2d6 cold total
+                    DamageType = "bludgeoning/cold",
+                    AllowsSavingThrow = false,
+                    SavingThrowType = "None",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

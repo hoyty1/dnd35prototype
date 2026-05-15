@@ -491,6 +491,35 @@ public class StatusEffectIndicator : MonoBehaviour
             }
         }
 
+        // ── Fire Shield ──
+        if (_character.Stats.FireShieldActive)
+        {
+            bool warm = _character.Stats.FireShieldIsWarm;
+            list.Add(new IconData
+            {
+                Key = warm ? "FireShieldWarm" : "FireShieldChill",
+                ShortLabel = warm ? "🔥FS" : "❄FS",
+                Tooltip = warm
+                    ? "Fire Shield (Warm)\nRetaliates 1d6+CL fire vs melee attackers.\nResist Cold 10."
+                    : "Fire Shield (Chill)\nRetaliates 1d6+CL cold vs melee attackers.\nResist Fire 10.",
+                Color = warm ? new Color(1f, 0.4f, 0f, 0.95f) : new Color(0.3f, 0.6f, 1f, 0.95f),
+                Duration = _character.Stats.FireShieldDurationRounds
+            });
+        }
+
+        // ── Deafened (from Shout or other sources) ──
+        if (_character.HasCondition(CombatConditionType.Deafened))
+        {
+            list.Add(new IconData
+            {
+                Key = "Deafened",
+                ShortLabel = "DEAF",
+                Tooltip = "Deafened\n-4 initiative, 20% spell failure (verbal).\nAutomatic failure on sound-based Perception.",
+                Color = new Color(0.6f, 0.6f, 0.2f, 0.95f),
+                Duration = -1
+            });
+        }
+
         return list;
     }
 

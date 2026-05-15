@@ -2023,6 +2023,10 @@ public partial class GameManager
             if (attack.Hit && attack.TotalDamage > 0)
                 CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
 
+            // Fire Shield retribution: defender's Fire Shield deals damage back to melee attacker
+            if (attack.Hit && !rangedMode && currentTarget != null && currentTarget.Stats.FireShieldActive)
+                ResolveFireShieldRetribution(currentTarget, attacker);
+
             TryResolveFreeTripFromAttackResults(attacker, currentTarget, stepResult.Attacks, rangeInfo);
 
             if (attack.TargetKilled)

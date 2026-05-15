@@ -2915,6 +2915,10 @@ public class CharacterController : MonoBehaviour
             Stats.SlowACPenalty = 0;
             Stats.SlowReflexPenalty = 0;
             Stats.SlowSpeedMultiplier = 1f;
+            Stats.FireShieldActive = false;
+            Stats.FireShieldIsWarm = false;
+            Stats.FireShieldCasterLevel = 0;
+            Stats.FireShieldDurationRounds = 0;
             Stats.ResetCurrentSizeToBase(); // Ensure size resets on combat end/death
             Stats.ActiveProtectionFromArrowsEffect = null;
             if (Stats.ActiveResistEnergyEffects != null)

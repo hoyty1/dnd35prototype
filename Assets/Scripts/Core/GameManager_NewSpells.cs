@@ -2589,4 +2589,534 @@ public partial class GameManager
         Debug.Log($"[RainbowPattern] {casterName}: {hdAffected} HD fascinated out of {maxHDTotal} max, {durationRounds} rounds duration");
         return true;
     }
+
+    // ================================================================
+    //  FIRE SHIELD — Self Buff with Retribution Damage (PHB p.230)
+    // ================================================================
+
+    private static bool IsFireShieldSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.FIRE_SHIELD, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Fire Shield: self-buff with two modes (warm/chill).
+    /// Warm Shield: resist cold 10, retribution 1d6+CL fire (max +15)
+    /// Chill Shield: resist fire 10, retribution 1d6+CL cold (max +15)
+    /// Duration: 1 round/level (D). PHB p.230
+    /// </summary>
+    private bool TryResolveFireShieldSpellEffect(
+        CharacterController caster, CharacterController target,
+        SpellData spell, SpellResult result)
+    {
+        if (!IsFireShieldSpell(spell) || caster == null || caster.Stats == null)
+            return false;
+
+        CharacterController recipient = target ?? caster;
+        if (recipient == null || recipient.Stats == null)
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+        // Default to Warm Shield (protects vs cold, deals fire retribution)
+        // In a full UI we'd let the player choose; for prototype, default warm
+        bool isWarmShield = true;
+
+        // Apply energy resistance via the existing ResistEnergy system
+        ResistEnergyEffectData resistData = new ResistEnergyEffectData
+        {
+            EnergyType = isWarmShield ? ResistEnergyType.Cold : ResistEnergyType.Fire,
+            ResistanceAmount = 10,
+            DurationRemainingRounds = durationRounds,
+            Caster = caster
+        };
+        recipient.Stats.SetResistEnergyEffect(resistData);
+
+        // Track via StatusEffectManager for duration and UI
+        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        if (recipientStatusMgr == null)
+            recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+        recipientStatusMgr.Init(recipient.Stats);
+
+        ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
+            spell,
+            caster.Stats.CharacterName ?? spell.Name,
+            casterLevel);
+
+        // Store warm/chill flag and CL on the character for retribution checks
+        // We use a simple tag approach
+        recipient.Stats.FireShieldActive = true;
+        recipient.Stats.FireShieldIsWarm = isWarmShield;
+        recipient.Stats.FireShieldCasterLevel = casterLevel;
+        recipient.Stats.FireShieldDurationRounds = durationRounds;
+
+        string shieldType = isWarmShield ? "Warm Shield (resist cold 10, fire retribution)" : "Chill Shield (resist fire 10, cold retribution)";
+        string retribType = isWarmShield ? "fire" : "cold";
+        int maxBonus = 15;
+
+        CombatUI?.ShowCombatLog($"🔥 {recipient.Stats.CharacterName} is wreathed in {(isWarmShield ? "warm" : "chill")} flames! (Fire Shield)");
+        CombatUI?.ShowCombatLog($"  {shieldType}");
+        CombatUI?.ShowCombatLog($"  Retribution: 1d6+{Mathf.Min(casterLevel, maxBonus)} {retribType} damage to melee attackers");
+        CombatUI?.ShowCombatLog($"  Duration: {durationRounds} round(s)");
+
+        Debug.Log($"[FireShield] {recipient.Stats.CharacterName}: {shieldType}, CL {casterLevel}, {durationRounds} rounds");
+
+        return true;
+    }
+
+    /// <summary>
+    /// Called when a character with Fire Shield is struck by a melee attack.
+    /// Deals retribution damage (1d6 + CL, max +15) to the attacker.
+    /// No save for retribution damage.
+    /// </summary>
+    public void ResolveFireShieldRetribution(CharacterController defender, CharacterController attacker)
+    {
+        if (defender == null || defender.Stats == null || !defender.Stats.FireShieldActive)
+            return;
+        if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
+            return;
+
+        // Check distance — must be within 5 ft (1 square)
+        int distance = SquareGridUtils.GetDistance(defender.GridPosition, attacker.GridPosition);
+        if (distance > 1)
+            return;
+
+        int casterLevel = defender.Stats.FireShieldCasterLevel;
+        int clBonus = Mathf.Min(casterLevel, 15);
+        int damage = Random.Range(1, 7) + clBonus; // 1d6 + CL (max +15)
+
+        bool isWarm = defender.Stats.FireShieldIsWarm;
+        string dmgType = isWarm ? "fire" : "cold";
+
+        attacker.Stats.TakeDamage(damage);
+
+        CombatUI?.ShowCombatLog($"  🔥 Fire Shield retribution! {attacker.Stats.CharacterName} takes {damage} {dmgType} damage (no save)!");
+
+        if (attacker.Stats.IsDead)
+        {
+            attacker.OnDeath();
+            HandleSummonDeathCleanup(attacker);
+            CombatUI?.ShowCombatLog($"  💀 {attacker.Stats.CharacterName} is slain by Fire Shield retribution!");
+        }
+    }
+
+    // ================================================================
+    //  ICE STORM — AoE Damage, No Save (PHB p.243)
+    // ================================================================
+
+    private static bool IsIceStormSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.ICE_STORM, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Ice Storm: 3d6 bludgeoning + 2d6 cold (no save), SR: Yes.
+    /// Area becomes difficult terrain for 1 round (logged for awareness).
+    /// PHB p.243
+    /// </summary>
+    private bool TryResolveIceStormAoE(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells,
+        out string log)
+    {
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (!IsIceStormSpell(spell))
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"❄ {caster.Stats.CharacterName} casts Ice Storm! (20-ft radius cylinder)");
+        sb.AppendLine($"  [Level {spell.SpellLevel}] {spell.School}");
+        sb.AppendLine($"  Damage: 3d6 bludgeoning + 2d6 cold (NO SAVE)");
+        sb.AppendLine($"  SR: Yes | Area becomes icy difficult terrain for 1 round");
+        sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
+        sb.AppendLine();
+
+        if (targets == null || targets.Count == 0)
+        {
+            sb.AppendLine($"  No valid targets in area!");
+        }
+        else
+        {
+            int targetIndex = 0;
+            foreach (CharacterController target in targets)
+            {
+                if (target == null || target.Stats == null || target.Stats.IsDead)
+                    continue;
+
+                targetIndex++;
+                sb.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
+
+                // Check Spell Resistance
+                if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+                {
+                    int srCheckRoll = Random.Range(1, 21);
+                    int srCheckTotal = srCheckRoll + casterLevel;
+                    bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
+
+                    sb.AppendLine($"  SR Check: d20({srCheckRoll}) + {casterLevel} = {srCheckTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
+
+                    if (!srOvercome)
+                    {
+                        sb.AppendLine($"  {target.Stats.CharacterName} resists Ice Storm via Spell Resistance!");
+                        sb.AppendLine();
+                        continue;
+                    }
+                }
+
+                // Roll 3d6 bludgeoning
+                int bludgeoningDamage = 0;
+                for (int i = 0; i < 3; i++)
+                    bludgeoningDamage += Random.Range(1, 7);
+
+                // Roll 2d6 cold
+                int coldDamage = 0;
+                for (int i = 0; i < 2; i++)
+                    coldDamage += Random.Range(1, 7);
+
+                int totalDamage = bludgeoningDamage + coldDamage;
+
+                // D&D 3.5e PHB p.206: Blinking creatures take half damage from area attacks
+                bool targetIsBlinking = target.HasActiveBlinkEffect;
+                if (targetIsBlinking)
+                    totalDamage = Mathf.Max(1, totalDamage / 2);
+
+                sb.AppendLine($"  Damage: {bludgeoningDamage} bludgeoning + {coldDamage} cold = {totalDamage} total (no save)");
+                if (targetIsBlinking)
+                    sb.AppendLine($"  Blink: area damage halved");
+
+                int hpBefore = target.Stats.CurrentHP;
+                target.Stats.TakeDamage(totalDamage);
+                int hpAfter = target.Stats.CurrentHP;
+
+                sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
+
+                CheckConcentrationOnDamage(target, totalDamage);
+
+                if (target.Stats.IsDead)
+                {
+                    target.OnDeath();
+                    HandleSummonDeathCleanup(target);
+                    sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
+                }
+
+                sb.AppendLine();
+            }
+        }
+
+        // Note about difficult terrain
+        sb.AppendLine("  ❄ Area is covered in ice (difficult terrain for 1 round)");
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
+        return true;
+    }
+
+    // ================================================================
+    //  SHOUT — Cone AoE Sonic Damage + Deafen (PHB p.275)
+    // ================================================================
+
+    private static bool IsShoutSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.SHOUT, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Shout: 5d6 sonic in 30-ft cone. Fort half.
+    /// Failed save = deafened for 2d6 rounds. SR: Yes. PHB p.275
+    /// </summary>
+    private bool TryResolveShoutAoE(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells,
+        out string log)
+    {
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (!IsShoutSpell(spell))
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int saveDc = GetSpellSaveDC(caster, spell);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"📣 {caster.Stats.CharacterName} casts Shout! (30-ft cone)");
+        sb.AppendLine($"  [Level {spell.SpellLevel}] {spell.School}");
+        sb.AppendLine($"  Damage: 5d6 sonic | Fort DC {saveDc} for half");
+        sb.AppendLine($"  Failed save: deafened for 2d6 rounds | SR: Yes");
+        sb.AppendLine($"  Targets: {(targets != null ? targets.Count : 0)} creature(s)");
+        sb.AppendLine();
+
+        if (targets == null || targets.Count == 0)
+        {
+            sb.AppendLine($"  No valid targets in area!");
+        }
+        else
+        {
+            int targetIndex = 0;
+            foreach (CharacterController target in targets)
+            {
+                if (target == null || target.Stats == null || target.Stats.IsDead)
+                    continue;
+
+                targetIndex++;
+                sb.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
+
+                // Check Spell Resistance
+                if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+                {
+                    int srCheckRoll = Random.Range(1, 21);
+                    int srCheckTotal = srCheckRoll + casterLevel;
+                    bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
+
+                    sb.AppendLine($"  SR Check: d20({srCheckRoll}) + {casterLevel} = {srCheckTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
+
+                    if (!srOvercome)
+                    {
+                        sb.AppendLine($"  {target.Stats.CharacterName} resists Shout via Spell Resistance!");
+                        sb.AppendLine();
+                        continue;
+                    }
+                }
+
+                // Roll 5d6 sonic damage
+                int damage = 0;
+                for (int i = 0; i < 5; i++)
+                    damage += Random.Range(1, 7);
+
+                // Fortitude save
+                int fortRoll = Random.Range(1, 21);
+                int fortMod = target.Stats.FortitudeSave;
+                int fortTotal = fortRoll + fortMod;
+                bool savePassed = fortTotal >= saveDc;
+
+                bool deafened = false;
+                int deafRounds = 0;
+
+                if (savePassed)
+                {
+                    damage = Mathf.Max(1, damage / 2);
+                }
+                else
+                {
+                    // Failed save: deafened for 2d6 rounds
+                    deafRounds = Random.Range(1, 7) + Random.Range(1, 7);
+                    deafened = true;
+                }
+
+                // D&D 3.5e: Blinking creatures take half damage from area attacks
+                bool targetIsBlinking = target.HasActiveBlinkEffect;
+                if (targetIsBlinking)
+                    damage = Mathf.Max(1, damage / 2);
+
+                sb.AppendLine($"  Fort save: d20({fortRoll}) + {fortMod} = {fortTotal} vs DC {saveDc} → {(savePassed ? "SAVED (half)" : "FAILED (full + deafened)")}");
+                if (targetIsBlinking)
+                    sb.AppendLine($"  Blink: area damage halved");
+
+                int hpBefore = target.Stats.CurrentHP;
+                target.Stats.TakeDamage(damage);
+                int hpAfter = target.Stats.CurrentHP;
+
+                sb.AppendLine($"  Damage: {damage} sonic");
+                sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
+
+                if (deafened && !target.Stats.IsDead)
+                {
+                    target.ApplyCondition(CombatConditionType.Deafened, deafRounds, "Shout");
+                    sb.AppendLine($"  🔇 {target.Stats.CharacterName} is DEAFENED for {deafRounds} rounds!");
+                }
+
+                CheckConcentrationOnDamage(target, damage);
+
+                if (target.Stats.IsDead)
+                {
+                    target.OnDeath();
+                    HandleSummonDeathCleanup(target);
+                    sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
+                }
+
+                sb.AppendLine();
+            }
+        }
+
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
+        return true;
+    }
+
+    // ================================================================
+    //  WALL OF FIRE — Persistent Area Effect (PHB p.298)
+    // ================================================================
+
+    private static bool IsWallOfFireSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.WALL_OF_FIRE, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Wall of Fire: creates a WallOfFireAreaEffect along a line.
+    /// Per PHB p.298: Concentration + 1 round/level duration.
+    /// </summary>
+    private bool TryResolveWallOfFireSpell(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells,
+        out string log)
+    {
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (!IsWallOfFireSpell(spell))
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int saveDc = GetSpellSaveDC(caster, spell);
+
+        // Wall length: up to 20 ft/level = 4 squares per CL
+        int maxLengthSquares = Mathf.Max(2, casterLevel * 4);
+
+        Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
+        Vector2Int centerCell = SquareGridUtils.WorldToGrid(centerPosition);
+        Vector2Int direction = ComputeWindWallDirection(caster.GridPosition, centerCell);
+
+        // Create the area effect
+        GameObject wallObj = new GameObject("WallOfFire_Area");
+        wallObj.transform.position = centerPosition;
+
+        WallOfFireAreaEffect wallEffect = wallObj.AddComponent<WallOfFireAreaEffect>();
+        wallEffect.CenterPosition = centerPosition;
+        wallEffect.CenterCell = centerCell;
+        wallEffect.LengthSquares = Mathf.Max(2, maxLengthSquares);
+        wallEffect.WallDirection = direction == Vector2Int.zero ? new Vector2Int(1, 0) : direction;
+        wallEffect.RoundsRemaining = Mathf.Max(1, durationRounds);
+        wallEffect.CasterLevel = casterLevel;
+        wallEffect.Caster = caster;
+        wallEffect.SaveDC = saveDc;
+
+        if (aoeCells != null && aoeCells.Count > 0)
+            wallEffect.SetExplicitCells(aoeCells);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"🔥 {caster.Stats.CharacterName} casts Wall of Fire!");
+        sb.AppendLine($"  Wall: {maxLengthSquares} squares long");
+        sb.AppendLine($"  Duration: {durationRounds} round(s)");
+        sb.AppendLine($"  Save DC: {saveDc} (Reflex half for pass-through)");
+        sb.AppendLine("  • 2d4 fire damage within 10 ft (near side)");
+        sb.AppendLine("  • 1d4 fire damage within 10 ft (far side)");
+        sb.AppendLine("  • 2d6+CL (max +20) fire to those passing through");
+        sb.AppendLine("  • Opaque — 50% concealment");
+
+        if (targets != null && targets.Count > 0)
+        {
+            sb.Append("  In wall area: ");
+            for (int i = 0; i < targets.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(targets[i] != null && targets[i].Stats != null ? targets[i].Stats.CharacterName : "Unknown");
+            }
+            sb.AppendLine();
+        }
+
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
+        return true;
+    }
+
+    // ================================================================
+    //  WALL OF ICE — Persistent Area Effect (PHB p.299)
+    // ================================================================
+
+    private static bool IsWallOfIceSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.WALL_OF_ICE, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Wall of Ice: creates a WallOfIceAreaEffect.
+    /// Per PHB p.299: 1 inch thick/CL, hardness 0, 3 HP/inch.
+    /// Duration 1 min/level. Trapped creatures take CL cold damage.
+    /// </summary>
+    private bool TryResolveWallOfIceSpell(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells,
+        out string log)
+    {
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (!IsWallOfIceSpell(spell))
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+        // Wall panels: one 10-ft square per CL = 2 squares per CL
+        int maxLengthSquares = Mathf.Max(2, casterLevel * 2);
+
+        Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
+        Vector2Int centerCell = SquareGridUtils.WorldToGrid(centerPosition);
+        Vector2Int direction = ComputeWindWallDirection(caster.GridPosition, centerCell);
+
+        // Create the area effect
+        GameObject wallObj = new GameObject("WallOfIce_Area");
+        wallObj.transform.position = centerPosition;
+
+        WallOfIceAreaEffect wallEffect = wallObj.AddComponent<WallOfIceAreaEffect>();
+        wallEffect.CenterPosition = centerPosition;
+        wallEffect.CenterCell = centerCell;
+        wallEffect.LengthSquares = Mathf.Max(2, maxLengthSquares);
+        wallEffect.WallDirection = direction == Vector2Int.zero ? new Vector2Int(1, 0) : direction;
+        wallEffect.RoundsRemaining = Mathf.Max(1, durationRounds);
+        wallEffect.CasterLevel = casterLevel;
+        wallEffect.Caster = caster;
+
+        if (aoeCells != null && aoeCells.Count > 0)
+            wallEffect.SetExplicitCells(aoeCells);
+
+        int thickness = casterLevel;
+        int wallHP = thickness * 3;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"❄ {caster.Stats.CharacterName} casts Wall of Ice!");
+        sb.AppendLine($"  Wall: {maxLengthSquares} squares long, {thickness} inch(es) thick");
+        sb.AppendLine($"  HP: {wallHP} (Hardness 0, 3 HP per inch)");
+        sb.AppendLine($"  Duration: {durationRounds} round(s)");
+        sb.AppendLine("  • Blocks movement through wall cells");
+        sb.AppendLine("  • Creatures caught in wall take CL cold damage");
+        sb.AppendLine("  • Fire damage is especially effective");
+
+        if (targets != null && targets.Count > 0)
+        {
+            sb.Append("  Caught in wall: ");
+            for (int i = 0; i < targets.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(targets[i] != null && targets[i].Stats != null ? targets[i].Stats.CharacterName : "Unknown");
+            }
+            sb.AppendLine();
+        }
+
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
+        return true;
+    }
 }

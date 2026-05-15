@@ -367,6 +367,54 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // FIRE SHIELD  (PHB p.230)
+        // Evocation [Fire] or [Cold]
+        // Level: Sor/Wiz 4
+        // Components: V, S, M (a bit of phosphorus for warm, a live firefly
+        //   or glowworm for chill)
+        // Casting Time: 1 standard action
+        // Range: Personal
+        // Target: You
+        // Duration: 1 round/level (D)
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // Two versions:
+        //   Warm Shield: resist cold 10, deals 1d6 + CL (max +15) fire damage
+        //     to melee attackers within 5 ft.
+        //   Chill Shield: resist fire 10, deals 1d6 + CL (max +15) cold damage
+        //     to melee attackers within 5 ft.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.FIRE_SHIELD,
+                    Name = "Fire Shield",
+                    Description = "Evocation [Fire or Cold]. Two versions: Warm Shield (resist cold 10, deals 1d6+CL fire damage to melee attackers, max +15) or Chill Shield (resist fire 10, deals 1d6+CL cold damage to melee attackers, max +15). Retribution damage triggers when struck by melee attack within 5 ft. No save for retribution damage. Duration 1 round/level (D). PHB p.230",
+                    SpellLevel = 4,
+                    School = "Evocation [Fire]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    BuffType = SpellNames.FIRE_SHIELD,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.FOXS_CUNNING,

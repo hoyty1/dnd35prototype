@@ -666,6 +666,63 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // SHOUT  (PHB p.275)
+        // Evocation [Sonic]
+        // Level: Brd 4, Sor/Wiz 4
+        // Components: V
+        // Casting Time: 1 standard action
+        // Range: 30 ft.
+        // Area: Cone-shaped burst
+        // Duration: Instantaneous
+        // Saving Throw: Fortitude partial (see text)
+        // Spell Resistance: Yes
+        //
+        // You emit an ear-splitting yell that deafens and damages creatures
+        // in its path. Any creature within the area is deafened for 2d6
+        // rounds and takes 5d6 points of sonic damage. A successful save
+        // negates the deafness and reduces the damage by half.
+        // Any exposed brittle or crystalline object or crystalline creature
+        // takes 1d6 points of sonic damage per caster level (max 15d6).
+        // An affected creature is allowed a Fortitude save to reduce damage
+        // by half. Creatures holding such objects can negate damage by
+        // making a Reflex save.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SHOUT,
+                    Name = "Shout",
+                    Description = "Evocation [Sonic]. You emit an ear-splitting yell in a 30-ft cone. 5d6 sonic damage (Fortitude half). Failed save: deafened for 2d6 rounds. SR: Yes. PHB p.275",
+                    SpellLevel = 4,
+                    School = "Evocation [Sonic]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 4),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeSquares = 6, // 30 ft = 6 squares
+                    AoEShapeType = AoEShape.Cone,
+                    AoESizeSquares = 6, // 30-ft cone
+                    AoERangeSquares = 0, // originates from caster
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 6,
+                    DamageCount = 5, // 5d6 sonic
+                    DamageType = "sonic",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = false,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterAlias(SpellNames.SEE_INVISIBILITY_LEGACY, SpellNames.SEE_INVISIBLE);
         RegisterClassSpellAlias("see_invisible_brd", SpellNames.SEE_INVISIBLE, "Bard", 3);

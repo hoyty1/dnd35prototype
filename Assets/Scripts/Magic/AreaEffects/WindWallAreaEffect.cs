@@ -288,6 +288,14 @@ public class WindWallAreaEffect : PersistentAreaEffect
     /// standing on the same cell as the wall is treated as inside (not
     /// blocked) and so that the attacker's own square doesn't trigger.
     /// </summary>
+    /// <summary>
+    /// Public accessor for line segment crossing check, used by other wall effects.
+    /// </summary>
+    public static bool LineSegmentCrossesAnyCellPublic(Vector2Int from, Vector2Int to, HashSet<Vector2Int> cells)
+    {
+        return LineSegmentCrossesAnyCell(from, to, cells);
+    }
+
     private static bool LineSegmentCrossesAnyCell(Vector2Int from, Vector2Int to, HashSet<Vector2Int> cells)
     {
         if (cells == null || cells.Count == 0)

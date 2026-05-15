@@ -1917,15 +1917,19 @@ public partial class GameManager
             if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && result.Success)
                 handledPhantasmalKiller = TryResolvePhantasmalKillerSpellEffect(caster, target, _pendingSpell, result);
 
+            bool handledFireShield = false;
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && result.Success)
+                handledFireShield = TryResolveFireShieldSpellEffect(caster, target, _pendingSpell, result);
+
             bool handledAnimateRope = false;
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield)
                 handledAnimateRope = TryResolveAnimateRopeSpellEffect(caster, target, _pendingSpell, result);
 
             bool handledMirrorImage = false;
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledAnimateRope && result.Success && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledAnimateRope && result.Success && !effectNegatedBySave)
                 handledMirrorImage = TryResolveMirrorImageSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -3013,6 +3017,110 @@ public partial class GameManager
                 {
                     BeginConcentrationTracking(caster, null, _pendingSpell);
                 }
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Ice Storm (AoE, no save, 3d6 bludgeoning + 2d6 cold) ──
+            if (TryResolveIceStormAoE(caster, _pendingSpell, targets, aoeCells, out string iceStormLog))
+            {
+                _lastCombatLog = iceStormLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Shout (Cone AoE, 5d6 sonic, Fort half, deafen on fail) ──
+            if (TryResolveShoutAoE(caster, _pendingSpell, targets, aoeCells, out string shoutLog))
+            {
+                _lastCombatLog = shoutLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Wall of Fire (line wall, persistent area effect) ──
+            if (TryResolveWallOfFireSpell(caster, _pendingSpell, targets, aoeCells, out string wallOfFireLog))
+            {
+                _lastCombatLog = wallOfFireLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Wall of Ice (line wall, persistent area effect) ──
+            if (TryResolveWallOfIceSpell(caster, _pendingSpell, targets, aoeCells, out string wallOfIceLog))
+            {
+                _lastCombatLog = wallOfIceLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
 
                 _pendingSpell = null;
                 _pendingMetamagic = null;
@@ -5886,6 +5994,17 @@ public partial class GameManager
                     }
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Slow expires on {character.Stats.CharacterName}: penalties removed, full actions restored.</color>");
                 }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.FIRE_SHIELD, StringComparison.Ordinal))
+                {
+                    if (character.Stats != null)
+                    {
+                        character.Stats.FireShieldActive = false;
+                        character.Stats.FireShieldIsWarm = false;
+                        character.Stats.FireShieldCasterLevel = 0;
+                        character.Stats.FireShieldDurationRounds = 0;
+                    }
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Fire Shield expires on {character.Stats.CharacterName}: retribution and energy resistance removed.</color>");
+                }
             }
 
             if (statusMgr.ActiveEffectCount > 0)
@@ -5919,6 +6038,8 @@ public partial class GameManager
                         character.UpdateHasteDuration(effect.RemainingRounds);
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SLOW, StringComparison.Ordinal))
                         character.UpdateSlowDuration(effect.RemainingRounds);
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.FIRE_SHIELD, StringComparison.Ordinal))
+                        character.Stats.FireShieldDurationRounds = effect.RemainingRounds;
 
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
                 }

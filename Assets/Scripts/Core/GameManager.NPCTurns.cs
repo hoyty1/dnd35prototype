@@ -643,6 +643,10 @@ public partial class GameManager
             if (attack.Hit && attack.TotalDamage > 0)
                 CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
 
+            // Fire Shield retribution: defender's Fire Shield damages melee attacker
+            if (attack.Hit && !attack.IsRangedAttack && currentTarget != null && currentTarget.Stats.FireShieldActive)
+                ResolveFireShieldRetribution(currentTarget, npc);
+
             TryResolveFreeTripFromAttackResults(npc, currentTarget, stepResult.Attacks, rangeInfo);
             TryResolveImprovedGrabFromAttackResults(npc, currentTarget, stepResult.Attacks);
 
@@ -993,15 +997,19 @@ public partial class GameManager
         if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && result.Success)
             handledPhantasmalKiller = TryResolvePhantasmalKillerSpellEffect(npc, target, spell, result);
 
+        bool handledFireShield = false;
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && result.Success)
+            handledFireShield = TryResolveFireShieldSpellEffect(npc, target, spell, result);
+
         bool handledAnimateRope = false;
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield)
             handledAnimateRope = TryResolveAnimateRopeSpellEffect(npc, target, spell, result);
 
         bool handledMirrorImage = false;
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledAnimateRope && result.Success && !effectNegatedBySave)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledAnimateRope && result.Success && !effectNegatedBySave)
             handledMirrorImage = TryResolveMirrorImageSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)
@@ -1221,6 +1229,16 @@ public partial class GameManager
             if (fullResult.TotalDamageDealt > 0)
                 CheckConcentrationOnDamage(target, fullResult.TotalDamageDealt);
 
+            // Fire Shield retribution: trigger for each melee hit in full attack
+            if (target != null && target.Stats.FireShieldActive)
+            {
+                foreach (var atk in fullResult.Attacks)
+                {
+                    if (atk.Hit && !atk.IsRangedAttack)
+                        ResolveFireShieldRetribution(target, npc);
+                }
+            }
+
             TryResolveFreeTripFromAttackResults(npc, target, fullResult.Attacks, npcRangeInfo);
             TryResolveImprovedGrabFromAttackResults(npc, target, fullResult.Attacks);
 
@@ -1280,6 +1298,10 @@ public partial class GameManager
 
         if (result.Hit && result.TotalDamage > 0)
             CheckConcentrationOnDamage(target, result.TotalDamage);
+
+        // Fire Shield retribution: defender's Fire Shield damages melee attacker
+        if (result.Hit && !result.IsRangedAttack && target != null && target.Stats.FireShieldActive)
+            ResolveFireShieldRetribution(target, npc);
 
         TryResolveImprovedGrabFromAttackResults(npc, target, new List<CombatResult> { result });
 

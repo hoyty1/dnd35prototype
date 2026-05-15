@@ -139,5 +139,112 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // WALL OF FIRE  (PHB p.298)
+        // Evocation [Fire]
+        // Level: Dru 5, Fire 4, Sor/Wiz 4
+        // Components: V, S, M/DF (a small piece of phosphorus)
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Effect: Opaque sheet of flame up to 20 ft. long/level (max CL*4 sq)
+        //         or a ring with up to 5-ft. radius/2 levels
+        // Duration: Concentration + 1 round/level
+        // Saving Throw: None (proximity), Reflex half (passing through)
+        // Spell Resistance: Yes
+        //
+        // Creates an immobile, blazing curtain of fire.
+        //  • 2d4 fire damage to creatures within 10 ft on the hot side
+        //  • 1d4 fire damage within 10 ft on the cool side
+        //  • 2d6+CL (max +20) fire damage to creatures passing through
+        //  • Wall is opaque: blocks line of sight (50% concealment)
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.WALL_OF_FIRE,
+                    Name = "Wall of Fire",
+                    Description = "Evocation [Fire]. Creates a blazing curtain of flame. Deals 2d4 fire to creatures within 10 ft (near side), 1d4 fire (far side), 2d6+CL (max +20) fire to those passing through (Reflex half). Opaque (50% concealment). Duration: Concentration + 1 round/level. PHB p.298",
+                    SpellLevel = 4,
+                    School = "Evocation [Fire]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 5),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Line,
+                    AoESizeSquares = 8, // Default; runtime scales per CL
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 6,
+                    DamageCount = 2, // placeholder; actual is 2d6+CL pass-through
+                    DamageType = "fire",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ──────────────────────────────────────────────────────────────
+        // WALL OF ICE  (PHB p.299)
+        // Evocation [Cold]
+        // Level: Sor/Wiz 4
+        // Components: V, S, M (a small piece of quartz or similar rock crystal)
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Effect: Anchored plane of ice, up to one 10-ft. square/level,
+        //         or hemisphere with radius up to 3 ft. + 1 ft./level
+        // Duration: 1 min./level
+        // Saving Throw: Reflex negates (hemisphere trap); see text
+        // Spell Resistance: Yes
+        //
+        // Creates a plane of ice or a hemisphere.
+        //  • Wall: 1 inch thick per CL, hardness 0, 3 HP per inch
+        //  • Hemisphere traps creatures inside (Reflex negates)
+        //  • Trapped creatures take CL cold damage (no save, 1 HP/CL)
+        //  • Fire damage destroys wall segment easily (fire deals full,
+        //    bypasses hardness)
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.WALL_OF_ICE,
+                    Name = "Wall of Ice",
+                    Description = "Evocation [Cold]. Creates a wall of ice (1 inch thick/CL, hardness 0, 3 HP/inch) or hemisphere (traps creatures, Reflex negates). Trapped creatures take 1 HP cold/CL. Duration 1 min/level. SR: Yes. PHB p.299",
+                    SpellLevel = 4,
+                    School = "Evocation [Cold]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Line,
+                    AoESizeSquares = 8, // Default; runtime scales per CL
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = false, // Main wall no save; hemisphere Reflex at runtime
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

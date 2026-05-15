@@ -657,5 +657,20 @@ namespace DND35e.Identifiers
         /// <summary>Rainbow Pattern (spell id: rainbow_pattern)</summary>
         public const string RAINBOW_PATTERN = "rainbow_pattern";
 
+        /// <summary>Fire Shield (spell id: fire_shield)</summary>
+        public const string FIRE_SHIELD = "fire_shield";
+
+        /// <summary>Ice Storm (spell id: ice_storm)</summary>
+        public const string ICE_STORM = "ice_storm";
+
+        /// <summary>Shout (spell id: shout)</summary>
+        public const string SHOUT = "shout";
+
+        /// <summary>Wall of Fire (spell id: wall_of_fire)</summary>
+        public const string WALL_OF_FIRE = "wall_of_fire";
+
+        /// <summary>Wall of Ice (spell id: wall_of_ice)</summary>
+        public const string WALL_OF_ICE = "wall_of_ice";
+
     }
 }
