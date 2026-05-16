@@ -307,20 +307,21 @@ public class SpellTestingPanel : MonoBehaviour
         // Scroll area for spell list
         _spellListScroll = UIFactory.CreateScrollPanel(parent, "SpellListScroll");
 
-        // --- FIX: Ensure the scroll panel RectTransform stretches to fill available space ---
-        RectTransform spellScrollRT = _spellListScroll.GetComponent<RectTransform>();
-        spellScrollRT.anchorMin = new Vector2(0f, 0f);
-        spellScrollRT.anchorMax = new Vector2(1f, 1f);
-        spellScrollRT.sizeDelta = new Vector2(0, 800);  // Large explicit height so it's definitely visible
-        spellScrollRT.offsetMin = Vector2.zero;
-        spellScrollRT.offsetMax = Vector2.zero;
+        // --- ScrollRect configuration ---
+        _spellListScroll.vertical = true;
+        _spellListScroll.horizontal = false;
+        _spellListScroll.movementType = ScrollRect.MovementType.Clamped;
+        _spellListScroll.scrollSensitivity = 30f;
 
+        // --- Scroll panel RectTransform: let LayoutElement control sizing ---
+        RectTransform spellScrollRT = _spellListScroll.GetComponent<RectTransform>();
+        // Don't set sizeDelta when using layout - the LayoutElement handles sizing
         LayoutElement scrollLE = _spellListScroll.gameObject.AddComponent<LayoutElement>();
         scrollLE.flexibleHeight = 1;
-        scrollLE.preferredHeight = 800;
-        scrollLE.minHeight = 400;  // Ensure minimum visible height
+        scrollLE.preferredHeight = 600;
+        scrollLE.minHeight = 200;
 
-        // --- FIX: Ensure the viewport RectTransform fully covers the scroll panel ---
+        // --- Viewport: fix Image + Mask for proper clipping ---
         RectTransform viewportRT = _spellListScroll.viewport;
         if (viewportRT != null)
         {
@@ -329,11 +330,73 @@ public class SpellTestingPanel : MonoBehaviour
             viewportRT.offsetMin = Vector2.zero;
             viewportRT.offsetMax = Vector2.zero;
             viewportRT.sizeDelta = Vector2.zero;
+
+            // Ensure viewport has an Image for the Mask to use (required for clipping)
+            Image viewportImg = viewportRT.GetComponent<Image>();
+            if (viewportImg == null)
+                viewportImg = viewportRT.gameObject.AddComponent<Image>();
+            viewportImg.color = new Color(1f, 1f, 1f, 0.004f); // Nearly invisible but non-zero alpha
+            viewportImg.raycastTarget = true; // Must be true for ScrollRect drag input
+
+            // Ensure Mask component for content clipping
+            Mask viewportMask = viewportRT.GetComponent<Mask>();
+            if (viewportMask == null)
+                viewportMask = viewportRT.gameObject.AddComponent<Mask>();
+            viewportMask.showMaskGraphic = false; // Don't render the mask graphic itself
+        }
+
+        // --- Create vertical scrollbar ---
+        GameObject scrollbarGO = new GameObject("VerticalScrollbar");
+        scrollbarGO.transform.SetParent(_spellListScroll.transform, false);
+        RectTransform scrollbarRT = scrollbarGO.AddComponent<RectTransform>();
+        // Position on right side of scroll panel
+        scrollbarRT.anchorMin = new Vector2(1f, 0f);
+        scrollbarRT.anchorMax = new Vector2(1f, 1f);
+        scrollbarRT.pivot = new Vector2(1f, 0.5f);
+        scrollbarRT.sizeDelta = new Vector2(10f, 0f);
+
+        Image scrollbarBg = scrollbarGO.AddComponent<Image>();
+        scrollbarBg.color = new Color(0.15f, 0.15f, 0.25f, 0.8f);
+
+        // Scrollbar handle (sliding area)
+        GameObject handleArea = new GameObject("SlidingArea");
+        handleArea.transform.SetParent(scrollbarGO.transform, false);
+        RectTransform handleAreaRT = handleArea.AddComponent<RectTransform>();
+        handleAreaRT.anchorMin = Vector2.zero;
+        handleAreaRT.anchorMax = Vector2.one;
+        handleAreaRT.offsetMin = Vector2.zero;
+        handleAreaRT.offsetMax = Vector2.zero;
+
+        GameObject handle = new GameObject("Handle");
+        handle.transform.SetParent(handleArea.transform, false);
+        RectTransform handleRT = handle.AddComponent<RectTransform>();
+        handleRT.anchorMin = Vector2.zero;
+        handleRT.anchorMax = Vector2.one;
+        handleRT.offsetMin = Vector2.zero;
+        handleRT.offsetMax = Vector2.zero;
+
+        Image handleImg = handle.AddComponent<Image>();
+        handleImg.color = new Color(0.4f, 0.5f, 0.7f, 0.9f);
+
+        Scrollbar scrollbar = scrollbarGO.AddComponent<Scrollbar>();
+        scrollbar.handleRect = handleRT;
+        scrollbar.targetGraphic = handleImg;
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+
+        // Wire scrollbar to ScrollRect
+        _spellListScroll.verticalScrollbar = scrollbar;
+        _spellListScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+        _spellListScroll.verticalScrollbarSpacing = -2f;
+
+        // Adjust viewport to leave room for scrollbar
+        if (viewportRT != null)
+        {
+            viewportRT.offsetMax = new Vector2(-12f, 0f); // Leave space on right for scrollbar
         }
 
         _spellListContent = _spellListScroll.content;
 
-        // --- FIX: Properly anchor content to top-stretch so it grows downward ---
+        // --- Content: anchor top-stretch so it grows downward ---
         RectTransform contentRT = _spellListContent as RectTransform;
         contentRT.anchorMin = new Vector2(0f, 1f);
         contentRT.anchorMax = new Vector2(1f, 1f);
@@ -359,11 +422,12 @@ public class SpellTestingPanel : MonoBehaviour
     {
         // Use a scroll view so everything fits
         ScrollRect configScroll = UIFactory.CreateScrollPanel(parent, "ConfigScroll");
-        RectTransform configScrollRT = configScroll.GetComponent<RectTransform>();
-        configScrollRT.sizeDelta = new Vector2(0, 500);
-        LayoutElement scrollLE = configScroll.gameObject.AddComponent<LayoutElement>();
-        scrollLE.flexibleHeight = 1;
-        scrollLE.preferredHeight = 500;
+        configScroll.movementType = ScrollRect.MovementType.Clamped;
+        configScroll.scrollSensitivity = 25f;
+        LayoutElement configScrollLE = configScroll.gameObject.AddComponent<LayoutElement>();
+        configScrollLE.flexibleHeight = 1;
+        configScrollLE.preferredHeight = 500;
+        FixViewportMask(configScroll);
         Transform content = configScroll.content;
         VerticalLayoutGroup vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
         vlg.spacing = 3;
@@ -490,11 +554,12 @@ public class SpellTestingPanel : MonoBehaviour
     {
         // Use scroll for this column too
         ScrollRect actionsScroll = UIFactory.CreateScrollPanel(parent, "ActionsScroll");
-        RectTransform actionsScrollRT = actionsScroll.GetComponent<RectTransform>();
-        actionsScrollRT.sizeDelta = new Vector2(0, 500);
-        LayoutElement scrollLE = actionsScroll.gameObject.AddComponent<LayoutElement>();
-        scrollLE.flexibleHeight = 1;
-        scrollLE.preferredHeight = 500;
+        actionsScroll.movementType = ScrollRect.MovementType.Clamped;
+        actionsScroll.scrollSensitivity = 25f;
+        LayoutElement actionsScrollLE = actionsScroll.gameObject.AddComponent<LayoutElement>();
+        actionsScrollLE.flexibleHeight = 1;
+        actionsScrollLE.preferredHeight = 500;
+        FixViewportMask(actionsScroll);
         Transform content = actionsScroll.content;
         VerticalLayoutGroup vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
         vlg.spacing = 3;
@@ -599,6 +664,35 @@ public class SpellTestingPanel : MonoBehaviour
     }
 
     // ========== UI HELPERS ==========
+
+    /// <summary>
+    /// Ensures a ScrollRect's viewport has a proper Image + Mask for content clipping.
+    /// The Image is nearly invisible but has non-zero alpha so the Mask stencil works.
+    /// </summary>
+    private void FixViewportMask(ScrollRect scrollRect)
+    {
+        if (scrollRect == null || scrollRect.viewport == null) return;
+
+        RectTransform viewportRT = scrollRect.viewport;
+        viewportRT.anchorMin = Vector2.zero;
+        viewportRT.anchorMax = Vector2.one;
+        viewportRT.offsetMin = Vector2.zero;
+        viewportRT.offsetMax = Vector2.zero;
+        viewportRT.sizeDelta = Vector2.zero;
+
+        // Ensure Image exists for the Mask (required for stencil-based clipping)
+        Image viewportImg = viewportRT.GetComponent<Image>();
+        if (viewportImg == null)
+            viewportImg = viewportRT.gameObject.AddComponent<Image>();
+        viewportImg.color = new Color(1f, 1f, 1f, 0.004f); // Nearly invisible
+        viewportImg.raycastTarget = true; // Needed for ScrollRect drag/scroll input
+
+        // Ensure Mask component
+        Mask viewportMask = viewportRT.GetComponent<Mask>();
+        if (viewportMask == null)
+            viewportMask = viewportRT.gameObject.AddComponent<Mask>();
+        viewportMask.showMaskGraphic = false;
+    }
 
     private Text CreateSliderRow(Transform parent, string label, float min, float max,
         float initial, Font font, UnityEngine.Events.UnityAction<float> onChanged)
