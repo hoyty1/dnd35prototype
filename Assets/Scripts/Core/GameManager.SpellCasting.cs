@@ -601,6 +601,9 @@ public partial class GameManager
             summonCC.aiProfile = ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
             summonCC.EnemyUseCoupDeGraceOverride = false;
 
+            // Swarm is completely uncontrollable - it attacks nearest creature regardless of team
+            summonCC.SetControllable(false);
+
             InsertIntoInitiative(summonCC, caster);
 
             int persistedRounds = 2;
