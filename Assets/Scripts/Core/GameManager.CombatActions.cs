@@ -1832,6 +1832,13 @@ public partial class GameManager
             ClearSunderSequenceState();
         }
 
+        // Fire Shield retribution: trip and disarm are melee maneuvers that involve physical contact
+        if ((type == SpecialAttackType.Trip || type == SpecialAttackType.Disarm) &&
+            target != null && target.Stats != null && target.Stats.FireShieldActive)
+        {
+            ResolveFireShieldRetribution(target, attacker);
+        }
+
         if (result.Success)
         {
             if (type == SpecialAttackType.BullRushAttack || type == SpecialAttackType.BullRushCharge)

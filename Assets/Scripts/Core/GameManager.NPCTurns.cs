@@ -129,6 +129,11 @@ public partial class GameManager
         {
             var trip = summon.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
             CombatUI.ShowCombatLog($"<color=#66E8FF>✦ {GetSummonDisplayName(summon)} attempts Trip: {trip.Log}</color>");
+
+            // Fire Shield retribution: trip is a melee maneuver
+            if (target != null && target.Stats != null && target.Stats.FireShieldActive)
+                ResolveFireShieldRetribution(target, summon);
+
             summon.CommitStandardAction();
             UpdateAllStatsUI();
             yield return new WaitForSeconds(0.65f);
@@ -290,6 +295,10 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog($"☠ {attacker.Stats.CharacterName} follows up with Trip ({tripContext}): {tripResult.Log}");
         Debug.Log($"[NPC Trip Follow-up] {attacker.Stats.CharacterName} triggered free trip after hit. Success={tripResult.Success}");
+
+        // Fire Shield retribution: free trip follow-up is a melee maneuver
+        if (target != null && target.Stats != null && target.Stats.FireShieldActive)
+            ResolveFireShieldRetribution(target, attacker);
     }
 
     private void TryResolveFreeTripFromAttackResults(CharacterController attacker, CharacterController target, List<CombatResult> attacks, RangeInfo attackRange)
@@ -386,6 +395,13 @@ public partial class GameManager
 
         var result = npc.ExecuteSpecialAttack(choice.Value, target);
         CombatUI.ShowCombatLog($"☠ {npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}");
+
+        // Fire Shield retribution: trip and disarm are melee maneuvers that involve physical contact
+        if ((choice.Value == SpecialAttackType.Trip || choice.Value == SpecialAttackType.Disarm) &&
+            target != null && target.Stats != null && target.Stats.FireShieldActive)
+        {
+            ResolveFireShieldRetribution(target, npc);
+        }
 
         if (result.Success)
         {
