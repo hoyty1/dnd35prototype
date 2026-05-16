@@ -281,6 +281,7 @@ public partial class GameManager : MonoBehaviour
     private ItemData _pendingMagicWeaponItem; // Selected weapon to receive the pending Magic Weapon spell
     private ResistEnergyType? _pendingResistEnergyType;
     private ResistEnergyType? _pendingProtectionFromEnergyType;
+    private bool? _pendingFireShieldIsWarm; // Chosen Fire Shield type: true=Warm, false=Chill, null=not yet chosen
     private string _pendingDisguiseSelfRace;
     private SummonMonsterOption _pendingSummonSelection; // Selected summon option waiting for placement
     private int _pendingSummonListLevel; // Selected Summon Monster list level (I/II/III...)
@@ -1051,6 +1052,7 @@ public partial class GameManager : MonoBehaviour
         _pendingGreaterMagicWeaponItem = null;
         _pendingResistEnergyType = null;
         _pendingProtectionFromEnergyType = null;
+        _pendingFireShieldIsWarm = null;
         _pendingDisguiseSelfRace = null;
         _pendingSummonSelection = null;
         _pendingSummonListLevel = 0;
@@ -8070,6 +8072,7 @@ public partial class GameManager : MonoBehaviour
         _pendingAnimateRopeItem = null;
         _pendingResistEnergyType = null;
         _pendingProtectionFromEnergyType = null;
+        _pendingFireShieldIsWarm = null;
         _pendingMagicWeaponItem = null;
         _pendingKeenEdgeItem = null;
         _pendingKeenEdgeIsAmmo = false;

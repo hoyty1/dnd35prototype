@@ -500,8 +500,8 @@ public class StatusEffectIndicator : MonoBehaviour
                 Key = warm ? "FireShieldWarm" : "FireShieldChill",
                 ShortLabel = warm ? "🔥FS" : "❄FS",
                 Tooltip = warm
-                    ? "Fire Shield (Warm)\nRetaliates 1d6+CL fire vs melee attackers.\nResist Cold 10."
-                    : "Fire Shield (Chill)\nRetaliates 1d6+CL cold vs melee attackers.\nResist Fire 10.",
+                    ? "Fire Shield (Warm)\nRetaliates 1d6+CL fire vs melee attackers.\nCold damage reduced 50% (0 if save-for-half)."
+                    : "Fire Shield (Chill)\nRetaliates 1d6+CL cold vs melee attackers.\nFire damage reduced 50% (0 if save-for-half).",
                 Color = warm ? new Color(1f, 0.4f, 0f, 0.95f) : new Color(0.3f, 0.6f, 1f, 0.95f),
                 Duration = _character.Stats.FireShieldDurationRounds
             });

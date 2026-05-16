@@ -74,6 +74,7 @@ public partial class GameManager
             _pendingSpellFromHeldCharge = false;
             _pendingAnimateRopeItem = null;
             _pendingResistEnergyType = null;
+            _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
             return false;
         }
@@ -95,6 +96,7 @@ public partial class GameManager
             _pendingSpellFromHeldCharge = false;
             _pendingAnimateRopeItem = null;
             _pendingResistEnergyType = null;
+            _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
             return false;
         }
@@ -840,6 +842,12 @@ public partial class GameManager
             return;
         }
 
+        if (string.Equals(_pendingSpell.SpellId, SpellNames.FIRE_SHIELD, StringComparison.Ordinal) && !_pendingFireShieldIsWarm.HasValue)
+        {
+            ShowFireShieldTypeSelection(caster);
+            return;
+        }
+
         // ===== AoE SPELLS: Enter AoE targeting mode =====
         if (_pendingSpell.AoEShapeType != AoEShape.None)
         {
@@ -950,6 +958,7 @@ public partial class GameManager
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
                     _pendingResistEnergyType = null;
+                    _pendingFireShieldIsWarm = null;
                     _pendingProtectionFromEnergyType = null;
                     CombatUI?.ShowCombatLog("⚠ Resist Energy cancelled: no energy type selected.");
                     ShowActionChoices();
@@ -966,6 +975,7 @@ public partial class GameManager
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
                 _pendingResistEnergyType = null;
+                _pendingFireShieldIsWarm = null;
                 _pendingProtectionFromEnergyType = null;
                 CombatUI?.ShowCombatLog("↩ Resist Energy cancelled (energy type not selected).");
                 ShowActionChoices();
@@ -1029,6 +1039,59 @@ public partial class GameManager
             optionButtonColorOverride: new Color(0.24f, 0.5f, 0.40f, 1f));
     }
 
+    private void ShowFireShieldTypeSelection(CharacterController caster)
+    {
+        if (caster == null || caster.Stats == null || CombatUI == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+        CombatUI.SetActionButtonsVisible(false);
+
+        List<string> options = new List<string>
+        {
+            "Chill Shield — cold retribution, resist fire 50%",
+            "Warm Shield — fire retribution, resist cold 50%"
+        };
+
+        CombatUI.ShowPickUpItemSelection(
+            actorName: caster.Stats.CharacterName,
+            itemOptions: options,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    _pendingSpellFromHeldCharge = false;
+                    _pendingFireShieldIsWarm = null;
+                    CombatUI?.ShowCombatLog("⚠ Fire Shield cancelled: no shield type selected.");
+                    ShowActionChoices();
+                    return;
+                }
+
+                // Index 0 = Chill Shield (not warm), Index 1 = Warm Shield
+                _pendingFireShieldIsWarm = (selectedIndex == 1);
+                string chosen = selectedIndex == 1 ? "Warm Shield" : "Chill Shield";
+                CombatUI?.ShowCombatLog($"✨ Fire Shield prepared: {chosen}.");
+                BeginPendingSpellTargeting(caster);
+            },
+            onCancel: () =>
+            {
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingFireShieldIsWarm = null;
+                CombatUI?.ShowCombatLog("↩ Fire Shield cancelled (shield type not selected).");
+                ShowActionChoices();
+            },
+            titleOverride: "Fire Shield — Choose Shield Type",
+            bodyOverride: "Choose a shield type:\n• Chill Shield: deals cold retribution to melee attackers; reduces fire damage by half.\n• Warm Shield: deals fire retribution to melee attackers; reduces cold damage by half.",
+            optionButtonColorOverride: new Color(0.8f, 0.3f, 0.1f, 1f));
+    }
+
     private bool ShouldShowTouchSpellPrompt(SpellData spell)
     {
         if (spell == null) return false;
@@ -1047,6 +1110,7 @@ public partial class GameManager
     private void OnSpellSelectionCancelled()
     {
         _pendingResistEnergyType = null;
+        _pendingFireShieldIsWarm = null;
         _pendingProtectionFromEnergyType = null;
         _pendingDisguiseSelfRace = null;
         ShowActionChoices();
@@ -1514,6 +1578,7 @@ public partial class GameManager
             _pendingKeenEdgeIsAmmo = false;
             _pendingGreaterMagicWeaponItem = null;
             _pendingResistEnergyType = null;
+            _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
             ShowActionChoices();
             return;
@@ -1530,6 +1595,13 @@ public partial class GameManager
         {
             CombatUI?.ShowCombatLog("⚠ Protection from Energy requires selecting an energy type before casting.");
             ShowProtectionFromEnergyTypeSelection(caster);
+            return;
+        }
+
+        if (string.Equals(_pendingSpell.SpellId, SpellNames.FIRE_SHIELD, StringComparison.Ordinal) && !_pendingFireShieldIsWarm.HasValue)
+        {
+            CombatUI?.ShowCombatLog("⚠ Fire Shield requires selecting a shield type before casting.");
+            ShowFireShieldTypeSelection(caster);
             return;
         }
 
@@ -1621,6 +1693,7 @@ public partial class GameManager
                 _pendingMetamagic = null;
                 _pendingAnimateRopeItem = null;
                 _pendingResistEnergyType = null;
+                _pendingFireShieldIsWarm = null;
                 _pendingProtectionFromEnergyType = null;
 
                 ClearSpellcastResourceSnapshot();
@@ -1648,6 +1721,7 @@ public partial class GameManager
                 _pendingMetamagic = null;
                 _pendingAnimateRopeItem = null;
                 _pendingResistEnergyType = null;
+                _pendingFireShieldIsWarm = null;
                 _pendingProtectionFromEnergyType = null;
 
                 ClearSpellcastResourceSnapshot();
@@ -1684,6 +1758,7 @@ public partial class GameManager
                 _pendingMetamagic = null;
                 _pendingAnimateRopeItem = null;
                 _pendingResistEnergyType = null;
+                _pendingFireShieldIsWarm = null;
                 _pendingProtectionFromEnergyType = null;
 
                 ClearSpellcastResourceSnapshot();
@@ -1727,6 +1802,7 @@ public partial class GameManager
                     _pendingMetamagic = null;
                     _pendingAnimateRopeItem = null;
                     _pendingResistEnergyType = null;
+                    _pendingFireShieldIsWarm = null;
                     _pendingProtectionFromEnergyType = null;
 
                     ClearSpellcastResourceSnapshot();
@@ -1803,6 +1879,7 @@ public partial class GameManager
                     _pendingMetamagic = null;
                     _pendingAnimateRopeItem = null;
                     _pendingResistEnergyType = null;
+                    _pendingFireShieldIsWarm = null;
                     _pendingProtectionFromEnergyType = null;
                     _pendingDisguiseSelfRace = null;
                     ResetPendingGreaseCastMode();
@@ -1831,6 +1908,7 @@ public partial class GameManager
                 _pendingMetamagic = null;
                 _pendingAnimateRopeItem = null;
                 _pendingResistEnergyType = null;
+                _pendingFireShieldIsWarm = null;
                 _pendingProtectionFromEnergyType = null;
                 _pendingDisguiseSelfRace = null;
                 ResetPendingGreaseCastMode();
@@ -1860,6 +1938,7 @@ public partial class GameManager
                     _pendingMetamagic = null;
                     _pendingAnimateRopeItem = null;
                     _pendingResistEnergyType = null;
+                    _pendingFireShieldIsWarm = null;
                     _pendingProtectionFromEnergyType = null;
                     _pendingDisguiseSelfRace = null;
                     ResetPendingGreaseCastMode();
@@ -2059,6 +2138,7 @@ public partial class GameManager
                     _pendingSpellFromHeldCharge = false;
                     _pendingAnimateRopeItem = null;
                     _pendingResistEnergyType = null;
+                    _pendingFireShieldIsWarm = null;
                     _pendingProtectionFromEnergyType = null;
                     ResetPendingGreaseCastMode();
                     return;
@@ -2073,6 +2153,7 @@ public partial class GameManager
                     _pendingSpellFromHeldCharge = false;
                     _pendingAnimateRopeItem = null;
                     _pendingResistEnergyType = null;
+                    _pendingFireShieldIsWarm = null;
                     _pendingProtectionFromEnergyType = null;
                     ResetPendingGreaseCastMode();
                     return;
@@ -2084,6 +2165,7 @@ public partial class GameManager
             _pendingMetamagic = null;
             _pendingAnimateRopeItem = null;
             _pendingResistEnergyType = null;
+            _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
             _pendingDisguiseSelfRace = null;
             ResetPendingGreaseCastMode();
@@ -2502,6 +2584,7 @@ public partial class GameManager
         _pendingSpellFromHeldCharge = false;
         _pendingAnimateRopeItem = null;
         _pendingResistEnergyType = null;
+        _pendingFireShieldIsWarm = null;
         _pendingProtectionFromEnergyType = null;
         ResetPendingGreaseCastMode();
 
@@ -2522,6 +2605,7 @@ public partial class GameManager
         _pendingMetamagic = null;
         _pendingAnimateRopeItem = null;
         _pendingResistEnergyType = null;
+        _pendingFireShieldIsWarm = null;
         _pendingProtectionFromEnergyType = null;
         _pendingSummonSelection = null;
         _pendingSummonListLevel = 0;
@@ -2791,6 +2875,7 @@ public partial class GameManager
                     _pendingMetamagic = null;
                     _pendingAnimateRopeItem = null;
                     _pendingResistEnergyType = null;
+                    _pendingFireShieldIsWarm = null;
                     _pendingProtectionFromEnergyType = null;
                     _pendingDisguiseSelfRace = null;
                     ResetPendingGreaseCastMode();
@@ -5502,6 +5587,7 @@ public partial class GameManager
             string energyLabel = DamageTextUtils.GetDamageTypeDisplay(chosenDamageType);
             CombatUI?.ShowCombatLog($"<color=#88FFEE>🛡 {recipient.Stats.CharacterName} gains Resist Energy ({energyLabel} {resistance}) for {Mathf.Max(0, durationRounds)} rounds.</color>");
             _pendingResistEnergyType = null;
+            _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
             UpdateAllStatsUI();
             return null;
@@ -6051,7 +6137,7 @@ public partial class GameManager
                         character.Stats.FireShieldCasterLevel = 0;
                         character.Stats.FireShieldDurationRounds = 0;
                     }
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Fire Shield expires on {character.Stats.CharacterName}: retribution and energy resistance removed.</color>");
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Fire Shield expires on {character.Stats.CharacterName}: retribution and elemental damage reduction removed.</color>");
                 }
                 // NOTE: Resilient Sphere expiry is now handled by the area effect system
                 // (ResilientSphereAreaEffect.OnRoundStart → RoundsRemaining countdown → ExpireEffect).

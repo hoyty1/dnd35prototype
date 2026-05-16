@@ -3193,6 +3193,35 @@ public class CharacterStats
             result.Notes.Add($"{damageForResistance} {typeLabel} damage reduced to {result.DamageAfterResistance} by Resist Energy ({typeLabel} {resistEnergyResistance})");
         }
 
+        // 2b) Fire Shield elemental damage reduction (PHB p.230)
+        // Warm Shield: cold damage reduced by 50%. Chill Shield: fire damage reduced by 50%.
+        // If the damage source allowed a save for half, the protected character takes 0 instead.
+        if (FireShieldActive && result.DamageAfterResistance > 0 && packet.Types != null && packet.Types.Count > 0)
+        {
+            DamageType fireShieldReduceType = FireShieldIsWarm ? DamageType.Cold : DamageType.Fire;
+            if (packet.Types.Contains(fireShieldReduceType))
+            {
+                int beforeFireShield = result.DamageAfterResistance;
+                if (packet.SavedForHalf)
+                {
+                    // Save-for-half + Fire Shield 50% = 0 damage
+                    result.DamageAfterResistance = 0;
+                    string typeLabel = DamageTextUtils.GetDamageTypeDisplay(fireShieldReduceType);
+                    string shieldName = FireShieldIsWarm ? "Warm Shield" : "Chill Shield";
+                    result.Notes.Add($"{beforeFireShield} {typeLabel} damage negated by Fire Shield ({shieldName}) — save for half + 50% reduction = 0");
+                }
+                else
+                {
+                    // Normal 50% reduction
+                    int reduced = beforeFireShield / 2;
+                    result.DamageAfterResistance = beforeFireShield - reduced;
+                    string typeLabel = DamageTextUtils.GetDamageTypeDisplay(fireShieldReduceType);
+                    string shieldName = FireShieldIsWarm ? "Warm Shield" : "Chill Shield";
+                    result.Notes.Add($"{beforeFireShield} {typeLabel} damage reduced to {result.DamageAfterResistance} by Fire Shield ({shieldName}, 50%)");
+                }
+            }
+        }
+
         // 3) DR check: applies only to physical weapon-like attacks (weapon or natural)
         int drApplied = 0;
         bool sourceCountsAsWeapon = packet.Source == AttackSource.Weapon || packet.Source == AttackSource.Natural;

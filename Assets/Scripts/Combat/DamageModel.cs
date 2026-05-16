@@ -81,6 +81,12 @@ public class DamagePacket
     public bool IsNonlethal;
     public AttackSource Source = AttackSource.Other;
     public string SourceName;
+    /// <summary>
+    /// True if the damage source allowed a save for half damage (Reflex half, etc.).
+    /// Used by Fire Shield: if the protected element damage source allows a save for half,
+    /// the character takes 0 damage instead (50% of half = 0). PHB p.230
+    /// </summary>
+    public bool SavedForHalf;
 }
 
 public class DamageResolutionResult

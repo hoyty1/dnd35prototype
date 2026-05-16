@@ -2640,8 +2640,10 @@ public partial class GameManager
 
     /// <summary>
     /// Resolves Fire Shield: self-buff with two modes (warm/chill).
-    /// Warm Shield: resist cold 10, retribution 1d6+CL fire (max +15)
-    /// Chill Shield: resist fire 10, retribution 1d6+CL cold (max +15)
+    /// Warm Shield: 50% cold damage reduction, retribution 1d6+CL fire (max +15)
+    /// Chill Shield: 50% fire damage reduction, retribution 1d6+CL cold (max +15)
+    /// If the reduced damage source allowed a save for half, the protected
+    /// character instead takes no damage from that source.
     /// Duration: 1 round/level (D). PHB p.230
     /// </summary>
     private bool TryResolveFireShieldSpellEffect(
@@ -2658,19 +2660,8 @@ public partial class GameManager
         int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
-        // Default to Warm Shield (protects vs cold, deals fire retribution)
-        // In a full UI we'd let the player choose; for prototype, default warm
-        bool isWarmShield = true;
-
-        // Apply energy resistance via the existing ResistEnergy system
-        ResistEnergyEffectData resistData = new ResistEnergyEffectData
-        {
-            EnergyType = isWarmShield ? ResistEnergyType.Cold : ResistEnergyType.Fire,
-            ResistanceAmount = 10,
-            DurationRemainingRounds = durationRounds,
-            Caster = caster
-        };
-        recipient.Stats.SetResistEnergyEffect(resistData);
+        // Use the player's shield-type choice; fall back to warm if not set (NPC casts)
+        bool isWarmShield = _pendingFireShieldIsWarm ?? true;
 
         // Track via StatusEffectManager for duration and UI
         StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
@@ -2683,23 +2674,26 @@ public partial class GameManager
             caster.Stats.CharacterName ?? spell.Name,
             casterLevel);
 
-        // Store warm/chill flag and CL on the character for retribution checks
-        // We use a simple tag approach
+        // Store warm/chill flag and CL on the character for retribution + damage reduction
         recipient.Stats.FireShieldActive = true;
         recipient.Stats.FireShieldIsWarm = isWarmShield;
         recipient.Stats.FireShieldCasterLevel = casterLevel;
         recipient.Stats.FireShieldDurationRounds = durationRounds;
 
-        string shieldType = isWarmShield ? "Warm Shield (resist cold 10, fire retribution)" : "Chill Shield (resist fire 10, cold retribution)";
+        string resistType = isWarmShield ? "cold" : "fire";
         string retribType = isWarmShield ? "fire" : "cold";
+        string shieldName = isWarmShield ? "Warm Shield" : "Chill Shield";
         int maxBonus = 15;
 
-        CombatUI?.ShowCombatLog($"🔥 {recipient.Stats.CharacterName} is wreathed in {(isWarmShield ? "warm" : "chill")} flames! (Fire Shield)");
-        CombatUI?.ShowCombatLog($"  {shieldType}");
+        CombatUI?.ShowCombatLog($"🔥 {recipient.Stats.CharacterName} is wreathed in {(isWarmShield ? "warm" : "chill")} flames! (Fire Shield — {shieldName})");
+        CombatUI?.ShowCombatLog($"  {resistType} damage reduced by 50% (0 if save-for-half)");
         CombatUI?.ShowCombatLog($"  Retribution: 1d6+{Mathf.Min(casterLevel, maxBonus)} {retribType} damage to melee attackers");
         CombatUI?.ShowCombatLog($"  Duration: {durationRounds} round(s)");
 
-        Debug.Log($"[FireShield] {recipient.Stats.CharacterName}: {shieldType}, CL {casterLevel}, {durationRounds} rounds");
+        Debug.Log($"[FireShield] {recipient.Stats.CharacterName}: {shieldName}, CL {casterLevel}, {durationRounds} rounds");
+
+        // Clear the pending choice
+        _pendingFireShieldIsWarm = null;
 
         return true;
     }
