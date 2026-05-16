@@ -189,6 +189,9 @@ public class SceneBootstrap : MonoBehaviour
         // Legacy NPC panel fields (hidden, for backward compatibility)
         CreateLegacyNPCFields(canvasGO.transform, combatUI);
 
+        // --- Spell Testing Panel (DEV/DEBUG - toggle with F12) ---
+        SpellTestingPanel spellTestPanel = canvasGO.AddComponent<SpellTestingPanel>();
+
         return combatUI;
     }
 
