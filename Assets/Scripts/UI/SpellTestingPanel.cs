@@ -37,6 +37,12 @@ public class SpellTestingPanel : MonoBehaviour
     private int _originalAbilityScore;
     private bool _abilityBoosted = false;
 
+    // Non-caster temporary setup tracking (to restore after cast)
+    private bool _temporaryCasterSetup = false;
+    private CharacterController _tempCasterCharacter;
+    private SpellcastingComponent _tempSpellComp;
+    private ClassLevelEntry _tempClassEntry;
+
     // ========== UI REFERENCES ==========
     private ScrollRect _spellListScroll;
     private Transform _spellListContent;
@@ -82,8 +88,8 @@ public class SpellTestingPanel : MonoBehaviour
             TogglePanel();
         }
 
-        // Check if we need to restore a boosted ability
-        if (_abilityBoosted && _boostedCaster != null)
+        // Check if we need to restore a boosted ability and/or temporary caster setup
+        if ((_abilityBoosted && _boostedCaster != null) || _temporaryCasterSetup)
         {
             // Restore after a short delay to let the spell resolve
             // We check every frame if the spell targeting is done
@@ -91,6 +97,7 @@ public class SpellTestingPanel : MonoBehaviour
             if (gm != null && gm.GetTestPanelCaster() == null)
             {
                 RestoreAbilityBoost();
+                RestoreTemporaryCasterSetup();
             }
         }
     }
@@ -793,6 +800,97 @@ public class SpellTestingPanel : MonoBehaviour
         _boostedAbility = null;
     }
 
+    /// <summary>
+    /// For non-spellcaster characters (e.g. Rogue, Fighter), temporarily adds a Wizard
+    /// class level and SpellcastingComponent so the test panel can cast spells through them.
+    /// This is automatically cleaned up after the spell resolves.
+    /// </summary>
+    private void EnsureTemporaryCasterSetup(CharacterController caster)
+    {
+        if (caster == null || caster.Stats == null) return;
+
+        // If the character is already a spellcaster with a SpellcastingComponent, nothing to do
+        if (caster.Stats.IsSpellcaster && caster.GetComponent<SpellcastingComponent>() != null)
+            return;
+
+        // Restore any previous temp setup first
+        if (_temporaryCasterSetup)
+        {
+            RestoreTemporaryCasterSetup();
+        }
+
+        Debug.Log($"[SpellTestPanel] ⚡ Setting up temporary Wizard caster for non-caster: {caster.Stats.CharacterName}");
+
+        _tempCasterCharacter = caster;
+
+        // ── 1. Add a temporary Wizard class level so IsSpellcaster returns true ──
+        if (!caster.Stats.IsSpellcaster)
+        {
+            _tempClassEntry = new ClassLevelEntry("Wizard", 10);
+            if (caster.Stats.ClassLevels == null)
+                caster.Stats.ClassLevels = new System.Collections.Generic.List<ClassLevelEntry>();
+            caster.Stats.ClassLevels.Add(_tempClassEntry);
+            Debug.Log($"[SpellTestPanel]   Added temp Wizard level 10. IsSpellcaster={caster.Stats.IsSpellcaster}, CasterLevel={caster.Stats.GetCasterLevel()}");
+        }
+
+        // ── 2. Add SpellcastingComponent if missing ──
+        SpellcastingComponent spellComp = caster.GetComponent<SpellcastingComponent>();
+        if (spellComp == null)
+        {
+            spellComp = caster.gameObject.AddComponent<SpellcastingComponent>();
+            _tempSpellComp = spellComp;
+            Debug.Log($"[SpellTestPanel]   Added temporary SpellcastingComponent");
+        }
+
+        // ── 3. Initialize the component with current stats ──
+        spellComp.Init(caster.Stats);
+
+        // ── 4. Ensure generous spell slots for all levels ──
+        if (spellComp.SlotsRemaining != null)
+        {
+            for (int i = 0; i < spellComp.SlotsRemaining.Length; i++)
+                spellComp.SlotsRemaining[i] = 99;
+        }
+        if (spellComp.SlotsMax != null)
+        {
+            for (int i = 0; i < spellComp.SlotsMax.Length; i++)
+                spellComp.SlotsMax[i] = Mathf.Max(spellComp.SlotsMax[i], 99);
+        }
+
+        _temporaryCasterSetup = true;
+        Debug.Log($"[SpellTestPanel]   Temporary caster setup complete for {caster.Stats.CharacterName}");
+    }
+
+    /// <summary>
+    /// Restores a non-caster character to its original state after a test spell resolves.
+    /// Removes the temporary Wizard class level and SpellcastingComponent.
+    /// </summary>
+    private void RestoreTemporaryCasterSetup()
+    {
+        if (!_temporaryCasterSetup) return;
+
+        Debug.Log($"[SpellTestPanel] 🧹 Restoring temporary caster setup for {_tempCasterCharacter?.Stats?.CharacterName}");
+
+        // Remove the temporary Wizard class entry
+        if (_tempClassEntry != null && _tempCasterCharacter?.Stats?.ClassLevels != null)
+        {
+            _tempCasterCharacter.Stats.ClassLevels.Remove(_tempClassEntry);
+            Debug.Log($"[SpellTestPanel]   Removed temp Wizard class level");
+        }
+
+        // Remove the temporary SpellcastingComponent
+        if (_tempSpellComp != null)
+        {
+            Destroy(_tempSpellComp);
+            Debug.Log($"[SpellTestPanel]   Removed temp SpellcastingComponent");
+        }
+
+        _temporaryCasterSetup = false;
+        _tempCasterCharacter = null;
+        _tempSpellComp = null;
+        _tempClassEntry = null;
+    }
+
     private void CastSpell(SpellData spell)
     {
         Debug.Log($"[SpellTestPanel] ═══ CastSpell START  spell={spell?.Name} ═══");
@@ -816,6 +914,9 @@ public class SpellTestingPanel : MonoBehaviour
 
         Debug.Log($"[SpellTestPanel] Caster: {caster.Stats?.CharacterName} (ActivePC)");
 
+        // ── If ActivePC is a non-caster, temporarily configure them as a Wizard ──
+        EnsureTemporaryCasterSetup(caster);
+
         // Apply +4 boost to primary casting ability
         ApplyAbilityBoost(caster);
 
@@ -823,7 +924,8 @@ public class SpellTestingPanel : MonoBehaviour
         EnsureSpellAvailable(caster, spell);
 
         string abilityInfo = $"{_boostedAbility} boosted +4 ({_originalAbilityScore}→{_originalAbilityScore + 4})";
-        gm.CombatUI?.ShowCombatLog($"🔮 [TEST] Casting {spell.Name} via {caster.Stats?.CharacterName} | {abilityInfo}");
+        string casterNote = _temporaryCasterSetup ? " (temp Wizard CL10)" : "";
+        gm.CombatUI?.ShowCombatLog($"🔮 [TEST] Casting {spell.Name} via {caster.Stats?.CharacterName}{casterNote} | {abilityInfo}");
 
         // Use TestCastSpellFromPanel which bypasses ActivePC/turn-phase guards
         try
@@ -837,8 +939,9 @@ public class SpellTestingPanel : MonoBehaviour
         {
             gm.CombatUI?.ShowCombatLog($"❌ [TEST] Cast error: {ex.Message}");
             Debug.LogError($"[SpellTestPanel] Cast error: {ex}");
-            // Restore ability immediately on error
+            // Restore immediately on error
             RestoreAbilityBoost();
+            RestoreTemporaryCasterSetup();
         }
     }
 
