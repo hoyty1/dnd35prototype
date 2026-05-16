@@ -851,11 +851,19 @@ public class AIService : MonoBehaviour
             : null;
 
         var candidates = new List<CharacterController>();
-        if (allCombatants == null)
+        if (allCombatants == null || swarm == null)
             return candidates;
 
         // D&D 3.5e PHB p.287: Summon Swarm attacks "all OTHER creatures" (excludes caster)
-        CharacterController summonCaster = _gameManager?.GetSummonCasterForAI(swarm);
+        CharacterController summonCaster = null;
+        if (indiscriminate && _gameManager != null)
+        {
+            summonCaster = _gameManager.GetSummonCasterForAI(swarm);
+            if (summonCaster == null)
+            {
+                Debug.LogWarning($"[AIService] Summon Swarm {swarm.Stats?.CharacterName ?? "?"} caster not found. Swarm will be hostile to all creatures including caster.");
+            }
+        }
 
         for (int i = 0; i < allCombatants.Count; i++)
         {
@@ -864,11 +872,20 @@ public class AIService : MonoBehaviour
                 continue;
 
             // Indiscriminate swarms (Summon Swarm) exclude only the caster per PHB
-            if (indiscriminate && candidate == summonCaster)
-                continue;
-
-            if (!indiscriminate && !_gameManager.IsEnemyTeamForAI(swarm, candidate))
-                continue;
+            // If summonCaster is null, we can't exclude it, so warn and include all
+            if (indiscriminate)
+            {
+                if (summonCaster != null && candidate == summonCaster)
+                {
+                    Debug.Log($"[AIService] Swarm excludes caster: {summonCaster.Stats?.CharacterName}");
+                    continue;
+                }
+            }
+            else
+            {
+                if (!_gameManager.IsEnemyTeamForAI(swarm, candidate))
+                    continue;
+            }
 
             candidates.Add(candidate);
         }
