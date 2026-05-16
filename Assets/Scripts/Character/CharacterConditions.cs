@@ -194,9 +194,9 @@ public class CharacterConditions : MonoBehaviour
 
     public bool CanAttack()
     {
-        // Resilient Sphere prevents all actions (PHB p.263)
-        if (_character != null && _character.Stats != null && _character.Stats.ResilientSphereActive)
-            return false;
+        // NOTE: Resilient Sphere does NOT prevent attempting attacks (PHB p.263).
+        // The creature can act freely inside the sphere, but outgoing attacks/spells
+        // are blocked at resolution time (nothing passes through the sphere barrier).
 
         List<StatusEffect> active = GetActiveConditions();
         for (int i = 0; i < active.Count; i++)
@@ -211,9 +211,10 @@ public class CharacterConditions : MonoBehaviour
 
     public bool CanCastSpells()
     {
-        // Resilient Sphere prevents all actions including spellcasting (PHB p.263)
-        if (_character != null && _character.Stats != null && _character.Stats.ResilientSphereActive)
-            return false;
+        // NOTE: Resilient Sphere does NOT prevent attempting to cast spells (PHB p.263).
+        // The creature can act freely inside the sphere, but outgoing spells targeting
+        // others are blocked at resolution time (nothing passes through the sphere barrier).
+        // Self-targeting spells still work normally.
 
         List<StatusEffect> active = GetActiveConditions();
         for (int i = 0; i < active.Count; i++)

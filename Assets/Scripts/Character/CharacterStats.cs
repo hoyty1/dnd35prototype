@@ -1162,16 +1162,19 @@ public class CharacterStats
     public int FireShieldDurationRounds;
 
     // ========== RESILIENT SPHERE (PHB p.263) ==========
+    // The sphere is a globe of shimmering force that is COMPLETELY INDESTRUCTIBLE
+    // by normal means. It has NO HP, NO Hardness. It can ONLY be destroyed by:
+    //   1. Disintegrate spell
+    //   2. Rod of Cancellation
+    //   3. Rod of Negation
+    //   4. Dispel Magic (normal dispel check)
+    // Normal attacks and damage have absolutely no effect on the sphere.
     /// <summary>True while this character is trapped inside Otiluke's Resilient Sphere.</summary>
     public bool ResilientSphereActive;
-    /// <summary>Caster level used when sphere was created (determines HP = 10 × CL).</summary>
+    /// <summary>Caster level used when sphere was created (for dispel checks).</summary>
     public int ResilientSphereCasterLevel;
     /// <summary>Remaining rounds of Resilient Sphere duration.</summary>
     public int ResilientSphereDurationRounds;
-    /// <summary>Current HP of the Resilient Sphere (starts at 10 × CL).</summary>
-    public int ResilientSphereCurrentHP;
-    /// <summary>Maximum HP of the Resilient Sphere (10 × CL).</summary>
-    public int ResilientSphereMaxHP;
     /// <summary>Reference to the caster who created the sphere (for dismissal).</summary>
     public CharacterController ResilientSphereCaster;
 
@@ -3076,45 +3079,23 @@ public class CharacterStats
             packet.Types = new HashSet<DamageType> { DamageType.Untyped };
 
         // ── Resilient Sphere damage interception (PHB p.263) ──
-        // If target is enclosed in a Resilient Sphere, ALL incoming damage
-        // is redirected to the sphere (with Hardness 20 reduction).
-        // If the sphere is destroyed, excess damage passes through to the target.
-        if (ResilientSphereActive && GameManager.Instance != null)
+        // The sphere is COMPLETELY INDESTRUCTIBLE by normal means.
+        // ALL incoming damage is completely blocked — no HP, no hardness, no excess.
+        // Only Disintegrate, Rod of Cancellation, Rod of Negation, or Dispel Magic
+        // can remove the sphere.
+        if (ResilientSphereActive)
         {
-            int sphereResult = GameManager.Instance.TryDestroyResilientSphere(
-                OwnerCharacter, result.RawDamage, GameManager.SphereDestructionType.Damage);
-
-            if (sphereResult == -1)
+            result.ImmunityTriggered = true;
+            result.DamageAfterImmunity = 0;
+            result.DamageAfterResistance = 0;
+            result.FinalDamage = 0;
+            result.Notes.Add("Resilient Sphere blocks the attack! Nothing can pass through.");
+            if (GameManager.Instance != null)
             {
-                // Sphere survived — all damage absorbed
-                result.ImmunityTriggered = true;
-                result.DamageAfterImmunity = 0;
-                result.DamageAfterResistance = 0;
-                result.FinalDamage = 0;
-                result.Notes.Add("Resilient Sphere absorbed all damage.");
-                return result;
+                GameManager.Instance.CombatUI?.ShowCombatLog(
+                    $"<color=#44CCFF>🔮 Resilient Sphere blocks the attack! Nothing can pass through.</color>");
             }
-            else if (sphereResult > 0)
-            {
-                // Sphere destroyed — excess damage passes through
-                // Re-run with excess damage (sphere is already cleared)
-                result.RawDamage = sphereResult;
-                result.DamageAfterImmunity = sphereResult;
-                result.DamageAfterResistance = sphereResult;
-                result.FinalDamage = sphereResult;
-                result.Notes.Add($"Resilient Sphere shattered! {sphereResult} excess damage passes through.");
-                // Fall through to normal damage processing with reduced amount
-            }
-            else
-            {
-                // sphereResult == 0: sphere destroyed with no excess
-                result.ImmunityTriggered = true;
-                result.DamageAfterImmunity = 0;
-                result.DamageAfterResistance = 0;
-                result.FinalDamage = 0;
-                result.Notes.Add("Resilient Sphere shattered (no excess damage).");
-                return result;
-            }
+            return result;
         }
 
         // Swarm trait immunity: weapon attacks do no damage unless the weapon attack is fire-based.

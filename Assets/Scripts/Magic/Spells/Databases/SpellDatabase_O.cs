@@ -109,16 +109,17 @@ public static partial class SpellDatabase
         // Saving Throw: Reflex negates
         // Spell Resistance: Yes
         //
-        // A globe of shimmering force encloses the target creature,
-        // making it immobile and immune to damage from outside.
-        // The sphere has Hardness 20 and 10 HP per caster level.
-        // Nothing can pass through the sphere, in or out.
+        // A globe of shimmering force encloses the target creature.
+        // The sphere moves with the creature — they can move and act freely.
+        // The sphere is INDESTRUCTIBLE by normal means (no HP, no Hardness).
+        // Nothing can pass through the sphere, in or out (bidirectional isolation).
+        // Only Disintegrate, Rod of Cancellation, Rod of Negation, or Dispel Magic can remove it.
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.RESILIENT_SPHERE,
                     Name = "Resilient Sphere",
-                    Description = "Evocation [Force]. A globe of shimmering force encloses the target creature, making it immobile and immune to damage from outside. The sphere has Hardness 20 and 10 HP per caster level. Nothing can pass through the sphere, in or out. A Disintegrate spell or Rod of Cancellation/Negation can destroy it. Duration 1 min/level (D). PHB p.263",
+                    Description = "Evocation [Force]. A globe of shimmering force encloses the target creature. The sphere moves with the creature — they can move and act freely, but nothing can pass through in either direction. Indestructible by normal means. Only Disintegrate, Rod of Cancellation/Negation, or Dispel Magic can remove it. Duration 1 min/level (D). PHB p.263",
                     SpellLevel = 4,
                     School = "Evocation [Force]",
                     AvailableFor = new List<SpellAvailability>

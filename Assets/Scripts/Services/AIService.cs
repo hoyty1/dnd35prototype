@@ -131,6 +131,18 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        // ── Resilient Sphere: NPC can move but attacks/spells are blocked (PHB p.263) ──
+        // The sphere moves with the creature, so the NPC can still take move actions,
+        // but all outgoing attacks and spells are blocked by the barrier.
+        if (npc.Stats.ResilientSphereActive)
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"<color=#44CCFF>🔮 {npc.Stats.CharacterName} is enclosed in a Resilient Sphere — attacks and spells cannot pass through!</color>");
+            // NPC skips offensive actions but could still move (handled by normal movement AI)
+            yield return new WaitForSeconds(0.5f);
+            yield break;
+        }
+
         AIProfile profile = GetProfile(npc);
         if (profile is SwarmAI swarmProfile)
         {

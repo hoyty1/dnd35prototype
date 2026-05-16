@@ -2922,8 +2922,6 @@ public class CharacterController : MonoBehaviour
             Stats.ResilientSphereActive = false;
             Stats.ResilientSphereCasterLevel = 0;
             Stats.ResilientSphereDurationRounds = 0;
-            Stats.ResilientSphereCurrentHP = 0;
-            Stats.ResilientSphereMaxHP = 0;
             Stats.ResilientSphereCaster = null;
             Stats.ResetCurrentSizeToBase(); // Ensure size resets on combat end/death
             Stats.ActiveProtectionFromArrowsEffect = null;

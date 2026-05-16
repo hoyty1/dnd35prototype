@@ -158,6 +158,26 @@ public class CombatFlowService : MonoBehaviour
         if (_gameManager == null || attacker == null || target == null)
             return;
 
+        // ── Resilient Sphere outgoing attack block (PHB p.263) ──
+        // Creature can attempt attacks but nothing passes through the sphere barrier.
+        if (attacker.Stats != null && attacker.Stats.ResilientSphereActive)
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"<color=#44CCFF>🔮 {attacker.Stats.CharacterName}'s attack cannot pass through the Resilient Sphere!</color>");
+            _gameManager.Combat_ShowActionChoices();
+            return;
+        }
+
+        // ── Resilient Sphere blocks incoming attacks on sphered targets ──
+        // Nothing can pass through the sphere from outside either.
+        if (target.Stats != null && target.Stats.ResilientSphereActive)
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"<color=#44CCFF>🔮 Attack on {target.Stats.CharacterName} is blocked by Resilient Sphere! Nothing can pass through.</color>");
+            _gameManager.Combat_ShowActionChoices();
+            return;
+        }
+
         _gameManager.Combat_SetSubPhase(GameManager.PlayerSubPhase.Animating);
 
         var allCombatants = _gameManager.Combat_GetAllCharacters();

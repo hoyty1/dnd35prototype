@@ -773,6 +773,21 @@ public partial class GameManager
             return;
         }
 
+        // ── Resilient Sphere outgoing spell block (PHB p.263) ──
+        // Creature can attempt to cast, but non-self spells cannot pass through the sphere.
+        // Self-targeting spells still work normally inside the sphere.
+        if (caster.Stats != null && caster.Stats.ResilientSphereActive
+            && _pendingSpell.TargetType != SpellTargetType.Self)
+        {
+            CombatUI?.ShowCombatLog(
+                $"<color=#44CCFF>🔮 {caster.Stats.CharacterName}'s spell cannot pass through the Resilient Sphere!</color>");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            ShowActionChoices();
+            return;
+        }
+
         if (!CanBeginSpellcastWhileGrappledOrPinned(caster, _pendingSpell))
         {
             _pendingSpell = null;
@@ -6014,7 +6029,7 @@ public partial class GameManager
                     if (character.Stats != null && character.Stats.ResilientSphereActive)
                     {
                         ClearResilientSphereState(character);
-                        CombatUI?.ShowCombatLog($"<color=#44CCFF>⏱ Resilient Sphere expires on {character.Stats.CharacterName}: movement and actions restored.</color>");
+                        CombatUI?.ShowCombatLog($"<color=#44CCFF>⏱ Resilient Sphere expires on {character.Stats.CharacterName}: barrier dissipates.</color>");
                     }
                 }
             }
