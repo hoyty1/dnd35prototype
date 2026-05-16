@@ -846,6 +846,149 @@ public class AIService : MonoBehaviour
         }
 
         yield return new WaitForSeconds(0.3f);
+
+        // ── Swarm automatic damage (MM p.239): At the end of the swarm's turn,
+        // any creature whose space the swarm occupies takes swarm damage automatically
+        // (no attack roll). Then each damaged creature must make a Fortitude save
+        // vs the distraction DC or become nauseated for 1 round.
+        yield return _gameManager.StartCoroutine(ApplySwarmDamageToOccupants(swarm, indiscriminate));
+    }
+
+    /// <summary>
+    /// D&D 3.5e swarm damage: automatically deals damage to all creatures occupying the
+    /// swarm's space at the end of its turn. No attack roll required.
+    /// Also triggers distraction (Fort save or nauseated 1 round).
+    /// </summary>
+    private IEnumerator ApplySwarmDamageToOccupants(CharacterController swarm, bool indiscriminate)
+    {
+        if (swarm == null || swarm.Stats == null || !swarm.Stats.IsSwarm)
+            yield break;
+
+        SwarmTraits traits = swarm.Stats.SwarmTraits;
+        if (traits == null || !traits.IsSwarm)
+            yield break;
+
+        Vector2Int swarmPos = swarm.GridPosition;
+        List<CharacterController> allChars = _gameManager.GetAllCharactersForAI();
+        if (allChars == null)
+            yield break;
+
+        for (int i = 0; i < allChars.Count; i++)
+        {
+            CharacterController victim = allChars[i];
+            if (victim == null || victim == swarm || victim.Stats == null || victim.Stats.IsDead)
+                continue;
+
+            // Swarms only damage creatures sharing their space
+            if (victim.GridPosition != swarmPos)
+                continue;
+
+            // Skip friendly creatures unless this is an indiscriminate swarm
+            if (!indiscriminate && !_gameManager.IsEnemyTeamForAI(swarm, victim))
+                continue;
+
+            // ── Roll swarm damage ──
+            int damage = RollSwarmDamage(traits);
+            if (damage <= 0)
+                continue;
+
+            string dmgTypeStr = traits.SwarmDamageType.ToString();
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"<color=#FF6644>🐝 {swarm.Stats.CharacterName} swarm damage: {damage} {dmgTypeStr} damage to {victim.Stats.CharacterName}! (no attack roll)</color>");
+
+            victim.Stats.TakeDamage(damage);
+            yield return new WaitForSeconds(0.25f);
+
+            // Check if victim died from swarm damage
+            if (victim.Stats.IsDead)
+            {
+                _gameManager.CombatUI?.ShowCombatLog(
+                    $"💀 {victim.Stats.CharacterName} is killed by the swarm!");
+                victim.OnDeath();
+                continue;
+            }
+
+            // ── Distraction: Fort save or nauseated 1 round (MM p.239) ──
+            if (traits.DistractionDC > 0)
+            {
+                var saveResult = SavingThrowResolver.ResolveFortitudeSave(
+                    victim.Stats, traits.DistractionDC, $"{swarm.Stats.CharacterName} distraction");
+
+                if (saveResult.Succeeded)
+                {
+                    _gameManager.CombatUI?.ShowCombatLog(
+                        $"💪 {victim.Stats.CharacterName} resists distraction (Fort {saveResult.Total} vs DC {traits.DistractionDC}).");
+                }
+                else
+                {
+                    _gameManager.CombatUI?.ShowCombatLog(
+                        $"<color=#FFAA00>🤢 {victim.Stats.CharacterName} fails distraction save (Fort {saveResult.Total} vs DC {traits.DistractionDC}) — nauseated for 1 round!</color>");
+                    victim.ApplyNauseatedCondition(1, $"{swarm.Stats.CharacterName} Distraction");
+                }
+                yield return new WaitForSeconds(0.2f);
+            }
+
+            // ── Poison rider (if applicable) ──
+            if (traits.HasPoison && !string.IsNullOrEmpty(traits.PoisonId))
+            {
+                _gameManager.CombatUI?.ShowCombatLog(
+                    $"☠ {victim.Stats.CharacterName} is exposed to {swarm.Stats.CharacterName}'s poison!");
+                // Poison application handled by existing poison system if available
+            }
+        }
+    }
+
+    /// <summary>
+    /// Rolls swarm damage from SwarmTraits. Uses SwarmDamage as flat if > 0,
+    /// otherwise parses and rolls SwarmDamageDice (e.g. "1d6").
+    /// </summary>
+    private static int RollSwarmDamage(SwarmTraits traits)
+    {
+        // If a flat SwarmDamage value is set, use it directly (some swarms have fixed damage)
+        if (traits.SwarmDamage > 0)
+            return traits.SwarmDamage;
+
+        // Parse dice notation (e.g., "1d6", "2d6")
+        string dice = traits.SwarmDamageDice;
+        if (string.IsNullOrWhiteSpace(dice))
+            return 0;
+
+        string trimmed = dice.Trim().ToLowerInvariant();
+        int dIdx = trimmed.IndexOf('d');
+        if (dIdx <= 0)
+        {
+            // Flat number
+            if (int.TryParse(trimmed, out int flat))
+                return flat;
+            return 0;
+        }
+
+        string leftStr = trimmed.Substring(0, dIdx);
+        string rightStr = dIdx + 1 < trimmed.Length ? trimmed.Substring(dIdx + 1) : "";
+
+        // Handle bonus (e.g., "1d6+2")
+        int bonus = 0;
+        int plusIdx = rightStr.IndexOf('+');
+        int minusIdx = rightStr.IndexOf('-');
+        if (plusIdx >= 0)
+        {
+            string bonusStr = rightStr.Substring(plusIdx + 1);
+            int.TryParse(bonusStr, out bonus);
+            rightStr = rightStr.Substring(0, plusIdx);
+        }
+        else if (minusIdx >= 0)
+        {
+            string bonusStr = rightStr.Substring(minusIdx); // includes the minus
+            int.TryParse(bonusStr, out bonus);
+            rightStr = rightStr.Substring(0, minusIdx);
+        }
+
+        if (!int.TryParse(leftStr, out int count) || count <= 0)
+            return 0;
+        if (!int.TryParse(rightStr, out int sides) || sides <= 0)
+            return 0;
+
+        return DiceService.RollMultiple(count, sides, "swarm damage") + bonus;
     }
 
     private List<CharacterController> BuildSwarmTargetCandidates(CharacterController swarm, bool indiscriminate)
