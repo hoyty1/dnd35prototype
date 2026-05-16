@@ -201,6 +201,10 @@ public static class ThreatSystem
 
             if (GetThreatenedSquares(character).Contains(square) && seenThreateners.Add(character))
             {
+                // Resilient Sphere blocks threat across the barrier
+                if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(character, mover))
+                    continue;
+
                 threateners.Add(character);
             }
         }
@@ -421,6 +425,10 @@ public static class ThreatSystem
                 if (!provoked)
                     continue;
 
+                // Resilient Sphere blocks AoOs across the barrier
+                if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(enemy, mover))
+                    continue;
+
                 // Check if this enemy can still make AoOs
                 int usedThisMovement = enemyAoOUsedThisMovement[enemy];
                 int remainingGlobal = enemy.Stats.MaxAttacksOfOpportunity - enemy.Stats.AttacksOfOpportunityUsed;
@@ -484,6 +492,13 @@ public static class ThreatSystem
     {
         if (threatener == null || target == null || threatener.Stats == null || target.Stats == null)
             return null;
+
+        // Resilient Sphere blocks AoOs across the barrier in either direction
+        if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(threatener, target))
+        {
+            Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} cannot make AoO against {target.Stats.CharacterName}: Resilient Sphere blocks interaction across barrier.");
+            return null;
+        }
 
         if (target.HasTotalConcealment(threatener, incomingIsRangedAttack: false))
         {
