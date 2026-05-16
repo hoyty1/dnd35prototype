@@ -152,7 +152,7 @@ public class SpellTestingPanel : MonoBehaviour
         mainVlg.spacing = 4;
         mainVlg.padding = new RectOffset(8, 8, 8, 8);
         mainVlg.childControlWidth = true;
-        mainVlg.childControlHeight = false;
+        mainVlg.childControlHeight = true;
         mainVlg.childForceExpandWidth = true;
         mainVlg.childForceExpandHeight = false;
 
@@ -163,8 +163,10 @@ public class SpellTestingPanel : MonoBehaviour
         GameObject contentRow = new GameObject("ContentRow");
         contentRow.transform.SetParent(_panelRoot.transform, false);
         RectTransform contentRT = contentRow.AddComponent<RectTransform>();
-        contentRT.sizeDelta = new Vector2(0, 600);
-        AddLayoutHeight(contentRow, 600);
+        contentRT.sizeDelta = new Vector2(0, 800);
+        LayoutElement contentLE = contentRow.AddComponent<LayoutElement>();
+        contentLE.preferredHeight = 800;
+        contentLE.flexibleHeight = 1;  // Allow it to grow with available space
         HorizontalLayoutGroup contentHlg = contentRow.AddComponent<HorizontalLayoutGroup>();
         contentHlg.spacing = 6;
         contentHlg.childControlWidth = true;
@@ -194,6 +196,7 @@ public class SpellTestingPanel : MonoBehaviour
         titleBar.transform.SetParent(parent, false);
         RectTransform titleRT = titleBar.AddComponent<RectTransform>();
         titleRT.sizeDelta = new Vector2(0, 32);
+        AddLayoutHeight(titleBar, 32);
         Image titleBg = titleBar.AddComponent<Image>();
         titleBg.color = new Color(0.1f, 0.1f, 0.18f, 1f);
 
@@ -301,13 +304,40 @@ public class SpellTestingPanel : MonoBehaviour
 
         // Scroll area for spell list
         _spellListScroll = UIFactory.CreateScrollPanel(parent, "SpellListScroll");
-        // Set explicit RectTransform size for the scroll panel since parent VLG uses childControlHeight=false
+
+        // --- FIX: Ensure the scroll panel RectTransform stretches to fill available space ---
         RectTransform spellScrollRT = _spellListScroll.GetComponent<RectTransform>();
-        spellScrollRT.sizeDelta = new Vector2(0, 500);
+        spellScrollRT.anchorMin = new Vector2(0f, 0f);
+        spellScrollRT.anchorMax = new Vector2(1f, 1f);
+        spellScrollRT.sizeDelta = new Vector2(0, 800);  // Large explicit height so it's definitely visible
+        spellScrollRT.offsetMin = Vector2.zero;
+        spellScrollRT.offsetMax = Vector2.zero;
+
         LayoutElement scrollLE = _spellListScroll.gameObject.AddComponent<LayoutElement>();
         scrollLE.flexibleHeight = 1;
-        scrollLE.preferredHeight = 500;
+        scrollLE.preferredHeight = 800;
+        scrollLE.minHeight = 400;  // Ensure minimum visible height
+
+        // --- FIX: Ensure the viewport RectTransform fully covers the scroll panel ---
+        RectTransform viewportRT = _spellListScroll.viewport;
+        if (viewportRT != null)
+        {
+            viewportRT.anchorMin = Vector2.zero;
+            viewportRT.anchorMax = Vector2.one;
+            viewportRT.offsetMin = Vector2.zero;
+            viewportRT.offsetMax = Vector2.zero;
+            viewportRT.sizeDelta = Vector2.zero;
+        }
+
         _spellListContent = _spellListScroll.content;
+
+        // --- FIX: Properly anchor content to top-stretch so it grows downward ---
+        RectTransform contentRT = _spellListContent as RectTransform;
+        contentRT.anchorMin = new Vector2(0f, 1f);
+        contentRT.anchorMax = new Vector2(1f, 1f);
+        contentRT.pivot = new Vector2(0.5f, 1f);
+        contentRT.sizeDelta = new Vector2(0f, 0f);  // ContentSizeFitter will expand this
+
         VerticalLayoutGroup contentVlg = _spellListContent.gameObject.AddComponent<VerticalLayoutGroup>();
         contentVlg.spacing = 2;
         contentVlg.padding = new RectOffset(2, 2, 2, 2);
@@ -318,6 +348,7 @@ public class SpellTestingPanel : MonoBehaviour
 
         ContentSizeFitter csf = _spellListContent.gameObject.AddComponent<ContentSizeFitter>();
         csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
     }
 
     // ========== CASTER CONFIG & ENEMY SPAWNER ==========
@@ -545,6 +576,7 @@ public class SpellTestingPanel : MonoBehaviour
         statsBar.transform.SetParent(parent, false);
         RectTransform statsRT = statsBar.AddComponent<RectTransform>();
         statsRT.sizeDelta = new Vector2(0, 28);
+        AddLayoutHeight(statsBar, 28);
         Image statsBg = statsBar.AddComponent<Image>();
         statsBg.color = new Color(0.1f, 0.1f, 0.18f, 1f);
 
@@ -786,10 +818,29 @@ public class SpellTestingPanel : MonoBehaviour
 
         Debug.Log($"[SpellTestingPanel] Created {entriesCreated} spell entries in UI.");
 
-        // Force layout rebuild
+        // Force layout rebuild - rebuild content first, then scroll panel, then parent
         if (_spellListContent != null)
         {
+            Canvas.ForceUpdateCanvases();
             LayoutRebuilder.ForceRebuildLayoutImmediate(_spellListContent as RectTransform);
+
+            // Also rebuild the scroll rect itself and its viewport
+            if (_spellListScroll != null)
+            {
+                RectTransform scrollRT = _spellListScroll.GetComponent<RectTransform>();
+                if (scrollRT != null)
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRT);
+
+                // Reset scroll position to top so entries are visible
+                _spellListScroll.verticalNormalizedPosition = 1f;
+            }
+
+            // Rebuild parent hierarchy to propagate sizes
+            RectTransform parentRT = _spellListContent.parent?.parent?.GetComponent<RectTransform>();
+            if (parentRT != null)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(parentRT);
+
+            Canvas.ForceUpdateCanvases();
         }
     }
 
