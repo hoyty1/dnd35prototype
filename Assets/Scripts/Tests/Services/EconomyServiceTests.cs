@@ -193,7 +193,7 @@ public static class EconomyServiceTests
     private static void TestBuyPrice()
     {
         var svc = CreateService();
-        var item = ItemDatabase.GetItem("longsword");
+        var item = ItemDatabase.Get("longsword");
         if (item != null)
         {
             int price = svc.GetBuyPrice(item);
@@ -209,7 +209,7 @@ public static class EconomyServiceTests
     private static void TestSellPrice()
     {
         var svc = CreateService();
-        var item = ItemDatabase.GetItem("longsword");
+        var item = ItemDatabase.Get("longsword");
         if (item != null)
         {
             int sell = svc.GetSellPrice(item);

@@ -195,7 +195,7 @@ public class SpellApplicationService : MonoBehaviour
         StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
         if (statusMgr == null) return;
 
-        statusMgr.ClearAllEffects();
+        statusMgr.RemoveAllEffects();
         Debug.Log($"[SpellApplicationService] Cleared all spell effects from {target.Stats?.CharacterName ?? target.name}");
     }
 

@@ -1097,6 +1097,20 @@ public class CharacterController : MonoBehaviour
 
     public HPState CurrentHPState => _currentHPState;
     public bool IsDead => _currentHPState == HPState.Dead;
+    public bool IsAlive => !IsDead;
+
+    /// <summary>Cached accessor for the StatusEffectManager component.</summary>
+    private StatusEffectManager _statusEffectManager;
+    public StatusEffectManager StatusEffectManager
+    {
+        get
+        {
+            if (_statusEffectManager == null)
+                _statusEffectManager = GetComponent<StatusEffectManager>();
+            return _statusEffectManager;
+        }
+    }
+
     public bool IsUnconscious => _currentHPState == HPState.Unconscious
                                  || _currentHPState == HPState.Dying
                                  || _currentHPState == HPState.Stable
@@ -4790,7 +4804,7 @@ public class CharacterController : MonoBehaviour
             allAttackBonuses.Insert(0, attackBonuses[0]);
             Debug.Log($"[FullAttack] Rapid Shot: attack count {baseAttackCount} → {allAttackBonuses.Count}");
         }
-        else if (RapidShotEnabled && hasRapidShotFeat && !isRanged)
+        else if (RapidShotEnabled && Stats.HasFeat("Rapid Shot") && !isRanged)
         {
             Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: Rapid Shot ON but weapon is not ranged");
         }

@@ -17,6 +17,12 @@ public class ActiveSpellEffect
     /// <summary>The spell that created this effect.</summary>
     public SpellData Spell;
 
+    /// <summary>Convenience accessor: the spell's unique ID (e.g. "magic_missile").</summary>
+    public string SpellId => Spell?.SpellId;
+
+    /// <summary>Convenience accessor: the spell's display name (e.g. "Magic Missile").</summary>
+    public string SpellName => Spell?.Name;
+
     /// <summary>Name of the caster who applied this effect.</summary>
     public string CasterName;
 

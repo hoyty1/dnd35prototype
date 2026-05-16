@@ -200,8 +200,8 @@ public class EncounterService : MonoBehaviour
         {
             if (pc != null && pc.Stats != null && !pc.Stats.IsDead)
             {
-                pc.Stats.CurrentXP += xpPerMember;
-                Debug.Log($"[EncounterService] {pc.Stats.CharacterName} awarded {xpPerMember} XP (total: {pc.Stats.CurrentXP})");
+                pc.Stats.ExperiencePoints += xpPerMember;
+                Debug.Log($"[EncounterService] {pc.Stats.CharacterName} awarded {xpPerMember} XP (total: {pc.Stats.ExperiencePoints})");
             }
         }
 

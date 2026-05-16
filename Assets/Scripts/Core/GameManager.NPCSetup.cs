@@ -5,6 +5,7 @@ using DND35.AI;
 using DND35.AI.Profiles;
 using DND35.Magic;
 using UnityEngine;
+using UnityEngine.UI;
 using DND35e.Identifiers;
 
 /// <summary>

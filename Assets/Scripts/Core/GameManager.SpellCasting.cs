@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using DND35.Magic;
+using DND35.AI.Profiles;
+using DND35e.Identifiers;
 using UnityEngine;
 
 /// <summary>
@@ -4639,10 +4641,12 @@ public partial class GameManager
             return;
         }
 
-        if (AreAllPlayerCharactersDead())
+        if (AreAllPCsDead())
         {
             Debug.Log("[CombatEnd] Defeat condition met after Fear resolution.");
-            HandleCombatDefeatDetected("ResolveFearSpell");
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+            CombatUI?.SetActionButtonsVisible(false);
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;

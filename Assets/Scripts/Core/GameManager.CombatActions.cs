@@ -1943,7 +1943,7 @@ public partial class GameManager
         int damageCount, damageDice;
         if (weapon != null)
         {
-            weapon.GetScaledDamageDice(attacker.Stats.Size, out damageCount, out damageDice);
+            weapon.GetScaledDamageDice(attacker.Stats.CurrentSizeCategory, out damageCount, out damageDice);
         }
         else
         {
@@ -1954,13 +1954,13 @@ public partial class GameManager
 
         int damage = 0;
         for (int i = 0; i < damageCount; i++)
-            damage += Random.Range(1, damageDice + 1);
+            damage += UnityEngine.Random.Range(1, damageDice + 1);
 
         // Add STR modifier to damage (melee and thrown)
         bool isRanged = weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && !weapon.IsThrown;
         if (!isRanged)
         {
-            int strMod = CharacterStats.GetModifier(attacker.Stats.Strength);
+            int strMod = CharacterStats.GetModifier(attacker.Stats.STR);
             // Two-handed weapons get 1.5x STR
             bool isTwoHanded = weapon != null && weapon.IsTwoHanded;
             if (isTwoHanded)
@@ -1996,7 +1996,7 @@ public partial class GameManager
                         if (parts.Length == 2 && int.TryParse(parts[0], out int bCount) && int.TryParse(parts[1], out int bDice))
                         {
                             for (int i = 0; i < bCount; i++)
-                                damage += Random.Range(1, bDice + 1);
+                                damage += UnityEngine.Random.Range(1, bDice + 1);
                         }
                     }
                     break;

@@ -83,7 +83,7 @@ public partial class GameManager
                 // Check Spell Resistance
                 if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
                 {
-                    int srCheckRoll = Random.Range(1, 21);
+                    int srCheckRoll = UnityEngine.Random.Range(1, 21);
                     int srCheckTotal = srCheckRoll + casterLevel;
                     bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
 
@@ -100,10 +100,10 @@ public partial class GameManager
                 // Roll damage
                 int damage = 0;
                 for (int i = 0; i < diceCount; i++)
-                    damage += Random.Range(1, 7); // 1d6
+                    damage += UnityEngine.Random.Range(1, 7); // 1d6
 
                 // Reflex save
-                int reflexRoll = Random.Range(1, 21);
+                int reflexRoll = UnityEngine.Random.Range(1, 21);
                 int reflexMod = target.Stats.ReflexSave;
                 int reflexTotal = reflexRoll + reflexMod;
                 bool savePassed = reflexTotal >= saveDc;
@@ -166,7 +166,7 @@ public partial class GameManager
                 // Roll separate damage for the wall (same dice as character damage)
                 int wallDamage = 0;
                 for (int i = 0; i < diceCount; i++)
-                    wallDamage += Random.Range(1, 7);
+                    wallDamage += UnityEngine.Random.Range(1, 7);
 
                 // No save for objects; fire is especially effective
                 sb.AppendLine($"  --- Wall of Ice ---");
@@ -1926,10 +1926,10 @@ public partial class GameManager
                 {
                     // Unwilling target — Fort save to negate
                     int saveRoll = DiceService.D20();
-                    int saveTotal = saveRoll + target.Stats.FortSave;
+                    int saveTotal = saveRoll + target.Stats.FortitudeSave;
                     bool saved = saveTotal >= saveDc;
 
-                    CombatUI?.ShowCombatLog($"  Fort Save ({target.Stats.CharacterName}): d20({saveRoll}) + {target.Stats.FortSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
+                    CombatUI?.ShowCombatLog($"  Fort Save ({target.Stats.CharacterName}): d20({saveRoll}) + {target.Stats.FortitudeSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
 
                     if (saved)
                     {
@@ -2434,7 +2434,7 @@ public partial class GameManager
         CombatUI?.ShowCombatLog($"<color=#CC0000>😱 {targetName} fails to disbelieve the phantasm!</color>");
         CombatUI?.ShowCombatLog($"<color=#CC3333>   Must make Fortitude save DC {saveDc} or die from fear!</color>");
 
-        SaveResult fortSave = SavingThrowResolver.ResolveFortitudeSave(target.Stats, saveDc, "Phantasmal Killer (Fort)");
+        SavingThrowResolver.SaveResult fortSave = SavingThrowResolver.ResolveFortitudeSave(target.Stats, saveDc, "Phantasmal Killer (Fort)");
 
         string fortRollStr = $"d20({fortSave.Roll}) + {fortSave.Bonus} = {fortSave.Total} vs DC {saveDc}";
 
@@ -2589,7 +2589,7 @@ public partial class GameManager
             }
 
             // Will save negates
-            SaveResult willSave = SavingThrowResolver.ResolveWillSave(target.Stats, saveDc, "Rainbow Pattern");
+            SavingThrowResolver.SaveResult willSave = SavingThrowResolver.ResolveWillSave(target.Stats, saveDc, "Rainbow Pattern");
             string saveStr = $"d20({willSave.Roll}) + {willSave.Bonus} = {willSave.Total} vs DC {saveDc}";
 
             if (willSave.Succeeded)
@@ -2723,7 +2723,7 @@ public partial class GameManager
 
         int casterLevel = defender.Stats.FireShieldCasterLevel;
         int clBonus = Mathf.Min(casterLevel, 15);
-        int damage = Random.Range(1, 7) + clBonus; // 1d6 + CL (max +15)
+        int damage = UnityEngine.Random.Range(1, 7) + clBonus; // 1d6 + CL (max +15)
 
         bool isWarm = defender.Stats.FireShieldIsWarm;
         string dmgType = isWarm ? "fire" : "cold";
@@ -2797,7 +2797,7 @@ public partial class GameManager
                 // Check Spell Resistance
                 if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
                 {
-                    int srCheckRoll = Random.Range(1, 21);
+                    int srCheckRoll = UnityEngine.Random.Range(1, 21);
                     int srCheckTotal = srCheckRoll + casterLevel;
                     bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
 
@@ -2814,12 +2814,12 @@ public partial class GameManager
                 // Roll 3d6 bludgeoning
                 int bludgeoningDamage = 0;
                 for (int i = 0; i < 3; i++)
-                    bludgeoningDamage += Random.Range(1, 7);
+                    bludgeoningDamage += UnityEngine.Random.Range(1, 7);
 
                 // Roll 2d6 cold
                 int coldDamage = 0;
                 for (int i = 0; i < 2; i++)
-                    coldDamage += Random.Range(1, 7);
+                    coldDamage += UnityEngine.Random.Range(1, 7);
 
                 int totalDamage = bludgeoningDamage + coldDamage;
 
@@ -2870,9 +2870,9 @@ public partial class GameManager
 
                 // 3d6 bludgeoning + 2d6 cold (no save for objects)
                 int wallBludg = 0;
-                for (int i = 0; i < 3; i++) wallBludg += Random.Range(1, 7);
+                for (int i = 0; i < 3; i++) wallBludg += UnityEngine.Random.Range(1, 7);
                 int wallCold = 0;
-                for (int i = 0; i < 2; i++) wallCold += Random.Range(1, 7);
+                for (int i = 0; i < 2; i++) wallCold += UnityEngine.Random.Range(1, 7);
                 int wallTotal = wallBludg + wallCold;
 
                 sb.AppendLine($"  --- Wall of Ice ---");
@@ -2953,7 +2953,7 @@ public partial class GameManager
                 // Check Spell Resistance
                 if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
                 {
-                    int srCheckRoll = Random.Range(1, 21);
+                    int srCheckRoll = UnityEngine.Random.Range(1, 21);
                     int srCheckTotal = srCheckRoll + casterLevel;
                     bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
 
@@ -2970,10 +2970,10 @@ public partial class GameManager
                 // Roll 5d6 sonic damage
                 int damage = 0;
                 for (int i = 0; i < 5; i++)
-                    damage += Random.Range(1, 7);
+                    damage += UnityEngine.Random.Range(1, 7);
 
                 // Fortitude save
-                int fortRoll = Random.Range(1, 21);
+                int fortRoll = UnityEngine.Random.Range(1, 21);
                 int fortMod = target.Stats.FortitudeSave;
                 int fortTotal = fortRoll + fortMod;
                 bool savePassed = fortTotal >= saveDc;
@@ -2988,7 +2988,7 @@ public partial class GameManager
                 else
                 {
                     // Failed save: deafened for 2d6 rounds
-                    deafRounds = Random.Range(1, 7) + Random.Range(1, 7);
+                    deafRounds = UnityEngine.Random.Range(1, 7) + UnityEngine.Random.Range(1, 7);
                     deafened = true;
                 }
 
@@ -3047,7 +3047,7 @@ public partial class GameManager
 
                 // 5d6 sonic (no save for objects)
                 int wallDamage = 0;
-                for (int i = 0; i < 5; i++) wallDamage += Random.Range(1, 7);
+                for (int i = 0; i < 5; i++) wallDamage += UnityEngine.Random.Range(1, 7);
 
                 sb.AppendLine($"  --- Wall of Ice ---");
                 sb.AppendLine($"  Sonic damage to wall: {wallDamage}");

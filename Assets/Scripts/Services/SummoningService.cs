@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DND35.Magic;
+using DND35e.Identifiers;
 
 // ============================================================================
 // D&D 3.5 Summoning Service - Centralized summoned creature management

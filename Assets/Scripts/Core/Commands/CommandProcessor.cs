@@ -131,16 +131,35 @@ public class CommandProcessor : MonoBehaviour
         _isProcessing = true;
 
         bool success = true;
-        try
+        Exception caughtEx = null;
+
+        // Cannot yield inside try-catch in C#, so we wrap with a helper
+        var enumerator = command.ExecuteAsync();
+        while (true)
         {
-            yield return command.ExecuteAsync();
-            RecordCommand(command, true);
+            bool moveNext;
+            try
+            {
+                moveNext = enumerator.MoveNext();
+            }
+            catch (Exception ex)
+            {
+                caughtEx = ex;
+                break;
+            }
+            if (!moveNext) break;
+            yield return enumerator.Current;
         }
-        catch (Exception ex)
+
+        if (caughtEx != null)
         {
-            Debug.LogError($"[CommandProcessor] Error in async command '{command.DisplayName}': {ex}");
+            Debug.LogError($"[CommandProcessor] Error in async command '{command.DisplayName}': {caughtEx}");
             RecordCommand(command, false);
             success = false;
+        }
+        else
+        {
+            RecordCommand(command, true);
         }
 
         _isProcessing = false;

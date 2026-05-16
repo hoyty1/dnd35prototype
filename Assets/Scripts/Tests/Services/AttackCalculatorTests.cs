@@ -126,7 +126,7 @@ public static class AttackCalculatorTests
     {
         var stats = MakeStats("PBS", feats: new[] { "Point Blank Shot" });
 
-        AttackCalculator.CalculatePointBlankShot(stats, isMelee: false, distanceFeet: 25,
+        AttackCalculator.CalculatePointBlankShot(stats, isRanged: true, distanceFeet: 25,
             out bool active, out int atkBonus, out int dmgBonus);
 
         Assert(active, "PBS active within 30ft");
@@ -138,7 +138,7 @@ public static class AttackCalculatorTests
     {
         var stats = MakeStats("PBS_Far", feats: new[] { "Point Blank Shot" });
 
-        AttackCalculator.CalculatePointBlankShot(stats, isMelee: false, distanceFeet: 35,
+        AttackCalculator.CalculatePointBlankShot(stats, isRanged: true, distanceFeet: 35,
             out bool active, out int atkBonus, out int dmgBonus);
 
         Assert(!active, "PBS not active beyond 30ft");
@@ -150,7 +150,7 @@ public static class AttackCalculatorTests
     {
         var stats = MakeStats("PBS_NoFeat");
 
-        AttackCalculator.CalculatePointBlankShot(stats, isMelee: false, distanceFeet: 25,
+        AttackCalculator.CalculatePointBlankShot(stats, isRanged: true, distanceFeet: 25,
             out bool active, out int atkBonus, out int dmgBonus);
 
         Assert(!active, "No PBS feat: not active");
@@ -233,14 +233,15 @@ public static class AttackCalculatorTests
 
         var mods = AttackCalculator.CalculateAllFeatModifiers(
             stats,
-            powerAttackValue: 2,
-            isMelee: true,
+            weapon: null,
             isRanged: false,
+            isMelee: true,
             isTwoHanded: false,
-            weaponDisablesStrDmg: false,
-            baseThreatMin: 20,
+            powerAttackValue: 2,
             distanceFeet: 20,
-            isFullAttack: false);
+            hasValidRange: false,
+            weaponDisablesStrDmg: false,
+            baseCritThreatMin: 20);
 
         Assert(mods.PowerAttackPenalty == -2, "AllFeats: PA penalty = -2", $"got {mods.PowerAttackPenalty}");
         Assert(mods.PowerAttackDamageBonus == 2, "AllFeats: PA damage = +2", $"got {mods.PowerAttackDamageBonus}");

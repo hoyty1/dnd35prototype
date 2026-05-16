@@ -404,6 +404,20 @@ public class CharacterStats
     /// <summary>Whether this character is a Paladin.</summary>
     public bool IsPaladin => HasClass("Paladin");
 
+    /// <summary>Returns the ability modifier used for the character's primary spellcasting ability.</summary>
+    public int GetPrimaryCastingModifier()
+    {
+        string className = (CharacterClass ?? string.Empty).Trim().ToLowerInvariant();
+        if (IsWizard)
+            return INTMod;
+        if (IsCleric || className == "druid" || className == "ranger" || className == "paladin")
+            return WISMod;
+        if (className == "sorcerer" || className == "bard")
+            return CHAMod;
+        // Default: use highest mental stat mod
+        return Mathf.Max(INTMod, Mathf.Max(WISMod, CHAMod));
+    }
+
     /// <summary>Whether this character is a spellcaster. Delegates to ClassRegistry.</summary>
     public bool IsSpellcaster
     {

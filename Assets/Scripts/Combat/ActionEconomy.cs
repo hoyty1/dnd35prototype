@@ -16,6 +16,9 @@ public class ActionEconomy
     // Whether the standard action was converted to a second move action
     public bool StandardConvertedToMove;
 
+    // Whether a 5-foot step has been taken this turn
+    public bool HasMoved5Ft;
+
     // D&D 3.5 disabled state support: one move OR one standard action each turn.
     public bool SingleActionOnly;
 
@@ -123,6 +126,7 @@ public class ActionEconomy
         SwiftActionUsed = false;
         StandardConvertedToMove = false;
         SingleActionOnly = false;
+        HasMoved5Ft = false;
     }
 
     // ========== STATUS STRING ==========
