@@ -6,8 +6,9 @@ using System.Reflection;
 
 /// <summary>
 /// DEV/DEBUG Spell Testing Panel for rapid spell playtesting.
-/// Toggle with F12 key. Provides spell selection by level, caster configuration,
-/// enemy spawning, quick actions, and filtered combat log.
+/// Toggle with F12 key. Shows a searchable, level-filtered spell list.
+/// Casting uses the ActivePC (whose turn it currently is), temporarily
+/// boosting their primary casting ability by +4 to improve DCs.
 ///
 /// Integrates with existing SpellDatabase, GameManager, and CharacterController systems.
 /// </summary>
@@ -19,24 +20,8 @@ public class SpellTestingPanel : MonoBehaviour
     private RectTransform _panelRect;
 
     // ========== CONFIGURATION STATE ==========
-    private int _casterLevel = 5;
-    private int _intScore = 18;
-    private int _chaScore = 18;
-    private bool _infiniteSlots = true;
-    private bool _autoConcentration = true;
     private string _searchFilter = "";
     private int _selectedSpellLevel = -1; // -1 = All
-    private string _selectedCasterType = "Player PC";
-    private string _combatLogFilter = "All";
-
-    // Enemy spawner state
-    private int _customHP = 30;
-    private int _customAC = 15;
-    private int _customFort = 3;
-    private int _customRef = 3;
-    private int _customWill = 3;
-    private int _customSR = 0;
-    private string _spawnDistance = "Near";
 
     // Stats tracking
     private int _totalDamageDealt = 0;
@@ -46,20 +31,18 @@ public class SpellTestingPanel : MonoBehaviour
     private int _totalSRPassed = 0;
     private int _totalSRFailed = 0;
 
+    // Ability boost tracking (to restore after cast)
+    private CharacterController _boostedCaster;
+    private string _boostedAbility; // "INT", "WIS", or "CHA"
+    private int _originalAbilityScore;
+    private bool _abilityBoosted = false;
+
     // ========== UI REFERENCES ==========
     private ScrollRect _spellListScroll;
     private Transform _spellListContent;
     private InputField _searchInput;
-    private Text _casterInfoText;
     private Text _statsText;
-    private ScrollRect _logScroll;
-    private Transform _logContent;
-    private Text _casterLevelText;
-    private Text _intText;
-    private Text _chaText;
     private List<GameObject> _spellEntries = new List<GameObject>();
-    private List<Text> _logEntries = new List<Text>();
-    private List<string> _allLogMessages = new List<string>();
 
     // Level filter buttons
     private List<Button> _levelFilterButtons = new List<Button>();
@@ -68,15 +51,11 @@ public class SpellTestingPanel : MonoBehaviour
     private static readonly Color PanelBg = new Color(0.08f, 0.09f, 0.14f, 0.96f);
     private static readonly Color SectionBg = new Color(0.12f, 0.13f, 0.2f, 0.95f);
     private static readonly Color HeaderColor = new Color(1f, 0.85f, 0.2f, 1f);
-    private static readonly Color SubHeaderColor = new Color(0.6f, 0.8f, 1f, 1f);
-    private static readonly Color SpellEntryBg = new Color(0.22f, 0.26f, 0.40f, 1f);       // BRIGHT visible blue-grey
-    private static readonly Color SpellEntryBgAlt = new Color(0.18f, 0.22f, 0.35f, 1f);   // Alternating row color
-    private static readonly Color SpellEntryHover = new Color(0.3f, 0.35f, 0.55f, 1f);
-    private static readonly Color SpellEntryBorder = new Color(0.45f, 0.55f, 0.75f, 1f);  // Visible border color
+    private static readonly Color SpellEntryBg = new Color(0.22f, 0.26f, 0.40f, 1f);
+    private static readonly Color SpellEntryBgAlt = new Color(0.18f, 0.22f, 0.35f, 1f);
+    private static readonly Color SpellEntryBorder = new Color(0.45f, 0.55f, 0.75f, 1f);
     private static readonly Color CastBtnColor = new Color(0.2f, 0.6f, 0.3f, 1f);
-    private static readonly Color SpawnBtnColor = new Color(0.3f, 0.5f, 0.8f, 1f);
     private static readonly Color DangerBtnColor = new Color(0.8f, 0.25f, 0.2f, 1f);
-    private static readonly Color ActionBtnColor = new Color(0.5f, 0.4f, 0.7f, 1f);
     private static readonly Color FilterActiveColor = new Color(0.3f, 0.6f, 0.9f, 1f);
     private static readonly Color FilterInactiveColor = new Color(0.25f, 0.26f, 0.35f, 0.9f);
 
@@ -102,6 +81,18 @@ public class SpellTestingPanel : MonoBehaviour
         {
             TogglePanel();
         }
+
+        // Check if we need to restore a boosted ability
+        if (_abilityBoosted && _boostedCaster != null)
+        {
+            // Restore after a short delay to let the spell resolve
+            // We check every frame if the spell targeting is done
+            GameManager gm = GameManager.Instance;
+            if (gm != null && gm.GetTestPanelCaster() == null)
+            {
+                RestoreAbilityBoost();
+            }
+        }
     }
 
     public void TogglePanel()
@@ -117,7 +108,6 @@ public class SpellTestingPanel : MonoBehaviour
             if (_isVisible)
             {
                 RefreshSpellList();
-                RefreshCasterInfo();
                 RefreshStats();
             }
         }
@@ -161,32 +151,26 @@ public class SpellTestingPanel : MonoBehaviour
         // ===== TITLE BAR =====
         BuildTitleBar(_panelRoot.transform, font);
 
-        // ===== MAIN CONTENT (horizontal split) =====
+        // ===== MAIN CONTENT - just the spell list =====
         GameObject contentRow = new GameObject("ContentRow");
         contentRow.transform.SetParent(_panelRoot.transform, false);
         RectTransform contentRT = contentRow.AddComponent<RectTransform>();
         contentRT.sizeDelta = new Vector2(0, 800);
         LayoutElement contentLE = contentRow.AddComponent<LayoutElement>();
         contentLE.preferredHeight = 800;
-        contentLE.flexibleHeight = 1;  // Allow it to grow with available space
+        contentLE.flexibleHeight = 1;
+
+        // Spell Selection section (full width)
+        GameObject spellCol = CreateSection(contentRow.transform, "SpellSelection", 1.0f);
+        BuildSpellSelectionSection(spellCol.transform, font);
+
+        // Make contentRow use a simple layout that stretches the child
         HorizontalLayoutGroup contentHlg = contentRow.AddComponent<HorizontalLayoutGroup>();
-        contentHlg.spacing = 6;
+        contentHlg.spacing = 0;
         contentHlg.childControlWidth = true;
         contentHlg.childControlHeight = true;
-        contentHlg.childForceExpandWidth = false;
+        contentHlg.childForceExpandWidth = true;
         contentHlg.childForceExpandHeight = true;
-
-        // Left column - Spell Selection (50%)
-        GameObject leftCol = CreateSection(contentRow.transform, "SpellSelection", 0.50f);
-        BuildSpellSelectionSection(leftCol.transform, font);
-
-        // Middle column - Config & Spawner (25%)
-        GameObject midCol = CreateSection(contentRow.transform, "ConfigSpawner", 0.25f);
-        BuildConfigAndSpawnerSection(midCol.transform, font);
-
-        // Right column - Actions & Log (25%)
-        GameObject rightCol = CreateSection(contentRow.transform, "ActionsLog", 0.25f);
-        BuildActionsAndLogSection(rightCol.transform, font);
 
         // ===== BOTTOM STATS BAR =====
         BuildStatsBar(_panelRoot.transform, font);
@@ -315,7 +299,6 @@ public class SpellTestingPanel : MonoBehaviour
 
         // --- Scroll panel RectTransform: let LayoutElement control sizing ---
         RectTransform spellScrollRT = _spellListScroll.GetComponent<RectTransform>();
-        // Don't set sizeDelta when using layout - the LayoutElement handles sizing
         LayoutElement scrollLE = _spellListScroll.gameObject.AddComponent<LayoutElement>();
         scrollLE.flexibleHeight = 1;
         scrollLE.preferredHeight = 600;
@@ -331,25 +314,22 @@ public class SpellTestingPanel : MonoBehaviour
             viewportRT.offsetMax = Vector2.zero;
             viewportRT.sizeDelta = Vector2.zero;
 
-            // Ensure viewport has an Image for the Mask to use (required for clipping)
             Image viewportImg = viewportRT.GetComponent<Image>();
             if (viewportImg == null)
                 viewportImg = viewportRT.gameObject.AddComponent<Image>();
-            viewportImg.color = new Color(1f, 1f, 1f, 0.004f); // Nearly invisible but non-zero alpha
-            viewportImg.raycastTarget = true; // Must be true for ScrollRect drag input
+            viewportImg.color = new Color(1f, 1f, 1f, 0.004f);
+            viewportImg.raycastTarget = true;
 
-            // Ensure Mask component for content clipping
             Mask viewportMask = viewportRT.GetComponent<Mask>();
             if (viewportMask == null)
                 viewportMask = viewportRT.gameObject.AddComponent<Mask>();
-            viewportMask.showMaskGraphic = false; // Don't render the mask graphic itself
+            viewportMask.showMaskGraphic = false;
         }
 
         // --- Create vertical scrollbar ---
         GameObject scrollbarGO = new GameObject("VerticalScrollbar");
         scrollbarGO.transform.SetParent(_spellListScroll.transform, false);
         RectTransform scrollbarRT = scrollbarGO.AddComponent<RectTransform>();
-        // Position on right side of scroll panel
         scrollbarRT.anchorMin = new Vector2(1f, 0f);
         scrollbarRT.anchorMax = new Vector2(1f, 1f);
         scrollbarRT.pivot = new Vector2(1f, 0.5f);
@@ -358,7 +338,6 @@ public class SpellTestingPanel : MonoBehaviour
         Image scrollbarBg = scrollbarGO.AddComponent<Image>();
         scrollbarBg.color = new Color(0.15f, 0.15f, 0.25f, 0.8f);
 
-        // Scrollbar handle (sliding area)
         GameObject handleArea = new GameObject("SlidingArea");
         handleArea.transform.SetParent(scrollbarGO.transform, false);
         RectTransform handleAreaRT = handleArea.AddComponent<RectTransform>();
@@ -383,25 +362,22 @@ public class SpellTestingPanel : MonoBehaviour
         scrollbar.targetGraphic = handleImg;
         scrollbar.direction = Scrollbar.Direction.BottomToTop;
 
-        // Wire scrollbar to ScrollRect
         _spellListScroll.verticalScrollbar = scrollbar;
         _spellListScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
         _spellListScroll.verticalScrollbarSpacing = -2f;
 
-        // Adjust viewport to leave room for scrollbar
         if (viewportRT != null)
         {
-            viewportRT.offsetMax = new Vector2(-12f, 0f); // Leave space on right for scrollbar
+            viewportRT.offsetMax = new Vector2(-12f, 0f);
         }
 
         _spellListContent = _spellListScroll.content;
 
-        // --- Content: anchor top-stretch so it grows downward ---
         RectTransform contentRT = _spellListContent as RectTransform;
         contentRT.anchorMin = new Vector2(0f, 1f);
         contentRT.anchorMax = new Vector2(1f, 1f);
         contentRT.pivot = new Vector2(0.5f, 1f);
-        contentRT.sizeDelta = new Vector2(0f, 0f);  // ContentSizeFitter will expand this
+        contentRT.sizeDelta = new Vector2(0f, 0f);
 
         VerticalLayoutGroup contentVlg = _spellListContent.gameObject.AddComponent<VerticalLayoutGroup>();
         contentVlg.spacing = 2;
@@ -414,225 +390,6 @@ public class SpellTestingPanel : MonoBehaviour
         ContentSizeFitter csf = _spellListContent.gameObject.AddComponent<ContentSizeFitter>();
         csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-    }
-
-    // ========== CASTER CONFIG & ENEMY SPAWNER ==========
-
-    private void BuildConfigAndSpawnerSection(Transform parent, Font font)
-    {
-        // Use a scroll view so everything fits
-        ScrollRect configScroll = UIFactory.CreateScrollPanel(parent, "ConfigScroll");
-        configScroll.movementType = ScrollRect.MovementType.Clamped;
-        configScroll.scrollSensitivity = 25f;
-        LayoutElement configScrollLE = configScroll.gameObject.AddComponent<LayoutElement>();
-        configScrollLE.flexibleHeight = 1;
-        configScrollLE.preferredHeight = 500;
-        FixViewportMask(configScroll);
-        Transform content = configScroll.content;
-        VerticalLayoutGroup vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
-        vlg.spacing = 3;
-        vlg.padding = new RectOffset(4, 4, 4, 4);
-        vlg.childControlWidth = true;
-        vlg.childControlHeight = false;
-        vlg.childForceExpandWidth = true;
-        vlg.childForceExpandHeight = false;
-        ContentSizeFitter csf = content.gameObject.AddComponent<ContentSizeFitter>();
-        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        // ---- CASTER CONFIG ----
-        Text casterHeader = UIFactory.CreateLabel(content, "🧙 CASTER CONFIG", 13,
-            TextAnchor.MiddleCenter, HeaderColor, "CasterHeader", font);
-        casterHeader.fontStyle = FontStyle.Bold;
-        AddLayoutHeight(casterHeader.gameObject, 20);
-
-        // Caster type buttons
-        string[] casterTypes = { "Player PC", "Test Wizard", "Test Sorcerer" };
-        foreach (string ct in casterTypes)
-        {
-            string type = ct;
-            Button btn = UIFactory.CreateButton(content, type,
-                () => { _selectedCasterType = type; RefreshCasterInfo(); },
-                new Vector2(0, 24), type == _selectedCasterType ? FilterActiveColor : FilterInactiveColor,
-                $"Caster_{type}", font, 11);
-            AddLayoutHeight(btn.gameObject, 24);
-        }
-
-        // Caster Level
-        _casterLevelText = CreateSliderRow(content, "Caster Level", 1, 20, _casterLevel, font,
-            (val) => { _casterLevel = (int)val; RefreshCasterInfo(); });
-
-        // Int Score
-        _intText = CreateSliderRow(content, "INT", 3, 30, _intScore, font,
-            (val) => { _intScore = (int)val; RefreshCasterInfo(); });
-
-        // Cha Score
-        _chaText = CreateSliderRow(content, "CHA", 3, 30, _chaScore, font,
-            (val) => { _chaScore = (int)val; RefreshCasterInfo(); });
-
-        // Checkboxes
-        CreateToggleRow(content, "♾ Infinite Spell Slots", _infiniteSlots, font,
-            (val) => _infiniteSlots = val);
-        CreateToggleRow(content, "🎯 Auto Concentration", _autoConcentration, font,
-            (val) => _autoConcentration = val);
-
-        // Caster info display
-        _casterInfoText = UIFactory.CreateLabel(content, "Caster: Player PC\nCL: 5 | DC: 14",
-            11, TextAnchor.MiddleLeft, new Color(0.7f, 0.9f, 0.7f), "CasterInfo", font);
-        AddLayoutHeight(_casterInfoText.gameObject, 40);
-
-        // ---- Separator ----
-        CreateSeparator(content);
-
-        // ---- ENEMY SPAWNER ----
-        Text spawnHeader = UIFactory.CreateLabel(content, "👹 ENEMY SPAWNER", 13,
-            TextAnchor.MiddleCenter, HeaderColor, "SpawnHeader", font);
-        spawnHeader.fontStyle = FontStyle.Bold;
-        AddLayoutHeight(spawnHeader.gameObject, 20);
-
-        // Preset buttons
-        CreateSpawnPresetButton(content, "Weak Enemy", "Low HP/saves, no SR", font,
-            10, 12, 0, 0, 0, 0);
-        CreateSpawnPresetButton(content, "Tough Enemy", "High HP/saves, SR 15", font,
-            60, 18, 6, 6, 6, 15);
-        CreateSpawnPresetButton(content, "Boss Enemy", "Very high HP/saves, SR 25", font,
-            120, 22, 10, 10, 10, 25);
-        CreateSpawnPresetButton(content, "Swarm (4)", "4 weak enemies in formation", font,
-            10, 12, 0, 0, 0, 0, true);
-
-        // Spawn distance
-        CreateSeparator(content);
-        Text distLabel = UIFactory.CreateLabel(content, "Spawn Distance:", 11,
-            TextAnchor.MiddleLeft, SubHeaderColor, "DistLabel", font);
-        AddLayoutHeight(distLabel.gameObject, 18);
-
-        string[] distances = { "Near", "Medium", "Long" };
-        GameObject distRow = new GameObject("DistRow");
-        distRow.transform.SetParent(content, false);
-        AddLayoutHeight(distRow, 24);
-        HorizontalLayoutGroup distHlg = distRow.AddComponent<HorizontalLayoutGroup>();
-        distHlg.spacing = 3;
-        distHlg.childControlWidth = true;
-        distHlg.childControlHeight = true;
-        distHlg.childForceExpandWidth = true;
-        distHlg.childForceExpandHeight = true;
-
-        foreach (string d in distances)
-        {
-            string dist = d;
-            UIFactory.CreateButton(distRow.transform, dist,
-                () => _spawnDistance = dist,
-                new Vector2(50, 22), SpawnBtnColor, $"Dist_{dist}", font, 10);
-        }
-
-        // Custom enemy config
-        CreateSeparator(content);
-        Text customLabel = UIFactory.CreateLabel(content, "Custom Enemy:", 11,
-            TextAnchor.MiddleLeft, SubHeaderColor, "CustomLabel", font);
-        AddLayoutHeight(customLabel.gameObject, 18);
-
-        CreateSliderRow(content, "HP", 1, 200, _customHP, font, (v) => _customHP = (int)v);
-        CreateSliderRow(content, "AC", 5, 30, _customAC, font, (v) => _customAC = (int)v);
-        CreateSliderRow(content, "Fort", -5, 15, _customFort, font, (v) => _customFort = (int)v);
-        CreateSliderRow(content, "Ref", -5, 15, _customRef, font, (v) => _customRef = (int)v);
-        CreateSliderRow(content, "Will", -5, 15, _customWill, font, (v) => _customWill = (int)v);
-        CreateSliderRow(content, "SR", 0, 30, _customSR, font, (v) => _customSR = (int)v);
-
-        Button spawnCustomBtn = UIFactory.CreateButton(content, "⚔ Spawn Custom Enemy",
-            () => SpawnEnemy(_customHP, _customAC, _customFort, _customRef, _customWill, _customSR, false),
-            new Vector2(0, 28), SpawnBtnColor, "SpawnCustom", font, 12);
-        AddLayoutHeight(spawnCustomBtn.gameObject, 28);
-
-        Button clearEnemiesBtn = UIFactory.CreateButton(content, "🗑 Clear All Enemies",
-            () => ClearAllEnemies(),
-            new Vector2(0, 26), DangerBtnColor, "ClearEnemies", font, 11);
-        AddLayoutHeight(clearEnemiesBtn.gameObject, 26);
-    }
-
-    // ========== QUICK ACTIONS & COMBAT LOG ==========
-
-    private void BuildActionsAndLogSection(Transform parent, Font font)
-    {
-        // Use scroll for this column too
-        ScrollRect actionsScroll = UIFactory.CreateScrollPanel(parent, "ActionsScroll");
-        actionsScroll.movementType = ScrollRect.MovementType.Clamped;
-        actionsScroll.scrollSensitivity = 25f;
-        LayoutElement actionsScrollLE = actionsScroll.gameObject.AddComponent<LayoutElement>();
-        actionsScrollLE.flexibleHeight = 1;
-        actionsScrollLE.preferredHeight = 500;
-        FixViewportMask(actionsScroll);
-        Transform content = actionsScroll.content;
-        VerticalLayoutGroup vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
-        vlg.spacing = 3;
-        vlg.padding = new RectOffset(4, 4, 4, 4);
-        vlg.childControlWidth = true;
-        vlg.childControlHeight = false;
-        vlg.childForceExpandWidth = true;
-        vlg.childForceExpandHeight = false;
-        ContentSizeFitter csf = content.gameObject.AddComponent<ContentSizeFitter>();
-        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        // ---- QUICK ACTIONS ----
-        Text actionsHeader = UIFactory.CreateLabel(content, "⚡ QUICK ACTIONS", 13,
-            TextAnchor.MiddleCenter, HeaderColor, "ActionsHeader", font);
-        actionsHeader.fontStyle = FontStyle.Bold;
-        AddLayoutHeight(actionsHeader.gameObject, 20);
-
-        CreateActionButton(content, "🔄 Reset Combat", "Clear effects, restore HP", font,
-            ActionBtnColor, () => ResetCombat());
-        CreateActionButton(content, "✨ Refresh Spell Slots", "Restore all slots", font,
-            ActionBtnColor, () => RefreshSpellSlots());
-        CreateActionButton(content, "💀 Kill All Enemies", "Instant victory", font,
-            DangerBtnColor, () => KillAllEnemies());
-        CreateActionButton(content, "💚 Heal All", "Full HP for everyone", font,
-            CastBtnColor, () => HealAll());
-        CreateActionButton(content, "🧹 Clear Area Effects", "Remove persistent effects", font,
-            ActionBtnColor, () => ClearAreaEffects());
-        CreateActionButton(content, "📊 Reset Stats", "Clear tracking stats", font,
-            FilterInactiveColor, () => ResetStats());
-
-        // ---- Separator ----
-        CreateSeparator(content);
-
-        // ---- COMBAT LOG FILTER ----
-        Text logHeader = UIFactory.CreateLabel(content, "📋 COMBAT LOG", 13,
-            TextAnchor.MiddleCenter, HeaderColor, "LogHeader", font);
-        logHeader.fontStyle = FontStyle.Bold;
-        AddLayoutHeight(logHeader.gameObject, 20);
-
-        // Filter buttons
-        string[] filters = { "All", "Spells", "Damage", "Saves", "Area" };
-        GameObject filterRow = new GameObject("LogFilterRow");
-        filterRow.transform.SetParent(content, false);
-        AddLayoutHeight(filterRow, 22);
-        HorizontalLayoutGroup filterHlg = filterRow.AddComponent<HorizontalLayoutGroup>();
-        filterHlg.spacing = 2;
-        filterHlg.childControlWidth = true;
-        filterHlg.childControlHeight = true;
-        filterHlg.childForceExpandWidth = true;
-        filterHlg.childForceExpandHeight = true;
-
-        foreach (string f in filters)
-        {
-            string filter = f;
-            UIFactory.CreateButton(filterRow.transform, filter,
-                () => { _combatLogFilter = filter; RefreshLog(); },
-                new Vector2(40, 20), FilterInactiveColor, $"LogFilter_{filter}", font, 9);
-        }
-
-        // Log display (inline, since we're already in a scrollable area)
-        for (int i = 0; i < 30; i++)
-        {
-            Text logLine = UIFactory.CreateLabel(content, "",
-                10, TextAnchor.MiddleLeft, Color.white, $"LogLine_{i}", font);
-            AddLayoutHeight(logLine.gameObject, 14);
-            logLine.gameObject.SetActive(false);
-            _logEntries.Add(logLine);
-        }
-
-        Button clearLogBtn = UIFactory.CreateButton(content, "Clear Log",
-            () => ClearLog(),
-            new Vector2(0, 22), FilterInactiveColor, "ClearLog", font, 10);
-        AddLayoutHeight(clearLogBtn.gameObject, 22);
     }
 
     // ========== STATS BAR ==========
@@ -665,158 +422,6 @@ public class SpellTestingPanel : MonoBehaviour
 
     // ========== UI HELPERS ==========
 
-    /// <summary>
-    /// Ensures a ScrollRect's viewport has a proper Image + Mask for content clipping.
-    /// The Image is nearly invisible but has non-zero alpha so the Mask stencil works.
-    /// </summary>
-    private void FixViewportMask(ScrollRect scrollRect)
-    {
-        if (scrollRect == null || scrollRect.viewport == null) return;
-
-        RectTransform viewportRT = scrollRect.viewport;
-        viewportRT.anchorMin = Vector2.zero;
-        viewportRT.anchorMax = Vector2.one;
-        viewportRT.offsetMin = Vector2.zero;
-        viewportRT.offsetMax = Vector2.zero;
-        viewportRT.sizeDelta = Vector2.zero;
-
-        // Ensure Image exists for the Mask (required for stencil-based clipping)
-        Image viewportImg = viewportRT.GetComponent<Image>();
-        if (viewportImg == null)
-            viewportImg = viewportRT.gameObject.AddComponent<Image>();
-        viewportImg.color = new Color(1f, 1f, 1f, 0.004f); // Nearly invisible
-        viewportImg.raycastTarget = true; // Needed for ScrollRect drag/scroll input
-
-        // Ensure Mask component
-        Mask viewportMask = viewportRT.GetComponent<Mask>();
-        if (viewportMask == null)
-            viewportMask = viewportRT.gameObject.AddComponent<Mask>();
-        viewportMask.showMaskGraphic = false;
-    }
-
-    private Text CreateSliderRow(Transform parent, string label, float min, float max,
-        float initial, Font font, UnityEngine.Events.UnityAction<float> onChanged)
-    {
-        GameObject row = new GameObject($"Slider_{label}");
-        row.transform.SetParent(parent, false);
-        AddLayoutHeight(row, 20);
-        HorizontalLayoutGroup hlg = row.AddComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 4;
-        hlg.childControlWidth = true;
-        hlg.childControlHeight = true;
-        hlg.childForceExpandWidth = false;
-        hlg.childForceExpandHeight = true;
-
-        Text lbl = UIFactory.CreateLabel(row.transform, label, 10,
-            TextAnchor.MiddleLeft, Color.white, "Label", font);
-        LayoutElement lblLE = lbl.gameObject.AddComponent<LayoutElement>();
-        lblLE.preferredWidth = 40;
-
-        // Decrease button
-        Text valText = null;
-        Button decBtn = UIFactory.CreateButton(row.transform, "-",
-            null, new Vector2(20, 18), FilterInactiveColor, "Dec", font, 12);
-        LayoutElement decLE = decBtn.gameObject.AddComponent<LayoutElement>();
-        decLE.preferredWidth = 20;
-
-        // Value text
-        valText = UIFactory.CreateLabel(row.transform, ((int)initial).ToString(), 10,
-            TextAnchor.MiddleCenter, Color.white, "Value", font);
-        LayoutElement valLE = valText.gameObject.AddComponent<LayoutElement>();
-        valLE.preferredWidth = 30;
-        valLE.flexibleWidth = 0;
-
-        // Increase button
-        Button incBtn = UIFactory.CreateButton(row.transform, "+",
-            null, new Vector2(20, 18), FilterInactiveColor, "Inc", font, 12);
-        LayoutElement incLE = incBtn.gameObject.AddComponent<LayoutElement>();
-        incLE.preferredWidth = 20;
-
-        // Wire up buttons
-        float currentVal = initial;
-        Text capturedValText = valText;
-        decBtn.onClick.AddListener(() =>
-        {
-            currentVal = Mathf.Max(min, currentVal - 1);
-            capturedValText.text = ((int)currentVal).ToString();
-            onChanged?.Invoke(currentVal);
-        });
-        incBtn.onClick.AddListener(() =>
-        {
-            currentVal = Mathf.Min(max, currentVal + 1);
-            capturedValText.text = ((int)currentVal).ToString();
-            onChanged?.Invoke(currentVal);
-        });
-
-        return valText;
-    }
-
-    private void CreateToggleRow(Transform parent, string label, bool initial, Font font,
-        System.Action<bool> onChanged)
-    {
-        GameObject row = new GameObject($"Toggle_{label}");
-        row.transform.SetParent(parent, false);
-        AddLayoutHeight(row, 22);
-
-        bool state = initial;
-        Button btn = UIFactory.CreateButton(row.transform, (state ? "☑ " : "☐ ") + label,
-            null, new Vector2(0, 22), state ? CastBtnColor : FilterInactiveColor,
-            "ToggleBtn", font, 10);
-
-        RectTransform btnRT = btn.GetComponent<RectTransform>();
-        btnRT.anchorMin = Vector2.zero;
-        btnRT.anchorMax = Vector2.one;
-        btnRT.offsetMin = Vector2.zero;
-        btnRT.offsetMax = Vector2.zero;
-
-        Text btnText = btn.GetComponentInChildren<Text>();
-        btn.onClick.AddListener(() =>
-        {
-            state = !state;
-            btnText.text = (state ? "☑ " : "☐ ") + label;
-            Image img = btn.GetComponent<Image>();
-            if (img != null) img.color = state ? CastBtnColor : FilterInactiveColor;
-            onChanged?.Invoke(state);
-        });
-    }
-
-    private void CreateSpawnPresetButton(Transform parent, string label, string desc, Font font,
-        int hp, int ac, int fort, int refSave, int will, int sr, bool isSwarm = false)
-    {
-        Button btn = UIFactory.CreateButton(parent, $"{label}", () =>
-        {
-            if (isSwarm)
-            {
-                for (int i = 0; i < 4; i++)
-                    SpawnEnemy(hp, ac, fort, refSave, will, sr, false);
-            }
-            else
-            {
-                SpawnEnemy(hp, ac, fort, refSave, will, sr, false);
-            }
-        }, new Vector2(0, 26), SpawnBtnColor, $"Spawn_{label}", font, 11);
-        AddLayoutHeight(btn.gameObject, 26);
-    }
-
-    private void CreateActionButton(Transform parent, string label, string tooltip, Font font,
-        Color color, UnityEngine.Events.UnityAction onClick)
-    {
-        Button btn = UIFactory.CreateButton(parent, label, onClick,
-            new Vector2(0, 26), color, $"Action_{label}", font, 11);
-        AddLayoutHeight(btn.gameObject, 26);
-    }
-
-    private void CreateSeparator(Transform parent)
-    {
-        GameObject sep = new GameObject("Separator");
-        sep.transform.SetParent(parent, false);
-        RectTransform sepRT = sep.AddComponent<RectTransform>();
-        sepRT.sizeDelta = new Vector2(0, 1);
-        Image sepImg = sep.AddComponent<Image>();
-        sepImg.color = new Color(0.4f, 0.4f, 0.5f, 0.5f);
-        AddLayoutHeight(sep, 2);
-    }
-
     private void AddLayoutHeight(GameObject obj, float height)
     {
         LayoutElement le = obj.GetComponent<LayoutElement>();
@@ -843,20 +448,19 @@ public class SpellTestingPanel : MonoBehaviour
 
         // Get all spells
         List<SpellData> allSpells = SpellDatabase.GetAllSpells();
-        Debug.Log($"[SpellTestingPanel] SpellDatabase.GetAllSpells() returned {allSpells?.Count ?? 0} spells.");
-
         if (allSpells == null || allSpells.Count == 0)
         {
-            Debug.LogWarning("[SpellTestingPanel] No spells found in database! SpellDatabase.Count = " + SpellDatabase.Count);
+            Debug.LogWarning("[SpellTestingPanel] No spells found in database!");
             return;
         }
 
-        // Filter
+        // Filter by level
         if (_selectedSpellLevel >= 0)
         {
             allSpells = allSpells.Where(s => s.SpellLevel == _selectedSpellLevel).ToList();
         }
 
+        // Filter by search text
         if (!string.IsNullOrEmpty(_searchFilter))
         {
             string filter = _searchFilter.ToLower();
@@ -869,61 +473,22 @@ public class SpellTestingPanel : MonoBehaviour
 
         // Sort by level then name
         allSpells = allSpells.OrderBy(s => s.SpellLevel).ThenBy(s => s.Name).ToList();
-        Debug.Log($"[SpellTestingPanel] After filtering: {allSpells.Count} spells to display (level filter={_selectedSpellLevel}, search='{_searchFilter}').");
 
         Font font = UIFactory.GetDefaultFont();
         if (font == null)
         {
-            Debug.LogWarning("[SpellTestingPanel] GetDefaultFont() returned NULL! Trying OS font fallback...");
             font = Font.CreateDynamicFontFromOSFont("Arial", 14);
             if (font == null) font = Font.CreateDynamicFontFromOSFont("Liberation Sans", 14);
             if (font == null)
             {
                 string[] osFonts = Font.GetOSInstalledFontNames();
                 if (osFonts != null && osFonts.Length > 0)
-                {
                     font = Font.CreateDynamicFontFromOSFont(osFonts[0], 14);
-                    Debug.Log($"[SpellTestingPanel] Using OS font: {osFonts[0]}");
-                }
             }
         }
-        Debug.Log($"[SpellTestingPanel] Font resolved: {(font != null ? font.name : "STILL NULL!")}");
 
-        // Reset alternating row index
         _spellEntryIndex = 0;
-
-        // ===== TEST ENTRY: Bright red, impossible to miss =====
-        {
-            GameObject testEntry = new GameObject("TEST_VISIBILITY_ENTRY");
-            testEntry.transform.SetParent(_spellListContent, false);
-            RectTransform testRT = testEntry.AddComponent<RectTransform>();
-            testRT.sizeDelta = new Vector2(0, 40);
-            AddLayoutHeight(testEntry, 40);
-
-            Image testBg = testEntry.AddComponent<Image>();
-            testBg.color = new Color(0.5f, 0.0f, 0.0f, 1f); // Dark red background
-
-            Outline testOutline = testEntry.AddComponent<Outline>();
-            testOutline.effectColor = Color.yellow;
-            testOutline.effectDistance = new Vector2(2f, 2f);
-
-            Text testText = CreateSafeLabel(testEntry.transform, "TEST - If you see this, rendering works!", 18, Color.red, font, "TestText");
-            testText.fontStyle = FontStyle.Bold;
-            testText.alignment = TextAnchor.MiddleCenter;
-            RectTransform testTextRT = testText.GetComponent<RectTransform>();
-            if (testTextRT != null)
-            {
-                testTextRT.anchorMin = Vector2.zero;
-                testTextRT.anchorMax = Vector2.one;
-                testTextRT.offsetMin = Vector2.zero;
-                testTextRT.offsetMax = Vector2.zero;
-            }
-
-            _spellEntries.Add(testEntry);
-        }
-
         int currentLevel = -999;
-        int entriesCreated = 0;
 
         foreach (SpellData spell in allSpells)
         {
@@ -944,7 +509,6 @@ public class SpellTestingPanel : MonoBehaviour
                 Image headerBg = headerObj.AddComponent<Image>();
                 headerBg.color = new Color(0.15f, 0.18f, 0.30f, 1f);
 
-                // Bright yellow header with bold text
                 Text headerText = CreateSafeLabel(headerObj.transform, $"══ {levelName} ══", 15, HeaderColor, font, "HeaderText");
                 headerText.fontStyle = FontStyle.Bold;
                 headerText.alignment = TextAnchor.MiddleCenter;
@@ -955,35 +519,28 @@ public class SpellTestingPanel : MonoBehaviour
                 htRT.offsetMax = Vector2.zero;
 
                 _spellEntries.Add(headerObj);
-                _spellEntryIndex = 0; // Reset alternating per level group
+                _spellEntryIndex = 0;
             }
 
             // Spell entry
             GameObject entry = CreateSpellEntry(spell, font);
             _spellEntries.Add(entry);
-            entriesCreated++;
         }
 
-        Debug.Log($"[SpellTestingPanel] Created {entriesCreated} spell entries in UI.");
-
-        // Force layout rebuild - rebuild content first, then scroll panel, then parent
+        // Force layout rebuild
         if (_spellListContent != null)
         {
             Canvas.ForceUpdateCanvases();
             LayoutRebuilder.ForceRebuildLayoutImmediate(_spellListContent as RectTransform);
 
-            // Also rebuild the scroll rect itself and its viewport
             if (_spellListScroll != null)
             {
                 RectTransform scrollRT = _spellListScroll.GetComponent<RectTransform>();
                 if (scrollRT != null)
                     LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRT);
-
-                // Reset scroll position to top so entries are visible
                 _spellListScroll.verticalNormalizedPosition = 1f;
             }
 
-            // Rebuild parent hierarchy to propagate sizes
             RectTransform parentRT = _spellListContent.parent?.parent?.GetComponent<RectTransform>();
             if (parentRT != null)
                 LayoutRebuilder.ForceRebuildLayoutImmediate(parentRT);
@@ -992,104 +549,16 @@ public class SpellTestingPanel : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Helper: ensure a Text component has a valid font, reasonable size, and visible color.
-    /// Also configures RectTransform for proper rendering inside layout groups.
-    /// If the Text component is null but a GameObject is provided, creates the Text component.
-    /// </summary>
-    private void EnsureTextVisible(Text txt, int fontSize, Color color)
-    {
-        if (txt == null) return;
-        ConfigureTextComponent(txt, fontSize, color);
-    }
-
-    /// <summary>
-    /// Ensures a GameObject has a properly configured Text component.
-    /// If the Text component is missing, it creates one. Returns the Text component.
-    /// </summary>
-    private Text EnsureTextOnGameObject(GameObject go, string textContent, int fontSize, Color color, Font font)
-    {
-        if (go == null) return null;
-
-        // Ensure a CanvasRenderer exists first (required for Text rendering)
-        if (go.GetComponent<CanvasRenderer>() == null)
-            go.AddComponent<CanvasRenderer>();
-
-        // Get or create the Text component
-        Text txt = go.GetComponent<Text>();
-        if (txt == null)
-        {
-            Debug.LogWarning($"[SpellTestingPanel] Text component MISSING on '{go.name}' – adding one now.");
-            txt = go.AddComponent<Text>();
-            txt.text = textContent;
-        }
-
-        // Always configure to ensure visibility
-        ConfigureTextComponent(txt, fontSize, color);
-
-        // Ensure font is set
-        if (txt.font == null)
-        {
-            txt.font = font;
-        }
-
-        return txt;
-    }
-
-    /// <summary>
-    /// Core configuration for a Text component: font fallback, size, color, overflow, RectTransform.
-    /// </summary>
-    private void ConfigureTextComponent(Text txt, int fontSize, Color color)
-    {
-        if (txt == null) return;
-
-        // Guarantee a valid font – try multiple fallbacks
-        if (txt.font == null)
-        {
-            txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (txt.font == null) txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
-            if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Liberation Sans", fontSize);
-            if (txt.font == null)
-            {
-                // Last resort: grab any system font
-                string[] osFonts = Font.GetOSInstalledFontNames();
-                if (osFonts != null && osFonts.Length > 0)
-                    txt.font = Font.CreateDynamicFontFromOSFont(osFonts[0], fontSize);
-            }
-        }
-
-        txt.fontSize = Mathf.Max(fontSize, 10);
-        txt.color = new Color(color.r, color.g, color.b, 1f); // force full alpha
-        txt.raycastTarget = false;
-        txt.horizontalOverflow = HorizontalWrapMode.Overflow;
-        txt.verticalOverflow = VerticalWrapMode.Overflow;
-        txt.supportRichText = true;
-
-        // NOTE: Do NOT override RectTransform anchors here - it breaks HorizontalLayoutGroup positioning.
-        // The layout group controls child positioning. Only set pivot.
-        RectTransform rt = txt.GetComponent<RectTransform>();
-        if (rt != null)
-        {
-            rt.pivot = new Vector2(0.5f, 0.5f);
-        }
-
-        // Ensure a CanvasRenderer exists (required for text rendering)
-        if (txt.GetComponent<CanvasRenderer>() == null)
-            txt.gameObject.AddComponent<CanvasRenderer>();
-    }
-
-    private int _spellEntryIndex = 0; // For alternating row colors
+    private int _spellEntryIndex = 0;
 
     private GameObject CreateSpellEntry(SpellData spell, Font font)
     {
         GameObject entry = new GameObject($"Spell_{spell.SpellId}");
         entry.transform.SetParent(_spellListContent, false);
         RectTransform entryRT = entry.AddComponent<RectTransform>();
-        entryRT.sizeDelta = new Vector2(0, 36); // Taller rows for visibility
+        entryRT.sizeDelta = new Vector2(0, 36);
         AddLayoutHeight(entry, 36);
 
-        // --- VISIBLE BACKGROUND: alternating bright colors ---
         bool isPlaceholder = spell.IsPlaceholder;
         Image entryBg = entry.AddComponent<Image>();
         if (isPlaceholder)
@@ -1098,7 +567,6 @@ public class SpellTestingPanel : MonoBehaviour
             entryBg.color = (_spellEntryIndex % 2 == 0) ? SpellEntryBg : SpellEntryBgAlt;
         _spellEntryIndex++;
 
-        // --- BORDER via Outline component ---
         Outline entryOutline = entry.AddComponent<Outline>();
         entryOutline.effectColor = SpellEntryBorder;
         entryOutline.effectDistance = new Vector2(1f, 1f);
@@ -1123,29 +591,29 @@ public class SpellTestingPanel : MonoBehaviour
         dotLE.preferredWidth = 20;
         dotLE.minHeight = 30;
 
-        // Spell name – LARGE, BOLD, BRIGHT WHITE (impossible to miss)
+        // Spell name
         Color nameColor = isPlaceholder ? new Color(0.7f, 0.7f, 0.7f, 1f) : Color.white;
         Text nameText = CreateSafeLabel(entry.transform, spell.Name, 16, nameColor, font, "SpellName");
-        nameText.fontStyle = FontStyle.Bold;  // BOLD for visibility
+        nameText.fontStyle = FontStyle.Bold;
         nameText.alignment = TextAnchor.MiddleLeft;
         LayoutElement nameLE = nameText.gameObject.GetComponent<LayoutElement>() ?? nameText.gameObject.AddComponent<LayoutElement>();
         nameLE.flexibleWidth = 1;
         nameLE.minWidth = 80;
         nameLE.minHeight = 30;
 
-        // School abbreviation - bright cyan
+        // School abbreviation
         string schoolAbbr = !string.IsNullOrEmpty(spell.School) ?
             spell.School.Substring(0, System.Math.Min(4, spell.School.Length)) : "???";
-        Color schoolTextColor = new Color(0.6f, 0.9f, 1f, 1f); // Bright cyan
+        Color schoolTextColor = new Color(0.6f, 0.9f, 1f, 1f);
         Text schoolText = CreateSafeLabel(entry.transform, schoolAbbr, 12, schoolTextColor, font, "School");
         schoolText.alignment = TextAnchor.MiddleCenter;
         LayoutElement schoolLE = schoolText.gameObject.GetComponent<LayoutElement>() ?? schoolText.gameObject.AddComponent<LayoutElement>();
         schoolLE.preferredWidth = 42;
         schoolLE.minHeight = 30;
 
-        // Range info - bright green
+        // Range info
         string rangeInfo = GetRangeAbbrev(spell);
-        Color rangeColor = new Color(0.5f, 1f, 0.5f, 1f); // Bright green
+        Color rangeColor = new Color(0.5f, 1f, 0.5f, 1f);
         Text rangeText = CreateSafeLabel(entry.transform, rangeInfo, 12, rangeColor, font, "Range");
         rangeText.alignment = TextAnchor.MiddleCenter;
         LayoutElement rangeLE = rangeText.gameObject.GetComponent<LayoutElement>() ?? rangeText.gameObject.AddComponent<LayoutElement>();
@@ -1182,10 +650,6 @@ public class SpellTestingPanel : MonoBehaviour
         return entry;
     }
 
-    /// <summary>
-    /// Simplified safe label creation - creates a Text with guaranteed visibility.
-    /// Does NOT mess with RectTransform anchors so layout groups work properly.
-    /// </summary>
     private Text CreateSafeLabel(Transform parent, string text, int fontSize, Color color, Font font, string name)
     {
         Text txt = UIFactory.CreateLabel(parent, text, fontSize, TextAnchor.MiddleLeft, color, name, font);
@@ -1241,6 +705,94 @@ public class SpellTestingPanel : MonoBehaviour
 
     // ========== SPELL CASTING ==========
 
+    /// <summary>
+    /// Determines the primary casting ability name for a character based on class.
+    /// Returns "INT" for wizard, "CHA" for sorcerer/bard, "WIS" for cleric/druid/ranger/paladin.
+    /// Falls back to the highest of INT/WIS/CHA.
+    /// </summary>
+    private string GetPrimaryCastingAbility(CharacterStats stats)
+    {
+        if (stats == null) return "INT";
+
+        if (stats.HasClass("Wizard")) return "INT";
+        if (stats.HasClass("Sorcerer") || stats.HasClass("Bard")) return "CHA";
+        if (stats.HasClass("Cleric") || stats.HasClass("Druid") ||
+            stats.HasClass("Ranger") || stats.HasClass("Paladin")) return "WIS";
+
+        // Fallback: pick the highest casting stat
+        int intVal = stats.INT;
+        int wisVal = stats.WIS;
+        int chaVal = stats.CHA;
+        if (wisVal >= intVal && wisVal >= chaVal) return "WIS";
+        if (chaVal >= intVal && chaVal >= wisVal) return "CHA";
+        return "INT";
+    }
+
+    /// <summary>
+    /// Gets the current value of a named ability score.
+    /// </summary>
+    private int GetAbilityScore(CharacterStats stats, string ability)
+    {
+        switch (ability)
+        {
+            case "INT": return stats.INT;
+            case "WIS": return stats.WIS;
+            case "CHA": return stats.CHA;
+            default: return stats.INT;
+        }
+    }
+
+    /// <summary>
+    /// Sets a named ability score on the stats.
+    /// </summary>
+    private void SetAbilityScore(CharacterStats stats, string ability, int value)
+    {
+        switch (ability)
+        {
+            case "INT": stats.INT = value; break;
+            case "WIS": stats.WIS = value; break;
+            case "CHA": stats.CHA = value; break;
+        }
+    }
+
+    /// <summary>
+    /// Applies a +4 temporary boost to the caster's primary casting ability.
+    /// Stores the original value for restoration after the spell resolves.
+    /// </summary>
+    private void ApplyAbilityBoost(CharacterController caster)
+    {
+        if (caster == null || caster.Stats == null) return;
+
+        // Restore any previous boost first
+        if (_abilityBoosted)
+        {
+            RestoreAbilityBoost();
+        }
+
+        _boostedAbility = GetPrimaryCastingAbility(caster.Stats);
+        _originalAbilityScore = GetAbilityScore(caster.Stats, _boostedAbility);
+        SetAbilityScore(caster.Stats, _boostedAbility, _originalAbilityScore + 4);
+        _boostedCaster = caster;
+        _abilityBoosted = true;
+
+        Debug.Log($"[SpellTestPanel] Applied +4 {_boostedAbility} boost: {_originalAbilityScore} → {_originalAbilityScore + 4}");
+    }
+
+    /// <summary>
+    /// Restores the caster's ability score to its original value.
+    /// </summary>
+    private void RestoreAbilityBoost()
+    {
+        if (!_abilityBoosted || _boostedCaster == null || _boostedCaster.Stats == null) return;
+
+        SetAbilityScore(_boostedCaster.Stats, _boostedAbility, _originalAbilityScore);
+        Debug.Log($"[SpellTestPanel] Restored {_boostedAbility}: {_originalAbilityScore + 4} → {_originalAbilityScore}");
+
+        _abilityBoosted = false;
+        _boostedCaster = null;
+        _boostedAbility = null;
+    }
+
     private void CastSpell(SpellData spell)
     {
         Debug.Log($"[SpellTestPanel] ═══ CastSpell START  spell={spell?.Name} ═══");
@@ -1248,120 +800,58 @@ public class SpellTestingPanel : MonoBehaviour
         GameManager gm = GameManager.Instance;
         if (gm == null)
         {
-            AddLog("❌ GameManager not found!", Color.red);
             Debug.LogError("[SpellTestPanel] GameManager.Instance is null!");
+            gm?.CombatUI?.ShowCombatLog("❌ [TEST] GameManager not found!");
             return;
         }
 
-        CharacterController caster = GetOrCreateTestCaster();
+        // Use ActivePC (the character whose turn it currently is)
+        CharacterController caster = gm.ActivePC;
         if (caster == null)
         {
-            AddLog("❌ No valid caster available!", Color.red);
-            Debug.LogError("[SpellTestPanel] GetOrCreateTestCaster returned null. PCs list count: "
-                + (gm.PCs?.Count.ToString() ?? "null"));
+            Debug.LogWarning("[SpellTestPanel] No ActivePC — must be used during a PC's turn!");
+            gm.CombatUI?.ShowCombatLog("❌ [TEST] No active PC! Use this during a PC's turn.");
             return;
         }
-        Debug.Log($"[SpellTestPanel]   Caster: {caster.Stats?.CharacterName}  HP={caster.Stats?.CurrentHP}  Team={caster.Team}");
 
-        // Configure caster stats for test
-        ConfigureTestCaster(caster);
-        Debug.Log($"[SpellTestPanel]   Configured caster: INT={caster.Stats?.INT} CHA={caster.Stats?.CHA}");
+        Debug.Log($"[SpellTestPanel] Caster: {caster.Stats?.CharacterName} (ActivePC)");
 
-        // If infinite slots, ensure spell is available
-        if (_infiniteSlots)
-        {
-            EnsureSpellAvailable(caster, spell);
-            Debug.Log($"[SpellTestPanel]   Infinite slots: ensured spell available for {spell.Name}");
-        }
+        // Apply +4 boost to primary casting ability
+        ApplyAbilityBoost(caster);
 
-        AddLog($"🔮 Casting: {spell.Name} (CL {_casterLevel})", new Color(0.5f, 0.8f, 1f));
-        AddLog($"   Caster: {caster.Stats?.CharacterName}  |  Target type: {spell.TargetType}", Color.white);
+        // Ensure the spell is available (known, prepared, has slot)
+        EnsureSpellAvailable(caster, spell);
 
-        // Use the new TestPanel integration — bypasses ActivePC / turn-phase guards
+        string abilityInfo = $"{_boostedAbility} boosted +4 ({_originalAbilityScore}→{_originalAbilityScore + 4})";
+        gm.CombatUI?.ShowCombatLog($"🔮 [TEST] Casting {spell.Name} via {caster.Stats?.CharacterName} | {abilityInfo}");
+
+        // Use TestCastSpellFromPanel which bypasses ActivePC/turn-phase guards
         try
         {
             var metamagic = new MetamagicData();
-            gm.TestCastSpellFromPanel(caster, spell, _infiniteSlots, metamagic);
-            AddLog($"✅ Spell targeting initiated for {spell.Name}", new Color(0.5f, 1f, 0.5f));
-            Debug.Log($"[SpellTestPanel]   TestCastSpellFromPanel returned normally.");
+            gm.TestCastSpellFromPanel(caster, spell, true, metamagic);
+            gm.CombatUI?.ShowCombatLog($"✅ [TEST] Spell targeting initiated for {spell.Name}");
+            Debug.Log($"[SpellTestPanel] TestCastSpellFromPanel returned normally.");
         }
         catch (System.Exception ex)
         {
-            AddLog($"❌ Cast error: {ex.Message}", Color.red);
+            gm.CombatUI?.ShowCombatLog($"❌ [TEST] Cast error: {ex.Message}");
             Debug.LogError($"[SpellTestPanel] Cast error: {ex}");
+            // Restore ability immediately on error
+            RestoreAbilityBoost();
         }
-    }
-
-    private CharacterController GetOrCreateTestCaster()
-    {
-        GameManager gm = GameManager.Instance;
-        if (gm == null) { Debug.LogWarning("[SpellTestPanel] GetOrCreateTestCaster: GM null"); return null; }
-
-        Debug.Log($"[SpellTestPanel] GetOrCreateTestCaster: type={_selectedCasterType}  PCs.Count={gm.PCs?.Count ?? -1}");
-
-        if (_selectedCasterType == "Player PC")
-        {
-            // Use first living PC
-            if (gm.PCs != null)
-            {
-                foreach (var pc in gm.PCs)
-                {
-                    if (pc != null && pc.Stats != null && pc.Stats.CurrentHP > 0)
-                    {
-                        Debug.Log($"[SpellTestPanel]   → Found living PC: {pc.Stats.CharacterName}  HP={pc.Stats.CurrentHP}");
-                        return pc;
-                    }
-                }
-            }
-            // Fallback to any PC
-            if (gm.PCs != null && gm.PCs.Count > 0)
-            {
-                Debug.Log($"[SpellTestPanel]   → Fallback to first PC: {gm.PCs[0]?.Stats?.CharacterName}");
-                return gm.PCs[0];
-            }
-        }
-
-        // For Test Wizard/Sorcerer, use first PC but configure differently
-        if (gm.PCs != null && gm.PCs.Count > 0)
-        {
-            Debug.Log($"[SpellTestPanel]   → Using first PC for {_selectedCasterType}: {gm.PCs[0]?.Stats?.CharacterName}");
-            return gm.PCs[0];
-        }
-
-        Debug.LogWarning("[SpellTestPanel] GetOrCreateTestCaster: no PCs available!");
-        return null;
-    }
-
-    private void ConfigureTestCaster(CharacterController caster)
-    {
-        if (caster == null || caster.Stats == null) return;
-
-        // If using test caster types, override stats
-        if (_selectedCasterType == "Test Wizard" || _selectedCasterType == "Test Sorcerer")
-        {
-            caster.Stats.INT = _intScore;
-            caster.Stats.CHA = _chaScore;
-        }
-
-        // Note: Caster level is typically tied to character level
-        // The spell DC uses these stats through normal calculation
     }
 
     private void EnsureSpellAvailable(CharacterController caster, SpellData spell)
     {
         if (caster == null) return;
 
-        // Get or add SpellcastingComponent
         SpellcastingComponent spellComp = caster.GetComponent<SpellcastingComponent>();
         if (spellComp == null)
         {
             Debug.LogWarning($"[SpellTestPanel] EnsureSpellAvailable: No SpellcastingComponent on {caster.Stats?.CharacterName}");
             return;
         }
-
-        Debug.Log($"[SpellTestPanel] EnsureSpellAvailable: spell={spell.Name}  lvl={spell.SpellLevel}  " +
-                  $"knownCount={spellComp.KnownSpells?.Count}  preparedCount={spellComp.PreparedSpells?.Count}  " +
-                  $"slotsRemaining={(spellComp.SlotsRemaining != null ? string.Join(",", spellComp.SlotsRemaining) : "null")}");
 
         // ── Ensure known ──
         if (spellComp.KnownSpells != null)
@@ -1370,7 +860,7 @@ public class SpellTestingPanel : MonoBehaviour
             if (!alreadyKnown)
             {
                 spellComp.KnownSpells.Add(spell);
-                Debug.Log($"[SpellTestPanel]   Added to KnownSpells: {spell.Name}");
+                Debug.Log($"[SpellTestPanel] Added to KnownSpells: {spell.Name}");
             }
         }
 
@@ -1381,7 +871,7 @@ public class SpellTestingPanel : MonoBehaviour
             if (!alreadyPrepared)
             {
                 spellComp.PreparedSpells.Add(spell);
-                Debug.Log($"[SpellTestPanel]   Added to PreparedSpells: {spell.Name}");
+                Debug.Log($"[SpellTestPanel] Added to PreparedSpells: {spell.Name}");
             }
         }
 
@@ -1393,20 +883,19 @@ public class SpellTestingPanel : MonoBehaviour
             if (!hasSlot)
             {
                 spellComp.SpellSlots.Add(new SpellSlot(spell.SpellLevel, spell));
-                Debug.Log($"[SpellTestPanel]   Added SpellSlot for {spell.Name} at level {spell.SpellLevel}");
+                Debug.Log($"[SpellTestPanel] Added SpellSlot for {spell.Name} at level {spell.SpellLevel}");
             }
         }
 
         // ── Infinite slots: max-out remaining counts ──
-        if (_infiniteSlots && spellComp.SlotsRemaining != null)
+        if (spellComp.SlotsRemaining != null)
         {
             for (int i = 0; i < spellComp.SlotsRemaining.Length; i++)
             {
                 spellComp.SlotsRemaining[i] = 99;
             }
-            Debug.Log("[SpellTestPanel]   All SlotsRemaining set to 99 (infinite mode)");
 
-            // Also un-use any used slots for this spell so they can be cast again
+            // Also un-use any used slots for this spell
             if (spellComp.SpellSlots != null)
             {
                 foreach (var slot in spellComp.SpellSlots)
@@ -1414,377 +903,13 @@ public class SpellTestingPanel : MonoBehaviour
                     if (slot.PreparedSpell != null && slot.PreparedSpell.SpellId == spell.SpellId && slot.IsUsed)
                     {
                         slot.IsUsed = false;
-                        Debug.Log($"[SpellTestPanel]   Reset used SpellSlot for {spell.Name}");
                     }
                 }
             }
         }
-
-        Debug.Log($"[SpellTestPanel] EnsureSpellAvailable DONE. SlotsRemaining={(spellComp.SlotsRemaining != null ? string.Join(",", spellComp.SlotsRemaining) : "null")}");
-    }
-
-    // ========== ENEMY SPAWNING ==========
-
-    private void SpawnEnemy(int hp, int ac, int fort, int refSave, int will, int sr, bool dummy)
-    {
-        GameManager gm = GameManager.Instance;
-        if (gm == null)
-        {
-            AddLog("❌ GameManager not found!", Color.red);
-            return;
-        }
-
-        // Find an inactive NPC slot
-        CharacterController npcSlot = null;
-        if (gm.NPCs != null)
-        {
-            foreach (var npc in gm.NPCs)
-            {
-                if (npc != null && (!npc.gameObject.activeSelf ||
-                    (npc.Stats != null && npc.Stats.CurrentHP <= 0)))
-                {
-                    npcSlot = npc;
-                    break;
-                }
-            }
-        }
-
-        if (npcSlot == null)
-        {
-            AddLog("⚠ No available NPC slots for spawning!", Color.yellow);
-            return;
-        }
-
-        // Calculate spawn position
-        Vector2Int spawnPos = GetSpawnPosition();
-
-        // Configure the NPC with a fresh CharacterStats
-        npcSlot.gameObject.SetActive(true);
-
-        int level = Mathf.Max(1, hp / 10);
-        // Create stats via proper constructor
-        // Use ability scores that produce approximately the desired saves
-        // Fort = CON mod + class save; Ref = DEX mod + class save; Will = WIS mod + class save
-        CharacterStats stats = new CharacterStats(
-            name: $"Test Enemy ({hp}hp)",
-            level: level,
-            characterClass: "Fighter",
-            str: 14, dex: 12, con: 14,
-            wis: 10, intelligence: 10, cha: 8,
-            bab: level,
-            armorBonus: Mathf.Max(0, ac - 11), // AC = 10 + dex(1) + armor
-            shieldBonus: 0,
-            damageDice: 8,
-            damageCount: 1,
-            bonusDamage: 2,
-            baseSpeed: 6,
-            atkRange: 1,
-            baseHitDieHP: hp
-        );
-
-        // Adjust saves to match desired values using morale bonus
-        // Fort = CONMod(2) + ClassFortSave + morale; desired = fort
-        stats.MoraleSaveBonus = 0; // Reset first
-        int currentFort = stats.FortitudeSave;
-        int currentRef = stats.ReflexSave;
-        int currentWill = stats.WillSave;
-        // Use morale bonus to bring saves closer to desired (affects all saves equally)
-        int avgDesired = (fort + refSave + will) / 3;
-        int avgCurrent = (currentFort + currentRef + currentWill) / 3;
-        stats.MoraleSaveBonus = avgDesired - avgCurrent;
-
-        stats.SpellResistance = sr;
-        stats.NaturalArmorBonus = 0;
-
-        npcSlot.Stats = stats;
-
-        npcSlot.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
-
-        // Position on grid
-        if (gm.Grid != null)
-        {
-            SquareCell cell = gm.Grid.GetCell(spawnPos.x, spawnPos.y);
-            if (cell != null)
-            {
-                npcSlot.transform.position = cell.transform.position;
-                npcSlot.GridPosition = spawnPos;
-            }
-        }
-
-        string srText = sr > 0 ? $" SR:{sr}" : "";
-        AddLog($"👹 Spawned: {stats.CharacterName} | AC:{ac} Fort:{fort} Ref:{refSave} Will:{will}{srText} at ({spawnPos.x},{spawnPos.y})",
-            new Color(0.9f, 0.6f, 0.3f));
-    }
-
-    private Vector2Int GetSpawnPosition()
-    {
-        GameManager gm = GameManager.Instance;
-        Vector2Int basePos = new Vector2Int(10, 10);
-
-        // Try to find player position
-        if (gm?.PCs != null)
-        {
-            foreach (var pc in gm.PCs)
-            {
-                if (pc != null && pc.Stats != null && pc.Stats.CurrentHP > 0)
-                {
-                    basePos = pc.GridPosition;
-                    break;
-                }
-            }
-        }
-
-        int offset;
-        switch (_spawnDistance)
-        {
-            case "Near": offset = 2; break;
-            case "Medium": offset = 6; break;
-            case "Long": offset = 12; break;
-            default: offset = 2; break;
-        }
-
-        // Spawn to the right of the player, with some randomness
-        int randX = Random.Range(-1, 2);
-        int randY = Random.Range(-offset / 2, offset / 2 + 1);
-        return new Vector2Int(basePos.x + offset + randX, basePos.y + randY);
-    }
-
-    // ========== QUICK ACTIONS ==========
-
-    private void ResetCombat()
-    {
-        GameManager gm = GameManager.Instance;
-        if (gm == null) return;
-
-        // Heal all PCs and clear conditions
-        if (gm.PCs != null)
-        {
-            foreach (var pc in gm.PCs)
-            {
-                if (pc?.Stats != null)
-                {
-                    pc.Stats.CurrentHP = pc.Stats.TotalMaxHP;
-                    pc.ClearAllConditions();
-                }
-            }
-        }
-
-        // Heal all NPCs and clear conditions
-        if (gm.NPCs != null)
-        {
-            foreach (var npc in gm.NPCs)
-            {
-                if (npc?.Stats != null && npc.gameObject.activeSelf)
-                {
-                    npc.Stats.CurrentHP = npc.Stats.TotalMaxHP;
-                    npc.ClearAllConditions();
-                }
-            }
-        }
-
-        RefreshSpellSlots();
-        ResetStats();
-        AddLog("🔄 Combat reset! All effects cleared, HP restored.", new Color(0.5f, 1f, 0.5f));
-    }
-
-    private void RefreshSpellSlots()
-    {
-        GameManager gm = GameManager.Instance;
-        if (gm?.PCs == null) return;
-
-        foreach (var pc in gm.PCs)
-        {
-            if (pc == null) continue;
-            SpellcastingComponent spellComp = pc.GetComponent<SpellcastingComponent>();
-            if (spellComp?.SlotsRemaining != null)
-            {
-                for (int i = 0; i < spellComp.SlotsRemaining.Length; i++)
-                {
-                    spellComp.SlotsRemaining[i] = 99;
-                }
-
-                // Also reset used spell slots
-                foreach (var slot in spellComp.SpellSlots)
-                {
-                    slot.IsUsed = false;
-                }
-            }
-        }
-        AddLog("✨ All spell slots refreshed!", new Color(0.8f, 0.8f, 1f));
-    }
-
-    private void KillAllEnemies()
-    {
-        GameManager gm = GameManager.Instance;
-        if (gm?.NPCs == null) return;
-
-        int killed = 0;
-        foreach (var npc in gm.NPCs)
-        {
-            if (npc?.Stats != null && npc.gameObject.activeSelf && npc.Stats.CurrentHP > 0)
-            {
-                npc.Stats.CurrentHP = 0;
-                killed++;
-            }
-        }
-        AddLog($"💀 Killed {killed} enemies!", DangerBtnColor);
-    }
-
-    private void HealAll()
-    {
-        GameManager gm = GameManager.Instance;
-        if (gm == null) return;
-
-        int healed = 0;
-        if (gm.PCs != null)
-        {
-            foreach (var pc in gm.PCs)
-            {
-                if (pc?.Stats != null)
-                {
-                    pc.Stats.CurrentHP = pc.Stats.TotalMaxHP;
-                    healed++;
-                }
-            }
-        }
-        if (gm.NPCs != null)
-        {
-            foreach (var npc in gm.NPCs)
-            {
-                if (npc?.Stats != null && npc.gameObject.activeSelf)
-                {
-                    npc.Stats.CurrentHP = npc.Stats.TotalMaxHP;
-                    healed++;
-                }
-            }
-        }
-        AddLog($"💚 Healed {healed} characters to full HP!", new Color(0.3f, 1f, 0.3f));
-    }
-
-    private void ClearAllEnemies()
-    {
-        GameManager gm = GameManager.Instance;
-        if (gm?.NPCs == null) return;
-
-        int cleared = 0;
-        foreach (var npc in gm.NPCs)
-        {
-            if (npc != null && npc.gameObject.activeSelf)
-            {
-                npc.gameObject.SetActive(false);
-                cleared++;
-            }
-        }
-        AddLog($"🗑 Cleared {cleared} enemies from battlefield!", Color.yellow);
-    }
-
-    private void ClearAreaEffects()
-    {
-        // Clear all persistent area effects if the system exists
-        try
-        {
-            var areaEffects = FindObjectsOfType<MonoBehaviour>()
-                .Where(mb => mb.GetType().Name.Contains("AreaEffect"))
-                .ToArray();
-
-            int cleared = 0;
-            foreach (var ae in areaEffects)
-            {
-                if (ae != null && ae.gameObject != null)
-                {
-                    Destroy(ae.gameObject);
-                    cleared++;
-                }
-            }
-            AddLog($"🧹 Cleared {cleared} area effects!", new Color(0.8f, 0.8f, 1f));
-        }
-        catch (System.Exception ex)
-        {
-            AddLog($"⚠ Error clearing area effects: {ex.Message}", Color.yellow);
-        }
-    }
-
-    // ========== COMBAT LOG ==========
-
-    private void AddLog(string message, Color color)
-    {
-        _allLogMessages.Add($"<color=#{ColorUtility.ToHtmlStringRGB(color)}>{message}</color>");
-
-        // Also forward to main combat log
-        GameManager gm = GameManager.Instance;
-        if (gm?.CombatUI != null)
-        {
-            gm.CombatUI.ShowCombatLog($"[TEST] {message}");
-        }
-
-        RefreshLog();
-    }
-
-    private void RefreshLog()
-    {
-        var filtered = FilterLogMessages();
-        int startIdx = Mathf.Max(0, filtered.Count - _logEntries.Count);
-
-        for (int i = 0; i < _logEntries.Count; i++)
-        {
-            int msgIdx = startIdx + i;
-            if (msgIdx < filtered.Count)
-            {
-                _logEntries[i].text = filtered[msgIdx];
-                _logEntries[i].supportRichText = true;
-                _logEntries[i].gameObject.SetActive(true);
-            }
-            else
-            {
-                _logEntries[i].gameObject.SetActive(false);
-            }
-        }
-    }
-
-    private List<string> FilterLogMessages()
-    {
-        if (_combatLogFilter == "All") return _allLogMessages;
-
-        return _allLogMessages.Where(msg =>
-        {
-            string lower = msg.ToLower();
-            switch (_combatLogFilter)
-            {
-                case "Spells": return lower.Contains("cast") || lower.Contains("spell") || lower.Contains("🔮");
-                case "Damage": return lower.Contains("damage") || lower.Contains("dmg") || lower.Contains("hit");
-                case "Saves": return lower.Contains("save") || lower.Contains("sr") || lower.Contains("fort") || lower.Contains("ref") || lower.Contains("will");
-                case "Area": return lower.Contains("area") || lower.Contains("aoe") || lower.Contains("wall") || lower.Contains("sphere");
-                default: return true;
-            }
-        }).ToList();
-    }
-
-    private void ClearLog()
-    {
-        _allLogMessages.Clear();
-        RefreshLog();
-        AddLog("📋 Log cleared.", Color.gray);
     }
 
     // ========== STATS ==========
-
-    private void RefreshCasterInfo()
-    {
-        if (_casterInfoText == null) return;
-
-        int intMod = (_intScore - 10) / 2;
-        int chaMod = (_chaScore - 10) / 2;
-        int spellDC = 10 + intMod; // Base DC for wizard
-
-        if (_selectedCasterType == "Test Sorcerer")
-        {
-            spellDC = 10 + chaMod;
-        }
-
-        _casterInfoText.text = $"Caster: {_selectedCasterType}\n" +
-            $"CL: {_casterLevel} | DC: {spellDC}+SL\n" +
-            $"INT: {_intScore} (+{intMod}) | CHA: {_chaScore} (+{chaMod})";
-    }
 
     private void RefreshStats()
     {
@@ -1793,18 +918,6 @@ public class SpellTestingPanel : MonoBehaviour
         _statsText.text = $"📊 Dmg: {_totalDamageDealt} | Hits: {_totalTargetsHit} | " +
             $"Saves: {_totalSavesMade}✓/{_totalSavesFailed}✗ | " +
             $"SR: {_totalSRPassed}✓/{_totalSRFailed}✗";
-    }
-
-    private void ResetStats()
-    {
-        _totalDamageDealt = 0;
-        _totalTargetsHit = 0;
-        _totalSavesMade = 0;
-        _totalSavesFailed = 0;
-        _totalSRPassed = 0;
-        _totalSRFailed = 0;
-        RefreshStats();
-        AddLog("📊 Stats reset!", Color.gray);
     }
 
     // ========== PUBLIC API (for integration) ==========
@@ -1844,6 +957,7 @@ public class SpellTestingPanel : MonoBehaviour
     /// </summary>
     public void LogMessage(string message, Color? color = null)
     {
-        AddLog(message, color ?? Color.white);
+        GameManager gm = GameManager.Instance;
+        gm?.CombatUI?.ShowCombatLog($"[TEST] {message}");
     }
 }
