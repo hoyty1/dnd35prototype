@@ -164,6 +164,7 @@ public class SpellTestingPanel : MonoBehaviour
         contentRow.transform.SetParent(_panelRoot.transform, false);
         RectTransform contentRT = contentRow.AddComponent<RectTransform>();
         contentRT.sizeDelta = new Vector2(0, 600);
+        AddLayoutHeight(contentRow, 600);
         HorizontalLayoutGroup contentHlg = contentRow.AddComponent<HorizontalLayoutGroup>();
         contentHlg.spacing = 6;
         contentHlg.childControlWidth = true;
@@ -232,7 +233,7 @@ public class SpellTestingPanel : MonoBehaviour
         vlg.spacing = 3;
         vlg.padding = new RectOffset(6, 6, 6, 6);
         vlg.childControlWidth = true;
-        vlg.childControlHeight = false;
+        vlg.childControlHeight = true;
         vlg.childForceExpandWidth = true;
         vlg.childForceExpandHeight = false;
 
@@ -255,6 +256,7 @@ public class SpellTestingPanel : MonoBehaviour
         searchRow.transform.SetParent(parent, false);
         RectTransform searchRT = searchRow.AddComponent<RectTransform>();
         searchRT.sizeDelta = new Vector2(0, 28);
+        AddLayoutHeight(searchRow, 28);
         HorizontalLayoutGroup searchHlg = searchRow.AddComponent<HorizontalLayoutGroup>();
         searchHlg.spacing = 4;
         searchHlg.childControlWidth = true;
@@ -277,6 +279,7 @@ public class SpellTestingPanel : MonoBehaviour
         filterRow.transform.SetParent(parent, false);
         RectTransform filterRT = filterRow.AddComponent<RectTransform>();
         filterRT.sizeDelta = new Vector2(0, 24);
+        AddLayoutHeight(filterRow, 24);
         HorizontalLayoutGroup filterHlg = filterRow.AddComponent<HorizontalLayoutGroup>();
         filterHlg.spacing = 2;
         filterHlg.childControlWidth = true;
@@ -298,15 +301,18 @@ public class SpellTestingPanel : MonoBehaviour
 
         // Scroll area for spell list
         _spellListScroll = UIFactory.CreateScrollPanel(parent, "SpellListScroll");
+        // Set explicit RectTransform size for the scroll panel since parent VLG uses childControlHeight=false
+        RectTransform spellScrollRT = _spellListScroll.GetComponent<RectTransform>();
+        spellScrollRT.sizeDelta = new Vector2(0, 500);
         LayoutElement scrollLE = _spellListScroll.gameObject.AddComponent<LayoutElement>();
         scrollLE.flexibleHeight = 1;
-        scrollLE.preferredHeight = 400;
+        scrollLE.preferredHeight = 500;
         _spellListContent = _spellListScroll.content;
         VerticalLayoutGroup contentVlg = _spellListContent.gameObject.AddComponent<VerticalLayoutGroup>();
         contentVlg.spacing = 2;
         contentVlg.padding = new RectOffset(2, 2, 2, 2);
         contentVlg.childControlWidth = true;
-        contentVlg.childControlHeight = false;
+        contentVlg.childControlHeight = true;
         contentVlg.childForceExpandWidth = true;
         contentVlg.childForceExpandHeight = false;
 
@@ -320,8 +326,11 @@ public class SpellTestingPanel : MonoBehaviour
     {
         // Use a scroll view so everything fits
         ScrollRect configScroll = UIFactory.CreateScrollPanel(parent, "ConfigScroll");
+        RectTransform configScrollRT = configScroll.GetComponent<RectTransform>();
+        configScrollRT.sizeDelta = new Vector2(0, 500);
         LayoutElement scrollLE = configScroll.gameObject.AddComponent<LayoutElement>();
         scrollLE.flexibleHeight = 1;
+        scrollLE.preferredHeight = 500;
         Transform content = configScroll.content;
         VerticalLayoutGroup vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
         vlg.spacing = 3;
@@ -448,8 +457,11 @@ public class SpellTestingPanel : MonoBehaviour
     {
         // Use scroll for this column too
         ScrollRect actionsScroll = UIFactory.CreateScrollPanel(parent, "ActionsScroll");
+        RectTransform actionsScrollRT = actionsScroll.GetComponent<RectTransform>();
+        actionsScrollRT.sizeDelta = new Vector2(0, 500);
         LayoutElement scrollLE = actionsScroll.gameObject.AddComponent<LayoutElement>();
         scrollLE.flexibleHeight = 1;
+        scrollLE.preferredHeight = 500;
         Transform content = actionsScroll.content;
         VerticalLayoutGroup vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
         vlg.spacing = 3;
@@ -695,8 +707,21 @@ public class SpellTestingPanel : MonoBehaviour
         }
         _spellEntries.Clear();
 
+        if (_spellListContent == null)
+        {
+            Debug.LogError("[SpellTestingPanel] _spellListContent is null! Cannot populate spell list.");
+            return;
+        }
+
         // Get all spells
         List<SpellData> allSpells = SpellDatabase.GetAllSpells();
+        Debug.Log($"[SpellTestingPanel] SpellDatabase.GetAllSpells() returned {allSpells?.Count ?? 0} spells.");
+
+        if (allSpells == null || allSpells.Count == 0)
+        {
+            Debug.LogWarning("[SpellTestingPanel] No spells found in database! SpellDatabase.Count = " + SpellDatabase.Count);
+            return;
+        }
 
         // Filter
         if (_selectedSpellLevel >= 0)
@@ -716,12 +741,16 @@ public class SpellTestingPanel : MonoBehaviour
 
         // Sort by level then name
         allSpells = allSpells.OrderBy(s => s.SpellLevel).ThenBy(s => s.Name).ToList();
+        Debug.Log($"[SpellTestingPanel] After filtering: {allSpells.Count} spells to display (level filter={_selectedSpellLevel}, search='{_searchFilter}').");
 
         Font font = UIFactory.GetDefaultFont();
         int currentLevel = -999;
+        int entriesCreated = 0;
 
         foreach (SpellData spell in allSpells)
         {
+            if (spell == null) continue;
+
             // Level group header
             if (spell.SpellLevel != currentLevel)
             {
@@ -729,6 +758,9 @@ public class SpellTestingPanel : MonoBehaviour
                 string levelName = currentLevel == 0 ? "Level 0 (Cantrips)" : $"Level {currentLevel}";
                 GameObject headerObj = new GameObject($"LevelHeader_{currentLevel}");
                 headerObj.transform.SetParent(_spellListContent, false);
+
+                RectTransform headerRT = headerObj.AddComponent<RectTransform>();
+                headerRT.sizeDelta = new Vector2(0, 20);
                 AddLayoutHeight(headerObj, 20);
 
                 Image headerBg = headerObj.AddComponent<Image>();
@@ -749,6 +781,15 @@ public class SpellTestingPanel : MonoBehaviour
             // Spell entry
             GameObject entry = CreateSpellEntry(spell, font);
             _spellEntries.Add(entry);
+            entriesCreated++;
+        }
+
+        Debug.Log($"[SpellTestingPanel] Created {entriesCreated} spell entries in UI.");
+
+        // Force layout rebuild
+        if (_spellListContent != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_spellListContent as RectTransform);
         }
     }
 
@@ -756,6 +797,8 @@ public class SpellTestingPanel : MonoBehaviour
     {
         GameObject entry = new GameObject($"Spell_{spell.SpellId}");
         entry.transform.SetParent(_spellListContent, false);
+        RectTransform entryRT = entry.AddComponent<RectTransform>();
+        entryRT.sizeDelta = new Vector2(0, 28);
         AddLayoutHeight(entry, 28);
 
         Image entryBg = entry.AddComponent<Image>();
