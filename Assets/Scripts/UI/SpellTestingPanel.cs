@@ -1243,10 +1243,13 @@ public class SpellTestingPanel : MonoBehaviour
 
     private void CastSpell(SpellData spell)
     {
+        Debug.Log($"[SpellTestPanel] ═══ CastSpell START  spell={spell?.Name} ═══");
+
         GameManager gm = GameManager.Instance;
         if (gm == null)
         {
             AddLog("❌ GameManager not found!", Color.red);
+            Debug.LogError("[SpellTestPanel] GameManager.Instance is null!");
             return;
         }
 
@@ -1254,65 +1257,47 @@ public class SpellTestingPanel : MonoBehaviour
         if (caster == null)
         {
             AddLog("❌ No valid caster available!", Color.red);
+            Debug.LogError("[SpellTestPanel] GetOrCreateTestCaster returned null. PCs list count: "
+                + (gm.PCs?.Count.ToString() ?? "null"));
             return;
         }
+        Debug.Log($"[SpellTestPanel]   Caster: {caster.Stats?.CharacterName}  HP={caster.Stats?.CurrentHP}  Team={caster.Team}");
 
         // Configure caster stats for test
         ConfigureTestCaster(caster);
+        Debug.Log($"[SpellTestPanel]   Configured caster: INT={caster.Stats?.INT} CHA={caster.Stats?.CHA}");
 
         // If infinite slots, ensure spell is available
         if (_infiniteSlots)
         {
             EnsureSpellAvailable(caster, spell);
+            Debug.Log($"[SpellTestPanel]   Infinite slots: ensured spell available for {spell.Name}");
         }
 
         AddLog($"🔮 Casting: {spell.Name} (CL {_casterLevel})", new Color(0.5f, 0.8f, 1f));
+        AddLog($"   Caster: {caster.Stats?.CharacterName}  |  Target type: {spell.TargetType}", Color.white);
 
-        // Trigger spell casting through GameManager
-        // We use reflection-free approach: call OnSpellSelectedWithMetamagic via the public interface
+        // Use the new TestPanel integration — bypasses ActivePC / turn-phase guards
         try
         {
-            // Create a no-metamagic data object
             var metamagic = new MetamagicData();
-
-            // Use the existing spell casting flow
-            // GameManager stores _pendingSpell and routes to targeting
-            var method = typeof(GameManager).GetMethod("OnSpellSelectedWithMetamagic",
-                BindingFlags.NonPublic | BindingFlags.Instance);
-
-            if (method != null)
-            {
-                method.Invoke(gm, new object[] { spell, metamagic });
-                AddLog($"✅ Spell targeting initiated for {spell.Name}", new Color(0.5f, 1f, 0.5f));
-            }
-            else
-            {
-                AddLog("⚠ Could not find spell casting method, trying direct cast...", Color.yellow);
-                // Fallback: Try to directly trigger
-                TryDirectCast(gm, caster, spell);
-            }
+            gm.TestCastSpellFromPanel(caster, spell, _infiniteSlots, metamagic);
+            AddLog($"✅ Spell targeting initiated for {spell.Name}", new Color(0.5f, 1f, 0.5f));
+            Debug.Log($"[SpellTestPanel]   TestCastSpellFromPanel returned normally.");
         }
         catch (System.Exception ex)
         {
             AddLog($"❌ Cast error: {ex.Message}", Color.red);
-            Debug.LogError($"[SpellTestingPanel] Cast error: {ex}");
+            Debug.LogError($"[SpellTestPanel] Cast error: {ex}");
         }
-    }
-
-    private void TryDirectCast(GameManager gm, CharacterController caster, SpellData spell)
-    {
-        // Fallback approach - log the spell info for manual testing
-        AddLog($"📋 Spell: {spell.Name} | Level: {spell.SpellLevel} | School: {spell.School}", Color.white);
-        AddLog($"   Range: {spell.RangeCategory} | Target: {spell.TargetType}", Color.white);
-        if (spell.DamageDice > 0)
-            AddLog($"   Damage: {spell.DamageCount}d{spell.DamageDice} {spell.DamageType}", Color.white);
-        AddLog("   ⚠ Use normal spell UI to complete cast.", Color.yellow);
     }
 
     private CharacterController GetOrCreateTestCaster()
     {
         GameManager gm = GameManager.Instance;
-        if (gm == null) return null;
+        if (gm == null) { Debug.LogWarning("[SpellTestPanel] GetOrCreateTestCaster: GM null"); return null; }
+
+        Debug.Log($"[SpellTestPanel] GetOrCreateTestCaster: type={_selectedCasterType}  PCs.Count={gm.PCs?.Count ?? -1}");
 
         if (_selectedCasterType == "Player PC")
         {
@@ -1322,18 +1307,28 @@ public class SpellTestingPanel : MonoBehaviour
                 foreach (var pc in gm.PCs)
                 {
                     if (pc != null && pc.Stats != null && pc.Stats.CurrentHP > 0)
+                    {
+                        Debug.Log($"[SpellTestPanel]   → Found living PC: {pc.Stats.CharacterName}  HP={pc.Stats.CurrentHP}");
                         return pc;
+                    }
                 }
             }
             // Fallback to any PC
             if (gm.PCs != null && gm.PCs.Count > 0)
+            {
+                Debug.Log($"[SpellTestPanel]   → Fallback to first PC: {gm.PCs[0]?.Stats?.CharacterName}");
                 return gm.PCs[0];
+            }
         }
 
         // For Test Wizard/Sorcerer, use first PC but configure differently
         if (gm.PCs != null && gm.PCs.Count > 0)
+        {
+            Debug.Log($"[SpellTestPanel]   → Using first PC for {_selectedCasterType}: {gm.PCs[0]?.Stats?.CharacterName}");
             return gm.PCs[0];
+        }
 
+        Debug.LogWarning("[SpellTestPanel] GetOrCreateTestCaster: no PCs available!");
         return null;
     }
 
@@ -1358,39 +1353,74 @@ public class SpellTestingPanel : MonoBehaviour
 
         // Get or add SpellcastingComponent
         SpellcastingComponent spellComp = caster.GetComponent<SpellcastingComponent>();
-        if (spellComp == null) return;
-
-        // If infinite slots, restore all slots
-        if (_infiniteSlots && spellComp.SlotsRemaining != null)
+        if (spellComp == null)
         {
-            // Ensure the spell is in known/prepared spells
+            Debug.LogWarning($"[SpellTestPanel] EnsureSpellAvailable: No SpellcastingComponent on {caster.Stats?.CharacterName}");
+            return;
+        }
+
+        Debug.Log($"[SpellTestPanel] EnsureSpellAvailable: spell={spell.Name}  lvl={spell.SpellLevel}  " +
+                  $"knownCount={spellComp.KnownSpells?.Count}  preparedCount={spellComp.PreparedSpells?.Count}  " +
+                  $"slotsRemaining={(spellComp.SlotsRemaining != null ? string.Join(",", spellComp.SlotsRemaining) : "null")}");
+
+        // ── Ensure known ──
+        if (spellComp.KnownSpells != null)
+        {
             bool alreadyKnown = spellComp.KnownSpells.Any(s => s.SpellId == spell.SpellId);
             if (!alreadyKnown)
             {
                 spellComp.KnownSpells.Add(spell);
+                Debug.Log($"[SpellTestPanel]   Added to KnownSpells: {spell.Name}");
             }
+        }
 
-            // Refresh slots
-            for (int i = 0; i < spellComp.SlotsRemaining.Length; i++)
-            {
-                spellComp.SlotsRemaining[i] = 99;
-            }
-
-            // Ensure spell is in prepared spells
+        // ── Ensure prepared ──
+        if (spellComp.PreparedSpells != null)
+        {
             bool alreadyPrepared = spellComp.PreparedSpells.Any(s => s.SpellId == spell.SpellId);
             if (!alreadyPrepared)
             {
                 spellComp.PreparedSpells.Add(spell);
+                Debug.Log($"[SpellTestPanel]   Added to PreparedSpells: {spell.Name}");
             }
+        }
 
-            // Ensure there's a spell slot for this spell
+        // ── Ensure an unused spell slot exists ──
+        if (spellComp.SpellSlots != null)
+        {
             bool hasSlot = spellComp.SpellSlots.Any(s =>
                 s.PreparedSpell != null && s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed);
             if (!hasSlot)
             {
                 spellComp.SpellSlots.Add(new SpellSlot(spell.SpellLevel, spell));
+                Debug.Log($"[SpellTestPanel]   Added SpellSlot for {spell.Name} at level {spell.SpellLevel}");
             }
         }
+
+        // ── Infinite slots: max-out remaining counts ──
+        if (_infiniteSlots && spellComp.SlotsRemaining != null)
+        {
+            for (int i = 0; i < spellComp.SlotsRemaining.Length; i++)
+            {
+                spellComp.SlotsRemaining[i] = 99;
+            }
+            Debug.Log("[SpellTestPanel]   All SlotsRemaining set to 99 (infinite mode)");
+
+            // Also un-use any used slots for this spell so they can be cast again
+            if (spellComp.SpellSlots != null)
+            {
+                foreach (var slot in spellComp.SpellSlots)
+                {
+                    if (slot.PreparedSpell != null && slot.PreparedSpell.SpellId == spell.SpellId && slot.IsUsed)
+                    {
+                        slot.IsUsed = false;
+                        Debug.Log($"[SpellTestPanel]   Reset used SpellSlot for {spell.Name}");
+                    }
+                }
+            }
+        }
+
+        Debug.Log($"[SpellTestPanel] EnsureSpellAvailable DONE. SlotsRemaining={(spellComp.SlotsRemaining != null ? string.Join(",", spellComp.SlotsRemaining) : "null")}");
     }
 
     // ========== ENEMY SPAWNING ==========

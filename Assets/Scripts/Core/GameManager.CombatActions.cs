@@ -532,9 +532,16 @@ public partial class GameManager
 
     public void OnCellClicked(SquareCell cell)
     {
-        if (CurrentPhase == TurnPhase.CombatOver) return;
+        // ── Test-panel bypass: allow targeting even outside a real PC turn ──
+        CharacterController testCaster = GetTestPanelCaster();
+        if (testCaster != null)
+        {
+            Debug.Log($"[TestPanel] OnCellClicked routed via test-panel caster={testCaster.Stats?.CharacterName}  SubPhase={CurrentSubPhase}  cell={cell.Coords}");
+        }
 
-        CharacterController pc = ActivePC;
+        if (CurrentPhase == TurnPhase.CombatOver && testCaster == null) return;
+
+        CharacterController pc = ActivePC ?? testCaster;
         if (pc == null) return;
 
         switch (CurrentSubPhase)
@@ -970,6 +977,8 @@ public partial class GameManager
 
     private void HandleAttackTargetClick(CharacterController pc, SquareCell cell)
     {
+        Debug.Log($"[CombatActions] HandleAttackTargetClick  pc={pc?.Stats?.CharacterName}  cell={cell?.Coords}  mode={_pendingAttackMode}  spell={_pendingSpell?.Name}  testPanel={_testPanelCastActive}");
+
         // ===== SPELL CASTING MODE =====
         if (_pendingAttackMode == PendingAttackMode.CastSpell && _pendingSpell != null)
         {
@@ -1034,6 +1043,7 @@ public partial class GameManager
             // Cancel if clicking non-highlighted cell.
             if (!_highlightedCells.Contains(cell))
             {
+                Debug.Log($"[CombatActions] Spell targeting CANCELLED – cell {cell?.Coords} not in highlighted set (count={_highlightedCells.Count})");
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
@@ -1045,6 +1055,7 @@ public partial class GameManager
                 _pendingSummonCountInfo = null;
                 _pendingSummonSwarmNpcId = null;
                 ResetPendingGreaseCastMode();
+                CleanupTestPanelCast();
                 ShowActionChoices();
                 return;
             }

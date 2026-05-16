@@ -769,8 +769,11 @@ public partial class GameManager
 
     private void BeginPendingSpellTargeting(CharacterController caster)
     {
+        Debug.Log($"[SpellCasting] BeginPendingSpellTargeting  caster={caster?.Stats?.CharacterName}  spell={_pendingSpell?.Name}  target={_pendingSpell?.TargetType}  AoE={_pendingSpell?.AoEShapeType}");
+
         if (caster == null || _pendingSpell == null)
         {
+            Debug.LogWarning($"[SpellCasting] BeginPendingSpellTargeting ABORTED: caster={caster != null}  spell={_pendingSpell != null}");
             ShowActionChoices();
             return;
         }
@@ -855,12 +858,14 @@ public partial class GameManager
         if (_pendingSpell.TargetType == SpellTargetType.Self)
         {
             // Self-targeting spells cast immediately
+            Debug.Log($"[SpellCasting] Self-targeting spell → PerformSpellCast immediately");
             PerformSpellCast(caster, caster);
         }
         else
         {
             _pendingAttackMode = PendingAttackMode.CastSpell;
             CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+            Debug.Log($"[SpellCasting] Non-self spell → SelectingAttackTarget mode, calling ShowSpellTargets  range={_pendingSpell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0)}");
             ShowSpellTargets(caster, _pendingSpell);
         }
     }
@@ -1247,12 +1252,15 @@ public partial class GameManager
     /// </summary>
     private void ShowSpellTargets(CharacterController caster, SpellData spell)
     {
+        Debug.Log($"[SpellCasting] ShowSpellTargets  caster={caster?.Stats?.CharacterName}@{caster?.GridPosition}  spell={spell?.Name}  targetType={spell?.TargetType}");
+
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
         int range = spell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0);
         if (range <= 0) range = 1; // Touch/self spells = adjacent (1 square for targeting)
+        Debug.Log($"[SpellCasting]   Computed range={range} squares ({range * 5} ft)");
 
 
         List<SquareCell> allCells = Grid.GetCellsInRange(caster.GridPosition, range);
@@ -1298,6 +1306,8 @@ public partial class GameManager
             hasTarget = true;
         }
 
+        Debug.Log($"[SpellCasting] ShowSpellTargets: {_highlightedCells.Count} valid target cell(s) found, hasTarget={hasTarget}");
+
         if (hasTarget)
         {
             string rangeStr = spell.RangeSquares <= 0 ? "Touch" : $"{range} sq ({range * 5} ft)";
@@ -1317,9 +1327,11 @@ public partial class GameManager
                             : "Click an enemy to cast";
             }
             CombatUI.SetTurnIndicator($"✦ {spell.Name}: {targetMsg} | Range: {rangeStr} | Right-click to cancel");
+            Debug.Log($"[SpellCasting]   Awaiting target click. SubPhase={CurrentSubPhase}  AttackMode={_pendingAttackMode}");
         }
         else
         {
+            Debug.LogWarning($"[SpellCasting] No valid targets found for {spell.Name}!");
             CombatUI.SetTurnIndicator($"No valid targets for {spell.Name}! | Right-click to cancel");
             StartCoroutine(ReturnToActionChoicesAfterDelay(1.5f));
         }
@@ -1476,6 +1488,11 @@ public partial class GameManager
     /// </summary>
     private void PerformSpellCast(CharacterController caster, CharacterController target)
     {
+        Debug.Log($"[SpellCasting] PerformSpellCast  caster={caster?.Stats?.CharacterName}  target={target?.Stats?.CharacterName}  spell={_pendingSpell?.Name}  testPanel={_testPanelCastActive}");
+
+        // Clean up test-panel override now that the spell is resolving
+        CleanupTestPanelCast();
+
         CombatUI?.HideDisguiseSelfRaceSelector();
         CurrentSubPhase = PlayerSubPhase.Animating;
 
