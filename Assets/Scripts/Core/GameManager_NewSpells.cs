@@ -2436,7 +2436,7 @@ public partial class GameManager
 
         SavingThrowResolver.SaveResult fortSave = SavingThrowResolver.ResolveFortitudeSave(target.Stats, saveDc, "Phantasmal Killer (Fort)");
 
-        string fortRollStr = $"d20({fortSave.Roll}) + {fortSave.Bonus} = {fortSave.Total} vs DC {saveDc}";
+        string fortRollStr = $"d20({fortSave.Roll}) + {fortSave.Modifier} = {fortSave.Total} vs DC {saveDc}";
 
         if (fortSave.Succeeded)
         {
@@ -2590,7 +2590,7 @@ public partial class GameManager
 
             // Will save negates
             SavingThrowResolver.SaveResult willSave = SavingThrowResolver.ResolveWillSave(target.Stats, saveDc, "Rainbow Pattern");
-            string saveStr = $"d20({willSave.Roll}) + {willSave.Bonus} = {willSave.Total} vs DC {saveDc}";
+            string saveStr = $"d20({willSave.Roll}) + {willSave.Modifier} = {willSave.Total} vs DC {saveDc}";
 
             if (willSave.Succeeded)
             {
