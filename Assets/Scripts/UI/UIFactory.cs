@@ -204,7 +204,36 @@ public static class UIFactory
         GameObject textObj = new GameObject(name);
         textObj.transform.SetParent(parent, false);
 
+        // Ensure RectTransform exists (AddComponent<Text> should create one, but be safe)
+        RectTransform rt = textObj.GetComponent<RectTransform>();
+        if (rt == null)
+            rt = textObj.AddComponent<RectTransform>();
+
+        // Ensure CanvasRenderer exists (required for Text rendering)
+        if (textObj.GetComponent<CanvasRenderer>() == null)
+            textObj.AddComponent<CanvasRenderer>();
+
+        // Add the Text component
         Text textComponent = textObj.AddComponent<Text>();
+
+        // DEFENSIVE: Verify the Text component was actually created
+        if (textComponent == null)
+        {
+            // Try getting it in case AddComponent silently returned null but added it
+            textComponent = textObj.GetComponent<Text>();
+        }
+        if (textComponent == null)
+        {
+            Debug.LogError($"[UIFactory.CreateLabel] CRITICAL: Failed to add Text component to '{name}'! Retrying...");
+            // Destroy and recreate the GameObject as a last resort
+            Object.DestroyImmediate(textObj);
+            textObj = new GameObject(name);
+            textObj.transform.SetParent(parent, false);
+            rt = textObj.AddComponent<RectTransform>();
+            textObj.AddComponent<CanvasRenderer>();
+            textComponent = textObj.AddComponent<Text>();
+        }
+
         textComponent.text = text;
 
         // Robust font resolution with multiple fallbacks
@@ -225,7 +254,7 @@ public static class UIFactory
         textComponent.alignment = alignment ?? TextAnchor.MiddleLeft;
 
         // Ensure RectTransform has a reasonable default size for layout groups
-        RectTransform rt = textComponent.GetComponent<RectTransform>();
+        rt = textComponent.GetComponent<RectTransform>();
         if (rt != null)
         {
             rt.sizeDelta = new Vector2(160, fontSize ?? UITheme.FontSizeNormal + 6);

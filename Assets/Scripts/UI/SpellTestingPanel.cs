@@ -816,8 +816,19 @@ public class SpellTestingPanel : MonoBehaviour
 
                 Text headerText = UIFactory.CreateLabel(headerObj.transform, $"── {levelName} ──", 14,
                     TextAnchor.MiddleCenter, SubHeaderColor, "HeaderText", font);
+                // DEFENSIVE: verify Text component on level header
+                if (headerText != null)
+                {
+                    EnsureTextOnGameObject(headerText.gameObject, $"── {levelName} ──", 14, SubHeaderColor, font);
+                }
+                else
+                {
+                    GameObject htGO = new GameObject("HeaderText");
+                    htGO.transform.SetParent(headerObj.transform, false);
+                    headerText = EnsureTextOnGameObject(htGO, $"── {levelName} ──", 14, SubHeaderColor, font);
+                    headerText.alignment = TextAnchor.MiddleCenter;
+                }
                 headerText.fontStyle = FontStyle.Bold;
-                EnsureTextVisible(headerText, 14, SubHeaderColor);
                 RectTransform htRT = headerText.GetComponent<RectTransform>();
                 htRT.anchorMin = Vector2.zero;
                 htRT.anchorMax = Vector2.one;
@@ -864,8 +875,51 @@ public class SpellTestingPanel : MonoBehaviour
     /// <summary>
     /// Helper: ensure a Text component has a valid font, reasonable size, and visible color.
     /// Also configures RectTransform for proper rendering inside layout groups.
+    /// If the Text component is null but a GameObject is provided, creates the Text component.
     /// </summary>
     private void EnsureTextVisible(Text txt, int fontSize, Color color)
+    {
+        if (txt == null) return;
+        ConfigureTextComponent(txt, fontSize, color);
+    }
+
+    /// <summary>
+    /// Ensures a GameObject has a properly configured Text component.
+    /// If the Text component is missing, it creates one. Returns the Text component.
+    /// </summary>
+    private Text EnsureTextOnGameObject(GameObject go, string textContent, int fontSize, Color color, Font font)
+    {
+        if (go == null) return null;
+
+        // Ensure a CanvasRenderer exists first (required for Text rendering)
+        if (go.GetComponent<CanvasRenderer>() == null)
+            go.AddComponent<CanvasRenderer>();
+
+        // Get or create the Text component
+        Text txt = go.GetComponent<Text>();
+        if (txt == null)
+        {
+            Debug.LogWarning($"[SpellTestingPanel] Text component MISSING on '{go.name}' – adding one now.");
+            txt = go.AddComponent<Text>();
+            txt.text = textContent;
+        }
+
+        // Always configure to ensure visibility
+        ConfigureTextComponent(txt, fontSize, color);
+
+        // Ensure font is set
+        if (txt.font == null)
+        {
+            txt.font = font;
+        }
+
+        return txt;
+    }
+
+    /// <summary>
+    /// Core configuration for a Text component: font fallback, size, color, overflow, RectTransform.
+    /// </summary>
+    private void ConfigureTextComponent(Text txt, int fontSize, Color color)
     {
         if (txt == null) return;
 
@@ -937,7 +991,19 @@ public class SpellTestingPanel : MonoBehaviour
 
         Text schoolDot = UIFactory.CreateLabel(entry.transform, "●", 14,
             TextAnchor.MiddleCenter, schoolColor, "SchoolDot", font);
-        EnsureTextVisible(schoolDot, 14, schoolColor);
+        // DEFENSIVE: verify Text component exists on the created GameObject
+        if (schoolDot != null)
+        {
+            EnsureTextOnGameObject(schoolDot.gameObject, "●", 14, schoolColor, font);
+        }
+        else
+        {
+            // CreateLabel returned null – create manually
+            GameObject schoolDotGO = new GameObject("SchoolDot");
+            schoolDotGO.transform.SetParent(entry.transform, false);
+            schoolDot = EnsureTextOnGameObject(schoolDotGO, "●", 14, schoolColor, font);
+            schoolDot.alignment = TextAnchor.MiddleCenter;
+        }
         LayoutElement dotLE = schoolDot.gameObject.AddComponent<LayoutElement>();
         dotLE.preferredWidth = 16;
         dotLE.minHeight = 26;
@@ -946,7 +1012,18 @@ public class SpellTestingPanel : MonoBehaviour
         Color nameColor = isPlaceholder ? new Color(0.6f, 0.6f, 0.6f, 1f) : Color.white;
         Text nameText = UIFactory.CreateLabel(entry.transform, spell.Name, 14,
             TextAnchor.MiddleLeft, nameColor, "SpellName", font);
-        EnsureTextVisible(nameText, 14, nameColor);
+        // DEFENSIVE: verify Text component exists on SpellName GameObject
+        if (nameText != null)
+        {
+            EnsureTextOnGameObject(nameText.gameObject, spell.Name, 14, nameColor, font);
+        }
+        else
+        {
+            GameObject nameGO = new GameObject("SpellName");
+            nameGO.transform.SetParent(entry.transform, false);
+            nameText = EnsureTextOnGameObject(nameGO, spell.Name, 14, nameColor, font);
+            nameText.alignment = TextAnchor.MiddleLeft;
+        }
         nameText.fontStyle = FontStyle.Normal;
         LayoutElement nameLE = nameText.gameObject.AddComponent<LayoutElement>();
         nameLE.flexibleWidth = 1;
@@ -959,7 +1036,18 @@ public class SpellTestingPanel : MonoBehaviour
         Color schoolTextColor = new Color(0.75f, 0.75f, 0.85f, 1f);
         Text schoolText = UIFactory.CreateLabel(entry.transform, schoolAbbr, 12,
             TextAnchor.MiddleCenter, schoolTextColor, "School", font);
-        EnsureTextVisible(schoolText, 12, schoolTextColor);
+        // DEFENSIVE: verify Text component exists on School GameObject
+        if (schoolText != null)
+        {
+            EnsureTextOnGameObject(schoolText.gameObject, schoolAbbr, 12, schoolTextColor, font);
+        }
+        else
+        {
+            GameObject schoolGO = new GameObject("School");
+            schoolGO.transform.SetParent(entry.transform, false);
+            schoolText = EnsureTextOnGameObject(schoolGO, schoolAbbr, 12, schoolTextColor, font);
+            schoolText.alignment = TextAnchor.MiddleCenter;
+        }
         LayoutElement schoolLE = schoolText.gameObject.AddComponent<LayoutElement>();
         schoolLE.preferredWidth = 38;
         schoolLE.minHeight = 26;
@@ -969,7 +1057,18 @@ public class SpellTestingPanel : MonoBehaviour
         Color rangeColor = new Color(0.7f, 0.85f, 0.7f, 1f);
         Text rangeText = UIFactory.CreateLabel(entry.transform, rangeInfo, 12,
             TextAnchor.MiddleCenter, rangeColor, "Range", font);
-        EnsureTextVisible(rangeText, 12, rangeColor);
+        // DEFENSIVE: verify Text component exists on Range GameObject
+        if (rangeText != null)
+        {
+            EnsureTextOnGameObject(rangeText.gameObject, rangeInfo, 12, rangeColor, font);
+        }
+        else
+        {
+            GameObject rangeGO = new GameObject("Range");
+            rangeGO.transform.SetParent(entry.transform, false);
+            rangeText = EnsureTextOnGameObject(rangeGO, rangeInfo, 12, rangeColor, font);
+            rangeText.alignment = TextAnchor.MiddleCenter;
+        }
         LayoutElement rangeLE = rangeText.gameObject.AddComponent<LayoutElement>();
         rangeLE.preferredWidth = 38;
         rangeLE.minHeight = 26;
@@ -981,10 +1080,26 @@ public class SpellTestingPanel : MonoBehaviour
             Button castBtn = UIFactory.CreateButton(entry.transform, "Cast",
                 () => CastSpell(capturedSpell),
                 new Vector2(50, 24), CastBtnColor, "CastBtn", font, 13);
-            // Ensure the button text is also visible
+            // DEFENSIVE: Ensure the button's child Text component exists and is visible
             Text btnText = castBtn.GetComponentInChildren<Text>();
             if (btnText != null)
-                EnsureTextVisible(btnText, 13, Color.white);
+            {
+                EnsureTextOnGameObject(btnText.gameObject, "Cast", 13, Color.white, font);
+            }
+            else
+            {
+                // Button has no child Text – find or create one
+                Transform btnTextChild = castBtn.transform.Find("Text");
+                GameObject btnTextGO = btnTextChild != null ? btnTextChild.gameObject : new GameObject("Text");
+                if (btnTextChild == null) btnTextGO.transform.SetParent(castBtn.transform, false);
+                btnText = EnsureTextOnGameObject(btnTextGO, "Cast", 13, Color.white, font);
+                btnText.alignment = TextAnchor.MiddleCenter;
+                RectTransform btnTextRT = btnText.GetComponent<RectTransform>();
+                btnTextRT.anchorMin = Vector2.zero;
+                btnTextRT.anchorMax = Vector2.one;
+                btnTextRT.offsetMin = Vector2.zero;
+                btnTextRT.offsetMax = Vector2.zero;
+            }
             LayoutElement castLE = castBtn.gameObject.AddComponent<LayoutElement>();
             castLE.preferredWidth = 50;
             castLE.minHeight = 24;
@@ -994,7 +1109,18 @@ public class SpellTestingPanel : MonoBehaviour
             Color phColor = new Color(0.5f, 0.5f, 0.5f, 1f);
             Text placeholder = UIFactory.CreateLabel(entry.transform, "(N/A)", 12,
                 TextAnchor.MiddleCenter, phColor, "Placeholder", font);
-            EnsureTextVisible(placeholder, 12, phColor);
+            // DEFENSIVE: verify Text component exists on Placeholder
+            if (placeholder != null)
+            {
+                EnsureTextOnGameObject(placeholder.gameObject, "(N/A)", 12, phColor, font);
+            }
+            else
+            {
+                GameObject phGO = new GameObject("Placeholder");
+                phGO.transform.SetParent(entry.transform, false);
+                placeholder = EnsureTextOnGameObject(phGO, "(N/A)", 12, phColor, font);
+                placeholder.alignment = TextAnchor.MiddleCenter;
+            }
             LayoutElement phLE = placeholder.gameObject.AddComponent<LayoutElement>();
             phLE.preferredWidth = 50;
             phLE.minHeight = 26;
