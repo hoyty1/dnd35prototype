@@ -180,6 +180,10 @@ public partial class GameManager
         if (isDeliveringHeldCharge || caster == null || caster.Stats == null || spell == null)
             return false;
 
+        // Bypass arcane spell failure for F12 test panel casts
+        if (_testPanelCastActive)
+            return false;
+
         if (!caster.Stats.IsAffectedByArcaneSpellFailure)
             return false;
 

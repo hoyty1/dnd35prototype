@@ -139,7 +139,7 @@ public class SpellTestingPanel : MonoBehaviour
         _panelRoot.transform.SetParent(canvas.transform, false);
         _panelRect = _panelRoot.AddComponent<RectTransform>();
         _panelRect.anchorMin = new Vector2(0.05f, 0.05f);
-        _panelRect.anchorMax = new Vector2(0.95f, 0.95f);
+        _panelRect.anchorMax = new Vector2(0.50f, 0.95f);
         _panelRect.offsetMin = Vector2.zero;
         _panelRect.offsetMax = Vector2.zero;
 
