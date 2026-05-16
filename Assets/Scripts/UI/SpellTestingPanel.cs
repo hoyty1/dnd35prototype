@@ -776,6 +776,22 @@ public class SpellTestingPanel : MonoBehaviour
         Debug.Log($"[SpellTestingPanel] After filtering: {allSpells.Count} spells to display (level filter={_selectedSpellLevel}, search='{_searchFilter}').");
 
         Font font = UIFactory.GetDefaultFont();
+        if (font == null)
+        {
+            Debug.LogWarning("[SpellTestingPanel] GetDefaultFont() returned NULL! Trying OS font fallback...");
+            font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+            if (font == null) font = Font.CreateDynamicFontFromOSFont("Liberation Sans", 14);
+            if (font == null)
+            {
+                string[] osFonts = Font.GetOSInstalledFontNames();
+                if (osFonts != null && osFonts.Length > 0)
+                {
+                    font = Font.CreateDynamicFontFromOSFont(osFonts[0], 14);
+                    Debug.Log($"[SpellTestingPanel] Using OS font: {osFonts[0]}");
+                }
+            }
+        }
+        Debug.Log($"[SpellTestingPanel] Font resolved: {(font != null ? font.name : "STILL NULL!")}");
         int currentLevel = -999;
         int entriesCreated = 0;
 
@@ -798,9 +814,10 @@ public class SpellTestingPanel : MonoBehaviour
                 Image headerBg = headerObj.AddComponent<Image>();
                 headerBg.color = new Color(0.18f, 0.2f, 0.32f, 0.95f);
 
-                Text headerText = UIFactory.CreateLabel(headerObj.transform, $"── {levelName} ──", 12,
+                Text headerText = UIFactory.CreateLabel(headerObj.transform, $"── {levelName} ──", 14,
                     TextAnchor.MiddleCenter, SubHeaderColor, "HeaderText", font);
                 headerText.fontStyle = FontStyle.Bold;
+                EnsureTextVisible(headerText, 14, SubHeaderColor);
                 RectTransform htRT = headerText.GetComponent<RectTransform>();
                 htRT.anchorMin = Vector2.zero;
                 htRT.anchorMax = Vector2.one;
@@ -844,13 +861,60 @@ public class SpellTestingPanel : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Helper: ensure a Text component has a valid font, reasonable size, and visible color.
+    /// Also configures RectTransform for proper rendering inside layout groups.
+    /// </summary>
+    private void EnsureTextVisible(Text txt, int fontSize, Color color)
+    {
+        if (txt == null) return;
+
+        // Guarantee a valid font – try multiple fallbacks
+        if (txt.font == null)
+        {
+            txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (txt.font == null) txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
+            if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Liberation Sans", fontSize);
+            if (txt.font == null)
+            {
+                // Last resort: grab any system font
+                string[] osFonts = Font.GetOSInstalledFontNames();
+                if (osFonts != null && osFonts.Length > 0)
+                    txt.font = Font.CreateDynamicFontFromOSFont(osFonts[0], fontSize);
+            }
+        }
+
+        txt.fontSize = Mathf.Max(fontSize, 10);
+        txt.color = new Color(color.r, color.g, color.b, 1f); // force full alpha
+        txt.raycastTarget = false;
+        txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        txt.supportRichText = true;
+
+        // Ensure RectTransform is stretched to fill the layout slot
+        RectTransform rt = txt.GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+        }
+
+        // Ensure a CanvasRenderer exists (required for text rendering)
+        if (txt.GetComponent<CanvasRenderer>() == null)
+            txt.gameObject.AddComponent<CanvasRenderer>();
+    }
+
     private GameObject CreateSpellEntry(SpellData spell, Font font)
     {
         GameObject entry = new GameObject($"Spell_{spell.SpellId}");
         entry.transform.SetParent(_spellListContent, false);
         RectTransform entryRT = entry.AddComponent<RectTransform>();
-        entryRT.sizeDelta = new Vector2(0, 28);
-        AddLayoutHeight(entry, 28);
+        entryRT.sizeDelta = new Vector2(0, 30);
+        AddLayoutHeight(entry, 30);
 
         Image entryBg = entry.AddComponent<Image>();
         bool isPlaceholder = spell.IsPlaceholder;
@@ -864,38 +928,51 @@ public class SpellTestingPanel : MonoBehaviour
         hlg.childControlHeight = true;
         hlg.childForceExpandWidth = false;
         hlg.childForceExpandHeight = true;
+        hlg.childAlignment = TextAnchor.MiddleLeft;
 
         // School color indicator
         Color schoolColor = Color.gray;
         if (!string.IsNullOrEmpty(spell.School) && SchoolColors.ContainsKey(spell.School))
             schoolColor = SchoolColors[spell.School];
 
-        Text schoolDot = UIFactory.CreateLabel(entry.transform, "●", 10,
+        Text schoolDot = UIFactory.CreateLabel(entry.transform, "●", 14,
             TextAnchor.MiddleCenter, schoolColor, "SchoolDot", font);
+        EnsureTextVisible(schoolDot, 14, schoolColor);
         LayoutElement dotLE = schoolDot.gameObject.AddComponent<LayoutElement>();
-        dotLE.preferredWidth = 14;
+        dotLE.preferredWidth = 16;
+        dotLE.minHeight = 26;
 
-        // Spell name
-        Color nameColor = isPlaceholder ? new Color(0.5f, 0.5f, 0.5f) : Color.white;
-        Text nameText = UIFactory.CreateLabel(entry.transform, spell.Name, 11,
+        // Spell name – large, bright white
+        Color nameColor = isPlaceholder ? new Color(0.6f, 0.6f, 0.6f, 1f) : Color.white;
+        Text nameText = UIFactory.CreateLabel(entry.transform, spell.Name, 14,
             TextAnchor.MiddleLeft, nameColor, "SpellName", font);
+        EnsureTextVisible(nameText, 14, nameColor);
+        nameText.fontStyle = FontStyle.Normal;
         LayoutElement nameLE = nameText.gameObject.AddComponent<LayoutElement>();
         nameLE.flexibleWidth = 1;
+        nameLE.minWidth = 60;
+        nameLE.minHeight = 26;
 
         // School abbreviation
         string schoolAbbr = !string.IsNullOrEmpty(spell.School) ?
             spell.School.Substring(0, System.Math.Min(4, spell.School.Length)) : "???";
-        Text schoolText = UIFactory.CreateLabel(entry.transform, schoolAbbr, 9,
-            TextAnchor.MiddleCenter, new Color(0.6f, 0.6f, 0.7f), "School", font);
+        Color schoolTextColor = new Color(0.75f, 0.75f, 0.85f, 1f);
+        Text schoolText = UIFactory.CreateLabel(entry.transform, schoolAbbr, 12,
+            TextAnchor.MiddleCenter, schoolTextColor, "School", font);
+        EnsureTextVisible(schoolText, 12, schoolTextColor);
         LayoutElement schoolLE = schoolText.gameObject.AddComponent<LayoutElement>();
-        schoolLE.preferredWidth = 35;
+        schoolLE.preferredWidth = 38;
+        schoolLE.minHeight = 26;
 
         // Range info
         string rangeInfo = GetRangeAbbrev(spell);
-        Text rangeText = UIFactory.CreateLabel(entry.transform, rangeInfo, 9,
-            TextAnchor.MiddleCenter, new Color(0.6f, 0.7f, 0.6f), "Range", font);
+        Color rangeColor = new Color(0.7f, 0.85f, 0.7f, 1f);
+        Text rangeText = UIFactory.CreateLabel(entry.transform, rangeInfo, 12,
+            TextAnchor.MiddleCenter, rangeColor, "Range", font);
+        EnsureTextVisible(rangeText, 12, rangeColor);
         LayoutElement rangeLE = rangeText.gameObject.AddComponent<LayoutElement>();
-        rangeLE.preferredWidth = 35;
+        rangeLE.preferredWidth = 38;
+        rangeLE.minHeight = 26;
 
         // Cast button
         if (!isPlaceholder)
@@ -903,16 +980,24 @@ public class SpellTestingPanel : MonoBehaviour
             SpellData capturedSpell = spell;
             Button castBtn = UIFactory.CreateButton(entry.transform, "Cast",
                 () => CastSpell(capturedSpell),
-                new Vector2(45, 22), CastBtnColor, "CastBtn", font, 10);
+                new Vector2(50, 24), CastBtnColor, "CastBtn", font, 13);
+            // Ensure the button text is also visible
+            Text btnText = castBtn.GetComponentInChildren<Text>();
+            if (btnText != null)
+                EnsureTextVisible(btnText, 13, Color.white);
             LayoutElement castLE = castBtn.gameObject.AddComponent<LayoutElement>();
-            castLE.preferredWidth = 45;
+            castLE.preferredWidth = 50;
+            castLE.minHeight = 24;
         }
         else
         {
-            Text placeholder = UIFactory.CreateLabel(entry.transform, "(N/A)", 9,
-                TextAnchor.MiddleCenter, new Color(0.4f, 0.4f, 0.4f), "Placeholder", font);
+            Color phColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+            Text placeholder = UIFactory.CreateLabel(entry.transform, "(N/A)", 12,
+                TextAnchor.MiddleCenter, phColor, "Placeholder", font);
+            EnsureTextVisible(placeholder, 12, phColor);
             LayoutElement phLE = placeholder.gameObject.AddComponent<LayoutElement>();
-            phLE.preferredWidth = 45;
+            phLE.preferredWidth = 50;
+            phLE.minHeight = 26;
         }
 
         return entry;

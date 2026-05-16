@@ -206,10 +206,30 @@ public static class UIFactory
 
         Text textComponent = textObj.AddComponent<Text>();
         textComponent.text = text;
-        textComponent.font = font ?? GetDefaultFont();
+
+        // Robust font resolution with multiple fallbacks
+        Font resolvedFont = font ?? GetDefaultFont();
+        if (resolvedFont == null)
+        {
+            resolvedFont = Font.CreateDynamicFontFromOSFont("Liberation Sans", fontSize ?? UITheme.FontSizeNormal);
+            if (resolvedFont == null)
+            {
+                string[] osFonts = Font.GetOSInstalledFontNames();
+                if (osFonts != null && osFonts.Length > 0)
+                    resolvedFont = Font.CreateDynamicFontFromOSFont(osFonts[0], fontSize ?? UITheme.FontSizeNormal);
+            }
+        }
+        textComponent.font = resolvedFont;
         textComponent.fontSize = fontSize ?? UITheme.FontSizeNormal;
         textComponent.color = color ?? UITheme.TextNormal;
         textComponent.alignment = alignment ?? TextAnchor.MiddleLeft;
+
+        // Ensure RectTransform has a reasonable default size for layout groups
+        RectTransform rt = textComponent.GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.sizeDelta = new Vector2(160, fontSize ?? UITheme.FontSizeNormal + 6);
+        }
 
         return textComponent;
     }
