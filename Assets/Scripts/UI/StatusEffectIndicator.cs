@@ -507,17 +507,20 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
-        // ── Resilient Sphere (PHB p.263) ──
-        if (_character.Stats.ResilientSphereActive)
+        // ── Resilient Sphere (PHB p.263) — now area effect ──
         {
-            list.Add(new IconData
+            ResilientSphereAreaEffect sphere = ResilientSphereAreaEffect.GetSphereContainingCharacter(_character);
+            if (sphere != null)
             {
-                Key = "ResilientSphere",
-                ShortLabel = "SPHERE",
-                Tooltip = $"Resilient Sphere — Nothing passes in or out.\n{_character.Stats.ResilientSphereDurationRounds} round(s) remaining.\nCreature can move freely (sphere moves with them).\nIndestructible except by Disintegrate, Rod of Cancellation/Negation, or Dispel Magic.",
-                Color = new Color(0.27f, 0.8f, 1f, 0.95f),
-                Duration = _character.Stats.ResilientSphereDurationRounds
-            });
+                list.Add(new IconData
+                {
+                    Key = "ResilientSphere",
+                    ShortLabel = "SPHERE",
+                    Tooltip = $"Inside Resilient Sphere — Nothing passes in or out.\n{sphere.RoundsRemaining} round(s) remaining.\nSphere is STATIONARY — can move within but cannot leave.\nIndestructible except by Disintegrate, Rod of Cancellation/Negation, or Dispel Magic.",
+                    Color = new Color(0.6f, 0.3f, 0.9f, 0.95f),
+                    Duration = sphere.RoundsRemaining
+                });
+            }
         }
 
         // ── Deafened (from Shout or other sources) ──

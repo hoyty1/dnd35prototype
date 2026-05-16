@@ -3238,15 +3238,16 @@ public partial class GameManager
     // Evocation [Force]
     // Level: Sor/Wiz 4
     // Range: Close (25 ft. + 5 ft./2 levels)
-    // Target: One Large or smaller creature
+    // Effect: Stationary sphere of force centered on target location
     // Duration: 1 min./level (D)
-    // Saving Throw: Reflex negates
+    // Saving Throw: Reflex negates (if ANY creature saves, spell fails)
     // Spell Resistance: Yes
     //
-    // A globe of shimmering force encloses the target creature.
-    // The sphere moves with the creature — they can move and act freely.
+    // A globe of shimmering force is anchored to a location on the grid.
+    // Diameter = 1 foot × caster level → square grid area.
+    // The sphere is STATIONARY — creatures inside can move within but not leave.
+    // Nothing can pass through the sphere boundary, in or out.
     // The sphere is INDESTRUCTIBLE by normal means (no HP, no Hardness).
-    // Nothing can pass through the sphere, in or out (bidirectional isolation).
     // Only Disintegrate, Rod of Cancellation, Rod of Negation, or Dispel Magic can remove it.
     // ═══════════════════════════════════════════════════════════════════
 
@@ -3259,13 +3260,11 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Resolves Resilient Sphere: encloses the target in a mobile force globe.
-    /// The pipeline has already handled Reflex save (negates) and SR checks.
-    /// If we get here with result.Success and !effectNegatedBySave, the sphere applies.
-    /// The sphere is INDESTRUCTIBLE by normal means — no HP, no Hardness.
-    /// Only Disintegrate, Rod of Cancellation, Rod of Negation, or Dispel Magic can remove it.
-    /// The creature can move freely (sphere moves with them) and attempt actions,
-    /// but nothing passes through the sphere in either direction.
+    /// Resolves Resilient Sphere as a stationary area effect.
+    /// Cast on target creature's position — sphere forms at that location.
+    /// Reflex save for each creature in the area — if ANY creature saves, the
+    /// entire spell fails (they dodge out before the sphere forms).
+    /// Creates a ResilientSphereAreaEffect registered with AreaEffectManager.
     /// PHB p.263
     /// </summary>
     private bool TryResolveResilientSphereSpellEffect(
@@ -3278,47 +3277,105 @@ public partial class GameManager
         if (caster == null || caster.Stats == null)
             return false;
 
-        // If already in a sphere, can't double-trap
-        if (target.Stats.ResilientSphereActive)
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int saveDC = GetSpellSaveDC(caster, spell);
+
+        // Calculate sphere grid size
+        int diameterFeet = Mathf.Max(1, casterLevel);
+        int squareSize = Mathf.Max(1, diameterFeet / 5);
+
+        // Center the sphere on the target's position
+        Vector2Int centerCell = target.GridPosition;
+        Vector3 centerWorldPos = SquareGridUtils.GridToWorld(centerCell);
+
+        // Calculate which cells the sphere will occupy (same algorithm as PersistentAreaEffect square)
+        HashSet<Vector2Int> sphereCells = new HashSet<Vector2Int>();
+        int startX = centerCell.x - (squareSize / 2);
+        int startY = centerCell.y - (squareSize / 2);
+        for (int x = 0; x < squareSize; x++)
+        {
+            for (int y = 0; y < squareSize; y++)
+            {
+                sphereCells.Add(new Vector2Int(startX + x, startY + y));
+            }
+        }
+
+        // Check if target is already inside an existing sphere
+        if (ResilientSphereAreaEffect.IsCharacterInAnySphere(target))
         {
             CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {target.Stats.CharacterName} is already enclosed in a Resilient Sphere.</color>");
             return true;
         }
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        // Find all creatures in the sphere area for Reflex saves
+        CharacterController[] allCharacters = FindObjectsOfType<CharacterController>();
+        List<CharacterController> creaturesInArea = new List<CharacterController>();
+        foreach (CharacterController ch in allCharacters)
+        {
+            if (ch == null || ch.Stats == null || ch.Stats.IsDead)
+                continue;
+            if (sphereCells.Contains(ch.GridPosition))
+                creaturesInArea.Add(ch);
+        }
 
-        // Apply sphere state — NO HP, NO Hardness (sphere is indestructible)
-        target.Stats.ResilientSphereActive = true;
-        target.Stats.ResilientSphereCasterLevel = casterLevel;
-        target.Stats.ResilientSphereDurationRounds = durationRounds;
-        target.Stats.ResilientSphereCaster = caster;
+        // Reflex saves: if ANY creature saves, the entire spell fails
+        // (The save/SR check for the primary target was already done upstream,
+        //  but we check additional creatures in the area here)
+        // NOTE: The primary target's save was already handled by the spell pipeline.
+        // If we got here, the primary target failed their save. Check other creatures.
+        foreach (CharacterController creature in creaturesInArea)
+        {
+            // Skip the primary target — their save was already resolved upstream
+            if (creature == target)
+                continue;
 
-        // NOTE: Do NOT set MovementBlockedByCondition — creature can move freely
-        // The sphere moves with the creature (PHB p.263)
+            // SR check for additional creatures
+            if (spell.SpellResistanceApplies && creature.Stats.SpellResistance > 0)
+            {
+                int srRoll = UnityEngine.Random.Range(1, 21);
+                int srTotal = srRoll + casterLevel;
+                if (srTotal < creature.Stats.SpellResistance)
+                {
+                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {creature.Stats.CharacterName} resists the Resilient Sphere via Spell Resistance — sphere fails to form!</color>");
+                    return true;
+                }
+            }
 
-        // Track via StatusEffectManager for duration and UI
-        StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
-        if (targetStatusMgr == null)
-            targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
-        targetStatusMgr.Init(target.Stats);
+            // Reflex save for additional creatures
+            int reflexSave = UnityEngine.Random.Range(1, 21) + creature.Stats.ReflexSave;
+            if (reflexSave >= saveDC)
+            {
+                CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {creature.Stats.CharacterName} dodges the forming Resilient Sphere (Reflex {reflexSave} vs DC {saveDC}) — sphere fails!</color>");
+                return true; // Spell consumed but sphere doesn't form
+            }
+        }
 
-        ActiveSpellEffect effect = targetStatusMgr.AddEffect(
-            spell,
-            caster.Stats.CharacterName ?? spell.Name,
-            casterLevel);
+        // All creatures failed saves — create the sphere area effect
+        GameObject sphereObj = new GameObject("ResilientSphere_Area");
+        sphereObj.transform.position = centerWorldPos;
+
+        ResilientSphereAreaEffect sphereEffect = sphereObj.AddComponent<ResilientSphereAreaEffect>();
+        sphereEffect.CenterPosition = centerWorldPos;
+        sphereEffect.CenterCell = centerCell;
+        sphereEffect.RoundsRemaining = Mathf.Max(1, durationRounds);
+        sphereEffect.CasterLevel = casterLevel;
+        sphereEffect.Caster = caster;
+        sphereEffect.SaveDC = saveDC;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
 
-        CombatUI?.ShowCombatLog($"<color=#44CCFF>🔮 {targetName} is enclosed in Resilient Sphere! Nothing can pass through the barrier.</color>");
+        CombatUI?.ShowCombatLog($"<color=#44CCFF>🔮 A Resilient Sphere forms at {targetName}'s position!</color>");
         CombatUI?.ShowCombatLog($"  Cast by {casterName} (CL {casterLevel})");
-        CombatUI?.ShowCombatLog($"  Sphere moves with the creature — can move and act freely");
-        CombatUI?.ShowCombatLog($"  But attacks/spells cannot pass through in either direction");
+        CombatUI?.ShowCombatLog($"  Sphere: {diameterFeet} ft diameter, {squareSize}×{squareSize} squares");
+        CombatUI?.ShowCombatLog($"  Creatures enclosed: {creaturesInArea.Count}");
+        CombatUI?.ShowCombatLog($"  Sphere is STATIONARY — creatures can move within but cannot leave");
+        CombatUI?.ShowCombatLog($"  Nothing passes through the sphere boundary in either direction");
         CombatUI?.ShowCombatLog($"  Indestructible except by Disintegrate, Rod of Cancellation/Negation, or Dispel Magic");
         CombatUI?.ShowCombatLog($"  Duration: {durationRounds} round(s)");
 
-        Debug.Log($"[ResilientSphere] {targetName} enclosed by {casterName}: CL {casterLevel}, {durationRounds} rounds, INDESTRUCTIBLE");
+        Debug.Log($"[ResilientSphere] Sphere created at ({centerCell.x},{centerCell.y}) by {casterName}: CL {casterLevel}, {squareSize}×{squareSize}, {durationRounds} rounds, {creaturesInArea.Count} creatures enclosed");
 
         return true;
     }
@@ -3329,83 +3386,68 @@ public partial class GameManager
     /// </summary>
     public enum SphereDestructionType
     {
-        /// <summary>Disintegrate spell automatically destroys the sphere. [STUB — hook here when Disintegrate is implemented]</summary>
+        /// <summary>Disintegrate spell automatically destroys the sphere.</summary>
         Disintegrate,
-        /// <summary>Rod of Cancellation touch automatically destroys the sphere. [STUB — hook here when Rod of Cancellation is implemented]</summary>
+        /// <summary>Rod of Cancellation touch automatically destroys the sphere.</summary>
         RodOfCancellation,
-        /// <summary>Rod of Negation touch automatically destroys the sphere. [STUB — hook here when Rod of Negation is implemented]</summary>
+        /// <summary>Rod of Negation touch automatically destroys the sphere.</summary>
         RodOfNegation
     }
 
     /// <summary>
-    /// Attempts to destroy a Resilient Sphere on the target via special means.
-    /// Normal damage CANNOT destroy the sphere — it is completely indestructible by mundane means.
-    /// Only Disintegrate, Rod of Cancellation, Rod of Negation, or Dispel Magic (handled separately)
-    /// can remove the sphere.
-    /// PHB p.263
+    /// Attempts to destroy a Resilient Sphere containing the target via special means.
+    /// Now works on the area effect, not character state.
     /// </summary>
-    /// <param name="target">The character enclosed in the sphere.</param>
-    /// <param name="destructionType">How the sphere is being destroyed (must be a special method).</param>
     public void TryDestroyResilientSphere(CharacterController target, SphereDestructionType destructionType)
     {
-        if (target == null || target.Stats == null || !target.Stats.ResilientSphereActive)
+        if (target == null)
             return;
 
-        string targetName = target.Stats.CharacterName ?? "Unknown";
+        ResilientSphereAreaEffect sphere = ResilientSphereAreaEffect.GetSphereContainingCharacter(target);
+        if (sphere == null)
+            return;
+
+        string targetName = target.Stats != null ? target.Stats.CharacterName ?? "Unknown" : "Unknown";
 
         switch (destructionType)
         {
-            // ── STUB: Disintegrate instantly destroys the sphere ──
-            // TODO: Hook this when Disintegrate spell is implemented.
-            // A targeted Disintegrate destroys the sphere with no HP check.
             case SphereDestructionType.Disintegrate:
-                ClearResilientSphereState(target);
-                CombatUI?.ShowCombatLog($"<color=#FF4444>💥 Resilient Sphere on {targetName} is destroyed by Disintegrate!</color>");
-                Debug.Log($"[ResilientSphere] Destroyed by Disintegrate on {targetName}");
+                CombatUI?.ShowCombatLog($"<color=#FF4444>💥 Resilient Sphere at {targetName}'s position is destroyed by Disintegrate!</color>");
+                Debug.Log($"[ResilientSphere] Destroyed by Disintegrate near {targetName}");
+                sphere.ExpireEffect();
                 break;
 
-            // ── STUB: Rod of Cancellation instantly destroys the sphere ──
-            // TODO: Hook this when Rod of Cancellation item is implemented.
             case SphereDestructionType.RodOfCancellation:
-                ClearResilientSphereState(target);
-                CombatUI?.ShowCombatLog($"<color=#FF4444>💥 Resilient Sphere on {targetName} is destroyed by Rod of Cancellation!</color>");
-                Debug.Log($"[ResilientSphere] Destroyed by Rod of Cancellation on {targetName}");
+                CombatUI?.ShowCombatLog($"<color=#FF4444>💥 Resilient Sphere at {targetName}'s position is destroyed by Rod of Cancellation!</color>");
+                Debug.Log($"[ResilientSphere] Destroyed by Rod of Cancellation near {targetName}");
+                sphere.ExpireEffect();
                 break;
 
-            // ── STUB: Rod of Negation instantly destroys the sphere ──
-            // TODO: Hook this when Rod of Negation item is implemented.
             case SphereDestructionType.RodOfNegation:
-                ClearResilientSphereState(target);
-                CombatUI?.ShowCombatLog($"<color=#FF4444>💥 Resilient Sphere on {targetName} is destroyed by Rod of Negation!</color>");
-                Debug.Log($"[ResilientSphere] Destroyed by Rod of Negation on {targetName}");
+                CombatUI?.ShowCombatLog($"<color=#FF4444>💥 Resilient Sphere at {targetName}'s position is destroyed by Rod of Negation!</color>");
+                Debug.Log($"[ResilientSphere] Destroyed by Rod of Negation near {targetName}");
+                sphere.ExpireEffect();
                 break;
         }
-        // Note: Normal damage CANNOT destroy Resilient Sphere. Only special methods work.
-        // Dispel Magic is handled separately via ClearResilientSphereState in the dispel system.
     }
 
     /// <summary>
-    /// Clears all Resilient Sphere state from the target, removing the sphere barrier.
-    /// Movement was never blocked by the sphere (it moves with the creature), so no
-    /// MovementBlockedByCondition reset is needed here.
+    /// Removes the Resilient Sphere area effect containing the given character.
+    /// Called by dispel system. Now works on area effects instead of character stats.
     /// </summary>
     public void ClearResilientSphereState(CharacterController target)
     {
-        if (target == null || target.Stats == null)
+        if (target == null)
             return;
 
-        target.Stats.ResilientSphereActive = false;
-        target.Stats.ResilientSphereCasterLevel = 0;
-        target.Stats.ResilientSphereDurationRounds = 0;
-        target.Stats.ResilientSphereCaster = null;
+        ResilientSphereAreaEffect sphere = ResilientSphereAreaEffect.GetSphereContainingCharacter(target);
+        if (sphere == null)
+            return;
 
-        // Remove the StatusEffectManager tracking
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
-        if (statusMgr != null && statusMgr.HasEffect(SpellNames.RESILIENT_SPHERE))
-            statusMgr.RemoveEffectsBySpellId(SpellNames.RESILIENT_SPHERE);
+        string targetName = target.Stats != null ? target.Stats.CharacterName ?? "Unknown" : "Unknown";
+        CombatUI?.ShowCombatLog($"<color=#44CCFF>🔮 Resilient Sphere near {targetName} has been dispelled!</color>");
+        Debug.Log($"[ResilientSphere] Area effect removed near {targetName}");
 
-        string targetName = target.Stats.CharacterName ?? "Unknown";
-        CombatUI?.ShowCombatLog($"<color=#44CCFF>🔮 Resilient Sphere on {targetName} has been dispelled!</color>");
-        Debug.Log($"[ResilientSphere] State cleared on {targetName}");
+        sphere.ExpireEffect();
     }
 }

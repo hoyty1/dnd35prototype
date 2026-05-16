@@ -131,14 +131,13 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        // ── Resilient Sphere: NPC can move but attacks/spells are blocked (PHB p.263) ──
-        // The sphere moves with the creature, so the NPC can still take move actions,
-        // but all outgoing attacks and spells are blocked by the barrier.
-        if (npc.Stats.ResilientSphereActive)
+        // ── Resilient Sphere: NPC inside sphere can move within it but attacks/spells
+        // cannot pass the boundary (PHB p.263). The sphere is now a stationary area effect.
+        if (ResilientSphereAreaEffect.IsCharacterInAnySphere(npc))
         {
             _gameManager.CombatUI?.ShowCombatLog(
-                $"<color=#44CCFF>🔮 {npc.Stats.CharacterName} is enclosed in a Resilient Sphere — attacks and spells cannot pass through!</color>");
-            // NPC skips offensive actions but could still move (handled by normal movement AI)
+                $"<color=#44CCFF>🔮 {npc.Stats.CharacterName} is enclosed in a Resilient Sphere — attacks and spells cannot pass through the boundary!</color>");
+            // NPC skips offensive actions but could still move within sphere
             yield return new WaitForSeconds(0.5f);
             yield break;
         }

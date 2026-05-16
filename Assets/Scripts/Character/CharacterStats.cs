@@ -1162,21 +1162,10 @@ public class CharacterStats
     public int FireShieldDurationRounds;
 
     // ========== RESILIENT SPHERE (PHB p.263) ==========
-    // The sphere is a globe of shimmering force that is COMPLETELY INDESTRUCTIBLE
-    // by normal means. It has NO HP, NO Hardness. It can ONLY be destroyed by:
-    //   1. Disintegrate spell
-    //   2. Rod of Cancellation
-    //   3. Rod of Negation
-    //   4. Dispel Magic (normal dispel check)
-    // Normal attacks and damage have absolutely no effect on the sphere.
-    /// <summary>True while this character is trapped inside Otiluke's Resilient Sphere.</summary>
-    public bool ResilientSphereActive;
-    /// <summary>Caster level used when sphere was created (for dispel checks).</summary>
-    public int ResilientSphereCasterLevel;
-    /// <summary>Remaining rounds of Resilient Sphere duration.</summary>
-    public int ResilientSphereDurationRounds;
-    /// <summary>Reference to the caster who created the sphere (for dismissal).</summary>
-    public CharacterController ResilientSphereCaster;
+    // Resilient Sphere is now implemented as a STATIONARY AREA EFFECT
+    // (ResilientSphereAreaEffect) — not tracked on CharacterStats.
+    // Use ResilientSphereAreaEffect.IsCharacterInAnySphere(character) to check.
+    // Use ResilientSphereAreaEffect.DoesSphereBlockInteraction(source, target) for blocking.
 
     /// <summary>Rage Will save bonus (+2 while raging).</summary>
     public int RageWillBonus => IsRaging ? 2 : 0;
@@ -3079,24 +3068,12 @@ public class CharacterStats
             packet.Types = new HashSet<DamageType> { DamageType.Untyped };
 
         // ── Resilient Sphere damage interception (PHB p.263) ──
-        // The sphere is COMPLETELY INDESTRUCTIBLE by normal means.
-        // ALL incoming damage is completely blocked — no HP, no hardness, no excess.
-        // Only Disintegrate, Rod of Cancellation, Rod of Negation, or Dispel Magic
-        // can remove the sphere.
-        if (ResilientSphereActive)
-        {
-            result.ImmunityTriggered = true;
-            result.DamageAfterImmunity = 0;
-            result.DamageAfterResistance = 0;
-            result.FinalDamage = 0;
-            result.Notes.Add("Resilient Sphere blocks the attack! Nothing can pass through.");
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.CombatUI?.ShowCombatLog(
-                    $"<color=#44CCFF>🔮 Resilient Sphere blocks the attack! Nothing can pass through.</color>");
-            }
-            return result;
-        }
+        // Now handled as an area effect. Check if this character is inside a sphere.
+        // Damage from sources outside the sphere is completely blocked.
+        // NOTE: The caller (CombatFlowService, etc.) should check DoesSphereBlockInteraction
+        // before reaching this point, but we add a safety net here.
+        // We cannot check the attacker here, so this is a fallback that blocks ALL damage
+        // if the character is inside a sphere. The proper sphere-boundary check is done upstream.
 
         // Swarm trait immunity: weapon attacks do no damage unless the weapon attack is fire-based.
         if (Immunities != null && Immunities.immuneToWeaponDamage && packet.Source == AttackSource.Weapon)

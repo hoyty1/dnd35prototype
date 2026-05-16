@@ -774,9 +774,10 @@ public partial class GameManager
         }
 
         // ── Resilient Sphere outgoing spell block (PHB p.263) ──
-        // Creature can attempt to cast, but non-self spells cannot pass through the sphere.
+        // Creature can attempt to cast, but non-self spells cannot pass through the sphere boundary.
         // Self-targeting spells still work normally inside the sphere.
-        if (caster.Stats != null && caster.Stats.ResilientSphereActive
+        // Now uses area effect check instead of character stats.
+        if (ResilientSphereAreaEffect.IsCharacterInAnySphere(caster)
             && _pendingSpell.TargetType != SpellTargetType.Self)
         {
             CombatUI?.ShowCombatLog(
@@ -6024,14 +6025,9 @@ public partial class GameManager
                     }
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Fire Shield expires on {character.Stats.CharacterName}: retribution and energy resistance removed.</color>");
                 }
-                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.RESILIENT_SPHERE, StringComparison.Ordinal))
-                {
-                    if (character.Stats != null && character.Stats.ResilientSphereActive)
-                    {
-                        ClearResilientSphereState(character);
-                        CombatUI?.ShowCombatLog($"<color=#44CCFF>⏱ Resilient Sphere expires on {character.Stats.CharacterName}: barrier dissipates.</color>");
-                    }
-                }
+                // NOTE: Resilient Sphere expiry is now handled by the area effect system
+                // (ResilientSphereAreaEffect.OnRoundStart → RoundsRemaining countdown → ExpireEffect).
+                // No character-based cleanup needed here.
             }
 
             if (statusMgr.ActiveEffectCount > 0)
@@ -6067,8 +6063,8 @@ public partial class GameManager
                         character.UpdateSlowDuration(effect.RemainingRounds);
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.FIRE_SHIELD, StringComparison.Ordinal))
                         character.Stats.FireShieldDurationRounds = effect.RemainingRounds;
-                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.RESILIENT_SPHERE, StringComparison.Ordinal))
-                        character.Stats.ResilientSphereDurationRounds = effect.RemainingRounds;
+                    // NOTE: Resilient Sphere duration is now tracked by the area effect itself,
+                    // not on CharacterStats.
 
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
                 }

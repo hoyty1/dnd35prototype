@@ -158,22 +158,17 @@ public class CombatFlowService : MonoBehaviour
         if (_gameManager == null || attacker == null || target == null)
             return;
 
-        // ── Resilient Sphere outgoing attack block (PHB p.263) ──
-        // Creature can attempt attacks but nothing passes through the sphere barrier.
-        if (attacker.Stats != null && attacker.Stats.ResilientSphereActive)
+        // ── Resilient Sphere boundary block (PHB p.263) ──
+        // Nothing passes through the sphere boundary. Attacks between creatures
+        // separated by a sphere boundary are blocked. Creatures inside the SAME
+        // sphere can attack each other normally.
+        if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(attacker, target))
         {
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"<color=#44CCFF>🔮 {attacker.Stats.CharacterName}'s attack cannot pass through the Resilient Sphere!</color>");
-            _gameManager.Combat_ShowActionChoices();
-            return;
-        }
-
-        // ── Resilient Sphere blocks incoming attacks on sphered targets ──
-        // Nothing can pass through the sphere from outside either.
-        if (target.Stats != null && target.Stats.ResilientSphereActive)
-        {
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"<color=#44CCFF>🔮 Attack on {target.Stats.CharacterName} is blocked by Resilient Sphere! Nothing can pass through.</color>");
+            bool attackerInSphere = ResilientSphereAreaEffect.IsCharacterInAnySphere(attacker);
+            string msg = attackerInSphere
+                ? $"<color=#44CCFF>🔮 {attacker.Stats.CharacterName}'s attack cannot pass through the Resilient Sphere!</color>"
+                : $"<color=#44CCFF>🔮 Attack on {target.Stats.CharacterName} is blocked by Resilient Sphere! Nothing can pass through.</color>";
+            _gameManager.CombatUI?.ShowCombatLog(msg);
             _gameManager.Combat_ShowActionChoices();
             return;
         }

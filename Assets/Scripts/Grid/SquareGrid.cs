@@ -323,6 +323,11 @@ public class SquareGrid : MonoBehaviour
 
                 if (!canTraverseHere) continue;
 
+                // ── Resilient Sphere boundary block ──
+                // Characters cannot cross sphere boundaries (in→out, out→in, or between spheres).
+                if (ResilientSphereAreaEffect.DoesMovementCrossSphereBoundary(current, neighbor))
+                    continue;
+
                 // Calculate step cost (weighted: orthogonal < diagonal to prefer straight paths)
                 bool isDiag = SquareGridUtils.IsDiagonalStep(current, neighbor);
                 int stepCost = isDiag ? DIAG_COST : ORTH_COST;
@@ -354,7 +359,7 @@ public class SquareGrid : MonoBehaviour
         result.Path = ThreatSystem.GenerateSimplePath(start, destination);
 
 
-        // Remove invalid fallback steps for larger footprints / blocked tiles.
+        // Remove invalid fallback steps for larger footprints / blocked tiles / sphere boundaries.
         int firstInvalidIndex = -1;
         for (int i = 0; i < result.Path.Count; i++)
         {
@@ -362,6 +367,14 @@ public class SquareGrid : MonoBehaviour
             bool isDestinationStep = step == destination;
             bool canTraverse = CanTraversePathNode(step, moverSizeSquares, mover, isDestinationStep, allowThroughAllies, allowThroughEnemies, allowDestinationEnemyOverlap);
             if (!canTraverse)
+            {
+                firstInvalidIndex = i;
+                break;
+            }
+
+            // Check sphere boundary crossing for fallback path
+            Vector2Int prev = (i == 0) ? start : result.Path[i - 1];
+            if (ResilientSphereAreaEffect.DoesMovementCrossSphereBoundary(prev, step))
             {
                 firstInvalidIndex = i;
                 break;

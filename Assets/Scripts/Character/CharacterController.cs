@@ -2919,10 +2919,8 @@ public class CharacterController : MonoBehaviour
             Stats.FireShieldIsWarm = false;
             Stats.FireShieldCasterLevel = 0;
             Stats.FireShieldDurationRounds = 0;
-            Stats.ResilientSphereActive = false;
-            Stats.ResilientSphereCasterLevel = 0;
-            Stats.ResilientSphereDurationRounds = 0;
-            Stats.ResilientSphereCaster = null;
+            // NOTE: Resilient Sphere is now a stationary area effect (ResilientSphereAreaEffect),
+            // not tracked on CharacterStats. No state to clear here.
             Stats.ResetCurrentSizeToBase(); // Ensure size resets on combat end/death
             Stats.ActiveProtectionFromArrowsEffect = null;
             if (Stats.ActiveResistEnergyEffects != null)

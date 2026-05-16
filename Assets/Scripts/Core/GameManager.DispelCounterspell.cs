@@ -352,13 +352,10 @@ public partial class GameManager
         }
 
         // --- Resilient Sphere (PHB p.263) ---
+        // Now handled as area effect. If dispel target is inside a sphere, remove that sphere.
         if (spellId == SpellNames.RESILIENT_SPHERE)
         {
-            if (target.Stats != null && target.Stats.ResilientSphereActive)
-            {
-                ClearResilientSphereState(target);
-                CombatUI?.ShowCombatLog($"<color=#44CCFF>🔮 Resilient Sphere on {target.Stats.CharacterName} is dispelled!</color>");
-            }
+            ClearResilientSphereState(target);
             return;
         }
 

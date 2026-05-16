@@ -104,13 +104,13 @@ public static partial class SpellDatabase
         //   hemisphere of gum arabic)
         // Casting Time: 1 standard action
         // Range: Close (25 ft. + 5 ft./2 levels)
-        // Target: One Large or smaller creature
+        // Effect: Stationary sphere of force (diameter = 1 ft/CL) at target's position
         // Duration: 1 min./level (D)
         // Saving Throw: Reflex negates
         // Spell Resistance: Yes
         //
-        // A globe of shimmering force encloses the target creature.
-        // The sphere moves with the creature — they can move and act freely.
+        // IMPLEMENTATION: Stationary area effect (ResilientSphereAreaEffect).
+        // The sphere is anchored to the grid — creatures inside can move within but cannot leave.
         // The sphere is INDESTRUCTIBLE by normal means (no HP, no Hardness).
         // Nothing can pass through the sphere, in or out (bidirectional isolation).
         // Only Disintegrate, Rod of Cancellation, Rod of Negation, or Dispel Magic can remove it.
@@ -119,7 +119,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.RESILIENT_SPHERE,
                     Name = "Resilient Sphere",
-                    Description = "Evocation [Force]. A globe of shimmering force encloses the target creature. The sphere moves with the creature — they can move and act freely, but nothing can pass through in either direction. Indestructible by normal means. Only Disintegrate, Rod of Cancellation/Negation, or Dispel Magic can remove it. Duration 1 min/level (D). PHB p.263",
+                    Description = "Evocation [Force]. A globe of shimmering force is anchored to the target's position as a stationary area effect. Diameter = 1 ft/level. Creatures inside can move within the sphere but cannot leave. Nothing passes through the sphere boundary in either direction. Indestructible by normal means. Only Disintegrate, Rod of Cancellation/Negation, or Dispel Magic can remove it. Duration 1 min/level (D). PHB p.263",
                     SpellLevel = 4,
                     School = "Evocation [Force]",
                     AvailableFor = new List<SpellAvailability>
