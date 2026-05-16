@@ -814,10 +814,14 @@ public class AIService : MonoBehaviour
 
         _gameManager.CombatUI?.ShowCombatLog($"{swarm.Stats.CharacterName} scans for nearest creature: {target.Stats.CharacterName}.");
 
-        // Per PHB p.287, indiscriminate swarms exclude the caster but may attack allies
+        // Indiscriminate swarms (Summon Swarm) attack nearest creature regardless of team
         if (indiscriminate && target.Team == swarm.Team)
         {
-            _gameManager.CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ {swarm.Stats.CharacterName} is uncontrolled and targets ally {target.Stats.CharacterName}!</color>");
+            CharacterController summonCaster = _gameManager.GetSummonCasterForAI(swarm);
+            if (summonCaster != null && target == summonCaster)
+                _gameManager.CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ {swarm.Stats.CharacterName} is uncontrolled and attacks its summoner {target.Stats.CharacterName}!</color>");
+            else
+                _gameManager.CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ {swarm.Stats.CharacterName} is uncontrolled and attacks ally {target.Stats.CharacterName}!</color>");
         }
 
         if (!swarm.IsTargetInCurrentWeaponRange(target) && swarm.Actions.HasMoveAction)
@@ -851,19 +855,8 @@ public class AIService : MonoBehaviour
             : null;
 
         var candidates = new List<CharacterController>();
-        if (allCombatants == null || swarm == null)
+        if (allCombatants == null)
             return candidates;
-
-        // D&D 3.5e PHB p.287: Summon Swarm attacks "all OTHER creatures" (excludes caster)
-        CharacterController summonCaster = null;
-        if (indiscriminate && _gameManager != null)
-        {
-            summonCaster = _gameManager.GetSummonCasterForAI(swarm);
-            if (summonCaster == null)
-            {
-                Debug.LogWarning($"[AIService] Summon Swarm {swarm.Stats?.CharacterName ?? "?"} caster not found. Swarm will be hostile to all creatures including caster.");
-            }
-        }
 
         for (int i = 0; i < allCombatants.Count; i++)
         {
@@ -871,21 +864,10 @@ public class AIService : MonoBehaviour
             if (candidate == null || candidate == swarm || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
 
-            // Indiscriminate swarms (Summon Swarm) exclude only the caster per PHB
-            // If summonCaster is null, we can't exclude it, so warn and include all
-            if (indiscriminate)
-            {
-                if (summonCaster != null && candidate == summonCaster)
-                {
-                    Debug.Log($"[AIService] Swarm excludes caster: {summonCaster.Stats?.CharacterName}");
-                    continue;
-                }
-            }
-            else
-            {
-                if (!_gameManager.IsEnemyTeamForAI(swarm, candidate))
-                    continue;
-            }
+            // Indiscriminate swarms (Summon Swarm) attack ALL creatures including caster
+            // No friend/foe distinction - purely distance-based targeting
+            if (!indiscriminate && !_gameManager.IsEnemyTeamForAI(swarm, candidate))
+                continue;
 
             candidates.Add(candidate);
         }

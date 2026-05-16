@@ -619,7 +619,7 @@ public partial class GameManager
             CombatUI?.ShowCombatLog($"  Range: {rangeFeet} ft (level {Mathf.Max(1, caster.Stats.Level)} caster)");
             CombatUI?.ShowCombatLog($"  Target location: ({targetCell.Coords.x}, {targetCell.Coords.y})");
             CombatUI?.ShowCombatLog($"  Swarm type: {baseDef.Name}");
-            CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ WARNING: The swarm is uncontrolled and will attack the nearest creature (including allies, but NOT the caster per PHB p.287)!</color>");
+            CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ WARNING: The swarm is uncontrolled and will attack the nearest creature (NO friend/foe distinction - caster and allies ARE valid targets)!</color>");
             CombatUI?.ShowCombatLog($"<color=#44AAFF>{caster.Stats.CharacterName} is concentrating on {_pendingSpell.Name}.</color>");
 
             _pendingSpell = null;
