@@ -693,6 +693,29 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
         return DoesCellBlockMovement(cell); // Same logic: intact blocks, breached allows
     }
 
+    /// <summary>
+    /// Checks whether an intact Wall of Ice blocks the line of effect between
+    /// two grid cells. Uses Bresenham line traversal (excluding endpoints) to
+    /// see if any intermediate cell is an intact wall section.
+    /// Breached sections do NOT block line of effect.
+    /// </summary>
+    public static bool BlocksLineOfEffect(Vector2Int from, Vector2Int to)
+    {
+        if (!AreaEffectManager.HasInstance)
+            return false;
+
+        List<WallOfIceAreaEffect> walls = AreaEffectManager.Instance.GetEffectsOfType<WallOfIceAreaEffect>();
+        if (walls == null || walls.Count == 0)
+            return false;
+
+        // Build a set of all intact wall cells across all active Wall of Ice effects
+        HashSet<Vector2Int> intactCells = GetAllIntactWallOfIceCells();
+        if (intactCells.Count == 0)
+            return false;
+
+        return WindWallAreaEffect.LineSegmentCrossesAnyCellPublic(from, to, intactCells);
+    }
+
     // ═══════════════════════════════════════════════════
     // CREATION VALIDATION
     // ═══════════════════════════════════════════════════

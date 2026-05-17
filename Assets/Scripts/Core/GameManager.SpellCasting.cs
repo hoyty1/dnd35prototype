@@ -3251,7 +3251,7 @@ public partial class GameManager
 
         ClearSelfAoEState();
 
-        // Now execute the spell
+        // Now execute the spell (Wall of Ice LoE filtering handled inside PerformAoESpellCast)
         PerformAoESpellCast(caster, targets, cells);
     }
 
@@ -3287,6 +3287,32 @@ public partial class GameManager
     /// </summary>
     private void PerformAoESpellCast(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
     {
+        // ── WALL OF ICE LINE-OF-EFFECT FILTERING (centralized) ──
+        // Determine AoE origin for LoE checks based on spell shape:
+        //   Burst spells: use centroid of AoE cells as origin (burst center)
+        //   Cone/Line/other: use caster position as origin
+        if (_pendingSpell != null && caster != null && aoeCells != null && aoeCells.Count > 0)
+        {
+            Vector2Int loeOrigin;
+            if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+            {
+                // For bursts, compute the center of the AoE cells
+                int sumX = 0, sumY = 0, count = 0;
+                foreach (Vector2Int c in aoeCells)
+                {
+                    sumX += c.x; sumY += c.y; count++;
+                }
+                loeOrigin = count > 0 ? new Vector2Int(sumX / count, sumY / count) : caster.GridPosition;
+            }
+            else
+            {
+                loeOrigin = caster.GridPosition;
+            }
+
+            AoESystem.FilterCellsByWallOfIceLoE(aoeCells, loeOrigin);
+            AoESystem.FilterTargetsByWallOfIceLoE(targets, loeOrigin);
+        }
+
         CurrentSubPhase = PlayerSubPhase.Animating;
 
         CaptureSpellcastResourceSnapshot(caster);
