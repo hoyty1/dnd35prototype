@@ -151,8 +151,8 @@ public abstract class PersistentAreaEffect : MonoBehaviour
 
     protected GameManager gameManager;
     private bool hasExpired;
-    private readonly List<SquareCell> highlightedCells = new List<SquareCell>();
-    private bool gridHighlightApplied;
+    protected readonly List<SquareCell> highlightedCells = new List<SquareCell>();
+    protected bool gridHighlightApplied;
 
     protected virtual void Awake()
     {
@@ -413,7 +413,7 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     /// <summary>
     /// Apply transparent color highlight to all currently affected grid cells.
     /// </summary>
-    protected void ApplyGridHighlight()
+    protected virtual void ApplyGridHighlight()
     {
         if (!UseGridHighlighting)
             return;

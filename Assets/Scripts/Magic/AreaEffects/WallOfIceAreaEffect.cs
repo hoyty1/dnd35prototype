@@ -332,14 +332,23 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
     /// </summary>
     protected override void ApplyGridHighlight()
     {
-        if (AffectedCells == null || !AreaEffectManager.HasInstance) return;
+        if (!UseGridHighlighting)
+            return;
 
-        SquareGrid grid = AreaEffectManager.Instance.Grid;
-        if (grid == null) return;
+        if (gameManager == null)
+            gameManager = GameManager.Instance != null ? GameManager.Instance : FindObjectOfType<GameManager>();
+
+        if (gameManager == null || gameManager.Grid == null)
+        {
+            gridHighlightApplied = false;
+            return;
+        }
+
+        RemoveGridHighlight();
 
         foreach (Vector2Int cell in AffectedCells)
         {
-            SquareCell gridCell = grid.GetCell(cell);
+            SquareCell gridCell = gameManager.Grid.GetCell(cell);
             if (gridCell == null) continue;
 
             if (_breachedCells.Contains(cell))
@@ -350,9 +359,11 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
             {
                 gridCell.SetHighlight(GridHighlightColor);
             }
+
+            highlightedCells.Add(gridCell);
         }
 
-        IsGridHighlightApplied = true;
+        gridHighlightApplied = highlightedCells.Count > 0;
     }
 
     // ═══════════════════════════════════════════════════
