@@ -2434,6 +2434,71 @@ public partial class GameManager
         if (_pendingSpell.AoEShapeType == AoEShape.Line)
         {
             Vector2Int gridPos = SquareGridUtils.WorldToGrid(worldPoint);
+
+            // ── Wall of Fire Line Mode: DIRECTION SELECTION PHASE ──
+            // After wall placement, mouse position determines which side radiates heat.
+            // We show wall cells in red and heat wave cells (preview) on the hovered side.
+            if (IsPendingWallOfFireLineDirectionPhase())
+            {
+                if (gridPos == _lastLineHoverKey) return;
+                _lastLineHoverKey = gridPos;
+
+                // Clear previous preview
+                if (_currentAoECells != null)
+                {
+                    foreach (Vector2Int c in _currentAoECells)
+                    {
+                        SquareCell sc = Grid.GetCell(c);
+                        if (sc != null) sc.SetHighlight(HighlightType.None);
+                    }
+                }
+
+                // Re-highlight the wall cells
+                foreach (Vector2Int wc in _pendingWallLineCellsForDirection)
+                {
+                    SquareCell sc = Grid.GetCell(wc);
+                    if (sc != null) sc.SetHighlight(HighlightType.AoETarget);
+                }
+
+                // Determine which side of the line the mouse is on
+                Vector2Int lineStart = _pendingWallLineStart ?? Vector2Int.zero;
+                Vector2Int lineEnd = lineStart;
+                if (_pendingWallLineCellsForDirection.Count > 0)
+                {
+                    int maxDist = 0;
+                    foreach (var cell in _pendingWallLineCellsForDirection)
+                    {
+                        int d = SquareGridUtils.GetDistance(lineStart, cell);
+                        if (d > maxDist) { maxDist = d; lineEnd = cell; }
+                    }
+                }
+
+                int side = GetSideOfLine(lineStart, lineEnd, gridPos);
+                if (side != 0)
+                {
+                    // Show heat wave preview cells on the hovered side (10 ft = 2 squares)
+                    HashSet<Vector2Int> heatCells = GetHeatWaveCellsForLineSide(
+                        lineStart, lineEnd, _pendingWallLineCellsForDirection, side, 2);
+
+                    foreach (Vector2Int hc in heatCells)
+                    {
+                        SquareCell sc = Grid.GetCell(hc);
+                        if (sc != null) sc.SetHighlight(HighlightType.AoEPreview);
+                    }
+
+                    // Track all highlighted cells for clearing
+                    var allCells = new HashSet<Vector2Int>(_pendingWallLineCellsForDirection);
+                    allCells.UnionWith(heatCells);
+                    _currentAoECells = allCells;
+                }
+                else
+                {
+                    // Mouse is on the line itself — just show wall cells
+                    _currentAoECells = new HashSet<Vector2Int>(_pendingWallLineCellsForDirection);
+                }
+                return; // Direction phase handles its own highlighting
+            }
+
             if (gridPos == _lastLineHoverKey) return;
             _lastLineHoverKey = gridPos;
 
@@ -2637,6 +2702,32 @@ public partial class GameManager
                 // ── LINE MODE: two-click targeting ──
                 if (_pendingWallOfFireMode == WallOfFireMode.Line)
                 {
+                    // ── DIRECTION PHASE: click to confirm heat wave side ──
+                    if (IsPendingWallOfFireLineDirectionPhase())
+                    {
+                        Vector2Int lineStart = _pendingWallLineStart ?? Vector2Int.zero;
+                        Vector2Int lineEnd = lineStart;
+                        if (_pendingWallLineCellsForDirection != null && _pendingWallLineCellsForDirection.Count > 0)
+                        {
+                            int maxDist = 0;
+                            foreach (var cell in _pendingWallLineCellsForDirection)
+                            {
+                                int d = SquareGridUtils.GetDistance(lineStart, cell);
+                                if (d > maxDist) { maxDist = d; lineEnd = cell; }
+                            }
+                        }
+
+                        int clickSide = GetSideOfLine(lineStart, lineEnd, targetPos);
+                        if (clickSide == 0)
+                        {
+                            CombatUI?.ShowCombatLog("⚠ Click on one side of the wall, not on the wall itself.");
+                            return;
+                        }
+
+                        ConfirmWallOfFireLineDirection(caster, clickSide);
+                        return;
+                    }
+
                     if (!_pendingWallLineStart.HasValue)
                     {
                         // FIRST CLICK: set start point (must be within spell range of caster)
@@ -2698,14 +2789,10 @@ public partial class GameManager
                             wallCells, caster, allyTeam2, enemyTeam2,
                             _pendingSpell.AoEFilter, casterIsPC2, Grid);
 
-                        // Exit AoE targeting
-                        _isAoETargeting = false;
-                        _currentAoECells = null;
-                        _lastAoEHoverPos = new Vector2Int(-1, -1);
-                        _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
-                        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
-
-                        PerformAoESpellCast(caster, targets2, wallCells);
+                        // Enter heat wave direction selection phase (PHB p.298)
+                        // Player must choose which side of the wall radiates heat
+                        Grid.ClearAllHighlights();
+                        EnterWallOfFireLineDirectionPhase(caster, wallCells, targets2);
                         return;
                     }
                 }
@@ -2831,6 +2918,7 @@ public partial class GameManager
         _pendingSummonCountInfo = null;
         _pendingSummonSwarmNpcId = null;
         ResetPendingGreaseCastMode();
+        ResetPendingWallOfFireMode();
         _pendingAttackMode = PendingAttackMode.Single;
 
         Grid.ClearAllHighlights();

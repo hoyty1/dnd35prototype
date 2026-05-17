@@ -39,6 +39,21 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     /// <summary>Radius of the ring in squares (Ring mode only).</summary>
     public int RingRadius { get; set; } = 1;
 
+    /// <summary>
+    /// Heat wave direction for Ring mode: "Inwards" or "Outwards" (PHB p.298).
+    /// Inwards = heat radiates toward center (damages creatures inside the ring).
+    /// Outwards = heat radiates away from center (damages creatures outside the ring).
+    /// Null = not yet selected (defaults to "Inwards" for backward compat).
+    /// </summary>
+    public string HeatWaveDirectionRing { get; set; }
+
+    /// <summary>
+    /// Heat wave direction for Line mode: perpendicular normal vector pointing
+    /// toward the "hot" side of the wall (PHB p.298).
+    /// Null = not yet selected (defaults to no heat wave direction).
+    /// </summary>
+    public Vector2? HeatWaveDirectionLine { get; set; }
+
     private HashSet<Vector2Int> _pendingExplicitCells;
 
     protected override Color GridHighlightColor => AreaEffectColors.WallOfFire;
@@ -90,11 +105,13 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     {
         if (IsRingMode)
         {
-            LogEffect($"🔥 A blazing ring of fire appears ({RingRadius * 5}-ft radius)!");
+            string ringDir = !string.IsNullOrEmpty(HeatWaveDirectionRing) ? HeatWaveDirectionRing : "Inwards";
+            LogEffect($"🔥 A blazing ring of fire appears ({RingRadius * 5}-ft radius, heat {ringDir.ToLower()})!");
         }
         else
         {
-            LogEffect($"🔥 A blazing wall of fire appears ({SizeX * 5} ft long)!");
+            string lineDir = HeatWaveDirectionLine.HasValue ? $", heat side selected" : "";
+            LogEffect($"🔥 A blazing wall of fire appears ({SizeX * 5} ft long{lineDir})!");
         }
         LogEffect("  • 2d4 fire damage to creatures within 10 ft (near side)");
         LogEffect("  • 1d4 fire damage within 10 ft (far side)");

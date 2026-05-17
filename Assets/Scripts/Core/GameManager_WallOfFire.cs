@@ -57,6 +57,45 @@ public partial class GameManager
     private Vector2Int? _pendingWallRingCenter;
 
     // ─────────────────────────────────────────────────────────────
+    //  Heat Wave Direction Selection State (PHB p.298)
+    // ─────────────────────────────────────────────────────────────
+    //
+    // Per D&D 3.5e PHB p.298, Wall of Fire sends out waves of heat
+    // that deal damage on one side. The caster chooses which side
+    // is the "hot" side when casting.
+    //
+    // Ring mode: "Inwards" or "Outwards"
+    // Line mode: perpendicular direction stored as a Vector2 normal
+
+    /// <summary>
+    /// Heat wave direction for Ring mode: "Inwards" or "Outwards".
+    /// Null means direction hasn't been selected yet.
+    /// </summary>
+    private string _pendingWallHeatDirectionRing;
+
+    /// <summary>
+    /// Heat wave direction for Line mode: perpendicular normal indicating the hot side.
+    /// Null means direction hasn't been selected yet.
+    /// </summary>
+    private Vector2? _pendingWallHeatDirectionLine;
+
+    /// <summary>
+    /// True when we are in the Line mode direction selection phase
+    /// (wall placed, waiting for player to choose which side is the hot side).
+    /// </summary>
+    private bool _pendingWallLineDirectionPhase;
+
+    /// <summary>
+    /// Stored wall cells during line direction selection phase (before final cast).
+    /// </summary>
+    private HashSet<Vector2Int> _pendingWallLineCellsForDirection;
+
+    /// <summary>
+    /// Stored targets during line direction selection phase (before final cast).
+    /// </summary>
+    private List<CharacterController> _pendingWallLineTargetsForDirection;
+
+    // ─────────────────────────────────────────────────────────────
     //  Helpers
     // ─────────────────────────────────────────────────────────────
 
@@ -67,6 +106,11 @@ public partial class GameManager
         _pendingWallLineStart = null;
         _pendingWallRingRadius = null;
         _pendingWallRingCenter = null;
+        _pendingWallHeatDirectionRing = null;
+        _pendingWallHeatDirectionLine = null;
+        _pendingWallLineDirectionPhase = false;
+        _pendingWallLineCellsForDirection = null;
+        _pendingWallLineTargetsForDirection = null;
     }
 
     /// <summary>
@@ -240,7 +284,7 @@ public partial class GameManager
 
                 CombatUI?.ShowCombatLog($"🔥 Wall of Fire ring: {chosenRadius * 5}-ft radius at ({centerCell.x}, {centerCell.y}).");
 
-                // Compute ring cells and finalize the spell
+                // Compute ring cells
                 HashSet<Vector2Int> ringCells = AoESystem.GetRingCells(centerCell, chosenRadius, Grid);
 
                 if (ringCells == null || ringCells.Count == 0)
@@ -265,14 +309,8 @@ public partial class GameManager
 
                 Debug.Log($"[WallOfFire] Ring mode: center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, cells={ringCells.Count}, targets={targets.Count}");
 
-                // Clear any remaining highlights
-                _currentAoECells = null;
-                _lastAoEHoverPos = new Vector2Int(-1, -1);
-                _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
-                _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
-
-                // Execute the spell
-                PerformAoESpellCast(caster, targets, ringCells);
+                // Chain to heat wave direction selection (PHB p.298)
+                ShowWallOfFireRingHeatDirectionSelection(caster, centerCell, chosenRadius, ringCells, targets);
             },
             onCancel: () =>
             {
@@ -301,5 +339,241 @@ public partial class GameManager
     {
         // Delegate to AoESystem's new method for arbitrary-origin line cells
         return AoESystem.GetLineCellsBetweenPoints(startPoint, endPoint, maxLengthSquares, Grid);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Heat Wave Direction Selection — Ring Mode (PHB p.298)
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// After ring radius is selected, show "Inwards" or "Outwards" heat wave direction prompt.
+    /// </summary>
+    private void ShowWallOfFireRingHeatDirectionSelection(
+        CharacterController caster, Vector2Int centerCell, int chosenRadius,
+        HashSet<Vector2Int> ringCells, List<CharacterController> targets)
+    {
+        if (caster == null || caster.Stats == null || CombatUI == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+        CombatUI.SetActionButtonsVisible(false);
+
+        var options = new List<string>
+        {
+            "🔥 Inwards — Heat waves radiate toward the center",
+            "🔥 Outwards — Heat waves radiate away from the center"
+        };
+
+        CombatUI.ShowPickUpItemSelection(
+            actorName: caster.Stats.CharacterName,
+            itemOptions: options,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    // Cancel — go back to radius selection
+                    _pendingWallHeatDirectionRing = null;
+                    CombatUI?.ShowCombatLog("⚠ Heat direction selection cancelled. Pick radius again.");
+                    ShowWallOfFireRadiusSelection(caster, centerCell);
+                    return;
+                }
+
+                _pendingWallHeatDirectionRing = selectedIndex == 0 ? "Inwards" : "Outwards";
+                string chosen = _pendingWallHeatDirectionRing;
+                CombatUI?.ShowCombatLog($"🔥 Wall of Fire heat waves: {chosen}.");
+
+                Debug.Log($"[WallOfFire] Ring heat direction: {chosen}, center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, cells={ringCells.Count}");
+
+                // Clear any remaining highlights
+                _currentAoECells = null;
+                _lastAoEHoverPos = new Vector2Int(-1, -1);
+                _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+                _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+
+                // Execute the spell
+                PerformAoESpellCast(caster, targets, ringCells);
+            },
+            onCancel: () =>
+            {
+                _pendingWallHeatDirectionRing = null;
+                CombatUI?.ShowCombatLog("↩ Heat direction selection cancelled. Pick radius again.");
+                ShowWallOfFireRadiusSelection(caster, centerCell);
+            },
+            titleOverride: "Wall of Fire Ring — Heat Wave Direction (PHB p.298)",
+            bodyOverride: "Wall of Fire sends out waves of heat, dealing 2d4 fire damage to creatures within 10 ft on the hot side.\n"
+                + "Choose which side of the ring radiates heat:\n"
+                + "• Inwards: Heat radiates toward the center (damages creatures inside the ring)\n"
+                + "• Outwards: Heat radiates away from the center (damages creatures outside the ring)",
+            optionButtonColorOverride: new Color(0.75f, 0.25f, 0.1f, 1f));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Heat Wave Direction Selection — Line Mode (PHB p.298)
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Check if we are in the line mode direction selection phase.
+    /// </summary>
+    private bool IsPendingWallOfFireLineDirectionPhase()
+    {
+        return IsPendingWallOfFire()
+            && _pendingWallOfFireMode == WallOfFireMode.Line
+            && _pendingWallLineDirectionPhase
+            && _pendingWallLineCellsForDirection != null;
+    }
+
+    /// <summary>
+    /// Determine which side of a line a point is on.
+    /// Returns +1 for one side, -1 for the other, 0 if on the line.
+    /// Uses the cross product of the line direction and the vector from line start to point.
+    /// </summary>
+    private static int GetSideOfLine(Vector2Int lineStart, Vector2Int lineEnd, Vector2Int point)
+    {
+        // Cross product: (lineEnd - lineStart) × (point - lineStart)
+        float cross = (float)(lineEnd.x - lineStart.x) * (point.y - lineStart.y)
+                    - (float)(lineEnd.y - lineStart.y) * (point.x - lineStart.x);
+        if (cross > 0.001f) return 1;
+        if (cross < -0.001f) return -1;
+        return 0;
+    }
+
+    /// <summary>
+    /// Get the perpendicular normal vector for a side of the line.
+    /// side > 0 → left normal, side < 0 → right normal.
+    /// </summary>
+    private static Vector2 GetPerpendicularNormal(Vector2Int lineStart, Vector2Int lineEnd, int side)
+    {
+        Vector2 dir = new Vector2(lineEnd.x - lineStart.x, lineEnd.y - lineStart.y);
+        if (dir.sqrMagnitude < 0.0001f) return Vector2.right;
+
+        dir.Normalize();
+
+        // Left perpendicular: (-dy, dx), Right perpendicular: (dy, -dx)
+        if (side > 0)
+            return new Vector2(-dir.y, dir.x);
+        else
+            return new Vector2(dir.y, -dir.x);
+    }
+
+    /// <summary>
+    /// Get cells on one side of the wall line within a given distance (in squares).
+    /// Used for heat wave AoE preview during direction selection.
+    /// </summary>
+    private HashSet<Vector2Int> GetHeatWaveCellsForLineSide(
+        Vector2Int lineStart, Vector2Int lineEnd,
+        HashSet<Vector2Int> wallCells, int side, int distanceSquares = 2)
+    {
+        var heatCells = new HashSet<Vector2Int>();
+        if (wallCells == null || wallCells.Count == 0 || side == 0) return heatCells;
+
+        // For each wall cell, check adjacent cells up to distanceSquares away
+        // and include them if they are on the correct side of the line
+        foreach (Vector2Int wallCell in wallCells)
+        {
+            for (int dx = -distanceSquares; dx <= distanceSquares; dx++)
+            {
+                for (int dy = -distanceSquares; dy <= distanceSquares; dy++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+                    Vector2Int candidate = new Vector2Int(wallCell.x + dx, wallCell.y + dy);
+                    if (wallCells.Contains(candidate)) continue; // Skip wall cells themselves
+
+                    int candidateSide = GetSideOfLine(lineStart, lineEnd, candidate);
+                    if (candidateSide == side)
+                    {
+                        // Check distance from nearest wall cell
+                        int dist = SquareGridUtils.GetDistance(wallCell, candidate);
+                        if (dist <= distanceSquares)
+                        {
+                            heatCells.Add(candidate);
+                        }
+                    }
+                }
+            }
+        }
+        return heatCells;
+    }
+
+    /// <summary>
+    /// Enter the line mode direction selection phase after the wall line is placed.
+    /// </summary>
+    private void EnterWallOfFireLineDirectionPhase(
+        CharacterController caster,
+        HashSet<Vector2Int> wallCells,
+        List<CharacterController> targets)
+    {
+        _pendingWallLineDirectionPhase = true;
+        _pendingWallLineCellsForDirection = wallCells;
+        _pendingWallLineTargetsForDirection = targets;
+        _pendingWallHeatDirectionLine = null;
+
+        // Keep AoE targeting active so UpdateAoEPreview can show heat wave preview
+        _isAoETargeting = true;
+
+        // Highlight the wall cells
+        if (wallCells != null)
+        {
+            foreach (Vector2Int cell in wallCells)
+            {
+                SquareCell sc = Grid.GetCell(cell);
+                if (sc != null) sc.SetHighlight(HighlightType.AoETarget);
+            }
+        }
+
+        int maxLen = GetWallOfFireMaxLengthSquares(caster);
+        CombatUI?.SetTurnIndicator(
+            $"✦ Wall of Fire (Line): Move mouse to choose HEAT WAVE side — click to confirm | Right-click to cancel");
+        CombatUI?.ShowCombatLog("🔥 Wall placed! Move mouse to choose which side radiates heat (2d4 fire within 10 ft). Click to confirm.");
+
+        Debug.Log($"[WallOfFire] Entered line direction selection phase. wallCells={wallCells?.Count ?? 0}");
+    }
+
+    /// <summary>
+    /// Confirm the line heat wave direction and finalize the spell.
+    /// </summary>
+    private void ConfirmWallOfFireLineDirection(CharacterController caster, int side)
+    {
+        if (!_pendingWallLineDirectionPhase || _pendingWallLineCellsForDirection == null)
+            return;
+
+        Vector2Int lineStart = _pendingWallLineStart ?? Vector2Int.zero;
+        // Compute end from center of wall cells as approximation
+        Vector2Int lineEnd = lineStart;
+        if (_pendingWallLineCellsForDirection.Count > 0)
+        {
+            // Find the furthest cell from start along the wall
+            int maxDist = 0;
+            foreach (var cell in _pendingWallLineCellsForDirection)
+            {
+                int d = SquareGridUtils.GetDistance(lineStart, cell);
+                if (d > maxDist)
+                {
+                    maxDist = d;
+                    lineEnd = cell;
+                }
+            }
+        }
+
+        _pendingWallHeatDirectionLine = GetPerpendicularNormal(lineStart, lineEnd, side);
+
+        string sideLabel = side > 0 ? "left" : "right";
+        CombatUI?.ShowCombatLog($"🔥 Wall of Fire heat waves: {sideLabel} side (hot).");
+        Debug.Log($"[WallOfFire] Line heat direction confirmed: side={side}, normal={_pendingWallHeatDirectionLine}");
+
+        // Exit direction selection phase
+        _pendingWallLineDirectionPhase = false;
+
+        // Exit AoE targeting
+        _isAoETargeting = false;
+        _currentAoECells = null;
+        _lastAoEHoverPos = new Vector2Int(-1, -1);
+        _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+
+        // Execute the spell with stored cells and targets
+        PerformAoESpellCast(caster, _pendingWallLineTargetsForDirection, _pendingWallLineCellsForDirection);
     }
 }

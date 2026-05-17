@@ -3177,6 +3177,18 @@ public partial class GameManager
             wallEffect.LengthSquares = Mathf.Max(2, maxLengthSquares);
         }
 
+        // Pass heat wave direction (PHB p.298)
+        if (isRingMode)
+        {
+            wallEffect.HeatWaveDirectionRing = _pendingWallHeatDirectionRing ?? "Inwards";
+            Debug.Log($"[WallOfFire] Resolve: ring heat direction = {wallEffect.HeatWaveDirectionRing}");
+        }
+        else
+        {
+            wallEffect.HeatWaveDirectionLine = _pendingWallHeatDirectionLine;
+            Debug.Log($"[WallOfFire] Resolve: line heat direction = {(_pendingWallHeatDirectionLine.HasValue ? _pendingWallHeatDirectionLine.Value.ToString() : "null")}");
+        }
+
         if (aoeCells != null && aoeCells.Count > 0)
             wallEffect.SetExplicitCells(aoeCells);
 
