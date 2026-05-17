@@ -150,6 +150,12 @@ public class SquareGrid : MonoBehaviour
                 if (additionalIgnoredOccupants != null && additionalIgnoredOccupants.Contains(occupant))
                     continue;
 
+                // D&D 3.5e: Dead creatures do not block placement.
+                // A dead creature's square is not considered "occupied" for
+                // movement and placement purposes.
+                if (occupant.Stats != null && occupant.Stats.IsDead)
+                    continue;
+
                 return false;
             }
         }
@@ -432,6 +438,14 @@ public class SquareGrid : MonoBehaviour
             {
                 CharacterController occupant = occupants[occIndex];
                 if (occupant == null || occupant == mover)
+                    continue;
+
+                // D&D 3.5e: Dead creatures do not block movement.
+                // A dead creature's square can be moved through freely.
+                // This is critical for Wall of Ice breach damage: if a creature
+                // dies on a breached section, other creatures must still be able
+                // to path through (and take pass-through cold damage).
+                if (occupant.Stats != null && occupant.Stats.IsDead)
                     continue;
 
                 bool isAllyOccupant = mover != null && occupant.Team == mover.Team;
