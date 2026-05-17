@@ -95,6 +95,36 @@ public partial class GameManager
     /// </summary>
     private List<CharacterController> _pendingWallLineTargetsForDirection;
 
+    // ─── Ring Mode Direction Selection Phase ───
+    // After ring radius is selected, the player clicks inside/outside the ring
+    // to choose inwards/outwards heat direction (mirroring the line mode UX).
+
+    /// <summary>
+    /// True when we are in the Ring mode direction selection phase
+    /// (ring placed, waiting for player to click inside/outside to choose heat side).
+    /// </summary>
+    private bool _pendingWallRingDirectionPhase;
+
+    /// <summary>
+    /// Stored ring cells during ring direction selection phase (before final cast).
+    /// </summary>
+    private HashSet<Vector2Int> _pendingWallRingCellsForDirection;
+
+    /// <summary>
+    /// Stored targets during ring direction selection phase (before final cast).
+    /// </summary>
+    private List<CharacterController> _pendingWallRingTargetsForDirection;
+
+    /// <summary>
+    /// Stored ring center during ring direction selection phase.
+    /// </summary>
+    private Vector2Int _pendingWallRingCenterForDirection;
+
+    /// <summary>
+    /// Stored ring radius during ring direction selection phase.
+    /// </summary>
+    private int _pendingWallRingRadiusForDirection;
+
     // ─────────────────────────────────────────────────────────────
     //  Helpers
     // ─────────────────────────────────────────────────────────────
@@ -111,6 +141,11 @@ public partial class GameManager
         _pendingWallLineDirectionPhase = false;
         _pendingWallLineCellsForDirection = null;
         _pendingWallLineTargetsForDirection = null;
+        _pendingWallRingDirectionPhase = false;
+        _pendingWallRingCellsForDirection = null;
+        _pendingWallRingTargetsForDirection = null;
+        _pendingWallRingCenterForDirection = Vector2Int.zero;
+        _pendingWallRingRadiusForDirection = 0;
     }
 
     /// <summary>
@@ -309,8 +344,9 @@ public partial class GameManager
 
                 Debug.Log($"[WallOfFire] Ring mode: center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, cells={ringCells.Count}, targets={targets.Count}");
 
-                // Chain to heat wave direction selection (PHB p.298)
-                ShowWallOfFireRingHeatDirectionSelection(caster, centerCell, chosenRadius, ringCells, targets);
+                // Chain to click-based heat wave direction selection phase (PHB p.298)
+                // Player clicks inside/outside the ring to choose inwards/outwards
+                EnterWallOfFireRingDirectionPhase(caster, centerCell, chosenRadius, ringCells, targets);
             },
             onCancel: () =>
             {
@@ -343,71 +379,127 @@ public partial class GameManager
 
     // ─────────────────────────────────────────────────────────────
     //  Heat Wave Direction Selection — Ring Mode (PHB p.298)
+    //  Click-based: mouse inside ring = Inwards, outside = Outwards
     // ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// After ring radius is selected, show "Inwards" or "Outwards" heat wave direction prompt.
+    /// Check if we are in the ring mode direction selection phase.
     /// </summary>
-    private void ShowWallOfFireRingHeatDirectionSelection(
+    private bool IsPendingWallOfFireRingDirectionPhase()
+    {
+        return IsPendingWallOfFire()
+            && _pendingWallOfFireMode == WallOfFireMode.Ring
+            && _pendingWallRingDirectionPhase
+            && _pendingWallRingCellsForDirection != null;
+    }
+
+    /// <summary>
+    /// Enter the ring mode direction selection phase after the ring radius is chosen.
+    /// Player moves mouse inside/outside ring to preview heat direction, clicks to confirm.
+    /// </summary>
+    private void EnterWallOfFireRingDirectionPhase(
         CharacterController caster, Vector2Int centerCell, int chosenRadius,
         HashSet<Vector2Int> ringCells, List<CharacterController> targets)
     {
-        if (caster == null || caster.Stats == null || CombatUI == null)
+        _pendingWallRingDirectionPhase = true;
+        _pendingWallRingCellsForDirection = ringCells;
+        _pendingWallRingTargetsForDirection = targets;
+        _pendingWallRingCenterForDirection = centerCell;
+        _pendingWallRingRadiusForDirection = chosenRadius;
+        _pendingWallHeatDirectionRing = null;
+
+        // Keep AoE targeting active so UpdateAoEPreview can show heat wave preview
+        _isAoETargeting = true;
+
+        // Highlight the ring cells
+        if (ringCells != null)
         {
-            ShowActionChoices();
-            return;
+            foreach (Vector2Int cell in ringCells)
+            {
+                SquareCell sc = Grid.GetCell(cell);
+                if (sc != null) sc.SetHighlight(HighlightType.AoETarget);
+            }
         }
 
-        CurrentSubPhase = PlayerSubPhase.ChoosingAction;
-        CombatUI.SetActionButtonsVisible(false);
+        CombatUI?.SetTurnIndicator(
+            $"✦ Wall of Fire (Ring): Click INSIDE ring for Inwards heat, OUTSIDE for Outwards | Right-click to cancel");
+        CombatUI?.ShowCombatLog("🔥 Ring placed! Click inside the ring for Inwards heat, or outside for Outwards. Right-click to cancel.");
 
-        var options = new List<string>
+        Debug.Log($"[WallOfFire] Entered ring direction selection phase. center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, ringCells={ringCells?.Count ?? 0}");
+    }
+
+    /// <summary>
+    /// Determine if a grid position is inside the ring (closer to center than the ring radius).
+    /// Returns true for inside, false for outside or on the ring.
+    /// </summary>
+    private bool IsInsideRing(Vector2Int point, Vector2Int center, int radius)
+    {
+        int dist = SquareGridUtils.GetDistance(center, point);
+        return dist < radius;
+    }
+
+    /// <summary>
+    /// Get heat wave preview cells for the ring: cells within 2 squares of the ring
+    /// on the specified side (inside or outside).
+    /// </summary>
+    private HashSet<Vector2Int> GetHeatWaveCellsForRingSide(
+        Vector2Int center, int radius, HashSet<Vector2Int> ringCells, bool inwards, int distanceSquares = 2)
+    {
+        var heatCells = new HashSet<Vector2Int>();
+        if (ringCells == null || ringCells.Count == 0) return heatCells;
+
+        foreach (Vector2Int ringCell in ringCells)
         {
-            "🔥 Inwards — Heat waves radiate toward the center",
-            "🔥 Outwards — Heat waves radiate away from the center"
-        };
-
-        CombatUI.ShowPickUpItemSelection(
-            actorName: caster.Stats.CharacterName,
-            itemOptions: options,
-            onSelect: selectedIndex =>
+            for (int dx = -distanceSquares; dx <= distanceSquares; dx++)
             {
-                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                for (int dy = -distanceSquares; dy <= distanceSquares; dy++)
                 {
-                    // Cancel — go back to radius selection
-                    _pendingWallHeatDirectionRing = null;
-                    CombatUI?.ShowCombatLog("⚠ Heat direction selection cancelled. Pick radius again.");
-                    ShowWallOfFireRadiusSelection(caster, centerCell);
-                    return;
+                    if (dx == 0 && dy == 0) continue;
+                    Vector2Int candidate = new Vector2Int(ringCell.x + dx, ringCell.y + dy);
+                    if (ringCells.Contains(candidate)) continue; // Skip ring cells themselves
+
+                    int distFromCenter = SquareGridUtils.GetDistance(center, candidate);
+                    int distFromRing = SquareGridUtils.GetDistance(ringCell, candidate);
+                    if (distFromRing > distanceSquares) continue;
+
+                    // Inwards = closer to center than ring, Outwards = farther
+                    bool candidateInside = distFromCenter < radius;
+                    if (inwards && candidateInside)
+                        heatCells.Add(candidate);
+                    else if (!inwards && !candidateInside)
+                        heatCells.Add(candidate);
                 }
+            }
+        }
+        return heatCells;
+    }
 
-                _pendingWallHeatDirectionRing = selectedIndex == 0 ? "Inwards" : "Outwards";
-                string chosen = _pendingWallHeatDirectionRing;
-                CombatUI?.ShowCombatLog($"🔥 Wall of Fire heat waves: {chosen}.");
+    /// <summary>
+    /// Confirm the ring heat wave direction based on click position and finalize the spell.
+    /// </summary>
+    private void ConfirmWallOfFireRingDirection(CharacterController caster, bool inwards)
+    {
+        if (!_pendingWallRingDirectionPhase || _pendingWallRingCellsForDirection == null)
+            return;
 
-                Debug.Log($"[WallOfFire] Ring heat direction: {chosen}, center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, cells={ringCells.Count}");
+        _pendingWallHeatDirectionRing = inwards ? "Inwards" : "Outwards";
 
-                // Clear any remaining highlights
-                _currentAoECells = null;
-                _lastAoEHoverPos = new Vector2Int(-1, -1);
-                _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
-                _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+        string chosen = _pendingWallHeatDirectionRing;
+        CombatUI?.ShowCombatLog($"🔥 Wall of Fire heat waves: {chosen}.");
+        Debug.Log($"[WallOfFire] Ring heat direction confirmed: {chosen}, center=({_pendingWallRingCenterForDirection.x},{_pendingWallRingCenterForDirection.y}), radius={_pendingWallRingRadiusForDirection}");
 
-                // Execute the spell
-                PerformAoESpellCast(caster, targets, ringCells);
-            },
-            onCancel: () =>
-            {
-                _pendingWallHeatDirectionRing = null;
-                CombatUI?.ShowCombatLog("↩ Heat direction selection cancelled. Pick radius again.");
-                ShowWallOfFireRadiusSelection(caster, centerCell);
-            },
-            titleOverride: "Wall of Fire Ring — Heat Wave Direction (PHB p.298)",
-            bodyOverride: "Wall of Fire sends out waves of heat, dealing 2d4 fire damage to creatures within 10 ft on the hot side.\n"
-                + "Choose which side of the ring radiates heat:\n"
-                + "• Inwards: Heat radiates toward the center (damages creatures inside the ring)\n"
-                + "• Outwards: Heat radiates away from the center (damages creatures outside the ring)",
-            optionButtonColorOverride: new Color(0.75f, 0.25f, 0.1f, 1f));
+        // Exit direction selection phase
+        _pendingWallRingDirectionPhase = false;
+
+        // Exit AoE targeting
+        _isAoETargeting = false;
+        _currentAoECells = null;
+        _lastAoEHoverPos = new Vector2Int(-1, -1);
+        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+        _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+
+        // Execute the spell with stored cells and targets
+        PerformAoESpellCast(caster, _pendingWallRingTargetsForDirection, _pendingWallRingCellsForDirection);
     }
 
     // ─────────────────────────────────────────────────────────────

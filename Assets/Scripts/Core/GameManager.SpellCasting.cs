@@ -2496,7 +2496,64 @@ public partial class GameManager
                     // Mouse is on the line itself — just show wall cells
                     _currentAoECells = new HashSet<Vector2Int>(_pendingWallLineCellsForDirection);
                 }
-                return; // Direction phase handles its own highlighting
+                return; // Line direction phase handles its own highlighting
+            }
+
+            // ── Wall of Fire Ring Mode: DIRECTION SELECTION PHASE ──
+            // After ring placement, mouse position (inside/outside ring) determines heat direction.
+            // We show ring cells in red and heat wave cells (preview) on the hovered side.
+            if (IsPendingWallOfFireRingDirectionPhase())
+            {
+                if (gridPos == _lastLineHoverKey) return;
+                _lastLineHoverKey = gridPos;
+
+                // Clear previous preview
+                if (_currentAoECells != null)
+                {
+                    foreach (Vector2Int c in _currentAoECells)
+                    {
+                        SquareCell sc = Grid.GetCell(c);
+                        if (sc != null) sc.SetHighlight(HighlightType.None);
+                    }
+                }
+
+                // Re-highlight the ring cells
+                foreach (Vector2Int rc in _pendingWallRingCellsForDirection)
+                {
+                    SquareCell sc = Grid.GetCell(rc);
+                    if (sc != null) sc.SetHighlight(HighlightType.AoETarget);
+                }
+
+                // Determine if mouse is inside or outside the ring
+                bool mouseInside = IsInsideRing(gridPos, _pendingWallRingCenterForDirection, _pendingWallRingRadiusForDirection);
+
+                // Don't show preview if mouse is on the ring itself
+                bool mouseOnRing = _pendingWallRingCellsForDirection.Contains(gridPos);
+
+                if (!mouseOnRing)
+                {
+                    // Show heat wave preview cells on the hovered side (10 ft = 2 squares)
+                    HashSet<Vector2Int> heatCells = GetHeatWaveCellsForRingSide(
+                        _pendingWallRingCenterForDirection, _pendingWallRingRadiusForDirection,
+                        _pendingWallRingCellsForDirection, mouseInside, 2);
+
+                    foreach (Vector2Int hc in heatCells)
+                    {
+                        SquareCell sc = Grid.GetCell(hc);
+                        if (sc != null) sc.SetHighlight(HighlightType.AoEPreview);
+                    }
+
+                    // Track all highlighted cells for clearing
+                    var allCells = new HashSet<Vector2Int>(_pendingWallRingCellsForDirection);
+                    allCells.UnionWith(heatCells);
+                    _currentAoECells = allCells;
+                }
+                else
+                {
+                    // Mouse is on the ring itself — just show ring cells
+                    _currentAoECells = new HashSet<Vector2Int>(_pendingWallRingCellsForDirection);
+                }
+                return; // Ring direction phase handles its own highlighting
             }
 
             if (gridPos == _lastLineHoverKey) return;
@@ -2796,9 +2853,25 @@ public partial class GameManager
                         return;
                     }
                 }
-                // ── RING MODE: click center, then radius prompt ──
+                // ── RING MODE ──
                 else if (_pendingWallOfFireMode == WallOfFireMode.Ring)
                 {
+                    // ── DIRECTION PHASE: click to confirm heat wave direction ──
+                    if (IsPendingWallOfFireRingDirectionPhase())
+                    {
+                        // Check if click is on the ring itself
+                        if (_pendingWallRingCellsForDirection.Contains(targetPos))
+                        {
+                            CombatUI?.ShowCombatLog("⚠ Click inside or outside the ring, not on the ring itself.");
+                            return;
+                        }
+
+                        bool clickInside = IsInsideRing(targetPos, _pendingWallRingCenterForDirection, _pendingWallRingRadiusForDirection);
+                        ConfirmWallOfFireRingDirection(caster, clickInside);
+                        return;
+                    }
+
+                    // ── CENTER SELECTION: click center, then radius prompt ──
                     if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, spellRange))
                     {
                         Debug.Log($"[WallOfFire] Ring center ({targetPos.x},{targetPos.y}) out of spell range");
