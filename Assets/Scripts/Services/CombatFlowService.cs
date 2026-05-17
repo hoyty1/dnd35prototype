@@ -603,6 +603,10 @@ public class CombatFlowService : MonoBehaviour
         if (result.Hit && result.TotalDamage > 0)
             _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamage);
 
+        // Fire Shield retribution: defender's Fire Shield damages melee attacker
+        if (result.Hit && !result.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
+            _gameManager.ResolveFireShieldRetribution(target, attacker);
+
         if (result.TargetKilled)
         {
             LogDeathPoint("PerformIterativeSequenceAttack:TargetKilled", attacker, target);
@@ -818,6 +822,10 @@ public class CombatFlowService : MonoBehaviour
         if (result.Hit && result.TotalDamage > 0)
             _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamage);
 
+        // Fire Shield retribution: defender's Fire Shield damages melee attacker
+        if (result.Hit && !result.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
+            _gameManager.ResolveFireShieldRetribution(target, attacker);
+
         if (result.TargetKilled)
         {
             LogDeathPoint("PerformSingleAttack:TargetKilled", attacker, target);
@@ -891,7 +899,13 @@ public class CombatFlowService : MonoBehaviour
         {
             for (int i = 0; i < result.Attacks.Count; i++)
             {
-                _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result.Attacks[i], rangeInfo);
+                var attack = result.Attacks[i];
+                _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, attack, rangeInfo);
+
+                // Fire Shield retribution: defender's Fire Shield damages melee attacker per hit
+                if (attack.Hit && !attack.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
+                    _gameManager.ResolveFireShieldRetribution(target, attacker);
+
                 if (target == null || target.Stats == null || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
                     break;
             }
@@ -941,6 +955,16 @@ public class CombatFlowService : MonoBehaviour
         if (result.TotalDamageDealt > 0)
             _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamageDealt);
 
+        // Fire Shield retribution: defender's Fire Shield damages melee attacker per hit
+        if (result.Attacks != null && target != null && target.Stats != null && target.Stats.FireShieldActive)
+        {
+            foreach (var attack in result.Attacks)
+            {
+                if (attack.Hit && !attack.IsRangedAttack)
+                    _gameManager.ResolveFireShieldRetribution(target, attacker);
+            }
+        }
+
         if (result.TargetKilled)
         {
             LogDeathPoint("PerformDualWieldAttack:TargetKilled", attacker, target);
@@ -984,6 +1008,16 @@ public class CombatFlowService : MonoBehaviour
 
         if (result.TotalDamageDealt > 0)
             _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+
+        // Fire Shield retribution: defender's Fire Shield damages melee attacker per hit
+        if (result.Attacks != null && target != null && target.Stats != null && target.Stats.FireShieldActive)
+        {
+            foreach (var attack in result.Attacks)
+            {
+                if (attack.Hit && !attack.IsRangedAttack)
+                    _gameManager.ResolveFireShieldRetribution(target, attacker);
+            }
+        }
 
         if (result.TargetKilled)
         {

@@ -543,6 +543,10 @@ public static class ThreatSystem
             Debug.Log($"[ThreatSystem] AoO HIT! {threatener.Stats.CharacterName} deals {result.TotalDamage} damage to {target.Stats.CharacterName}{critStr}");
             Debug.Log($"[ThreatSystem] {target.Stats.CharacterName} HP: {result.DefenderHPBefore} → {result.DefenderHPAfter}");
 
+            // Fire Shield retribution: AoO is a melee attack, triggers Fire Shield
+            if (target != null && target.Stats != null && target.Stats.FireShieldActive && GameManager.Instance != null)
+                GameManager.Instance.ResolveFireShieldRetribution(target, threatener);
+
             if (result.TargetKilled)
             {
                 Debug.Log($"[ThreatSystem] {target.Stats.CharacterName} was SLAIN by the Attack of Opportunity!");

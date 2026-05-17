@@ -2701,19 +2701,23 @@ public partial class GameManager
     /// <summary>
     /// Called when a character with Fire Shield is struck by a melee attack.
     /// Deals retribution damage (1d6 + CL, max +15) to the attacker.
-    /// No save for retribution damage.
+    /// No save for retribution damage. PHB p.230: triggers on any creature
+    /// striking the defender with its body or a handheld weapon (includes reach).
     /// </summary>
     public void ResolveFireShieldRetribution(CharacterController defender, CharacterController attacker)
     {
-        if (defender == null || defender.Stats == null || !defender.Stats.FireShieldActive)
-            return;
-        if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
-            return;
+        Debug.Log($"[FireShield] ResolveFireShieldRetribution called | defender={defender?.Stats?.CharacterName ?? "null"} | attacker={attacker?.Stats?.CharacterName ?? "null"}");
 
-        // Check distance — must be within 5 ft (1 square)
-        int distance = SquareGridUtils.GetDistance(defender.GridPosition, attacker.GridPosition);
-        if (distance > 1)
+        if (defender == null || defender.Stats == null || !defender.Stats.FireShieldActive)
+        {
+            Debug.Log($"[FireShield] BAIL: defender null or FireShieldActive=false | active={defender?.Stats?.FireShieldActive}");
             return;
+        }
+        if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
+        {
+            Debug.Log($"[FireShield] BAIL: attacker null or dead | dead={attacker?.Stats?.IsDead}");
+            return;
+        }
 
         int casterLevel = defender.Stats.FireShieldCasterLevel;
         int clBonus = Mathf.Min(casterLevel, 15);
@@ -2721,6 +2725,8 @@ public partial class GameManager
 
         bool isWarm = defender.Stats.FireShieldIsWarm;
         string dmgType = isWarm ? "fire" : "cold";
+
+        Debug.Log($"[FireShield] Retribution damage={damage} ({dmgType}) | CL={casterLevel} | isWarm={isWarm} | attacker HP before={attacker.Stats.CurrentHP}");
 
         attacker.Stats.TakeDamage(damage);
 
