@@ -18,7 +18,7 @@ using DND35e.Identifiers;
 ///       Band 1: 2d4 fire damage to creatures within 10 ft (1-2 squares) of hot side
 ///       Band 2: 1d4 fire damage to creatures within 10-20 ft (3-4 squares) of hot side
 ///       Cool side: NO heat wave damage at all
-///   • Pass-through: 2d6+CL (max +20) fire damage to creatures passing through (Reflex half)
+///   • Pass-through: 2d6+CL (max +20) fire damage to creatures passing through (NO save)
 ///   • Undead take double damage from Wall of Fire (PHB 3.5e)
 ///   • Multi-square creatures only take damage once per entry/stay
 ///   • Wall is opaque: blocks line of sight, provides 20% concealment (miss chance) for attacks through
@@ -121,20 +121,35 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             SizeX = Mathf.Max(2, LengthSquares);
         }
 
+        // IMPORTANT: base.Start() calls CalculateAffectedCells() then ApplyInitialEffect().
+        // Our override of CalculateAffectedCells() applies _pendingExplicitCells BEFORE
+        // ApplyInitialEffect() runs, so creatures inside a ring (but NOT on wall cells)
+        // won't incorrectly receive pass-through damage on creation.
         base.Start();
 
+        // Deal initial heat wave damage AFTER base.Start() (PHB p.298).
+        // AffectedCells now contains only the ring perimeter (not a filled circle)
+        // so IsCharacterInArea correctly identifies only creatures standing ON the ring.
+        TriggerHeatWaveDamage("on creation");
+    }
+
+    /// <summary>
+    /// Override CalculateAffectedCells to use explicit cells (ring perimeter) when available.
+    /// This ensures AffectedCells is correct BEFORE ApplyInitialEffect() runs in base.Start(),
+    /// preventing creatures inside the ring (but not on wall cells) from taking pass-through damage.
+    /// </summary>
+    protected override void CalculateAffectedCells()
+    {
         if (_pendingExplicitCells != null && _pendingExplicitCells.Count > 0)
         {
             AffectedCells = new HashSet<Vector2Int>(_pendingExplicitCells);
-            RemoveGridHighlight();
-            ApplyGridHighlight();
             _pendingExplicitCells = null;
+            Debug.Log($"[WallOfFire] CalculateAffectedCells: Used {AffectedCells.Count} explicit cells (ring perimeter) instead of filled circle");
+            return;
         }
 
-        // Deal initial heat wave damage AFTER explicit cells are set (PHB p.298).
-        // This ensures AffectedCells contains only the ring perimeter (not a filled circle)
-        // so IsCharacterInArea correctly identifies only creatures standing ON the ring.
-        TriggerHeatWaveDamage("on creation");
+        base.CalculateAffectedCells();
+        Debug.Log($"[WallOfFire] CalculateAffectedCells: Calculated {AffectedCells.Count} cells via base (line mode or no explicit cells)");
     }
 
     protected override void OnAreaCreated()
@@ -151,7 +166,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         }
         LogEffect("  • Hot side: 2d4 fire within 10 ft, 1d4 fire within 10-20 ft [No save]");
         LogEffect("  • Cool side: no heat wave damage");
-        LogEffect("  • Pass-through: 2d6+CL (max +20) fire damage [Reflex half]");
+        LogEffect("  • Pass-through: 2d6+CL (max +20) fire damage [No save]");
         LogEffect("  • Undead take double damage");
         LogEffect("  • Wall is opaque — blocks line of sight, 20% concealment for attacks through");
         LogEffect("  • Sections can be extinguished by 20+ cold damage in one round");
@@ -199,6 +214,17 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
 
+        // SAFETY CHECK: Verify creature is actually in a wall cell (AffectedCells).
+        // This guards against edge cases where the base class tracking might fire
+        // before AffectedCells has been narrowed to ring-perimeter-only cells.
+        if (!AffectedCells.Contains(character.GridPosition))
+        {
+            Debug.Log($"[WallOfFire][PassThrough] BLOCKED OnCreatureEntersArea for {character.Stats.CharacterName} "
+                + $"at ({character.GridPosition.x},{character.GridPosition.y}) — NOT in AffectedCells (wall cells). "
+                + $"Creature is inside ring area but not on a wall cell. No pass-through damage.");
+            return;
+        }
+
         // Check if all wall cells this creature occupies are extinguished
         if (AreAllCreatureCellsExtinguished(character))
             return;
@@ -210,6 +236,8 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         _damagedOnEntry.Add(character);
 
         string timing = isInitial ? "is caught in" : "passes through";
+        Debug.Log($"[WallOfFire][PassThrough] ✓ {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) "
+            + $"— IS in wall cell, applying PASS-THROUGH damage (context: {timing}, isInitial: {isInitial})");
         DealPassThroughDamage(character, timing);
     }
 
@@ -217,6 +245,14 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     {
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
+
+        // SAFETY CHECK: Verify creature is actually in a wall cell
+        if (!AffectedCells.Contains(character.GridPosition))
+        {
+            Debug.Log($"[WallOfFire][PassThrough] BLOCKED OnCreatureInAreaAtRoundStart for {character.Stats.CharacterName} "
+                + $"at ({character.GridPosition.x},{character.GridPosition.y}) — NOT in AffectedCells (wall cells).");
+            return;
+        }
 
         // Check if all wall cells this creature occupies are extinguished
         if (AreAllCreatureCellsExtinguished(character))
@@ -228,22 +264,33 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
         _damagedThisRound.Add(character);
 
+        Debug.Log($"[WallOfFire][PassThrough] ✓ {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) "
+            + $"— IS in wall cell at round start, applying PASS-THROUGH damage");
         DealPassThroughDamage(character, "remains in");
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  PASS-THROUGH Damage: 2d6 + CL fire (Reflex half)
+    //  PASS-THROUGH Damage: 2d6 + CL fire (NO save — PHB p.298)
     //  Applied when a creature enters or remains in wall cells.
+    //  Per PHB 3.5e p.298: "Any creature passing through the wall takes
+    //  2d6 points of damage +1 point of damage per caster level (maximum +20)."
+    //  NO saving throw — the Reflex save mentioned for Wall of Fire only
+    //  applies to the initial casting if it catches a creature.
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Deals 2d6 + CL (max +20) fire damage to a creature in the wall. Reflex half.
+    /// Deals 2d6 + CL (max +20) fire damage to a creature in the wall. NO save (PHB p.298).
     /// Undead creatures take double damage (PHB 3.5e).
     /// </summary>
     private void DealPassThroughDamage(CharacterController character, string context)
     {
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
+
+        // Debug: verify creature is actually in a wall cell
+        Debug.Log($"[WallOfFire][PassThrough] TRIGGER: {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) "
+            + $"— context='{context}', InAffectedCells={AffectedCells.Contains(character.GridPosition)}, "
+            + $"AffectedCells.Count={AffectedCells.Count}");
 
         int clBonus = Mathf.Min(CasterLevel, 20);
         int d1 = Random.Range(1, 7);
@@ -255,25 +302,15 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         if (isUndead)
             baseDamage *= 2;
 
-        // Reflex save for half
-        int saveRoll = Random.Range(1, 21);
-        int saveTotal = saveRoll + character.Stats.ReflexSave;
-        bool saveSuccess = saveTotal >= SaveDC;
-
-        int finalDamage = baseDamage;
-        if (saveSuccess)
-            finalDamage = Mathf.Max(1, baseDamage / 2);
-
-        finalDamage = Mathf.Max(0, finalDamage);
+        // NO saving throw for pass-through damage (PHB p.298)
+        int finalDamage = Mathf.Max(0, baseDamage);
 
         if (finalDamage > 0)
             character.Stats.TakeDamage(finalDamage);
 
         string undeadNote = isUndead ? " [UNDEAD ×2]" : "";
-        string saveResult = saveSuccess ? "SAVE" : "FAIL";
-        LogEffect($"🔥 PASS-THROUGH: {character.Stats.CharacterName} {context} the Wall of Fire — "
-            + $"{finalDamage} fire damage [2d6({d1}+{d2})+{clBonus}] "
-            + $"(Reflex DC {SaveDC}: rolled d20({saveRoll})+{character.Stats.ReflexSave}={saveTotal}, {saveResult}){undeadNote}");
+        LogEffect($"🔥 {character.Stats.CharacterName} takes {finalDamage} fire damage from Wall of Fire PASS-THROUGH "
+            + $"[2d6({d1}+{d2})+{clBonus}CL={d1 + d2 + clBonus}] [No save]{undeadNote}");
 
         if (character.Stats.IsDead)
         {
@@ -572,7 +609,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     //    Band 1 (Close):  1-2 squares from hot side → 2d4 fire (NO save)
     //    Band 2 (Medium): 3-4 squares from hot side → 1d4 fire (NO save)
     //  Undead take double damage in both bands.
-    //  NO saving throw for heat wave damage (Reflex save is ONLY for pass-through).
+    //  NO saving throw for heat wave damage (pass-through also has NO save per PHB p.298).
     //  Triggered:
     //    1) At time of casting (wall creation)
     //    2) At the beginning of the caster's turn each round
@@ -890,7 +927,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     ///   Band 1 (1-2 sq from hot side): 2d4 fire damage [NO save]
     ///   Band 2 (3-4 sq from hot side): 1d4 fire damage [NO save]
     /// Undead take double damage (PHB 3.5e p.298).
-    /// NOTE: Heat wave damage has NO saving throw. Only pass-through damage has Reflex.
+    /// NOTE: Neither heat wave NOR pass-through damage has a saving throw (PHB p.298).
     /// </summary>
     /// <param name="character">The creature taking damage.</param>
     /// <param name="band">1 for close band (2d4), 2 for medium band (1d4).</param>
