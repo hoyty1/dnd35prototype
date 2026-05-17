@@ -7812,6 +7812,10 @@ public class CharacterController : MonoBehaviour
         if (attacker != null)
             bestMissChance = Mathf.Max(bestMissChance, DarknessAreaEffect.GetAttackConcealmentMissChance(attacker, this));
 
+        // Wall of Fire is opaque (PHB p.298) — attacks through active wall cells have 20% miss chance.
+        if (attacker != null)
+            bestMissChance = Mathf.Max(bestMissChance, WallOfFireAreaEffect.GetAttackConcealmentMissChance(attacker, this));
+
         return bestMissChance;
     }
 

@@ -14,14 +14,14 @@ using DND35e.Identifiers;
 ///      The caster picks a center point and radius.
 ///
 /// Damage:
-///   • Heat wave (hot side only, no save):
+///   • Heat wave (hot side only, NO save):
 ///       Band 1: 2d4 fire damage to creatures within 10 ft (1-2 squares) of hot side
 ///       Band 2: 1d4 fire damage to creatures within 10-20 ft (3-4 squares) of hot side
 ///       Cool side: NO heat wave damage at all
-///   • 2d6+CL (max +20) fire damage to creatures passing through (Reflex half)
+///   • Pass-through: 2d6+CL (max +20) fire damage to creatures passing through (Reflex half)
 ///   • Undead take double damage from Wall of Fire (PHB 3.5e)
 ///   • Multi-square creatures only take damage once per entry/stay
-///   • Wall is opaque: 50% concealment
+///   • Wall is opaque: blocks line of sight, provides 20% concealment (miss chance) for attacks through
 ///   • Duration: Concentration + 1 round/level
 ///   • A wall section (cell) that takes 20+ cold damage in a single round is extinguished
 ///
@@ -141,7 +141,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     {
         if (IsRingMode)
         {
-            string ringDir = !string.IsNullOrEmpty(HeatWaveDirectionRing) ? HeatWaveDirectionRing : "Inwards";
+            string ringDir = GetEffectiveRingDirection();
             LogEffect($"🔥 A blazing ring of fire appears ({RingRadius * 5}-ft radius, heat {ringDir.ToLower()})!");
         }
         else
@@ -149,11 +149,11 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             string lineDir = HeatWaveDirectionLine.HasValue ? $", heat side selected" : "";
             LogEffect($"🔥 A blazing wall of fire appears ({SizeX * 5} ft long{lineDir})!");
         }
-        LogEffect("  • Hot side: 2d4 fire within 10 ft, 1d4 fire within 10-20 ft (no save)");
+        LogEffect("  • Hot side: 2d4 fire within 10 ft, 1d4 fire within 10-20 ft [No save]");
         LogEffect("  • Cool side: no heat wave damage");
-        LogEffect("  • 2d6+CL (max +20) fire damage to those passing through (Reflex half)");
+        LogEffect("  • Pass-through: 2d6+CL (max +20) fire damage [Reflex half]");
         LogEffect("  • Undead take double damage");
-        LogEffect("  • Wall is opaque — provides 50% concealment");
+        LogEffect("  • Wall is opaque — blocks line of sight, 20% concealment for attacks through");
         LogEffect("  • Sections can be extinguished by 20+ cold damage in one round");
 
         // Subscribe to TurnStartedEvent so we can trigger heat wave at caster's turn start
@@ -231,6 +231,11 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         DealPassThroughDamage(character, "remains in");
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    //  PASS-THROUGH Damage: 2d6 + CL fire (Reflex half)
+    //  Applied when a creature enters or remains in wall cells.
+    // ════════════════════════════════════════════════════════════════════
+
     /// <summary>
     /// Deals 2d6 + CL (max +20) fire damage to a creature in the wall. Reflex half.
     /// Undead creatures take double damage (PHB 3.5e).
@@ -241,30 +246,34 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             return;
 
         int clBonus = Mathf.Min(CasterLevel, 20);
-        int damage = Random.Range(1, 7) + Random.Range(1, 7) + clBonus; // 2d6 + CL
+        int d1 = Random.Range(1, 7);
+        int d2 = Random.Range(1, 7);
+        int baseDamage = d1 + d2 + clBonus; // 2d6 + CL
 
         // Undead take double damage from Wall of Fire (PHB 3.5e p.298)
         bool isUndead = IsCreatureUndead(character);
         if (isUndead)
-            damage *= 2;
+            baseDamage *= 2;
 
         // Reflex save for half
         int saveRoll = Random.Range(1, 21);
         int saveTotal = saveRoll + character.Stats.ReflexSave;
         bool saveSuccess = saveTotal >= SaveDC;
 
+        int finalDamage = baseDamage;
         if (saveSuccess)
-            damage = Mathf.Max(1, damage / 2);
+            finalDamage = Mathf.Max(1, baseDamage / 2);
 
-        int finalDamage = Mathf.Max(0, damage);
+        finalDamage = Mathf.Max(0, finalDamage);
 
         if (finalDamage > 0)
             character.Stats.TakeDamage(finalDamage);
 
         string undeadNote = isUndead ? " [UNDEAD ×2]" : "";
-        LogEffect($"  🔥 {character.Stats.CharacterName} {context} the Wall of Fire: "
-            + $"Reflex d20({saveRoll})+{character.Stats.ReflexSave}={saveTotal} vs DC {SaveDC} "
-            + $"=> {(saveSuccess ? "half" : "full")} {finalDamage} fire damage{undeadNote}");
+        string saveResult = saveSuccess ? "SAVE" : "FAIL";
+        LogEffect($"🔥 PASS-THROUGH: {character.Stats.CharacterName} {context} the Wall of Fire — "
+            + $"{finalDamage} fire damage [2d6({d1}+{d2})+{clBonus}] "
+            + $"(Reflex DC {SaveDC}: rolled d20({saveRoll})+{character.Stats.ReflexSave}={saveTotal}, {saveResult}){undeadNote}");
 
         if (character.Stats.IsDead)
         {
@@ -290,6 +299,55 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         LogEffect("The Wall of Fire flickers and fades.");
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    //  OPACITY / CONCEALMENT (PHB p.298)
+    //  Wall of Fire is opaque: blocks line of sight and provides 20%
+    //  concealment (miss chance) for attacks that cross active wall cells.
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Checks if an attack line between attacker and target crosses any active
+    /// (non-extinguished) Wall of Fire cell. Returns 20 (%) if so, 0 otherwise.
+    /// This provides the concealment miss chance per PHB p.298 ("Wall of Fire is opaque").
+    /// Integrate into CharacterController.GetMissChance for automatic application.
+    /// </summary>
+    public static int GetAttackConcealmentMissChance(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null)
+            return 0;
+
+        if (!AreaEffectManager.HasInstance)
+            return 0;
+
+        List<WallOfFireAreaEffect> walls = AreaEffectManager.Instance.GetEffectsOfType<WallOfFireAreaEffect>();
+        if (walls == null || walls.Count == 0)
+            return 0;
+
+        Vector2Int from = attacker.GridPosition;
+        Vector2Int to = target.GridPosition;
+
+        for (int i = 0; i < walls.Count; i++)
+        {
+            WallOfFireAreaEffect wall = walls[i];
+            if (wall == null || wall.AffectedCells == null)
+                continue;
+
+            // Build set of active (non-extinguished) cells
+            HashSet<Vector2Int> activeCells = wall.GetActiveCells();
+            if (activeCells.Count == 0)
+                continue;
+
+            // Don't count concealment if attacker or target is standing IN the wall
+            if (activeCells.Contains(from) || activeCells.Contains(to))
+                continue;
+
+            if (WindWallAreaEffect.LineSegmentCrossesAnyCellPublic(from, to, activeCells))
+                return 20; // 20% concealment / miss chance for attacks through the opaque wall
+        }
+
+        return 0;
+    }
+
     /// <summary>
     /// Checks if a ranged attack line crosses any active (non-extinguished) Wall of Fire cell.
     /// </summary>
@@ -308,23 +366,25 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             if (wall == null || wall.AffectedCells == null)
                 continue;
 
-            // Build set of active (non-extinguished) cells for LoS check
-            HashSet<Vector2Int> activeCells;
-            if (wall._extinguishedCells.Count == 0)
-            {
-                activeCells = wall.AffectedCells;
-            }
-            else
-            {
-                activeCells = new HashSet<Vector2Int>(wall.AffectedCells);
-                activeCells.ExceptWith(wall._extinguishedCells);
-            }
-
+            HashSet<Vector2Int> activeCells = wall.GetActiveCells();
             if (activeCells.Count > 0 && WindWallAreaEffect.LineSegmentCrossesAnyCellPublic(from, to, activeCells))
                 return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Returns the set of active (non-extinguished) wall cells.
+    /// </summary>
+    private HashSet<Vector2Int> GetActiveCells()
+    {
+        if (_extinguishedCells.Count == 0)
+            return AffectedCells;
+
+        var activeCells = new HashSet<Vector2Int>(AffectedCells);
+        activeCells.ExceptWith(_extinguishedCells);
+        return activeCells;
     }
 
     public void SetExplicitCells(HashSet<Vector2Int> cells)
@@ -365,6 +425,12 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             return 0f;
 
         return Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+    }
+
+    /// <summary>Helper to get the effective ring direction string.</summary>
+    private string GetEffectiveRingDirection()
+    {
+        return !string.IsNullOrEmpty(HeatWaveDirectionRing) ? HeatWaveDirectionRing : "Inwards";
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -503,9 +569,10 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     //  Heat Wave Damage (PHB 3.5e p.298) — Two-Band System
     //
     //  HOT SIDE ONLY (cool side gets NO heat wave damage):
-    //    Band 1 (Close):  1-2 squares from hot side → 2d4 fire (no save)
-    //    Band 2 (Medium): 3-4 squares from hot side → 1d4 fire (no save)
+    //    Band 1 (Close):  1-2 squares from hot side → 2d4 fire (NO save)
+    //    Band 2 (Medium): 3-4 squares from hot side → 1d4 fire (NO save)
     //  Undead take double damage in both bands.
+    //  NO saving throw for heat wave damage (Reflex save is ONLY for pass-through).
     //  Triggered:
     //    1) At time of casting (wall creation)
     //    2) At the beginning of the caster's turn each round
@@ -559,19 +626,28 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     /// <summary>
     /// Main heat wave damage trigger. Finds all creatures on the hot side
     /// within 4 squares and deals band-appropriate damage:
-    ///   Band 1 (1-2 sq): 2d4 fire
-    ///   Band 2 (3-4 sq): 1d4 fire
-    /// No saving throw. Undead take double. Cool side: no damage.
+    ///   Band 1 (1-2 sq): 2d4 fire — NO save
+    ///   Band 2 (3-4 sq): 1d4 fire — NO save
+    /// Undead take double. Cool side: no damage.
     /// </summary>
     /// <param name="context">Description for the combat log (e.g., "on creation", "at caster's turn start").</param>
     public void TriggerHeatWaveDamage(string context)
     {
         _heatWaveDamagedThisTrigger.Clear();
 
+        string modeLabel = IsRingMode ? "Ring" : "Line";
+        string dirLabel = IsRingMode
+            ? GetEffectiveRingDirection()
+            : (HeatWaveDirectionLine.HasValue ? $"Normal({HeatWaveDirectionLine.Value.x:F1},{HeatWaveDirectionLine.Value.y:F1})" : "NoDirection");
+
+        Debug.Log($"[WallOfFire][HeatWave] === TRIGGER ({context}) === Mode={modeLabel}, Direction={dirLabel}, "
+            + $"AffectedCells={AffectedCells?.Count ?? 0}, ActiveCells={ActiveCellCount}, "
+            + $"RingRadius={RingRadius}, Center=({CenterCell.x},{CenterCell.y})");
+
         List<(CharacterController creature, int band)> hotSideCreatures = GetCreaturesOnHotSideWithBand();
         if (hotSideCreatures.Count == 0)
         {
-            Debug.Log($"[WallOfFire] Heat wave ({context}): no creatures on hot side within {HeatWaveBand2MaxSquares} squares.");
+            Debug.Log($"[WallOfFire][HeatWave] No creatures on hot side within {HeatWaveBand2MaxSquares} squares — no heat wave damage this trigger.");
             return;
         }
 
@@ -597,11 +673,6 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         if (AffectedCells == null || AffectedCells.Count == 0)
             return result;
 
-        string dirLabel = IsRingMode
-            ? (!string.IsNullOrEmpty(HeatWaveDirectionRing) ? HeatWaveDirectionRing : "Inwards")
-            : (HeatWaveDirectionLine.HasValue ? "LineNormal" : "NoDirection");
-        Debug.Log($"[WallOfFire][HeatWave] Scanning for hot-side creatures (two-band). Mode={( IsRingMode ? "Ring" : "Line" )}, Direction={dirLabel}, AffectedCells={AffectedCells.Count}, RingRadius={RingRadius}, Center=({CenterCell.x},{CenterCell.y})");
-
         CharacterController[] allCharacters = FindObjectsOfType<CharacterController>();
 
         for (int i = 0; i < allCharacters.Length; i++)
@@ -617,7 +688,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             // Skip creatures standing IN the wall (they take pass-through damage instead)
             if (IsCharacterInArea(character))
             {
-                Debug.Log($"[WallOfFire][HeatWave]   SKIP {character.Stats.CharacterName} — standing IN wall at ({character.GridPosition.x},{character.GridPosition.y})");
+                Debug.Log($"[WallOfFire][HeatWave] SKIP {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) — standing IN wall cells (takes PASS-THROUGH damage, not heat wave)");
                 continue;
             }
 
@@ -626,13 +697,8 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             if (band > 0)
             {
                 string bandLabel = band == 1 ? "Band1 (1-2 sq, 2d4)" : "Band2 (3-4 sq, 1d4)";
-                Debug.Log($"[WallOfFire][HeatWave]   HIT {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) — {bandLabel}");
+                Debug.Log($"[WallOfFire][HeatWave] ✓ HIT {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) — HOT SIDE, {bandLabel}");
                 result.Add((character, band));
-            }
-            else
-            {
-                int distToCenter = IsRingMode ? SquareGridUtils.GetDistance(CenterCell, character.GridPosition) : -1;
-                Debug.Log($"[WallOfFire][HeatWave]   MISS {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) — distToCenter={distToCenter}, RingRadius={RingRadius}, not on hot side or out of range");
             }
         }
 
@@ -649,8 +715,9 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     {
         List<Vector2Int> occupied = character.GetOccupiedSquares();
         int bestBand = 0; // 0 = not in any band
-        bool foundInRange = false;
-        bool foundOnHotSide = false;
+        int closestDist = int.MaxValue;
+        bool anyInRange = false;
+        bool anyOnHotSide = false;
 
         for (int i = 0; i < occupied.Count; i++)
         {
@@ -666,13 +733,14 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
                 if (dist > HeatWaveBand2MaxSquares)
                     continue;
 
-                foundInRange = true;
+                anyInRange = true;
 
-                // Check if this creature cell is on the hot side
-                if (!IsCellOnHotSide(creatureCell, wallCell))
+                // Check if this creature cell is on the hot side relative to this wall cell
+                bool onHotSide = IsCellOnHotSide(creatureCell, wallCell);
+                if (!onHotSide)
                     continue;
 
-                foundOnHotSide = true;
+                anyOnHotSide = true;
 
                 // Determine band based on distance
                 int cellBand;
@@ -685,16 +753,40 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
                 if (bestBand == 0 || cellBand < bestBand)
                 {
                     bestBand = cellBand;
+                    closestDist = dist;
                     if (bestBand == 1)
                         return 1; // Can't do better than Band 1, exit early
                 }
             }
         }
 
-        if (foundInRange && !foundOnHotSide)
+        // Debug logging for creatures that were checked but not hit
+        if (anyInRange && !anyOnHotSide)
         {
-            int distToCenter = IsRingMode ? SquareGridUtils.GetDistance(CenterCell, character.GridPosition) : -1;
-            Debug.Log($"[WallOfFire][HeatWave]     {character.Stats.CharacterName}: in range of wall but NOT on hot side — cool side gets NO damage (distToCenter={distToCenter}, RingRadius={RingRadius}, direction={HeatWaveDirectionRing})");
+            if (IsRingMode)
+            {
+                int distToCenter = SquareGridUtils.GetDistance(CenterCell, character.GridPosition);
+                string dir = GetEffectiveRingDirection();
+                Debug.Log($"[WallOfFire][HeatWave] ✗ COOL SIDE: {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) "
+                    + $"— distToCenter={distToCenter}, RingRadius={RingRadius}, direction={dir} "
+                    + $"(hot side is {(dir == "Inwards" ? "INSIDE ring (dist < " + RingRadius + ")" : "OUTSIDE ring (dist > " + RingRadius + ")")}) "
+                    + $"— creature is on COOL side, NO damage");
+            }
+            else
+            {
+                Debug.Log($"[WallOfFire][HeatWave] ✗ COOL SIDE: {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) "
+                    + $"— on cool side of line wall, NO damage");
+            }
+        }
+        else if (!anyInRange)
+        {
+            // Only log if creature is somewhat close (within 6 squares of center) to avoid spam
+            int distToCenter = SquareGridUtils.GetDistance(CenterCell, character.GridPosition);
+            if (distToCenter <= RingRadius + HeatWaveBand2MaxSquares + 2)
+            {
+                Debug.Log($"[WallOfFire][HeatWave] ✗ OUT OF RANGE: {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) "
+                    + $"— not within {HeatWaveBand2MaxSquares} squares of any active wall cell");
+            }
         }
 
         return bestBand;
@@ -714,31 +806,32 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
     /// <summary>
     /// Ring mode: check if cell is on the hot side.
-    /// "Inwards" = cell is closer to center than the ring (inside).
-    /// "Outwards" = cell is farther from center than the ring (outside).
+    /// "Inwards" = heat goes toward center → creatures INSIDE the ring (closer to center) take damage.
+    /// "Outwards" = heat goes away from center → creatures OUTSIDE the ring (farther from center) take damage.
     /// Uses D&D 3.5e distance (SquareGridUtils.GetDistance) to be consistent
     /// with how ring cells are generated (cells at D&D dist == RingRadius).
     /// </summary>
     private bool IsCellOnHotSideRing(Vector2Int testCell)
     {
-        string direction = !string.IsNullOrEmpty(HeatWaveDirectionRing)
-            ? HeatWaveDirectionRing
-            : "Inwards"; // Default
+        string direction = GetEffectiveRingDirection();
 
         // Use D&D 3.5e distance (alternating diagonal) — same metric used to generate ring cells
         int distFromCenter = SquareGridUtils.GetDistance(CenterCell, testCell);
 
+        bool isHotSide;
         if (direction == "Inwards")
         {
             // Hot side is inside the ring — cell must be strictly closer to center than ring radius
             // (cells AT RingRadius are ring cells themselves → pass-through damage, not heat wave)
-            return distFromCenter < RingRadius;
+            isHotSide = distFromCenter < RingRadius;
         }
         else // "Outwards"
         {
             // Hot side is outside the ring — cell must be strictly farther from center than ring radius
-            return distFromCenter > RingRadius;
+            isHotSide = distFromCenter > RingRadius;
         }
+
+        return isHotSide;
     }
 
     /// <summary>
@@ -788,11 +881,16 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             : new Vector2(CenterCell.x, CenterCell.y);
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    //  Heat Wave Damage Application — NO SAVING THROW
+    // ════════════════════════════════════════════════════════════════════
+
     /// <summary>
-    /// Deals heat wave fire damage (no save) to a creature based on their band.
-    ///   Band 1 (1-2 sq from hot side): 2d4 fire damage
-    ///   Band 2 (3-4 sq from hot side): 1d4 fire damage
+    /// Deals heat wave fire damage (NO save) to a creature based on their band.
+    ///   Band 1 (1-2 sq from hot side): 2d4 fire damage [NO save]
+    ///   Band 2 (3-4 sq from hot side): 1d4 fire damage [NO save]
     /// Undead take double damage (PHB 3.5e p.298).
+    /// NOTE: Heat wave damage has NO saving throw. Only pass-through damage has Reflex.
     /// </summary>
     /// <param name="character">The creature taking damage.</param>
     /// <param name="band">1 for close band (2d4), 2 for medium band (1d4).</param>
@@ -808,15 +906,25 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
         int damage;
         string bandLabel;
+        string diceLabel;
+        string diceRolls;
+
         if (band == 1)
         {
-            damage = Random.Range(1, 5) + Random.Range(1, 5); // 2d4
+            int d1 = Random.Range(1, 5);
+            int d2 = Random.Range(1, 5);
+            damage = d1 + d2; // 2d4
             bandLabel = "within 10 ft";
+            diceLabel = "2d4";
+            diceRolls = $"{d1}+{d2}";
         }
         else
         {
-            damage = Random.Range(1, 5); // 1d4
+            int d1 = Random.Range(1, 5);
+            damage = d1; // 1d4
             bandLabel = "10-20 ft";
+            diceLabel = "1d4";
+            diceRolls = $"{d1}";
         }
 
         bool isUndead = IsCreatureUndead(character);
@@ -829,8 +937,9 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             character.Stats.TakeDamage(finalDamage);
 
         string undeadNote = isUndead ? " [UNDEAD ×2]" : "";
-        string diceLabel = band == 1 ? "2d4" : "1d4";
-        LogEffect($"  🔥 {character.Stats.CharacterName} takes {finalDamage} fire damage from Wall of Fire heat wave ({bandLabel}) [{diceLabel}]{undeadNote}");
+        string sideNote = IsRingMode ? $" [{GetEffectiveRingDirection()} heat]" : "";
+        LogEffect($"🔥 HEAT WAVE: {character.Stats.CharacterName} takes {finalDamage} fire damage "
+            + $"({bandLabel}) [{diceLabel}({diceRolls})] [No save]{undeadNote}{sideNote}");
 
         if (character.Stats.IsDead)
         {
