@@ -771,18 +771,20 @@ public static class AoESystem
     }
 
     // ═══════════════════════════════════════════════════
-    // WALL OF ICE LINE-OF-EFFECT FILTERING
+    // LINE-OF-EFFECT FILTERING (generic — uses LineOfEffectService)
     // ═══════════════════════════════════════════════════
 
     /// <summary>
     /// Filter AoE cells by removing any cell whose line of effect from the AoE
-    /// origin is blocked by an intact Wall of Ice section.
-    /// Cells that ARE wall cells themselves are kept (so the AoE can damage the wall).
+    /// origin is blocked by any registered <see cref="ILineOfEffectBlocker"/>
+    /// (Wall of Ice, Resilient Sphere, future wall spells, terrain, etc.).
+    /// Cells that belong to a blocker (e.g., intact wall cells, sphere cells) are
+    /// kept so the AoE can interact with/damage the blocker.
     /// </summary>
     /// <param name="aoeCells">The original set of AoE cells (modified in place).</param>
     /// <param name="origin">The AoE origin point (burst center, or caster position for cone/line).</param>
-    /// <returns>The set of cells that were removed (blocked by Wall of Ice).</returns>
-    public static HashSet<Vector2Int> FilterCellsByWallOfIceLoE(
+    /// <returns>The set of cells that were removed (blocked by LoE).</returns>
+    public static HashSet<Vector2Int> FilterCellsByLineOfEffect(
         HashSet<Vector2Int> aoeCells, Vector2Int origin)
     {
         var blockedCells = new HashSet<Vector2Int>();
@@ -790,10 +792,13 @@ public static class AoESystem
         if (aoeCells == null || aoeCells.Count == 0)
             return blockedCells;
 
-        // Quick check: any intact Wall of Ice cells exist?
-        HashSet<Vector2Int> intactWallCells = WallOfIceAreaEffect.GetAllIntactWallOfIceCells();
-        if (intactWallCells.Count == 0)
+        // Quick check: any active LoE blockers at all?
+        if (!LineOfEffectService.HasBlockers)
             return blockedCells;
+
+        // Gather all "blocker-owned" cells (wall cells, sphere cells, etc.)
+        // These are exempt from LoE filtering so the AoE can still damage them.
+        HashSet<Vector2Int> blockerCells = LineOfEffectService.GetAllBlockerCells();
 
         // Check each AoE cell for line-of-effect from origin
         var cellsToCheck = new List<Vector2Int>(aoeCells);
@@ -803,13 +808,13 @@ public static class AoESystem
             if (cell == origin)
                 continue;
 
-            // Don't filter cells that ARE intact wall cells — AoE should be able
-            // to damage the wall itself
-            if (intactWallCells.Contains(cell))
+            // Don't filter cells that belong to a blocker — AoE should be able
+            // to affect the blocker itself (e.g., damage an intact wall cell)
+            if (blockerCells.Contains(cell))
                 continue;
 
             // Check if line of effect from origin to this cell is blocked
-            if (WallOfIceAreaEffect.BlocksLineOfEffect(origin, cell))
+            if (LineOfEffectService.IsBlocked(origin, cell))
             {
                 blockedCells.Add(cell);
             }
@@ -819,7 +824,7 @@ public static class AoESystem
         if (blockedCells.Count > 0)
         {
             aoeCells.ExceptWith(blockedCells);
-            Debug.Log($"[AoE/WallOfIce] Filtered {blockedCells.Count} cells blocked by Wall of Ice LoE");
+            Debug.Log($"[AoE/LoE] Filtered {blockedCells.Count} cells blocked by line-of-effect");
         }
 
         return blockedCells;
@@ -827,21 +832,23 @@ public static class AoESystem
 
     /// <summary>
     /// Filter AoE targets by removing any creature whose position's line of effect
-    /// from the AoE origin is blocked by an intact Wall of Ice section.
+    /// from the AoE origin is blocked by any registered <see cref="ILineOfEffectBlocker"/>.
     /// </summary>
     /// <param name="targets">The list of targets (modified in place).</param>
     /// <param name="origin">The AoE origin point.</param>
     /// <returns>Number of targets removed.</returns>
-    public static int FilterTargetsByWallOfIceLoE(
+    public static int FilterTargetsByLineOfEffect(
         List<CharacterController> targets, Vector2Int origin)
     {
         if (targets == null || targets.Count == 0)
             return 0;
 
-        // Quick check: any intact Wall of Ice cells exist?
-        HashSet<Vector2Int> intactWallCells = WallOfIceAreaEffect.GetAllIntactWallOfIceCells();
-        if (intactWallCells.Count == 0)
+        // Quick check: any active LoE blockers?
+        if (!LineOfEffectService.HasBlockers)
             return 0;
+
+        // Gather blocker-owned cells (exempt from filtering)
+        HashSet<Vector2Int> blockerCells = LineOfEffectService.GetAllBlockerCells();
 
         int removedCount = 0;
         for (int i = targets.Count - 1; i >= 0; i--)
@@ -855,22 +862,45 @@ public static class AoESystem
             if (targetPos == origin)
                 continue;
 
-            // Don't filter targets standing ON an intact wall cell
-            // (they are inside the wall and can be affected by spells hitting the wall)
-            if (intactWallCells.Contains(targetPos))
+            // Don't filter targets standing ON a blocker cell
+            if (blockerCells.Contains(targetPos))
                 continue;
 
-            if (WallOfIceAreaEffect.BlocksLineOfEffect(origin, targetPos))
+            if (LineOfEffectService.IsBlocked(origin, targetPos))
             {
-                Debug.Log($"[AoE/WallOfIce] Target {target.Stats?.CharacterName} at ({targetPos.x},{targetPos.y}) blocked by Wall of Ice LoE from origin ({origin.x},{origin.y})");
+                Debug.Log($"[AoE/LoE] Target {target.Stats?.CharacterName} at ({targetPos.x},{targetPos.y}) blocked by LoE from origin ({origin.x},{origin.y})");
                 targets.RemoveAt(i);
                 removedCount++;
             }
         }
 
         if (removedCount > 0)
-            Debug.Log($"[AoE/WallOfIce] Filtered {removedCount} target(s) blocked by Wall of Ice line of effect");
+            Debug.Log($"[AoE/LoE] Filtered {removedCount} target(s) blocked by line of effect");
 
         return removedCount;
+    }
+
+    // ═══════════════════════════════════════════════════
+    // BACKWARD COMPATIBILITY WRAPPERS (deprecated — use generic methods above)
+    // ═══════════════════════════════════════════════════
+
+    /// <summary>
+    /// [Deprecated] Use <see cref="FilterCellsByLineOfEffect"/> instead.
+    /// Kept for backward compatibility — delegates to the generic method.
+    /// </summary>
+    public static HashSet<Vector2Int> FilterCellsByWallOfIceLoE(
+        HashSet<Vector2Int> aoeCells, Vector2Int origin)
+    {
+        return FilterCellsByLineOfEffect(aoeCells, origin);
+    }
+
+    /// <summary>
+    /// [Deprecated] Use <see cref="FilterTargetsByLineOfEffect"/> instead.
+    /// Kept for backward compatibility — delegates to the generic method.
+    /// </summary>
+    public static int FilterTargetsByWallOfIceLoE(
+        List<CharacterController> targets, Vector2Int origin)
+    {
+        return FilterTargetsByLineOfEffect(targets, origin);
     }
 }

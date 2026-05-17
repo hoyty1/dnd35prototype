@@ -2250,8 +2250,8 @@ public partial class GameManager
             // Calculate AoE cells centered on caster
             HashSet<Vector2Int> aoeCells = AoESystem.GetBurstCells(caster.GridPosition, spell.AoESizeSquares, Grid);
 
-            // Filter out cells blocked by Wall of Ice (self-centered burst origin = caster)
-            AoESystem.FilterCellsByWallOfIceLoE(aoeCells, caster.GridPosition);
+            // Filter out cells blocked by line-of-effect blockers (walls, spheres, etc.)
+            AoESystem.FilterCellsByLineOfEffect(aoeCells, caster.GridPosition);
 
             // Visual preview — highlight affected area
             Grid.ClearAllHighlights();
@@ -2743,7 +2743,7 @@ public partial class GameManager
                 // Cone / Line: origin is caster position
                 loeOrigin = pc.GridPosition;
             }
-            AoESystem.FilterCellsByWallOfIceLoE(aoeCells, loeOrigin);
+            AoESystem.FilterCellsByLineOfEffect(aoeCells, loeOrigin);
         }
 
         if (aoeCells.Count == 0) return;
@@ -3333,8 +3333,8 @@ public partial class GameManager
                 loeOrigin = caster.GridPosition;
             }
 
-            AoESystem.FilterCellsByWallOfIceLoE(aoeCells, loeOrigin);
-            AoESystem.FilterTargetsByWallOfIceLoE(targets, loeOrigin);
+            AoESystem.FilterCellsByLineOfEffect(aoeCells, loeOrigin);
+            AoESystem.FilterTargetsByLineOfEffect(targets, loeOrigin);
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;

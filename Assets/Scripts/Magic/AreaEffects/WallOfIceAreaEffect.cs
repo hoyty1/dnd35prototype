@@ -28,7 +28,7 @@ using DND35e.Identifiers;
 ///
 /// Duration: 1 min/level
 /// </summary>
-public class WallOfIceAreaEffect : PersistentAreaEffect
+public class WallOfIceAreaEffect : PersistentAreaEffect, ILineOfEffectBlocker
 {
     /// <summary>Anchor cell of the wall.</summary>
     public Vector2Int CenterCell { get; set; }
@@ -159,6 +159,9 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaCreated()
     {
+        // Register with the centralized LoE blocking service
+        LineOfEffectService.Register(this);
+
         if (IsCircleMode)
         {
             LogEffect($"❄ A hemisphere of ice forms ({CircleRadius * 5}-ft radius, {ThicknessInches} inches thick)!");
@@ -228,6 +231,9 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaExpires()
     {
+        // Unregister from centralized LoE blocking service
+        LineOfEffectService.Unregister(this);
+
         RemoveGridHighlight();
         LogEffect("The Wall of Ice melts away.");
     }
@@ -714,6 +720,49 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
             return false;
 
         return WindWallAreaEffect.LineSegmentCrossesAnyCellPublic(from, to, intactCells);
+    }
+
+    // ═══════════════════════════════════════════════════
+    // ILineOfEffectBlocker IMPLEMENTATION (instance methods)
+    // ═══════════════════════════════════════════════════
+
+    /// <summary>
+    /// Instance-level LoE check for THIS wall only.
+    /// Returns true if this wall's intact (non-breached) cells block the line
+    /// between <paramref name="from"/> and <paramref name="to"/>.
+    /// </summary>
+    bool ILineOfEffectBlocker.BlocksLineOfEffect(Vector2Int from, Vector2Int to)
+    {
+        HashSet<Vector2Int> intactCells = GetIntactCells();
+        if (intactCells.Count == 0)
+            return false;
+
+        return WindWallAreaEffect.LineSegmentCrossesAnyCellPublic(from, to, intactCells);
+    }
+
+    /// <summary>
+    /// Returns the intact cells of this wall. AoE filtering keeps these cells
+    /// in the AoE so the spell can damage the wall itself.
+    /// </summary>
+    HashSet<Vector2Int> ILineOfEffectBlocker.GetBlockerCells()
+    {
+        return GetIntactCells();
+    }
+
+    /// <summary>
+    /// Returns all intact (non-breached) cells of THIS wall instance.
+    /// </summary>
+    public HashSet<Vector2Int> GetIntactCells()
+    {
+        var result = new HashSet<Vector2Int>();
+        if (AffectedCells == null) return result;
+
+        foreach (Vector2Int cell in AffectedCells)
+        {
+            if (!_breachedCells.Contains(cell))
+                result.Add(cell);
+        }
+        return result;
     }
 
     // ═══════════════════════════════════════════════════

@@ -21,7 +21,7 @@ using DND35e.Identifiers;
 ///   • Duration: 1 min/level (Dismissible by caster)
 ///   • Reflex save negates (if ANY creature in area saves, spell fails entirely — they dodge out)
 /// </summary>
-public class ResilientSphereAreaEffect : PersistentAreaEffect
+public class ResilientSphereAreaEffect : PersistentAreaEffect, ILineOfEffectBlocker
 {
     /// <summary>Center cell where the sphere was cast.</summary>
     public Vector2Int CenterCell { get; set; }
@@ -62,6 +62,9 @@ public class ResilientSphereAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaCreated()
     {
+        // Register with the centralized LoE blocking service
+        LineOfEffectService.Register(this);
+
         int diameterFeet = Mathf.Max(1, CasterLevel);
         LogEffect($"🔮 A shimmering sphere of force appears ({diameterFeet} ft diameter, {SphereSquareSize}×{SphereSquareSize} squares)!");
         LogEffect("  • Nothing can pass through the sphere boundary");
@@ -111,6 +114,9 @@ public class ResilientSphereAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaExpires()
     {
+        // Unregister from centralized LoE blocking service
+        LineOfEffectService.Unregister(this);
+
         RemoveGridHighlight();
         LogEffect("The Resilient Sphere dissipates.");
     }
@@ -238,5 +244,37 @@ public class ResilientSphereAreaEffect : PersistentAreaEffect
     {
         int diameterFeet = Mathf.Max(1, CasterLevel);
         return $"Resilient Sphere — {diameterFeet} ft diameter, {SphereSquareSize}×{SphereSquareSize} squares, {RoundsRemaining} round(s)";
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ILineOfEffectBlocker IMPLEMENTATION
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The Resilient Sphere blocks line of effect across its boundary.
+    /// If one cell is inside the sphere and the other is outside (or in a
+    /// different sphere), LoE is blocked. If both are inside the same sphere
+    /// or both are outside, LoE is NOT blocked by this sphere.
+    /// </summary>
+    bool ILineOfEffectBlocker.BlocksLineOfEffect(Vector2Int from, Vector2Int to)
+    {
+        if (AffectedCells == null || AffectedCells.Count == 0)
+            return false;
+
+        bool fromInside = AffectedCells.Contains(from);
+        bool toInside = AffectedCells.Contains(to);
+
+        // Block only when the line crosses the sphere boundary
+        // (one inside, one outside)
+        return fromInside != toInside;
+    }
+
+    /// <summary>
+    /// Returns the sphere's cells. AoE filtering uses this to understand
+    /// which cells "belong" to the blocker.
+    /// </summary>
+    HashSet<Vector2Int> ILineOfEffectBlocker.GetBlockerCells()
+    {
+        return AffectedCells;
     }
 }
