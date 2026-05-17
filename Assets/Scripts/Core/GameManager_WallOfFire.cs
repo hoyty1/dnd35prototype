@@ -387,10 +387,11 @@ public partial class GameManager
     /// </summary>
     private bool IsPendingWallOfFireRingDirectionPhase()
     {
-        return IsPendingWallOfFire()
+        bool result = IsPendingWallOfFire()
             && _pendingWallOfFireMode == WallOfFireMode.Ring
             && _pendingWallRingDirectionPhase
             && _pendingWallRingCellsForDirection != null;
+        return result;
     }
 
     /// <summary>
@@ -408,8 +409,17 @@ public partial class GameManager
         _pendingWallRingRadiusForDirection = chosenRadius;
         _pendingWallHeatDirectionRing = null;
 
-        // Keep AoE targeting active so UpdateAoEPreview can show heat wave preview
+        // Re-enable AoE targeting so UpdateAoEPreview runs and clicks route to HandleAoETargetClick
         _isAoETargeting = true;
+
+        // CRITICAL: Restore SubPhase to SelectingAoETarget so the Update loop
+        // calls UpdateAoEPreview() and routes clicks to HandleAoETargetClick().
+        // The radius selection prompt set SubPhase to ChoosingAction; we must
+        // switch back so preview + click handling work during direction selection.
+        CurrentSubPhase = PlayerSubPhase.SelectingAoETarget;
+
+        // Reset hover key so the first mouse position triggers a preview update
+        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
 
         // Highlight the ring cells
         if (ringCells != null)
@@ -425,7 +435,7 @@ public partial class GameManager
             $"✦ Wall of Fire (Ring): Click INSIDE ring for Inwards heat, OUTSIDE for Outwards | Right-click to cancel");
         CombatUI?.ShowCombatLog("🔥 Ring placed! Click inside the ring for Inwards heat, or outside for Outwards. Right-click to cancel.");
 
-        Debug.Log($"[WallOfFire] Entered ring direction selection phase. center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, ringCells={ringCells?.Count ?? 0}");
+        Debug.Log($"[WallOfFire][RingDir] Entered ring direction selection phase. center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, ringCells={ringCells?.Count ?? 0}, subPhase={CurrentSubPhase}");
     }
 
     /// <summary>

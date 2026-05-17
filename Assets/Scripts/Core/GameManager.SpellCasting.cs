@@ -2530,12 +2530,16 @@ public partial class GameManager
                 // Don't show preview if mouse is on the ring itself
                 bool mouseOnRing = _pendingWallRingCellsForDirection.Contains(gridPos);
 
+                Debug.Log($"[WallOfFire][RingDir] Preview update: gridPos=({gridPos.x},{gridPos.y}), mouseInside={mouseInside}, mouseOnRing={mouseOnRing}");
+
                 if (!mouseOnRing)
                 {
                     // Show heat wave preview cells on the hovered side (10 ft = 2 squares)
                     HashSet<Vector2Int> heatCells = GetHeatWaveCellsForRingSide(
                         _pendingWallRingCenterForDirection, _pendingWallRingRadiusForDirection,
                         _pendingWallRingCellsForDirection, mouseInside, 2);
+
+                    Debug.Log($"[WallOfFire][RingDir] Heat wave preview: side={(mouseInside ? "Inside" : "Outside")}, heatCells={heatCells.Count}");
 
                     foreach (Vector2Int hc in heatCells)
                     {
@@ -2859,14 +2863,18 @@ public partial class GameManager
                     // ── DIRECTION PHASE: click to confirm heat wave direction ──
                     if (IsPendingWallOfFireRingDirectionPhase())
                     {
+                        Debug.Log($"[WallOfFire][RingDir] Click detected at ({targetPos.x},{targetPos.y}) during ring direction phase");
+
                         // Check if click is on the ring itself
                         if (_pendingWallRingCellsForDirection.Contains(targetPos))
                         {
+                            Debug.Log($"[WallOfFire][RingDir] Click was on ring itself — ignored");
                             CombatUI?.ShowCombatLog("⚠ Click inside or outside the ring, not on the ring itself.");
                             return;
                         }
 
                         bool clickInside = IsInsideRing(targetPos, _pendingWallRingCenterForDirection, _pendingWallRingRadiusForDirection);
+                        Debug.Log($"[WallOfFire][RingDir] Click confirmed: {(clickInside ? "Inside (Inwards)" : "Outside (Outwards)")}");
                         ConfirmWallOfFireRingDirection(caster, clickInside);
                         return;
                     }
