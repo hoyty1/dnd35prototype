@@ -134,6 +134,10 @@ public class MovementService : MonoBehaviour
             if (!_grid.CanPlaceCreature(cell.Coords, moverSize, mover))
                 continue;
 
+            // Intact Wall of Ice cells block movement — only breached cells allow passage.
+            if (WallOfIceAreaEffect.DoesCellBlockMovement(cell.Coords))
+                continue;
+
             reachable.Add(cell);
         }
 
@@ -350,6 +354,10 @@ public class MovementService : MonoBehaviour
             return false;
 
         if (disallowDifficultTerrain && IsDifficultTerrain(destination))
+            return false;
+
+        // Intact Wall of Ice cells block movement (including 5-foot steps).
+        if (WallOfIceAreaEffect.DoesCellBlockMovement(destination))
             return false;
 
         return true;

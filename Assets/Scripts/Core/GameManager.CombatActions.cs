@@ -978,7 +978,14 @@ public partial class GameManager
 
         List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
             ? pathResult.Path
-            : new List<Vector2Int> { destination };
+            : null;
+
+        // If no valid path found (e.g. blocked by Wall of Ice or other obstacle), abort movement.
+        if (path == null || path.Count == 0)
+        {
+            Debug.Log($"[CombatActions] MoveCharacterAlongComputedPath: No valid path to {destination} for {mover?.Stats?.CharacterName}. Movement blocked.");
+            yield break;
+        }
 
         if (_movementService != null)
             yield return StartCoroutine(_movementService.ExecuteMovement(mover, path, secondsPerStep, markAsMoved: true));
