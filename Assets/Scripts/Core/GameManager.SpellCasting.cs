@@ -3823,28 +3823,40 @@ public partial class GameManager
             }
 
             // ── Wall of Ice (line wall, persistent area effect) ──
-            if (TryResolveWallOfIceSpell(caster, _pendingSpell, targets, aoeCells, out string wallOfIceLog))
+            // Check for adjacent creatures that can attempt Reflex save to disrupt
+            if (IsWallOfIceSpell(_pendingSpell))
             {
-                _lastCombatLog = wallOfIceLog;
+                // Capture local copies for the callback closure
+                SpellData wallSpell = _pendingSpell;
+                bool wallIsSpontaneous = isSpontaneous;
+                string wallSpontaneousSacrificedSpellId = spontaneousSacrificedSpellId;
+                bool wallIsQuickened = isQuickened;
+                List<CharacterController> wallTargets = targets;
+                HashSet<Vector2Int> wallAoeCells = aoeCells;
 
-                if (isSpontaneous)
+                ResolveWallOfIceWithReflexSaves(caster, wallSpell, wallTargets, wallAoeCells, wallLog =>
                 {
-                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                        : "Converted prepared spell";
-                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-                }
+                    _lastCombatLog = wallLog;
 
-                if (isQuickened)
-                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                    if (wallIsSpontaneous)
+                    {
+                        string sacrificeInfo = !string.IsNullOrEmpty(wallSpontaneousSacrificedSpellId)
+                            ? $"Sacrificed: {wallSpontaneousSacrificedSpellId}"
+                            : "Converted prepared spell";
+                        _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {wallSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                    }
 
-                CombatUI.ShowCombatLog(_lastCombatLog);
-                UpdateAllStatsUI();
-                Grid.ClearAllHighlights();
+                    if (wallIsQuickened)
+                        _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {wallSpell.Name}! (Free Action)\n" + _lastCombatLog;
 
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                    CombatUI.ShowCombatLog(_lastCombatLog);
+                    UpdateAllStatsUI();
+                    Grid.ClearAllHighlights();
+
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                });
                 return;
             }
 

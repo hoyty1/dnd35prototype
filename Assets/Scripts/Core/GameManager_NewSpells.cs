@@ -3260,25 +3260,406 @@ public partial class GameManager
         return spell != null && string.Equals(spell.SpellId, SpellNames.WALL_OF_ICE, System.StringComparison.Ordinal);
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // WALL OF ICE — REFLEX SAVE TO DISRUPT WALL (PHB p.299)
+    //
+    // D&D 3.5e Rule: When Wall of Ice is cast, any creature adjacent to
+    // a wall section (but not IN the wall) can attempt a Reflex save.
+    //   DC = 10 + spell level (4) + caster's spellcasting ability modifier
+    //   Success: Creature disrupts the wall by moving into a wall square;
+    //            entire wall fails to manifest, spell slot is consumed.
+    //   Failure: Creature stays in place, wall forms normally.
+    // Player-controlled creatures get a UI prompt to choose whether to
+    // attempt the save. AI-controlled creatures always attempt if the
+    // wall caster is an enemy.
+    // ═══════════════════════════════════════════════════════════════════
+
     /// <summary>
-    /// Resolves Wall of Ice: creates a WallOfIceAreaEffect.
-    /// Per PHB p.299: 1 inch thick/CL, hardness 0, 3 HP/inch.
-    /// Duration 1 min/level. Trapped creatures take CL cold damage.
+    /// Find all living creatures that are adjacent to any proposed wall cell
+    /// but NOT standing in a wall cell. These creatures can attempt a Reflex
+    /// save to disrupt the wall.
     /// </summary>
-    private bool TryResolveWallOfIceSpell(
+    private List<CharacterController> GetCreaturesAdjacentToWallCells(
+        HashSet<Vector2Int> wallCells, CharacterController caster)
+    {
+        var result = new List<CharacterController>();
+        if (wallCells == null || wallCells.Count == 0)
+            return result;
+
+        List<CharacterController> allChars = GetAllCharacters();
+        if (allChars == null) return result;
+
+        // Build set of neighbor cells adjacent to any wall cell
+        var adjacentCells = new HashSet<Vector2Int>();
+        foreach (Vector2Int wc in wallCells)
+        {
+            Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(wc);
+            for (int i = 0; i < neighbors.Length; i++)
+            {
+                if (!wallCells.Contains(neighbors[i]))
+                    adjacentCells.Add(neighbors[i]);
+            }
+        }
+
+        for (int i = 0; i < allChars.Count; i++)
+        {
+            CharacterController cc = allChars[i];
+            if (cc == null || cc.Stats == null || cc.Stats.IsDead)
+                continue;
+            // Skip the caster — they don't save against their own wall
+            if (cc == caster)
+                continue;
+            // Must be standing on a cell adjacent to the wall
+            if (!adjacentCells.Contains(cc.GridPosition))
+                continue;
+            // Must not be standing IN a wall cell (those are "caught" and take damage)
+            if (wallCells.Contains(cc.GridPosition))
+                continue;
+
+            result.Add(cc);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Calculate the Reflex save DC for Wall of Ice disruption.
+    /// DC = 10 + spell level (4) + caster's spellcasting ability modifier.
+    /// </summary>
+    private int GetWallOfIceReflexDC(CharacterController caster, SpellData spell)
+    {
+        int abilityMod = GetSpellSaveAbilityModifier(caster, spell);
+        int spellLevel = spell != null ? spell.SpellLevel : 4;
+        return 10 + spellLevel + abilityMod;
+    }
+
+    /// <summary>
+    /// Roll a Reflex save for a creature against the Wall of Ice disruption DC.
+    /// Returns true if the save succeeds.
+    /// </summary>
+    private bool RollWallOfIceReflexSave(CharacterController creature, int dc, out int roll, out int total)
+    {
+        roll = Random.Range(1, 21);
+        int reflexMod = creature.Stats.ReflexSave;
+        total = roll + reflexMod;
+        bool success = total >= dc;
+
+        Debug.Log($"[WallOfIce] Reflex save: {creature.Stats.CharacterName} rolls d20({roll}) + {reflexMod} = {total} vs DC {dc} → {(success ? "SUCCESS" : "FAILURE")}");
+        return success;
+    }
+
+    /// <summary>
+    /// Find the closest wall cell to a creature for movement on successful save.
+    /// </summary>
+    private Vector2Int FindClosestWallCell(CharacterController creature, HashSet<Vector2Int> wallCells)
+    {
+        Vector2Int creaturePos = creature.GridPosition;
+        Vector2Int closest = creaturePos;
+        int bestDist = int.MaxValue;
+
+        foreach (Vector2Int wc in wallCells)
+        {
+            int dist = SquareGridUtils.GetDistance(creaturePos, wc);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                closest = wc;
+            }
+        }
+
+        return closest;
+    }
+
+    /// <summary>
+    /// Move a creature into a wall cell after successful Reflex save disruption.
+    /// </summary>
+    private void MoveCreatureToWallCell(CharacterController creature, Vector2Int wallCell)
+    {
+        if (creature == null || creature.Stats == null) return;
+
+        Vector2Int oldPos = creature.GridPosition;
+
+        // Update grid occupancy — remove from old cell first
+        if (Grid != null)
+        {
+            SquareCell oldCell = Grid.GetCell(oldPos);
+            if (oldCell != null)
+                oldCell.RemoveOccupant(creature);
+        }
+
+        // Move creature
+        Vector3 worldPos = SquareGridUtils.GridToWorld(wallCell);
+        creature.transform.position = worldPos;
+        creature.GridPosition = wallCell;
+
+        // Add to new cell
+        if (Grid != null)
+        {
+            SquareCell newCell = Grid.GetCell(wallCell);
+            if (newCell != null)
+                newCell.AddOccupant(creature);
+        }
+
+        Debug.Log($"[WallOfIce] {creature.Stats.CharacterName} moves from ({oldPos.x},{oldPos.y}) into wall cell ({wallCell.x},{wallCell.y}) to disrupt the wall!");
+    }
+
+    /// <summary>
+    /// Resolves Wall of Ice with Reflex save checks for adjacent creatures.
+    /// Uses a callback to handle async player prompts.
+    /// The callback receives the combat log string when resolution is complete.
+    /// </summary>
+    private void ResolveWallOfIceWithReflexSaves(
         CharacterController caster,
         SpellData spell,
         List<CharacterController> targets,
         HashSet<Vector2Int> aoeCells,
-        out string log)
+        System.Action<string> onComplete)
     {
-        log = string.Empty;
         if (caster == null || caster.Stats == null || spell == null)
-            return false;
+        {
+            onComplete?.Invoke("⚠ Wall of Ice failed: invalid caster or spell.");
+            return;
+        }
 
-        if (!IsWallOfIceSpell(spell))
-            return false;
+        // ── Validate proposed wall cells are not occupied ──
+        if (aoeCells != null && aoeCells.Count > 0)
+        {
+            string validationError = WallOfIceAreaEffect.ValidateWallCreation(aoeCells, Grid);
+            if (!string.IsNullOrEmpty(validationError))
+            {
+                Debug.Log($"[WallOfIce] Creation blocked: {validationError}");
+                ResetPendingWallOfIceMode();
+                onComplete?.Invoke($"⚠ Wall of Ice cannot be placed: {validationError}");
+                return;
+            }
+        }
 
+        int saveDC = GetWallOfIceReflexDC(caster, spell);
+
+        // Find creatures adjacent to the proposed wall
+        List<CharacterController> adjacentCreatures = GetCreaturesAdjacentToWallCells(aoeCells, caster);
+
+        // Filter to only enemy creatures (only enemies attempt to disrupt the wall)
+        adjacentCreatures.RemoveAll(cc => !IsEnemyTeam(caster, cc));
+
+        Debug.Log($"[WallOfIce] Adjacent enemy creatures that can attempt Reflex save: {adjacentCreatures.Count} (DC {saveDC})");
+
+        if (adjacentCreatures.Count == 0)
+        {
+            // No adjacent enemies — proceed directly to wall creation
+            string log = CreateWallOfIceEffect(caster, spell, targets, aoeCells);
+            onComplete?.Invoke(log);
+            return;
+        }
+
+        // Separate into AI-controlled and player-controlled creatures
+        var aiCreatures = new List<CharacterController>();
+        var playerCreatures = new List<CharacterController>();
+
+        for (int i = 0; i < adjacentCreatures.Count; i++)
+        {
+            CharacterController cc = adjacentCreatures[i];
+            if (cc.Team == CharacterTeam.Player && cc.IsPlayerControlled)
+                playerCreatures.Add(cc);
+            else
+                aiCreatures.Add(cc);
+        }
+
+        // Process AI saves first (synchronous)
+        var saveLog = new StringBuilder();
+        CharacterController aiDisruptor = null;
+        Vector2Int aiDisruptorTargetCell = Vector2Int.zero;
+
+        foreach (CharacterController aiCreature in aiCreatures)
+        {
+            bool success = RollWallOfIceReflexSave(aiCreature, saveDC, out int roll, out int total);
+            string name = aiCreature.Stats.CharacterName;
+
+            if (success)
+            {
+                saveLog.AppendLine($"🛡 {name} attempts Reflex save (DC {saveDC}): d20({roll}) + {aiCreature.Stats.ReflexSave} = {total} — SUCCESS!");
+                saveLog.AppendLine($"  💥 {name} disrupts the Wall of Ice by moving into the wall's space!");
+                aiDisruptor = aiCreature;
+                aiDisruptorTargetCell = FindClosestWallCell(aiCreature, aoeCells);
+                break; // First successful save disrupts the entire wall
+            }
+            else
+            {
+                saveLog.AppendLine($"🛡 {name} attempts Reflex save (DC {saveDC}): d20({roll}) + {aiCreature.Stats.ReflexSave} = {total} — FAILURE!");
+                saveLog.AppendLine($"  {name} fails to disrupt the wall.");
+            }
+        }
+
+        // If an AI creature already disrupted the wall
+        if (aiDisruptor != null)
+        {
+            MoveCreatureToWallCell(aiDisruptor, aiDisruptorTargetCell);
+            string disruptLog = BuildWallOfIceDisruptedLog(caster, spell, aoeCells, saveLog.ToString(), aiDisruptor);
+            ResetPendingWallOfIceMode();
+            onComplete?.Invoke(disruptLog);
+            return;
+        }
+
+        // If there are player creatures that could attempt, show prompt
+        if (playerCreatures.Count > 0)
+        {
+            // Process player creatures sequentially via callbacks
+            ProcessPlayerWallOfIceReflexSaves(
+                caster, spell, targets, aoeCells, saveDC,
+                playerCreatures, 0, saveLog,
+                onComplete);
+            return;
+        }
+
+        // All AI creatures failed their saves — proceed to wall creation
+        string wallLog = CreateWallOfIceEffect(caster, spell, targets, aoeCells);
+        if (saveLog.Length > 0)
+        {
+            wallLog = saveLog.ToString() + "\n" + wallLog;
+        }
+        onComplete?.Invoke(wallLog);
+    }
+
+    /// <summary>
+    /// Process player-controlled creatures' Reflex save prompts sequentially.
+    /// Shows a UI prompt for each player creature, then continues with
+    /// wall creation or disruption.
+    /// </summary>
+    private void ProcessPlayerWallOfIceReflexSaves(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells,
+        int saveDC,
+        List<CharacterController> playerCreatures,
+        int currentIndex,
+        StringBuilder accumulatedLog,
+        System.Action<string> onComplete)
+    {
+        // Base case: all player creatures processed, no disruption
+        if (currentIndex >= playerCreatures.Count)
+        {
+            string wallLog = CreateWallOfIceEffect(caster, spell, targets, aoeCells);
+            if (accumulatedLog.Length > 0)
+                wallLog = accumulatedLog.ToString() + "\n" + wallLog;
+            onComplete?.Invoke(wallLog);
+            return;
+        }
+
+        CharacterController pc = playerCreatures[currentIndex];
+        if (pc == null || pc.Stats == null || pc.Stats.IsDead)
+        {
+            // Skip dead/null — move to next
+            ProcessPlayerWallOfIceReflexSaves(
+                caster, spell, targets, aoeCells, saveDC,
+                playerCreatures, currentIndex + 1, accumulatedLog, onComplete);
+            return;
+        }
+
+        string pcName = pc.Stats.CharacterName;
+        string casterName = caster.Stats.CharacterName;
+
+        // Show prompt
+        var options = new List<string>
+        {
+            $"Attempt Reflex Save (DC {saveDC})",
+            "Let Wall Form"
+        };
+
+        CombatUI.ShowPickUpItemSelection(
+            actorName: pcName,
+            itemOptions: options,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex == 0)
+                {
+                    // Player chose to attempt save
+                    bool success = RollWallOfIceReflexSave(pc, saveDC, out int roll, out int total);
+
+                    if (success)
+                    {
+                        accumulatedLog.AppendLine($"🛡 {pcName} attempts Reflex save (DC {saveDC}): d20({roll}) + {pc.Stats.ReflexSave} = {total} — SUCCESS!");
+                        accumulatedLog.AppendLine($"  💥 {pcName} disrupts the Wall of Ice by moving into the wall's space!");
+
+                        Vector2Int targetCell = FindClosestWallCell(pc, aoeCells);
+                        MoveCreatureToWallCell(pc, targetCell);
+
+                        string disruptLog = BuildWallOfIceDisruptedLog(caster, spell, aoeCells, accumulatedLog.ToString(), pc);
+                        ResetPendingWallOfIceMode();
+                        onComplete?.Invoke(disruptLog);
+                        return;
+                    }
+                    else
+                    {
+                        accumulatedLog.AppendLine($"🛡 {pcName} attempts Reflex save (DC {saveDC}): d20({roll}) + {pc.Stats.ReflexSave} = {total} — FAILURE!");
+                        accumulatedLog.AppendLine($"  {pcName} fails to disrupt the wall.");
+                    }
+                }
+                else
+                {
+                    // Player chose not to attempt
+                    accumulatedLog.AppendLine($"🛡 {pcName} chooses not to attempt a Reflex save against the Wall of Ice.");
+                }
+
+                // Move to next player creature
+                ProcessPlayerWallOfIceReflexSaves(
+                    caster, spell, targets, aoeCells, saveDC,
+                    playerCreatures, currentIndex + 1, accumulatedLog, onComplete);
+            },
+            onCancel: () =>
+            {
+                // Treat cancel as declining to save
+                accumulatedLog.AppendLine($"🛡 {pcName} chooses not to attempt a Reflex save against the Wall of Ice.");
+
+                ProcessPlayerWallOfIceReflexSaves(
+                    caster, spell, targets, aoeCells, saveDC,
+                    playerCreatures, currentIndex + 1, accumulatedLog, onComplete);
+            },
+            titleOverride: "Wall of Ice — Reflex Save to Disrupt",
+            bodyOverride: $"{casterName} is casting Wall of Ice adjacent to {pcName}!\n\n"
+                + $"Reflex Save DC {saveDC}: Success disrupts the entire wall and moves {pcName} into the wall's space.\n"
+                + "Failure: Wall forms normally.",
+            optionButtonColorOverride: new Color(0.4f, 0.7f, 0.9f, 1f));
+    }
+
+    /// <summary>
+    /// Build the combat log for when a creature disrupts Wall of Ice via Reflex save.
+    /// Spell slot was already consumed; wall does not manifest.
+    /// </summary>
+    private string BuildWallOfIceDisruptedLog(
+        CharacterController caster,
+        SpellData spell,
+        HashSet<Vector2Int> aoeCells,
+        string saveLog,
+        CharacterController disruptor)
+    {
+        bool isCircleMode = _pendingWallOfIceMode.HasValue && _pendingWallOfIceMode.Value == WallOfIceMode.Circle;
+        string modeLabel = isCircleMode ? "Hemisphere" : "Wall";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"❄ {caster.Stats.CharacterName} casts Wall of Ice ({modeLabel})!");
+        sb.AppendLine();
+        sb.Append(saveLog);
+        sb.AppendLine();
+        sb.AppendLine($"  🚫 Wall of Ice fails to manifest! {disruptor.Stats.CharacterName} disrupted the wall.");
+        sb.AppendLine("  (Spell slot consumed)");
+        sb.Append("═══════════════════════════════════");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Creates the Wall of Ice area effect (the actual wall manifestation).
+    /// Extracted from the original TryResolveWallOfIceSpell to allow
+    /// the Reflex save flow to call this after saves are resolved.
+    /// </summary>
+    private string CreateWallOfIceEffect(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells)
+    {
         int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
@@ -3293,16 +3674,12 @@ public partial class GameManager
 
         if (isCircleMode)
         {
-            // Circle mode: direction doesn't matter, use default
             direction = new Vector2Int(1, 0);
-
-            // If we stored the circle center, use that instead of computed center
             if (_pendingWallOfIceCircleCenter.HasValue)
                 centerCell = _pendingWallOfIceCircleCenter.Value;
         }
         else
         {
-            // Line mode: compute direction from start→end points if available
             if (_pendingWallOfIceLineStart.HasValue)
             {
                 Vector2Int lineStart = _pendingWallOfIceLineStart.Value;
@@ -3320,21 +3697,7 @@ public partial class GameManager
             }
         }
 
-        // Wall length for line mode
         int maxLengthSquares = Mathf.Max(2, casterLevel * 2);
-
-        // ── Validate proposed wall cells are not occupied ──
-        if (aoeCells != null && aoeCells.Count > 0)
-        {
-            string validationError = WallOfIceAreaEffect.ValidateWallCreation(aoeCells, Grid);
-            if (!string.IsNullOrEmpty(validationError))
-            {
-                log = $"⚠ Wall of Ice cannot be placed: {validationError}";
-                Debug.Log($"[WallOfIce] Creation blocked: {validationError}");
-                ResetPendingWallOfIceMode();
-                return false;
-            }
-        }
 
         // Create the area effect
         string objName = isCircleMode ? "WallOfIce_Hemisphere_Area" : "WallOfIce_Line_Area";
@@ -3351,14 +3714,12 @@ public partial class GameManager
 
         if (isCircleMode)
         {
-            // Circle mode: set circle-specific properties
             wallEffect.IsCircleMode = true;
             wallEffect.CircleRadius = _pendingWallOfIceCircleRadius ?? 1;
-            wallEffect.LengthSquares = 0; // Not applicable for circle
+            wallEffect.LengthSquares = 0;
         }
         else
         {
-            // Line mode
             wallEffect.IsCircleMode = false;
             wallEffect.LengthSquares = Mathf.Max(2, maxLengthSquares);
         }
@@ -3402,12 +3763,11 @@ public partial class GameManager
         }
 
         sb.Append("═══════════════════════════════════");
-        log = sb.ToString();
 
-        // Clean up Wall of Ice pending state after successful cast
+        // Clean up Wall of Ice pending state after successful creation
         ResetPendingWallOfIceMode();
 
-        return true;
+        return sb.ToString();
     }
 
     // ═══════════════════════════════════════════════════════════════════
