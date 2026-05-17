@@ -2250,6 +2250,9 @@ public partial class GameManager
             // Calculate AoE cells centered on caster
             HashSet<Vector2Int> aoeCells = AoESystem.GetBurstCells(caster.GridPosition, spell.AoESizeSquares, Grid);
 
+            // Filter out cells blocked by Wall of Ice (self-centered burst origin = caster)
+            AoESystem.FilterCellsByWallOfIceLoE(aoeCells, caster.GridPosition);
+
             // Visual preview — highlight affected area
             Grid.ClearAllHighlights();
             foreach (Vector2Int cellPos in aoeCells)
@@ -2723,6 +2726,27 @@ public partial class GameManager
         }
 
         if (aoeCells == null || aoeCells.Count == 0) return;
+
+        // ── Wall of Ice Line-of-Effect filtering for AoE PREVIEW ──
+        // Remove cells that are blocked by an intact Wall of Ice so the
+        // player sees only the squares that will actually be affected.
+        {
+            Vector2Int loeOrigin;
+            if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+            {
+                // For bursts the origin is the burst center (hovered grid cell)
+                Vector2Int gridPosForOrigin = SquareGridUtils.WorldToGrid(GetMouseWorldPosition());
+                loeOrigin = gridPosForOrigin;
+            }
+            else
+            {
+                // Cone / Line: origin is caster position
+                loeOrigin = pc.GridPosition;
+            }
+            AoESystem.FilterCellsByWallOfIceLoE(aoeCells, loeOrigin);
+        }
+
+        if (aoeCells.Count == 0) return;
 
         _currentAoECells = aoeCells;
 
