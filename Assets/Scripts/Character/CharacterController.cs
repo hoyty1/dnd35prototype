@@ -6080,8 +6080,10 @@ public class CharacterController : MonoBehaviour
         result.NaturalOne = (roll == 1);
         AttachAttackBuffDebuffBreakdown(result);
 
-        if (weaponEnhancementAttackBonus != 0)
-            result.AddAttackBuffDebuffModifier("Weapon enhancement", weaponEnhancementAttackBonus);
+        // NOTE: Weapon enhancement bonus is NOT added to AttackBuffDebuffModifiers here
+        // because it is already included in CombatResult.WeaponEnhancementAttackBonus,
+        // which BuildBreakdowns() adds to AttackRollBreakdown.Modifiers as "enhancement".
+        // Adding it here as well would create a duplicate entry in the breakdown display.
 
         if (trueStrikeActive && trueStrikeBonus != 0)
             result.AddAttackBuffDebuffModifier("True Strike (insight)", trueStrikeBonus);
