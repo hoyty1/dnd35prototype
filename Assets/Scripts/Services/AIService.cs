@@ -482,7 +482,10 @@ public class AIService : MonoBehaviour
         }
         else
         {
-            yield return new WaitForSeconds(0.3f);
+            // ── AI: Wall of Ice interaction ──
+            // If the NPC cannot reach the target but is adjacent to a Wall of Ice,
+            // try to attack or break through the wall to clear the path.
+            yield return _gameManager.StartCoroutine(TryAIWallInteraction(npc, target));
         }
     }
 
@@ -880,7 +883,8 @@ public class AIService : MonoBehaviour
         }
         else
         {
-            yield return new WaitForSeconds(0.3f);
+            // ── AI: Wall of Ice interaction (defensive variant) ──
+            yield return _gameManager.StartCoroutine(TryAIWallInteraction(npc, target));
         }
     }
 
@@ -2244,5 +2248,64 @@ public class AIService : MonoBehaviour
         }
 
         return readied;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  AI WALL OF ICE INTERACTION
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// If the NPC is adjacent to an intact Wall of Ice, decides whether to attack it
+    /// with a weapon (auto-hit, Hardness 0) or attempt a Strength check (DC 15 + CL).
+    /// Prefers weapon attack if equipped; falls back to STR check for unarmed NPCs.
+    /// If not adjacent to any wall, yields a short delay and returns.
+    /// </summary>
+    private IEnumerator TryAIWallInteraction(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || npc.Stats.CurrentHP <= 0 || !npc.Actions.HasStandardAction)
+        {
+            yield return new WaitForSeconds(0.3f);
+            yield break;
+        }
+
+        Vector2Int targetPos = target != null ? target.GridPosition : npc.GridPosition;
+        Vector2Int? bestWallCell = _gameManager.FindBestAdjacentWallCellForAI(npc, targetPos);
+
+        if (!bestWallCell.HasValue)
+        {
+            yield return new WaitForSeconds(0.3f);
+            yield break;
+        }
+
+        WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(bestWallCell.Value);
+        if (wall == null || wall.IsBreached(bestWallCell.Value))
+        {
+            yield return new WaitForSeconds(0.3f);
+            yield break;
+        }
+
+        // Decide: weapon attack vs Strength check
+        // Weapon attacks auto-hit and deal full damage (Hardness 0), so prefer weapon.
+        // STR check is a backup if STR bonus is high enough for reasonable success.
+        bool hasWeapon = npc.GetEquippedMainWeapon() != null || npc.Stats.GetPrimaryNaturalAttack() != null;
+        int strMod = CharacterStats.GetModifier(npc.Stats.STR);
+        int dc = wall.GetStrengthCheckDC();
+        bool strCheckLikely = (strMod + 10) >= dc; // Rough: ~50%+ chance on d20
+
+        if (hasWeapon)
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName} attacks Wall of Ice at ({bestWallCell.Value.x},{bestWallCell.Value.y}) with weapon.");
+            yield return _gameManager.StartCoroutine(_gameManager.NPCAttackWallForAI(npc, wall, bestWallCell.Value));
+        }
+        else if (strCheckLikely)
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName} attempts STR check (DC {dc}) on Wall of Ice at ({bestWallCell.Value.x},{bestWallCell.Value.y}).");
+            yield return _gameManager.StartCoroutine(_gameManager.NPCBreakWallForAI(npc, wall, bestWallCell.Value));
+        }
+        else
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName} is adjacent to Wall of Ice but STR check DC {dc} too high (STR mod {strMod}), skipping.");
+            yield return new WaitForSeconds(0.3f);
+        }
     }
 }

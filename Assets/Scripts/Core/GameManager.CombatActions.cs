@@ -29,6 +29,9 @@ public partial class GameManager
     //  PLAYER COMBAT ACTIONS &amp; TARGET RESOLUTION
     // ═══════════════════════════════════════════════════════════════════
 
+    // ── Wall of Ice Strength-check selection state ──
+    private bool _isSelectingBreakWallTarget;
+
     private void ShowAttackTargets(CharacterController pc)
     {
         Grid.ClearAllHighlights();
@@ -1141,6 +1144,27 @@ public partial class GameManager
             return;
         }
 
+        // ── WALL OF ICE STRENGTH CHECK ──
+        // When _isSelectingBreakWallTarget, the player clicked a cell to attempt a STR break.
+        if (_isSelectingBreakWallTarget)
+        {
+            if (_highlightedCells.Contains(cell))
+            {
+                WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell.Coords);
+                if (wall != null)
+                {
+                    _isSelectingBreakWallTarget = false;
+                    PerformStrengthCheckOnWall(pc, wall, cell.Coords);
+                    return;
+                }
+            }
+            // Clicked a non-wall cell — cancel and return to action choices
+            _isSelectingBreakWallTarget = false;
+            Grid.ClearAllHighlights();
+            ShowActionChoices();
+            return;
+        }
+
         if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)
         {
             // ── WALL OF ICE ATTACK ──
@@ -2071,6 +2095,52 @@ public partial class GameManager
         StartCoroutine(AfterAttackDelay(attacker, 1.0f));
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    //  BREAK WALL (STR CHECK) — BUTTON HANDLER & TARGET SELECTION
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Called when the player presses the "Break Wall" action button.
+    /// Enters a target-selection sub-phase that highlights adjacent intact wall cells.
+    /// </summary>
+    public void OnBreakWallButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        // Collect adjacent intact Wall of Ice cells (Chebyshev distance 1)
+        HashSet<Vector2Int> allIntactWalls = WallOfIceAreaEffect.GetAllIntactWallOfIceCells();
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        bool hasAdjacentWall = false;
+        foreach (Vector2Int wallCoord in allIntactWalls)
+        {
+            int dist = SquareGridUtils.ChebyshevDistance(pc.GridPosition, wallCoord);
+            if (dist > 1) continue;
+
+            SquareCell wallCell = Grid.GetCell(wallCoord);
+            if (wallCell == null) continue;
+
+            wallCell.SetHighlight(HighlightType.AttackRange);
+            _highlightedCells.Add(wallCell);
+            hasAdjacentWall = true;
+        }
+
+        if (!hasAdjacentWall)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is not adjacent to any intact Wall of Ice.");
+            ShowActionChoices();
+            return;
+        }
+
+        _isSelectingBreakWallTarget = true;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+        CombatUI?.ShowCombatLog($"💪 Select an adjacent Wall of Ice cell to attempt a Strength check, or right-click/ESC to cancel.");
+        Debug.Log($"[BreakWall] {pc.Stats.CharacterName} entering break-wall target selection with {_highlightedCells.Count} adjacent wall cells.");
+    }
+
     /// <summary>
     /// Attempts a Strength check to breach an intact Wall of Ice cell.
     /// D&D 3.5e: DC 15 + caster level. Consumes a standard action.
@@ -2535,6 +2605,68 @@ public partial class GameManager
             EndActivePCTurn();
         else
             ShowActionChoices();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  AI WALL OF ICE INTERACTION HELPERS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// AI helper: Attack an adjacent intact Wall of Ice cell with equipped weapon.
+    /// Returns an IEnumerator so the AI can yield on it.
+    /// </summary>
+    public IEnumerator NPCAttackWallForAI(CharacterController npc, WallOfIceAreaEffect wall, Vector2Int wallCell)
+    {
+        if (npc == null || wall == null || wall.IsBreached(wallCell))
+            yield break;
+
+        PerformPlayerAttackOnWall(npc, wall, wallCell);
+        yield return new WaitForSeconds(1.0f);
+    }
+
+    /// <summary>
+    /// AI helper: Attempt a Strength check to break an adjacent intact Wall of Ice cell.
+    /// Returns an IEnumerator so the AI can yield on it.
+    /// </summary>
+    public IEnumerator NPCBreakWallForAI(CharacterController npc, WallOfIceAreaEffect wall, Vector2Int wallCell)
+    {
+        if (npc == null || wall == null || wall.IsBreached(wallCell))
+            yield break;
+
+        PerformStrengthCheckOnWall(npc, wall, wallCell);
+        yield return new WaitForSeconds(1.0f);
+    }
+
+    /// <summary>
+    /// Returns the best adjacent intact Wall of Ice cell for an NPC to target,
+    /// prioritizing cells that lie between the NPC and a given target position.
+    /// Returns null if no adjacent wall cells exist.
+    /// </summary>
+    public Vector2Int? FindBestAdjacentWallCellForAI(CharacterController npc, Vector2Int targetPos)
+    {
+        HashSet<Vector2Int> intactWalls = WallOfIceAreaEffect.GetAllIntactWallOfIceCells();
+        if (intactWalls.Count == 0) return null;
+
+        Vector2Int? bestCell = null;
+        float bestScore = float.MinValue;
+
+        foreach (Vector2Int wc in intactWalls)
+        {
+            int dist = SquareGridUtils.ChebyshevDistance(npc.GridPosition, wc);
+            if (dist > 1) continue;
+
+            // Score: prefer wall cells closer to the target (blocks path)
+            float distToTarget = SquareGridUtils.ChebyshevDistance(wc, targetPos);
+            float score = -distToTarget; // Lower distance to target = higher priority
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestCell = wc;
+            }
+        }
+
+        return bestCell;
     }
 
 }

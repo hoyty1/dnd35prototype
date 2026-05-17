@@ -140,6 +140,7 @@ public class CombatUI : MonoBehaviour
     public Button DismissJumpButton; // Dismiss Jump (Standard Action)
     public Button DismissInvisibilityButton; // Dismiss Invisibility (Standard Action)
     public Button DismissSeeInvisibilityButton; // Dismiss See Invisible (Free Action)
+    public Button BreakWallButton;             // Break Wall of Ice (STR check, Standard Action)
     public Text SpellSlotsText;            // Shows remaining spell slots
     [Header("Feat Controls")]
     public GameObject PowerAttackPanel;     // Panel containing Power Attack slider
@@ -403,6 +404,7 @@ public class CombatUI : MonoBehaviour
             if (ControlFlamingSphereButton != null) ControlFlamingSphereButton.gameObject.SetActive(false);
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             if (DismissSeeInvisibilityButton != null) DismissSeeInvisibilityButton.gameObject.SetActive(false);
+            if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();
             HideSpecialStyleSelectionMenu();
             HideBullRushExtraPushChoice();

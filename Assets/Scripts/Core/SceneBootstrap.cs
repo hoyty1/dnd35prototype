@@ -801,6 +801,8 @@ public class SceneBootstrap : MonoBehaviour
             "Overrun", new Color(0.58f, 0.34f, 0.2f));
         combatUI.ChargeButton = CreateGridButton(btnGrid.transform, "ChargeBtn",
             "Charge", new Color(0.78f, 0.45f, 0.15f));
+        combatUI.BreakWallButton = CreateGridButton(btnGrid.transform, "BreakWallBtn",
+            "Break Wall (STR)", new Color(0.35f, 0.65f, 0.80f));
         combatUI.FullAttackButton = CreateGridButton(btnGrid.transform, "FullAttackBtn",
             "Full Attack", new Color(0.64f, 0.24f, 0.24f));
         // Dual Wield entry point remains intentionally omitted from the main actions window.
@@ -1153,6 +1155,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.RageButton.onClick.AddListener(() => GameManager.Instance.OnRageButtonPressed());
         if (ui.CastSpellButton != null)
             ui.CastSpellButton.onClick.AddListener(() => GameManager.Instance.OnCastSpellButtonPressed());
+        if (ui.BreakWallButton != null)
+            ui.BreakWallButton.onClick.AddListener(() => GameManager.Instance.OnBreakWallButtonPressed());
         if (ui.ControlFlamingSphereButton != null)
             ui.ControlFlamingSphereButton.onClick.AddListener(() => GameManager.Instance.OnControlFlamingSphereButtonPressed());
         if (ui.DismissDisguiseSelfButton != null)

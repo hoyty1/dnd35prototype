@@ -1038,6 +1038,7 @@ public partial class GameManager : MonoBehaviour
         ClearSpellcastResourceSnapshot();
 
         _isSelectingWithdraw = false;
+        _isSelectingBreakWallTarget = false;
         _isSelectingSpecialAttack = false;
         _pendingDisarmUseOffHandSelection = false;
         _pendingSunderUseOffHandSelection = false;
@@ -3967,6 +3968,7 @@ public partial class GameManager : MonoBehaviour
         _waitingForAoOConfirmation = false;
         _pendingAoOAction = null;
         _isSelectingWithdraw = false;
+        _isSelectingBreakWallTarget = false;
         _isSelectingTurnUndead = false;
         _turnUndeadPendingInvoker = null;
         CloseTurnUndeadSelectionPanel(clearHighlights: true);

@@ -57,6 +57,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button RageButton => _combatUI != null ? _combatUI.RageButton : null;
     private Text RageStatusText => _combatUI != null ? _combatUI.RageStatusText : null;
     private Button CastSpellButton => _combatUI != null ? _combatUI.CastSpellButton : null;
+    private Button BreakWallButton => _combatUI != null ? _combatUI.BreakWallButton : null;
     private Button ControlFlamingSphereButton => _combatUI != null ? _combatUI.ControlFlamingSphereButton : null;
     private Button DischargeTouchButton => _combatUI != null ? _combatUI.DischargeTouchButton : null;
     private Button DismissDisguiseSelfButton => _combatUI != null ? _combatUI.DismissDisguiseSelfButton : null;
@@ -151,6 +152,10 @@ public class ActionButtonPanel : MonoBehaviour
         public string GrappleOpponentName;
         public bool HasAnimateRopeEscapeAction;
         public string AnimateRopeEscapeDisabledReason;
+
+        // Wall of Ice — break wall button context
+        public bool HasAdjacentIntactWall;
+        public int AdjacentWallDC;
     }
 
     private sealed class NaturalAttackButtonOption
@@ -266,6 +271,25 @@ public class ActionButtonPanel : MonoBehaviour
         context.AnimateRopeEscapeDisabledReason = string.Empty;
         context.HasAnimateRopeEscapeAction = context.Gm != null && context.Gm.CanUseAnimateRopeEscapeAction(pc, out context.AnimateRopeEscapeDisabledReason);
 
+        // Wall of Ice — check if any adjacent cell has an intact wall for Break Wall button
+        context.HasAdjacentIntactWall = false;
+        context.AdjacentWallDC = 0;
+        HashSet<Vector2Int> intactWallCells = WallOfIceAreaEffect.GetAllIntactWallOfIceCells();
+        if (intactWallCells.Count > 0)
+        {
+            foreach (Vector2Int wc in intactWallCells)
+            {
+                if (SquareGridUtils.ChebyshevDistance(pc.GridPosition, wc) <= 1)
+                {
+                    context.HasAdjacentIntactWall = true;
+                    WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(wc);
+                    if (wall != null)
+                        context.AdjacentWallDC = wall.GetStrengthCheckDC();
+                    break;
+                }
+            }
+        }
+
         return context;
     }
 
@@ -378,6 +402,7 @@ public class ActionButtonPanel : MonoBehaviour
         ComputeClassAndSpellActionStates(pc, context, states);
         ComputeEquipmentActionStates(pc, context, states);
         ComputeGrappleActionStates(pc, context, states);
+        ComputeBreakWallState(pc, context, states);
         ComputeAlwaysAvailableStates(states);
 
         return states;
@@ -1007,6 +1032,28 @@ public class ActionButtonPanel : MonoBehaviour
             RageStatusText.text = "😫 FATIGUED: -2 STR, -2 DEX";
     }
 
+    private void ComputeBreakWallState(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
+    {
+        if (!context.HasAdjacentIntactWall)
+        {
+            states.Set(BreakWallButton, new ActionButtonState(false, false));
+            return;
+        }
+
+        bool canBreak = context.Actions.HasStandardAction && !context.IsTurned && !context.IsPinned;
+        string label;
+        if (canBreak)
+            label = $"Break Wall (STR DC {context.AdjacentWallDC})";
+        else if (context.IsPinned)
+            label = "Break Wall (Pinned)";
+        else if (context.IsTurned)
+            label = "Break Wall (Turned)";
+        else
+            label = "Break Wall (No Std Action)";
+
+        states.Set(BreakWallButton, new ActionButtonState(true, canBreak, label));
+    }
+
     private void HideNonGrappleActionButtons()
     {
         if (MoveButton != null) MoveButton.gameObject.SetActive(false);
@@ -1035,6 +1082,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
         if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
         if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
+        if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
         if (ControlFlamingSphereButton != null) ControlFlamingSphereButton.gameObject.SetActive(false);
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
         if (DismissDisguiseSelfButton != null) DismissDisguiseSelfButton.gameObject.SetActive(false);
@@ -1084,6 +1132,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (FlurryOfBlowsButton != null) FlurryOfBlowsButton.gameObject.SetActive(false);
         if (RageButton != null) RageButton.gameObject.SetActive(false);
         if (CastSpellButton != null) CastSpellButton.gameObject.SetActive(false);
+        if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
         if (DismissDisguiseSelfButton != null) DismissDisguiseSelfButton.gameObject.SetActive(false);
         if (DismissExpeditiousRetreatButton != null) DismissExpeditiousRetreatButton.gameObject.SetActive(false);
