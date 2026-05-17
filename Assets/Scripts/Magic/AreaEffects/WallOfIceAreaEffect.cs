@@ -317,7 +317,7 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
     {
         if (!AreaEffectManager.HasInstance) return;
 
-        SquareGrid grid = AreaEffectManager.Instance.Grid;
+        SquareGrid grid = GameManager.Instance.Grid;
         if (grid == null) return;
 
         SquareCell gridCell = grid.GetCell(cell);
