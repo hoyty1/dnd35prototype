@@ -23,8 +23,10 @@ using DND35e.Identifiers;
 ///   • Duration: Concentration + 1 round/level
 ///   • A wall section (cell) that takes 20+ cold damage in a single round is extinguished
 ///
-/// Simplified prototype: damages creatures standing in the wall cells
-/// (pass-through damage) and logs proximity damage for awareness.
+/// Heat wave damage (2d4 fire, no save) is dealt to creatures within 10 ft (2 squares)
+/// on the hot side:
+///   - At time of casting (wall creation)
+///   - At the beginning of the caster's turn each round
 /// </summary>
 public class WallOfFireAreaEffect : PersistentAreaEffect
 {
@@ -67,6 +69,13 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     // Tracks which creatures were damaged on entry (pass-through) during the current
     // Update() cycle, reset when they leave the wall so re-entry damages again.
     private HashSet<CharacterController> _damagedOnEntry = new HashSet<CharacterController>();
+
+    // ── Heat wave damage tracking ──
+    // Tracks which creatures have already taken heat wave damage this trigger
+    // to prevent multi-square creatures from being hit multiple times.
+    private HashSet<CharacterController> _heatWaveDamagedThisTrigger = new HashSet<CharacterController>();
+    // Whether we've already subscribed to the TurnStartedEvent
+    private bool _subscribedToTurnStart;
 
     // ── Cold damage extinguishing ──
     // Tracks accumulated cold damage per cell this round. If any cell reaches 20+, it is extinguished.
@@ -134,12 +143,24 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             string lineDir = HeatWaveDirectionLine.HasValue ? $", heat side selected" : "";
             LogEffect($"🔥 A blazing wall of fire appears ({SizeX * 5} ft long{lineDir})!");
         }
-        LogEffect("  • 2d4 fire damage to creatures within 10 ft (near side)");
-        LogEffect("  • 1d4 fire damage within 10 ft (far side)");
+        LogEffect("  • 2d4 fire damage to creatures within 10 ft (hot side)");
+        LogEffect("  • 1d4 fire damage within 10 ft (cool side)");
         LogEffect("  • 2d6+CL (max +20) fire damage to those passing through (Reflex half)");
         LogEffect("  • Undead take double damage");
         LogEffect("  • Wall is opaque — provides 50% concealment");
         LogEffect("  • Sections can be extinguished by 20+ cold damage in one round");
+
+        // Subscribe to TurnStartedEvent so we can trigger heat wave at caster's turn start
+        SubscribeToTurnStartEvent();
+
+        // Deal initial heat wave damage at time of casting (PHB p.298)
+        TriggerHeatWaveDamage("on creation");
+    }
+
+    protected override void OnDestroy()
+    {
+        UnsubscribeFromTurnStartEvent();
+        base.OnDestroy();
     }
 
     private void Update()
@@ -467,6 +488,274 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         {
             LogEffect("🔥➡💨 The entire Wall of Fire has been extinguished by cold!");
             ExpireEffect();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Heat Wave Damage (PHB 3.5e p.298)
+    //
+    //  2d4 fire damage (no save) to creatures within 10 ft (2 squares)
+    //  on the hot side of the wall. Undead take double damage.
+    //  Triggered:
+    //    1) At time of casting (wall creation)
+    //    2) At the beginning of the caster's turn each round
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>Distance in squares for heat wave (10 ft = 2 squares).</summary>
+    private const int HeatWaveDistanceSquares = 2;
+
+    /// <summary>
+    /// Subscribe to TurnStartedEvent to trigger heat wave at caster's turn start.
+    /// </summary>
+    private void SubscribeToTurnStartEvent()
+    {
+        if (_subscribedToTurnStart) return;
+        GameEventSystem.Instance.Subscribe<TurnStartedEvent>(OnTurnStartedForHeatWave);
+        _subscribedToTurnStart = true;
+    }
+
+    /// <summary>
+    /// Unsubscribe from TurnStartedEvent.
+    /// </summary>
+    private void UnsubscribeFromTurnStartEvent()
+    {
+        if (!_subscribedToTurnStart) return;
+        GameEventSystem.Instance.Unsubscribe<TurnStartedEvent>(OnTurnStartedForHeatWave);
+        _subscribedToTurnStart = false;
+    }
+
+    /// <summary>
+    /// Called when any character's turn starts. We only trigger heat wave
+    /// when it is the caster's turn.
+    /// </summary>
+    private void OnTurnStartedForHeatWave(TurnStartedEvent evt)
+    {
+        if (evt.Character == null || Caster == null)
+            return;
+
+        // Only trigger on the caster's turn
+        if (evt.Character != Caster)
+            return;
+
+        // Don't trigger if the wall has expired or all cells extinguished
+        if (ActiveCellCount <= 0)
+            return;
+
+        TriggerHeatWaveDamage("at caster's turn start");
+    }
+
+    /// <summary>
+    /// Main heat wave damage trigger. Finds all creatures within 2 squares
+    /// on the hot side and deals 2d4 fire damage (doubled for undead, no save).
+    /// </summary>
+    /// <param name="context">Description for the combat log (e.g., "on creation", "at caster's turn start").</param>
+    public void TriggerHeatWaveDamage(string context)
+    {
+        _heatWaveDamagedThisTrigger.Clear();
+
+        List<CharacterController> hotSideCreatures = GetCreaturesOnHotSide();
+        if (hotSideCreatures.Count == 0)
+        {
+            Debug.Log($"[WallOfFire] Heat wave ({context}): no creatures on hot side within {HeatWaveDistanceSquares} squares.");
+            return;
+        }
+
+        LogEffect($"🌊🔥 Heat wave radiates {context}!");
+
+        for (int i = 0; i < hotSideCreatures.Count; i++)
+        {
+            CharacterController creature = hotSideCreatures[i];
+            DealHeatWaveDamage(creature);
+        }
+    }
+
+    /// <summary>
+    /// Returns all living creatures within HeatWaveDistanceSquares of the wall
+    /// on the hot side, respecting ring/line mode direction settings.
+    /// Each creature is returned at most once (multi-square creatures).
+    /// </summary>
+    private List<CharacterController> GetCreaturesOnHotSide()
+    {
+        var result = new List<CharacterController>();
+
+        if (AffectedCells == null || AffectedCells.Count == 0)
+            return result;
+
+        CharacterController[] allCharacters = FindObjectsOfType<CharacterController>();
+
+        for (int i = 0; i < allCharacters.Length; i++)
+        {
+            CharacterController character = allCharacters[i];
+            if (character == null || character.Stats == null || character.Stats.IsDead)
+                continue;
+
+            // Skip creatures already tracked (multi-square)
+            if (_heatWaveDamagedThisTrigger.Contains(character))
+                continue;
+
+            // Skip creatures standing IN the wall (they take pass-through damage instead)
+            if (IsCharacterInArea(character))
+                continue;
+
+            // Check if any of the creature's occupied squares is within range
+            // of a non-extinguished wall cell AND on the hot side
+            if (IsCreatureOnHotSideWithinRange(character))
+                result.Add(character);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Check if any occupied square of the creature is within HeatWaveDistanceSquares
+    /// of a non-extinguished wall cell AND on the hot side of the wall.
+    /// </summary>
+    private bool IsCreatureOnHotSideWithinRange(CharacterController character)
+    {
+        List<Vector2Int> occupied = character.GetOccupiedSquares();
+
+        for (int i = 0; i < occupied.Count; i++)
+        {
+            Vector2Int creatureCell = occupied[i];
+
+            // Check against each non-extinguished wall cell
+            foreach (Vector2Int wallCell in AffectedCells)
+            {
+                if (_extinguishedCells.Contains(wallCell))
+                    continue;
+
+                int dist = SquareGridUtils.GetDistance(creatureCell, wallCell);
+                if (dist > HeatWaveDistanceSquares)
+                    continue;
+
+                // Check if this creature cell is on the hot side
+                if (IsCellOnHotSide(creatureCell, wallCell))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Determines if a given cell is on the "hot" side of the wall relative
+    /// to a specific wall cell, based on ring or line mode configuration.
+    /// </summary>
+    private bool IsCellOnHotSide(Vector2Int testCell, Vector2Int wallCell)
+    {
+        if (IsRingMode)
+            return IsCellOnHotSideRing(testCell);
+        else
+            return IsCellOnHotSideLine(testCell);
+    }
+
+    /// <summary>
+    /// Ring mode: check if cell is on the hot side.
+    /// "Inwards" = cell is closer to center than the ring (inside).
+    /// "Outwards" = cell is farther from center than the ring (outside).
+    /// </summary>
+    private bool IsCellOnHotSideRing(Vector2Int testCell)
+    {
+        string direction = !string.IsNullOrEmpty(HeatWaveDirectionRing)
+            ? HeatWaveDirectionRing
+            : "Inwards"; // Default
+
+        // Distance from test cell to center
+        float dx = testCell.x - CenterCell.x;
+        float dy = testCell.y - CenterCell.y;
+        float distFromCenter = Mathf.Sqrt(dx * dx + dy * dy);
+
+        if (direction == "Inwards")
+        {
+            // Hot side is inside the ring — cell must be closer to center than ring radius
+            return distFromCenter < RingRadius;
+        }
+        else // "Outwards"
+        {
+            // Hot side is outside the ring — cell must be farther from center than ring radius
+            return distFromCenter > RingRadius;
+        }
+    }
+
+    /// <summary>
+    /// Line mode: check if cell is on the hot side.
+    /// Uses HeatWaveDirectionLine (perpendicular normal pointing to hot side).
+    /// The dot product of (cell - wall midpoint) with the normal determines the side.
+    /// </summary>
+    private bool IsCellOnHotSideLine(Vector2Int testCell)
+    {
+        if (!HeatWaveDirectionLine.HasValue)
+            return false; // No direction chosen — no heat wave
+
+        Vector2 normal = HeatWaveDirectionLine.Value;
+        if (normal.sqrMagnitude < 0.0001f)
+            return false;
+
+        // Compute midpoint of the wall for reference
+        Vector2 wallMidpoint = GetWallMidpoint();
+
+        // Vector from wall midpoint to the test cell
+        Vector2 toCell = new Vector2(testCell.x - wallMidpoint.x, testCell.y - wallMidpoint.y);
+
+        // Positive dot product = same side as the normal = hot side
+        float dot = Vector2.Dot(toCell, normal);
+        return dot > 0f;
+    }
+
+    /// <summary>
+    /// Compute the midpoint of all wall cells (used for line mode hot side check).
+    /// </summary>
+    private Vector2 GetWallMidpoint()
+    {
+        if (AffectedCells == null || AffectedCells.Count == 0)
+            return new Vector2(CenterCell.x, CenterCell.y);
+
+        float sumX = 0f, sumY = 0f;
+        int count = 0;
+        foreach (Vector2Int cell in AffectedCells)
+        {
+            sumX += cell.x;
+            sumY += cell.y;
+            count++;
+        }
+
+        return count > 0
+            ? new Vector2(sumX / count, sumY / count)
+            : new Vector2(CenterCell.x, CenterCell.y);
+    }
+
+    /// <summary>
+    /// Deals 2d4 fire damage (no save) to a creature from heat waves.
+    /// Undead take double damage (PHB 3.5e p.298).
+    /// </summary>
+    private void DealHeatWaveDamage(CharacterController character)
+    {
+        if (character == null || character.Stats == null || character.Stats.IsDead)
+            return;
+
+        // Per-creature tracking: don't damage same creature twice in one heat wave trigger
+        if (_heatWaveDamagedThisTrigger.Contains(character))
+            return;
+        _heatWaveDamagedThisTrigger.Add(character);
+
+        int damage = Random.Range(1, 5) + Random.Range(1, 5); // 2d4
+
+        bool isUndead = IsCreatureUndead(character);
+        if (isUndead)
+            damage *= 2;
+
+        int finalDamage = Mathf.Max(1, damage);
+
+        if (finalDamage > 0)
+            character.Stats.TakeDamage(finalDamage);
+
+        string undeadNote = isUndead ? " [UNDEAD ×2]" : "";
+        LogEffect($"  🌊🔥 {character.Stats.CharacterName} takes {finalDamage} fire damage from heat waves{undeadNote}");
+
+        if (character.Stats.IsDead)
+        {
+            character.OnDeath();
+            LogEffect($"  💀 {character.Stats.CharacterName} is slain by heat waves from the Wall of Fire!");
         }
     }
 }
