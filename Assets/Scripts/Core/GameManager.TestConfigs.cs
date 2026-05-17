@@ -304,7 +304,7 @@ public partial class GameManager
         if (heavyMace != null)
             clericInventory.CharacterInventory.AddItem(heavyMace);
 
-        ItemData crossbowBolts = ItemDatabase.CloneItem(ItemIDs.CROSSBOW_BOLTS_20);
+        ItemData crossbowBolts = ItemDatabase.CloneItem(ItemIDs.AMMO_BOLT);
         if (crossbowBolts != null)
             clericInventory.CharacterInventory.AddItem(crossbowBolts);
 

@@ -56,6 +56,7 @@ public class RogueClass : ICharacterClass
         inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.RAPIER), EquipSlot.RightHand);
 
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.SHORTBOW));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.AMMO_ARROW));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.DAGGER));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));

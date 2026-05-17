@@ -47,6 +47,7 @@ public class MonkClass : ICharacterClass
         inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
 
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.SLING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.AMMO_SLING_BULLET));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));

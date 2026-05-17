@@ -44,6 +44,7 @@ public class FighterClass : ICharacterClass
         inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SPIKED_GAUNTLET), EquipSlot.Hands);
 
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.SHORTBOW));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.AMMO_ARROW));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.LONGSPEAR));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.GAUNTLET));
