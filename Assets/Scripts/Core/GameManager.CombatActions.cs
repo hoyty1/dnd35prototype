@@ -2100,6 +2100,11 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(sb.ToString());
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        // End the attack sequence so the character can't keep attacking the wall.
+        // Wall attacks are a single standard action — no iterative attacks apply.
+        EndAttackSequence();
 
         StartCoroutine(AfterAttackDelay(attacker, 1.0f));
     }
@@ -2208,6 +2213,13 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(sb.ToString());
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        // Clear break-wall targeting state
+        _isSelectingBreakWallTarget = false;
+
+        // End any attack sequence that may be active
+        EndAttackSequence();
 
         StartCoroutine(AfterAttackDelay(attacker, 1.0f));
     }
