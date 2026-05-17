@@ -3305,6 +3305,19 @@ public partial class GameManager
         // Wall length for line mode
         int maxLengthSquares = Mathf.Max(2, casterLevel * 2);
 
+        // ── Validate proposed wall cells are not occupied ──
+        if (aoeCells != null && aoeCells.Count > 0)
+        {
+            string validationError = WallOfIceAreaEffect.ValidateWallCreation(aoeCells, Grid);
+            if (!string.IsNullOrEmpty(validationError))
+            {
+                log = $"⚠ Wall of Ice cannot be placed: {validationError}";
+                Debug.Log($"[WallOfIce] Creation blocked: {validationError}");
+                ResetPendingWallOfIceMode();
+                return false;
+            }
+        }
+
         // Create the area effect
         string objName = isCircleMode ? "WallOfIce_Hemisphere_Area" : "WallOfIce_Line_Area";
         GameObject wallObj = new GameObject(objName);

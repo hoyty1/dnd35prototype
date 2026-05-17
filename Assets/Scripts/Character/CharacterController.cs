@@ -3223,6 +3223,14 @@ public class CharacterController : MonoBehaviour
 
             transform.position = endPos;
 
+            // ── Wall of Ice breach pass-through damage ──
+            // Moving through a breached Wall of Ice cell (Line mode only) deals 1d6+CL cold damage.
+            // D&D 3.5e: creatures passing through a breached section take cold damage.
+            if (WallOfIceAreaEffect.IsCellBreachedWallOfIce(nextCell.Coords))
+            {
+                WallOfIceAreaEffect.ApplyBreachDamageAtCell(this, nextCell.Coords);
+            }
+
             // ── Death/disable check AFTER each movement step ──
             // Area effects (Wall of Fire, etc.) detect entry via UpdateCharacterTracking()
             // in their Update() method. The yield return null above gives Unity a frame to

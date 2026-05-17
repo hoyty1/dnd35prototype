@@ -22,6 +22,7 @@ public static class AreaEffectColors
 
     // Cold / ice
     public static readonly Color WallOfIce = new Color(0.7f, 0.9f, 1.0f, 0.7f);
+    public static readonly Color WallOfIceBreached = new Color(0.5f, 0.7f, 0.85f, 0.35f);
     public static readonly Color IceStorm = new Color(0.75f, 0.85f, 0.95f, 0.65f);
 
     // Poison / acid

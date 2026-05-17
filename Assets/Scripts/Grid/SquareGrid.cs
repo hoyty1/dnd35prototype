@@ -328,6 +328,11 @@ public class SquareGrid : MonoBehaviour
                 if (ResilientSphereAreaEffect.DoesMovementCrossSphereBoundary(current, neighbor))
                     continue;
 
+                // ── Wall of Ice movement block ──
+                // Intact wall cells block movement; breached cells allow passage (with damage).
+                if (WallOfIceAreaEffect.DoesCellBlockMovement(neighbor))
+                    continue;
+
                 // Calculate step cost (weighted: orthogonal < diagonal to prefer straight paths)
                 bool isDiag = SquareGridUtils.IsDiagonalStep(current, neighbor);
                 int stepCost = isDiag ? DIAG_COST : ORTH_COST;
@@ -375,6 +380,13 @@ public class SquareGrid : MonoBehaviour
             // Check sphere boundary crossing for fallback path
             Vector2Int prev = (i == 0) ? start : result.Path[i - 1];
             if (ResilientSphereAreaEffect.DoesMovementCrossSphereBoundary(prev, step))
+            {
+                firstInvalidIndex = i;
+                break;
+            }
+
+            // Check Wall of Ice blocking for fallback path
+            if (WallOfIceAreaEffect.DoesCellBlockMovement(step))
             {
                 firstInvalidIndex = i;
                 break;

@@ -117,7 +117,7 @@ public partial class GameManager
         bool hasWallTarget = false;
         if (_pendingAttackMode != PendingAttackMode.CastSpell && _pendingAttackMode != PendingAttackMode.TemplateSmite)
         {
-            HashSet<Vector2Int> wallCells = WallOfIceAreaEffect.GetAllWallOfIceCells();
+            HashSet<Vector2Int> wallCells = WallOfIceAreaEffect.GetAllIntactWallOfIceCells();
             if (wallCells.Count > 0)
             {
                 foreach (Vector2Int wallCoord in wallCells)
@@ -2035,22 +2035,87 @@ public partial class GameManager
             }
         }
 
-        // Build combat log
+        // Build combat log — per-cell damage
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
-        sb.AppendLine($"🧊 {attacker.Stats.CharacterName} attacks Wall of Ice with {weaponName}!");
+        sb.AppendLine($"🧊 {attacker.Stats.CharacterName} attacks Wall of Ice at ({wallCell.x},{wallCell.y}) with {weaponName}!");
         sb.AppendLine($"  Auto-hit (stationary object, Hardness 0)");
         sb.AppendLine($"  Damage: {damage}{(isFire ? " (includes fire)" : "")}");
 
-        bool destroyed = wall.DealDamageToWall(damage, isFire);
+        // Apply damage to specific cell
+        wall.OnCellAttacked(attacker, wallCell, damage, isFire);
 
-        if (destroyed)
+        int remainingHP = wall.GetCellHP(wallCell);
+        if (wall.IsBreached(wallCell))
         {
-            sb.AppendLine($"  💥 The Wall of Ice is destroyed!");
+            sb.AppendLine($"  💥 Wall cell ({wallCell.x},{wallCell.y}) breached!");
         }
         else
         {
-            sb.AppendLine($"  Wall HP: {wall.WallHP}/{wall.WallMaxHP}");
+            int maxHP = wall.CasterLevel * 3;
+            sb.AppendLine($"  Cell HP: {remainingHP}/{maxHP}");
+        }
+        sb.Append("═══════════════════════════════════");
+
+        CombatUI?.ShowCombatLog(sb.ToString());
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+
+        StartCoroutine(AfterAttackDelay(attacker, 1.0f));
+    }
+
+    /// <summary>
+    /// Attempts a Strength check to breach an intact Wall of Ice cell.
+    /// D&D 3.5e: DC 15 + caster level. Consumes a standard action.
+    /// Can be called from UI when a player selects "Break Wall" on an adjacent intact wall cell.
+    /// </summary>
+    public void PerformStrengthCheckOnWall(CharacterController attacker, WallOfIceAreaEffect wall, Vector2Int wallCell)
+    {
+        if (attacker == null || wall == null)
+            return;
+
+        // Must be adjacent (Chebyshev distance 1)
+        int dist = SquareGridUtils.ChebyshevDistance(attacker.GridPosition, wallCell);
+        if (dist > 1)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} must be adjacent to attempt a Strength check.");
+            return;
+        }
+
+        // Cell must be intact
+        if (wall.IsBreached(wallCell))
+        {
+            CombatUI?.ShowCombatLog($"⚠ That wall cell is already breached.");
+            return;
+        }
+
+        // Consume standard action
+        if (!attacker.CommitStandardAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available.");
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        bool success = wall.AttemptStrengthCheck(attacker, wallCell);
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        int strMod = CharacterStats.GetModifier(attacker.Stats.STR);
+        int dc = 15 + wall.CasterLevel;
+        sb.AppendLine($"💪 {attacker.Stats.CharacterName} attempts to break through Wall of Ice at ({wallCell.x},{wallCell.y})!");
+        sb.AppendLine($"  Strength Check DC {dc} (15 + CL {wall.CasterLevel})");
+        sb.AppendLine($"  STR modifier: {(strMod >= 0 ? "+" : "")}{strMod}");
+
+        if (success)
+        {
+            sb.AppendLine($"  ✅ Success! The ice cracks open — cell breached!");
+        }
+        else
+        {
+            sb.AppendLine($"  ❌ Failed! The wall holds firm.");
         }
         sb.Append("═══════════════════════════════════");
 
