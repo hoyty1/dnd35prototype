@@ -1206,15 +1206,14 @@ public partial class GameManager
         if (isPersonTransmutation)
         {
             // Person transmutations can target any humanoid creature (ally or enemy).
+            // TARGETING OVERRIDE: Allow any character to be targeted regardless of faction.
             return IsHumanoid(target);
         }
 
         if (spell.SpellId == SpellNames.DAZE)
         {
             // D&D 3.5e Daze: one humanoid creature of 4 HD or less.
-            // Protection-from-Evil benchmark scenario intentionally allows Daze against the level 10 test wizard
-            // so we can validate save bonus behavior (+2 vs evil, no bonus vs neutral).
-            if (!IsEnemyTeam(caster, target)) return false;
+            // TARGETING OVERRIDE: Removed enemy-only restriction. Still requires humanoid and HD check.
             if (!IsHumanoid(target)) return false;
             if (!_isProtectionFromEvilTestEncounter && GetTargetHitDice(target) > 4) return false;
             if (IsImmuneToMindAffecting(target)) return false;
@@ -1223,8 +1222,8 @@ public partial class GameManager
 
         if (spell.SpellId == SpellNames.CHARM_PERSON)
         {
-            // D&D 3.5e Charm Person: one humanoid creature of 4 HD or less.
-            if (!IsEnemyTeam(caster, target)) return false;
+            // D&D 3.5e Charm Person: one humanoid creature.
+            // TARGETING OVERRIDE: Removed enemy-only restriction. Still requires humanoid and HD check.
             if (!IsHumanoid(target)) return false;
             if (GetTargetHitDice(target) > 4) return false;
             if (IsImmuneToMindAffecting(target)) return false;
@@ -1233,15 +1232,16 @@ public partial class GameManager
 
         if (spell.SpellId == SpellNames.TOUCH_OF_IDIOCY)
         {
-            if (!IsEnemyTeam(caster, target)) return false;
+            // TARGETING OVERRIDE: Removed enemy-only restriction. Still requires living creature.
             if (!IsLivingCreatureForFearSpell(target)) return false;
             return true;
         }
 
-        // Direct enemy targeting requires line of sight.
+        // Direct targeting requires line of sight for enemies.
         // See Invisible allows direct targeting of invisible enemies, but does not bypass
         // true visibility blockers or total concealment sources.
-        if (spell.TargetType == SpellTargetType.SingleEnemy && IsEnemyTeam(caster, target))
+        // TARGETING OVERRIDE: Line-of-sight check still applies for enemies only.
+        if (IsEnemyTeam(caster, target))
         {
             bool isRangedTouch = spell.IsRangedTouchSpell();
             bool casterCanSeeInvisibleTarget = target.HasActiveInvisibilityEffect && caster.CanSeeInvisible(target);
@@ -1249,12 +1249,17 @@ public partial class GameManager
                 return false;
         }
 
+        // TARGETING OVERRIDE: All spells can now target any character regardless of faction.
+        // SingleEnemy and SingleAlly are no longer restricted to their respective teams.
+        // Self spells still require self-targeting.
         switch (spell.TargetType)
         {
             case SpellTargetType.SingleEnemy:
-                return IsEnemyTeam(caster, target);
+                // Allow targeting any living character (ally or enemy).
+                return true;
             case SpellTargetType.SingleAlly:
-                return target == caster || IsAllyTeam(caster, target);
+                // Allow targeting any living character (ally or enemy).
+                return true;
             case SpellTargetType.Touch:
                 return true;
             case SpellTargetType.Area:
@@ -1270,17 +1275,40 @@ public partial class GameManager
     {
         if (caster == null || target == null || spell == null) return false;
 
-        // Willing creatures can choose to fail saves.
-        // Keep this explicit for known "harmless" spells we currently support with optional saves.
-        if (spell.SpellId == SpellNames.ENLARGE_PERSON
-            || spell.SpellId == SpellNames.REDUCE_PERSON
-            || spell.SpellId == SpellNames.MASS_ENLARGE_PERSON
-            || spell.SpellId == SpellNames.MASS_REDUCE_PERSON
-            || spell.SpellId == SpellNames.BLUR)
+        bool isAlly = target == caster || IsAllyTeam(caster, target);
+
+        // --- VOLUNTARY SAVE FAILURE (D&D 3.5e PHB p.177) ---
+        // A willing creature can voluntarily forgo a saving throw and accept a spell's result.
+        // This applies to ALL spells cast on allies, not just specific "harmless" ones.
+        //
+        // EXCEPTION: Compelled or controlled creatures (e.g. under Charm or Confusion)
+        // cannot voluntarily choose to fail a save, because their will is compromised.
+        // They must roll saves normally even against allied casters.
+        if (isAlly)
         {
-            return target == caster || IsAllyTeam(caster, target);
+            // Check if the target is under a compulsion/control effect that prevents voluntary save failure.
+            bool isCompelled = target.HasCondition(CombatConditionType.Charmed)
+                            || target.HasCondition(CombatConditionType.Confused);
+
+            if (isCompelled)
+            {
+                // Compelled allies cannot voluntarily fail saves — they roll normally.
+                // BUFF AUTO-SUCCESS: Even compelled allies auto-fail saves for buff spells,
+                // since buff spells are beneficial and the compulsion doesn't make them resist help.
+                // (Task 2: EffectType.Buff on ally = always skip save)
+                if (spell.EffectType == SpellEffectType.Buff)
+                {
+                    return true; // Buff on ally always auto-accepts, even if compelled
+                }
+                return false; // Non-buff on compelled ally: roll save normally
+            }
+
+            // Willing (non-compelled) ally: voluntarily fails the save for ANY spell.
+            // This covers both buff spells (Task 2) and the general voluntary failure rule (Task 3).
+            return true;
         }
 
+        // Enemies always roll saves normally — no change to existing enemy save mechanics.
         return false;
     }
 
@@ -3333,7 +3361,9 @@ public partial class GameManager
                     // For damage spells, resolve with save and damage
                     else if (_pendingSpell.EffectType == SpellEffectType.Damage)
                     {
-                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, false, caster, target);
+                        // VOLUNTARY SAVE FAILURE: AoE damage spells also respect voluntary save failure for allies.
+                        bool aoeForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
+                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeForceFailSave, caster, target);
 
                         if (result.RequiredSave)
                         {
@@ -3360,7 +3390,9 @@ public partial class GameManager
                     // For healing spells
                     else if (_pendingSpell.EffectType == SpellEffectType.Healing)
                     {
-                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, false, caster, target);
+                        // VOLUNTARY SAVE FAILURE: AoE healing spells also respect voluntary save failure for allies.
+                        bool aoeHealForceFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
+                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeHealForceFailSave, caster, target);
 
                         logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
                         logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
