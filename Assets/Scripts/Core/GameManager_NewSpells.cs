@@ -3264,25 +3264,73 @@ public partial class GameManager
         int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
-        // Wall panels: one 10-ft square per CL = 2 squares per CL
-        int maxLengthSquares = Mathf.Max(2, casterLevel * 2);
+        // Determine which mode was selected
+        bool isCircleMode = _pendingWallOfIceMode.HasValue && _pendingWallOfIceMode.Value == WallOfIceMode.Circle;
+        string modeLabel = isCircleMode ? "Hemisphere" : "Wall";
 
+        // Compute center and direction from the AoE cells
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
         Vector2Int centerCell = SquareGridUtils.WorldToGrid(centerPosition);
-        Vector2Int direction = ComputeWindWallDirection(caster.GridPosition, centerCell);
+        Vector2Int direction;
+
+        if (isCircleMode)
+        {
+            // Circle mode: direction doesn't matter, use default
+            direction = new Vector2Int(1, 0);
+
+            // If we stored the circle center, use that instead of computed center
+            if (_pendingWallOfIceCircleCenter.HasValue)
+                centerCell = _pendingWallOfIceCircleCenter.Value;
+        }
+        else
+        {
+            // Line mode: compute direction from start→end points if available
+            if (_pendingWallOfIceLineStart.HasValue)
+            {
+                Vector2Int lineStart = _pendingWallOfIceLineStart.Value;
+                Vector2Int diff = centerCell - lineStart;
+                if (diff == Vector2Int.zero)
+                    direction = new Vector2Int(1, 0);
+                else
+                    direction = new Vector2Int(
+                        diff.x != 0 ? (diff.x > 0 ? 1 : -1) : 0,
+                        diff.y != 0 ? (diff.y > 0 ? 1 : -1) : 0);
+            }
+            else
+            {
+                direction = ComputeWindWallDirection(caster.GridPosition, centerCell);
+            }
+        }
+
+        // Wall length for line mode
+        int maxLengthSquares = Mathf.Max(2, casterLevel * 2);
 
         // Create the area effect
-        GameObject wallObj = new GameObject("WallOfIce_Area");
+        string objName = isCircleMode ? "WallOfIce_Hemisphere_Area" : "WallOfIce_Line_Area";
+        GameObject wallObj = new GameObject(objName);
         wallObj.transform.position = centerPosition;
 
         WallOfIceAreaEffect wallEffect = wallObj.AddComponent<WallOfIceAreaEffect>();
         wallEffect.CenterPosition = centerPosition;
         wallEffect.CenterCell = centerCell;
-        wallEffect.LengthSquares = Mathf.Max(2, maxLengthSquares);
         wallEffect.WallDirection = direction == Vector2Int.zero ? new Vector2Int(1, 0) : direction;
         wallEffect.RoundsRemaining = Mathf.Max(1, durationRounds);
         wallEffect.CasterLevel = casterLevel;
         wallEffect.Caster = caster;
+
+        if (isCircleMode)
+        {
+            // Circle mode: set circle-specific properties
+            wallEffect.IsCircleMode = true;
+            wallEffect.CircleRadius = _pendingWallOfIceCircleRadius ?? 1;
+            wallEffect.LengthSquares = 0; // Not applicable for circle
+        }
+        else
+        {
+            // Line mode
+            wallEffect.IsCircleMode = false;
+            wallEffect.LengthSquares = Mathf.Max(2, maxLengthSquares);
+        }
 
         if (aoeCells != null && aoeCells.Count > 0)
             wallEffect.SetExplicitCells(aoeCells);
@@ -3292,8 +3340,19 @@ public partial class GameManager
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
-        sb.AppendLine($"❄ {caster.Stats.CharacterName} casts Wall of Ice!");
-        sb.AppendLine($"  Wall: {maxLengthSquares} squares long, {thickness} inch(es) thick");
+        sb.AppendLine($"❄ {caster.Stats.CharacterName} casts Wall of Ice ({modeLabel})!");
+
+        if (isCircleMode)
+        {
+            int circleRad = _pendingWallOfIceCircleRadius ?? 1;
+            sb.AppendLine($"  Hemisphere: {circleRad * 5}-ft radius ({aoeCells?.Count ?? 0} cells)");
+        }
+        else
+        {
+            sb.AppendLine($"  Wall: {aoeCells?.Count ?? 0} cells ({maxLengthSquares * 5} ft max)");
+        }
+
+        sb.AppendLine($"  Thickness: {thickness} inch(es)");
         sb.AppendLine($"  HP: {wallHP} (Hardness 0, 3 HP per inch)");
         sb.AppendLine($"  Duration: {durationRounds} round(s)");
         sb.AppendLine("  • Blocks movement through wall cells");
@@ -3313,6 +3372,10 @@ public partial class GameManager
 
         sb.Append("═══════════════════════════════════");
         log = sb.ToString();
+
+        // Clean up Wall of Ice pending state after successful cast
+        ResetPendingWallOfIceMode();
+
         return true;
     }
 

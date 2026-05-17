@@ -78,6 +78,7 @@ public partial class GameManager
             _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
             ResetPendingWallOfFireMode();
+            ResetPendingWallOfIceMode();
             return false;
         }
 
@@ -101,6 +102,7 @@ public partial class GameManager
             _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
             ResetPendingWallOfFireMode();
+            ResetPendingWallOfIceMode();
             return false;
         }
         if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
@@ -858,6 +860,13 @@ public partial class GameManager
             return;
         }
 
+        // Wall of Ice: choose Line vs Circle mode before AoE targeting (PHB p.299)
+        if (string.Equals(_pendingSpell.SpellId, SpellNames.WALL_OF_ICE, StringComparison.Ordinal) && !_pendingWallOfIceMode.HasValue)
+        {
+            ShowWallOfIceModeSelection(caster);
+            return;
+        }
+
         // ===== AoE SPELLS: Enter AoE targeting mode =====
         if (_pendingSpell.AoEShapeType != AoEShape.None)
         {
@@ -1124,6 +1133,7 @@ public partial class GameManager
         _pendingProtectionFromEnergyType = null;
         _pendingDisguiseSelfRace = null;
         ResetPendingWallOfFireMode();
+        ResetPendingWallOfIceMode();
         ShowActionChoices();
     }
 
@@ -2371,6 +2381,46 @@ public partial class GameManager
                 CombatUI.SetTurnIndicator(
                     $"✦ Wall of Fire (Ring): Click CENTER point within range | Max radius: {maxRad * 5} ft | Right-click to cancel");
             }
+            // ── Wall of Ice Line Mode: show placement range, two-click targeting ──
+            else if (IsPendingWallOfIce() && _pendingWallOfIceMode == WallOfIceMode.Line)
+            {
+                int spellRange = GetWallOfIceRangeSquares(caster);
+                List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, spellRange);
+                foreach (SquareCell cell in rangeCells)
+                {
+                    if (cell == null) continue;
+                    cell.SetHighlight(HighlightType.SpellRange);
+                }
+                HighlightCharacterFootprint(caster, HighlightType.Selected);
+
+                int maxLen = GetWallOfIceMaxLengthSquares(caster);
+                if (_pendingWallOfIceLineStart.HasValue)
+                {
+                    CombatUI.SetTurnIndicator(
+                        $"✦ Wall of Ice (Line): Click END point for the wall (max {maxLen * 5} ft from start) | Right-click to cancel");
+                }
+                else
+                {
+                    CombatUI.SetTurnIndicator(
+                        $"✦ Wall of Ice (Line): Click START point within range | Wall up to {maxLen * 5} ft long | Right-click to cancel");
+                }
+            }
+            // ── Wall of Ice Circle Mode: show placement range, click center ──
+            else if (IsPendingWallOfIce() && _pendingWallOfIceMode == WallOfIceMode.Circle)
+            {
+                int spellRange = GetWallOfIceRangeSquares(caster);
+                List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, spellRange);
+                foreach (SquareCell cell in rangeCells)
+                {
+                    if (cell == null) continue;
+                    cell.SetHighlight(HighlightType.SpellRange);
+                }
+                HighlightCharacterFootprint(caster, HighlightType.Selected);
+
+                int maxRad = GetWallOfIceMaxCircleRadius(caster);
+                CombatUI.SetTurnIndicator(
+                    $"✦ Wall of Ice (Hemisphere): Click CENTER point within range | Max radius: {maxRad * 5} ft | Right-click to cancel");
+            }
             else
             {
                 // Normal line spell (e.g., Lightning Bolt)
@@ -2593,6 +2643,33 @@ public partial class GameManager
                     return;
                 aoeCells = new HashSet<Vector2Int> { gridPos };
             }
+            // ── Wall of Ice Line Mode: preview from first-click start to mouse ──
+            else if (IsPendingWallOfIceLineSecondClick())
+            {
+                Vector2Int start = _pendingWallOfIceLineStart.Value;
+                int maxLen = GetWallOfIceMaxLengthSquares(pc);
+                int distFromStart = SquareGridUtils.GetDistance(start, gridPos);
+                if (distFromStart > maxLen) return;
+
+                aoeCells = AoESystem.GetLineCellsBetweenPoints(start, gridPos, maxLen, Grid);
+            }
+            // ── Wall of Ice Circle Mode: preview ring at hovered center ──
+            else if (IsPendingWallOfIce() && _pendingWallOfIceMode == WallOfIceMode.Circle)
+            {
+                int spellRange = GetWallOfIceRangeSquares(pc);
+                if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, spellRange))
+                    return;
+                int previewRadius = Mathf.Min(2, GetWallOfIceMaxCircleRadius(pc));
+                aoeCells = AoESystem.GetRingCells(gridPos, previewRadius, Grid);
+            }
+            // ── Wall of Ice Line Mode first click: just show hovered cell ──
+            else if (IsPendingWallOfIce() && _pendingWallOfIceMode == WallOfIceMode.Line && !_pendingWallOfIceLineStart.HasValue)
+            {
+                int spellRange = GetWallOfIceRangeSquares(pc);
+                if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, spellRange))
+                    return;
+                aoeCells = new HashSet<Vector2Int> { gridPos };
+            }
             // ── Normal line spell (Lightning Bolt, etc.) ──
             else
             {
@@ -2709,10 +2786,12 @@ public partial class GameManager
             }
             else if (_pendingSpell != null && _pendingSpell.AoEShapeType == AoEShape.Line)
             {
-                // Wall of Fire uses spell range (Medium) for placement; normal lines use AoESizeSquares
+                // Wall of Fire/Ice uses spell range (Medium) for placement; normal lines use AoESizeSquares
                 int lineRange = IsPendingWallOfFire()
                     ? GetWallOfFireRangeSquares(pc)
-                    : Mathf.Max(1, _pendingSpell.AoESizeSquares);
+                    : IsPendingWallOfIce()
+                        ? GetWallOfIceRangeSquares(pc)
+                        : Mathf.Max(1, _pendingSpell.AoESizeSquares);
                 int dist = SquareGridUtils.GetDistance(casterPos, cellPos);
                 if (dist <= lineRange)
                     cell.SetHighlight(HighlightType.SpellRange);
@@ -2892,6 +2971,100 @@ public partial class GameManager
                 }
             }
 
+            // ── Wall of Ice: use spell range (Medium) instead of AoESizeSquares ──
+            if (IsPendingWallOfIce())
+            {
+                int spellRange = GetWallOfIceRangeSquares(caster);
+
+                // ── LINE MODE: two-click targeting ──
+                if (_pendingWallOfIceMode == WallOfIceMode.Line)
+                {
+                    if (!_pendingWallOfIceLineStart.HasValue)
+                    {
+                        // FIRST CLICK: set start point
+                        if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, spellRange))
+                        {
+                            Debug.Log($"[WallOfIce] Start point ({targetPos.x},{targetPos.y}) out of spell range");
+                            return;
+                        }
+
+                        _pendingWallOfIceLineStart = targetPos;
+                        CombatUI?.ShowCombatLog($"❄ Wall start set at ({targetPos.x}, {targetPos.y}). Click END point.");
+
+                        SquareCell startCell = Grid.GetCell(targetPos);
+                        if (startCell != null) startCell.SetHighlight(HighlightType.AoETarget);
+
+                        int maxLen = GetWallOfIceMaxLengthSquares(caster);
+                        CombatUI.SetTurnIndicator(
+                            $"✦ Wall of Ice (Line): Click END point (max {maxLen * 5} ft from start) | Right-click to cancel");
+                        return; // Wait for second click
+                    }
+                    else
+                    {
+                        // SECOND CLICK: set end point
+                        int maxLen = GetWallOfIceMaxLengthSquares(caster);
+                        Vector2Int start = _pendingWallOfIceLineStart.Value;
+                        int distFromStart = SquareGridUtils.GetDistance(start, targetPos);
+
+                        if (distFromStart > maxLen)
+                        {
+                            Debug.Log($"[WallOfIce] End point ({targetPos.x},{targetPos.y}) too far from start ({distFromStart} > {maxLen})");
+                            CombatUI?.ShowCombatLog($"⚠ End point too far from start (max {maxLen * 5} ft). Click closer.");
+                            return;
+                        }
+
+                        if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, spellRange))
+                        {
+                            Debug.Log($"[WallOfIce] End point ({targetPos.x},{targetPos.y}) out of spell range");
+                            return;
+                        }
+
+                        // Compute final wall cells
+                        HashSet<Vector2Int> wallCells = AoESystem.GetLineCellsBetweenPoints(start, targetPos, maxLen, Grid);
+                        Debug.Log($"[WallOfIce] Line mode: start=({start.x},{start.y}), end=({targetPos.x},{targetPos.y}), cells={wallCells.Count}");
+
+                        if (wallCells.Count == 0)
+                        {
+                            Debug.Log("[WallOfIce] No valid cells for wall line");
+                            return;
+                        }
+
+                        // Get targets
+                        bool casterIsPC3 = caster.Team == CharacterTeam.Player;
+                        CharacterTeam enemyTeamType3 = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+                        List<CharacterController> allyTeam3 = GetTeamMembers(caster.Team);
+                        List<CharacterController> enemyTeam3 = GetTeamMembers(enemyTeamType3);
+                        List<CharacterController> targets3 = AoESystem.GetTargetsInArea(
+                            wallCells, caster, allyTeam3, enemyTeam3,
+                            _pendingSpell.AoEFilter, casterIsPC3, Grid);
+
+                        // No direction selection for Wall of Ice — proceed directly to cast
+                        _isAoETargeting = false;
+                        _currentAoECells = null;
+                        _lastAoEHoverPos = new Vector2Int(-1, -1);
+                        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+                        _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+
+                        PerformAoESpellCast(caster, targets3, wallCells);
+                        return;
+                    }
+                }
+                // ── CIRCLE MODE ──
+                else if (_pendingWallOfIceMode == WallOfIceMode.Circle)
+                {
+                    // CENTER SELECTION: click center, then radius prompt
+                    if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, spellRange))
+                    {
+                        Debug.Log($"[WallOfIce] Circle center ({targetPos.x},{targetPos.y}) out of spell range");
+                        return;
+                    }
+
+                    // Show radius selection prompt
+                    ShowWallOfIceRadiusSelection(caster, targetPos);
+                    return;
+                }
+            }
+
             // Normal line spell range check
             int lineRange = Mathf.Max(1, _pendingSpell.AoESizeSquares);
             if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, lineRange))
@@ -2974,6 +3147,7 @@ public partial class GameManager
         _pendingProtectionFromEnergyType = null;
         ResetPendingGreaseCastMode();
         ResetPendingWallOfFireMode();
+        ResetPendingWallOfIceMode();
 
         Grid.ClearAllHighlights();
         ShowActionChoices();
@@ -3000,6 +3174,7 @@ public partial class GameManager
         _pendingSummonSwarmNpcId = null;
         ResetPendingGreaseCastMode();
         ResetPendingWallOfFireMode();
+        ResetPendingWallOfIceMode();
         _pendingAttackMode = PendingAttackMode.Single;
 
         Grid.ClearAllHighlights();

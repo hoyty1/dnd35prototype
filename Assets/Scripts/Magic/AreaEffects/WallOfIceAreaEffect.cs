@@ -6,25 +6,33 @@ using DND35e.Identifiers;
 /// Wall of Ice (PHB 3.5e p.299): Evocation [Cold].
 ///
 /// Creates a plane of ice or hemisphere.
-///   • Wall: 1 inch thick per caster level, hardness 0, 3 HP per inch
-///   • Hemisphere traps creatures inside (Reflex negates)
+/// Supports TWO shapes per PHB:
+///   1) WALL (Line Mode): An anchored plane of ice, up to one 10-ft square
+///      per caster level (2 squares per CL). 1 inch thick/CL, hardness 0, 3 HP/inch.
+///   2) HEMISPHERE (Circle Mode): A hemisphere with radius up to (3 + CL) feet.
+///      Convert to squares: floor((3 + CL) / 5).
+///
 ///   • Trapped creatures take CL cold damage (1 HP/CL, no save)
 ///   • Duration: 1 min/level
-///
-/// Simplified prototype: Creates a wall of ice that blocks movement
-/// through its cells. Creatures caught when wall is placed take
-/// cold damage equal to caster level. Wall has HP that can be tracked.
+///   • Wall blocks movement through its cells
+///   • Wall has HP that can be tracked; fire is especially effective
 /// </summary>
 public class WallOfIceAreaEffect : PersistentAreaEffect
 {
     /// <summary>Anchor cell of the wall.</summary>
     public Vector2Int CenterCell { get; set; }
 
-    /// <summary>Length of the wall in squares.</summary>
+    /// <summary>Length of the wall in squares (Line mode only).</summary>
     public int LengthSquares { get; set; } = 8;
 
-    /// <summary>Direction the wall faces.</summary>
+    /// <summary>Direction the wall faces (Line mode).</summary>
     public Vector2Int WallDirection { get; set; } = new Vector2Int(1, 0);
+
+    /// <summary>True if this wall was created in Circle mode (hemisphere).</summary>
+    public bool IsCircleMode { get; set; }
+
+    /// <summary>Radius of the circle in squares (Circle mode only).</summary>
+    public int CircleRadius { get; set; } = 1;
 
     /// <summary>Total HP of the wall (3 HP per inch, 1 inch per CL).</summary>
     public int WallHP { get; set; }
@@ -46,6 +54,7 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
 
         EffectName = "Wall of Ice";
         SpellId = SpellNames.WALL_OF_ICE;
+        // Shape is set in Start() based on IsCircleMode
         Shape = AreaShape.Line;
         SizeY = 1;
 
@@ -54,29 +63,61 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
 
     protected override void Start()
     {
-        WallDirection = NormalizeWallDirection(WallDirection);
-        DirectionAngle = DirectionFromVector(WallDirection);
-        SizeX = Mathf.Max(2, LengthSquares);
+        // Configure shape based on circle vs line mode
+        if (IsCircleMode)
+        {
+            Shape = AreaShape.Circle;
+            EffectName = "Wall of Ice (Hemisphere)";
+            SizeX = Mathf.Max(1, CircleRadius * 2);
+            SizeY = SizeX;
+        }
+        else
+        {
+            Shape = AreaShape.Line;
+            WallDirection = NormalizeWallDirection(WallDirection);
+            DirectionAngle = DirectionFromVector(WallDirection);
+            SizeX = Mathf.Max(2, LengthSquares);
+        }
 
         // Calculate wall HP: 3 HP per inch of thickness
         ThicknessInches = Mathf.Max(1, CasterLevel);
         WallMaxHP = ThicknessInches * 3;
         WallHP = WallMaxHP;
 
+        // IMPORTANT: base.Start() calls CalculateAffectedCells() then ApplyInitialEffect().
+        // Our override of CalculateAffectedCells() applies _pendingExplicitCells BEFORE
+        // ApplyInitialEffect() runs.
         base.Start();
+    }
 
+    /// <summary>
+    /// Override CalculateAffectedCells to use explicit cells (circle perimeter) when available.
+    /// This ensures AffectedCells is correct BEFORE ApplyInitialEffect() runs in base.Start().
+    /// </summary>
+    protected override void CalculateAffectedCells()
+    {
         if (_pendingExplicitCells != null && _pendingExplicitCells.Count > 0)
         {
             AffectedCells = new HashSet<Vector2Int>(_pendingExplicitCells);
-            RemoveGridHighlight();
-            ApplyGridHighlight();
             _pendingExplicitCells = null;
+            Debug.Log($"[WallOfIce] CalculateAffectedCells: Used {AffectedCells.Count} explicit cells instead of default calculation");
+            return;
         }
+
+        base.CalculateAffectedCells();
+        Debug.Log($"[WallOfIce] CalculateAffectedCells: Calculated {AffectedCells.Count} cells via base");
     }
 
     protected override void OnAreaCreated()
     {
-        LogEffect($"❄ A wall of ice forms ({SizeX * 5} ft long, {ThicknessInches} inches thick)!");
+        if (IsCircleMode)
+        {
+            LogEffect($"❄ A hemisphere of ice forms ({CircleRadius * 5}-ft radius, {ThicknessInches} inches thick)!");
+        }
+        else
+        {
+            LogEffect($"❄ A wall of ice forms ({SizeX * 5} ft long, {ThicknessInches} inches thick)!");
+        }
         LogEffect($"  HP: {WallHP}/{WallMaxHP} (Hardness 0, 3 HP per inch)");
         LogEffect("  • Blocks movement through wall cells");
         LogEffect("  • Creatures caught in wall take cold damage equal to caster level");
@@ -233,7 +274,8 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
     /// </summary>
     public string GetWallInfoString()
     {
-        return $"Wall of Ice — {WallHP}/{WallMaxHP} HP (Hardness 0)";
+        string mode = IsCircleMode ? "Hemisphere" : "Wall";
+        return $"Wall of Ice ({mode}) — {WallHP}/{WallMaxHP} HP (Hardness 0)";
     }
 
     public void SetExplicitCells(HashSet<Vector2Int> cells)
