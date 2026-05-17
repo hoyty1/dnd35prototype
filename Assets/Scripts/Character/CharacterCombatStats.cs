@@ -42,12 +42,32 @@ public class CharacterCombatStats : MonoBehaviour
 
     public int GetIterativeAttackCount()
     {
-        return GetAttackBonuses().Count;
+        int count = GetAttackBonuses().Count;
+
+        // Haste grants one extra attack at highest BAB (PHB p.239)
+        if (_character != null && _character.HasActiveHasteEffect
+            && _character.ActiveHasteEffect.GrantsExtraAttack)
+        {
+            count++;
+        }
+
+        return count;
     }
 
     public int GetIterativeAttackBAB(int attackIndex)
     {
         List<int> bonuses = GetAttackBonuses();
+
+        // Haste extra attack is appended at the end and uses highest BAB
+        bool hasteExtraAttack = _character != null && _character.HasActiveHasteEffect
+            && _character.ActiveHasteEffect.GrantsExtraAttack;
+
+        if (hasteExtraAttack && attackIndex == bonuses.Count)
+        {
+            // The Haste extra attack is at the character's highest BAB
+            return bonuses.Count > 0 ? bonuses[0] : 0;
+        }
+
         if (attackIndex < 0 || attackIndex >= bonuses.Count)
             return 0;
 
