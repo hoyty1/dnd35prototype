@@ -5,6 +5,7 @@ using System.Linq;
 using DND35.Magic;
 using UnityEngine;
 using DND35e.Identifiers;
+using Random = UnityEngine.Random;
 
 /// <summary>
 /// GameManager partial class: Player Combat Actions &amp; Target Resolution

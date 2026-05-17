@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using DND35e.Identifiers;
+using Random = UnityEngine.Random;
 
 public partial class GameManager
 {
@@ -3078,8 +3079,15 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Resolves Wall of Fire: creates a WallOfFireAreaEffect along a line.
-    /// Per PHB p.298: Concentration + 1 round/level duration.
+    /// Resolves Wall of Fire in both Line and Ring modes (PHB p.298).
+    ///
+    /// Line Mode: The aoeCells are computed from the player's chosen start/end
+    ///   points via the two-click targeting system in GameManager_WallOfFire.cs.
+    ///   The wall direction is derived from the line's start→end vector.
+    ///
+    /// Ring Mode: The aoeCells are computed as a ring (circle perimeter) with
+    ///   the chosen center and radius. The area effect uses AreaShape.Circle
+    ///   and the ring cells are set explicitly.
     /// </summary>
     private bool TryResolveWallOfFireSpell(
         CharacterController caster,
@@ -3099,34 +3107,93 @@ public partial class GameManager
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
         int saveDc = GetSpellSaveDC(caster, spell);
 
-        // Wall length: up to 20 ft/level = 4 squares per CL
-        int maxLengthSquares = Mathf.Max(2, casterLevel * 4);
+        // Determine which mode was selected
+        bool isRingMode = _pendingWallOfFireMode.HasValue && _pendingWallOfFireMode.Value == WallOfFireMode.Ring;
+        string modeLabel = isRingMode ? "Ring" : "Wall";
 
+        // Compute center and direction from the AoE cells
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
         Vector2Int centerCell = SquareGridUtils.WorldToGrid(centerPosition);
-        Vector2Int direction = ComputeWindWallDirection(caster.GridPosition, centerCell);
+        Vector2Int direction;
+
+        if (isRingMode)
+        {
+            // Ring mode: direction doesn't matter, use default
+            direction = new Vector2Int(1, 0);
+
+            // If we stored the ring center, use that instead of computed center
+            if (_pendingWallRingCenter.HasValue)
+                centerCell = _pendingWallRingCenter.Value;
+        }
+        else
+        {
+            // Line mode: compute direction from start→end points if available
+            if (_pendingWallLineStart.HasValue)
+            {
+                // Use line start→center as direction proxy
+                Vector2Int lineStart = _pendingWallLineStart.Value;
+                Vector2Int diff = centerCell - lineStart;
+                if (diff == Vector2Int.zero)
+                    direction = new Vector2Int(1, 0);
+                else
+                    direction = new Vector2Int(
+                        diff.x != 0 ? (diff.x > 0 ? 1 : -1) : 0,
+                        diff.y != 0 ? (diff.y > 0 ? 1 : -1) : 0);
+            }
+            else
+            {
+                direction = ComputeWindWallDirection(caster.GridPosition, centerCell);
+            }
+        }
+
+        // Wall length for line mode / ring circumference info
+        int maxLengthSquares = Mathf.Max(2, casterLevel * 4);
 
         // Create the area effect
-        GameObject wallObj = new GameObject("WallOfFire_Area");
+        string objName = isRingMode ? "WallOfFire_Ring_Area" : "WallOfFire_Line_Area";
+        GameObject wallObj = new GameObject(objName);
         wallObj.transform.position = centerPosition;
 
         WallOfFireAreaEffect wallEffect = wallObj.AddComponent<WallOfFireAreaEffect>();
         wallEffect.CenterPosition = centerPosition;
         wallEffect.CenterCell = centerCell;
-        wallEffect.LengthSquares = Mathf.Max(2, maxLengthSquares);
         wallEffect.WallDirection = direction == Vector2Int.zero ? new Vector2Int(1, 0) : direction;
         wallEffect.RoundsRemaining = Mathf.Max(1, durationRounds);
         wallEffect.CasterLevel = casterLevel;
         wallEffect.Caster = caster;
         wallEffect.SaveDC = saveDc;
 
+        if (isRingMode)
+        {
+            // Ring mode: set ring-specific properties
+            wallEffect.IsRingMode = true;
+            wallEffect.RingRadius = _pendingWallRingRadius ?? 1;
+            wallEffect.LengthSquares = 0; // Not applicable for ring
+        }
+        else
+        {
+            // Line mode
+            wallEffect.IsRingMode = false;
+            wallEffect.LengthSquares = Mathf.Max(2, maxLengthSquares);
+        }
+
         if (aoeCells != null && aoeCells.Count > 0)
             wallEffect.SetExplicitCells(aoeCells);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
-        sb.AppendLine($"🔥 {caster.Stats.CharacterName} casts Wall of Fire!");
-        sb.AppendLine($"  Wall: {maxLengthSquares} squares long");
+        sb.AppendLine($"🔥 {caster.Stats.CharacterName} casts Wall of Fire ({modeLabel})!");
+
+        if (isRingMode)
+        {
+            int ringRad = _pendingWallRingRadius ?? 1;
+            sb.AppendLine($"  Ring: {ringRad * 5}-ft radius ({aoeCells?.Count ?? 0} cells)");
+        }
+        else
+        {
+            sb.AppendLine($"  Wall: {aoeCells?.Count ?? 0} cells ({maxLengthSquares * 5} ft max)");
+        }
+
         sb.AppendLine($"  Duration: {durationRounds} round(s)");
         sb.AppendLine($"  Save DC: {saveDc} (Reflex half for pass-through)");
         sb.AppendLine("  • 2d4 fire damage within 10 ft (near side)");
@@ -3147,6 +3214,10 @@ public partial class GameManager
 
         sb.Append("═══════════════════════════════════");
         log = sb.ToString();
+
+        // Clean up Wall of Fire pending state after successful cast
+        ResetPendingWallOfFireMode();
+
         return true;
     }
 

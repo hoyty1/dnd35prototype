@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using DND35.AI.Profiles;
+using Random = UnityEngine.Random;
 
 public class GrappleSystem : BaseCombatManeuver
 {

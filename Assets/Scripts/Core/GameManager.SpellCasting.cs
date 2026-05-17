@@ -6,6 +6,7 @@ using DND35.Magic;
 using DND35.AI.Profiles;
 using DND35e.Identifiers;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 /// <summary>
 /// GameManager partial class: Spell Casting Orchestration
@@ -76,6 +77,7 @@ public partial class GameManager
             _pendingResistEnergyType = null;
             _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
+            ResetPendingWallOfFireMode();
             return false;
         }
 
@@ -98,6 +100,7 @@ public partial class GameManager
             _pendingResistEnergyType = null;
             _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
+            ResetPendingWallOfFireMode();
             return false;
         }
         if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
@@ -848,6 +851,13 @@ public partial class GameManager
             return;
         }
 
+        // Wall of Fire: choose Line vs Ring mode before AoE targeting (PHB p.298)
+        if (string.Equals(_pendingSpell.SpellId, SpellNames.WALL_OF_FIRE, StringComparison.Ordinal) && !_pendingWallOfFireMode.HasValue)
+        {
+            ShowWallOfFireModeSelection(caster);
+            return;
+        }
+
         // ===== AoE SPELLS: Enter AoE targeting mode =====
         if (_pendingSpell.AoEShapeType != AoEShape.None)
         {
@@ -1113,6 +1123,7 @@ public partial class GameManager
         _pendingFireShieldIsWarm = null;
         _pendingProtectionFromEnergyType = null;
         _pendingDisguiseSelfRace = null;
+        ResetPendingWallOfFireMode();
         ShowActionChoices();
     }
 
@@ -2317,19 +2328,66 @@ public partial class GameManager
         }
         else if (spell.AoEShapeType == AoEShape.Line)
         {
-            int range = Mathf.Max(1, spell.AoESizeSquares);
-            List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
-            foreach (SquareCell cell in rangeCells)
+            // ── Wall of Fire Line Mode: show placement range, two-click targeting ──
+            bool isWallOfFireLine = IsPendingWallOfFire() && _pendingWallOfFireMode == WallOfFireMode.Line;
+            if (isWallOfFireLine)
             {
-                if (cell == null || cell.Coords == caster.GridPosition)
-                    continue;
-                cell.SetHighlight(HighlightType.SpellRange);
+                int spellRange = GetWallOfFireRangeSquares(caster);
+                List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, spellRange);
+                foreach (SquareCell cell in rangeCells)
+                {
+                    if (cell == null) continue;
+                    cell.SetHighlight(HighlightType.SpellRange);
+                }
+                HighlightCharacterFootprint(caster, HighlightType.Selected);
+
+                int maxLen = GetWallOfFireMaxLengthSquares(caster);
+                if (_pendingWallLineStart.HasValue)
+                {
+                    // Second click mode
+                    CombatUI.SetTurnIndicator(
+                        $"✦ Wall of Fire (Line): Click END point for the wall (max {maxLen * 5} ft from start) | Right-click to cancel");
+                }
+                else
+                {
+                    // First click mode
+                    CombatUI.SetTurnIndicator(
+                        $"✦ Wall of Fire (Line): Click START point within range | Wall up to {maxLen * 5} ft long | Right-click to cancel");
+                }
             }
+            // ── Wall of Fire Ring Mode: show placement range, click center ──
+            else if (IsPendingWallOfFire() && _pendingWallOfFireMode == WallOfFireMode.Ring)
+            {
+                int spellRange = GetWallOfFireRangeSquares(caster);
+                List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, spellRange);
+                foreach (SquareCell cell in rangeCells)
+                {
+                    if (cell == null) continue;
+                    cell.SetHighlight(HighlightType.SpellRange);
+                }
+                HighlightCharacterFootprint(caster, HighlightType.Selected);
 
-            HighlightCharacterFootprint(caster, HighlightType.Selected);
+                int maxRad = GetWallOfFireMaxRingRadius(caster);
+                CombatUI.SetTurnIndicator(
+                    $"✦ Wall of Fire (Ring): Click CENTER point within range | Max radius: {maxRad * 5} ft | Right-click to cancel");
+            }
+            else
+            {
+                // Normal line spell (e.g., Lightning Bolt)
+                int range = Mathf.Max(1, spell.AoESizeSquares);
+                List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
+                foreach (SquareCell cell in rangeCells)
+                {
+                    if (cell == null || cell.Coords == caster.GridPosition)
+                        continue;
+                    cell.SetHighlight(HighlightType.SpellRange);
+                }
 
-            string sizeStr = $"{spell.AoESizeSquares * 5}-ft line";
-            CombatUI.SetTurnIndicator($"✦ {spell.Name}: Select target for line ({sizeStr}) | Click endpoint cell within range | Right-click to cancel");
+                HighlightCharacterFootprint(caster, HighlightType.Selected);
+
+                string sizeStr = $"{spell.AoESizeSquares * 5}-ft line";
+                CombatUI.SetTurnIndicator($"✦ {spell.Name}: Select target for line ({sizeStr}) | Click endpoint cell within range | Right-click to cancel");
+            }
         }
 
         Debug.Log($"[AoE] Entered AoE targeting mode: {spell.Name} ({spell.AoEShapeType}, {spell.AoESizeSquares} sq)");
@@ -2381,11 +2439,43 @@ public partial class GameManager
 
             ClearAoEPreviewHighlights();
 
-            if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares))
-                return;
+            // ── Wall of Fire Line Mode: preview from first-click start to mouse ──
+            if (IsPendingWallOfFireLineSecondClick())
+            {
+                Vector2Int start = _pendingWallLineStart.Value;
+                int maxLen = GetWallOfFireMaxLengthSquares(pc);
+                int distFromStart = SquareGridUtils.GetDistance(start, gridPos);
+                if (distFromStart > maxLen) return; // Out of wall length range
 
-            aoeCells = AoESystem.GetLineCellsToTarget(
-                pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
+                aoeCells = AoESystem.GetLineCellsBetweenPoints(start, gridPos, maxLen, Grid);
+            }
+            // ── Wall of Fire Ring Mode: preview ring at hovered center ──
+            else if (IsPendingWallOfFire() && _pendingWallOfFireMode == WallOfFireMode.Ring)
+            {
+                int spellRange = GetWallOfFireRangeSquares(pc);
+                if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, spellRange))
+                    return;
+                // Show a small ring preview at radius 1 while hovering center
+                int previewRadius = Mathf.Min(2, GetWallOfFireMaxRingRadius(pc));
+                aoeCells = AoESystem.GetRingCells(gridPos, previewRadius, Grid);
+            }
+            // ── Wall of Fire Line Mode first click: just show hovered cell ──
+            else if (IsPendingWallOfFire() && _pendingWallOfFireMode == WallOfFireMode.Line && !_pendingWallLineStart.HasValue)
+            {
+                int spellRange = GetWallOfFireRangeSquares(pc);
+                if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, spellRange))
+                    return;
+                aoeCells = new HashSet<Vector2Int> { gridPos };
+            }
+            // ── Normal line spell (Lightning Bolt, etc.) ──
+            else
+            {
+                if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares))
+                    return;
+
+                aoeCells = AoESystem.GetLineCellsToTarget(
+                    pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
+            }
         }
         else
         {
@@ -2493,9 +2583,12 @@ public partial class GameManager
             }
             else if (_pendingSpell != null && _pendingSpell.AoEShapeType == AoEShape.Line)
             {
-                int lineRange = Mathf.Max(1, _pendingSpell.AoESizeSquares);
+                // Wall of Fire uses spell range (Medium) for placement; normal lines use AoESizeSquares
+                int lineRange = IsPendingWallOfFire()
+                    ? GetWallOfFireRangeSquares(pc)
+                    : Mathf.Max(1, _pendingSpell.AoESizeSquares);
                 int dist = SquareGridUtils.GetDistance(casterPos, cellPos);
-                if (cellPos != casterPos && dist <= lineRange)
+                if (dist <= lineRange)
                     cell.SetHighlight(HighlightType.SpellRange);
                 else
                     cell.SetHighlight(HighlightType.None);
@@ -2536,6 +2629,102 @@ public partial class GameManager
         }
         else if (_pendingSpell.AoEShapeType == AoEShape.Line)
         {
+            // ── Wall of Fire: use spell range (Medium) instead of AoESizeSquares ──
+            if (IsPendingWallOfFire())
+            {
+                int spellRange = GetWallOfFireRangeSquares(caster);
+
+                // ── LINE MODE: two-click targeting ──
+                if (_pendingWallOfFireMode == WallOfFireMode.Line)
+                {
+                    if (!_pendingWallLineStart.HasValue)
+                    {
+                        // FIRST CLICK: set start point (must be within spell range of caster)
+                        if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, spellRange))
+                        {
+                            Debug.Log($"[WallOfFire] Start point ({targetPos.x},{targetPos.y}) out of spell range");
+                            return;
+                        }
+
+                        _pendingWallLineStart = targetPos;
+                        CombatUI?.ShowCombatLog($"🔥 Wall start set at ({targetPos.x}, {targetPos.y}). Click END point.");
+
+                        // Highlight start cell and update instructions
+                        SquareCell startCell = Grid.GetCell(targetPos);
+                        if (startCell != null) startCell.SetHighlight(HighlightType.AoETarget);
+
+                        int maxLen = GetWallOfFireMaxLengthSquares(caster);
+                        CombatUI.SetTurnIndicator(
+                            $"✦ Wall of Fire (Line): Click END point (max {maxLen * 5} ft from start) | Right-click to cancel");
+                        return; // Wait for second click
+                    }
+                    else
+                    {
+                        // SECOND CLICK: set end point
+                        // End point must be within wall max length of start AND within spell range of caster
+                        int maxLen = GetWallOfFireMaxLengthSquares(caster);
+                        Vector2Int start = _pendingWallLineStart.Value;
+                        int distFromStart = SquareGridUtils.GetDistance(start, targetPos);
+
+                        if (distFromStart > maxLen)
+                        {
+                            Debug.Log($"[WallOfFire] End point ({targetPos.x},{targetPos.y}) too far from start ({distFromStart} > {maxLen})");
+                            CombatUI?.ShowCombatLog($"⚠ End point too far from start (max {maxLen * 5} ft). Click closer.");
+                            return;
+                        }
+
+                        if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, spellRange))
+                        {
+                            Debug.Log($"[WallOfFire] End point ({targetPos.x},{targetPos.y}) out of spell range");
+                            return;
+                        }
+
+                        // Compute final wall cells
+                        HashSet<Vector2Int> wallCells = AoESystem.GetLineCellsBetweenPoints(start, targetPos, maxLen, Grid);
+                        Debug.Log($"[WallOfFire] Line mode: start=({start.x},{start.y}), end=({targetPos.x},{targetPos.y}), cells={wallCells.Count}");
+
+                        if (wallCells.Count == 0)
+                        {
+                            Debug.Log("[WallOfFire] No valid cells for wall line");
+                            return;
+                        }
+
+                        // Get targets
+                        bool casterIsPC2 = caster.Team == CharacterTeam.Player;
+                        CharacterTeam enemyTeamType2 = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+                        List<CharacterController> allyTeam2 = GetTeamMembers(caster.Team);
+                        List<CharacterController> enemyTeam2 = GetTeamMembers(enemyTeamType2);
+                        List<CharacterController> targets2 = AoESystem.GetTargetsInArea(
+                            wallCells, caster, allyTeam2, enemyTeam2,
+                            _pendingSpell.AoEFilter, casterIsPC2, Grid);
+
+                        // Exit AoE targeting
+                        _isAoETargeting = false;
+                        _currentAoECells = null;
+                        _lastAoEHoverPos = new Vector2Int(-1, -1);
+                        _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+                        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+
+                        PerformAoESpellCast(caster, targets2, wallCells);
+                        return;
+                    }
+                }
+                // ── RING MODE: click center, then radius prompt ──
+                else if (_pendingWallOfFireMode == WallOfFireMode.Ring)
+                {
+                    if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, spellRange))
+                    {
+                        Debug.Log($"[WallOfFire] Ring center ({targetPos.x},{targetPos.y}) out of spell range");
+                        return;
+                    }
+
+                    // Show radius selection prompt
+                    ShowWallOfFireRadiusSelection(caster, targetPos);
+                    return;
+                }
+            }
+
+            // Normal line spell range check
             int lineRange = Mathf.Max(1, _pendingSpell.AoESizeSquares);
             if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, lineRange))
             {
@@ -2564,6 +2753,7 @@ public partial class GameManager
         else if (_pendingSpell.AoEShapeType == AoEShape.Line)
         {
             // Line spells: click endpoint targeting from caster to selected cell.
+            // (Wall of Fire is handled above and returns early)
             aoeCells = AoESystem.GetLineCellsToTarget(
                 caster.GridPosition, targetPos, _pendingSpell.AoESizeSquares, Grid);
             Debug.Log($"[AoE] Line endpoint ({targetPos.x},{targetPos.y}) → {aoeCells.Count} cells");
@@ -2615,6 +2805,7 @@ public partial class GameManager
         _pendingFireShieldIsWarm = null;
         _pendingProtectionFromEnergyType = null;
         ResetPendingGreaseCastMode();
+        ResetPendingWallOfFireMode();
 
         Grid.ClearAllHighlights();
         ShowActionChoices();

@@ -14,7 +14,8 @@ public enum AoEShape
     None,       // Single target (no AoE)
     Burst,      // Circular burst centered on a point (e.g., Bless, Fireball)
     Cone,       // Cone emanating from caster (e.g., Burning Hands, Cone of Cold)
-    Line        // Line from caster (e.g., Lightning Bolt) — click endpoint targeting
+    Line,       // Line from caster (e.g., Lightning Bolt) — click endpoint targeting
+    Ring        // Ring / circle perimeter (e.g., Wall of Fire ring mode) — choose center + radius
 }
 
 /// <summary>
@@ -644,5 +645,128 @@ public static class AoESystem
         if (rangeSquares < 0) return true; // Self-range, always valid
         int dist = SquareGridUtils.GetDistance(casterPos, targetPos);
         return dist <= rangeSquares;
+    }
+
+    // ================================================================
+    //  Wall of Fire — arbitrary-origin line and ring cell computation
+    //  (D&D 3.5e PHB p.298)
+    // ================================================================
+
+    /// <summary>
+    /// Compute grid cells along a line between two arbitrary points (not necessarily
+    /// starting from the caster). Used by Wall of Fire Line Mode where the player
+    /// picks both start and end points.
+    /// </summary>
+    /// <param name="startPos">Start of the wall (first click)</param>
+    /// <param name="endPos">End of the wall (second click)</param>
+    /// <param name="maxLengthSquares">Maximum number of squares the wall can span</param>
+    /// <param name="grid">Reference to the game grid</param>
+    /// <returns>Set of grid cells the wall passes through (includes both endpoints)</returns>
+    public static HashSet<Vector2Int> GetLineCellsBetweenPoints(
+        Vector2Int startPos, Vector2Int endPos, int maxLengthSquares, SquareGrid grid)
+    {
+        var result = new HashSet<Vector2Int>();
+        if (grid == null) return result;
+        if (startPos == endPos)
+        {
+            // Single-cell wall (degenerate)
+            if (grid.GetCell(startPos) != null)
+                result.Add(startPos);
+            return result;
+        }
+
+        int actualDist = SquareGridUtils.GetDistance(startPos, endPos);
+        if (actualDist > maxLengthSquares)
+        {
+            // Clamp: trace only maxLengthSquares in the chosen direction
+            Vector2 dir = new Vector2(endPos.x - startPos.x, endPos.y - startPos.y);
+            dir.Normalize();
+            endPos = new Vector2Int(
+                Mathf.RoundToInt(startPos.x + dir.x * maxLengthSquares),
+                Mathf.RoundToInt(startPos.y + dir.y * maxLengthSquares));
+        }
+
+        // Trace through grid using the same boundary-crossing algorithm
+        Vector2 start = new Vector2(startPos.x, startPos.y);
+        Vector2 end = new Vector2(endPos.x, endPos.y);
+
+        // We pass Vector2Int.one * -9999 as "excluded cell" so nothing is excluded
+        Vector2Int noExclude = new Vector2Int(-9999, -9999);
+        HashSet<Vector2Int> traced = TraceLineThroughGrid(start, end, noExclude, grid);
+
+        foreach (Vector2Int cell in traced)
+        {
+            int distFromStart = SquareGridUtils.GetDistance(startPos, cell);
+            if (distFromStart <= maxLengthSquares && grid.GetCell(cell) != null)
+                result.Add(cell);
+        }
+
+        // Ensure both endpoints are included if valid
+        if (grid.GetCell(startPos) != null)
+            result.Add(startPos);
+        if (grid.GetCell(endPos) != null
+            && SquareGridUtils.GetDistance(startPos, endPos) <= maxLengthSquares)
+            result.Add(endPos);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Compute the cells forming a ring (circle perimeter) of a given radius
+    /// centered on a point. Used by Wall of Fire Ring Mode.
+    ///
+    /// A cell is part of the ring if its D&D 3.5e distance from center == radius.
+    /// This creates a 1-cell-wide ring at the specified distance.
+    /// </summary>
+    /// <param name="center">Center of the ring</param>
+    /// <param name="radius">Radius in squares (D&D 3.5e alternating diagonal distance)</param>
+    /// <param name="grid">Reference to the game grid</param>
+    /// <returns>Set of grid cells forming the ring perimeter</returns>
+    public static HashSet<Vector2Int> GetRingCells(Vector2Int center, int radius, SquareGrid grid)
+    {
+        var result = new HashSet<Vector2Int>();
+        if (grid == null || radius <= 0) return result;
+
+        // Check all cells within a bounding box; include cells whose D&D distance == radius
+        // For the ring to be visible, we also include cells at distance radius-1 to radius
+        // if that would make the ring too thin. But for D&D 3.5e, exactly == radius is correct.
+        for (int dx = -radius; dx <= radius; dx++)
+        {
+            for (int dy = -radius; dy <= radius; dy++)
+            {
+                Vector2Int cell = new Vector2Int(center.x + dx, center.y + dy);
+                int dist = SquareGridUtils.GetDistance(center, cell);
+
+                // Ring = cells exactly at the specified radius distance
+                if (dist == radius && grid.GetCell(cell) != null)
+                {
+                    result.Add(cell);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Preview helper: get ring cells for hover preview during Wall of Fire Ring mode.
+    /// Same as GetRingCells but doesn't require a confirmed radius — uses mouse distance.
+    /// </summary>
+    public static HashSet<Vector2Int> GetRingPreviewCells(
+        Vector2Int center, Vector2 mouseWorldPos, int maxRadius, SquareGrid grid)
+    {
+        Vector2Int mouseGrid = WorldToGrid(mouseWorldPos);
+        int hoverRadius = Mathf.Clamp(
+            SquareGridUtils.GetDistance(center, mouseGrid), 1, maxRadius);
+        return GetRingCells(center, hoverRadius, grid);
+    }
+
+    /// <summary>
+    /// Convert a world position to grid coordinates.
+    /// Public wrapper for use by other systems.
+    /// </summary>
+    public static Vector2Int WorldToGrid(Vector2 worldPos)
+    {
+        return SquareGridUtils.WorldToGrid(worldPos);
     }
 }

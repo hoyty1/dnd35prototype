@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 /// <summary>
 /// Resolves Gust of Wind (PHB 3.5e) creature interactions and registers temporary severe wind.

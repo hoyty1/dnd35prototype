@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using DND35e.Identifiers;
+using Random = UnityEngine.Random;
 
 public partial class GameManager
 {

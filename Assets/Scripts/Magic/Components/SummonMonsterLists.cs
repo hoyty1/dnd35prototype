@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using DND35e.Identifiers;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 /// <summary>
 /// Metadata for one summonable creature choice in a Summon Monster spell list.

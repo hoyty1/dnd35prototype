@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DND35e.Identifiers;
+using Random = UnityEngine.Random;
 
 /// <summary>
 /// D&D 3.5 edition character stats system.

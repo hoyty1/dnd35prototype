@@ -6,6 +6,7 @@ using DND35.AI.Profiles;
 using DND35.Magic;
 using UnityEngine;
 using DND35e.Identifiers;
+using Random = UnityEngine.Random;
 
 /// <summary>
 /// Centralized NPC AI orchestration and tactical decision-making.

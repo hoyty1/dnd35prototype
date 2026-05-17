@@ -6,6 +6,13 @@ using DND35e.Identifiers;
 /// Wall of Fire (PHB 3.5e p.298): Evocation [Fire].
 ///
 /// Creates an immobile, blazing curtain of shimmering violet fire.
+/// Supports TWO shapes per PHB:
+///   1) WALL (Line Mode): An opaque sheet of flame up to 20 ft/level long.
+///      The caster picks start and end points within Medium range.
+///   2) RING (Ring Mode): A ring of fire with radius up to 5 ft per 2 CL.
+///      The caster picks a center point and radius.
+///
+/// Damage:
 ///   • 2d4 fire damage to creatures within 10 ft on the near (hot) side
 ///   • 1d4 fire damage within 10 ft on the far (cool) side
 ///   • 2d6+CL (max +20) fire damage to creatures passing through (Reflex half)
@@ -20,11 +27,17 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     /// <summary>Anchor cell of the wall.</summary>
     public Vector2Int CenterCell { get; set; }
 
-    /// <summary>Length of the wall in squares.</summary>
+    /// <summary>Length of the wall in squares (Line mode only).</summary>
     public int LengthSquares { get; set; } = 8;
 
-    /// <summary>Direction the wall faces.</summary>
+    /// <summary>Direction the wall faces (Line mode).</summary>
     public Vector2Int WallDirection { get; set; } = new Vector2Int(1, 0);
+
+    /// <summary>True if this wall was created in Ring mode (circle perimeter).</summary>
+    public bool IsRingMode { get; set; }
+
+    /// <summary>Radius of the ring in squares (Ring mode only).</summary>
+    public int RingRadius { get; set; } = 1;
 
     private HashSet<Vector2Int> _pendingExplicitCells;
 
@@ -37,6 +50,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
         EffectName = "Wall of Fire";
         SpellId = SpellNames.WALL_OF_FIRE;
+        // Shape is set in Start() based on IsRingMode
         Shape = AreaShape.Line;
         SizeY = 1; // 5 ft wide
 
@@ -45,9 +59,21 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
     protected override void Start()
     {
-        WallDirection = NormalizeWallDirection(WallDirection);
-        DirectionAngle = DirectionFromVector(WallDirection);
-        SizeX = Mathf.Max(2, LengthSquares);
+        // Configure shape based on ring vs line mode
+        if (IsRingMode)
+        {
+            Shape = AreaShape.Circle;
+            EffectName = "Wall of Fire (Ring)";
+            SizeX = Mathf.Max(1, RingRadius * 2);
+            SizeY = SizeX;
+        }
+        else
+        {
+            Shape = AreaShape.Line;
+            WallDirection = NormalizeWallDirection(WallDirection);
+            DirectionAngle = DirectionFromVector(WallDirection);
+            SizeX = Mathf.Max(2, LengthSquares);
+        }
 
         base.Start();
 
@@ -62,7 +88,14 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaCreated()
     {
-        LogEffect($"🔥 A blazing wall of fire appears ({SizeX * 5} ft long)!");
+        if (IsRingMode)
+        {
+            LogEffect($"🔥 A blazing ring of fire appears ({RingRadius * 5}-ft radius)!");
+        }
+        else
+        {
+            LogEffect($"🔥 A blazing wall of fire appears ({SizeX * 5} ft long)!");
+        }
         LogEffect("  • 2d4 fire damage to creatures within 10 ft (near side)");
         LogEffect("  • 1d4 fire damage within 10 ft (far side)");
         LogEffect("  • 2d6+CL (max +20) fire damage to those passing through (Reflex half)");
