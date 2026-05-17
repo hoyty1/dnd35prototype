@@ -312,10 +312,11 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         LogEffect($"🔥 {character.Stats.CharacterName} takes {finalDamage} fire damage from Wall of Fire PASS-THROUGH "
             + $"[2d6({d1}+{d2})+{clBonus}CL={d1 + d2 + clBonus}] [No save]{undeadNote}");
 
-        if (character.Stats.IsDead)
+        if (character.Stats.IsDead || character.Stats.IsUnconscious)
         {
-            character.OnDeath();
-            LogEffect($"  💀 {character.Stats.CharacterName} is slain by the Wall of Fire!");
+            if (character.Stats.IsDead)
+                character.OnDeath();
+            LogEffect($"  💀 {character.Stats.CharacterName} is {(character.Stats.IsDead ? "slain" : "disabled")} by the Wall of Fire! Turn ended immediately.");
         }
     }
 
@@ -978,10 +979,11 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         LogEffect($"🔥 HEAT WAVE: {character.Stats.CharacterName} takes {finalDamage} fire damage "
             + $"({bandLabel}) [{diceLabel}({diceRolls})] [No save]{undeadNote}{sideNote}");
 
-        if (character.Stats.IsDead)
+        if (character.Stats.IsDead || character.Stats.IsUnconscious)
         {
-            character.OnDeath();
-            LogEffect($"  💀 {character.Stats.CharacterName} is slain by heat waves from the Wall of Fire!");
+            if (character.Stats.IsDead)
+                character.OnDeath();
+            LogEffect($"  💀 {character.Stats.CharacterName} is {(character.Stats.IsDead ? "slain" : "disabled")} by heat waves from the Wall of Fire! Turn ended immediately.");
         }
     }
 }

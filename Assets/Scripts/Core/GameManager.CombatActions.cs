@@ -831,6 +831,18 @@ public partial class GameManager
                     break;
             }
 
+            // ── Death/disable check after area effect damage during movement step ──
+            // Area effects (Wall of Fire, etc.) may deal damage when a creature enters
+            // their cells via UpdateCharacterTracking() in Unity's Update loop.
+            // The MoveAlongPath coroutine already breaks on death, but we need to
+            // set the interruptedByIncapacitation flag here for proper PC turn handling.
+            if (!interruptedByIncapacitation && pc.Stats != null && pc.Stats.CurrentHP <= 0)
+            {
+                Debug.Log($"🔥 [PCMovement] {pc.Stats.CharacterName} killed/disabled by area damage during movement step {pathIndex + 1} (HP={pc.Stats.CurrentHP})");
+                interruptedByIncapacitation = true;
+                break;
+            }
+
             if (!HandleGreaseStepAfterMovement(pc, previousCell, step))
             {
                 interruptedByGreaseSlip = true;

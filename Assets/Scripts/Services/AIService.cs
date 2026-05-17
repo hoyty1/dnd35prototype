@@ -60,6 +60,16 @@ public class AIService : MonoBehaviour
         _gameManager.CombatUI.ShowCombatLog($"<color={turnColor}>{turnIcon} {_gameManager.GetSummonDisplayName(npc)}'s turn begins</color>");
         yield return new WaitForSeconds(0.6f);
 
+        // ── Death/disable check after turn-start effects ──
+        // The NPC may have been killed/disabled by start-of-turn area damage
+        // (e.g., standing in Wall of Fire, heat wave at caster's turn start, etc.)
+        if (npc.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} is dead/disabled (HP={npc.Stats.CurrentHP}) after turn-start effects — turn ended immediately");
+            _gameManager.CombatUI?.ShowCombatLog($"💀 {npc.Stats.CharacterName} is dead/disabled and cannot act.");
+            yield break;
+        }
+
         if (_gameManager.TryGetConfusedTurnDecisionForAI(npc, out ConfusedBehaviorController.ConfusedTurnDecision confusedDecision))
         {
             if (confusedDecision.Mode != ConfusedBehaviorController.ConfusedTurnMode.ActNormally)
@@ -413,6 +423,13 @@ public class AIService : MonoBehaviour
         if (npc == null || target == null || target.Stats == null || target.Stats.IsDead)
             yield break;
 
+        // Death/disable check: NPC may have been killed by damage before this method runs
+        if (npc.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} is dead/disabled (HP={npc.Stats.CurrentHP}) at start of aggressive melee turn — turn ended");
+            yield break;
+        }
+
         AIActionType action = SelectBestAction(npc, target, preferAggression: true);
         if (action == AIActionType.Charge)
         {
@@ -429,10 +446,26 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+
+                // ── Death/disable check after movement ──
+                // Creature may have been killed by area damage (Wall of Fire, etc.) during movement.
+                if (npc.Stats.CurrentHP <= 0)
+                {
+                    Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} killed/disabled during movement (HP={npc.Stats.CurrentHP}) — turn ended");
+                    yield break;
+                }
+
                 npc.Actions.UseMoveAction();
                 _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!");
                 yield return new WaitForSeconds(0.5f);
             }
+        }
+
+        // ── Death/disable re-check before attack phase ──
+        if (npc.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} dead/disabled before attack phase (HP={npc.Stats.CurrentHP}) — turn ended");
+            yield break;
         }
 
         target = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
@@ -455,6 +488,14 @@ public class AIService : MonoBehaviour
 
     private IEnumerator ExecuteRangedKiterTurn(CharacterController npc)
     {
+        // Death/disable check: NPC may have been killed by damage before this method runs
+        if (npc == null || npc.Stats == null || npc.Stats.CurrentHP <= 0)
+        {
+            if (npc != null && npc.Stats != null)
+                Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} is dead/disabled (HP={npc.Stats.CurrentHP}) at start of ranged kiter turn — turn ended");
+            yield break;
+        }
+
         AIProfile profile = GetProfile(npc);
         List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
 
@@ -551,6 +592,14 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+
+                // ── Death/disable check after retreat movement ──
+                if (npc.Stats.CurrentHP <= 0)
+                {
+                    Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} killed/disabled during retreat movement (HP={npc.Stats.CurrentHP}) — turn ended");
+                    yield break;
+                }
+
                 npc.Actions.UseMoveAction();
 
                 if (shouldRetreatForRisk)
@@ -560,6 +609,13 @@ public class AIService : MonoBehaviour
 
                 yield return new WaitForSeconds(0.5f);
             }
+        }
+
+        // ── Death/disable re-check before attack phase ──
+        if (npc.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} dead/disabled before ranged attack phase (HP={npc.Stats.CurrentHP}) — turn ended");
+            yield break;
         }
 
         CharacterController rangedTarget = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
@@ -744,6 +800,13 @@ public class AIService : MonoBehaviour
         if (npc == null || target == null || target.Stats == null || target.Stats.IsDead)
             yield break;
 
+        // Death/disable check: NPC may have been killed by damage before this method runs
+        if (npc.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} is dead/disabled (HP={npc.Stats.CurrentHP}) at start of defensive melee turn — turn ended");
+            yield break;
+        }
+
         AIActionType action = SelectBestAction(npc, target, preferAggression: false);
         if (action == AIActionType.Charge)
         {
@@ -761,6 +824,14 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(
                     _gameManager.ExecuteWithdrawMovementForAI(npc, withdrawCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+
+                // ── Death/disable check after withdraw movement ──
+                if (npc.Stats.CurrentHP <= 0)
+                {
+                    Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} killed/disabled during withdraw (HP={npc.Stats.CurrentHP}) — turn ended");
+                    yield break;
+                }
+
                 _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} withdraws from {target.Stats.CharacterName}.");
                 yield return new WaitForSeconds(0.45f);
                 yield break;
@@ -774,10 +845,25 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+
+                // ── Death/disable check after movement ──
+                if (npc.Stats.CurrentHP <= 0)
+                {
+                    Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} killed/disabled during movement (HP={npc.Stats.CurrentHP}) — turn ended");
+                    yield break;
+                }
+
                 npc.Actions.UseMoveAction();
                 _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances methodically toward {target.Stats.CharacterName}.");
                 yield return new WaitForSeconds(0.5f);
             }
+        }
+
+        // ── Death/disable re-check before attack phase ──
+        if (npc.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} dead/disabled before attack phase (HP={npc.Stats.CurrentHP}) — turn ended");
+            yield break;
         }
 
         target = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
@@ -829,8 +915,23 @@ public class AIService : MonoBehaviour
         {
             yield return _gameManager.StartCoroutine(
                 _gameManager.MoveCharacterAlongComputedPathForAI(swarm, target.GridPosition, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+
+            // ── Death/disable check after swarm movement ──
+            if (swarm.Stats.CurrentHP <= 0)
+            {
+                Debug.Log($"🔥 [AI] {swarm.Stats.CharacterName} killed/disabled during swarm movement (HP={swarm.Stats.CurrentHP}) — turn ended");
+                yield break;
+            }
+
             swarm.Actions.UseMoveAction();
             yield return new WaitForSeconds(0.35f);
+        }
+
+        // ── Death/disable re-check before swarm attack phase ──
+        if (swarm.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI] {swarm.Stats.CharacterName} dead/disabled before swarm attack phase (HP={swarm.Stats.CurrentHP}) — turn ended");
+            yield break;
         }
 
         target = profile.ResolveTarget(swarm, candidates);

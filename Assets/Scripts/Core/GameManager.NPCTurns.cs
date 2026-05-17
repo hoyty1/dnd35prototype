@@ -82,6 +82,13 @@ public partial class GameManager
         if (data == null)
             yield break;
 
+        // ── Death/disable check at summon turn start ──
+        if (summon.Stats != null && summon.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} is dead/disabled (HP={summon.Stats.CurrentHP}) at summon turn start — turn ended");
+            yield break;
+        }
+
         if (data.CurrentCommand != null && data.CurrentCommand.Type == SummonCommandType.ProtectCaster && data.Caster != null && data.Caster.Stats != null)
         {
             CombatUI.ShowCombatLog($"<color=#66E8FF>{GetSummonDisplayName(summon)} protects {data.Caster.Stats.CharacterName}.</color>");
@@ -99,6 +106,14 @@ public partial class GameManager
             if (retreat != null && retreat.Coords != summon.GridPosition)
             {
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, retreat.Coords, PlayerMoveSecondsPerStep));
+
+                // ── Death/disable check after retreat movement ──
+                if (summon.Stats.CurrentHP <= 0)
+                {
+                    Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} killed/disabled during retreat (HP={summon.Stats.CurrentHP}) — turn ended");
+                    yield break;
+                }
+
                 if (summon.Actions.HasMoveAction)
                     summon.Actions.UseMoveAction();
                 CombatUI.ShowCombatLog($"<color=#FFCC66>{GetSummonDisplayName(summon)} withdraws to survive.</color>");
@@ -112,10 +127,25 @@ public partial class GameManager
             if (bestCell != null)
             {
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, bestCell.Coords, PlayerMoveSecondsPerStep));
+
+                // ── Death/disable check after advance movement ──
+                if (summon.Stats.CurrentHP <= 0)
+                {
+                    Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} killed/disabled during advance (HP={summon.Stats.CurrentHP}) — turn ended");
+                    yield break;
+                }
+
                 summon.Actions.UseMoveAction();
                 CombatUI.ShowCombatLog($"<color=#66E8FF>{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}.</color>");
                 yield return new WaitForSeconds(0.4f);
             }
+        }
+
+        // ── Death/disable re-check before attack phase ──
+        if (summon.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI] {summon.Stats.CharacterName} dead/disabled before summon attack phase (HP={summon.Stats.CurrentHP}) — turn ended");
+            yield break;
         }
 
         target = SelectSummonTargetByCommand(summon, data);

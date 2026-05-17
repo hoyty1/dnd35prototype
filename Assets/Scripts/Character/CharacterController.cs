@@ -3176,6 +3176,16 @@ public class CharacterController : MonoBehaviour
 
         for (int i = 0; i < path.Count; i++)
         {
+            // ── Death/disable check BEFORE each movement step ──
+            // If the creature was killed or disabled (HP <= 0) by damage taken during
+            // movement (e.g., Wall of Fire pass-through, AoO, etc.), stop immediately.
+            // D&D 3.5e: a dead/dying/disabled creature cannot continue moving.
+            if (Stats != null && Stats.CurrentHP <= 0)
+            {
+                Debug.Log($"🔥 [MoveAlongPath] {Stats.CharacterName} is dead/disabled (HP={Stats.CurrentHP}) — movement interrupted at step {i}/{path.Count}");
+                break;
+            }
+
             SquareCell nextCell = GameManager.Instance.Grid.GetCell(path[i]);
             if (nextCell == null)
                 continue;
@@ -3212,6 +3222,16 @@ public class CharacterController : MonoBehaviour
             }
 
             transform.position = endPos;
+
+            // ── Death/disable check AFTER each movement step ──
+            // Area effects (Wall of Fire, etc.) detect entry via UpdateCharacterTracking()
+            // in their Update() method. The yield return null above gives Unity a frame to
+            // process those Updates. Check again after the step completes.
+            if (Stats != null && Stats.CurrentHP <= 0)
+            {
+                Debug.Log($"🔥 [MoveAlongPath] {Stats.CharacterName} killed/disabled after step {i + 1}/{path.Count} at ({GridPosition.x},{GridPosition.y}) (HP={Stats.CurrentHP}) — movement interrupted");
+                break;
+            }
         }
 
         RefreshGridOccupancy();
