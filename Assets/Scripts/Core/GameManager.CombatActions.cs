@@ -2002,19 +2002,9 @@ public partial class GameManager
 
         CurrentSubPhase = PlayerSubPhase.Animating;
 
-        // Commit standard action for single attack
-        if (_pendingAttackMode == PendingAttackMode.Single ||
-            _pendingAttackMode == PendingAttackMode.FullAttack ||
-            _pendingAttackMode == PendingAttackMode.DualWield ||
-            _pendingAttackMode == PendingAttackMode.FlurryOfBlows)
-        {
-            if (!attacker.CommitStandardAction())
-            {
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available.");
-                ShowActionChoices();
-                return;
-            }
-        }
+        // NOTE: Do NOT check or commit standard action here.
+        // The Attack button already committed the standard action before
+        // the player clicks the wall cell. Same pattern as regular attacks.
 
         // Get weapon and calculate damage
         ItemData weapon = attacker.GetEquippedMainWeapon();
@@ -2638,6 +2628,13 @@ public partial class GameManager
     {
         if (npc == null || wall == null || wall.IsBreached(wallCell))
             yield break;
+
+        // AI must commit its own standard action (player path commits via Attack button)
+        if (!npc.CommitStandardAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no standard action available.");
+            yield break;
+        }
 
         PerformPlayerAttackOnWall(npc, wall, wallCell);
         yield return new WaitForSeconds(1.0f);
