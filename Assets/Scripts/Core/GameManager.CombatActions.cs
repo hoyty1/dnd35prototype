@@ -86,8 +86,8 @@ public partial class GameManager
         {
             if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead)
             {
-                if (!IsEnemyTeam(pc, cell.Occupant))
-                    continue;
+                // Allow targeting ANY character (enemies, friendlies, neutrals)
+                // so players can attack walls, allies (mind control, coup de grace), etc.
 
                 if (!pc.IsTargetInCurrentWeaponRange(cell.Occupant))
                     continue;
@@ -95,14 +95,22 @@ public partial class GameManager
                 if (isRangedWeapon && !pc.CanSee(cell.Occupant, incomingIsRangedAttack: true))
                     continue;
 
+                bool isEnemy = IsEnemyTeam(pc, cell.Occupant);
+
                 // Check whether attacker can flank this target with any ally who actually threatens.
+                // Flanking only applies against enemies.
                 CharacterController flankPartner;
-                bool flanking = CombatUtils.IsAttackerFlanking(pc, cell.Occupant, allCombatants, out flankPartner);
+                bool flanking = isEnemy && CombatUtils.IsAttackerFlanking(pc, cell.Occupant, allCombatants, out flankPartner);
 
                 if (flanking)
                 {
                     cell.SetHighlight(HighlightType.Flanking);
                     anyFlanking = true;
+                }
+                else if (!isEnemy)
+                {
+                    // Friendly/neutral targets get a distinct highlight
+                    cell.SetHighlight(HighlightType.AttackRange);
                 }
                 else
                 {
@@ -164,6 +172,16 @@ public partial class GameManager
         {
             string flankMsg = anyFlanking ? " (FLANKING available! +2 to hit)" : "";
             string wallMsg = hasWallTarget ? " | Wall of Ice can be targeted" : "";
+            bool hasAnyFriendlyTarget = false;
+            foreach (var hc in _highlightedCells)
+            {
+                if (hc.IsOccupied && hc.Occupant != pc && !hc.Occupant.Stats.IsDead && !IsEnemyTeam(pc, hc.Occupant))
+                {
+                    hasAnyFriendlyTarget = true;
+                    break;
+                }
+            }
+            string friendlyMsg = hasAnyFriendlyTarget ? " | ⚠ Friendly targets available" : "";
             string modeStr = "";
             switch (_pendingAttackMode)
             {
@@ -192,11 +210,11 @@ public partial class GameManager
             }
 
             if (CombatUI.TurnIndicatorText != null && !CombatUI.TurnIndicatorText.text.Contains("DUAL WIELD"))
-                CombatUI.SetTurnIndicator($"{modeStr}: Click an enemy to attack!{flankMsg}{wallMsg}{rangeMsg}");
+                CombatUI.SetTurnIndicator($"{modeStr}: Click a target to attack!{flankMsg}{wallMsg}{friendlyMsg}{rangeMsg}");
         }
         else
         {
-            string noRangeMsg = isRangedWeapon ? "No enemies within maximum range!" : "No enemies in range!";
+            string noRangeMsg = isRangedWeapon ? "No targets within maximum range!" : "No targets in range!";
             CombatUI.SetTurnIndicator(noRangeMsg);
             StartCoroutine(ReturnToActionChoicesAfterDelay(1.5f));
         }
@@ -1127,7 +1145,7 @@ public partial class GameManager
         if (_isAwaitingRangedRetargetSelection)
         {
             if (cell.IsOccupied && cell.Occupant != null && cell.Occupant != pc && !cell.Occupant.Stats.IsDead
-                && _highlightedCells.Contains(cell) && IsEnemyTeam(pc, cell.Occupant))
+                && _highlightedCells.Contains(cell))
             {
                 _selectedRangedRetarget = cell.Occupant;
                 _isAwaitingRangedRetargetSelection = false;
@@ -1187,9 +1205,10 @@ public partial class GameManager
         }
 
 
-        if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead && _highlightedCells.Contains(cell)
-            && IsEnemyTeam(pc, cell.Occupant))
+        if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead && _highlightedCells.Contains(cell))
         {
+            // Allow attacking any highlighted target (enemies, friendlies, neutrals).
+            // This supports attacking mind-controlled allies, neutral creatures, etc.
             PerformPlayerAttack(pc, cell.Occupant);
         }
     }
@@ -1204,9 +1223,9 @@ public partial class GameManager
             return;
         }
 
-        if (!cell.IsOccupied || cell.Occupant == null || cell.Occupant == attacker || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead || !_highlightedCells.Contains(cell) || !IsEnemyTeam(attacker, cell.Occupant))
+        if (!cell.IsOccupied || cell.Occupant == null || cell.Occupant == attacker || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead || !_highlightedCells.Contains(cell))
         {
-            Debug.Log($"[OffHand] Invalid target click. occupied={cell.IsOccupied} occupant={(cell.Occupant != null ? cell.Occupant.Stats.CharacterName : "none")} highlighted={_highlightedCells.Contains(cell)} enemy={(cell.Occupant != null ? IsEnemyTeam(attacker, cell.Occupant) : false)}");
+            Debug.Log($"[OffHand] Invalid target click. occupied={cell.IsOccupied} occupant={(cell.Occupant != null ? cell.Occupant.Stats.CharacterName : "none")} highlighted={_highlightedCells.Contains(cell)}");
             _isSelectingOffHandTarget = false;
             _isSelectingOffHandThrownTarget = false;
             _currentOffHandBAB = 0;

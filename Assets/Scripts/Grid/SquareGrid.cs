@@ -339,6 +339,11 @@ public class SquareGrid : MonoBehaviour
                 if (WallOfIceAreaEffect.DoesCellBlockMovement(neighbor))
                     continue;
 
+                // ── Wall of Ice diagonal corner block ──
+                // D&D 3.5e: Can't move diagonally past a wall corner.
+                if (WallOfIceAreaEffect.DoesDiagonalMoveCrossWall(current, neighbor))
+                    continue;
+
                 // Calculate step cost (weighted: orthogonal < diagonal to prefer straight paths)
                 bool isDiag = SquareGridUtils.IsDiagonalStep(current, neighbor);
                 int stepCost = isDiag ? DIAG_COST : ORTH_COST;
@@ -393,6 +398,13 @@ public class SquareGrid : MonoBehaviour
 
             // Check Wall of Ice blocking for fallback path
             if (WallOfIceAreaEffect.DoesCellBlockMovement(step))
+            {
+                firstInvalidIndex = i;
+                break;
+            }
+
+            // Check Wall of Ice diagonal corner blocking for fallback path
+            if (WallOfIceAreaEffect.DoesDiagonalMoveCrossWall(prev, step))
             {
                 firstInvalidIndex = i;
                 break;

@@ -686,6 +686,33 @@ public class WallOfIceAreaEffect : PersistentAreaEffect, ILineOfEffectBlocker
         }
     }
 
+    /// <summary>
+    /// Check if a diagonal move from 'from' to 'to' is blocked by adjacent wall cells.
+    /// In D&D 3.5e grid rules, diagonal movement is blocked when both "corner" cells
+    /// adjacent to the diagonal are blocked. For a diagonal step from (x1,y1) to (x2,y2),
+    /// the corner cells are (x1,y2) and (x2,y1). If BOTH are intact wall cells,
+    /// the diagonal is blocked.
+    /// Only applies to diagonal moves (dx==1 && dy==1).
+    /// </summary>
+    public static bool DoesDiagonalMoveCrossWall(Vector2Int from, Vector2Int to)
+    {
+        int dx = to.x - from.x;
+        int dy = to.y - from.y;
+
+        // Only check diagonal moves
+        if (Mathf.Abs(dx) != 1 || Mathf.Abs(dy) != 1)
+            return false;
+
+        // The two corner cells that share edges with both 'from' and 'to'
+        Vector2Int corner1 = new Vector2Int(from.x + dx, from.y);   // (to.x, from.y)
+        Vector2Int corner2 = new Vector2Int(from.x, from.y + dy);   // (from.x, to.y)
+
+        // D&D 3.5e rule: You can't move diagonally past a corner formed by walls.
+        // Block diagonal if EITHER corner cell is an intact wall cell.
+        // This prevents squeezing through gaps between adjacent wall sections (e.g., ring shape).
+        return DoesCellBlockMovement(corner1) || DoesCellBlockMovement(corner2);
+    }
+
     // ═══════════════════════════════════════════════════
     // LINE OF SIGHT / SPELL BLOCKING
     // ═══════════════════════════════════════════════════
