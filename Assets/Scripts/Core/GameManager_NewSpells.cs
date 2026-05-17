@@ -146,21 +146,27 @@ public partial class GameManager
         }
 
         // ── WALL OF ICE DAMAGE ──
-        // AoE spells also damage any Wall of Ice in the affected area.
+        // AoE spells damage only the Wall of Ice cells that overlap the AoE area.
+        // Each overlapping section takes the full AoE damage (per PHB object rules).
         if (aoeCells != null && AreaEffectManager.HasInstance)
         {
-            // Collect walls hit by this AoE (may be multiple walls, or same wall hit by multiple cells)
-            var wallsHit = new Dictionary<WallOfIceAreaEffect, bool>();
+            // Collect per-wall overlap: which specific cells of each wall are hit
+            var wallOverlap = new Dictionary<WallOfIceAreaEffect, HashSet<Vector2Int>>();
             foreach (Vector2Int cell in aoeCells)
             {
                 WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell);
-                if (wall != null && !wallsHit.ContainsKey(wall))
-                    wallsHit[wall] = true;
+                if (wall != null)
+                {
+                    if (!wallOverlap.ContainsKey(wall))
+                        wallOverlap[wall] = new HashSet<Vector2Int>();
+                    wallOverlap[wall].Add(cell);
+                }
             }
 
-            foreach (var kvp in wallsHit)
+            foreach (var kvp in wallOverlap)
             {
                 WallOfIceAreaEffect wall = kvp.Key;
+                HashSet<Vector2Int> overlapCells = kvp.Value;
                 if (wall == null || wall.WallHP <= 0)
                     continue;
 
@@ -170,10 +176,10 @@ public partial class GameManager
                     wallDamage += UnityEngine.Random.Range(1, 7);
 
                 // No save for objects; fire is especially effective
-                sb.AppendLine($"  --- Wall of Ice ---");
-                sb.AppendLine($"  {damageType} damage to wall: {wallDamage}");
+                sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");
+                sb.AppendLine($"  {damageType} damage to overlapping sections: {wallDamage}");
 
-                bool destroyed = wall.DealDamageToWall(wallDamage, isFireball);
+                bool destroyed = wall.DealDamageToOverlappingCells(wallDamage, overlapCells, isFireball);
 
                 if (destroyed)
                     sb.AppendLine($"  💥 The Wall of Ice is destroyed by the {spellName}!");
@@ -2853,19 +2859,25 @@ public partial class GameManager
         }
 
         // ── WALL OF ICE DAMAGE FROM ICE STORM ──
+        // Only damage the specific wall sections that overlap the Ice Storm AoE.
         if (aoeCells != null && AreaEffectManager.HasInstance)
         {
-            var wallsHit = new Dictionary<WallOfIceAreaEffect, bool>();
+            var wallOverlap = new Dictionary<WallOfIceAreaEffect, HashSet<Vector2Int>>();
             foreach (Vector2Int cell in aoeCells)
             {
                 WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell);
-                if (wall != null && !wallsHit.ContainsKey(wall))
-                    wallsHit[wall] = true;
+                if (wall != null)
+                {
+                    if (!wallOverlap.ContainsKey(wall))
+                        wallOverlap[wall] = new HashSet<Vector2Int>();
+                    wallOverlap[wall].Add(cell);
+                }
             }
 
-            foreach (var kvp in wallsHit)
+            foreach (var kvp in wallOverlap)
             {
                 WallOfIceAreaEffect wall = kvp.Key;
+                HashSet<Vector2Int> overlapCells = kvp.Value;
                 if (wall == null || wall.WallHP <= 0)
                     continue;
 
@@ -2876,10 +2888,10 @@ public partial class GameManager
                 for (int i = 0; i < 2; i++) wallCold += UnityEngine.Random.Range(1, 7);
                 int wallTotal = wallBludg + wallCold;
 
-                sb.AppendLine($"  --- Wall of Ice ---");
-                sb.AppendLine($"  Bludgeoning + cold damage to wall: {wallTotal}");
+                sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");
+                sb.AppendLine($"  Bludgeoning + cold damage to overlapping sections: {wallTotal}");
 
-                bool destroyed = wall.DealDamageToWall(wallTotal, false);
+                bool destroyed = wall.DealDamageToOverlappingCells(wallTotal, overlapCells, false);
 
                 if (destroyed)
                     sb.AppendLine($"  💥 The Wall of Ice is destroyed by Ice Storm!");
@@ -3030,19 +3042,25 @@ public partial class GameManager
 
         // ── WALL OF ICE DAMAGE FROM SHOUT ──
         // Sonic damage is especially effective against crystalline/brittle objects.
+        // Only damage the specific wall sections that overlap the Shout AoE.
         if (aoeCells != null && AreaEffectManager.HasInstance)
         {
-            var wallsHit = new Dictionary<WallOfIceAreaEffect, bool>();
+            var wallOverlap = new Dictionary<WallOfIceAreaEffect, HashSet<Vector2Int>>();
             foreach (Vector2Int cell in aoeCells)
             {
                 WallOfIceAreaEffect wall = WallOfIceAreaEffect.GetWallAtCell(cell);
-                if (wall != null && !wallsHit.ContainsKey(wall))
-                    wallsHit[wall] = true;
+                if (wall != null)
+                {
+                    if (!wallOverlap.ContainsKey(wall))
+                        wallOverlap[wall] = new HashSet<Vector2Int>();
+                    wallOverlap[wall].Add(cell);
+                }
             }
 
-            foreach (var kvp in wallsHit)
+            foreach (var kvp in wallOverlap)
             {
                 WallOfIceAreaEffect wall = kvp.Key;
+                HashSet<Vector2Int> overlapCells = kvp.Value;
                 if (wall == null || wall.WallHP <= 0)
                     continue;
 
@@ -3050,10 +3068,10 @@ public partial class GameManager
                 int wallDamage = 0;
                 for (int i = 0; i < 5; i++) wallDamage += UnityEngine.Random.Range(1, 7);
 
-                sb.AppendLine($"  --- Wall of Ice ---");
-                sb.AppendLine($"  Sonic damage to wall: {wallDamage}");
+                sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");
+                sb.AppendLine($"  Sonic damage to overlapping sections: {wallDamage}");
 
-                bool destroyed = wall.DealDamageToWall(wallDamage, false);
+                bool destroyed = wall.DealDamageToOverlappingCells(wallDamage, overlapCells, false);
 
                 if (destroyed)
                     sb.AppendLine($"  💥 The Wall of Ice is shattered by Shout!");

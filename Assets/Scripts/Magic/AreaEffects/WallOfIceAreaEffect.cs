@@ -367,17 +367,70 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
     }
 
     // ═══════════════════════════════════════════════════
-    // LEGACY WALL-WIDE DAMAGE (for AoE spells hitting multiple cells)
+    // AOE / TARGETED CELL DAMAGE
     // ═══════════════════════════════════════════════════
 
     /// <summary>
-    /// Deals damage to the wall. Fire damage is especially effective.
-    /// Returns true if the wall is destroyed.
-    /// This is the legacy method — distributes damage across all intact cells.
+    /// Deals damage ONLY to the wall cells that actually overlap the given AoE cells.
+    /// Each overlapping intact cell takes the full damage (objects in an AoE each take damage).
+    /// Fire damage is especially effective (per PHB).
+    /// Returns true if all remaining wall sections are destroyed.
+    /// </summary>
+    public bool DealDamageToOverlappingCells(int damage, HashSet<Vector2Int> aoeCells, bool isFire = false)
+    {
+        if (aoeCells == null || aoeCells.Count == 0)
+            return false;
+
+        // Find only the intact cells that overlap with the AoE
+        var cellsToHit = new List<Vector2Int>();
+        foreach (Vector2Int cell in aoeCells)
+        {
+            if (_cellHitPoints.ContainsKey(cell) && !_breachedCells.Contains(cell) && _cellHitPoints[cell] > 0)
+                cellsToHit.Add(cell);
+        }
+
+        if (cellsToHit.Count == 0)
+        {
+            // No intact cells overlapping — check if entire wall is gone
+            if (_breachedCells.Count >= _cellHitPoints.Count)
+            {
+                LogEffect("  💥 The Wall of Ice shatters!");
+                ExpireEffect();
+                return true;
+            }
+            return false;
+        }
+
+        string dmgType = isFire ? "fire" : "";
+        LogEffect($"  Wall of Ice takes {damage} {dmgType} damage to {cellsToHit.Count} overlapping section(s)!");
+
+        bool anyBreached = false;
+        foreach (Vector2Int cell in cellsToHit)
+        {
+            if (DamageCellHP(cell, damage, isFire))
+                anyBreached = true;
+        }
+
+        // Update legacy WallHP
+        UpdateLegacyWallHP();
+
+        if (WallHP <= 0 || _breachedCells.Count >= _cellHitPoints.Count)
+        {
+            LogEffect("  💥 The Wall of Ice shatters!");
+            ExpireEffect();
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Legacy method — deals damage to ALL intact cells (use DealDamageToOverlappingCells for AoE).
+    /// Kept for backward compatibility but should rarely be called directly.
     /// </summary>
     public bool DealDamageToWall(int damage, bool isFire = false)
     {
-        // Distribute damage to all intact cells equally
+        // Collect all intact cells
         var intactCells = new List<Vector2Int>();
         foreach (var kvp in _cellHitPoints)
         {
@@ -392,9 +445,9 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
             return true;
         }
 
-        // Apply full damage to each intact cell (AoE hits all sections)
+        // Apply full damage to each intact cell
         string dmgType = isFire ? "fire" : "";
-        LogEffect($"  Wall of Ice takes {damage} {dmgType} damage across {intactCells.Count} section(s)!");
+        LogEffect($"  Wall of Ice takes {damage} {dmgType} damage across ALL {intactCells.Count} section(s)!");
 
         bool anyBreached = false;
         foreach (Vector2Int cell in intactCells)
@@ -403,14 +456,7 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
                 anyBreached = true;
         }
 
-        // Update legacy WallHP
-        int totalHP = 0;
-        foreach (var kvp in _cellHitPoints)
-        {
-            if (!_breachedCells.Contains(kvp.Key))
-                totalHP += Mathf.Max(0, kvp.Value);
-        }
-        WallHP = totalHP;
+        UpdateLegacyWallHP();
 
         if (WallHP <= 0 || _breachedCells.Count >= _cellHitPoints.Count)
         {
@@ -420,6 +466,20 @@ public class WallOfIceAreaEffect : PersistentAreaEffect
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Update the legacy WallHP field to reflect total remaining HP across all intact cells.
+    /// </summary>
+    private void UpdateLegacyWallHP()
+    {
+        int totalHP = 0;
+        foreach (var kvp in _cellHitPoints)
+        {
+            if (!_breachedCells.Contains(kvp.Key))
+                totalHP += Mathf.Max(0, kvp.Value);
+        }
+        WallHP = totalHP;
     }
 
     // ═══════════════════════════════════════════════════
