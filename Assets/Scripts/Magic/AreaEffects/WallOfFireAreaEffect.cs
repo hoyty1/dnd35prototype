@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using DND35e.Identifiers;
 
@@ -16,8 +17,11 @@ using DND35e.Identifiers;
 ///   • 2d4 fire damage to creatures within 10 ft on the near (hot) side
 ///   • 1d4 fire damage within 10 ft on the far (cool) side
 ///   • 2d6+CL (max +20) fire damage to creatures passing through (Reflex half)
+///   • Undead take double damage from Wall of Fire (PHB 3.5e)
+///   • Multi-square creatures only take damage once per entry/stay
 ///   • Wall is opaque: 50% concealment
 ///   • Duration: Concentration + 1 round/level
+///   • A wall section (cell) that takes 20+ cold damage in a single round is extinguished
 ///
 /// Simplified prototype: damages creatures standing in the wall cells
 /// (pass-through damage) and logs proximity damage for awareness.
@@ -55,6 +59,23 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     public Vector2? HeatWaveDirectionLine { get; set; }
 
     private HashSet<Vector2Int> _pendingExplicitCells;
+
+    // ── Per-creature damage tracking ──
+    // Tracks which creatures have already been damaged THIS round (for standing-in-wall)
+    // so multi-square creatures only take damage once per round/entry.
+    private HashSet<CharacterController> _damagedThisRound = new HashSet<CharacterController>();
+    // Tracks which creatures were damaged on entry (pass-through) during the current
+    // Update() cycle, reset when they leave the wall so re-entry damages again.
+    private HashSet<CharacterController> _damagedOnEntry = new HashSet<CharacterController>();
+
+    // ── Cold damage extinguishing ──
+    // Tracks accumulated cold damage per cell this round. If any cell reaches 20+, it is extinguished.
+    private Dictionary<Vector2Int, int> _coldDamagePerCell = new Dictionary<Vector2Int, int>();
+    // Cells that have been extinguished (no longer deal damage or block).
+    private HashSet<Vector2Int> _extinguishedCells = new HashSet<Vector2Int>();
+
+    /// <summary>Threshold of cold damage in a single round to extinguish a wall cell.</summary>
+    private const int ColdDamageExtinguishThreshold = 20;
 
     protected override Color GridHighlightColor => AreaEffectColors.WallOfFire;
     protected override bool UseGridHighlighting => true;
@@ -116,7 +137,9 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         LogEffect("  • 2d4 fire damage to creatures within 10 ft (near side)");
         LogEffect("  • 1d4 fire damage within 10 ft (far side)");
         LogEffect("  • 2d6+CL (max +20) fire damage to those passing through (Reflex half)");
+        LogEffect("  • Undead take double damage");
         LogEffect("  • Wall is opaque — provides 50% concealment");
+        LogEffect("  • Sections can be extinguished by 20+ cold damage in one round");
     }
 
     private void Update()
@@ -129,6 +152,13 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
     public override void OnRoundStart()
     {
+        // Reset per-round damage tracking so creatures can be damaged again this round
+        _damagedThisRound.Clear();
+        _damagedOnEntry.Clear();
+
+        // Reset cold damage accumulation for this new round
+        _coldDamagePerCell.Clear();
+
         base.OnRoundStart();
 
         if (!IsGridHighlightApplied)
@@ -140,6 +170,16 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
 
+        // Check if all wall cells this creature occupies are extinguished
+        if (AreAllCreatureCellsExtinguished(character))
+            return;
+
+        // Per-creature damage tracking: don't double-damage multi-square creatures
+        if (_damagedOnEntry.Contains(character))
+            return;
+
+        _damagedOnEntry.Add(character);
+
         string timing = isInitial ? "is caught in" : "passes through";
         DealPassThroughDamage(character, timing);
     }
@@ -149,11 +189,22 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
 
+        // Check if all wall cells this creature occupies are extinguished
+        if (AreAllCreatureCellsExtinguished(character))
+            return;
+
+        // Per-creature damage tracking: only damage once per round for standing in wall
+        if (_damagedThisRound.Contains(character))
+            return;
+
+        _damagedThisRound.Add(character);
+
         DealPassThroughDamage(character, "remains in");
     }
 
     /// <summary>
     /// Deals 2d6 + CL (max +20) fire damage to a creature in the wall. Reflex half.
+    /// Undead creatures take double damage (PHB 3.5e).
     /// </summary>
     private void DealPassThroughDamage(CharacterController character, string context)
     {
@@ -162,6 +213,11 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
         int clBonus = Mathf.Min(CasterLevel, 20);
         int damage = Random.Range(1, 7) + Random.Range(1, 7) + clBonus; // 2d6 + CL
+
+        // Undead take double damage from Wall of Fire (PHB 3.5e p.298)
+        bool isUndead = IsCreatureUndead(character);
+        if (isUndead)
+            damage *= 2;
 
         // Reflex save for half
         int saveRoll = Random.Range(1, 21);
@@ -176,9 +232,10 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         if (finalDamage > 0)
             character.Stats.TakeDamage(finalDamage);
 
+        string undeadNote = isUndead ? " [UNDEAD ×2]" : "";
         LogEffect($"  🔥 {character.Stats.CharacterName} {context} the Wall of Fire: "
             + $"Reflex d20({saveRoll})+{character.Stats.ReflexSave}={saveTotal} vs DC {SaveDC} "
-            + $"=> {(saveSuccess ? "half" : "full")} {finalDamage} fire damage");
+            + $"=> {(saveSuccess ? "half" : "full")} {finalDamage} fire damage{undeadNote}");
 
         if (character.Stats.IsDead)
         {
@@ -192,6 +249,9 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         if (character == null || character.Stats == null)
             return;
 
+        // Clear entry tracking so the creature takes damage again if it re-enters
+        _damagedOnEntry.Remove(character);
+
         LogEffect($"{character.Stats.CharacterName} moves away from the Wall of Fire.");
     }
 
@@ -202,7 +262,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     }
 
     /// <summary>
-    /// Checks if a ranged attack line crosses any active Wall of Fire cell.
+    /// Checks if a ranged attack line crosses any active (non-extinguished) Wall of Fire cell.
     /// </summary>
     public static bool BlocksLineOfSight(Vector2Int from, Vector2Int to)
     {
@@ -219,7 +279,19 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             if (wall == null || wall.AffectedCells == null)
                 continue;
 
-            if (WindWallAreaEffect.LineSegmentCrossesAnyCellPublic(from, to, wall.AffectedCells))
+            // Build set of active (non-extinguished) cells for LoS check
+            HashSet<Vector2Int> activeCells;
+            if (wall._extinguishedCells.Count == 0)
+            {
+                activeCells = wall.AffectedCells;
+            }
+            else
+            {
+                activeCells = new HashSet<Vector2Int>(wall.AffectedCells);
+                activeCells.ExceptWith(wall._extinguishedCells);
+            }
+
+            if (activeCells.Count > 0 && WindWallAreaEffect.LineSegmentCrossesAnyCellPublic(from, to, activeCells))
                 return true;
         }
 
@@ -264,5 +336,137 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             return 0f;
 
         return Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Undead detection
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Returns true if the creature is of type Undead (case-insensitive).
+    /// </summary>
+    private static bool IsCreatureUndead(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return false;
+
+        string creatureType = character.Stats.CreatureType;
+        if (string.IsNullOrWhiteSpace(creatureType))
+            return false;
+
+        return creatureType.Trim().ToLowerInvariant() == "undead";
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Multi-square creature helpers
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Returns true if every wall cell the creature occupies has been extinguished.
+    /// For single-square creatures this checks just one cell.
+    /// </summary>
+    private bool AreAllCreatureCellsExtinguished(CharacterController character)
+    {
+        if (_extinguishedCells.Count == 0)
+            return false;
+
+        List<Vector2Int> occupied = character.GetOccupiedSquares();
+        for (int i = 0; i < occupied.Count; i++)
+        {
+            // If any occupied cell is a non-extinguished wall cell, the wall still affects them
+            if (AffectedCells.Contains(occupied[i]) && !_extinguishedCells.Contains(occupied[i]))
+                return false;
+        }
+        return true;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Cold damage / extinguishing
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Apply cold damage to a specific wall cell. If the accumulated cold damage
+    /// this round reaches 20+, that cell is extinguished and stops dealing damage.
+    /// Call this from whatever system resolves cold-damage spells/effects hitting the wall.
+    /// </summary>
+    /// <param name="cell">The grid cell being hit by cold damage.</param>
+    /// <param name="coldDamage">Amount of cold damage dealt to the cell.</param>
+    public void ApplyColdDamageToCell(Vector2Int cell, int coldDamage)
+    {
+        if (coldDamage <= 0)
+            return;
+
+        // Only track damage to cells that are actually part of this wall and not already out
+        if (!AffectedCells.Contains(cell) || _extinguishedCells.Contains(cell))
+            return;
+
+        if (!_coldDamagePerCell.ContainsKey(cell))
+            _coldDamagePerCell[cell] = 0;
+
+        _coldDamagePerCell[cell] += coldDamage;
+
+        LogEffect($"  ❄ Wall of Fire cell ({cell.x},{cell.y}) takes {coldDamage} cold damage "
+            + $"(total this round: {_coldDamagePerCell[cell]})");
+
+        if (_coldDamagePerCell[cell] >= ColdDamageExtinguishThreshold)
+        {
+            _extinguishedCells.Add(cell);
+            LogEffect($"  💨 Wall of Fire cell ({cell.x},{cell.y}) is EXTINGUISHED by cold damage!");
+
+            // Update grid highlighting — remove highlight from extinguished cell
+            RefreshGridHighlightForExtinguishedCells();
+        }
+    }
+
+    /// <summary>
+    /// Apply cold damage to ALL cells of this wall (e.g., from a large AoE cold spell).
+    /// </summary>
+    /// <param name="coldDamage">Amount of cold damage dealt to each cell.</param>
+    public void ApplyColdDamageToAllCells(int coldDamage)
+    {
+        if (coldDamage <= 0)
+            return;
+
+        // Copy to avoid modification during iteration
+        var cells = AffectedCells.ToList();
+        for (int i = 0; i < cells.Count; i++)
+            ApplyColdDamageToCell(cells[i], coldDamage);
+    }
+
+    /// <summary>
+    /// Returns true if the given cell has been extinguished.
+    /// </summary>
+    public bool IsCellExtinguished(Vector2Int cell)
+    {
+        return _extinguishedCells.Contains(cell);
+    }
+
+    /// <summary>
+    /// Returns the number of still-active (non-extinguished) wall cells.
+    /// </summary>
+    public int ActiveCellCount => AffectedCells.Count - _extinguishedCells.Count;
+
+    /// <summary>
+    /// Refreshes grid highlighting to hide extinguished cells.
+    /// </summary>
+    private void RefreshGridHighlightForExtinguishedCells()
+    {
+        // For each extinguished cell, clear its individual highlight
+        foreach (Vector2Int cell in _extinguishedCells)
+        {
+            if (GameManager.Instance != null && GameManager.Instance.Grid != null)
+            {
+                SquareCell gridCell = GameManager.Instance.Grid.GetCell(cell.x, cell.y);
+                if (gridCell != null)
+                    gridCell.ClearHighlight();
+            }
+        }
+
+        // If all cells are extinguished, expire the entire effect
+        if (_extinguishedCells.Count >= AffectedCells.Count)
+        {
+            LogEffect("🔥➡💨 The entire Wall of Fire has been extinguished by cold!");
+            ExpireEffect();
+        }
     }
 }
