@@ -129,6 +129,11 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             ApplyGridHighlight();
             _pendingExplicitCells = null;
         }
+
+        // Deal initial heat wave damage AFTER explicit cells are set (PHB p.298).
+        // This ensures AffectedCells contains only the ring perimeter (not a filled circle)
+        // so IsCharacterInArea correctly identifies only creatures standing ON the ring.
+        TriggerHeatWaveDamage("on creation");
     }
 
     protected override void OnAreaCreated()
@@ -153,8 +158,10 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         // Subscribe to TurnStartedEvent so we can trigger heat wave at caster's turn start
         SubscribeToTurnStartEvent();
 
-        // Deal initial heat wave damage at time of casting (PHB p.298)
-        TriggerHeatWaveDamage("on creation");
+        // NOTE: Initial heat wave damage is triggered from Start() AFTER explicit cells
+        // are applied, not here. OnAreaCreated() runs inside base.Start() before
+        // _pendingExplicitCells override AffectedCells, so triggering heat wave here
+        // would use the wrong cell set (filled circle instead of ring perimeter).
     }
 
     protected override void OnDestroy()
@@ -581,6 +588,11 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         if (AffectedCells == null || AffectedCells.Count == 0)
             return result;
 
+        string dirLabel = IsRingMode
+            ? (!string.IsNullOrEmpty(HeatWaveDirectionRing) ? HeatWaveDirectionRing : "Inwards")
+            : (HeatWaveDirectionLine.HasValue ? "LineNormal" : "NoDirection");
+        Debug.Log($"[WallOfFire][HeatWave] Scanning for hot-side creatures. Mode={( IsRingMode ? "Ring" : "Line" )}, Direction={dirLabel}, AffectedCells={AffectedCells.Count}, RingRadius={RingRadius}, Center=({CenterCell.x},{CenterCell.y})");
+
         CharacterController[] allCharacters = FindObjectsOfType<CharacterController>();
 
         for (int i = 0; i < allCharacters.Length; i++)
@@ -595,12 +607,23 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
             // Skip creatures standing IN the wall (they take pass-through damage instead)
             if (IsCharacterInArea(character))
+            {
+                Debug.Log($"[WallOfFire][HeatWave]   SKIP {character.Stats.CharacterName} — standing IN wall at ({character.GridPosition.x},{character.GridPosition.y})");
                 continue;
+            }
 
             // Check if any of the creature's occupied squares is within range
             // of a non-extinguished wall cell AND on the hot side
             if (IsCreatureOnHotSideWithinRange(character))
+            {
+                Debug.Log($"[WallOfFire][HeatWave]   HIT {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) — on hot side within range");
                 result.Add(character);
+            }
+            else
+            {
+                int distToCenter = SquareGridUtils.GetDistance(CenterCell, character.GridPosition);
+                Debug.Log($"[WallOfFire][HeatWave]   MISS {character.Stats.CharacterName} at ({character.GridPosition.x},{character.GridPosition.y}) — distToCenter={distToCenter}, RingRadius={RingRadius}, not on hot side or out of range");
+            }
         }
 
         return result;
@@ -613,6 +636,8 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     private bool IsCreatureOnHotSideWithinRange(CharacterController character)
     {
         List<Vector2Int> occupied = character.GetOccupiedSquares();
+        bool foundInRange = false;
+        bool foundOnHotSide = false;
 
         for (int i = 0; i < occupied.Count; i++)
         {
@@ -628,10 +653,21 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
                 if (dist > HeatWaveDistanceSquares)
                     continue;
 
+                foundInRange = true;
+
                 // Check if this creature cell is on the hot side
                 if (IsCellOnHotSide(creatureCell, wallCell))
+                {
+                    foundOnHotSide = true;
                     return true;
+                }
             }
+        }
+
+        if (foundInRange && !foundOnHotSide)
+        {
+            int distToCenter = IsRingMode ? SquareGridUtils.GetDistance(CenterCell, character.GridPosition) : -1;
+            Debug.Log($"[WallOfFire][HeatWave]     {character.Stats.CharacterName}: in range of wall but NOT on hot side (distToCenter={distToCenter}, RingRadius={RingRadius}, direction={HeatWaveDirectionRing})");
         }
 
         return false;
@@ -653,6 +689,8 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
     /// Ring mode: check if cell is on the hot side.
     /// "Inwards" = cell is closer to center than the ring (inside).
     /// "Outwards" = cell is farther from center than the ring (outside).
+    /// Uses D&D 3.5e distance (SquareGridUtils.GetDistance) to be consistent
+    /// with how ring cells are generated (cells at D&D dist == RingRadius).
     /// </summary>
     private bool IsCellOnHotSideRing(Vector2Int testCell)
     {
@@ -660,19 +698,18 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             ? HeatWaveDirectionRing
             : "Inwards"; // Default
 
-        // Distance from test cell to center
-        float dx = testCell.x - CenterCell.x;
-        float dy = testCell.y - CenterCell.y;
-        float distFromCenter = Mathf.Sqrt(dx * dx + dy * dy);
+        // Use D&D 3.5e distance (alternating diagonal) — same metric used to generate ring cells
+        int distFromCenter = SquareGridUtils.GetDistance(CenterCell, testCell);
 
         if (direction == "Inwards")
         {
-            // Hot side is inside the ring — cell must be closer to center than ring radius
+            // Hot side is inside the ring — cell must be strictly closer to center than ring radius
+            // (cells AT RingRadius are ring cells themselves → pass-through damage, not heat wave)
             return distFromCenter < RingRadius;
         }
         else // "Outwards"
         {
-            // Hot side is outside the ring — cell must be farther from center than ring radius
+            // Hot side is outside the ring — cell must be strictly farther from center than ring radius
             return distFromCenter > RingRadius;
         }
     }
