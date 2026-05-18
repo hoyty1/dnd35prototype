@@ -198,6 +198,72 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // EVARD'S BLACK TENTACLES  (PHB p.228)
+        // Conjuration (Creation)
+        // Level: Sor/Wiz 4
+        // Components: V, S, M (a piece of tentacle from a giant octopus
+        //   or giant squid)
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Area: 20-ft.-radius spread
+        // Duration: 1 round/level (D)
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // This spell conjures a field of rubbery black tentacles, each 10
+        // feet long. These waving members seem to spring forth from the
+        // earth, floor, or whatever surface is underfoot. They grasp and
+        // entwine around creatures that enter or are caught in the area.
+        // Every creature within the area of the spell must make a grapple
+        // check, opposed by the tentacles' grapple check. Treat the
+        // tentacles attacking a particular target as a Large creature with
+        // a base attack bonus equal to your caster level and a Strength
+        // score of 19 (+4 modifier). Thus the tentacles' grapple check
+        // modifier is equal to your caster level + 8.
+        //
+        // IMPLEMENTATION: AoE persistent area effect
+        // (BlackTentaclesAreaEffect). Each round, tentacles grapple
+        // check against all creatures in area. Grappled creatures take
+        // 1d6+4 bludgeoning damage per round. Creatures can break free
+        // with grapple or Escape Artist check vs tentacle grapple check.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.EVARDS_BLACK_TENTACLES,
+                    Name = "Evard's Black Tentacles",
+                    Description = "Conjuration (Creation). A field of rubbery black tentacles fills a 20-ft radius spread. "
+                        + "Tentacles grapple creatures in the area each round (grapple mod = CL + 8). "
+                        + "Grappled creatures take 1d6+4 bludgeoning damage per round. "
+                        + "Duration 1 round/level (D). Components: V, S, M (tentacle piece). PHB p.228",
+                    HasMaterialComponent = true, // M: tentacle from giant octopus/squid (common — covered by spell component pouch)
+                    SpellLevel = 4,
+                    School = "Conjuration (Creation)",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AreaRadius = 4,                     // 20-ft radius = 4 squares
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,                 // 20-ft radius
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Debuff,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases — Eagle's Splendor: Cleric 2, Paladin 2
         RegisterClassSpellAlias("eagles_splendor_clr", SpellNames.EAGLES_SPLENDOR, "Cleric", 2);
         RegisterClassSpellAlias("eagles_splendor_pal", SpellNames.EAGLES_SPLENDOR, "Paladin", 2);

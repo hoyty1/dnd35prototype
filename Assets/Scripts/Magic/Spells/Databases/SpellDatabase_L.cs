@@ -176,6 +176,63 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // LESSER GLOBE OF INVULNERABILITY  (PHB p.246)
+        // Abjuration
+        // Level: Sor/Wiz 4
+        // Components: V, S, M (a glass or crystal bead)
+        // Casting Time: 1 standard action
+        // Range: 10 ft.
+        // Area: 10-ft.-radius spherical emanation, centered on you
+        // Duration: 1 round/level (D)
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // An immobile, faintly shimmering magical sphere surrounds you
+        // and excludes all spell effects of 3rd level or lower. The area
+        // or effect of any such spells does not include the area of the
+        // lesser globe of invulnerability. Such spells fail to affect any
+        // target located within the globe. Spells of 4th level and higher
+        // are not affected by the globe. The globe can be brought down by
+        // a targeted dispel magic spell.
+        //
+        // IMPLEMENTATION: Self-targeted buff that creates a
+        // LesserGlobeOfInvulnerabilityAreaEffect (emanation centered on
+        // caster, moves with caster). Blocks spell effects ≤ 3rd level
+        // against creatures inside the globe.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.LESSER_GLOBE_OF_INVULNERABILITY,
+                    Name = "Lesser Globe of Invulnerability",
+                    Description = "Abjuration. A 10-ft-radius emanation centered on you excludes all spell effects of 3rd level or lower. "
+                        + "Such spells fail to affect any target within the globe. Spells of 4th level and higher pass through normally. "
+                        + "Duration 1 round/level (D). Components: V, S, M (glass bead). PHB p.246",
+                    HasMaterialComponent = true, // M: glass or crystal bead (common — covered by spell component pouch)
+                    SpellLevel = 4,
+                    School = "Abjuration",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    BuffType = SpellNames.LESSER_GLOBE_OF_INVULNERABILITY,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("light_clr", SpellNames.LIGHT, "Cleric", 0);
 

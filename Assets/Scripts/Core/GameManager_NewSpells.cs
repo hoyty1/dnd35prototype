@@ -4484,4 +4484,115 @@ public partial class GameManager
         UpdateAllStatsUI();
         return true;
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // LESSER GLOBE OF INVULNERABILITY (PHB p.246)
+    // ═══════════════════════════════════════════════════════════════
+
+    private static bool IsLesserGlobeOfInvulnerabilitySpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.LESSER_GLOBE_OF_INVULNERABILITY, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Lesser Globe of Invulnerability: creates a 10-ft radius emanation
+    /// centered on the caster that blocks spell effects of 3rd level or lower.
+    /// The emanation moves with the caster.
+    /// PHB p.246
+    /// </summary>
+    private bool TryResolveLesserGlobeSpellEffect(
+        CharacterController caster, CharacterController target,
+        SpellData spell, SpellResult result)
+    {
+        if (!IsLesserGlobeOfInvulnerabilitySpell(spell))
+            return false;
+
+        if (caster == null || caster.Stats == null)
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
+
+        // Create the area effect centered on the caster
+        Vector3 centerWorldPos = caster.transform.position;
+
+        GameObject globeObj = new GameObject("LesserGlobeOfInvulnerability_Area");
+        globeObj.transform.position = centerWorldPos;
+
+        LesserGlobeOfInvulnerabilityAreaEffect globeEffect = globeObj.AddComponent<LesserGlobeOfInvulnerabilityAreaEffect>();
+        globeEffect.CenterPosition = centerWorldPos;
+        globeEffect.RoundsRemaining = durationRounds;
+        globeEffect.CasterLevel = casterLevel;
+        globeEffect.Caster = caster;
+        globeEffect.MaxBlockedSpellLevel = 3; // Lesser Globe blocks ≤ 3rd level
+
+        string casterName = caster.Stats.CharacterName ?? "Unknown";
+
+        CombatUI?.ShowCombatLog($"<color=#44AAFF>🛡 {casterName} casts Lesser Globe of Invulnerability!</color>");
+        CombatUI?.ShowCombatLog($"  A 10-ft radius emanation of shimmering protection forms around {casterName}.");
+        CombatUI?.ShowCombatLog($"  Blocks all spell effects of 3rd level or lower.");
+        CombatUI?.ShowCombatLog($"  Spells of 4th level and higher pass through normally.");
+        CombatUI?.ShowCombatLog($"  Globe moves with the caster. Duration: {durationRounds} round(s).");
+
+        Debug.Log($"[LesserGlobe] Created by {casterName}: CL {casterLevel}, blocks ≤ level 3, {durationRounds} rounds");
+
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // EVARD'S BLACK TENTACLES (PHB p.228)
+    // ═══════════════════════════════════════════════════════════════
+
+    private static bool IsBlackTentaclesSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.EVARDS_BLACK_TENTACLES, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Evard's Black Tentacles as an AoE area effect.
+    /// Creates a 20-ft radius spread of grappling tentacles at the targeted location.
+    /// PHB p.228
+    /// </summary>
+    public bool TryResolveBlackTentaclesAoECast(
+        CharacterController caster, SpellData spell,
+        HashSet<Vector2Int> aoeCells, out string log)
+    {
+        log = string.Empty;
+
+        if (!IsBlackTentaclesSpell(spell) || caster == null || caster.Stats == null || aoeCells == null)
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
+        int tentacleGrappleMod = casterLevel + 8; // CL + Str mod (4) + Large size (4)
+
+        Vector3 centerWorldPos = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
+
+        // Create area effect
+        GameObject tentaclesObj = new GameObject("BlackTentacles_Area");
+        tentaclesObj.transform.position = centerWorldPos;
+
+        BlackTentaclesAreaEffect tentaclesEffect = tentaclesObj.AddComponent<BlackTentaclesAreaEffect>();
+        tentaclesEffect.CenterPosition = centerWorldPos;
+        tentaclesEffect.RoundsRemaining = durationRounds;
+        tentaclesEffect.CasterLevel = casterLevel;
+        tentaclesEffect.Caster = caster;
+
+        string casterName = caster.Stats.CharacterName ?? "Unknown";
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"✨ {casterName} casts Evard's Black Tentacles!");
+        sb.AppendLine($"  Area: 20-ft radius spread ({aoeCells.Count} squares)");
+        sb.AppendLine($"  Tentacle grapple modifier: +{tentacleGrappleMod} (CL {casterLevel} + 8)");
+        sb.AppendLine($"  Damage: 1d6+4 bludgeoning per round (grappled creatures)");
+        sb.AppendLine($"  Duration: {durationRounds} round(s)");
+        sb.AppendLine("═══════════════════════════════════");
+
+        log = sb.ToString();
+
+        Debug.Log($"[BlackTentacles] Created by {casterName}: CL {casterLevel}, grapple +{tentacleGrappleMod}, {durationRounds} rounds, {aoeCells.Count} cells");
+
+        return true;
+    }
 }

@@ -696,5 +696,11 @@ namespace DND35e.Identifiers
         /// <summary>Dimension Door (spell id: dimension_door)</summary>
         public const string DIMENSION_DOOR = "dimension_door";
 
+        /// <summary>Lesser Globe of Invulnerability (spell id: lesser_globe_of_invulnerability)</summary>
+        public const string LESSER_GLOBE_OF_INVULNERABILITY = "lesser_globe_of_invulnerability";
+
+        /// <summary>Evard's Black Tentacles (spell id: evards_black_tentacles)</summary>
+        public const string EVARDS_BLACK_TENTACLES = "evards_black_tentacles";
+
     }
 }

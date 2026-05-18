@@ -361,6 +361,38 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // Lesser Globe of Invulnerability — show if this character is inside any globe
+        if (_character != null && LesserGlobeOfInvulnerabilityAreaEffect.IsCharacterInAnyGlobe(_character))
+        {
+            var globe = LesserGlobeOfInvulnerabilityAreaEffect.GetGlobeContainingCharacter(_character);
+            int globeRounds = globe != null ? globe.RoundsRemaining : 0;
+            string globeCaster = globe != null && globe.Caster != null && globe.Caster.Stats != null ? globe.Caster.Stats.CharacterName : "Unknown";
+            list.Add(new IconData
+            {
+                Key = "LesserGlobe",
+                ShortLabel = "LG",
+                Tooltip = $"Lesser Globe of Invulnerability\nBlocks spell effects of 3rd level or lower\nCaster: {globeCaster}\nDuration: {Mathf.Max(0, globeRounds)} round(s)",
+                Color = new Color(0.35f, 0.65f, 0.95f, 0.92f), // Light blue
+                Duration = globeRounds
+            });
+        }
+
+        // Black Tentacles — show if this character is grappled by tentacles
+        if (_character != null && BlackTentaclesAreaEffect.IsCharacterGrappledByAnyTentacles(_character))
+        {
+            var tentacles = BlackTentaclesAreaEffect.GetTentaclesContainingCharacter(_character);
+            int tentacleRounds = tentacles != null ? tentacles.RoundsRemaining : 0;
+            int grappleMod = tentacles != null ? tentacles.TentacleGrappleModifier : 0;
+            list.Add(new IconData
+            {
+                Key = "BlackTentacles",
+                ShortLabel = "BT",
+                Tooltip = $"Grappled by Black Tentacles\nTentacle grapple modifier: +{grappleMod}\n1d6+4 bludgeoning damage/round\nDuration: {Mathf.Max(0, tentacleRounds)} round(s)",
+                Color = new Color(0.25f, 0.05f, 0.35f, 0.92f), // Dark purple
+                Duration = tentacleRounds
+            });
+        }
+
         if (_character.Stats != null && _character.Stats.ActiveResistEnergyEffects != null && _character.Stats.ActiveResistEnergyEffects.Count > 0)
         {
             for (int i = 0; i < _character.Stats.ActiveResistEnergyEffects.Count; i++)

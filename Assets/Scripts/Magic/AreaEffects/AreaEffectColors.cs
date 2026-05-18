@@ -49,4 +49,10 @@ public static class AreaEffectColors
 
     // Illusion (concealment / invisibility emanations)
     public static readonly Color InvisibilitySphere = new Color(0.6f, 0.7f, 1.0f, 0.35f);
+
+    // Abjuration (protective globes)
+    public static readonly Color LesserGlobeOfInvulnerability = new Color(0.4f, 0.7f, 1.0f, 0.40f); // Light blue for protection
+
+    // Conjuration (tentacles)
+    public static readonly Color BlackTentacles = new Color(0.15f, 0.05f, 0.2f, 0.65f); // Dark purple/black for tentacles
 }

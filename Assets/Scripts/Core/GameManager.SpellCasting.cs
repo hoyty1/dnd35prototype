@@ -2060,6 +2060,21 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {_pendingSpell.Name} has no effect.");
             }
 
+            // ── Lesser Globe of Invulnerability check ──
+            // PHB p.246: Spell effects of 3rd level or lower are excluded from the globe area.
+            // Check if target is inside a Lesser Globe and the incoming spell is ≤ 3rd level.
+            // Note: the caster's own spells are also blocked if target is in a globe.
+            bool blockedByGlobe = false;
+            if (target != null && _pendingSpell != null && result.Success && !effectNegatedBySave)
+            {
+                if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target))
+                {
+                    blockedByGlobe = true;
+                    result.Success = false;
+                    CombatUI?.ShowCombatLog($"🛡 {_pendingSpell.Name} (level {_pendingSpell.SpellLevel}) is blocked by Lesser Globe of Invulnerability! Spell effects of 3rd level or lower cannot affect {target.Stats.CharacterName}.");
+                }
+            }
+
             bool handledCauseFear = TryResolveCauseFearSpellEffect(caster, target, _pendingSpell, result);
 
             bool handledGhoulTouch = false;
@@ -2138,7 +2153,11 @@ public partial class GameManager
             if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledDimensionalAnchor && !handledRemoveCurse && result.Success)
                 handledDimensionDoor = TryResolveDimensionDoorSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledDimensionalAnchor && !handledRemoveCurse && !handledDimensionDoor && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            bool handledLesserGlobe = false;
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledDimensionalAnchor && !handledRemoveCurse && !handledDimensionDoor && result.Success)
+                handledLesserGlobe = TryResolveLesserGlobeSpellEffect(caster, target, _pendingSpell, result);
+
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledDimensionalAnchor && !handledRemoveCurse && !handledDimensionDoor && !handledLesserGlobe && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -3944,6 +3963,32 @@ public partial class GameManager
                 return;
             }
 
+            // ── Evard's Black Tentacles (persistent grappling area effect) ──
+            if (TryResolveBlackTentaclesAoECast(caster, _pendingSpell, aoeCells, out string blackTentaclesLog))
+            {
+                _lastCombatLog = blackTentaclesLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
             if (aoeCells != null
                 && string.Equals(_pendingSpell.DamageType, "fire", StringComparison.OrdinalIgnoreCase))
             {
@@ -3974,6 +4019,13 @@ public partial class GameManager
                 {
                     targetIndex++;
                     logBuilder.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
+
+                    // ── Lesser Globe of Invulnerability — block AoE spell effects ≤ 3rd level ──
+                    if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target))
+                    {
+                        logBuilder.AppendLine($"  🛡 Blocked by Lesser Globe of Invulnerability (spell level {_pendingSpell.SpellLevel} ≤ 3)!");
+                        continue;
+                    }
 
                     // For buff/debuff spells, apply tracked effects
                     if (_pendingSpell.EffectType == SpellEffectType.Buff || _pendingSpell.EffectType == SpellEffectType.Debuff)

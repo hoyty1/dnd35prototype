@@ -998,6 +998,16 @@ public partial class GameManager
         if (result.MindAffectingImmunityBlocked)
             CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {spell.Name} has no effect.");
 
+        // ── Lesser Globe of Invulnerability check ──
+        if (target != null && spell != null && result.Success && !effectNegatedBySave)
+        {
+            if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target))
+            {
+                result.Success = false;
+                CombatUI?.ShowCombatLog($"🛡 {spell.Name} (level {spell.SpellLevel}) is blocked by Lesser Globe of Invulnerability! Spell effects of 3rd level or lower cannot affect {target.Stats.CharacterName}.");
+            }
+        }
+
         bool handledCauseFear = TryResolveCauseFearSpellEffect(npc, target, spell, result);
         bool handledRayOfEnfeeblement = false;
         if (!handledCauseFear && result.Success && !effectNegatedBySave)
@@ -1055,7 +1065,11 @@ public partial class GameManager
         if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && result.Success && !effectNegatedBySave)
             handledMirrorImage = TryResolveMirrorImageSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        bool handledLesserGlobe = false;
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && result.Success)
+            handledLesserGlobe = TryResolveLesserGlobeSpellEffect(npc, target, spell, result);
+
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledLesserGlobe && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)
