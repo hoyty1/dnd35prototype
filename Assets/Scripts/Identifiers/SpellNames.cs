@@ -159,6 +159,9 @@ namespace DND35e.Identifiers
         /// <summary>Detect Undead (spell id: detect_undead)</summary>
         public const string DETECT_UNDEAD = "detect_undead";
 
+        /// <summary>Dimensional Anchor (spell id: dimensional_anchor)</summary>
+        public const string DIMENSIONAL_ANCHOR = "dimensional_anchor";
+
         /// <summary>Dispel Magic (spell id: dispel_magic)</summary>
         public const string DISPEL_MAGIC = "dispel_magic";
 

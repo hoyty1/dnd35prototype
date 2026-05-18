@@ -3976,4 +3976,70 @@ public partial class GameManager
 
         sphere.ExpireEffect();
     }
+
+    // ================================================================
+    // DIMENSIONAL ANCHOR — PHB p.221
+    // Abjuration. Cleric 4, Sor/Wiz 4. V, S.
+    // Range: Medium (100 ft + 10 ft/level). Duration: 1 min/level.
+    // Ranged touch attack ray. No save. SR: Yes.
+    // Blocks all extradimensional travel on hit.
+    // ================================================================
+
+    private static bool IsDimensionalAnchorSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.DIMENSIONAL_ANCHOR, System.StringComparison.Ordinal);
+    }
+
+    private bool TryResolveDimensionalAnchorSpellEffect(
+        CharacterController caster, CharacterController target,
+        SpellData spell, SpellResult result)
+    {
+        if (!IsDimensionalAnchorSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (caster == null || caster.Stats == null)
+            return false;
+
+        // Ranged touch attack must have hit
+        if (result == null || !result.Success || (result.RequiredAttackRoll && !result.AttackHit))
+        {
+            // Miss — combat log already handled by the standard miss path
+            return true; // We claimed this spell, even though it missed
+        }
+
+        // Check if target already has Dimensional Anchor — refresh duration if so
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+        string casterName = caster.Stats.CharacterName ?? "Unknown";
+        string targetName = target.Stats.CharacterName ?? "Unknown";
+
+        // Apply the effect data
+        DimensionalAnchorEffectData effectData = DimensionalAnchorEffectData.Create(
+            casterLevel, casterName, durationRounds);
+
+        target.Stats.ActiveDimensionalAnchorEffect = effectData;
+
+        // Add tracked spell effect for duration management
+        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        if (statusMgr != null)
+        {
+            ActiveSpellEffect spellEffect = statusMgr.AddEffect(spell, casterName, casterLevel);
+            if (spellEffect != null)
+                spellEffect.RemainingRounds = durationRounds;
+        }
+
+        // Combat log with emerald/green styling
+        CombatUI?.ShowCombatLog(
+            $"<color=#00FF88>🟢 {casterName}'s green ray strikes {targetName}! " +
+            $"A shimmering emerald field envelops {targetName}, blocking all extradimensional travel " +
+            $"for {durationRounds} rounds ({durationRounds / 10} minutes).</color>");
+
+        Debug.Log($"[DimensionalAnchor] Applied to {targetName} by {casterName} " +
+                  $"(CL {casterLevel}, {durationRounds} rounds). " +
+                  $"Blocks: {effectData.BlockedTypes}");
+
+        UpdateAllStatsUI();
+        return true;
+    }
 }

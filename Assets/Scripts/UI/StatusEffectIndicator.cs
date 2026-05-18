@@ -344,6 +344,23 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.DIMENSIONAL_ANCHOR))
+        {
+            int rounds = statusMgr.GetRemainingRounds(SpellNames.DIMENSIONAL_ANCHOR);
+            DimensionalAnchorEffectData anchor = _character.Stats != null ? _character.Stats.ActiveDimensionalAnchorEffect : null;
+            int blocked = anchor != null ? Mathf.Max(0, anchor.AttemptsBlocked) : 0;
+            string casterInfo = anchor != null && !string.IsNullOrEmpty(anchor.CasterName) ? $"\nCaster: {anchor.CasterName}" : "";
+
+            list.Add(new IconData
+            {
+                Key = "DimensionalAnchor",
+                ShortLabel = "DA",
+                Tooltip = $"Dimensional Anchor\nBlocks all extradimensional travel\n(teleport, dimension door, plane shift,\netherealness, blink, gate, maze, etc.){casterInfo}\nAttempts blocked: {blocked}\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.10f, 0.85f, 0.45f, 0.92f), // Emerald/green color
+                Duration = rounds
+            });
+        }
+
         if (_character.Stats != null && _character.Stats.ActiveResistEnergyEffects != null && _character.Stats.ActiveResistEnergyEffects.Count > 0)
         {
             for (int i = 0; i < _character.Stats.ActiveResistEnergyEffects.Count; i++)

@@ -1592,6 +1592,10 @@ public class CharacterStats
     /// <summary>Runtime state for Stoneskin (if currently active). PHB p.285.</summary>
     [NonSerialized] public StoneskinEffectData ActiveStoneskinEffect;
 
+    /// <summary>Runtime state for Dimensional Anchor (if currently active). PHB p.221.
+    /// Blocks all extradimensional travel. Use TeleportationBlocker.IsBlocked() to check.</summary>
+    [NonSerialized] public DimensionalAnchorEffectData ActiveDimensionalAnchorEffect;
+
     /// <summary>Runtime Resist Energy effects (can hold different energy types simultaneously).</summary>
     [NonSerialized] public List<ResistEnergyEffectData> ActiveResistEnergyEffects = new List<ResistEnergyEffectData>();
 

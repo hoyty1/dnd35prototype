@@ -303,6 +303,44 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Undead detection not implemented]"
                 });
 
+        // ===== DIMENSIONAL ANCHOR — PHB p.221 =====
+        // Abjuration. Cleric 4, Sor/Wiz 4. V, S (no material component).
+        // Range: Medium (100 ft + 10 ft/level). Duration: 1 min/level.
+        // Ranged touch attack ray. No save. SR: Yes.
+        // A green ray springs from your hand. On hit, the target is covered
+        // in a shimmering emerald field that completely blocks extradimensional
+        // travel (teleport, dimension door, plane shift, etherealness, blink,
+        // astral projection, gate, maze, shadow walk, etc.).
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DIMENSIONAL_ANCHOR,
+                    Name = "Dimensional Anchor",
+                    Description = "Abjuration. A green ray springs from your outstretched hand. " +
+                        "You must make a ranged touch attack to hit the target. Any creature or " +
+                        "object struck by the ray is covered with a shimmering emerald field that " +
+                        "completely blocks extradimensional travel. Forms of movement barred by " +
+                        "dimensional anchor include astral projection, blink, dimension door, " +
+                        "ethereal jaunt, etherealness, gate, maze, plane shift, shadow walk, " +
+                        "teleport, and similar spell-like or psionic abilities. The spell also " +
+                        "prevents the use of a gate or teleportation circle for the duration. " +
+                        "Duration 1 min/level. No save. SR applies. PHB p.221",
+                    SpellLevel = 4,
+                    School = "Abjuration",
+                    ClassList = new[] { "Cleric", "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    IsTouch = true,
+                    IsRangedTouch = true,
+                    EffectType = SpellEffectType.Debuff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.DISGUISE_SELF,

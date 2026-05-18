@@ -2126,7 +2126,11 @@ public partial class GameManager
             if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && result.Success && !effectNegatedBySave)
                 handledMirrorImage = TryResolveMirrorImageSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            bool handledDimensionalAnchor = false;
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && result.Success && !effectNegatedBySave)
+                handledDimensionalAnchor = TryResolveDimensionalAnchorSpellEffect(caster, target, _pendingSpell, result);
+
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledDimensionalAnchor && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -6836,6 +6840,11 @@ public partial class GameManager
                     character.Stats.ActiveStoneskinEffect = null;
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Stoneskin expires on {character.Stats.CharacterName}.</color>");
                 }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DIMENSIONAL_ANCHOR, StringComparison.Ordinal))
+                {
+                    character.Stats.ActiveDimensionalAnchorEffect = null;
+                    CombatUI?.ShowCombatLog($"<color=#00FF88>⏱ Dimensional Anchor fades from {character.Stats.CharacterName}. Extradimensional travel is no longer blocked.</color>");
+                }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
                 {
                     OnMirrorImageEffectExpired(character);
@@ -6907,6 +6916,12 @@ public partial class GameManager
                         StoneskinEffectData stoneskin = character.Stats.ActiveStoneskinEffect;
                         if (stoneskin != null)
                             stoneskin.DurationRemainingRounds = effect.RemainingRounds;
+                    }
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DIMENSIONAL_ANCHOR, StringComparison.Ordinal))
+                    {
+                        DimensionalAnchorEffectData anchor = character.Stats.ActiveDimensionalAnchorEffect;
+                        if (anchor != null)
+                            anchor.DurationRemainingRounds = effect.RemainingRounds;
                     }
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
                     {
