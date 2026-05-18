@@ -6168,6 +6168,12 @@ public partial class GameManager
             return effect;
         }
 
+        // ── Detect Alignment / Undead Suite ──
+        if (spell != null && AlignmentDetectionEffectData.IsDetectionSpell(spell.SpellId))
+        {
+            return ApplyAlignmentDetectionSpell(caster, spell, spellComp);
+        }
+
         if (spell != null && spell.SpellId == SpellNames.INVISIBILITY_SPHERE)
         {
             return ApplyInvisibilitySphere(caster, target, spell, spellComp);
@@ -6842,7 +6848,36 @@ public partial class GameManager
             TickCharacterSpellDurations(npc);
         }
 
+        // Tick alignment/undead detection effects (concentration-based, separate from StatusEffectManager)
+        TickAllAlignmentDetectionDurations();
+
         UpdateAllStatsUI();
+    }
+
+    /// <summary>
+    /// Tick alignment/undead detection effects for all characters each round.
+    /// Updates scans (progressive detail) and decrements duration.
+    /// </summary>
+    private void TickAllAlignmentDetectionDurations()
+    {
+        var allCharacters = GetAllLivingCharacters();
+
+        foreach (var character in allCharacters)
+        {
+            if (character == null || !character.HasActiveAlignmentDetection) continue;
+
+            // Update scan with progressive detail (round 1/2/3+)
+            UpdateAlignmentDetectionForRound(character);
+
+            // Tick duration down; remove if expired
+            string detSpellName = character.ActiveAlignmentDetectionEffect?.SpellName ?? "Detection";
+            bool expired = character.TickAlignmentDetectionDuration();
+            if (expired)
+            {
+                CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {detSpellName} expires on {character.Stats.CharacterName}.</color>");
+                ClearDetectionHighlights();
+            }
+        }
     }
 
     /// <summary>
@@ -6942,6 +6977,12 @@ public partial class GameManager
                         character.Stats.FireShieldDurationRounds = 0;
                     }
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Fire Shield expires on {character.Stats.CharacterName}: retribution and elemental damage reduction removed.</color>");
+                }
+                else if (effect.Spell != null && AlignmentDetectionEffectData.IsDetectionSpell(effect.Spell.SpellId))
+                {
+                    character.RemoveAlignmentDetectionEffect();
+                    ClearDetectionHighlights();
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {effect.Spell.Name} expires on {character.Stats.CharacterName}.</color>");
                 }
                 // NOTE: Resilient Sphere expiry is now handled by the area effect system
                 // (ResilientSphereAreaEffect.OnRoundStart → RoundsRemaining countdown → ExpireEffect).
@@ -7699,6 +7740,186 @@ public partial class GameManager
             TransitionSummonSwarmToPostConcentration(character, "voluntary end");
 
         UpdateAllStatsUI();
+    }
+
+    // ========================================================================
+    //  DETECT ALIGNMENT / UNDEAD — PHB p.218-220
+    //  Concentration spells that reveal aligned or undead creatures in 60 ft.
+    // ========================================================================
+
+    /// <summary>
+    /// Apply a Detect Alignment/Undead spell to the caster (self-targeting buff).
+    /// Creates the detection effect, performs initial scan, shows combat log.
+    /// </summary>
+    private ActiveSpellEffect ApplyAlignmentDetectionSpell(CharacterController caster, SpellData spell, SpellcastingComponent spellComp)
+    {
+        if (caster == null || caster.Stats == null || spell == null)
+            return null;
+
+        // Remove any existing detection effect (only one at a time)
+        if (caster.HasActiveAlignmentDetection)
+        {
+            var old = caster.RemoveAlignmentDetectionEffect();
+            if (old != null)
+            {
+                CombatUI?.ShowCombatLog($"<color=#AAAAAA>Previous {old.SpellDisplayName} ends as {caster.Stats.CharacterName} begins a new detection.</color>");
+            }
+        }
+
+        // Ensure StatusEffectManager exists
+        StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
+        if (statusMgr == null)
+            statusMgr = caster.gameObject.AddComponent<StatusEffectManager>();
+        statusMgr.Init(caster.Stats);
+
+        // Add spell effect for duration tracking
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        ActiveSpellEffect effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
+
+        // Create detection data
+        AlignmentDetectionEffectData detectionData = AlignmentDetectionEffectData.CreateFromSpell(spell.SpellId, caster);
+        detectionData.DurationRemainingRounds = effect != null ? effect.RemainingRounds : casterLevel * 100; // 10 min/level = lots of rounds
+        detectionData.ConcentrationRounds = 0;
+
+        // Apply to caster
+        caster.ApplyAlignmentDetectionEffect(detectionData);
+
+        // Track in spellcasting component
+        if (spellComp != null)
+            spellComp.ActiveBuffs[spell.SpellId] = detectionData.DurationRemainingRounds;
+
+        // Perform initial scan (round 1)
+        List<CharacterController> allChars = GetAllLivingCharacters();
+        caster.UpdateAlignmentDetectionScan(allChars);
+
+        // Show combat log with initial results
+        string typeName = detectionData.Type == DetectionType.Undead ? "undead" : detectionData.Type.ToString().ToLower();
+        string emoji = GetDetectionEmoji(detectionData.Type);
+        CombatUI?.ShowCombatLog($"<color=#88CCFF>{emoji} {caster.Stats.CharacterName} begins concentrating on {detectionData.SpellDisplayName}.</color>");
+
+        string summary = detectionData.GetDetectionSummary();
+        CombatUI?.ShowCombatLog($"<color=#BBDDFF>  → {summary}</color>");
+
+        // Apply visual highlights to detected creatures
+        RefreshDetectionHighlights(caster);
+
+        UpdateAllStatsUI();
+        return effect;
+    }
+
+    /// <summary>
+    /// Called each round to update detection scans for all characters with active detection.
+    /// Should be called from the round-tick logic.
+    /// </summary>
+    public void UpdateAlignmentDetectionForRound(CharacterController character)
+    {
+        if (character == null || !character.HasActiveAlignmentDetection)
+            return;
+
+        var detection = character.ActiveAlignmentDetectionEffect;
+
+        // Tick duration
+        detection.DurationRemainingRounds = Mathf.Max(0, detection.DurationRemainingRounds - 1);
+        if (detection.DurationRemainingRounds <= 0)
+        {
+            string emoji = GetDetectionEmoji(detection.Type);
+            CombatUI?.ShowCombatLog($"<color=#FFAA44>{emoji} {character.Stats.CharacterName}'s {detection.SpellDisplayName} expires.</color>");
+            character.RemoveAlignmentDetectionEffect();
+            ClearDetectionHighlights(character);
+            return;
+        }
+
+        // Re-scan
+        List<CharacterController> allChars = GetAllLivingCharacters();
+        character.UpdateAlignmentDetectionScan(allChars);
+
+        // Log updated info
+        string summary = detection.GetDetectionSummary();
+        string emoji2 = GetDetectionEmoji(detection.Type);
+        CombatUI?.ShowCombatLog($"<color=#BBDDFF>{emoji2} {detection.SpellDisplayName} (Round {detection.ConcentrationRounds}): {summary}</color>");
+
+        // Update visual highlights
+        RefreshDetectionHighlights(character);
+    }
+
+    /// <summary>
+    /// Get all living characters on the battlefield.
+    /// </summary>
+    private List<CharacterController> GetAllLivingCharacters()
+    {
+        var result = new List<CharacterController>();
+        if (_playerCharacters != null)
+        {
+            foreach (var pc in _playerCharacters)
+            {
+                if (pc != null && pc.Stats != null && pc.Stats.CurrentHP > 0)
+                    result.Add(pc);
+            }
+        }
+        if (_activeNPCs != null)
+        {
+            foreach (var npc in _activeNPCs)
+            {
+                if (npc != null && npc.Stats != null && npc.Stats.CurrentHP > 0)
+                    result.Add(npc);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Apply visual tint/highlight to detected creatures on the battlefield.
+    /// Creates a colored overlay on detected characters' sprites.
+    /// </summary>
+    private void RefreshDetectionHighlights(CharacterController detector)
+    {
+        if (detector == null || !detector.HasActiveAlignmentDetection)
+            return;
+
+        var detection = detector.ActiveAlignmentDetectionEffect;
+
+        // Only show locations at round 3+
+        if (detection.ConcentrationRounds < 3)
+            return;
+
+        foreach (var detected in detection.DetectedCreatures)
+        {
+            if (detected.Creature == null || detected.Creature.OccupiedCell == null)
+                continue;
+
+            // Apply a subtle colored highlight on the creature's cell
+            var cell = detected.Creature.OccupiedCell;
+            cell.SetHighlight(detection.HighlightColor);
+        }
+    }
+
+    /// <summary>
+    /// Clear visual highlights from all cells when detection ends.
+    /// </summary>
+    private void ClearDetectionHighlights(CharacterController detector)
+    {
+        // Clear all cell highlights (they'll be restored by normal game logic)
+        if (_grid != null)
+        {
+            foreach (var cell in _grid.AllCells())
+            {
+                cell.ClearHighlight();
+            }
+        }
+    }
+
+    /// <summary>Get the emoji for a detection type for combat log display.</summary>
+    private static string GetDetectionEmoji(DetectionType type)
+    {
+        switch (type)
+        {
+            case DetectionType.Chaos: return "🌀";
+            case DetectionType.Evil:  return "👿";
+            case DetectionType.Good:  return "😇";
+            case DetectionType.Law:   return "⚖";
+            case DetectionType.Undead: return "💀";
+            default: return "🔮";
+        }
     }
 
     // ========== MOVEMENT ==========

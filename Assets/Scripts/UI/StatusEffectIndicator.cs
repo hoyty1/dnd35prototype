@@ -150,6 +150,22 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // Alignment/Undead Detection spells (Detect Chaos/Evil/Good/Law/Undead)
+        if (_character.HasActiveAlignmentDetection)
+        {
+            var det = _character.ActiveAlignmentDetectionEffect;
+            int rounds = det.DurationRemainingRounds;
+            string summary = det.GetSummaryText();
+            list.Add(new IconData
+            {
+                Key = $"Detect_{det.Type}",
+                ShortLabel = det.StatusLabel,
+                Tooltip = $"{det.SpellName}\n{summary}\nConcentrating: round {det.ConcentrationRounds}\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = det.HighlightColor,
+                Duration = rounds
+            });
+        }
+
         if (_character.HasActiveBlurEffect)
         {
             int rounds = _character.GetBlurRemainingRounds();

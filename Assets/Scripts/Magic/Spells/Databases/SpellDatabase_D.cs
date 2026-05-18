@@ -191,11 +191,19 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Area desecration not implemented]"
                 });
 
+        // ===== DETECT CHAOS — PHB p.218 =====
+        // Divination. Cleric 1. V, S, DF.
+        // Range: 60 ft cone. Duration: Concentration, up to 10 min/level.
+        // Detects chaotic creatures, spells, and objects within a 60-ft cone.
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DETECT_EVIL,
-                    Name = "Detect Evil",
-                    Description = "Reveals evil creatures, spells, or objects. Concentration, up to 10 min/level. PHB p.218",
+                    SpellId = SpellNames.DETECT_CHAOS,
+                    Name = "Detect Chaos",
+                    Description = "You can sense the presence of chaos. The amount of information revealed depends on how long you study a particular area or subject.\n" +
+                        "1st Round: Presence or absence of chaotic auras.\n" +
+                        "2nd Round: Number of chaotic auras and the power of the strongest.\n" +
+                        "3rd Round: The strength and location of each aura.\n" +
+                        "60 ft cone, concentration up to 10 min/level. PHB p.218",
                     SpellLevel = 1, School = "Divination",
                     ClassList = new[] { "Cleric" },
                     TargetType = SpellTargetType.Self,
@@ -204,10 +212,91 @@ public static partial class SpellDatabase
                     DurationType = DurationType.Concentration,
                     DurationValue = 10,
                     DurationScalesWithLevel = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Alignment detection not implemented]"
+                    ProvokesAoO = true
+                });
+
+        // ===== DETECT EVIL — PHB p.218 =====
+        // Divination. Cleric 1. V, S, DF.
+        // Range: 60 ft cone. Duration: Concentration, up to 10 min/level.
+        // Detects evil creatures, spells, and objects within a 60-ft cone.
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DETECT_EVIL,
+                    Name = "Detect Evil",
+                    Description = "You can sense the presence of evil. The amount of information revealed depends on how long you study a particular area or subject.\n" +
+                        "1st Round: Presence or absence of evil auras.\n" +
+                        "2nd Round: Number of evil auras and the power of the strongest.\n" +
+                        "3rd Round: The strength and location of each aura.\n" +
+                        "60 ft cone, concentration up to 10 min/level. PHB p.218",
+                    SpellLevel = 1, School = "Divination",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Concentration,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // ===== DETECT GOOD — PHB p.219 =====
+        // Divination. Cleric 1. V, S, DF.
+        // Range: 60 ft cone. Duration: Concentration, up to 10 min/level.
+        // Detects good creatures, spells, and objects within a 60-ft cone.
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DETECT_GOOD,
+                    Name = "Detect Good",
+                    Description = "You can sense the presence of good. The amount of information revealed depends on how long you study a particular area or subject.\n" +
+                        "1st Round: Presence or absence of good auras.\n" +
+                        "2nd Round: Number of good auras and the power of the strongest.\n" +
+                        "3rd Round: The strength and location of each aura.\n" +
+                        "60 ft cone, concentration up to 10 min/level. PHB p.219",
+                    SpellLevel = 1, School = "Divination",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Concentration,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // ===== DETECT LAW — PHB p.220 =====
+        // Divination. Cleric 1. V, S, DF.
+        // Range: 60 ft cone. Duration: Concentration, up to 10 min/level.
+        // Detects lawful creatures, spells, and objects within a 60-ft cone.
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DETECT_LAW,
+                    Name = "Detect Law",
+                    Description = "You can sense the presence of law. The amount of information revealed depends on how long you study a particular area or subject.\n" +
+                        "1st Round: Presence or absence of lawful auras.\n" +
+                        "2nd Round: Number of lawful auras and the power of the strongest.\n" +
+                        "3rd Round: The strength and location of each aura.\n" +
+                        "60 ft cone, concentration up to 10 min/level. PHB p.220",
+                    SpellLevel = 1, School = "Divination",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Concentration,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -284,23 +373,31 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Mind reading not implemented]"
                 });
 
+        // ===== DETECT UNDEAD — PHB p.220 =====
+        // Divination. Cleric 1, Sor/Wiz 1. V, S, M/DF.
+        // Range: 60 ft cone. Duration: Concentration, up to 1 min/level.
+        // Detects undead creatures within a 60-ft cone.
         Register(new SpellData
                 {
                     SpellId = SpellNames.DETECT_UNDEAD,
                     Name = "Detect Undead",
-                    Description = "Reveals undead within 60 ft. Concentration, up to 1 min/level. PHB p.220",
+                    Description = "You can detect the aura that surrounds undead creatures. The amount of information revealed depends on how long you study.\n" +
+                        "1st Round: Presence or absence of undead auras.\n" +
+                        "2nd Round: Number of undead auras and the power of the strongest.\n" +
+                        "3rd Round: The strength and location of each aura.\n" +
+                        "60 ft cone, concentration up to 1 min/level. PHB p.220",
                     SpellLevel = 1, School = "Divination",
-                    ClassList = new[] { "Cleric" },
+                    ClassList = new[] { "Cleric", "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Undead detection not implemented]"
+                    ProvokesAoO = true
                 });
 
         // ===== DIMENSIONAL ANCHOR — PHB p.221 =====

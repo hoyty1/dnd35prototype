@@ -339,6 +339,50 @@ public class CharacterController : MonoBehaviour
     public ScareEffectData ActiveScareEffect { get; private set; }
     public SpectralHandEffectData ActiveSpectralHandEffect { get; private set; }
 
+    /// <summary>Active alignment/undead detection effect (Detect Chaos/Evil/Good/Law/Undead).</summary>
+    public AlignmentDetectionEffectData ActiveAlignmentDetectionEffect { get; private set; }
+
+    /// <summary>Whether this character has an active alignment/undead detection effect.</summary>
+    public bool HasActiveAlignmentDetection => ActiveAlignmentDetectionEffect != null;
+
+    /// <summary>Apply an alignment detection effect to this character (the caster).</summary>
+    public void ApplyAlignmentDetectionEffect(AlignmentDetectionEffectData data)
+    {
+        ActiveAlignmentDetectionEffect = data;
+        Debug.Log($"[AlignmentDetection] {Stats?.CharacterName} now detecting {data.Type} (label={data.StatusLabel})");
+    }
+
+    /// <summary>Update the detection scan (call each round while concentrating).</summary>
+    public void UpdateAlignmentDetectionScan(System.Collections.Generic.List<CharacterController> allCharacters)
+    {
+        if (ActiveAlignmentDetectionEffect == null) return;
+        ActiveAlignmentDetectionEffect.ConcentrationRounds++;
+        ActiveAlignmentDetectionEffect.ScanForCreatures(allCharacters);
+    }
+
+    /// <summary>Tick down detection duration. Returns true if expired.</summary>
+    public bool TickAlignmentDetectionDuration()
+    {
+        if (ActiveAlignmentDetectionEffect == null) return true;
+        ActiveAlignmentDetectionEffect.DurationRemainingRounds = Mathf.Max(0, ActiveAlignmentDetectionEffect.DurationRemainingRounds - 1);
+        if (ActiveAlignmentDetectionEffect.DurationRemainingRounds <= 0)
+        {
+            RemoveAlignmentDetectionEffect();
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Remove the active alignment detection effect.</summary>
+    public AlignmentDetectionEffectData RemoveAlignmentDetectionEffect()
+    {
+        var removed = ActiveAlignmentDetectionEffect;
+        ActiveAlignmentDetectionEffect = null;
+        if (removed != null)
+            Debug.Log($"[AlignmentDetection] {Stats?.CharacterName} detection of {removed.Type} ended.");
+        return removed;
+    }
+
     /// <summary>Active attribute enhancement effects (one per ability score). Keyed by AbilityType.</summary>
     private readonly System.Collections.Generic.Dictionary<AbilityType, AttributeEnhancementEffectData> _activeAttributeEnhancements
         = new System.Collections.Generic.Dictionary<AbilityType, AttributeEnhancementEffectData>();
@@ -2939,6 +2983,7 @@ public class CharacterController : MonoBehaviour
             Stats.ActiveProtectionFromArrowsEffect = null;
             Stats.ActiveStoneskinEffect = null;
             Stats.ActiveDimensionalAnchorEffect = null;
+            ActiveAlignmentDetectionEffect = null; // Clear detection effects on combat reset
             if (Stats.ActiveResistEnergyEffects != null)
                 Stats.ActiveResistEnergyEffects.Clear();
             if (Stats.ActiveProtectionFromEnergyEffects != null)

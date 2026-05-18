@@ -144,8 +144,17 @@ namespace DND35e.Identifiers
         /// <summary>Delay Poison (spell id: delay_poison)</summary>
         public const string DELAY_POISON = "delay_poison";
 
+        /// <summary>Detect Chaos (spell id: detect_chaos)</summary>
+        public const string DETECT_CHAOS = "detect_chaos";
+
         /// <summary>Detect Evil (spell id: detect_evil)</summary>
         public const string DETECT_EVIL = "detect_evil";
+
+        /// <summary>Detect Good (spell id: detect_good)</summary>
+        public const string DETECT_GOOD = "detect_good";
+
+        /// <summary>Detect Law (spell id: detect_law)</summary>
+        public const string DETECT_LAW = "detect_law";
 
         /// <summary>Detect Magic (spell id: detect_magic_wiz)</summary>
         public const string DETECT_MAGIC_WIZ = "detect_magic_wiz";

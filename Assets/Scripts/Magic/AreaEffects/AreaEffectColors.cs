@@ -55,4 +55,11 @@ public static class AreaEffectColors
 
     // Conjuration (tentacles)
     public static readonly Color BlackTentacles = new Color(0.15f, 0.05f, 0.2f, 0.65f); // Dark purple/black for tentacles
+
+    // Divination (alignment/undead detection highlights)
+    public static readonly Color DetectChaos = new Color(0.6f, 0.2f, 0.8f, 0.45f);  // Purple for chaos
+    public static readonly Color DetectEvil  = new Color(0.9f, 0.15f, 0.15f, 0.45f); // Red for evil
+    public static readonly Color DetectGood  = new Color(1.0f, 0.84f, 0.0f, 0.45f);  // Gold for good
+    public static readonly Color DetectLaw   = new Color(0.2f, 0.4f, 0.9f, 0.45f);   // Blue for law
+    public static readonly Color DetectUndead = new Color(0.2f, 0.8f, 0.3f, 0.45f);  // Green for undead
 }
