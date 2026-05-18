@@ -273,6 +273,35 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.STONESKIN, System.StringComparison.Ordinal) && _stats != null)
             _stats.ActiveStoneskinEffect = null;
 
+        // D&D 3.5e: Clear Sanctuary flag when the spell effect expires or is removed.
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SANCTUARY, System.StringComparison.Ordinal) && _stats != null)
+        {
+            _stats.SanctuaryActive = false;
+            _stats.SanctuaryDC = 0;
+            _stats.SanctuaryCasterLevel = 0;
+        }
+
+        // D&D 3.5e: Clear Hide from Undead flag when the spell effect expires or is removed.
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.HIDE_FROM_UNDEAD, System.StringComparison.Ordinal) && _stats != null)
+        {
+            _stats.HideFromUndeadActive = false;
+            _stats.HideFromUndeadDC = 0;
+            _stats.HideFromUndeadCasterLevel = 0;
+        }
+
+        // D&D 3.5e: Clear Remove Fear morale bonus when the spell effect expires or is removed.
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.REMOVE_FEAR, System.StringComparison.Ordinal) && _stats != null)
+        {
+            _stats.RemoveFearMoraleBonus = 0;
+        }
+
+        // D&D 3.5e: Clear Shield of Faith deflection bonus when the spell effect expires or is removed.
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SHIELD_OF_FAITH, System.StringComparison.Ordinal) && _stats != null)
+        {
+            _stats.DeflectionBonus = Mathf.Max(0, _stats.DeflectionBonus - _stats.ShieldOfFaithDeflectionBonus);
+            _stats.ShieldOfFaithDeflectionBonus = 0;
+        }
+
         // Also remove from SpellcastingComponent's ActiveBuffs for backward compat
         if (_spellComp != null && effect.Spell != null)
         {

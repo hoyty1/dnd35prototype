@@ -150,15 +150,15 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.REMOVE_FEAR,
                     Name = "Remove Fear",
-                    Description = "Suppresses fear or gives +4 morale bonus vs fear for 10 min. One ally +1 per 4 CL. PHB p.271",
+                    Description = "Suppresses Frightened and Shaken conditions and grants a +4 morale bonus on saves against fear for 10 minutes. Affects one ally plus one additional ally per four caster levels. PHB p.271",
                     SpellLevel = 1, School = "Abjuration",
-                    ClassList = new[] { "Cleric" },
+                    ClassList = new[] { "Cleric", "Bard" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Buff,
-                    BuffSaveBonus = 4, // +4 morale vs fear, simplified
-                    BuffDurationRounds = -1,
-                    BuffType = "morale",
+                    BuffSaveBonus = 4, // +4 morale vs fear
+                    BuffDurationRounds = 100, // 10 minutes = 100 rounds
+                    BuffType = "morale_fear",
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

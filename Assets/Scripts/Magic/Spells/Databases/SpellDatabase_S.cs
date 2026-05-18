@@ -14,7 +14,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.SANCTUARY,
                     Name = "Sanctuary",
-                    Description = "Opponents can't attack you unless they make a Will save. 1 round/level. PHB p.274",
+                    Description = "Opponents can't attack you unless they make a Will save (DC 10 + spell level + caster's WIS modifier). If subject attacks, spell ends. 1 round/level. PHB p.274",
                     SpellLevel = 1, School = "Abjuration",
                     ClassList = new[] { "Cleric" },
                     TargetType = SpellTargetType.Self,
@@ -24,10 +24,11 @@ public static partial class SpellDatabase
                     SavingThrowType = "Will",
                     BuffDurationRounds = 3,
                     BuffType = SpellNames.SANCTUARY,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Attack prevention not fully implemented]"
+                    ProvokesAoO = true
                 });
 
         // ──────────────────────────────────────────────────────────────

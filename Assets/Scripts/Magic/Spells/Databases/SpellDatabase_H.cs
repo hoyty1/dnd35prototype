@@ -96,17 +96,18 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.HIDE_FROM_UNDEAD,
                     Name = "Hide from Undead",
-                    Description = "Undead can't perceive one subject/level. Duration 10 min/level. Will negates (intelligent undead). PHB p.241",
+                    Description = "Undead can't perceive the subject. Mindless undead are automatically affected; intelligent undead get a Will save. If the subject attacks, the spell ends for that subject. Duration 10 min/level. PHB p.241",
                     SpellLevel = 1, School = "Abjuration",
                     ClassList = new[] { "Cleric" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Undead perception not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData

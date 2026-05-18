@@ -1197,6 +1197,9 @@ public partial class GameManager
             yield break;
         }
 
+        // D&D 3.5e: Sanctuary/Hide from Undead end if the warded creature attacks
+        CombatFlowService.BreakProtectiveWardsOnAttack(npc);
+
         if (npc.aiProfile != null)
             npc.aiProfile.TryEnsureWeaponFallback(npc);
 

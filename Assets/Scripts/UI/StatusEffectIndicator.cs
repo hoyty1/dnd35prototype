@@ -619,6 +619,117 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // ── Protection from Chaos/Evil/Good/Law (Alignment Protection) ──
+        if (statusMgr != null)
+        {
+            for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
+            {
+                ActiveSpellEffect alignProt = statusMgr.ActiveEffects[i];
+                if (alignProt == null || alignProt.Spell == null) continue;
+
+                AlignmentProtectionType protType = alignProt.ProtectionAgainstAlignment;
+                if (protType == AlignmentProtectionType.None && alignProt.Spell != null)
+                    AlignmentProtectionRules.TryGetProtectionTypeForSpell(alignProt.Spell.SpellId, out protType);
+
+                if (protType == AlignmentProtectionType.None) continue;
+
+                string alignLabel = AlignmentProtectionRules.GetDisplayName(protType);
+                string shortLabel;
+                Color protColor;
+                bool isMagicCircle = AlignmentProtectionRules.IsMagicCircleSpell(alignProt.Spell.SpellId);
+                switch (protType)
+                {
+                    case AlignmentProtectionType.Evil:
+                        shortLabel = isMagicCircle ? "MC:E" : "PE";
+                        protColor = new Color(0.9f, 0.85f, 0.4f, 0.95f); // Gold
+                        break;
+                    case AlignmentProtectionType.Good:
+                        shortLabel = isMagicCircle ? "MC:G" : "PG";
+                        protColor = new Color(0.6f, 0.2f, 0.2f, 0.95f); // Dark red
+                        break;
+                    case AlignmentProtectionType.Law:
+                        shortLabel = isMagicCircle ? "MC:L" : "PL";
+                        protColor = new Color(0.3f, 0.5f, 0.9f, 0.95f); // Blue
+                        break;
+                    case AlignmentProtectionType.Chaos:
+                        shortLabel = isMagicCircle ? "MC:C" : "PC";
+                        protColor = new Color(0.7f, 0.3f, 0.7f, 0.95f); // Purple
+                        break;
+                    default:
+                        shortLabel = "PA";
+                        protColor = new Color(0.7f, 0.7f, 0.7f, 0.95f);
+                        break;
+                }
+
+                string spellName = isMagicCircle ? $"Magic Circle against {alignLabel}" : $"Protection from {alignLabel}";
+                int protRounds = alignProt.RemainingRounds;
+                list.Add(new IconData
+                {
+                    Key = $"AlignProt_{protType}_{i}",
+                    ShortLabel = shortLabel,
+                    Tooltip = $"{spellName}\n+2 deflection AC, +2 resistance saves vs {alignLabel.ToLower()} creatures\nBlocks mental control & summoned contact\nDuration: {(protRounds < 0 ? "∞" : $"{Mathf.Max(0, protRounds)} rounds")}",
+                    Color = protColor,
+                    Duration = protRounds
+                });
+            }
+        }
+
+        // ── Sanctuary ──
+        if (_character.Stats != null && _character.Stats.SanctuaryActive && statusMgr != null && statusMgr.HasEffect(SpellNames.SANCTUARY))
+        {
+            int sanctuaryRounds = statusMgr.GetRemainingRounds(SpellNames.SANCTUARY);
+            list.Add(new IconData
+            {
+                Key = "Sanctuary",
+                ShortLabel = "SAN",
+                Tooltip = $"Sanctuary\nEnemies must make Will save DC {_character.Stats.SanctuaryDC} to attack.\nEnds if subject attacks.\nDuration: {(sanctuaryRounds < 0 ? "∞" : $"{Mathf.Max(0, sanctuaryRounds)} rounds")}",
+                Color = new Color(0.95f, 0.9f, 0.5f, 0.95f), // Warm gold
+                Duration = sanctuaryRounds
+            });
+        }
+
+        // ── Hide from Undead ──
+        if (_character.Stats != null && _character.Stats.HideFromUndeadActive && statusMgr != null && statusMgr.HasEffect(SpellNames.HIDE_FROM_UNDEAD))
+        {
+            int hideRounds = statusMgr.GetRemainingRounds(SpellNames.HIDE_FROM_UNDEAD);
+            list.Add(new IconData
+            {
+                Key = "HideFromUndead",
+                ShortLabel = "HFU",
+                Tooltip = $"Hide from Undead\nMindless undead cannot perceive subject.\nIntelligent undead: Will DC {_character.Stats.HideFromUndeadDC}.\nEnds if subject attacks.\nDuration: {(hideRounds < 0 ? "∞" : $"{Mathf.Max(0, hideRounds)} rounds")}",
+                Color = new Color(0.6f, 0.8f, 0.6f, 0.95f), // Pale green
+                Duration = hideRounds
+            });
+        }
+
+        // ── Remove Fear (+4 morale vs fear) ──
+        if (_character.Stats != null && _character.Stats.RemoveFearMoraleBonus > 0 && statusMgr != null && statusMgr.HasEffect(SpellNames.REMOVE_FEAR))
+        {
+            int fearRounds = statusMgr.GetRemainingRounds(SpellNames.REMOVE_FEAR);
+            list.Add(new IconData
+            {
+                Key = "RemoveFear",
+                ShortLabel = "+4F",
+                Tooltip = $"Remove Fear\n+{_character.Stats.RemoveFearMoraleBonus} morale bonus on saves vs fear\nDuration: {(fearRounds < 0 ? "∞" : $"{Mathf.Max(0, fearRounds)} rounds")}",
+                Color = new Color(0.4f, 0.85f, 0.4f, 0.95f), // Bright green
+                Duration = fearRounds
+            });
+        }
+
+        // ── Shield of Faith ──
+        if (_character.Stats != null && _character.Stats.ShieldOfFaithDeflectionBonus > 0 && statusMgr != null && statusMgr.HasEffect(SpellNames.SHIELD_OF_FAITH))
+        {
+            int sofRounds = statusMgr.GetRemainingRounds(SpellNames.SHIELD_OF_FAITH);
+            list.Add(new IconData
+            {
+                Key = "ShieldOfFaith",
+                ShortLabel = $"+{_character.Stats.ShieldOfFaithDeflectionBonus}D",
+                Tooltip = $"Shield of Faith\n+{_character.Stats.ShieldOfFaithDeflectionBonus} deflection bonus to AC\nDuration: {(sofRounds < 0 ? "∞" : $"{Mathf.Max(0, sofRounds)} rounds")}",
+                Color = new Color(0.5f, 0.7f, 1f, 0.95f), // Light blue
+                Duration = sofRounds
+            });
+        }
+
         return list;
     }
 

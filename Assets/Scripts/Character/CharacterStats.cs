@@ -2064,6 +2064,30 @@ public class CharacterStats
     /// <summary>Morale bonus to saving throws from spells (e.g., Bless).</summary>
     public int MoraleSaveBonus;
 
+    // ── Sanctuary ──
+    /// <summary>True if the Sanctuary spell is active on this character. Enemies must make a Will save to attack.</summary>
+    [NonSerialized] public bool SanctuaryActive;
+    /// <summary>DC for the Sanctuary Will save (10 + spell level + caster WIS mod).</summary>
+    [NonSerialized] public int SanctuaryDC;
+    /// <summary>Caster level of the Sanctuary effect (for dispel checks).</summary>
+    [NonSerialized] public int SanctuaryCasterLevel;
+
+    // ── Hide from Undead ──
+    /// <summary>True if Hide from Undead is active on this character.</summary>
+    [NonSerialized] public bool HideFromUndeadActive;
+    /// <summary>DC for the Will save (intelligent undead only). 10 + spell level + caster WIS mod.</summary>
+    [NonSerialized] public int HideFromUndeadDC;
+    /// <summary>Caster level of the Hide from Undead effect.</summary>
+    [NonSerialized] public int HideFromUndeadCasterLevel;
+
+    // ── Remove Fear ──
+    /// <summary>Morale bonus to saves vs fear from Remove Fear spell.</summary>
+    [NonSerialized] public int RemoveFearMoraleBonus;
+
+    // ── Shield of Faith ──
+    /// <summary>The deflection bonus amount specifically from Shield of Faith (for CL scaling display).</summary>
+    [NonSerialized] public int ShieldOfFaithDeflectionBonus;
+
     /// <summary>Competence bonus to Disguise checks from active effects (e.g., Disguise Self).</summary>
     public int DisguiseCompetenceBonus;
 

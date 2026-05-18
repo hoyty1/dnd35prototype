@@ -968,6 +968,26 @@ public static class SpellCaster
             }
         }
 
+        // D&D 3.5e Remove Fear (PHB p.271): +4 morale bonus on saves against fear effects.
+        // Applies to Will saves against spells with the [Fear] descriptor or that cause
+        // Frightened/Shaken/Panicked conditions.
+        if (stats.RemoveFearMoraleBonus > 0 && spell.SavingThrowType == "Will" && IsFearSpell(spell))
+        {
+            int fearBonus = stats.RemoveFearMoraleBonus;
+            baseSave += fearBonus;
+            // Combine with any existing situational bonus
+            if (situationalSaveBonus == 0)
+            {
+                situationalSaveBonus = fearBonus;
+                situationalSaveSource = $"Remove Fear (+{fearBonus} vs fear)";
+            }
+            else
+            {
+                situationalSaveBonus += fearBonus;
+                situationalSaveSource += $", Remove Fear (+{fearBonus} vs fear)";
+            }
+        }
+
         return baseSave;
     }
 
@@ -1009,6 +1029,40 @@ public static class SpellCaster
         // treat as "being attacked" for the charm save bonus.
         if (target.Stats.CurrentHP < target.Stats.TotalMaxHP && target.Team != caster.Team)
             return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true if the spell has the [Fear] descriptor or produces fear conditions
+    /// (Frightened, Shaken, Panicked). D&D 3.5e PHB fear-descriptor spells include
+    /// Cause Fear, Scare, Fear, Doom, Phantasmal Killer, etc.
+    /// Used to determine if Remove Fear's +4 morale bonus applies.
+    /// </summary>
+    private static bool IsFearSpell(SpellData spell)
+    {
+        if (spell == null)
+            return false;
+
+        string id = spell.SpellId;
+        if (string.IsNullOrEmpty(id))
+            return false;
+
+        // Known fear-descriptor spells from PHB/SRD
+        if (string.Equals(id, SpellNames.CAUSE_FEAR, System.StringComparison.Ordinal)) return true;
+        if (string.Equals(id, SpellNames.SCARE, System.StringComparison.Ordinal)) return true;
+        if (string.Equals(id, SpellNames.FEAR, System.StringComparison.Ordinal)) return true;
+        if (string.Equals(id, SpellNames.DOOM, System.StringComparison.Ordinal)) return true;
+        if (string.Equals(id, SpellNames.PHANTASMAL_KILLER, System.StringComparison.Ordinal)) return true;
+
+        // Fallback: check description for fear-related keywords
+        if (!string.IsNullOrWhiteSpace(spell.Description))
+        {
+            string desc = spell.Description.ToLowerInvariant();
+            if (desc.Contains("frightened") || desc.Contains("shaken") || desc.Contains("panicked")
+                || desc.Contains("fear") || desc.Contains("[fear]"))
+                return true;
+        }
 
         return false;
     }

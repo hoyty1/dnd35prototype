@@ -6675,6 +6675,168 @@ public partial class GameManager
             return effect;
         }
 
+        // ===== SANCTUARY — D&D 3.5e PHB p.274 =====
+        if (spell != null && spell.SpellId == SpellNames.SANCTUARY)
+        {
+            CharacterController recipient = caster ?? target;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+            int saveDC = 10 + spell.SpellLevel + (recipient.Stats != null ? recipient.Stats.WISMod : 0);
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, recipient.Stats.CharacterName, casterLevel);
+            if (effect != null)
+            {
+                recipient.Stats.SanctuaryActive = true;
+                recipient.Stats.SanctuaryDC = saveDC;
+                recipient.Stats.SanctuaryCasterLevel = casterLevel;
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88DDFF>🛡️ {recipient.Stats.CharacterName} casts Sanctuary — enemies must make Will save DC {saveDC} to attack [{effect.GetDurationDisplayString()}]</color>");
+                Debug.Log($"[GameManager] Sanctuary applied to {recipient.Stats.CharacterName}: DC {saveDC}, CL {casterLevel}");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
+        // ===== HIDE FROM UNDEAD — D&D 3.5e PHB p.241 =====
+        if (spell != null && spell.SpellId == SpellNames.HIDE_FROM_UNDEAD)
+        {
+            if (target == null || target.Stats == null)
+                return null;
+
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int saveDC = 10 + spell.SpellLevel + (caster != null && caster.Stats != null ? caster.Stats.WISMod : 0);
+
+            StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            if (targetStatusMgr == null)
+                targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+            targetStatusMgr.Init(target.Stats);
+
+            ActiveSpellEffect effect = targetStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown", casterLevel);
+            if (effect != null)
+            {
+                target.Stats.HideFromUndeadActive = true;
+                target.Stats.HideFromUndeadDC = saveDC;
+                target.Stats.HideFromUndeadCasterLevel = casterLevel;
+
+                SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                if (targetSpellComp != null)
+                    targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88DDFF>👻 {target.Stats.CharacterName} is hidden from undead — mindless undead auto-fail, intelligent undead Will DC {saveDC} [{effect.GetDurationDisplayString()}]</color>");
+                Debug.Log($"[GameManager] Hide from Undead applied to {target.Stats.CharacterName}: DC {saveDC}, CL {casterLevel}");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
+        // ===== REMOVE FEAR — D&D 3.5e PHB p.271 =====
+        if (spell != null && spell.SpellId == SpellNames.REMOVE_FEAR)
+        {
+            if (target == null || target.Stats == null)
+                return null;
+
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+
+            // Remove existing fear conditions (Frightened, Shaken, Panicked)
+            bool removedFear = false;
+            if (target.HasCondition(CombatConditionType.Frightened))
+            {
+                target.RemoveCondition(CombatConditionType.Frightened);
+                removedFear = true;
+                Debug.Log($"[RemoveFear] Removed Frightened from {target.Stats.CharacterName}");
+            }
+            if (target.HasCondition(CombatConditionType.Shaken))
+            {
+                target.RemoveCondition(CombatConditionType.Shaken);
+                removedFear = true;
+                Debug.Log($"[RemoveFear] Removed Shaken from {target.Stats.CharacterName}");
+            }
+            if (target.HasCondition(CombatConditionType.Panicked))
+            {
+                target.RemoveCondition(CombatConditionType.Panicked);
+                removedFear = true;
+                Debug.Log($"[RemoveFear] Removed Panicked from {target.Stats.CharacterName}");
+            }
+
+            // Apply +4 morale bonus vs fear for 10 minutes
+            StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            if (targetStatusMgr == null)
+                targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+            targetStatusMgr.Init(target.Stats);
+
+            ActiveSpellEffect effect = targetStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown", casterLevel);
+            if (effect != null)
+            {
+                target.Stats.RemoveFearMoraleBonus = 4;
+
+                SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                if (targetSpellComp != null)
+                    targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                string fearStatus = removedFear ? "Fear removed! " : "";
+                CombatUI?.ShowCombatLog($"<color=#AAFF88>✨ {fearStatus}{target.Stats.CharacterName} gains +4 morale bonus vs fear [{effect.GetDurationDisplayString()}]</color>");
+                Debug.Log($"[GameManager] Remove Fear applied to {target.Stats.CharacterName}: +4 morale vs fear, CL {casterLevel}, fear removed={removedFear}");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
+        // ===== SHIELD OF FAITH — D&D 3.5e PHB p.278 =====
+        // Deflection bonus scales: +2 base, +1 per 6 CL above 1st (max +5 at CL 18)
+        if (spell != null && spell.SpellId == SpellNames.SHIELD_OF_FAITH)
+        {
+            if (target == null || target.Stats == null)
+                return null;
+
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+
+            // D&D 3.5e: +2 at CL 1-5, +3 at CL 6-11, +4 at CL 12-17, +5 at CL 18+
+            int deflectionBonus = 2;
+            if (casterLevel >= 18) deflectionBonus = 5;
+            else if (casterLevel >= 12) deflectionBonus = 4;
+            else if (casterLevel >= 6) deflectionBonus = 3;
+
+            StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            if (targetStatusMgr == null)
+                targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+            targetStatusMgr.Init(target.Stats);
+
+            // Override the spell's deflection bonus with scaled value
+            SpellData scaledSpell = spell;
+            scaledSpell.BuffDeflectionBonus = deflectionBonus;
+
+            ActiveSpellEffect effect = targetStatusMgr.AddEffect(scaledSpell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown", casterLevel);
+            if (effect != null)
+            {
+                target.Stats.DeflectionBonus = Mathf.Max(target.Stats.DeflectionBonus, deflectionBonus);
+                target.Stats.ShieldOfFaithDeflectionBonus = deflectionBonus;
+
+                SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                if (targetSpellComp != null)
+                    targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88DDFF>🛡️ {target.Stats.CharacterName} gains +{deflectionBonus} deflection bonus to AC from Shield of Faith (CL {casterLevel}) [{effect.GetDurationDisplayString()}]</color>");
+                Debug.Log($"[GameManager] Shield of Faith applied to {target.Stats.CharacterName}: +{deflectionBonus} deflection, CL {casterLevel}");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         // ===== DISPEL MAGIC — D&D 3.5e PHB p.223 =====
         // Targeted dispel: make one dispel check (1d20 + CL, max +10) vs DC 11 + spell's CL.
         // Check spells in descending CL order. Remove at most ONE spell per casting.

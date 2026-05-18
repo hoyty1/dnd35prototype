@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using DND35.Magic;
+using DND35e.Identifiers;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -173,6 +175,9 @@ public class CombatFlowService : MonoBehaviour
             _gameManager.Combat_ShowActionChoices();
             return;
         }
+
+        // D&D 3.5e Sanctuary (PHB p.274): If the warded creature makes an attack, the spell ends.
+        BreakProtectiveWardsOnAttack(attacker);
 
         _gameManager.Combat_SetSubPhase(GameManager.PlayerSubPhase.Animating);
 
@@ -1125,5 +1130,48 @@ public class CombatFlowService : MonoBehaviour
         _gameManager?.CombatUI?.ShowCombatLog($"🏹 {charName} uses 1 {ammoName}{enchantInfo}. ({remaining} remaining)");
 
         return consumedAmmo;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  SANCTUARY / HIDE FROM UNDEAD — Break on attack
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// D&D 3.5e: Sanctuary and Hide from Undead end immediately if the warded creature
+    /// makes an attack or takes any offensive action (PHB p.274 / PHB p.241).
+    /// Called at the start of any attack pipeline.
+    /// </summary>
+    public static void BreakProtectiveWardsOnAttack(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return;
+
+        // Sanctuary: ends if the warded creature attacks
+        if (attacker.Stats.SanctuaryActive)
+        {
+            attacker.Stats.SanctuaryActive = false;
+            attacker.Stats.SanctuaryDC = 0;
+            attacker.Stats.SanctuaryCasterLevel = 0;
+            var statusMgr = attacker.GetComponent<StatusEffectManager>();
+            statusMgr?.RemoveEffectsBySpellId(SpellNames.SANCTUARY);
+            string name = attacker.Stats.CharacterName;
+            Debug.Log($"[Sanctuary] {name} attacks — Sanctuary spell ends.");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(
+                $"🛡️ {name} makes an attack — Sanctuary ends!");
+        }
+
+        // Hide from Undead: ends if the warded creature attacks
+        if (attacker.Stats.HideFromUndeadActive)
+        {
+            attacker.Stats.HideFromUndeadActive = false;
+            attacker.Stats.HideFromUndeadDC = 0;
+            attacker.Stats.HideFromUndeadCasterLevel = 0;
+            var statusMgr = attacker.GetComponent<StatusEffectManager>();
+            statusMgr?.RemoveEffectsBySpellId(SpellNames.HIDE_FROM_UNDEAD);
+            string name = attacker.Stats.CharacterName;
+            Debug.Log($"[HideFromUndead] {name} attacks — Hide from Undead spell ends.");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(
+                $"👻 {name} makes an attack — Hide from Undead ends!");
+        }
     }
 }

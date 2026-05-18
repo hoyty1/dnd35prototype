@@ -1166,6 +1166,16 @@ public class AIService : MonoBehaviour
             if (ShouldExcludeTargetBecauseOfFrightenedSource(npc, candidate))
                 continue;
 
+            // D&D 3.5e Sanctuary (PHB p.274): attacker must make Will save vs DC to target this creature.
+            // On failure, the attacker must choose a different target. Checked per-target in AI selection.
+            if (ShouldExcludeTargetBecauseOfSanctuary(npc, candidate))
+                continue;
+
+            // D&D 3.5e Hide from Undead (PHB p.241): undead cannot perceive the hidden creature.
+            // Mindless undead are automatically hidden from; intelligent undead get a Will save.
+            if (ShouldExcludeTargetBecauseOfHideFromUndead(npc, candidate))
+                continue;
+
             if (CanSeeTarget(npc, candidate))
             {
                 visibleTargets.Add(candidate);
@@ -1327,6 +1337,94 @@ public class AIService : MonoBehaviour
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// D&D 3.5e Sanctuary (PHB p.274): An attacker must succeed on a Will save (DC set
+    /// when the spell was cast) or be unable to attack/target the warded creature.
+    /// Each potential attacker rolls once per targeting attempt.
+    /// </summary>
+    private bool ShouldExcludeTargetBecauseOfSanctuary(CharacterController npc, CharacterController candidate)
+    {
+        if (_gameManager == null || npc == null || candidate == null)
+            return false;
+        if (candidate.Stats == null || !candidate.Stats.SanctuaryActive)
+            return false;
+
+        int dc = candidate.Stats.SanctuaryDC;
+        var saveResult = SavingThrowResolver.ResolveWillSave(npc.Stats, dc, "Sanctuary");
+        string npcName = npc.Stats != null ? npc.Stats.CharacterName : "NPC";
+        string candName = candidate.Stats.CharacterName;
+
+        if (saveResult.Succeeded)
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"🛡️ {npcName} overcomes {candName}'s Sanctuary (Will {saveResult.Total} vs DC {dc}).");
+            Debug.Log($"[AI][Sanctuary] {npcName} passed Will save {saveResult.Total} vs DC {dc} — can target {candName}");
+            return false; // can target
+        }
+        else
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"🛡️ {npcName} is unable to attack {candName} — Sanctuary! (Will {saveResult.Total} vs DC {dc})");
+            Debug.Log($"[AI][Sanctuary] {npcName} failed Will save {saveResult.Total} vs DC {dc} — cannot target {candName}");
+            return true; // excluded
+        }
+    }
+
+    /// <summary>
+    /// D&D 3.5e Hide from Undead (PHB p.241): Undead cannot perceive the warded creature.
+    /// Mindless undead are automatically affected (no save). Intelligent undead (INT ≥ 1)
+    /// get a Will save to see through the ward.
+    /// Non-undead NPCs are unaffected by this spell.
+    /// </summary>
+    private bool ShouldExcludeTargetBecauseOfHideFromUndead(CharacterController npc, CharacterController candidate)
+    {
+        if (_gameManager == null || npc == null || candidate == null)
+            return false;
+        if (candidate.Stats == null || !candidate.Stats.HideFromUndeadActive)
+            return false;
+
+        // Only affects undead attackers
+        if (!_gameManager.IsUndeadCharacterForAI(npc))
+            return false;
+
+        string npcName = npc.Stats != null ? npc.Stats.CharacterName : "NPC";
+        string candName = candidate.Stats.CharacterName;
+
+        // Mindless undead: automatically hidden from, no save
+        if (npc.Stats != null && npc.Stats.IsMindless)
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"👻 {npcName} cannot perceive {candName} — Hidden from Undead! (mindless, no save)");
+            Debug.Log($"[AI][HideFromUndead] Mindless undead {npcName} auto-excluded from targeting {candName}");
+            return true;
+        }
+
+        // Intelligent undead: Will save to see through
+        int dc = candidate.Stats.HideFromUndeadDC;
+        var saveResult = SavingThrowResolver.ResolveWillSave(npc.Stats, dc, "Hide from Undead");
+
+        if (saveResult.Succeeded)
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"👻 {npcName} sees through {candName}'s ward! (Will {saveResult.Total} vs DC {dc})");
+            Debug.Log($"[AI][HideFromUndead] Intelligent undead {npcName} passed Will {saveResult.Total} vs DC {dc}");
+            // Spell breaks for this target when the undead sees through
+            candidate.Stats.HideFromUndeadActive = false;
+            var statusMgr = candidate.GetComponent<StatusEffectManager>();
+            statusMgr?.RemoveEffectsBySpellId(SpellNames.HIDE_FROM_UNDEAD);
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"👻 Hide from Undead on {candName} is broken — {npcName} perceived them!");
+            return false;
+        }
+        else
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"👻 {npcName} cannot perceive {candName} — Hidden from Undead! (Will {saveResult.Total} vs DC {dc})");
+            Debug.Log($"[AI][HideFromUndead] Intelligent undead {npcName} failed Will {saveResult.Total} vs DC {dc}");
+            return true;
+        }
     }
 
     private CharacterController SelectBestTargetFromProfile(CharacterController npc, List<CharacterController> allCombatants, AIProfile profile)
