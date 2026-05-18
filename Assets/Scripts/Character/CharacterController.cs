@@ -2937,6 +2937,7 @@ public class CharacterController : MonoBehaviour
             // not tracked on CharacterStats. No state to clear here.
             Stats.ResetCurrentSizeToBase(); // Ensure size resets on combat end/death
             Stats.ActiveProtectionFromArrowsEffect = null;
+            Stats.ActiveStoneskinEffect = null;
             if (Stats.ActiveResistEnergyEffects != null)
                 Stats.ActiveResistEnergyEffects.Clear();
             if (Stats.ActiveProtectionFromEnergyEffects != null)

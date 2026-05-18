@@ -66,6 +66,9 @@ public static partial class SpellDatabase
 
         AnnotateDomainAvailabilityFromDomainDatabase();
 
+        // Initialize the spell component system (tracks costly material components)
+        SpellComponentRegistry.Init();
+
         int total = _spells.Count;
         int functional = 0;
         int placeholder = 0;

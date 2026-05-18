@@ -684,5 +684,8 @@ namespace DND35e.Identifiers
         /// <summary>Otiluke's Resilient Sphere (spell id: resilient_sphere)</summary>
         public const string RESILIENT_SPHERE = "resilient_sphere";
 
+        /// <summary>Stoneskin (spell id: stoneskin)</summary>
+        public const string STONESKIN = "stoneskin";
+
     }
 }

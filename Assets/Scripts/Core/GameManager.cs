@@ -913,6 +913,7 @@ public partial class GameManager : MonoBehaviour
             stats.ActiveResistEnergyEffects?.Clear();
             stats.ActiveProtectionFromEnergyEffects?.Clear();
             stats.ActiveProtectionFromArrowsEffect = null;
+            stats.ActiveStoneskinEffect = null;
             stats.TemplateSmiteUsed = false;
             stats.RagesUsedToday = 0;
             stats.TurnUndeadAttemptsUsedToday = 0;

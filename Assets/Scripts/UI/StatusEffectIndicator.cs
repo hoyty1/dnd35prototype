@@ -326,6 +326,24 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.STONESKIN))
+        {
+            int rounds = statusMgr.GetRemainingRounds(SpellNames.STONESKIN);
+            StoneskinEffectData stoneskin = _character.Stats != null ? _character.Stats.ActiveStoneskinEffect : null;
+            int totalPool = stoneskin != null ? Mathf.Max(0, stoneskin.TotalAbsorptionPool) : 0;
+            int remainingPool = stoneskin != null ? Mathf.Max(0, stoneskin.RemainingAbsorptionPool) : 0;
+            int hitsBlocked = stoneskin != null ? Mathf.Max(0, stoneskin.HitsBlocked) : 0;
+
+            list.Add(new IconData
+            {
+                Key = "Stoneskin",
+                ShortLabel = "SK",
+                Tooltip = $"Stoneskin\nDR 10/adamantine\nAbsorption pool: {remainingPool}/{totalPool}\nHits blocked: {hitsBlocked}\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.55f, 0.50f, 0.40f, 0.92f), // Stone/brown color
+                Duration = rounds
+            });
+        }
+
         if (_character.Stats != null && _character.Stats.ActiveResistEnergyEffects != null && _character.Stats.ActiveResistEnergyEffects.Count > 0)
         {
             for (int i = 0; i < _character.Stats.ActiveResistEnergyEffects.Count; i++)

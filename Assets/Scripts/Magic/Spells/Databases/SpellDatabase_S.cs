@@ -866,6 +866,64 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // STONESKIN  (PHB p.285)
+        // Abjuration
+        // Level: Drd 5, Sor/Wiz 4, Earth 6, Strength 6
+        // Components: V, S, M (granite and 250 gp worth of diamond dust)
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Creature touched
+        // Duration: 10 min./level or until discharged
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        //
+        // The warded creature gains resistance to blows, cuts, stabs, and
+        // slashes. The subject gains damage reduction 10/adamantine. (It
+        // ignores the first 10 points of damage each time it takes damage
+        // from a weapon, though an adamantine weapon bypasses the reduction.)
+        // Once the spell has prevented a total of 10 points of damage per
+        // caster level (maximum 150 points), it is discharged.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.STONESKIN,
+                    Name = "Stoneskin",
+                    Description = "Abjuration. Warded creature gains DR 10/adamantine. "
+                        + "Absorbs up to 10 damage per caster level (max 150 points), then discharges. "
+                        + "Duration 10 min./level or until discharged. Will negates (harmless). SR: Yes (harmless). "
+                        + "Components: V, S, M (granite and 250 gp diamond dust). PHB p.285",
+                    SpellLevel = 4,
+                    School = "Abjuration",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 5),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    BuffType = SpellNames.STONESKIN,
+                    BuffDamageReductionAmount = 10,
+                    BuffDamageReductionBypass = DamageBypassTag.Adamantine,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterAlias(SpellNames.SEE_INVISIBILITY_LEGACY, SpellNames.SEE_INVISIBLE);
         RegisterClassSpellAlias("see_invisible_brd", SpellNames.SEE_INVISIBLE, "Bard", 3);

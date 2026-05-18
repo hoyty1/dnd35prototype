@@ -136,6 +136,12 @@ public class CharacterStats
     [Header("Experience")]
     public int ExperiencePoints = 0;
 
+    /// <summary>
+    /// Gold pieces available for spell material component costs (e.g., Stoneskin's 250 gp diamond dust).
+    /// Tracked separately from inventory wealth for simplicity. Defaults to a reasonable starting amount.
+    /// </summary>
+    public int ComponentGold = 1000;
+
     public string CharacterClass; // e.g., "Fighter", "Rogue", "Warrior"
     public string SourceNpcDefinitionId;
 
@@ -1582,6 +1588,9 @@ public class CharacterStats
 
     /// <summary>Runtime state for Protection from Arrows (if currently active).</summary>
     [NonSerialized] public ProtectionFromArrowsEffectData ActiveProtectionFromArrowsEffect;
+
+    /// <summary>Runtime state for Stoneskin (if currently active). PHB p.285.</summary>
+    [NonSerialized] public StoneskinEffectData ActiveStoneskinEffect;
 
     /// <summary>Runtime Resist Energy effects (can hold different energy types simultaneously).</summary>
     [NonSerialized] public List<ResistEnergyEffectData> ActiveResistEnergyEffects = new List<ResistEnergyEffectData>();
@@ -3342,6 +3351,63 @@ public class CharacterStats
             result.Notes.Add($"Protection from Arrows blocked {drApplied} damage from {sourceName}!");
         }
 
+        // ── Stoneskin absorption tracking (PHB p.285) ──
+        // Stoneskin grants DR 10/adamantine with an absorption pool (10/CL, max 150).
+        // When the DR from Stoneskin blocks damage, that amount counts against the pool.
+        // Once the pool is depleted, the spell is discharged.
+        if (ActiveStoneskinEffect != null && drApplied > 0 && !bestDrWasRangedOnly)
+        {
+            // Check if the best DR that was applied is from Stoneskin
+            // (i.e., bypass is Adamantine and the attack didn't have Adamantine tag)
+            bool stoneskinDrWasBest = false;
+            for (int i = 0; i < DamageReductions.Count; i++)
+            {
+                var dr = DamageReductions[i];
+                if (dr == null || dr.Amount <= 0 || dr.AppliesToRangedOnly) continue;
+                if (dr.BypassAnyTag == DamageBypassTag.Adamantine && dr.Amount == ActiveStoneskinEffect.DamageReductionAmount)
+                {
+                    bool bypassed = (packet.AttackTags & DamageBypassTag.Adamantine) != 0;
+                    if (!bypassed)
+                    {
+                        stoneskinDrWasBest = true;
+                        break;
+                    }
+                }
+            }
+
+            if (stoneskinDrWasBest)
+            {
+                int poolBefore = ActiveStoneskinEffect.RemainingAbsorptionPool;
+                int stoneskinAbsorbed = Mathf.Min(drApplied, poolBefore);
+
+                if (stoneskinAbsorbed > 0)
+                {
+                    ActiveStoneskinEffect.CurrentAbsorbedDamage += stoneskinAbsorbed;
+                    ActiveStoneskinEffect.HitsBlocked++;
+
+                    int poolAfter = ActiveStoneskinEffect.RemainingAbsorptionPool;
+                    result.Notes.Add($"Stoneskin absorbs {stoneskinAbsorbed} ({poolAfter} remaining)");
+
+                    if (poolAfter <= 0)
+                    {
+                        // If stoneskin absorbed less than what DR claimed, reduce drApplied
+                        if (stoneskinAbsorbed < drApplied)
+                        {
+                            drApplied = stoneskinAbsorbed;
+                        }
+                        result.Notes.Add("Stoneskin discharged!");
+                        TryDischargeStoneskin();
+                    }
+                }
+                else if (poolBefore <= 0)
+                {
+                    // Pool already depleted, DR shouldn't have been counted from Stoneskin
+                    drApplied = 0;
+                    TryDischargeStoneskin();
+                }
+            }
+        }
+
         result.DamageReductionApplied = drApplied;
         result.FinalDamage = Mathf.Max(0, result.DamageAfterResistance - drApplied);
 
@@ -3398,6 +3464,28 @@ public class CharacterStats
 
         if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && owner.Stats != null)
             GameManager.Instance.CombatUI.ShowCombatLog($"<color=#FFAA44>🛡 Protection from Arrows discharged on {owner.Stats.CharacterName}!</color>");
+    }
+
+    private void TryDischargeStoneskin()
+    {
+        if (ActiveStoneskinEffect == null)
+            return;
+
+        ActiveStoneskinEffect = null;
+
+        CharacterController owner = OwnerCharacter;
+        if (owner == null)
+            return;
+
+        // Remove the DR entry that Stoneskin added
+        RemoveDamageReduction(10, DamageBypassTag.Adamantine, false);
+
+        StatusEffectManager statusMgr = owner.GetComponent<StatusEffectManager>();
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.STONESKIN))
+            statusMgr.RemoveEffectsBySpellId(SpellNames.STONESKIN);
+
+        if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && owner.Stats != null)
+            GameManager.Instance.CombatUI.ShowCombatLog($"<color=#FFAA44>🪨 Stoneskin discharged on {owner.Stats.CharacterName}! (absorption pool depleted)</color>");
     }
 
     /// <summary>

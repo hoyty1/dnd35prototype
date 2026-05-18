@@ -270,6 +270,9 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.PROTECTION_FROM_ARROWS, System.StringComparison.Ordinal) && _stats != null)
             _stats.ActiveProtectionFromArrowsEffect = null;
 
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.STONESKIN, System.StringComparison.Ordinal) && _stats != null)
+            _stats.ActiveStoneskinEffect = null;
+
         // Also remove from SpellcastingComponent's ActiveBuffs for backward compat
         if (_spellComp != null && effect.Spell != null)
         {

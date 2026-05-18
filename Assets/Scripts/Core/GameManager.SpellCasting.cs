@@ -6312,6 +6312,61 @@ public partial class GameManager
             return effect;
         }
 
+        // ===== STONESKIN — PHB p.285 =====
+        // Abjuration. Touch. DR 10/adamantine with absorption pool.
+        // Material component: granite + 250 gp diamond dust (consumed).
+        if (spell != null && spell.SpellId == SpellNames.STONESKIN)
+        {
+            CharacterController recipient = target ?? caster;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            // Check and consume costly material components (250 gp diamond dust)
+            CharacterStats casterStats = caster != null ? caster.Stats : null;
+            if (casterStats != null && SpellComponentRegistry.HasCostlyComponents(spell.SpellId))
+            {
+                if (!SpellComponentRegistry.CanAffordComponents(spell.SpellId, casterStats))
+                {
+                    string summary = SpellComponentRegistry.GetConsumptionSummary(spell.SpellId);
+                    CombatUI?.ShowCombatLog($"<color=#FF6666>❌ {casterStats.CharacterName} cannot cast Stoneskin — insufficient material components! {summary ?? ""} (has {casterStats.ComponentGold} gp)</color>");
+                    return null;
+                }
+                SpellComponentRegistry.ConsumeComponents(spell.SpellId, casterStats);
+                CombatUI?.ShowCombatLog($"<color=#CCAA44>💎 {casterStats.CharacterName} consumes 250 gp diamond dust for Stoneskin ({casterStats.ComponentGold} gp remaining).</color>");
+            }
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
+            if (effect != null)
+            {
+                // Absorption pool: 10 per caster level, max 150
+                int maxPool = Mathf.Min(150, Mathf.Max(1, casterLevel) * 10);
+                recipient.Stats.ActiveStoneskinEffect = new StoneskinEffectData
+                {
+                    DamageReductionAmount = 10,
+                    BypassTag = DamageBypassTag.Adamantine,
+                    TotalAbsorptionPool = maxPool,
+                    CurrentAbsorbedDamage = 0,
+                    DurationRemainingRounds = effect.RemainingRounds,
+                    HitsBlocked = 0
+                };
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88FFEE>🪨 {recipient.Stats.CharacterName} gains Stoneskin (DR 10/adamantine, {maxPool} absorption pool, CL {casterLevel}).</color>");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         if (spell != null && spell.SpellId == SpellNames.MAGIC_WEAPON)
         {
             TryApplyMagicWeaponToPendingItem(caster, target, spell);
@@ -6730,6 +6785,11 @@ public partial class GameManager
                     character.Stats.ActiveProtectionFromArrowsEffect = null;
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Protection from Arrows expires on {character.Stats.CharacterName}.</color>");
                 }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.STONESKIN, StringComparison.Ordinal))
+                {
+                    character.Stats.ActiveStoneskinEffect = null;
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Stoneskin expires on {character.Stats.CharacterName}.</color>");
+                }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
                 {
                     OnMirrorImageEffectExpired(character);
@@ -6795,6 +6855,12 @@ public partial class GameManager
                         ProtectionFromArrowsEffectData protection = character.Stats.ActiveProtectionFromArrowsEffect;
                         if (protection != null)
                             protection.DurationRemainingRounds = effect.RemainingRounds;
+                    }
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.STONESKIN, StringComparison.Ordinal))
+                    {
+                        StoneskinEffectData stoneskin = character.Stats.ActiveStoneskinEffect;
+                        if (stoneskin != null)
+                            stoneskin.DurationRemainingRounds = effect.RemainingRounds;
                     }
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
                     {
