@@ -561,6 +561,12 @@ namespace DND35e.Identifiers
         /// <summary>Summon Monster II (spell id: summon_monster_2)</summary>
         public const string SUMMON_MONSTER_2 = "summon_monster_2";
 
+        /// <summary>Summon Monster III (spell id: summon_monster_3)</summary>
+        public const string SUMMON_MONSTER_3 = "summon_monster_3";
+
+        /// <summary>Summon Monster IV (spell id: summon_monster_4)</summary>
+        public const string SUMMON_MONSTER_4 = "summon_monster_4";
+
         /// <summary>Summon Swarm (spell id: summon_swarm)</summary>
         public const string SUMMON_SWARM = "summon_swarm";
 

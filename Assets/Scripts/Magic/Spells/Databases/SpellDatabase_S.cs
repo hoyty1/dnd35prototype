@@ -642,6 +642,99 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Summoning not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // SUMMON MONSTER III  (PHB p.286)
+        // Conjuration (Summoning) [see text]
+        // Level: Clr 3, Sor/Wiz 3
+        // Components: V, S, F/DF (a tiny bag and a small candle)
+        // Casting Time: 1 round
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Effect: One or more summoned creatures, no two of which can
+        //         be more than 30 ft. apart
+        // Duration: 1 round/level (D)
+        // Saving Throw: None
+        // Spell Resistance: No
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SUMMON_MONSTER_3,
+                    Name = "Summon Monster III",
+                    Description = "Conjuration (Summoning). Summons an extraplanar creature to fight for you. "
+                        + "Choose from the Summon Monster III list, or 1d3 from the SM II list, or 1d4+1 from the SM I list. "
+                        + "Duration 1 round/level (D). Components: V, S, F/DF. PHB p.286",
+                    SpellLevel = 3,
+                    School = "Conjuration (Summoning)",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Cleric", 3),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 3,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SavingThrowType = "None",
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ──────────────────────────────────────────────────────────────
+        // SUMMON MONSTER IV  (PHB p.286)
+        // Conjuration (Summoning) [see text]
+        // Level: Clr 4, Sor/Wiz 4
+        // Components: V, S, F/DF (a tiny bag and a small candle)
+        // Casting Time: 1 round
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Effect: One or more summoned creatures, no two of which can
+        //         be more than 30 ft. apart
+        // Duration: 1 round/level (D)
+        // Saving Throw: None
+        // Spell Resistance: No
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SUMMON_MONSTER_4,
+                    Name = "Summon Monster IV",
+                    Description = "Conjuration (Summoning). Summons an extraplanar creature to fight for you. "
+                        + "Choose from the Summon Monster IV list, or 1d3 from the SM III list, or 1d4+1 from the SM II/I lists. "
+                        + "Creatures include Lantern Archon, Celestial animals, all 10 Mephit types, Fiendish beasts, Yeth Hound, and Howler. "
+                        + "Duration 1 round/level (D). Components: V, S, F/DF. PHB p.286",
+                    SpellLevel = 4,
+                    School = "Conjuration (Summoning)",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Cleric", 4),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 3,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SavingThrowType = "None",
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.SUMMON_SWARM,
@@ -729,6 +822,8 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("see_invisibility_brd", SpellNames.SEE_INVISIBLE, "Bard", 3);
         RegisterClassSpellAlias("summon_monster_1_clr", SpellNames.SUMMON_MONSTER_1, "Cleric", 1);
         RegisterClassSpellAlias("summon_monster_2_clr", SpellNames.SUMMON_MONSTER_2, "Cleric", 2);
+        RegisterClassSpellAlias("summon_monster_3_clr", SpellNames.SUMMON_MONSTER_3, "Cleric", 3);
+        RegisterClassSpellAlias("summon_monster_4_clr", SpellNames.SUMMON_MONSTER_4, "Cleric", 4);
 
     }
 }

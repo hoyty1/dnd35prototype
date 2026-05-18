@@ -102,9 +102,9 @@ public static class SummonMonsterLists
             { 1, GetSummonMonsterIOptions() },
             { 2, GetSummonMonsterIIOptions() },
             { 3, GetSummonMonsterIIIOptions() },
+            { 4, GetSummonMonsterIVOptions() },
             // Higher level list definitions can be added incrementally.
             // Keeping empty entries allows UI level selection rules to stay consistent.
-            { 4, new List<SummonMonsterOption>() },
             { 5, new List<SummonMonsterOption>() }
         };
 
@@ -194,6 +194,67 @@ public static class SummonMonsterLists
             // Evil outsiders — Evil alignment only
             new SummonMonsterOption { DisplayName = "Hell Hound", NpcDefinitionId = "hell_hound", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.LawfulEvil },
             new SummonMonsterOption { DisplayName = "Dretch (Demon)", NpcDefinitionId = "dretch", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil }
+        };
+    }
+
+    /// <summary>
+    /// Summon Monster IV creature list (D&D 3.5e SRD/MM)
+    /// All 12 creature entries (plus 10 mephit sub-types) with proper templates and alignment restrictions.
+    /// </summary>
+    private static List<SummonMonsterOption> GetSummonMonsterIVOptions()
+    {
+        return new List<SummonMonsterOption>
+        {
+            // ── Good-aligned creatures ──
+
+            // Lantern Archon (LG) — base outsider, no template needed
+            new SummonMonsterOption { DisplayName = "Lantern Archon", NpcDefinitionId = "lantern_archon", AlignmentRequirement = SummonAlignmentRequirement.Good, SummonedCreatureAlignment = Alignment.LawfulGood },
+
+            // Celestial Giant Owl (LG)
+            new SummonMonsterOption { DisplayName = "Giant Owl", NpcDefinitionId = "giant_owl", TemplateId = "celestial", AlignmentRequirement = SummonAlignmentRequirement.Good, SummonedCreatureAlignment = Alignment.LawfulGood },
+
+            // Celestial Giant Eagle (CG)
+            new SummonMonsterOption { DisplayName = "Giant Eagle", NpcDefinitionId = "giant_eagle", TemplateId = "celestial", AlignmentRequirement = SummonAlignmentRequirement.Good, SummonedCreatureAlignment = Alignment.ChaoticGood },
+
+            // Celestial Lion (CG)
+            new SummonMonsterOption { DisplayName = "Lion", NpcDefinitionId = "lion", TemplateId = "celestial", AlignmentRequirement = SummonAlignmentRequirement.Good, SummonedCreatureAlignment = Alignment.ChaoticGood },
+
+            // ── Neutral creatures — available to all casters ──
+
+            // Mephit (any) (N) — all 10 mephit sub-types
+            new SummonMonsterOption { DisplayName = "Air Mephit", NpcDefinitionId = "air_mephit" },
+            new SummonMonsterOption { DisplayName = "Dust Mephit", NpcDefinitionId = "dust_mephit" },
+            new SummonMonsterOption { DisplayName = "Earth Mephit", NpcDefinitionId = "earth_mephit" },
+            new SummonMonsterOption { DisplayName = "Fire Mephit", NpcDefinitionId = "fire_mephit" },
+            new SummonMonsterOption { DisplayName = "Ice Mephit", NpcDefinitionId = "ice_mephit" },
+            new SummonMonsterOption { DisplayName = "Magma Mephit", NpcDefinitionId = "magma_mephit" },
+            new SummonMonsterOption { DisplayName = "Ooze Mephit", NpcDefinitionId = "ooze_mephit" },
+            new SummonMonsterOption { DisplayName = "Salt Mephit", NpcDefinitionId = "salt_mephit" },
+            new SummonMonsterOption { DisplayName = "Steam Mephit", NpcDefinitionId = "steam_mephit" },
+            new SummonMonsterOption { DisplayName = "Water Mephit", NpcDefinitionId = "water_mephit" },
+
+            // ── Evil-aligned creatures ──
+
+            // Fiendish Dire Wolf (LE)
+            new SummonMonsterOption { DisplayName = "Dire Wolf", NpcDefinitionId = "dire_wolf", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.LawfulEvil },
+
+            // Fiendish Giant Wasp (LE)
+            new SummonMonsterOption { DisplayName = "Giant Wasp", NpcDefinitionId = "giant_wasp", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.LawfulEvil },
+
+            // Fiendish Giant Praying Mantis (NE)
+            new SummonMonsterOption { DisplayName = "Giant Praying Mantis", NpcDefinitionId = "giant_praying_mantis", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.NeutralEvil },
+
+            // Yeth Hound (NE) — base outsider, no template needed
+            new SummonMonsterOption { DisplayName = "Yeth Hound", NpcDefinitionId = "yeth_hound", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.NeutralEvil },
+
+            // Fiendish Monstrous Spider, Large (CE)
+            new SummonMonsterOption { DisplayName = "Monstrous Spider, Large", NpcDefinitionId = "monstrous_spider_large", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil },
+
+            // Fiendish Snake, Huge Viper (CE)
+            new SummonMonsterOption { DisplayName = "Snake, Huge Viper", NpcDefinitionId = "viper_huge", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil },
+
+            // Howler (CE) — base outsider, no template needed
+            new SummonMonsterOption { DisplayName = "Howler", NpcDefinitionId = "howler", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil }
         };
     }
 
