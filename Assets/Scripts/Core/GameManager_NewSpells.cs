@@ -2687,6 +2687,10 @@ public partial class GameManager
         recipient.Stats.FireShieldCasterLevel = casterLevel;
         recipient.Stats.FireShieldDurationRounds = durationRounds;
 
+        // Register with the generic melee reaction service
+        var fireShieldReaction = new FireShieldReactionEffect(recipient);
+        MeleeReactionService.Register(fireShieldReaction);
+
         string resistType = isWarmShield ? "cold" : "fire";
         string retribType = isWarmShield ? "fire" : "cold";
         string shieldName = isWarmShield ? "Warm Shield" : "Chill Shield";
@@ -2711,40 +2715,25 @@ public partial class GameManager
     /// No save for retribution damage. PHB p.230: triggers on any creature
     /// striking the defender with its body or a handheld weapon (includes reach).
     /// </summary>
+    /// <summary>
+    /// LEGACY method — kept for backward compatibility.
+    /// All attack resolution code should use MeleeReactionService.TriggerReactions() instead.
+    /// This method now delegates to the service for Fire Shield specifically.
+    /// </summary>
     public void ResolveFireShieldRetribution(CharacterController defender, CharacterController attacker)
     {
-        Debug.Log($"[FireShield] ResolveFireShieldRetribution called | defender={defender?.Stats?.CharacterName ?? "null"} | attacker={attacker?.Stats?.CharacterName ?? "null"}");
+        Debug.Log($"[FireShield] ResolveFireShieldRetribution (legacy redirect) | defender={defender?.Stats?.CharacterName ?? "null"} | attacker={attacker?.Stats?.CharacterName ?? "null"}");
 
         if (defender == null || defender.Stats == null || !defender.Stats.FireShieldActive)
-        {
-            Debug.Log($"[FireShield] BAIL: defender null or FireShieldActive=false | active={defender?.Stats?.FireShieldActive}");
             return;
-        }
         if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
-        {
-            Debug.Log($"[FireShield] BAIL: attacker null or dead | dead={attacker?.Stats?.IsDead}");
             return;
-        }
 
-        int casterLevel = defender.Stats.FireShieldCasterLevel;
-        int clBonus = Mathf.Min(casterLevel, 15);
-        int damage = UnityEngine.Random.Range(1, 7) + clBonus; // 1d6 + CL (max +15)
-
-        bool isWarm = defender.Stats.FireShieldIsWarm;
-        string dmgType = isWarm ? "fire" : "cold";
-
-        Debug.Log($"[FireShield] Retribution damage={damage} ({dmgType}) | CL={casterLevel} | isWarm={isWarm} | attacker HP before={attacker.Stats.CurrentHP}");
-
-        attacker.Stats.TakeDamage(damage);
-
-        CombatUI?.ShowCombatLog($"  🔥 Fire Shield retribution! {attacker.Stats.CharacterName} takes {damage} {dmgType} damage (no save)!");
-
-        if (attacker.Stats.IsDead)
-        {
-            attacker.OnDeath();
-            HandleSummonDeathCleanup(attacker);
-            CombatUI?.ShowCombatLog($"  💀 {attacker.Stats.CharacterName} is slain by Fire Shield retribution!");
-        }
+        // Create a temporary effect instance and fire it directly.
+        // In normal flow, the registered FireShieldReactionEffect handles this
+        // through MeleeReactionService.TriggerReactions().
+        var tempEffect = new FireShieldReactionEffect(defender);
+        tempEffect.OnMeleeAttackHit(attacker, defender, null);
     }
 
     // ================================================================

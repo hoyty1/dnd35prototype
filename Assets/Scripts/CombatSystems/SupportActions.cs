@@ -1573,13 +1573,13 @@ public partial class GameManager
                 {
                     CombatUI?.ShowCombatLog($"⚡ Charge Pounce (+2): {pounceResult.GetFullSummary()}");
 
-                    // Fire Shield retribution: pounce is a series of melee attacks, each hit triggers Fire Shield
-                    if (pounceResult.Attacks != null && target != null && target.Stats != null && target.Stats.FireShieldActive)
+                    // Melee reaction effects (Fire Shield, Thorns, etc.) — pounce triggers per hit
+                    if (pounceResult.Attacks != null)
                     {
                         foreach (var pounceAtk in pounceResult.Attacks)
                         {
                             if (pounceAtk.Hit && !pounceAtk.IsRangedAttack)
-                                ResolveFireShieldRetribution(target, charger);
+                                MeleeReactionService.TriggerReactions(charger, target, pounceAtk);
                         }
                     }
 
@@ -1596,9 +1596,9 @@ public partial class GameManager
                                 Debug.Log($"[Charge] Rake attack dealt {rakeAttack.TotalDamage} damage to {target?.Stats?.CharacterName ?? target?.name ?? "<null>"}.");
                                 CheckConcentrationOnDamage(target, rakeAttack.TotalDamage);
                             }
-                            // Fire Shield retribution for rake attacks
-                            if (rakeAttack != null && rakeAttack.Hit && !rakeAttack.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
-                                ResolveFireShieldRetribution(target, charger);
+                            // Melee reaction effects for rake attacks
+                            if (rakeAttack != null && rakeAttack.Hit && !rakeAttack.IsRangedAttack)
+                                MeleeReactionService.TriggerReactions(charger, target, rakeAttack);
                         }
                     }
 
@@ -1680,9 +1680,9 @@ public partial class GameManager
                         CheckConcentrationOnDamage(target, result.TotalDamage);
                     }
 
-                    // Fire Shield retribution: charge is a melee attack, triggers Fire Shield
-                    if (result.Hit && !result.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
-                        ResolveFireShieldRetribution(target, charger);
+                    // Melee reaction effects (Fire Shield, Thorns, etc.) — charge is a melee attack
+                    if (result.Hit && !result.IsRangedAttack)
+                        MeleeReactionService.TriggerReactions(charger, target, result);
 
                     Debug.Log($"[Charge] Post-hit target state | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | hp={target?.Stats?.CurrentHP ?? 0} | dead={(target != null && target.Stats != null && target.Stats.IsDead)}");
 
@@ -1902,13 +1902,13 @@ public partial class GameManager
                 string flankText = isFlankingCharge ? " + Flanking" : "";
                 CombatUI?.ShowCombatLog($"☠ Charge Pounce (+2{flankText}): {pounceResult.GetFullSummary()}");
 
-                // Fire Shield retribution: NPC pounce is a series of melee attacks, each hit triggers Fire Shield
-                if (pounceResult.Attacks != null && target != null && target.Stats != null && target.Stats.FireShieldActive)
+                // Melee reaction effects (Fire Shield, Thorns, etc.) — NPC pounce triggers per hit
+                if (pounceResult.Attacks != null)
                 {
                     foreach (var pounceAtk in pounceResult.Attacks)
                     {
                         if (pounceAtk.Hit && !pounceAtk.IsRangedAttack)
-                            ResolveFireShieldRetribution(target, npc);
+                            MeleeReactionService.TriggerReactions(npc, target, pounceAtk);
                     }
                 }
 
@@ -1922,9 +1922,9 @@ public partial class GameManager
                         CombatResult rakeAttack = pounceRakeResult.Attacks[i];
                         if (rakeAttack != null && rakeAttack.Hit && rakeAttack.TotalDamage > 0)
                             CheckConcentrationOnDamage(target, rakeAttack.TotalDamage);
-                        // Fire Shield retribution for NPC rake attacks
-                        if (rakeAttack != null && rakeAttack.Hit && !rakeAttack.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
-                            ResolveFireShieldRetribution(target, npc);
+                        // Melee reaction effects for NPC rake attacks
+                        if (rakeAttack != null && rakeAttack.Hit && !rakeAttack.IsRangedAttack)
+                            MeleeReactionService.TriggerReactions(npc, target, rakeAttack);
                     }
                 }
 
@@ -1989,9 +1989,9 @@ public partial class GameManager
                 if (result.Hit && result.TotalDamage > 0)
                     CheckConcentrationOnDamage(target, result.TotalDamage);
 
-                // Fire Shield retribution: NPC charge is a melee attack, triggers Fire Shield
-                if (result.Hit && !result.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
-                    ResolveFireShieldRetribution(target, npc);
+                // Melee reaction effects (Fire Shield, Thorns, etc.) — NPC charge is a melee attack
+                if (result.Hit && !result.IsRangedAttack)
+                    MeleeReactionService.TriggerReactions(npc, target, result);
 
                 if (npc.Stats != null && npc.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(npc, result) && !target.Stats.IsDead)
                 {

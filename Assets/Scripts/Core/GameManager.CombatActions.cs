@@ -1895,12 +1895,9 @@ public partial class GameManager
             ClearSunderSequenceState();
         }
 
-        // Fire Shield retribution: trip and disarm are melee maneuvers that involve physical contact
-        if ((type == SpecialAttackType.Trip || type == SpecialAttackType.Disarm) &&
-            target != null && target.Stats != null && target.Stats.FireShieldActive)
-        {
-            ResolveFireShieldRetribution(target, attacker);
-        }
+        // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
+        if (type == SpecialAttackType.Trip || type == SpecialAttackType.Disarm)
+            MeleeReactionService.TriggerReactions(attacker, target, null);
 
         if (result.Success)
         {
@@ -2403,9 +2400,9 @@ public partial class GameManager
             if (attack.Hit && attack.TotalDamage > 0)
                 CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
 
-            // Fire Shield retribution: defender's Fire Shield deals damage back to melee attacker
-            if (attack.Hit && !rangedMode && currentTarget != null && currentTarget.Stats.FireShieldActive)
-                ResolveFireShieldRetribution(currentTarget, attacker);
+            // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
+            if (attack.Hit && !rangedMode)
+                MeleeReactionService.TriggerReactions(attacker, currentTarget, attack);
 
             TryResolveFreeTripFromAttackResults(attacker, currentTarget, stepResult.Attacks, rangeInfo);
 

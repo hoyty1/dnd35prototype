@@ -160,9 +160,8 @@ public partial class GameManager
             var trip = summon.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
             CombatUI.ShowCombatLog($"<color=#66E8FF>✦ {GetSummonDisplayName(summon)} attempts Trip: {trip.Log}</color>");
 
-            // Fire Shield retribution: trip is a melee maneuver
-            if (target != null && target.Stats != null && target.Stats.FireShieldActive)
-                ResolveFireShieldRetribution(target, summon);
+            // Melee reaction effects (Fire Shield, Thorns, etc.) — trip is a melee maneuver
+            MeleeReactionService.TriggerReactions(summon, target, null);
 
             summon.CommitStandardAction();
             UpdateAllStatsUI();
@@ -326,9 +325,8 @@ public partial class GameManager
         CombatUI?.ShowCombatLog($"☠ {attacker.Stats.CharacterName} follows up with Trip ({tripContext}): {tripResult.Log}");
         Debug.Log($"[NPC Trip Follow-up] {attacker.Stats.CharacterName} triggered free trip after hit. Success={tripResult.Success}");
 
-        // Fire Shield retribution: free trip follow-up is a melee maneuver
-        if (target != null && target.Stats != null && target.Stats.FireShieldActive)
-            ResolveFireShieldRetribution(target, attacker);
+        // Melee reaction effects (Fire Shield, Thorns, etc.) — free trip follow-up is a melee maneuver
+        MeleeReactionService.TriggerReactions(attacker, target, null);
     }
 
     private void TryResolveFreeTripFromAttackResults(CharacterController attacker, CharacterController target, List<CombatResult> attacks, RangeInfo attackRange)
@@ -426,12 +424,9 @@ public partial class GameManager
         var result = npc.ExecuteSpecialAttack(choice.Value, target);
         CombatUI.ShowCombatLog($"☠ {npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}");
 
-        // Fire Shield retribution: trip and disarm are melee maneuvers that involve physical contact
-        if ((choice.Value == SpecialAttackType.Trip || choice.Value == SpecialAttackType.Disarm) &&
-            target != null && target.Stats != null && target.Stats.FireShieldActive)
-        {
-            ResolveFireShieldRetribution(target, npc);
-        }
+        // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
+        if (choice.Value == SpecialAttackType.Trip || choice.Value == SpecialAttackType.Disarm)
+            MeleeReactionService.TriggerReactions(npc, target, null);
 
         if (result.Success)
         {
@@ -690,9 +685,9 @@ public partial class GameManager
             if (attack.Hit && attack.TotalDamage > 0)
                 CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
 
-            // Fire Shield retribution: defender's Fire Shield damages melee attacker
-            if (attack.Hit && !attack.IsRangedAttack && currentTarget != null && currentTarget.Stats.FireShieldActive)
-                ResolveFireShieldRetribution(currentTarget, npc);
+            // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
+            if (attack.Hit && !attack.IsRangedAttack)
+                MeleeReactionService.TriggerReactions(npc, currentTarget, attack);
 
             TryResolveFreeTripFromAttackResults(npc, currentTarget, stepResult.Attacks, rangeInfo);
             TryResolveImprovedGrabFromAttackResults(npc, currentTarget, stepResult.Attacks);
@@ -1280,13 +1275,13 @@ public partial class GameManager
             if (fullResult.TotalDamageDealt > 0)
                 CheckConcentrationOnDamage(target, fullResult.TotalDamageDealt);
 
-            // Fire Shield retribution: trigger for each melee hit in full attack
-            if (target != null && target.Stats.FireShieldActive)
+            // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call per hit
+            if (fullResult.Attacks != null)
             {
                 foreach (var atk in fullResult.Attacks)
                 {
                     if (atk.Hit && !atk.IsRangedAttack)
-                        ResolveFireShieldRetribution(target, npc);
+                        MeleeReactionService.TriggerReactions(npc, target, atk);
                 }
             }
 
@@ -1350,9 +1345,9 @@ public partial class GameManager
         if (result.Hit && result.TotalDamage > 0)
             CheckConcentrationOnDamage(target, result.TotalDamage);
 
-        // Fire Shield retribution: defender's Fire Shield damages melee attacker
-        if (result.Hit && !result.IsRangedAttack && target != null && target.Stats.FireShieldActive)
-            ResolveFireShieldRetribution(target, npc);
+        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
+        if (result.Hit && !result.IsRangedAttack)
+            MeleeReactionService.TriggerReactions(npc, target, result);
 
         TryResolveImprovedGrabFromAttackResults(npc, target, new List<CombatResult> { result });
 

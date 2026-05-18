@@ -604,9 +604,9 @@ public class CombatFlowService : MonoBehaviour
         if (result.Hit && result.TotalDamage > 0)
             _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamage);
 
-        // Fire Shield retribution: defender's Fire Shield damages melee attacker
-        if (result.Hit && !result.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
-            _gameManager.ResolveFireShieldRetribution(target, attacker);
+        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
+        if (result.Hit && !result.IsRangedAttack)
+            MeleeReactionService.TriggerReactions(attacker, target, result);
 
         if (result.TargetKilled)
         {
@@ -823,9 +823,9 @@ public class CombatFlowService : MonoBehaviour
         if (result.Hit && result.TotalDamage > 0)
             _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamage);
 
-        // Fire Shield retribution: defender's Fire Shield damages melee attacker
-        if (result.Hit && !result.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
-            _gameManager.ResolveFireShieldRetribution(target, attacker);
+        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
+        if (result.Hit && !result.IsRangedAttack)
+            MeleeReactionService.TriggerReactions(attacker, target, result);
 
         if (result.TargetKilled)
         {
@@ -903,9 +903,9 @@ public class CombatFlowService : MonoBehaviour
                 var attack = result.Attacks[i];
                 _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, attack, rangeInfo);
 
-                // Fire Shield retribution: defender's Fire Shield damages melee attacker per hit
-                if (attack.Hit && !attack.IsRangedAttack && target != null && target.Stats != null && target.Stats.FireShieldActive)
-                    _gameManager.ResolveFireShieldRetribution(target, attacker);
+                // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
+                if (attack.Hit && !attack.IsRangedAttack)
+                    MeleeReactionService.TriggerReactions(attacker, target, attack);
 
                 if (target == null || target.Stats == null || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
                     break;
@@ -956,13 +956,13 @@ public class CombatFlowService : MonoBehaviour
         if (result.TotalDamageDealt > 0)
             _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamageDealt);
 
-        // Fire Shield retribution: defender's Fire Shield damages melee attacker per hit
-        if (result.Attacks != null && target != null && target.Stats != null && target.Stats.FireShieldActive)
+        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
+        if (result.Attacks != null)
         {
             foreach (var attack in result.Attacks)
             {
                 if (attack.Hit && !attack.IsRangedAttack)
-                    _gameManager.ResolveFireShieldRetribution(target, attacker);
+                    MeleeReactionService.TriggerReactions(attacker, target, attack);
             }
         }
 
@@ -1010,13 +1010,13 @@ public class CombatFlowService : MonoBehaviour
         if (result.TotalDamageDealt > 0)
             _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamageDealt);
 
-        // Fire Shield retribution: defender's Fire Shield damages melee attacker per hit
-        if (result.Attacks != null && target != null && target.Stats != null && target.Stats.FireShieldActive)
+        // Melee reaction effects (Fire Shield, Thorns, etc.) — generic service call
+        if (result.Attacks != null)
         {
             foreach (var attack in result.Attacks)
             {
                 if (attack.Hit && !attack.IsRangedAttack)
-                    _gameManager.ResolveFireShieldRetribution(target, attacker);
+                    MeleeReactionService.TriggerReactions(attacker, target, attack);
             }
         }
 
