@@ -40,6 +40,7 @@ public static partial class NPCDatabase
         RegisterCreatures_S();
         RegisterCreatures_V();
         RegisterCreatures_W();
+        RegisterCreatures_Y();
 
         // Register summon compatibility aliases (map legacy IDs to existing creature entries).
         RegisterSummonCreatureAliases();
@@ -102,6 +103,10 @@ public static partial class NPCDatabase
             new EncounterPreset("mirror_image_test", "🪞 Mirror Image Test Arena", "Level 5 wizard duel sandbox with four shortbow goblins on cardinal points to validate clone spawn, swap, targeting redirection, dissipation, and caster-hit fallback.", new List<string> { "mirror_image_test_goblin", "mirror_image_test_goblin", "mirror_image_test_goblin", "mirror_image_test_goblin" }),
             new EncounterPreset("xp_levelup_test", "🎯 XP Level-Up Test", "1× XP Piñata Goblin (CR 15) for guaranteed level-up validation. Instant-kill target with oversized XP reward (~3,300 XP each for a level 3 party of 4).", new List<string> { "xp_pinata_goblin" }),
             new EncounterPreset("creature_showcase", "🕷️ Creature Showcase - Animals & Vermin", "Showcase encounter covering newly implemented Monster Manual animals, vermin, and viper variants.", new List<string> { "dog", "owl", "badger", "monkey", "dire_rat", "raven", "hawk", "giant_fire_beetle", "monstrous_centipede_medium", "monstrous_scorpion_medium", "monstrous_spider_medium", "viper_medium" }),
+            new EncounterPreset("mephit_swarm", "🌪️ Mephit Menagerie", "Mixed mephit encounter: air, fire, ice, and earth mephits with varied breath weapons and spell-like abilities.", new List<string> { "air_mephit", "fire_mephit", "ice_mephit", "earth_mephit" }),
+            new EncounterPreset("outsider_hunt", "👹 Outsider Hunt", "Yeth hound, howler, and lantern archon in a mixed-alignment outsider encounter.", new List<string> { "yeth_hound", "howler", "lantern_archon" }),
+            new EncounterPreset("beast_arena", "🦁 Beast Arena", "Lion, giant eagle, giant owl, and dire wolf — classic Monster Manual beasts with pounce, trip, and flight.", new List<string> { "lion", "giant_eagle", "giant_owl", "dire_wolf" }),
+            new EncounterPreset("vermin_nest", "🐛 Vermin Nest", "Giant wasp, giant praying mantis, large monstrous spider, and huge viper — dangerous vermin and animals.", new List<string> { "giant_wasp", "giant_praying_mantis", "monstrous_spider_large", "viper_huge" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),

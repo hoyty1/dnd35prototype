@@ -9,6 +9,7 @@ public static partial class NPCDatabase
     private static void RegisterCreatures_H()
     {
         RegisterHawk();
+        RegisterHowler();
     
         RegisterSummonHellHound();
         RegisterSummonHippogriff();
@@ -51,6 +52,54 @@ public static partial class NPCDatabase
     }
 
 
+
+    /// <summary>
+    /// Howler (CR 3) — Large outsider (chaotic, evil, extraplanar).
+    /// MM 3.5e p.154. 6 HD, quills deal damage to grapplers/attackers, howl causes fear.
+    /// </summary>
+    private static void RegisterHowler()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "howler",
+            Name = "Howler",
+            ChallengeRating = "3",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 21, DEX = 17, CON = 15, WIS = 14, INT = 6, CHA = 8,
+            BAB = 6,
+            NaturalArmorBonus = 5,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Quills", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 12, // 60 ft.
+            BaseHitDieHP = 39, // 6d8+12
+            CreatureTags = new List<string> { "Outsider", "Chaotic", "Evil", "Extraplanar", "MM35" },
+            Feats = new List<string> { "Alertness", "Improved Initiative", "Power Attack" },
+            SpecialAbilities = new List<string>
+            {
+                "Howl (Will DC 12 or become affected with Wisdom damage; 1 round to take effect; repeated howls within 24 hrs auto-fail; each round exposed = 1 Wis damage)",
+                "Quills (melee attackers take 1d6 quill damage, Ref DC 15 negates)",
+                "Darkvision 60 ft.",
+                "Skills: Climb +14, Hide +12, Listen +13, Move Silently +12, Search +7, Spot +13, Survival +11",
+                "Alignment: Chaotic Evil"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Berserk,
+            SpriteColor = new Color(0.55f, 0.22f, 0.22f, 1f),
+            PanelColor = new Color(0.22f, 0.08f, 0.08f, 0.85f),
+            NameColor = new Color(0.95f, 0.6f, 0.6f),
+            Description = "Monster Manual howler (CR 3). Bite +10 (1d8+5), quills +5 (1d6+2). Howl causes cumulative Wisdom damage. Fast outsider. MM 3.5e p.154."
+        });
+    }
 
     private static void RegisterSummonHellHound()
     {

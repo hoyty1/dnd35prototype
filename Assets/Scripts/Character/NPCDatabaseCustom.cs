@@ -598,6 +598,7 @@ public static partial class NPCDatabase
         {
             Id = "dire_wolf",
             Name = "Dire Wolf",
+            ChallengeRating = "3",
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -610,12 +611,23 @@ public static partial class NPCDatabase
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
-            }, // long Large creature => 5-ft reach
+            },
             BaseSpeed = 10,   // 50 ft
             BaseHitDieHP = 45,
-            CreatureTags = new List<string> { "Animal" },
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Alertness", "Run", "Track", "Weapon Focus" },
+            WeaponFocusChoice = "Bite",
             HasScent = true,
             HasTripAttack = true,
+            TripAttackCheckBonus = 11, // Str +7, size +4 = +11 trip check bonus
+            SpecialAbilities = new List<string>
+            {
+                "Trip (free trip attempt on bite hit, opposed Str +11)",
+                "Low-light vision",
+                "Scent",
+                "Skills: Hide +0, Listen +7, Move Silently +4, Spot +7, Survival +2 (+6 tracking by scent)",
+                "Alignment: True Neutral"
+            },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
@@ -623,7 +635,7 @@ public static partial class NPCDatabase
             SpriteColor = new Color(0.62f, 0.62f, 0.62f, 1f),
             PanelColor = new Color(0.18f, 0.18f, 0.18f, 0.85f),
             NameColor = new Color(0.95f, 0.95f, 1f),
-            Description = "A massive wolf with crushing jaws and pack-hunting instincts. It can drag prey down with vicious trip attacks."
+            Description = "Monster Manual dire wolf (CR 3). Bite +11 (1d8+10), trip +11. 6 HD Large animal with scent and pack tactics. MM 3.5e p.65."
         });
     }
 

@@ -165,7 +165,7 @@ public static partial class NPCDatabase
         {
             Id = "viper_huge",
             Name = "Viper (Huge)",
-            ChallengeRating = "4",
+            ChallengeRating = "3",
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -176,7 +176,7 @@ public static partial class NPCDatabase
             NaturalArmorBonus = 5,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true, PoisonOnHitId = "huge_viper_poison" }
             },
             BaseSpeed = 4,
             BaseHitDieHP = 33,
@@ -184,7 +184,7 @@ public static partial class NPCDatabase
             Feats = new List<string> { "Improved Initiative", "Run", "Weapon Focus" },
             WeaponFocusChoice = "Bite",
             HasScent = true,
-            SpecialAbilities = new List<string> { "Poison (Fort DC 14; initial 1d6 Con; secondary 1d6 Con)", "Climb 20 ft", "Swim 20 ft", "Scent" },
+            SpecialAbilities = new List<string> { "Poison (Fort DC 14; initial 1d6 Con; secondary 1d6 Con)", "Climb 20 ft", "Swim 20 ft", "Scent", "Alignment: True Neutral" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,

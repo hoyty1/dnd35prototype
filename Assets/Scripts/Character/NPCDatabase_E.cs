@@ -9,6 +9,7 @@ public static partial class NPCDatabase
     private static void RegisterCreatures_E()
     {
         RegisterEagle();
+        RegisterGiantEagle();
     
         RegisterSummonSmallAirElemental();
         RegisterSummonSmallFireElemental();
@@ -52,6 +53,56 @@ public static partial class NPCDatabase
         });
     }
 
+
+    /// <summary>
+    /// Giant Eagle (CR 3) — Large magical beast, INT 10, can speak Common and Auran.
+    /// MM 3.5e p.93. 4 HD, fly 80 ft (average), Evasion, 10 ft. space/5 ft. reach.
+    /// </summary>
+    private static void RegisterGiantEagle()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "giant_eagle",
+            Name = "Giant Eagle",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 18, DEX = 17, CON = 12, WIS = 14, INT = 10, CHA = 10,
+            BAB = 4,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 2, // 10 ft. land, fly 80 ft. (average)
+            BaseHitDieHP = 26, // 4d10+4
+            CreatureTags = new List<string> { "Magical Beast", "MM35", "Fly" },
+            Feats = new List<string> { "Alertness", "Flyby Attack" },
+            SpecialAbilities = new List<string>
+            {
+                "Evasion",
+                "Fly 80 ft. (average)",
+                "Low-light vision",
+                "Darkvision 60 ft.",
+                "Languages: Common, Auran",
+                "Skills: Knowledge (nature) +2, Listen +6, Sense Motive +4, Spot +15 (+4 racial in daylight)",
+                "Alignment: Neutral Good"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.82f, 0.75f, 0.58f, 1f),
+            PanelColor = new Color(0.25f, 0.2f, 0.12f, 0.85f),
+            NameColor = new Color(1f, 0.94f, 0.78f),
+            Description = "Monster Manual giant eagle (CR 3). Intelligent magical beast with evasion, keen eyesight, and powerful talons. MM 3.5e p.93."
+        });
+    }
 
     private static void RegisterSummonSmallAirElemental()
     {

@@ -155,6 +155,14 @@ public static partial class NPCDatabase
 
     private static void RegisterMonstrousSpiderVariant(string id, string name, int hitDice, SizeCategory size, int hp, int dex, int con, int str, int naturalArmor, int speed, int damageCount, int damageDice, int poisonDc, string poisonInitial, string poisonSecondary, int webDc)
     {
+        // Map spider size to poison ID
+        string poisonId = id switch
+        {
+            "monstrous_spider_medium" => "medium_spider_poison",
+            "monstrous_spider_large" => "large_spider_poison",
+            _ => null
+        };
+
         Register(new NPCDefinition
         {
             Id = id,
@@ -180,7 +188,7 @@ public static partial class NPCDatabase
             NaturalArmorBonus = naturalArmor,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = damageDice, DamageCount = damageCount, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = damageDice, DamageCount = damageCount, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true, PoisonOnHitId = poisonId }
             },
             BaseSpeed = speed / 5,
             BaseHitDieHP = hp,

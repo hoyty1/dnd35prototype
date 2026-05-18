@@ -8,10 +8,77 @@ public static partial class NPCDatabase
 {
     private static void RegisterCreatures_L()
     {
+        RegisterLanternArchon();
         RegisterLemure();
+        RegisterLion();
     
         RegisterSummonLargeShark();
         RegisterSummonLargeViper();
+    }
+
+    /// <summary>
+    /// Lantern Archon (CR 2) — Small outsider (archon, extraplanar, good, lawful).
+    /// MM 3.5e p.16. 1 HD, fly 60 ft (perfect), light rays (ranged touch 1d6),
+    /// aura of menace, magic circle against evil, teleport, aid.
+    /// </summary>
+    private static void RegisterLanternArchon()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "lantern_archon",
+            Name = "Lantern Archon",
+            ChallengeRating = "2",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 1, DEX = 11, CON = 12, WIS = 11, INT = 6, CHA = 10,
+            BAB = 1,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                // Light rays — 2 ranged touch attacks, 1d6 damage each, range 30 ft.
+                new NaturalAttackDefinition { Name = "Light Ray", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.None, Range = 6, IsPrimary = true }
+            },
+            BaseSpeed = 12, // Fly 60 ft. (perfect) — no land speed
+            BaseHitDieHP = 6, // 1d8+1
+            DamageReductionAmount = 10,
+            DamageReductionBypass = DamageBypassTag.Evil,
+            SpellResistance = 12,
+            DamageImmunities = new List<DamageType> { DamageType.Electricity },
+            Immunities = new CreatureImmunities
+            {
+                immuneToElectricity = true
+            },
+            CreatureTags = new List<string> { "Outsider", "Archon", "Extraplanar", "Good", "Lawful", "MM35", "Fly", "SummonBase" },
+            SpecialAbilities = new List<string>
+            {
+                "Light rays (2 ranged touch +1, 1d6 each, 30 ft.)",
+                "Aura of Menace (Will DC 13 or -2 attacks/AC/saves for 24 hrs)",
+                "Magic Circle Against Evil (continuous)",
+                "Teleport (at will, self + 50 lbs)",
+                "Spell-like: Aid (at will)",
+                "DR 10/evil",
+                "SR 12",
+                "Immunity to electricity and petrification",
+                "Fly 60 ft. (perfect)",
+                "Darkvision 60 ft.",
+                "Low-light vision",
+                "+4 racial vs poison",
+                "Tongues (continuous)",
+                "Alignment: Lawful Good"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Ranged,
+            SpriteColor = new Color(1f, 0.98f, 0.7f, 1f),
+            PanelColor = new Color(0.3f, 0.28f, 0.12f, 0.85f),
+            NameColor = new Color(1f, 1f, 0.85f),
+            Description = "Monster Manual lantern archon (CR 2). Glowing orb celestial with light ray attacks, DR 10/evil, SR 12, aura of menace. MM 3.5e p.16."
+        });
     }
 
     private static void RegisterLemure()
@@ -70,6 +137,62 @@ public static partial class NPCDatabase
         });
     }
 
+
+    /// <summary>
+    /// Lion (CR 3) — Large animal with pounce and rake.
+    /// MM 3.5e p.274. 5 HD, pounce (full attack on charge), rake 1d4+2 (x2).
+    /// </summary>
+    private static void RegisterLion()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "lion",
+            Name = "Lion",
+            ChallengeRating = "3",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 5,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 21, DEX = 17, CON = 15, WIS = 12, INT = 2, CHA = 6,
+            BAB = 3,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 32, // 5d8+10
+            HasPounce = true,
+            HasRake = true,
+            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
+            HasScent = true,
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Alertness", "Run" },
+            SpecialAbilities = new List<string>
+            {
+                "Pounce (full attack on charge)",
+                "Improved Grab (bite)",
+                "Rake (2 × 1d4+2)",
+                "Low-light vision",
+                "Scent",
+                "Skills: Balance +7, Hide +3 (+12 in tall grass), Listen +5, Move Silently +11, Spot +5",
+                "Alignment: True Neutral"
+            },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.85f, 0.72f, 0.4f, 1f),
+            PanelColor = new Color(0.28f, 0.22f, 0.1f, 0.85f),
+            NameColor = new Color(1f, 0.92f, 0.7f),
+            Description = "Monster Manual lion (CR 3). 2 claws +7 (1d4+5), bite +2 (1d8+2). Pounce, improved grab, rake 2×1d4+2. MM 3.5e p.274."
+        });
+    }
 
     private static void RegisterSummonLargeShark()
     {

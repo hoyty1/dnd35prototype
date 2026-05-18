@@ -168,6 +168,18 @@ public static class PoisonDatabase
             Description = "Venom from medium monstrous spider."
         };
 
+        _poisons["large_spider_poison"] = new PoisonData
+        {
+            Id = "large_spider_poison",
+            Name = "Large Spider Venom",
+            Type = PoisonType.Injury,
+            FortitudeDC = 13,
+            InitialDamage = Damage(AbilityType.STR, "1d6"),
+            SecondaryDamage = Damage(AbilityType.STR, "1d6"),
+            PriceInGold = 0,
+            Description = "Venom from large monstrous spider. Fort DC 13, initial and secondary 1d6 Str damage."
+        };
+
         _poisons["purple_worm_poison"] = new PoisonData
         {
             Id = "purple_worm_poison",
@@ -226,6 +238,18 @@ public static class PoisonDatabase
             SecondaryDamage = Damage(AbilityType.CON, "1d6"),
             PriceInGold = 0,
             Description = "Venom from large viper snake. Fort DC 11, initial and secondary 1d6 Con damage."
+        };
+
+        _poisons["huge_viper_poison"] = new PoisonData
+        {
+            Id = "huge_viper_poison",
+            Name = "Huge Viper Poison",
+            Type = PoisonType.Injury,
+            FortitudeDC = 14,
+            InitialDamage = Damage(AbilityType.CON, "1d6"),
+            SecondaryDamage = Damage(AbilityType.CON, "1d6"),
+            PriceInGold = 0,
+            Description = "Venom from huge viper snake. Fort DC 14, initial and secondary 1d6 Con damage."
         };
 
         _poisons["wyvern_poison"] = new PoisonData
