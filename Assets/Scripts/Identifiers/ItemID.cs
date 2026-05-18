@@ -178,6 +178,9 @@ namespace DND35e.Identifiers
         ScrollLightningBolt = 5003,
         ScrollHaste = 5004,
 
+        // Spell Components (5500-5599)
+        ComponentDiamondDust = 5500,
+
         // Gear & misc (6000-6999)
         GearBackpack = 6000,
         GearBedroll = 6001,

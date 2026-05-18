@@ -6321,18 +6321,41 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            // Check and consume costly material components (250 gp diamond dust)
+            // Check and consume material components (250 gp diamond dust from inventory)
+            // F12 test panel casts bypass inventory requirements for testing convenience.
             CharacterStats casterStats = caster != null ? caster.Stats : null;
-            if (casterStats != null && SpellComponentRegistry.HasCostlyComponents(spell.SpellId))
+            bool isTestPanelCast = _testPanelCastActive;
+            if (casterStats != null && SpellComponentRegistry.HasCostlyComponents(spell.SpellId) && !isTestPanelCast)
             {
-                if (!SpellComponentRegistry.CanAffordComponents(spell.SpellId, casterStats))
+                var req = SpellComponentRegistry.GetRequirements(spell.SpellId);
+                if (req != null && req.HasInventoryComponents)
                 {
-                    string summary = SpellComponentRegistry.GetConsumptionSummary(spell.SpellId);
-                    CombatUI?.ShowCombatLog($"<color=#FF6666>❌ {casterStats.CharacterName} cannot cast Stoneskin — insufficient material components! {summary ?? ""} (has {casterStats.ComponentGold} gp)</color>");
-                    return null;
+                    // Inventory-based component check
+                    if (!SpellComponentRegistry.HasRequiredInventoryComponents(spell.SpellId, caster, out string missingComponent))
+                    {
+                        CombatUI?.ShowCombatLog($"<color=#FF6666>❌ {casterStats.CharacterName} cannot cast Stoneskin — missing required component: {missingComponent}! Purchase it from the store and carry it in your inventory.</color>");
+                        return null;
+                    }
+                    SpellComponentRegistry.ConsumeInventoryComponents(spell.SpellId, caster);
+                    CombatUI?.ShowCombatLog($"<color=#CCAA44>💎 {casterStats.CharacterName} consumes diamond dust (250 gp) from inventory for Stoneskin.</color>");
                 }
-                SpellComponentRegistry.ConsumeComponents(spell.SpellId, casterStats);
-                CombatUI?.ShowCombatLog($"<color=#CCAA44>💎 {casterStats.CharacterName} consumes 250 gp diamond dust for Stoneskin ({casterStats.ComponentGold} gp remaining).</color>");
+                else
+                {
+                    // Fallback: gold-based component check for non-inventory components
+                    if (!SpellComponentRegistry.CanAffordComponents(spell.SpellId, casterStats))
+                    {
+                        string summary = SpellComponentRegistry.GetConsumptionSummary(spell.SpellId);
+                        CombatUI?.ShowCombatLog($"<color=#FF6666>❌ {casterStats.CharacterName} cannot cast Stoneskin — insufficient material components! {summary ?? ""} (has {casterStats.ComponentGold} gp)</color>");
+                        return null;
+                    }
+                    SpellComponentRegistry.ConsumeComponents(spell.SpellId, casterStats);
+                    CombatUI?.ShowCombatLog($"<color=#CCAA44>💎 {casterStats.CharacterName} consumes 250 gp diamond dust for Stoneskin ({casterStats.ComponentGold} gp remaining).</color>");
+                }
+            }
+            else if (isTestPanelCast && casterStats != null)
+            {
+                Debug.Log($"[SpellCasting] F12 test panel cast — bypassing inventory component check for {spell.SpellId}.");
+                CombatUI?.ShowCombatLog($"<color=#888888>🔧 [Test] {casterStats.CharacterName} casts Stoneskin (component check bypassed for testing).</color>");
             }
 
             StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();

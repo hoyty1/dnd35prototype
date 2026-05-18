@@ -349,6 +349,17 @@ public static class ItemDatabase
             IconChar = "\u2022", IconColor = new Color(0.7f, 0.65f, 0.45f)
         });
 
+        // ── Spell Components ──
+        Register(new ItemData
+        {
+            Id = ItemIDs.COMPONENT_DIAMOND_DUST, Name = "Diamond Dust (250 gp)", Type = ItemType.Consumable,
+            Slot = EquipSlot.None,
+            Description = "A pouch of finely ground diamond dust worth 250 gp. Required material component for Stoneskin and other spells.",
+            BasePriceGp = 250,
+            WeightLbs = 0.1f,
+            IconChar = "💎", IconColor = new Color(0.7f, 0.85f, 1f)
+        });
+
         // Dart: 1d4, 20/×2, piercing, range 20 ft
         Register(new ItemData
         {

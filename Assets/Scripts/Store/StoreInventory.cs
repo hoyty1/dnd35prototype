@@ -97,6 +97,9 @@ public class StoreInventory : MonoBehaviour
         Add(ItemID.PotionCureLightWounds, "Potion", 50);
         Add(ItemID.PotionShieldOfFaith, "Potion", 50);
 
+        // Spell Components
+        Add(ItemID.ComponentDiamondDust, "Spell Component", 250);
+
         // Adventuring gear / misc
         Add(ItemID.AmmoCrossbowBolts20, "Ammunition", 1);
         Add(ItemID.WeaponTorch, "Weapon", 1);

@@ -75,6 +75,8 @@ namespace DND35e.Identifiers
             { ItemID.AmmoSlingBullet, ItemIDs.AMMO_SLING_BULLET },
             { ItemID.AmmoCrossbowBolts20, ItemIDs.CROSSBOW_BOLTS_20 },
 
+            { ItemID.ComponentDiamondDust, ItemIDs.COMPONENT_DIAMOND_DUST },
+
             { ItemID.ScrollMagicMissile, "scroll_magic_missile" },
             { ItemID.ScrollCureLightWounds, "scroll_cure_light_wounds" },
             { ItemID.ScrollFireball, "scroll_fireball" },

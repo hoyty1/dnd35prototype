@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Defines a single material component requirement for a spell.
@@ -33,12 +34,13 @@ public class SpellMaterialComponent
 
     public SpellMaterialComponent() { }
 
-    public SpellMaterialComponent(string name, int gpCost, bool isConsumed = true, string description = null)
+    public SpellMaterialComponent(string name, int gpCost, bool isConsumed = true, string description = null, string inventoryItemId = null)
     {
         Name = name;
         GpCost = gpCost;
         IsConsumed = isConsumed;
         Description = description;
+        InventoryItemId = inventoryItemId;
     }
 
     /// <summary>Returns a formatted display string for this component.</summary>
@@ -82,6 +84,21 @@ public class SpellComponentRequirements
                 }
             }
             return total;
+        }
+    }
+
+    /// <summary>Whether this spell has any material components requiring inventory items.</summary>
+    public bool HasInventoryComponents
+    {
+        get
+        {
+            if (MaterialComponents == null) return false;
+            for (int i = 0; i < MaterialComponents.Count; i++)
+            {
+                if (MaterialComponents[i] != null && !string.IsNullOrEmpty(MaterialComponents[i].InventoryItemId))
+                    return true;
+            }
+            return false;
         }
     }
 
@@ -198,18 +215,128 @@ public static class SpellComponentRegistry
 
     /// <summary>
     /// Check if a character can afford the material component costs for a spell.
-    /// Returns true if the character has enough gold, false otherwise.
+    /// For components with InventoryItemId, checks the character's inventory.
+    /// For other costly components, checks ComponentGold.
     /// </summary>
     public static bool CanAffordComponents(string spellId, CharacterStats stats)
     {
         if (stats == null) return false;
         var req = GetRequirements(spellId);
         if (req == null || !req.HasCostlyComponents) return true;
+
+        // For inventory-based components, defer to CanAffordComponentsFromInventory
+        if (req.HasInventoryComponents)
+            return true; // Gold check only applies to non-inventory components
+
         return stats.ComponentGold >= req.TotalConsumedGpCost;
     }
 
     /// <summary>
+    /// Check if a character has the required inventory items for a spell's material components.
+    /// Returns true if all inventory-based components are present, false otherwise.
+    /// Also returns the missing component name via out parameter.
+    /// </summary>
+    public static bool HasRequiredInventoryComponents(string spellId, CharacterController caster, out string missingComponent)
+    {
+        missingComponent = null;
+        if (caster == null) return true;
+
+        var req = GetRequirements(spellId);
+        if (req == null || !req.HasInventoryComponents) return true;
+
+        Inventory inv = caster.GetInventoryData();
+        if (inv == null)
+        {
+            // No inventory — check fails for any inventory component
+            for (int i = 0; i < req.MaterialComponents.Count; i++)
+            {
+                var comp = req.MaterialComponents[i];
+                if (comp != null && !string.IsNullOrEmpty(comp.InventoryItemId) && comp.IsConsumed)
+                {
+                    missingComponent = comp.Name;
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        for (int i = 0; i < req.MaterialComponents.Count; i++)
+        {
+            var comp = req.MaterialComponents[i];
+            if (comp == null || string.IsNullOrEmpty(comp.InventoryItemId) || !comp.IsConsumed)
+                continue;
+
+            // Search inventory for an item with matching Id
+            bool found = false;
+            for (int s = 0; s < inv.GeneralSlots.Length; s++)
+            {
+                ItemData item = inv.GeneralSlots[s];
+                if (item != null && string.Equals(item.Id, comp.InventoryItemId, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                missingComponent = comp.Name;
+                Debug.Log($"[SpellComponentRegistry] {caster.Stats?.CharacterName} missing inventory component '{comp.Name}' (item id: {comp.InventoryItemId}) for {spellId}.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Consume inventory-based material components for a spell.
+    /// Removes matching items from the character's inventory.
+    /// Returns true if successful.
+    /// </summary>
+    public static bool ConsumeInventoryComponents(string spellId, CharacterController caster)
+    {
+        if (caster == null) return false;
+
+        var req = GetRequirements(spellId);
+        if (req == null || !req.HasInventoryComponents) return true;
+
+        Inventory inv = caster.GetInventoryData();
+        if (inv == null) return false;
+
+        for (int i = 0; i < req.MaterialComponents.Count; i++)
+        {
+            var comp = req.MaterialComponents[i];
+            if (comp == null || string.IsNullOrEmpty(comp.InventoryItemId) || !comp.IsConsumed)
+                continue;
+
+            // Find and remove the first matching item from inventory
+            bool removed = false;
+            for (int s = 0; s < inv.GeneralSlots.Length; s++)
+            {
+                ItemData item = inv.GeneralSlots[s];
+                if (item != null && string.Equals(item.Id, comp.InventoryItemId, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    inv.GeneralSlots[s] = null;
+                    removed = true;
+                    Debug.Log($"[SpellComponentRegistry] {caster.Stats?.CharacterName} consumed inventory item '{item.Name}' for {spellId}.");
+                    break;
+                }
+            }
+
+            if (!removed)
+            {
+                Debug.LogWarning($"[SpellComponentRegistry] Failed to consume inventory component '{comp.Name}' for {spellId} — item not found.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Consume the material components for a spell (deduct gold from component budget).
+    /// Only handles non-inventory components. For inventory-based components, use ConsumeInventoryComponents.
     /// Returns true if successful, false if character can't afford it.
     /// </summary>
     public static bool ConsumeComponents(string spellId, CharacterStats stats)
@@ -217,6 +344,9 @@ public static class SpellComponentRegistry
         if (stats == null) return false;
         var req = GetRequirements(spellId);
         if (req == null || !req.HasCostlyComponents) return true;
+
+        // Skip inventory-based components (handled by ConsumeInventoryComponents)
+        if (req.HasInventoryComponents) return true;
 
         int cost = req.TotalConsumedGpCost;
         if (stats.ComponentGold < cost)
@@ -259,12 +389,15 @@ public static class SpellComponentRegistry
     {
         // ── STONESKIN (PHB p.285) ──
         // Components: V, S, M (granite and 250 gp worth of diamond dust)
+        // Diamond dust is an inventory-based component — must be purchased and carried.
         RegisterComponents("stoneskin", new SpellComponentRequirements
         {
             MaterialComponents = new List<SpellMaterialComponent>
             {
                 new SpellMaterialComponent("granite", 0, false, "A small piece of granite"),
-                new SpellMaterialComponent("diamond dust", 250, true, "250 gp worth of diamond dust, sprinkled on the target's skin")
+                new SpellMaterialComponent("diamond dust", 250, true,
+                    "250 gp worth of diamond dust, sprinkled on the target's skin",
+                    inventoryItemId: ItemIDs.COMPONENT_DIAMOND_DUST)
             }
         });
 

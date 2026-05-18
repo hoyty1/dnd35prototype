@@ -65,6 +65,9 @@ namespace DND35e.Identifiers
         /// <summary>Item id: ammo_sling_bullet</summary>
         public const string AMMO_SLING_BULLET = "ammo_sling_bullet";
 
+        /// <summary>Item id: component_diamond_dust</summary>
+        public const string COMPONENT_DIAMOND_DUST = "component_diamond_dust";
+
         /// <summary>Item id: crossbow_bolts_20</summary>
         public const string CROSSBOW_BOLTS_20 = "crossbow_bolts_20";
 
