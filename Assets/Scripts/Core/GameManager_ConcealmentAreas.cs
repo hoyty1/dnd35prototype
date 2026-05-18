@@ -22,7 +22,8 @@ public partial class GameManager
         bool isGustOfWind = spell.SpellId == SpellNames.GUST_OF_WIND;
         bool isSleetStorm = spell.SpellId == SpellNames.SLEET_STORM;
         bool isStinkingCloud = spell.SpellId == SpellNames.STINKING_CLOUD;
-        if (!isObscuringMist && !isFogCloud && !isDarkness && !isGustOfWind && !isSleetStorm && !isStinkingCloud)
+        bool isSolidFog = spell.SpellId == SpellNames.SOLID_FOG;
+        if (!isObscuringMist && !isFogCloud && !isDarkness && !isGustOfWind && !isSleetStorm && !isStinkingCloud && !isSolidFog)
             return false;
 
         int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
@@ -113,6 +114,42 @@ public partial class GameManager
 
             cloudLog.Append("═══════════════════════════════════");
             log = cloudLog.ToString();
+            return true;
+        }
+
+        // Handle Solid Fog
+        if (isSolidFog)
+        {
+            int solidFogDuration = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
+            if (solidFogDuration <= 0)
+                solidFogDuration = Mathf.Max(1, casterLevel * 10); // 1 min/level = 10 rounds/level fallback
+            Vector3 solidFogCenter = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
+            CreateSolidFogArea(solidFogCenter, solidFogDuration, casterLevel, caster);
+
+            var solidFogLog = new StringBuilder();
+            solidFogLog.AppendLine("═══════════════════════════════════");
+            solidFogLog.AppendLine($"✨ {caster.Stats.CharacterName} casts Solid Fog!");
+            solidFogLog.AppendLine($"  Area: 20-ft radius spread, 20 ft. high ({aoeCells.Count} squares)");
+            solidFogLog.AppendLine($"  Duration: {solidFogDuration} rounds ({solidFogDuration / 10} min)");
+            solidFogLog.AppendLine("  • Concealment: 20% miss chance at 5 ft, 50% (total) beyond 5 ft");
+            solidFogLog.AppendLine("  • Movement speed halved inside the fog");
+            solidFogLog.AppendLine("  • -2 penalty to melee attack and damage rolls");
+            solidFogLog.AppendLine("  • Normal ranged weapon attacks blocked (magic rays still work)");
+            solidFogLog.AppendLine("  • No save, no SR");
+
+            if (targets != null && targets.Count > 0)
+            {
+                solidFogLog.Append("  Currently affected: ");
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    if (i > 0) solidFogLog.Append(", ");
+                    solidFogLog.Append(targets[i] != null && targets[i].Stats != null ? targets[i].Stats.CharacterName : "Unknown");
+                }
+                solidFogLog.AppendLine();
+            }
+
+            solidFogLog.Append("═══════════════════════════════════");
+            log = solidFogLog.ToString();
             return true;
         }
 
@@ -258,6 +295,18 @@ public partial class GameManager
         cloud.CasterLevel = Mathf.Max(1, casterLevel);
         cloud.SaveDC = Mathf.Max(1, saveDc);
         cloud.Caster = caster;
+    }
+
+    public void CreateSolidFogArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    {
+        GameObject fogObject = new GameObject("SolidFog_Area");
+        fogObject.transform.position = centerPosition;
+
+        SolidFogAreaEffect fog = fogObject.AddComponent<SolidFogAreaEffect>();
+        fog.CenterPosition = centerPosition;
+        fog.RoundsRemaining = Mathf.Max(1, durationRounds);
+        fog.CasterLevel = Mathf.Max(1, casterLevel);
+        fog.Caster = caster;
     }
 
     private bool TryResolveGlitterdustSpell(CharacterController caster, SpellData spell, List<CharacterController> targets, HashSet<Vector2Int> aoeCells, out string log)

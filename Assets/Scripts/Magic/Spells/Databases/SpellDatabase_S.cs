@@ -353,6 +353,56 @@ public static partial class SpellDatabase
                 });
 
         // ──────────────────────────────────────────────────────────────
+        // SOLID FOG  (PHB p.281)
+        // Conjuration (Creation)
+        // Level: Sor/Wiz 4
+        // Components: V, S, M (a pinch of dried, powdered peas combined
+        //             with powdered animal hoof)
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Effect: Fog spreads in 20-ft. radius, 20 ft. high
+        // Duration: 1 min./level
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // Functions like Fog Cloud but the vapors are so thick that
+        // creatures move at half speed, take –2 on melee attack and
+        // damage rolls. Normal ranged weapon attacks are blocked
+        // (magic rays still work). A strong wind disperses it in 1 round.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SOLID_FOG,
+                    Name = "Solid Fog",
+                    Description = "Conjuration (Creation). Functions like Fog Cloud, but the solid fog is so thick that "
+                        + "any creature attempting to move through it progresses at half speed, and takes a -2 penalty on "
+                        + "all melee attack and melee damage rolls. The vapors prevent effective ranged weapon attacks "
+                        + "(except for magic rays and the like). A strong wind (21+ mph) disperses the fog in 1 round. "
+                        + "Duration 1 min./level. No save. No SR. Components: V, S, M (dried peas + powdered animal hoof). PHB p.281",
+                    SpellLevel = 4, School = "Conjuration (Creation)",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4, // 20-ft radius = 4 squares
+                    AoERangeSquares = 0, // use Medium range profile
+                    AoEFilter = AoETargetFilter.All,
+                    AreaRadius = 4, // 20-ft radius
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = false,
+                    SavingThrowType = "None",
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ──────────────────────────────────────────────────────────────
         // SLOW  (PHB p.280)
         // Transmutation
         // Level: Brd 3, Sor/Wiz 3

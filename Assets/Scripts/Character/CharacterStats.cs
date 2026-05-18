@@ -1166,6 +1166,22 @@ public class CharacterStats
     /// <summary>Slow spell speed multiplier (0.5 = half speed). 1.0 = no penalty.</summary>
     public float SlowSpeedMultiplier = 1f;
 
+    // ========== SOLID FOG (area effect, queried dynamically) ==========
+
+    /// <summary>
+    /// Solid Fog melee attack penalty (-2 if inside any Solid Fog, 0 otherwise).
+    /// Queried dynamically from SolidFogAreaEffect.
+    /// </summary>
+    public int SolidFogMeleeAttackPenalty =>
+        OwnerCharacter != null ? SolidFogAreaEffect.GetMeleeAttackPenaltyFor(OwnerCharacter) : 0;
+
+    /// <summary>
+    /// Solid Fog melee damage penalty (-2 if inside any Solid Fog, 0 otherwise).
+    /// Queried dynamically from SolidFogAreaEffect.
+    /// </summary>
+    public int SolidFogMeleeDamagePenalty =>
+        OwnerCharacter != null ? SolidFogAreaEffect.GetMeleeDamagePenaltyFor(OwnerCharacter) : 0;
+
     // ========== FIRE SHIELD ==========
     /// <summary>True while Fire Shield is active on this character.</summary>
     public bool FireShieldActive;
@@ -2148,6 +2164,14 @@ public class CharacterStats
             // Slow spell halves speed (PHB p.280)
             if (SlowSpeedMultiplier < 1f)
                 speed *= SlowSpeedMultiplier;
+
+            // Solid Fog halves speed (PHB p.281)
+            if (OwnerCharacter != null)
+            {
+                float solidFogMult = SolidFogAreaEffect.GetSpeedMultiplierFor(OwnerCharacter);
+                if (solidFogMult < 1f)
+                    speed *= solidFogMult;
+            }
 
             int roundedToFive = Mathf.FloorToInt(Mathf.Max(0f, speed) / 5f) * 5;
             return Mathf.Max(0, roundedToFive);

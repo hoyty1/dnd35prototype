@@ -4501,6 +4501,8 @@ public class CharacterController : MonoBehaviour
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
         int moraleAttackBonus = Stats.MoraleAttackBonus;
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
+        int solidFogAtkPenalty = isMelee ? Stats.SolidFogMeleeAttackPenalty : 0;
+        int solidFogDmgPenalty = isMelee ? Stats.SolidFogMeleeDamagePenalty : 0;
         int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
         int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
@@ -4512,12 +4514,13 @@ public class CharacterController : MonoBehaviour
                           + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                           + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                           + weaponNonProfPenalty + armorNonProfPenalty + moraleAttackBonus + conditionAttackPenalty
-                          + aidAnotherAttackBonus + damageModeProfile.AttackPenalty + additionalAttackModifier;
+                          + aidAnotherAttackBonus + damageModeProfile.AttackPenalty + additionalAttackModifier
+                          + solidFogAtkPenalty;
 
         int critThreatMin = featMods.CritThreatMin;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
-        int totalFeatDmgBonus = featMods.TotalFeatDamageBonus;
+        int totalFeatDmgBonus = featMods.TotalFeatDamageBonus + solidFogDmgPenalty;
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
         NaturalAttackDefinition naturalAttackForOnHit = null;
@@ -4688,6 +4691,8 @@ public class CharacterController : MonoBehaviour
         int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
+        int solidFogAtkPenalty = isMelee ? Stats.SolidFogMeleeAttackPenalty : 0;
+        int solidFogDmgPenalty = isMelee ? Stats.SolidFogMeleeDamagePenalty : 0;
 
         // === FEAT MODIFIERS (via AttackCalculator) - Full Attack ===
         int fullAtkDistFeet = (rangeInfo != null) ? rangeInfo.DistanceFeet : 0;
@@ -4722,7 +4727,7 @@ public class CharacterController : MonoBehaviour
         bool preciseShotNegated = false;
         int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
 
-        int totalFeatDmgBonus = fullAtkFeatMods.TotalFeatDamageBonus;
+        int totalFeatDmgBonus = fullAtkFeatMods.TotalFeatDamageBonus + solidFogDmgPenalty;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
@@ -4757,7 +4762,8 @@ public class CharacterController : MonoBehaviour
                                  + powerAtkPenalty + weaponFocusBonus + combatExpertisePenalty
                                  + proneAttackPenalty + fightingDefensivelyPenalty
                                  + shootingIntoMeleePenalty + armorNonProfPenalty + conditionAttackPenalty
-                                 + aidAnotherAttackBonus + damageModeProfile.AttackPenalty;
+                                 + aidAnotherAttackBonus + damageModeProfile.AttackPenalty
+                                 + solidFogAtkPenalty;
 
                     int hpBeforeAtk = target.Stats.CurrentHP;
                     bool useHalfStrength = !naturalAttack.IsPrimary;
@@ -4866,7 +4872,8 @@ public class CharacterController : MonoBehaviour
                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                          + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                          + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty
-                         + aidAnotherAttackBonus + damageModeProfile.AttackPenalty;
+                         + aidAnotherAttackBonus + damageModeProfile.AttackPenalty
+                         + solidFogAtkPenalty;
 
             // The base bonus from GetIterativeAttackBonuses already includes STRMod + SizeModifier.
             if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
@@ -5106,6 +5113,8 @@ public class CharacterController : MonoBehaviour
         int attackCount = Mathf.Max(1, rakeAttack.Count);
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
+        int solidFogAtkPenalty = Stats.SolidFogMeleeAttackPenalty; // rake is always melee
+        int solidFogDmgPenalty = Stats.SolidFogMeleeDamagePenalty;
 
         for (int i = 0; i < attackCount; i++)
         {
@@ -5114,7 +5123,7 @@ public class CharacterController : MonoBehaviour
 
             // D&D 3.5e: rake attacks use PRIMARY attack bonuses (no -5 secondary penalty)
             int baseBonus = Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier;
-            int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + armorNonProfPenalty + conditionAttackPenalty;
+            int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + armorNonProfPenalty + conditionAttackPenalty + solidFogAtkPenalty;
             int hpBeforeAtk = target.Stats.CurrentHP;
 
             Stats.GetScaledNaturalAttackDamage(rakeAttack, out int damageCount, out int damageDice);
@@ -5122,7 +5131,7 @@ public class CharacterController : MonoBehaviour
             // Rake damage still uses 0.5× STR by rule, so keep off-hand strength handling for damage resolution.
             const bool useHalfStrengthForRakeDamage = true;
             int baseStrengthFromDamageResolver = Mathf.FloorToInt(Stats.STRMod * 0.5f);
-            int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(rakeAttack) - baseStrengthFromDamageResolver;
+            int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(rakeAttack) - baseStrengthFromDamageResolver + solidFogDmgPenalty;
 
             CombatResult atk = PerformSingleAttackWithCrit(
                 target,
@@ -5235,6 +5244,8 @@ public class CharacterController : MonoBehaviour
         int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
         bool preciseShotNegated = false;
         int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
+        int solidFogAtkPenalty = isMelee ? Stats.SolidFogMeleeAttackPenalty : 0;
+        int solidFogDmgPenalty = isMelee ? Stats.SolidFogMeleeDamagePenalty : 0;
 
         // Main-hand attack
         if (canMainAttack)
@@ -5245,12 +5256,12 @@ public class CharacterController : MonoBehaviour
                              + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty
                              + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                              + mainWeaponNonProfPenalty + armorNonProfPenalty + mainAidAnotherAttackBonus
-                             + mainDamageModeProfile.AttackPenalty;
+                             + mainDamageModeProfile.AttackPenalty + solidFogAtkPenalty;
             string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
             int mainCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20);
             int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
-            int totalMainFeatDmg = powerAtkDmgBonus + pbsDmgBonus + mainWSBonus;
+            int totalMainFeatDmg = powerAtkDmgBonus + pbsDmgBonus + mainWSBonus + solidFogDmgPenalty;
 
             GetScaledWeaponDamageDice(mainWeapon, out int mainDamageCount, out int mainDamageDice);
 
@@ -5320,7 +5331,7 @@ public class CharacterController : MonoBehaviour
                             + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                             + offWeaponNonProfPenalty + armorNonProfPenalty + offAidAnotherAttackBonus
-                            + offDamageModeProfile.AttackPenalty;
+                            + offDamageModeProfile.AttackPenalty + solidFogAtkPenalty;
             bool offHandShieldBash = IsShieldBashWeapon(offWeapon);
             string offLabel = offHandFromSpikedGauntlet
                 ? $"Attack 2 - Off Hand ({offWeapon.Name}, Hands Slot)"
@@ -5330,7 +5341,7 @@ public class CharacterController : MonoBehaviour
 
             int offCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20);
             int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
-            int totalOffFeatDmg = powerAtkDmgBonus + pbsDmgBonus + offWSBonus;
+            int totalOffFeatDmg = powerAtkDmgBonus + pbsDmgBonus + offWSBonus + solidFogDmgPenalty;
 
             GetScaledWeaponDamageDice(offWeapon, out int offDamageCount, out int offDamageDice);
 
@@ -11097,6 +11108,8 @@ public class CharacterController : MonoBehaviour
         int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+        int solidFogAtkPenalty = Stats.SolidFogMeleeAttackPenalty; // flurry is always melee
+        int solidFogDmgPenalty = Stats.SolidFogMeleeDamagePenalty;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
 
         for (int i = 0; i < flurryBonuses.Length; i++)
@@ -11111,14 +11124,14 @@ public class CharacterController : MonoBehaviour
             int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
             int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + proneAttackPenalty
                        + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty + aidAnotherAttackBonus
-                       + damageModeProfile.AttackPenalty;
+                       + damageModeProfile.AttackPenalty + solidFogAtkPenalty;
 
             string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(flurryBonuses[i])})";
             int hpBefore = target.Stats.CurrentHP;
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
                 damageDice, damageCount, bonusDamage, critThreatMin, critMult,
-                equippedWeapon, false, 0, aidAnotherTargetAcBonus,
+                equippedWeapon, false, solidFogDmgPenalty, aidAnotherTargetAcBonus,
                 damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
             atk.RacialAttackBonus = racialAtkBonus;

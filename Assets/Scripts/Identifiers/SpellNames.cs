@@ -528,6 +528,9 @@ namespace DND35e.Identifiers
         /// <summary>Silent Image (spell id: silent_image)</summary>
         public const string SILENT_IMAGE = "silent_image";
 
+        /// <summary>Solid Fog (spell id: solid_fog)</summary>
+        public const string SOLID_FOG = "solid_fog";
+
         /// <summary>Sleet Storm (spell id: sleet_storm)</summary>
         public const string SLEET_STORM = "sleet_storm";
 
