@@ -360,6 +360,19 @@ public static class ItemDatabase
             IconChar = "💎", IconColor = new Color(0.7f, 0.85f, 1f)
         });
 
+        // ── Spell Component Pouch (PHB p.130) ──
+        // Contains all common material components that don't have a listed GP cost.
+        // Reusable — NOT consumed when casting spells.
+        Register(new ItemData
+        {
+            Id = ItemIDs.COMPONENT_SPELL_POUCH, Name = "Spell Component Pouch", Type = ItemType.Misc,
+            Slot = EquipSlot.None,
+            Description = "A small waterproof belt pouch containing all the common material components and focuses needed to cast spells — except those with a specific cost. Reusable; not consumed when casting.",
+            BasePriceGp = 5,
+            WeightLbs = 2f,
+            IconChar = "🎒", IconColor = new Color(0.55f, 0.45f, 0.30f)
+        });
+
         // Dart: 1d4, 20/×2, piercing, range 20 ft
         Register(new ItemData
         {

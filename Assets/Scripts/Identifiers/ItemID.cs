@@ -180,6 +180,7 @@ namespace DND35e.Identifiers
 
         // Spell Components (5500-5599)
         ComponentDiamondDust = 5500,
+        ComponentSpellPouch = 5501,
 
         // Gear & misc (6000-6999)
         GearBackpack = 6000,

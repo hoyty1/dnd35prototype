@@ -117,6 +117,22 @@ public class SpellComponentRequirements
         }
     }
 
+    /// <summary>Whether this spell has any common (GP == 0) material components that require a spell component pouch.</summary>
+    public bool HasCommonMaterialComponents
+    {
+        get
+        {
+            if (MaterialComponents == null) return false;
+            for (int i = 0; i < MaterialComponents.Count; i++)
+            {
+                if (MaterialComponents[i] != null && MaterialComponents[i].GpCost == 0
+                    && string.IsNullOrEmpty(MaterialComponents[i].InventoryItemId))
+                    return true;
+            }
+            return false;
+        }
+    }
+
     /// <summary>Get a formatted component line for spell descriptions (e.g., "V, S, M (granite and 250 gp diamond dust)").</summary>
     public string GetComponentLine(bool hasVerbal = true, bool hasSomatic = true, bool hasMaterial = false)
     {
@@ -204,6 +220,72 @@ public static class SpellComponentRegistry
     {
         var req = GetRequirements(spellId);
         return req != null && req.HasCostlyComponents;
+    }
+
+    /// <summary>
+    /// Whether a spell requires a spell component pouch for common material components.
+    /// A spell needs the pouch if:
+    /// 1) It has SpellData.HasMaterialComponent == true AND no costly components registered, OR
+    /// 2) It has registered common (GP==0, no InventoryItemId) material components.
+    /// Stoneskin has both a common component (granite) AND a costly one (diamond dust) — it needs the pouch for granite.
+    /// </summary>
+    public static bool RequiresComponentPouch(string spellId, SpellData spell = null)
+    {
+        // Check registered component requirements first
+        var req = GetRequirements(spellId);
+        if (req != null && req.HasCommonMaterialComponents)
+            return true;
+
+        // If spell data says it has material components but no costly components registered,
+        // it's a common-material-only spell — needs the pouch.
+        if (spell != null && spell.HasMaterialComponent)
+        {
+            if (req == null || !req.HasCostlyComponents)
+                return true;
+            // Even if it has costly components, it may also have common ones (e.g., Stoneskin has granite)
+            // We already checked HasCommonMaterialComponents above.
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Check if a character has a Spell Component Pouch in their inventory.
+    /// The pouch is NOT consumed — it's a reusable item.
+    /// </summary>
+    public static bool HasSpellComponentPouch(CharacterController caster)
+    {
+        if (caster == null) return false;
+        Inventory inv = caster.GetInventoryData();
+        if (inv == null) return false;
+
+        for (int s = 0; s < inv.GeneralSlots.Length; s++)
+        {
+            ItemData item = inv.GeneralSlots[s];
+            if (item != null && string.Equals(item.Id, ItemIDs.COMPONENT_SPELL_POUCH, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Validates that a caster has the spell component pouch if needed for a spell.
+    /// Returns true if the pouch is not needed or is present. 
+    /// Returns false and sets reason if the pouch is missing.
+    /// </summary>
+    public static bool ValidatePouchRequirement(string spellId, SpellData spell, CharacterController caster, out string failureReason)
+    {
+        failureReason = null;
+        if (caster == null) return true;
+
+        if (!RequiresComponentPouch(spellId, spell))
+            return true;
+
+        if (HasSpellComponentPouch(caster))
+            return true;
+
+        failureReason = "Spell Component Pouch";
+        return false;
     }
 
     /// <summary>Get the total GP cost of consumed components for a spell.</summary>

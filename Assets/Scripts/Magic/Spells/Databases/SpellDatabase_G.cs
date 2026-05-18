@@ -141,7 +141,8 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.GREASE,
                     Name = "Grease",
-                    Description = "Object or 10-ft-square area becomes slippery. Reflex save to avoid falling when first affected. Balance checks while traversing. Duration 1 round/level. PHB p.237",
+                    Description = "Object or 10-ft-square area becomes slippery. Reflex save to avoid falling when first affected. Balance checks while traversing. Duration 1 round/level. Components: V, S, M (butter/pork rind). PHB p.237",
+                    HasMaterialComponent = true, // M: butter or pork rind (common — covered by spell component pouch)
                     SpellLevel = 1, School = "Conjuration",
                     ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.SingleEnemy, // Runtime prompt supports object mode (single target) or area mode

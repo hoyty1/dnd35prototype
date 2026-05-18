@@ -279,7 +279,8 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.SLEEP,
                     Name = "Sleep",
-                    Description = "Enchantment (Compulsion) [Mind-Affecting]. A 10-ft radius burst affects creatures with lowest HD first from a 4d4 HD pool. Only creatures with 4 HD or less are affected. Will negates. Duration 1 min/level. SR: Yes. PHB p.280",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. A 10-ft radius burst affects creatures with lowest HD first from a 4d4 HD pool. Only creatures with 4 HD or less are affected. Will negates. Duration 1 min/level. SR: Yes. Components: V, S, M (sand/rose petals/cricket). PHB p.280",
+                    HasMaterialComponent = true, // M: sand, rose petals, or a cricket (common — covered by spell component pouch)
                     SpellLevel = 1,
                     School = "Enchantment",
                     ClassList = new[] { "Wizard", "Sorcerer" },
@@ -328,7 +329,8 @@ public static partial class SpellDatabase
                     Description = "Conjuration (Creation) [Cold]. Driving sleet blocks all sight (including darkvision) within a 40-ft radius cylinder. "
                         + "Icy ground: DC 10 Balance check to move at half speed; fail by 5+ = fall prone. "
                         + "Concentration DC 5 + spell level to cast inside. Extinguishes torches and small fires. "
-                        + "No save. No SR. Components: V, S, M/DF. PHB p.281",
+                        + "No save. No SR. Components: V, S, M/DF (dust and water). PHB p.281",
+                    HasMaterialComponent = true, // M/DF: dust and water (common — covered by spell component pouch)
                     SpellLevel = 3, School = "Conjuration (Creation) [Cold]",
                     ClassList = new[] { "Wizard", "Sorcerer", "Druid" },
                     TargetType = SpellTargetType.Area,
@@ -374,6 +376,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.SOLID_FOG,
                     Name = "Solid Fog",
+                    HasMaterialComponent = true, // M: dried peas + powdered animal hoof (common — covered by spell component pouch)
                     Description = "Conjuration (Creation). Functions like Fog Cloud, but the solid fog is so thick that "
                         + "any creature attempting to move through it progresses at half speed, and takes a -2 penalty on "
                         + "all melee attack and melee damage rolls. The vapors prevent effective ranged weapon attacks "
@@ -430,12 +433,13 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.SLOW,
                     Name = "Slow",
+                    HasMaterialComponent = true, // M: a drop of molasses (common — covered by spell component pouch)
                     Description = "Transmutation. Affected creature moves and attacks at a drastically slowed rate. "
                         + "Can only take a single move action or standard action each turn (no full-round actions). "
                         + "-1 penalty on attack rolls, AC, and Reflex saves. "
                         + "Movement speed halved (round down to nearest 5 ft). "
                         + "Slow counters and dispels Haste. "
-                        + "Duration 1 round/level. Will negates. SR: Yes. PHB p.280",
+                        + "Duration 1 round/level. Will negates. SR: Yes. Components: V, S, M (drop of molasses). PHB p.280",
                     SpellLevel = 3,
                     School = "Transmutation",
                     AvailableFor = new List<SpellAvailability>
@@ -480,6 +484,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.STINKING_CLOUD,
                     Name = "Stinking Cloud",
+                    HasMaterialComponent = true, // M: rotten egg or skunk cabbage (common — covered by spell component pouch)
                     Description = "Conjuration (Creation). Creates a 20-ft radius bank of nauseating fog. "
                         + "Living creatures must Fort save each round or become nauseated (can only take move action). "
                         + "Nausea persists 1d4+1 rounds after leaving. Immune: undead, constructs, non-breathers, poison immune. "

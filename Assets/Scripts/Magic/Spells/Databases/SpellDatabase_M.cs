@@ -14,7 +14,8 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.MAGE_ARMOR,
                     Name = "Mage Armor",
-                    Description = "+4 armor bonus to AC for 1 hour/level. Doesn't stack with actual armor. PHB p.249",
+                    HasMaterialComponent = true, // M: a piece of cured leather (common — covered by spell component pouch)
+                    Description = "+4 armor bonus to AC for 1 hour/level. Doesn't stack with actual armor. Components: V, S, F (cured leather). PHB p.249",
                     SpellLevel = 1, School = "Conjuration",
                     ClassList = new[] { "Wizard" },
                     TargetType = SpellTargetType.Self,

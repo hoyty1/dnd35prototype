@@ -46,7 +46,8 @@ public class WizardClass : ICharacterClass
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));
-        Debug.Log("[Wizard] Equipment: Quarterstaff, Light Crossbow, Dagger (no armor)");
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.COMPONENT_SPELL_POUCH));
+        Debug.Log("[Wizard] Equipment: Quarterstaff, Light Crossbow, Dagger, Spell Component Pouch (no armor)");
     }
 
     // Spellcasting

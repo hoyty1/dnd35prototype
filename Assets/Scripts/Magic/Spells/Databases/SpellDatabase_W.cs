@@ -14,7 +14,8 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.WEB,
                     Name = "Web",
-                    Description = "Conjuration (Creation). Webs fill a 20-ft-radius spread. Creatures in area make Reflex save or become entangled. Entangled creatures cannot move until they escape (Str or Escape Artist DC 20). Area is difficult terrain, burns if ignited, and is destroyed in 1 round by fire. Duration 10 min/level (dismissible). PHB p.301",
+                    Description = "Conjuration (Creation). Webs fill a 20-ft-radius spread. Creatures in area make Reflex save or become entangled. Entangled creatures cannot move until they escape (Str or Escape Artist DC 20). Area is difficult terrain, burns if ignited, and is destroyed in 1 round by fire. Duration 10 min/level (dismissible). Components: V, S, M (spider web). PHB p.301",
+                    HasMaterialComponent = true, // M: spider web (common — covered by spell component pouch)
                     SpellLevel = 2,
                     School = "Conjuration",
                     ClassList = new[] { "Wizard", "Sorcerer" },
@@ -192,6 +193,7 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M/DF: phosphorus (common — covered by spell component pouch)
                     IsPlaceholder = false
                 });
 
@@ -243,6 +245,7 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: a small piece of quartz or rock crystal (common — covered by spell component pouch)
                     IsPlaceholder = false
                 });
 

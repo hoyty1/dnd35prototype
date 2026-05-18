@@ -85,7 +85,7 @@ public static partial class SpellDatabase
                     SpellId = SpellNames.FIREBALL,
                     Name = "Fireball",
                     Description = "Evocation [Fire]. An explosion of flame deals 1d6 fire damage per caster level (max 10d6) "
-                        + "in a 20-ft.-radius spread. Reflex half. SR: Yes. PHB p.231",
+                        + "in a 20-ft.-radius spread. Reflex half. SR: Yes. Components: V, S, M (bat guano and sulfur). PHB p.231",
                     SpellLevel = 3,
                     School = "Evocation [Fire]",
                     AvailableFor = new List<SpellAvailability>
@@ -103,6 +103,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Damage,
                     DamageDice = 6,
                     DamageCount = 1, // Placeholder; actual dice = min(CL, 10) resolved at cast time
+                    HasMaterialComponent = true, // M: bat guano and sulfur (common — covered by spell component pouch)
                     DamageType = "fire",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Reflex",

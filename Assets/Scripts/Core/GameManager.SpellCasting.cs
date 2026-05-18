@@ -1663,6 +1663,29 @@ public partial class GameManager
         if (TryHandleGreaterMagicWeaponSelection(caster, target))
             return;
 
+        // ── Spell Component Pouch check (D&D 3.5e PHB p.130) ──
+        // Spells with common material components (M with no GP cost) require a spell component pouch.
+        // F12 test panel casts bypass this requirement for testing convenience.
+        if (!_testPanelCastActive && _pendingSpell.HasMaterialComponent)
+        {
+            if (!SpellComponentRegistry.ValidatePouchRequirement(_pendingSpell.SpellId, _pendingSpell, caster, out string pouchFailure))
+            {
+                CombatUI?.ShowCombatLog($"<color=#FF6666>❌ {caster.Stats?.CharacterName} cannot cast {_pendingSpell.Name} — requires a {pouchFailure} for material components! Purchase one from the store (5 gp).</color>");
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingMagicWeaponItem = null;
+                _pendingKeenEdgeItem = null;
+                _pendingKeenEdgeIsAmmo = false;
+                _pendingGreaterMagicWeaponItem = null;
+                _pendingResistEnergyType = null;
+                _pendingFireShieldIsWarm = null;
+                _pendingProtectionFromEnergyType = null;
+                ShowActionChoices();
+                return;
+            }
+        }
+
         CaptureSpellcastResourceSnapshot(caster);
 
         bool isDeliveringHeldCharge = _pendingSpellFromHeldCharge;
