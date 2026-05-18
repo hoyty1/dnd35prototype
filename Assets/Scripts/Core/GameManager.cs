@@ -850,6 +850,7 @@ public partial class GameManager : MonoBehaviour
         _summonedEnemies.Clear();
         ClearAllMirrorImageEffects("combat reset");
         MeleeReactionService.ClearAll();
+        CurseTracker.ClearAll();
 
         if (PCs == null || PCs.Count == 0)
             return;
@@ -3664,6 +3665,7 @@ public partial class GameManager : MonoBehaviour
         ClearAllActiveGreaseEffects();
         ClearAllMirrorImageEffects("combat ended");
         MeleeReactionService.ClearAll();
+        CurseTracker.ClearAll();
         _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
 
         CombatUI.SetTurnIndicator(isVictory ? "VICTORY! All enemies defeated!" : "Combat has ended.");

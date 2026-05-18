@@ -355,6 +355,66 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // REMOVE CURSE  (PHB p.270)
+        // Abjuration
+        // Level: Cleric 3, Paladin 3, Sor/Wiz 4
+        // Components: V, S (no material component)
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Creature or object touched
+        // Duration: Instantaneous
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        //
+        // Remove curse instantaneously removes all curses on an object
+        // or a creature. Remove curse does not remove the curse from a
+        // cursed shield, weapon, or suit of armor, although the spell
+        // typically enables the creature afflicted with any such cursed
+        // item to remove and get rid of it. Remove curse counters and
+        // dispels bestow curse.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.REMOVE_CURSE,
+                    Name = "Remove Curse",
+                    Description = "Abjuration. Instantaneously removes all curses on an object or creature. "
+                        + "Does not remove the curse from a cursed shield, weapon, or suit of armor, "
+                        + "but enables the afflicted creature to remove and get rid of it. "
+                        + "Counters and dispels Bestow Curse. "
+                        + "Will negates (harmless). SR: Yes (harmless). PHB p.270",
+                    SpellLevel = 3,
+                    School = "Abjuration",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Cleric", 3),
+                        new SpellAvailability("Paladin", 3),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Healing, // Removal spell
+                    DurationType = DurationType.Instantaneous,
+                    DurationValue = 0,
+                    DurationScalesWithLevel = false,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will", // harmless
+                    SpellResistanceApplies = true, // harmless
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = false,
+                    IsPlaceholder = false
+                });
+
+        RegisterClassSpellAlias("remove_curse_pal", SpellNames.REMOVE_CURSE, "Paladin", 3);
+        RegisterClassSpellAlias("remove_curse_wiz", SpellNames.REMOVE_CURSE, "Wizard", 4);
+        RegisterClassSpellAlias("remove_curse_sor", SpellNames.REMOVE_CURSE, "Sorcerer", 4);
+
         // Aliases
         RegisterClassSpellAlias("read_magic_clr", SpellNames.READ_MAGIC, "Cleric", 0);
         RegisterClassSpellAlias("resist_energy_clr", SpellNames.RESIST_ENERGY, "Cleric", 2);

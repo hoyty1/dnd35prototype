@@ -632,6 +632,62 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // DIMENSION DOOR  (PHB p.221)
+        // Conjuration (Teleportation)
+        // Level: Bard 4, Sor/Wiz 4
+        // Components: V (verbal only — no somatic or material component)
+        // Casting Time: 1 standard action
+        // Range: Long (400 ft. + 40 ft./level)
+        // Target: You and touched objects or other touched willing creatures
+        // Duration: Instantaneous
+        // Saving Throw: None and Will negates (object)
+        // Spell Resistance: No and Yes (object)
+        //
+        // You instantly transfer yourself from your current location to
+        // any other spot within range. You always arrive at exactly the
+        // spot desired. After using this spell, you can't take any other
+        // actions until your next turn. If you arrive in a place already
+        // occupied by a solid body, the spell simply fails.
+        //
+        // You can bring along objects as long as their weight doesn't exceed
+        // your maximum load. You may also bring one additional willing
+        // Medium or smaller creature per three caster levels. A Large
+        // creature counts as two Medium creatures, etc.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DIMENSION_DOOR,
+                    Name = "Dimension Door",
+                    Description = "Conjuration (Teleportation). You instantly transfer yourself to any spot within range. "
+                        + "You always arrive at exactly the spot desired. If the arrival spot is occupied by a solid body, "
+                        + "the spell simply fails. After using dimension door, you can't take any other actions until your next turn. "
+                        + "Blocked by Dimensional Anchor and similar effects. "
+                        + "No save (willing). No SR (for caster). PHB p.221",
+                    SpellLevel = 4,
+                    School = "Conjuration (Teleportation)",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 4),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Long,
+                    EffectType = SpellEffectType.Buff, // Movement/utility
+                    DurationType = DurationType.Instantaneous,
+                    DurationValue = 0,
+                    DurationScalesWithLevel = false,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = false, // V only
+                    HasMaterialComponent = false,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("detect_magic_clr", SpellNames.DETECT_MAGIC_WIZ, "Cleric", 0);
         RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);

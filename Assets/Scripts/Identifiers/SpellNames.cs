@@ -690,5 +690,11 @@ namespace DND35e.Identifiers
         /// <summary>Stoneskin (spell id: stoneskin)</summary>
         public const string STONESKIN = "stoneskin";
 
+        /// <summary>Remove Curse (spell id: remove_curse)</summary>
+        public const string REMOVE_CURSE = "remove_curse";
+
+        /// <summary>Dimension Door (spell id: dimension_door)</summary>
+        public const string DIMENSION_DOOR = "dimension_door";
+
     }
 }

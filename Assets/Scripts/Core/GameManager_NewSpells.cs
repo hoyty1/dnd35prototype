@@ -2269,6 +2269,18 @@ public partial class GameManager
                 target.ApplyAbilityDamage(chosenAbility, penalty, "Bestow Curse");
                 curseDescription = $"-{penalty} {chosenAbility} penalty";
 
+                // Register with CurseTracker for Remove Curse
+                CurseTracker.AddCurse(target, new CurseEffectData
+                {
+                    SourceSpellId = SpellNames.BESTOW_CURSE,
+                    Description = curseDescription,
+                    CasterName = casterName,
+                    CasterLevel = casterLevel,
+                    AffectedAbility = chosenAbility.ToString(),
+                    PenaltyAmount = penalty,
+                    Type = CurseType.BestowCurseAbilityPenalty
+                });
+
                 CombatUI?.ShowCombatLog($"<color=#8B0000>🔮 {target.Stats.CharacterName} is cursed! {curseDescription} (permanent).</color>");
                 CombatUI?.ShowCombatLog($"<color=#AA5555>   Ability reduced by {penalty} (minimum effective score of 1).</color>");
                 break;
@@ -2281,6 +2293,17 @@ public partial class GameManager
                 target.ApplyCondition(CombatConditionType.BestowCurseGeneralPenalty, -1, "Bestow Curse");
                 curseDescription = "-4 on attacks, saves, ability checks, and skill checks";
 
+                // Register with CurseTracker for Remove Curse
+                CurseTracker.AddCurse(target, new CurseEffectData
+                {
+                    SourceSpellId = SpellNames.BESTOW_CURSE,
+                    Description = curseDescription,
+                    CasterName = casterName,
+                    CasterLevel = casterLevel,
+                    PenaltyAmount = 4,
+                    Type = CurseType.BestowCurseGeneralPenalty
+                });
+
                 CombatUI?.ShowCombatLog($"<color=#8B0000>🔮 {target.Stats.CharacterName} is cursed! {curseDescription} (permanent).</color>");
                 break;
             }
@@ -2290,6 +2313,16 @@ public partial class GameManager
                 // 50% chance each turn the creature can't act
                 target.ApplyCondition(CombatConditionType.BestowCurseActionLoss, -1, "Bestow Curse");
                 curseDescription = "50% chance each turn to lose all actions";
+
+                // Register with CurseTracker for Remove Curse
+                CurseTracker.AddCurse(target, new CurseEffectData
+                {
+                    SourceSpellId = SpellNames.BESTOW_CURSE,
+                    Description = curseDescription,
+                    CasterName = casterName,
+                    CasterLevel = casterLevel,
+                    Type = CurseType.BestowCurseActionLoss
+                });
 
                 CombatUI?.ShowCombatLog($"<color=#8B0000>🔮 {target.Stats.CharacterName} is cursed! {curseDescription} (permanent).</color>");
                 break;
@@ -3988,6 +4021,415 @@ public partial class GameManager
     private static bool IsDimensionalAnchorSpell(SpellData spell)
     {
         return spell != null && string.Equals(spell.SpellId, SpellNames.DIMENSIONAL_ANCHOR, System.StringComparison.Ordinal);
+    }
+
+    // ================================================================
+    //  REMOVE CURSE — PHB p.270
+    //  Abjuration. Cleric 3, Paladin 3, Sor/Wiz 4.
+    //  V, S (no material component).
+    //  Range: Touch. Duration: Instantaneous.
+    //  Will negates (harmless). SR: Yes (harmless).
+    //  Removes all curses on a creature or object.
+    //  Counters and dispels Bestow Curse.
+    // ================================================================
+
+    private static bool IsRemoveCurseSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.REMOVE_CURSE, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Remove Curse: touch spell, removes all curse effects from target.
+    /// Reverses Bestow Curse ability penalties, general penalties, and action loss.
+    /// Uses CurseTracker for centralized curse management.
+    /// </summary>
+    private bool TryResolveRemoveCurseSpellEffect(
+        CharacterController caster, CharacterController target,
+        SpellData spell, SpellResult result)
+    {
+        if (!IsRemoveCurseSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (caster == null || caster.Stats == null)
+            return false;
+
+        if (result == null)
+            return true;
+
+        string casterName = caster.Stats.CharacterName ?? "Unknown";
+        string targetName = target.Stats.CharacterName ?? "Unknown";
+
+        // Check if target has any curses to remove
+        bool hasCurseTracker = CurseTracker.IsCursed(target);
+        bool hasBestowCurseConditionGP = target.HasCondition(CombatConditionType.BestowCurseGeneralPenalty);
+        bool hasBestowCurseConditionAL = target.HasCondition(CombatConditionType.BestowCurseActionLoss);
+        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        bool hasBestowCurseStatusEffect = statusMgr != null && statusMgr.HasEffect(SpellNames.BESTOW_CURSE);
+
+        bool hasAnyCurse = hasCurseTracker || hasBestowCurseConditionGP || hasBestowCurseConditionAL || hasBestowCurseStatusEffect;
+
+        if (!hasAnyCurse)
+        {
+            CombatUI?.ShowCombatLog($"<color=#AAAAAA>✦ {casterName} casts Remove Curse on {targetName}, but no curses are found.</color>");
+            result.BuffApplied = true;
+            result.BuffDescription = "No curses to remove.";
+            return true;
+        }
+
+        int cursesRemoved = 0;
+        var removedDescriptions = new System.Collections.Generic.List<string>();
+
+        // 1. Remove all curses tracked by CurseTracker
+        if (hasCurseTracker)
+        {
+            System.Collections.Generic.List<CurseEffectData> removedCurses;
+            int trackerRemoved = CurseTracker.RemoveAllCurses(target, out removedCurses);
+
+            foreach (var curse in removedCurses)
+            {
+                // Reverse ability damage from ability penalty curses
+                if (curse.Type == CurseType.BestowCurseAbilityPenalty && !string.IsNullOrEmpty(curse.AffectedAbility))
+                {
+                    AbilityType ability;
+                    if (System.Enum.TryParse(curse.AffectedAbility, out ability))
+                    {
+                        int healed = target.HealAbilityDamage(ability, curse.PenaltyAmount, "Remove Curse");
+                        if (healed > 0)
+                        {
+                            removedDescriptions.Add($"+{healed} {ability} restored");
+                        }
+                    }
+                }
+                else
+                {
+                    removedDescriptions.Add(curse.Description ?? curse.Type.ToString());
+                }
+
+                cursesRemoved++;
+            }
+        }
+
+        // 2. Remove Bestow Curse conditions
+        if (hasBestowCurseConditionGP)
+        {
+            target.RemoveCondition(CombatConditionType.BestowCurseGeneralPenalty);
+            if (!removedDescriptions.Exists(d => d.Contains("General Penalty")))
+                removedDescriptions.Add("Bestow Curse (-4 penalty) removed");
+            cursesRemoved++;
+        }
+
+        if (hasBestowCurseConditionAL)
+        {
+            target.RemoveCondition(CombatConditionType.BestowCurseActionLoss);
+            if (!removedDescriptions.Exists(d => d.Contains("Action Loss")))
+                removedDescriptions.Add("Bestow Curse (action loss) removed");
+            cursesRemoved++;
+        }
+
+        // 3. Remove Bestow Curse from StatusEffectManager
+        if (hasBestowCurseStatusEffect && statusMgr != null)
+        {
+            statusMgr.RemoveEffectsBySpellId(SpellNames.BESTOW_CURSE);
+        }
+
+        // Combat log
+        string removedSummary = string.Join(", ", removedDescriptions);
+        CombatUI?.ShowCombatLog($"<color=#FFD700>✦ {casterName} casts Remove Curse on {targetName}!</color>");
+        CombatUI?.ShowCombatLog($"<color=#FFD700>   {(cursesRemoved > 0 ? $"{cursesRemoved} curse(s) removed: {removedSummary}" : "Curses lifted!")}.</color>");
+
+        result.BuffApplied = true;
+        result.BuffDescription = $"Remove Curse: {cursesRemoved} curse(s) removed from {targetName}.";
+
+        Debug.Log($"[RemoveCurse] {casterName} -> {targetName}: {cursesRemoved} curses removed. {removedSummary}");
+
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    // ================================================================
+    //  DIMENSION DOOR — PHB p.221
+    //  Conjuration (Teleportation). Brd 4, Sor/Wiz 4.
+    //  V only (no somatic or material component).
+    //  Range: Long (400 ft + 40 ft/level).
+    //  Duration: Instantaneous.
+    //  No save (for caster). No SR (for caster).
+    //  Instantly transports caster to a chosen location within range.
+    //  After dimension door, no other actions until next turn.
+    //  Blocked by Dimensional Anchor (TeleportationBlocker).
+    // ================================================================
+
+    private static bool IsDimensionDoorSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.DIMENSION_DOOR, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Dimension Door: self-target teleportation spell.
+    /// Checks TeleportationBlocker, validates destination, moves caster,
+    /// and ends the caster's turn (no further actions).
+    /// For PC casters: selects a random valid cell within range (future: UI selection).
+    /// For NPC casters: attempts to teleport to a tactically useful position.
+    /// </summary>
+    private bool TryResolveDimensionDoorSpellEffect(
+        CharacterController caster, CharacterController target,
+        SpellData spell, SpellResult result)
+    {
+        if (!IsDimensionDoorSpell(spell) || caster == null || caster.Stats == null)
+            return false;
+
+        if (result == null)
+            return true;
+
+        string casterName = caster.Stats.CharacterName ?? "Unknown";
+
+        // ── Check TeleportationBlocker ──
+        if (TeleportationBlocker.IsBlocked(caster))
+        {
+            string reason = TeleportationBlocker.GetBlockedReason(caster, TeleportationType.Teleportation)
+                ?? "Extradimensional travel is blocked";
+
+            CombatUI?.ShowCombatLog($"<color=#FF4444>🚫 {casterName} attempts Dimension Door, but {reason}!</color>");
+            CombatUI?.ShowCombatLog($"<color=#FF6666>   The spell fizzles. The spell slot is consumed.</color>");
+
+            // Increment blocked counter on Dimensional Anchor
+            DimensionalAnchorEffectData anchor = caster.Stats.ActiveDimensionalAnchorEffect;
+            if (anchor != null)
+                anchor.AttemptsBlocked++;
+
+            result.BuffApplied = false;
+            result.BuffDescription = $"Dimension Door blocked: {reason}";
+            Debug.Log($"[DimensionDoor] {casterName} blocked by TeleportationBlocker");
+            return true;
+        }
+
+        // ── Calculate range ──
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int rangeSquares = spell.GetRangeSquaresForCasterLevel(casterLevel);
+        if (rangeSquares <= 0) rangeSquares = 80 + (casterLevel * 8); // fallback: 400ft + 40ft/level = 80sq + 8sq/level
+
+        // ── Find valid destination ──
+        SquareGrid grid = Grid;
+        if (grid == null)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF4444>❌ Dimension Door fails: no grid available.</color>");
+            return true;
+        }
+
+        Vector2Int casterPos = caster.GridPosition;
+        int casterSize = caster.GetVisualSquaresOccupied();
+
+        // For this prototype: auto-select best destination
+        // PC: find an empty cell at max range away from enemies (escape)
+        // NPC: find an empty cell near a suitable target
+        Vector2Int? destination = FindDimensionDoorDestination(caster, casterPos, rangeSquares, casterSize, grid);
+
+        if (!destination.HasValue)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF4444>❌ {casterName}'s Dimension Door fails — no valid destination found within range!</color>");
+            result.BuffApplied = false;
+            result.BuffDescription = "Dimension Door failed: no valid destination.";
+            Debug.Log($"[DimensionDoor] {casterName}: no valid destination found within {rangeSquares} squares");
+            return true;
+        }
+
+        Vector2Int dest = destination.Value;
+        int distance = SquareGridUtils.ChebyshevDistance(casterPos, dest);
+
+        // ── Perform teleportation ──
+        // Clear old occupancy
+        grid.ClearCreatureOccupancy(caster);
+
+        // Update position
+        caster.GridPosition = dest;
+        grid.SetCreatureOccupancy(caster, dest, casterSize);
+
+        // Update visual position
+        Vector3 worldPos = grid.GetCenteredWorldPosition(dest, casterSize);
+        caster.transform.position = worldPos;
+
+        // ── D&D 3.5e: After dimension door, you can't take any other actions until next turn ──
+        caster.Actions.StandardActionUsed = true;
+        caster.Actions.MoveActionUsed = true;
+        caster.Actions.FullRoundActionUsed = true;
+        caster.Actions.SwiftActionUsed = true;
+
+        // ── Combat log ──
+        int distanceFeet = distance * 5;
+        CombatUI?.ShowCombatLog($"<color=#00CCFF>🌀 {casterName} vanishes in a flash and reappears {distanceFeet} ft away!</color>");
+        CombatUI?.ShowCombatLog($"<color=#66DDFF>   Dimension Door: teleported from ({casterPos.x},{casterPos.y}) to ({dest.x},{dest.y}). No further actions this turn.</color>");
+
+        result.BuffApplied = true;
+        result.BuffDescription = $"Dimension Door: teleported {distanceFeet} ft. Turn ends.";
+
+        Debug.Log($"[DimensionDoor] {casterName} teleported from ({casterPos.x},{casterPos.y}) to ({dest.x},{dest.y}), distance={distance} sq ({distanceFeet} ft), CL={casterLevel}, maxRange={rangeSquares} sq");
+
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    /// <summary>
+    /// Find the best destination for Dimension Door based on character context.
+    /// PCs: try to teleport away from nearest enemy (escape) or to a flanking position.
+    /// NPCs: try to teleport adjacent to their preferred target.
+    /// Returns null if no valid destination found.
+    /// </summary>
+    private Vector2Int? FindDimensionDoorDestination(
+        CharacterController caster, Vector2Int casterPos, int maxRange,
+        int casterSize, SquareGrid grid)
+    {
+        bool isPC = caster.Stats != null && !caster.Stats.IsNPC;
+
+        if (isPC)
+        {
+            // PC: find a safe position away from enemies (escape teleport)
+            return FindDimensionDoorEscapeDestination(caster, casterPos, maxRange, casterSize, grid);
+        }
+        else
+        {
+            // NPC: find a position adjacent to a target
+            return FindDimensionDoorAggressiveDestination(caster, casterPos, maxRange, casterSize, grid);
+        }
+    }
+
+    /// <summary>
+    /// PC escape destination: find a valid empty cell that maximizes distance
+    /// from the nearest enemy while staying within range.
+    /// </summary>
+    private Vector2Int? FindDimensionDoorEscapeDestination(
+        CharacterController caster, Vector2Int casterPos, int maxRange,
+        int casterSize, SquareGrid grid)
+    {
+        // Find nearest enemy
+        Vector2Int? nearestEnemyPos = null;
+        int nearestDist = int.MaxValue;
+
+        var allChars = GetAllCharacters();
+        if (allChars != null)
+        {
+            foreach (var ch in allChars)
+            {
+                if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
+                if (ch.Stats.IsNPC == caster.Stats.IsNPC) continue; // same side
+
+                int dist = SquareGridUtils.ChebyshevDistance(casterPos, ch.GridPosition);
+                if (dist < nearestDist)
+                {
+                    nearestDist = dist;
+                    nearestEnemyPos = ch.GridPosition;
+                }
+            }
+        }
+
+        Vector2Int? bestDest = null;
+        int bestScore = int.MinValue;
+
+        // Scan grid for valid positions within range
+        int scanRange = Mathf.Min(maxRange, 30); // Cap scan to reasonable radius
+        for (int dx = -scanRange; dx <= scanRange; dx++)
+        {
+            for (int dy = -scanRange; dy <= scanRange; dy++)
+            {
+                Vector2Int candidate = new Vector2Int(casterPos.x + dx, casterPos.y + dy);
+                int distFromCaster = SquareGridUtils.ChebyshevDistance(casterPos, candidate);
+
+                if (distFromCaster > maxRange || distFromCaster < 2) continue; // at least 2 squares away
+                if (!grid.CanPlaceCreature(candidate, casterSize, caster)) continue;
+
+                // Score: maximize distance from nearest enemy
+                int score = 0;
+                if (nearestEnemyPos.HasValue)
+                {
+                    score = SquareGridUtils.ChebyshevDistance(candidate, nearestEnemyPos.Value) * 10;
+                }
+                else
+                {
+                    score = distFromCaster; // no enemy, just go far
+                }
+
+                // Prefer positions not adjacent to any enemy
+                bool adjacentToEnemy = false;
+                if (allChars != null)
+                {
+                    foreach (var ch in allChars)
+                    {
+                        if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
+                        if (ch.Stats.IsNPC == caster.Stats.IsNPC) continue;
+                        if (SquareGridUtils.ChebyshevDistance(candidate, ch.GridPosition) <= 1)
+                        {
+                            adjacentToEnemy = true;
+                            break;
+                        }
+                    }
+                }
+                if (!adjacentToEnemy) score += 50;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestDest = candidate;
+                }
+            }
+        }
+
+        return bestDest;
+    }
+
+    /// <summary>
+    /// NPC aggressive destination: find a position adjacent to the best PC target.
+    /// </summary>
+    private Vector2Int? FindDimensionDoorAggressiveDestination(
+        CharacterController caster, Vector2Int casterPos, int maxRange,
+        int casterSize, SquareGrid grid)
+    {
+        // Find best target (lowest HP PC)
+        CharacterController bestTarget = null;
+        int lowestHP = int.MaxValue;
+
+        var allChars = GetAllCharacters();
+        if (allChars != null)
+        {
+            foreach (var ch in allChars)
+            {
+                if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
+                if (ch.Stats.IsNPC == caster.Stats.IsNPC) continue; // same side
+
+                if (ch.Stats.CurrentHP < lowestHP)
+                {
+                    lowestHP = ch.Stats.CurrentHP;
+                    bestTarget = ch;
+                }
+            }
+        }
+
+        if (bestTarget == null) return null;
+
+        // Find valid cell adjacent to target
+        Vector2Int targetPos = bestTarget.GridPosition;
+        int[] offsets = { -1, 0, 1 };
+        Vector2Int? bestDest = null;
+        int bestDist = int.MaxValue;
+
+        foreach (int ox in offsets)
+        {
+            foreach (int oy in offsets)
+            {
+                if (ox == 0 && oy == 0) continue;
+                Vector2Int candidate = new Vector2Int(targetPos.x + ox, targetPos.y + oy);
+                int distFromCaster = SquareGridUtils.ChebyshevDistance(casterPos, candidate);
+
+                if (distFromCaster > maxRange) continue;
+                if (!grid.CanPlaceCreature(candidate, casterSize, caster)) continue;
+
+                // Prefer closer to where we already are (energy efficiency)
+                if (distFromCaster < bestDist)
+                {
+                    bestDist = distFromCaster;
+                    bestDest = candidate;
+                }
+            }
+        }
+
+        return bestDest;
     }
 
     private bool TryResolveDimensionalAnchorSpellEffect(
