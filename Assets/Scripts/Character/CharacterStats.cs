@@ -2229,6 +2229,33 @@ public class CharacterStats
     /// <summary>Rounds remaining for Neutralize Poison immunity.</summary>
     [NonSerialized] public int NeutralizePoisonImmunityRoundsRemaining;
 
+    // ══════════════════════════════════════════════════════════════
+    //  IMBUE WITH SPELL ABILITY — Caster-side tracking
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>True while this character has active Imbue with Spell Ability (as caster).
+    /// Caster's spell slots are locked until target discharges or spell dismissed.</summary>
+    [NonSerialized] public bool ImbueWithSpellAbilityCasterActive;
+
+    /// <summary>The target character who received the imbued spells (caster-side reference).</summary>
+    [NonSerialized] public CharacterController ImbueTarget;
+
+    /// <summary>Indices of locked spell slots in SpellcastingComponent.SpellSlots (caster-side).</summary>
+    [NonSerialized] public List<int> ImbueLockedSlotIndices = new List<int>();
+
+    // ══════════════════════════════════════════════════════════════
+    //  IMBUE WITH SPELL ABILITY — Target-side tracking
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>True while this character has imbued spells to cast (as target).</summary>
+    [NonSerialized] public bool ImbueWithSpellAbilityTargetActive;
+
+    /// <summary>The caster who imbued this character (target-side reference).</summary>
+    [NonSerialized] public CharacterController ImbueCaster;
+
+    /// <summary>List of imbued spell data the target can cast.</summary>
+    [NonSerialized] public List<ImbueSpellEntry> ImbuedSpells = new List<ImbueSpellEntry>();
+
     public int ArmorClass
     {
         get

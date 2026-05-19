@@ -57,6 +57,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button RageButton => _combatUI != null ? _combatUI.RageButton : null;
     private Text RageStatusText => _combatUI != null ? _combatUI.RageStatusText : null;
     private Button CastSpellButton => _combatUI != null ? _combatUI.CastSpellButton : null;
+    private Button UseImbuedSpellButton => _combatUI != null ? _combatUI.UseImbuedSpellButton : null;
     private Button BreakWallButton => _combatUI != null ? _combatUI.BreakWallButton : null;
     private Button ControlFlamingSphereButton => _combatUI != null ? _combatUI.ControlFlamingSphereButton : null;
     private Button DischargeTouchButton => _combatUI != null ? _combatUI.DischargeTouchButton : null;
@@ -403,6 +404,7 @@ public class ActionButtonPanel : MonoBehaviour
         ComputeEquipmentActionStates(pc, context, states);
         ComputeGrappleActionStates(pc, context, states);
         ComputeBreakWallState(pc, context, states);
+        ComputeUseImbuedSpellState(pc, context, states);
         ComputeAlwaysAvailableStates(states);
 
         return states;
@@ -1054,6 +1056,30 @@ public class ActionButtonPanel : MonoBehaviour
         states.Set(BreakWallButton, new ActionButtonState(true, canBreak, label));
     }
 
+    private void ComputeUseImbuedSpellState(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
+    {
+        bool hasImbuedSpells = ImbueWithSpellAbilityManager.HasImbuedSpells(pc);
+        if (!hasImbuedSpells)
+        {
+            states.Set(UseImbuedSpellButton, new ActionButtonState(false, false));
+            return;
+        }
+
+        int count = pc.Stats.ImbuedSpells != null ? pc.Stats.ImbuedSpells.Count : 0;
+        bool canCast = context.Actions.HasStandardAction && !context.IsTurned && !context.IsPinned;
+        string label;
+        if (canCast)
+            label = $"Cast Imbued Spell ({count})";
+        else if (context.IsPinned)
+            label = "Imbued Spell (Pinned)";
+        else if (context.IsTurned)
+            label = "Imbued Spell (Turned)";
+        else
+            label = "Imbued Spell (No Std)";
+
+        states.Set(UseImbuedSpellButton, new ActionButtonState(true, canCast, label));
+    }
+
     private void HideNonGrappleActionButtons()
     {
         if (MoveButton != null) MoveButton.gameObject.SetActive(false);
@@ -1083,6 +1109,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
         if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
         if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
+        if (UseImbuedSpellButton != null) UseImbuedSpellButton.gameObject.SetActive(false);
         if (ControlFlamingSphereButton != null) ControlFlamingSphereButton.gameObject.SetActive(false);
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
         if (DismissDisguiseSelfButton != null) DismissDisguiseSelfButton.gameObject.SetActive(false);
@@ -1133,6 +1160,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (RageButton != null) RageButton.gameObject.SetActive(false);
         if (CastSpellButton != null) CastSpellButton.gameObject.SetActive(false);
         if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
+        if (UseImbuedSpellButton != null) UseImbuedSpellButton.gameObject.SetActive(false);
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
         if (DismissDisguiseSelfButton != null) DismissDisguiseSelfButton.gameObject.SetActive(false);
         if (DismissExpeditiousRetreatButton != null) DismissExpeditiousRetreatButton.gameObject.SetActive(false);

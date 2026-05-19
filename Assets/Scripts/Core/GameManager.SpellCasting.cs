@@ -2258,9 +2258,14 @@ public partial class GameManager
             if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && !handledDivinePower && !handledFreedomOfMovement && !handledSpellImmunity && !handledNeutralizePoison && !handledPoison && !handledDismissal && result.Success)
                 handledRepelVermin = TryResolveRepelVerminSpellEffect(caster, target, _pendingSpell, result);
 
+            bool handledImbueWithSpellAbility = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && !handledDivinePower && !handledFreedomOfMovement && !handledSpellImmunity && !handledNeutralizePoison && !handledPoison && !handledDismissal && !handledRepelVermin && result.Success)
+                handledImbueWithSpellAbility = TryResolveImbueWithSpellAbilitySpellEffect(caster, target, _pendingSpell, result);
+
             bool anyCleric4Handled = handledChaosHammer || handledHolySmite || handledOrdersWrath || handledUnholyBlight
                 || handledDeathWard || handledDivinePower || handledFreedomOfMovement || handledSpellImmunity
-                || handledNeutralizePoison || handledPoison || handledDismissal || handledRepelVermin;
+                || handledNeutralizePoison || handledPoison || handledDismissal || handledRepelVermin
+                || handledImbueWithSpellAbility;
 
             if (!anyPriorHandled && !anyClericHandled && !anyCleric4Handled && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {

@@ -803,6 +803,8 @@ public class SceneBootstrap : MonoBehaviour
             "Charge", new Color(0.78f, 0.45f, 0.15f));
         combatUI.BreakWallButton = CreateGridButton(btnGrid.transform, "BreakWallBtn",
             "Break Wall (STR)", new Color(0.35f, 0.65f, 0.80f));
+        combatUI.UseImbuedSpellButton = CreateGridButton(btnGrid.transform, "UseImbuedSpellBtn",
+            "Cast Imbued Spell", new Color(0.4f, 0.7f, 0.9f));
         combatUI.FullAttackButton = CreateGridButton(btnGrid.transform, "FullAttackBtn",
             "Full Attack", new Color(0.64f, 0.24f, 0.24f));
         // Dual Wield entry point remains intentionally omitted from the main actions window.
@@ -1157,6 +1159,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.CastSpellButton.onClick.AddListener(() => GameManager.Instance.OnCastSpellButtonPressed());
         if (ui.BreakWallButton != null)
             ui.BreakWallButton.onClick.AddListener(() => GameManager.Instance.OnBreakWallButtonPressed());
+        if (ui.UseImbuedSpellButton != null)
+            ui.UseImbuedSpellButton.onClick.AddListener(() => GameManager.Instance.OnUseImbuedSpellButtonPressed());
         if (ui.ControlFlamingSphereButton != null)
             ui.ControlFlamingSphereButton.onClick.AddListener(() => GameManager.Instance.OnControlFlamingSphereButtonPressed());
         if (ui.DismissDisguiseSelfButton != null)

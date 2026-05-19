@@ -133,6 +133,7 @@ public class CombatUI : MonoBehaviour
 
     [Header("Spellcasting")]
     public Button CastSpellButton;         // Cast Spell (Standard Action)
+    public Button UseImbuedSpellButton;    // Cast Imbued Spell (Standard Action) — Imbue with Spell Ability target
     public Button ControlFlamingSphereButton; // Move Flaming Sphere (Move Action)
     public Button DischargeTouchButton;    // Deliver currently held touch charge (Free Action)
     public Button DismissDisguiseSelfButton; // Dismiss Disguise Self (Standard Action)
@@ -405,6 +406,7 @@ public class CombatUI : MonoBehaviour
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             if (DismissSeeInvisibilityButton != null) DismissSeeInvisibilityButton.gameObject.SetActive(false);
             if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
+            if (UseImbuedSpellButton != null) UseImbuedSpellButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();
             HideSpecialStyleSelectionMenu();
             HideBullRushExtraPushChoice();

@@ -33,6 +33,13 @@ public class SpellSlot
     public bool DisabledByNegativeLevel;
 
     /// <summary>
+    /// True when this slot is locked by Imbue with Spell Ability.
+    /// The slot cannot be used or re-prepared until the imbued spell is discharged or the effect ends.
+    /// Unlike DisabledByNegativeLevel, this is NOT reset by ApplyNegativeLevelSlotLoss.
+    /// </summary>
+    public bool LockedByImbue;
+
+    /// <summary>
     /// True when this slot is a cleric domain slot.
     /// Domain slots can only be prepared with spells from one of the cleric's chosen domains.
     /// </summary>
@@ -83,8 +90,8 @@ public class SpellSlot
         CasterClassName = casterClassName;
     }
 
-    /// <summary>Whether this slot can be cast (has a spell, isn't used, and isn't disabled).</summary>
-    public bool CanCast => PreparedSpell != null && !IsUsed && !DisabledByNegativeLevel;
+    /// <summary>Whether this slot can be cast (has a spell, isn't used, isn't disabled, and isn't locked by Imbue).</summary>
+    public bool CanCast => PreparedSpell != null && !IsUsed && !DisabledByNegativeLevel && !LockedByImbue;
 
     /// <summary>Whether this slot has a spell prepared (regardless of used status).</summary>
     public bool HasSpell => PreparedSpell != null;
@@ -124,7 +131,7 @@ public class SpellSlot
     public override string ToString()
     {
         string spellName = PreparedSpell != null ? PreparedSpell.Name : "(empty)";
-        string status = DisabledByNegativeLevel ? "DISABLED" : (IsUsed ? "USED" : "ready");
+        string status = LockedByImbue ? "LOCKED(Imbue)" : (DisabledByNegativeLevel ? "DISABLED" : (IsUsed ? "USED" : "ready"));
         string bonusTag = IsDomainSlot ? " [DOMAIN]" : (IsSpecialistSlot ? " [SPECIALIST]" : string.Empty);
         string classTag = string.IsNullOrWhiteSpace(CasterClassName) ? string.Empty : $" [{CasterClassName}]";
         return $"Lv{Level}{bonusTag}{classTag} [{spellName}] ({status})";

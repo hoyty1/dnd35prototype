@@ -310,7 +310,10 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.IMBUE_WITH_SPELL_ABILITY,
                     Name = "Imbue with Spell Ability",
-                    Description = "Transfer up to 3 prepared spells (1st/2nd level only) to a nonspellcaster. Subject can cast the transferred spells. PHB p.243",
+                    Description = "You transfer spell energy from yourself to a willing creature that is not a spellcaster. "
+                        + "You can imbue the subject with up to 3 prepared 1st-level spells (or fewer 2nd-level spells if subject has WIS ≥ 13). "
+                        + "The subject can then cast the imbued spells using your caster level and DC. "
+                        + "You lose the spell slots until the subject uses all transferred spells or the spell is dismissed. PHB p.243",
                     SpellLevel = 4, School = "Evocation",
                     ClassList = new[] { "Cleric" },
                     TargetType = SpellTargetType.SingleAlly,
@@ -318,11 +321,17 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Buff,
+                    BuffType = SpellNames.IMBUE_WITH_SPELL_ABILITY,
                     DurationType = DurationType.Permanent,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Spell transfer system not implemented; requires transferring prepared spells to nonspellcasters]"
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = false,
+                    IsPlaceholder = false
                 });
 
         // ═══════════════════════════════════════════════════════════════

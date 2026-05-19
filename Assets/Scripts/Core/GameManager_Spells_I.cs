@@ -7,12 +7,502 @@
 using DND35e.Identifiers;
 using Random = UnityEngine.Random;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System;
 using UnityEngine;
 
 public partial class GameManager
 {
+    // ================================================================
+    //  IMBUE WITH SPELL ABILITY  (PHB p.243)
+    // ================================================================
+    // Cleric 4 — Touch, Permanent until discharged
+    // Transfer up to 3 prepared 1st/2nd-level spells to a willing
+    // non-spellcaster. Caster loses those spell slots until target
+    // uses all transferred spells or the spell is dismissed.
+
+    /// <summary>
+    /// Resolves the Imbue with Spell Ability spell.
+    /// This triggers the spell selection UI for the caster to pick
+    /// which prepared spells to transfer.
+    /// </summary>
+    private bool TryResolveImbueWithSpellAbilitySpellEffect(
+        CharacterController caster, CharacterController target,
+        SpellData spell, SpellResult result)
+    {
+        if (spell == null || spell.SpellId != SpellNames.IMBUE_WITH_SPELL_ABILITY)
+            return false;
+
+        if (caster == null || caster.Stats == null)
+            return false;
+
+        if (!result.Success)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Imbue with Spell Ability failed (spell did not succeed).</color>");
+            return true;
+        }
+
+        if (target == null || target.Stats == null)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Imbue with Spell Ability: No valid target.</color>");
+            return true;
+        }
+
+        string casterName = caster.Stats.CharacterName ?? "Unknown";
+        string targetName = target.Stats.CharacterName ?? "Unknown";
+
+        // Validate target
+        var (isValid, reason) = ImbueWithSpellAbilityManager.ValidateTarget(caster, target);
+        if (!isValid)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Imbue with Spell Ability failed: {reason}</color>");
+            Debug.Log($"[ImbueWithSpellAbility] Validation failed for {targetName}: {reason}");
+            return true;
+        }
+
+        // Determine max level target can receive
+        int maxLevel = ImbueWithSpellAbilityManager.GetMaxImbuableLevel(target);
+
+        // Get transferable slots
+        var transferableSlots = ImbueWithSpellAbilityManager.GetTransferableSlots(caster, maxLevel);
+        if (transferableSlots.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Imbue with Spell Ability: {casterName} has no prepared 1st{(maxLevel >= 2 ? "/2nd" : "")}-level spells to transfer.</color>");
+            Debug.Log($"[ImbueWithSpellAbility] No transferable slots for {casterName}");
+            return true;
+        }
+
+        Debug.Log($"[ImbueWithSpellAbility] {casterName} → {targetName}: {transferableSlots.Count} transferable slot(s), max level {maxLevel}");
+
+        // Show the spell selection UI
+        ShowImbueSpellSelectionUI(caster, target, transferableSlots, maxLevel, spell);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Displays the UI for the caster to select which prepared spells to transfer.
+    /// Uses a simple modal panel approach consistent with existing UI patterns.
+    /// </summary>
+    private void ShowImbueSpellSelectionUI(
+        CharacterController caster,
+        CharacterController target,
+        List<(SpellSlot slot, int index)> transferableSlots,
+        int maxLevel,
+        SpellData imbueSpell)
+    {
+        string casterName = caster.Stats.CharacterName ?? "Unknown";
+        string targetName = target.Stats.CharacterName ?? "Unknown";
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+
+        // Build the selection list: group by spell name for clarity
+        var selectedIndices = new List<int>();
+
+        // Create UI panel
+        var panelGO = new GameObject("ImbueSpellSelectionPanel");
+        var canvas = FindObjectOfType<Canvas>();
+        if (canvas != null)
+            panelGO.transform.SetParent(canvas.transform, false);
+
+        var rectTransform = panelGO.AddComponent<RectTransform>();
+        rectTransform.anchorMin = new Vector2(0.2f, 0.15f);
+        rectTransform.anchorMax = new Vector2(0.8f, 0.85f);
+        rectTransform.offsetMin = Vector2.zero;
+        rectTransform.offsetMax = Vector2.zero;
+
+        var bgImage = panelGO.AddComponent<UnityEngine.UI.Image>();
+        bgImage.color = new Color(0.12f, 0.14f, 0.2f, 0.95f);
+
+        var layout = panelGO.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+        layout.padding = new RectOffset(20, 20, 15, 15);
+        layout.spacing = 8;
+        layout.childAlignment = TextAnchor.UpperCenter;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        // Title
+        var titleText = UIFactory.CreateLabel(panelGO.transform,
+            "IMBUE WITH SPELL ABILITY",
+            24, null, new Color(1f, 0.85f, 0.2f), "ImbueTitle");
+        var titleLayout = titleText.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+        titleLayout.preferredHeight = 35;
+
+        // Subtitle
+        var subtitleText = UIFactory.CreateLabel(panelGO.transform,
+            $"Select up to 3 spells to transfer from {casterName} to {targetName}\n" +
+            $"(Max spell level: {maxLevel}{(maxLevel >= 2 ? " — target WIS ≥ 13" : "")})",
+            14, null, new Color(0.8f, 0.8f, 0.8f), "ImbueSubtitle");
+        var subLayout = subtitleText.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+        subLayout.preferredHeight = 40;
+
+        // Scroll area for spell slots
+        var scrollGO = new GameObject("ScrollArea");
+        scrollGO.transform.SetParent(panelGO.transform, false);
+        var scrollRect = scrollGO.AddComponent<UnityEngine.UI.ScrollRect>();
+        var scrollLayout = scrollGO.AddComponent<UnityEngine.UI.LayoutElement>();
+        scrollLayout.flexibleHeight = 1;
+        var scrollRectTransform = scrollGO.GetComponent<RectTransform>();
+
+        var contentGO = new GameObject("Content");
+        contentGO.transform.SetParent(scrollGO.transform, false);
+        var contentRT = contentGO.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0, 1);
+        contentRT.anchorMax = new Vector2(1, 1);
+        contentRT.pivot = new Vector2(0.5f, 1);
+
+        var contentLayout = contentGO.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+        contentLayout.spacing = 4;
+        contentLayout.childForceExpandWidth = true;
+        contentLayout.childForceExpandHeight = false;
+        contentLayout.padding = new RectOffset(5, 5, 5, 5);
+
+        var contentFitter = contentGO.AddComponent<UnityEngine.UI.ContentSizeFitter>();
+        contentFitter.verticalFit = UnityEngine.UI.ContentSizeFitter.FitMode.PreferredSize;
+
+        scrollRect.content = contentRT;
+        scrollRect.vertical = true;
+        scrollRect.horizontal = false;
+
+        // Track toggle states
+        var toggles = new List<(UnityEngine.UI.Toggle toggle, int slotIndex)>();
+
+        foreach (var (slot, index) in transferableSlots)
+        {
+            var rowGO = new GameObject($"SpellRow_{index}");
+            rowGO.transform.SetParent(contentGO.transform, false);
+            var rowLayout = rowGO.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+            rowLayout.spacing = 10;
+            rowLayout.childAlignment = TextAnchor.MiddleLeft;
+            rowLayout.childForceExpandWidth = false;
+            rowLayout.childForceExpandHeight = false;
+            var rowLayoutElem = rowGO.AddComponent<UnityEngine.UI.LayoutElement>();
+            rowLayoutElem.preferredHeight = 30;
+
+            // Toggle (checkbox)
+            var toggleGO = new GameObject("Toggle");
+            toggleGO.transform.SetParent(rowGO.transform, false);
+            var toggle = toggleGO.AddComponent<UnityEngine.UI.Toggle>();
+            var toggleRT = toggleGO.GetComponent<RectTransform>();
+            toggleRT.sizeDelta = new Vector2(25, 25);
+            var toggleLayoutElem = toggleGO.AddComponent<UnityEngine.UI.LayoutElement>();
+            toggleLayoutElem.preferredWidth = 25;
+            toggleLayoutElem.preferredHeight = 25;
+
+            // Toggle background
+            var bgToggle = new GameObject("Background");
+            bgToggle.transform.SetParent(toggleGO.transform, false);
+            var bgImg = bgToggle.AddComponent<UnityEngine.UI.Image>();
+            bgImg.color = new Color(0.3f, 0.3f, 0.3f);
+            var bgRT = bgToggle.GetComponent<RectTransform>();
+            bgRT.anchorMin = Vector2.zero;
+            bgRT.anchorMax = Vector2.one;
+            bgRT.offsetMin = Vector2.zero;
+            bgRT.offsetMax = Vector2.zero;
+
+            // Toggle checkmark
+            var checkGO = new GameObject("Checkmark");
+            checkGO.transform.SetParent(bgToggle.transform, false);
+            var checkImg = checkGO.AddComponent<UnityEngine.UI.Image>();
+            checkImg.color = new Color(0.2f, 0.8f, 0.2f);
+            var checkRT = checkGO.GetComponent<RectTransform>();
+            checkRT.anchorMin = new Vector2(0.15f, 0.15f);
+            checkRT.anchorMax = new Vector2(0.85f, 0.85f);
+            checkRT.offsetMin = Vector2.zero;
+            checkRT.offsetMax = Vector2.zero;
+
+            toggle.targetGraphic = bgImg;
+            toggle.graphic = checkImg;
+            toggle.isOn = false;
+
+            // Enforce max 3 selections
+            int capturedIndex = index;
+            toggle.onValueChanged.AddListener((isOn) =>
+            {
+                if (isOn)
+                {
+                    int currentSelected = toggles.Count(t => t.toggle.isOn);
+                    if (currentSelected > 3)
+                    {
+                        toggle.isOn = false; // revert
+                    }
+                }
+            });
+
+            toggles.Add((toggle, index));
+
+            // Spell label
+            string domainTag = slot.IsDomainSlot ? " [D]" : "";
+            string spellLabel = $"Lv{slot.Level}{domainTag}: {slot.PreparedSpell.Name}";
+            var labelText = UIFactory.CreateLabel(rowGO.transform,
+                spellLabel, 16, null, Color.white, $"Label_{index}");
+            var labelLayout = labelText.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+            labelLayout.flexibleWidth = 1;
+            labelLayout.preferredHeight = 25;
+        }
+
+        // Bottom buttons row
+        var btnRowGO = new GameObject("ButtonRow");
+        btnRowGO.transform.SetParent(panelGO.transform, false);
+        var btnRowLayout = btnRowGO.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+        btnRowLayout.spacing = 20;
+        btnRowLayout.childAlignment = TextAnchor.MiddleCenter;
+        btnRowLayout.childForceExpandWidth = false;
+        btnRowLayout.childForceExpandHeight = false;
+        var btnRowLayoutElem = btnRowGO.AddComponent<UnityEngine.UI.LayoutElement>();
+        btnRowLayoutElem.preferredHeight = 40;
+
+        // Confirm button
+        var confirmButton = UIFactory.CreateButton(btnRowGO.transform,
+            "IMBUE SELECTED", null, new Vector2(180, 35), new Color(0.2f, 0.7f, 0.3f), "ConfirmBtn");
+        var confirmLayout = confirmButton.gameObject.GetComponent<UnityEngine.UI.LayoutElement>();
+        if (confirmLayout == null) confirmLayout = confirmButton.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+        confirmLayout.preferredWidth = 180;
+        confirmLayout.preferredHeight = 35;
+
+        // Cancel button
+        var cancelButton = UIFactory.CreateButton(btnRowGO.transform,
+            "CANCEL", null, new Vector2(120, 35), new Color(0.7f, 0.25f, 0.25f), "CancelBtn");
+        var cancelLayout = cancelButton.gameObject.GetComponent<UnityEngine.UI.LayoutElement>();
+        if (cancelLayout == null) cancelLayout = cancelButton.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+        cancelLayout.preferredWidth = 120;
+        cancelLayout.preferredHeight = 35;
+
+        // Wire confirm button
+        confirmButton?.onClick.AddListener(() =>
+        {
+            var chosen = toggles.Where(t => t.toggle.isOn).Select(t => t.slotIndex).ToList();
+            if (chosen.Count == 0)
+            {
+                CombatUI?.ShowCombatLog("<color=#FFAA44>⚠ No spells selected for imbuing. Select at least one spell.</color>");
+                return;
+            }
+
+            // Perform the transfer
+            ImbueWithSpellAbilityManager.TransferSpells(caster, target, chosen);
+
+            // Add status effects on both characters
+            var casterStatusMgr = caster.GetComponent<StatusEffectManager>();
+            if (casterStatusMgr != null)
+            {
+                var effect = casterStatusMgr.AddEffect(imbueSpell, casterName, casterLevel);
+                if (effect != null)
+                    effect.RemainingRounds = -1; // permanent until discharged
+            }
+
+            var targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            if (targetStatusMgr != null)
+            {
+                var effect = targetStatusMgr.AddEffect(imbueSpell, casterName, casterLevel);
+                if (effect != null)
+                    effect.RemainingRounds = -1; // permanent until discharged
+            }
+
+            // Log
+            var sb = new StringBuilder();
+            sb.AppendLine($"<color=#88CCFF>✨ {casterName} imbues {targetName} with spell ability!</color>");
+            foreach (var idx in chosen)
+            {
+                var spellComp = caster.GetComponent<SpellcastingComponent>();
+                if (spellComp != null && idx >= 0 && idx < spellComp.SpellSlots.Count)
+                {
+                    var slot = spellComp.SpellSlots[idx];
+                    sb.AppendLine($"<color=#AADDFF>  📜 {slot.PreparedSpell?.Name ?? "?"} (Lv{slot.Level})</color>");
+                }
+            }
+            sb.AppendLine($"<color=#AADDFF>  {targetName} can now cast {chosen.Count} imbued spell(s) using {casterName}'s caster level.</color>");
+            sb.Append($"<color=#AADDFF>  {casterName}'s spell slots are locked until spells are used or dismissed.</color>");
+            CombatUI?.ShowCombatLog(sb.ToString());
+
+            UpdateAllStatsUI();
+            Destroy(panelGO);
+        });
+
+        // Wire cancel button
+        cancelButton?.onClick.AddListener(() =>
+        {
+            CombatUI?.ShowCombatLog($"<color=#AAAAAA>Imbue with Spell Ability cancelled.</color>");
+            Debug.Log("[ImbueWithSpellAbility] Spell selection cancelled by user.");
+            Destroy(panelGO);
+        });
+
+        Debug.Log($"[ImbueWithSpellAbility] Showing spell selection UI with {transferableSlots.Count} available slots");
+    }
+
+    /// <summary>
+    /// Handles a target casting one of their imbued spells.
+    /// Called from the combat flow when an imbued spell is selected from the action menu.
+    /// Sets up the pending spell for the standard resolution pipeline.
+    /// The target acts as the "caster" for targeting purposes but uses the
+    /// original caster's level and DC.
+    /// </summary>
+    public void ResolveImbuedSpellCast(CharacterController target, string spellId)
+    {
+        if (target == null || target.Stats == null) return;
+
+        // Find the entry (don't consume it yet — it will be consumed when spell actually resolves)
+        var entry = target.Stats.ImbuedSpells.FirstOrDefault(
+            e => e.Spell != null && e.Spell.SpellId == spellId);
+        if (entry == null)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Failed to cast imbued spell — not found.</color>");
+            return;
+        }
+
+        string targetName = target.Stats.CharacterName ?? "Unknown";
+        CombatUI?.ShowCombatLog($"<color=#88CCFF>✨ {targetName} begins casting imbued {entry.Spell.Name}! (CL {entry.CasterLevel}, DC {entry.SaveDC})</color>");
+        Debug.Log($"[ImbueWithSpellAbility] {targetName} initiating imbued spell cast: {entry.Spell.Name} at CL {entry.CasterLevel}, DC {entry.SaveDC}");
+
+        // Set the pending spell for the resolution pipeline
+        _pendingSpell = entry.Spell;
+        _imbueSpellCastInProgress = true;
+        _imbueSpellEntry = entry;
+
+        // The standard spell resolution pipeline will pick this up.
+        // For self/ally targeting spells, resolve immediately.
+        // For targeted spells, the target selection flow will handle it.
+
+        // Consume the imbued spell and update tracking
+        ImbueWithSpellAbilityManager.CastImbuedSpell(target, spellId);
+
+        int remaining = target.Stats.ImbuedSpells.Count;
+        if (remaining > 0)
+            CombatUI?.ShowCombatLog($"<color=#AADDFF>  {remaining} imbued spell(s) remaining.</color>");
+        else
+            CombatUI?.ShowCombatLog($"<color=#AADDFF>  All imbued spells discharged. Imbue with Spell Ability ends.</color>");
+
+        UpdateAllStatsUI();
+    }
+
+    /// <summary>True when a character is casting a spell via Imbue with Spell Ability.</summary>
+    private bool _imbueSpellCastInProgress;
+
+    /// <summary>The ImbueSpellEntry being cast, for CL/DC overrides during resolution.</summary>
+    private ImbueSpellEntry _imbueSpellEntry;
+
+    /// <summary>
+    /// Returns the effective caster level for the current spell being cast.
+    /// If an imbued spell is being cast, returns the original caster's level.
+    /// </summary>
+    public int GetEffectiveCasterLevelForImbue()
+    {
+        if (_imbueSpellCastInProgress && _imbueSpellEntry != null)
+            return _imbueSpellEntry.CasterLevel;
+        return -1; // indicates no override
+    }
+
+    /// <summary>
+    /// Returns the effective save DC for the current imbued spell being cast.
+    /// Returns -1 if no imbue override is active.
+    /// </summary>
+    public int GetEffectiveSaveDCForImbue()
+    {
+        if (_imbueSpellCastInProgress && _imbueSpellEntry != null)
+            return _imbueSpellEntry.SaveDC;
+        return -1;
+    }
+
+    /// <summary>
+    /// Clears the imbue spell cast state after the spell has been resolved.
+    /// Called at the end of spell resolution.
+    /// </summary>
+    public void ClearImbueSpellCastState()
+    {
+        _imbueSpellCastInProgress = false;
+        _imbueSpellEntry = null;
+    }
+
+    /// <summary>
+    /// Called when the "Cast Imbued Spell" button is pressed in the action menu.
+    /// Shows a selection popup of the target's available imbued spells.
+    /// </summary>
+    public void OnUseImbuedSpellButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || pc.Stats == null) return;
+
+        if (!ImbueWithSpellAbilityManager.HasImbuedSpells(pc))
+        {
+            CombatUI?.ShowCombatLog("<color=#FF8888>No imbued spells available.</color>");
+            return;
+        }
+
+        var entries = ImbueWithSpellAbilityManager.GetImbuedSpells(pc);
+        Debug.Log($"[ImbueWithSpellAbility] Showing imbued spell selection for {pc.Stats.CharacterName}: {entries.Count} spell(s)");
+
+        // Create selection popup
+        ShowImbuedSpellCastSelectionUI(pc, entries);
+    }
+
+    /// <summary>
+    /// Shows a popup for the target to select which imbued spell to cast.
+    /// </summary>
+    private void ShowImbuedSpellCastSelectionUI(CharacterController target, List<ImbueSpellEntry> entries)
+    {
+        var panelGO = new GameObject("ImbuedSpellCastPanel");
+        var canvas = FindObjectOfType<Canvas>();
+        if (canvas != null)
+            panelGO.transform.SetParent(canvas.transform, false);
+
+        var rectTransform = panelGO.AddComponent<RectTransform>();
+        rectTransform.anchorMin = new Vector2(0.25f, 0.25f);
+        rectTransform.anchorMax = new Vector2(0.75f, 0.75f);
+        rectTransform.offsetMin = Vector2.zero;
+        rectTransform.offsetMax = Vector2.zero;
+
+        var bgImage = panelGO.AddComponent<UnityEngine.UI.Image>();
+        bgImage.color = new Color(0.12f, 0.14f, 0.2f, 0.95f);
+
+        var layout = panelGO.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+        layout.padding = new RectOffset(20, 20, 15, 15);
+        layout.spacing = 8;
+        layout.childAlignment = TextAnchor.UpperCenter;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        // Title
+        var titleText = UIFactory.CreateLabel(panelGO.transform,
+            "CAST IMBUED SPELL", 22, null, new Color(0.4f, 1f, 0.6f), "ImbuedCastTitle");
+        var titleLayout = titleText.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+        titleLayout.preferredHeight = 30;
+
+        string casterName = entries.Count > 0 && entries[0].CasterName != null ? entries[0].CasterName : "?";
+        var subText = UIFactory.CreateLabel(panelGO.transform,
+            $"Imbued by {casterName} — select a spell to cast:", 14, null, new Color(0.8f, 0.8f, 0.8f), "ImbuedCastSub");
+        var subLayout = subText.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+        subLayout.preferredHeight = 25;
+
+        foreach (var entry in entries)
+        {
+            string label = $"{entry.Spell.Name} (Lv{entry.Spell.SpellLevel}, CL {entry.CasterLevel}, DC {entry.SaveDC})";
+            var btn = UIFactory.CreateButton(panelGO.transform,
+                label, null, null, new Color(0.2f, 0.55f, 0.7f), $"ImbuedCast_{entry.Spell.SpellId}");
+            var btnLayout = btn.gameObject.GetComponent<UnityEngine.UI.LayoutElement>();
+            if (btnLayout == null) btnLayout = btn.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+            btnLayout.preferredHeight = 35;
+
+            string capturedId = entry.Spell.SpellId;
+            btn?.onClick.AddListener(() =>
+            {
+                Destroy(panelGO);
+                ResolveImbuedSpellCast(target, capturedId);
+            });
+        }
+
+        // Cancel button
+        var cancelButton = UIFactory.CreateButton(panelGO.transform,
+            "CANCEL", null, null, new Color(0.5f, 0.25f, 0.25f), "CancelBtn");
+        var cancelLayout = cancelButton.gameObject.GetComponent<UnityEngine.UI.LayoutElement>();
+        if (cancelLayout == null) cancelLayout = cancelButton.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+        cancelLayout.preferredHeight = 35;
+
+        cancelButton?.onClick.AddListener(() =>
+        {
+            Debug.Log("[ImbueWithSpellAbility] Imbued spell cast cancelled.");
+            Destroy(panelGO);
+        });
+    }
+
     // ================================================================
     //  INVISIBILITY PURGE  (PHB p.245)
     // ================================================================

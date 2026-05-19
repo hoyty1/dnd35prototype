@@ -373,6 +373,24 @@ public partial class GameManager
             return;
         }
 
+        // --- Imbue with Spell Ability ---
+        if (spellId == SpellNames.IMBUE_WITH_SPELL_ABILITY)
+        {
+            // If dispelled from the caster, end the entire imbue link
+            if (target.Stats.ImbueWithSpellAbilityCasterActive)
+            {
+                ImbueWithSpellAbilityManager.EndImbueEffect(target, target.Stats.ImbueTarget, "dispelled from caster");
+                CombatUI?.ShowCombatLog($"<color=#FF8888>✨ Imbue with Spell Ability dispelled — {target.Stats?.CharacterName}'s locked spell slots freed.</color>");
+            }
+            // If dispelled from the target, end the entire imbue link
+            else if (target.Stats.ImbueWithSpellAbilityTargetActive)
+            {
+                ImbueWithSpellAbilityManager.EndImbueEffect(target.Stats.ImbueCaster, target, "dispelled from target");
+                CombatUI?.ShowCombatLog($"<color=#FF8888>✨ Imbue with Spell Ability dispelled — imbued spells lost.</color>");
+            }
+            return;
+        }
+
         // For other spells, StatusEffectManager.RemoveEffect() handles the stat reversal
     }
 

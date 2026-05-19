@@ -987,6 +987,48 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // ── Imbue with Spell Ability (Caster) ──
+        if (_character.Stats.ImbueWithSpellAbilityCasterActive)
+        {
+            int lockedCount = _character.Stats.ImbueLockedSlotIndices != null ? _character.Stats.ImbueLockedSlotIndices.Count : 0;
+            string targetName = _character.Stats.ImbueTarget != null && _character.Stats.ImbueTarget.Stats != null
+                ? _character.Stats.ImbueTarget.Stats.CharacterName : "?";
+            list.Add(new IconData
+            {
+                Key = "ImbueCaster",
+                ShortLabel = "Imb",
+                Tooltip = $"Imbue with Spell Ability (Caster)\n{lockedCount} spell slot(s) locked\nTarget: {targetName}\nPermanent until discharged",
+                Color = new Color(0.6f, 0.8f, 1f, 0.92f), // Light blue
+                Duration = -1
+            });
+        }
+
+        // ── Imbue with Spell Ability (Target) ──
+        if (_character.Stats.ImbueWithSpellAbilityTargetActive)
+        {
+            int spellCount = _character.Stats.ImbuedSpells != null ? _character.Stats.ImbuedSpells.Count : 0;
+            string casterName = _character.Stats.ImbueCaster != null && _character.Stats.ImbueCaster.Stats != null
+                ? _character.Stats.ImbueCaster.Stats.CharacterName : "?";
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Imbue with Spell Ability (Target)");
+            sb.AppendLine($"From: {casterName}");
+            sb.AppendLine($"{spellCount} imbued spell(s) remaining:");
+            if (_character.Stats.ImbuedSpells != null)
+            {
+                foreach (var entry in _character.Stats.ImbuedSpells)
+                    sb.AppendLine($"  • {entry.Spell?.Name ?? "?"} (CL {entry.CasterLevel}, DC {entry.SaveDC})");
+            }
+            sb.Append("Permanent until discharged");
+            list.Add(new IconData
+            {
+                Key = "ImbueTarget",
+                ShortLabel = "Imb",
+                Tooltip = sb.ToString(),
+                Color = new Color(0.4f, 1f, 0.6f, 0.92f), // Light green
+                Duration = -1
+            });
+        }
+
         return list;
     }
 

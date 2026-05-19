@@ -9527,6 +9527,9 @@ public class CharacterController : MonoBehaviour
         ClearIncomingFeintIndicators();
         ReleaseGrappleState("death");
 
+        // Clean up Imbue with Spell Ability on death
+        ImbueWithSpellAbilityManager.HandleDeath(this);
+
         Debug.Log($"[DeathFlow][OnDeath] EXIT | who={who} | hp={(Stats != null ? Stats.CurrentHP : 0)}");
     }
 
