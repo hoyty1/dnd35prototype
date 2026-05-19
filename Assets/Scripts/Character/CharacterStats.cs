@@ -2114,6 +2114,61 @@ public class CharacterStats
     /// <summary>Bonus max HP from spell effects (e.g., CON buff retroactive HP).</summary>
     public int BonusMaxHP;
 
+    /// <summary>Recursion guard for Shield Other damage sharing — prevents infinite loops when both characters protect each other.</summary>
+    [NonSerialized] internal bool _isProcessingShieldOtherDamage;
+
+    // ── Death Knell ──
+    /// <summary>True while this character has the Death Knell buff active.</summary>
+    [NonSerialized] public bool DeathKnellActive;
+    /// <summary>Strength enhancement bonus from Death Knell (+2).</summary>
+    [NonSerialized] public int DeathKnellStrBonus;
+    /// <summary>Caster level bonus from Death Knell (+1).</summary>
+    [NonSerialized] public int DeathKnellCLBonus;
+    /// <summary>Rounds remaining for Death Knell buff (10 min/HD of killed creature).</summary>
+    [NonSerialized] public int DeathKnellRoundsRemaining;
+
+    // ── Shield Other ──
+    /// <summary>True when this character is the PROTECTED target of Shield Other.</summary>
+    [NonSerialized] public bool ShieldOtherProtectedActive;
+    /// <summary>The CharacterController acting as protector (the caster) for this character's Shield Other.</summary>
+    [NonSerialized] public CharacterController ShieldOtherProtector;
+    /// <summary>True when this character is the CASTER/protector of Shield Other.</summary>
+    [NonSerialized] public bool ShieldOtherProtectorActive;
+    /// <summary>The CharacterController being protected by this character's Shield Other.</summary>
+    [NonSerialized] public CharacterController ShieldOtherProtected;
+
+    // ── Silence ──
+    /// <summary>True when this character is directly targeted by a Silence spell.</summary>
+    [NonSerialized] public bool SilenceActive;
+    /// <summary>Rounds remaining for Silence effect on this character.</summary>
+    [NonSerialized] public int SilenceRoundsRemaining;
+
+    // ── Spiritual Weapon ──
+    /// <summary>True when this character has an active Spiritual Weapon.</summary>
+    [NonSerialized] public bool SpiritualWeaponActive;
+    /// <summary>The current target of the Spiritual Weapon.</summary>
+    [NonSerialized] public CharacterController SpiritualWeaponTarget;
+    /// <summary>Caster level used for the Spiritual Weapon's attack bonus.</summary>
+    [NonSerialized] public int SpiritualWeaponCasterLevel;
+    /// <summary>Rounds remaining for Spiritual Weapon.</summary>
+    [NonSerialized] public int SpiritualWeaponRoundsRemaining;
+
+    // ── Consecrate ──
+    /// <summary>True while this character is within a Consecrate area effect.</summary>
+    [NonSerialized] public bool ConsecrateActive;
+
+    // ── Desecrate ──
+    /// <summary>True while this character is within a Desecrate area effect.</summary>
+    [NonSerialized] public bool DesecrateActive;
+
+    // ── Align Weapon ──
+    /// <summary>True when this character's weapon has Align Weapon active.</summary>
+    [NonSerialized] public bool AlignWeaponActive;
+    /// <summary>The alignment applied by Align Weapon ("good", "evil", "lawful", "chaotic").</summary>
+    [NonSerialized] public string AlignWeaponAlignment;
+    /// <summary>Rounds remaining for Align Weapon.</summary>
+    [NonSerialized] public int AlignWeaponRoundsRemaining;
+
     public int ArmorClass
     {
         get
@@ -3539,6 +3594,32 @@ public class CharacterStats
         int hpBefore = CurrentHP;
         int tempHpBefore = TempHP;
         Debug.Log($"[DeathFlow][TakeDamage] ENTER | target={ownerName} | incoming={amount} | hpBefore={hpBefore} | tempHpBefore={tempHpBefore} | isDeadBefore={IsDead}");
+
+        // ── Shield Other damage sharing (PHB p.278) ──
+        // If this character is protected by Shield Other, the caster takes half the damage.
+        // The protected character takes the other half. This happens BEFORE temp HP absorption.
+        if (ShieldOtherProtectedActive && ShieldOtherProtector != null
+            && ShieldOtherProtector.Stats != null && amount > 0
+            && !ShieldOtherProtector.Stats._isProcessingShieldOtherDamage)
+        {
+            int sharedDamage = amount / 2; // Half to protector (round down)
+            int remainingDamage = amount - sharedDamage; // Other half to protected
+
+            Debug.Log($"[ShieldOther] {ownerName} takes {amount} damage → sharing {sharedDamage} to protector {ShieldOtherProtector.Stats.CharacterName}, {remainingDamage} remains");
+
+            // Apply shared damage to protector (prevent infinite recursion via flag)
+            ShieldOtherProtector.Stats._isProcessingShieldOtherDamage = true;
+            ShieldOtherProtector.Stats.TakeDamage(sharedDamage);
+            ShieldOtherProtector.Stats._isProcessingShieldOtherDamage = false;
+
+            amount = remainingDamage;
+
+            if (amount <= 0)
+            {
+                Debug.Log($"[DeathFlow][TakeDamage] Shield Other absorbed all damage | target={ownerName}");
+                return;
+            }
+        }
 
         // Temp HP absorbs damage first
         if (TempHP > 0 && amount > 0)

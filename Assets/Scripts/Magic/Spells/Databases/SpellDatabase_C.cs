@@ -238,22 +238,30 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Language mechanics not implemented]"
                 });
 
+        // ===== CONSECRATE — PHB p.212 =====
+        // Evocation [Good]. Cleric 2. V, S, M (vial of holy water), DF.
+        // Casting Time: 1 standard action. Range: Close (25 ft + 5 ft/2 levels).
+        // Area: 20-ft-radius emanation. Duration: 2 hr/level.
+        // Undead in area take -1 profane penalty on attack, damage, and saves.
+        // Turning check in area gets +3 sacred bonus.
+        // If area contains altar/shrine of caster's deity, bonuses double.
         Register(new SpellData
                 {
                     SpellId = SpellNames.CONSECRATE,
                     Name = "Consecrate",
-                    Description = "Fills area with positive energy. Undead suffer penalties. 20-ft radius. 2 hr/level. PHB p.212",
+                    Description = "Fills area with positive energy. Undead suffer -1 on attacks, damage, and saves. +3 sacred bonus to turning checks. 20-ft radius. 2 hr/level. PHB p.212",
                     SpellLevel = 2, School = "Evocation",
                     ClassList = new[] { "Cleric" },
-                    TargetType = SpellTargetType.Self,
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Close,
                     RangeSquares = 5,
                     AreaRadius = 4,
                     EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = -1,
+                    BuffDurationRounds = -1, // 2 hr/level, effectively unlimited in combat
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Area consecration not implemented]"
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
                 });
 
         Register(new SpellData

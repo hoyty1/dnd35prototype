@@ -172,23 +172,32 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Poison mechanics not implemented]"
                 });
 
+        // ===== DESECRATE — PHB p.218 =====
+        // Evocation [Evil]. Cleric 2. V, S, M (vial of unholy water), DF.
+        // Casting Time: 1 standard action. Range: Close (25 ft + 5 ft/2 levels).
+        // Area: 20-ft-radius emanation. Duration: 2 hr/level.
+        // Undead in area gain +1 profane bonus on attack, damage, and saves.
+        // Turning checks in area take -3 profane penalty.
+        // Undead created in the area gain +1 HP per HD.
+        // If area contains altar/shrine of caster's deity, bonuses double.
         Register(new SpellData
                 {
                     SpellId = SpellNames.DOMAIN_DESECRATE,
                     Name = "Desecrate",
-                    Description = "Fills area with negative energy, making undead stronger. Undead in the area gain +1 profane bonus on attack rolls, damage rolls, and saving throws.",
+                    Description = "Fills area with negative energy. Undead gain +1 on attacks, damage, and saves. -3 profane penalty to turning checks. 20-ft radius. 2 hr/level. PHB p.218",
                     SpellLevel = 2,
                     School = "Evocation",
                     ClassList = new string[] { "Cleric" },
                     TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Close,
                     RangeSquares = 4,
                     AreaRadius = 4,
                     EffectType = SpellEffectType.Debuff,
-                    BuffDurationRounds = -1,
+                    BuffDurationRounds = -1, // 2 hr/level, effectively unlimited in combat
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Area desecration not implemented]"
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
                 });
 
         // ===== DETECT CHAOS — PHB p.218 =====

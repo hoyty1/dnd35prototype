@@ -21,6 +21,9 @@ namespace DND35e.Identifiers
         /// <summary>Alarm (spell id: alarm)</summary>
         public const string ALARM = "alarm";
 
+        /// <summary>Align Weapon (spell id: align_weapon)</summary>
+        public const string ALIGN_WEAPON = "align_weapon";
+
         /// <summary>Alter Self (spell id: alter_self)</summary>
         public const string ALTER_SELF = "alter_self";
 

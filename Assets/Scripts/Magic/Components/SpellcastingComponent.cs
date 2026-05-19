@@ -2217,6 +2217,19 @@ public class SpellcastingComponent : MonoBehaviour
         int level = spell.SpellLevel;
         if (level >= SlotsRemaining.Length) return false;
 
+        // ── Silence check (PHB p.279) ──
+        // A silenced character cannot cast spells with verbal components.
+        // Silent Spell metamagic would bypass this, but that check is handled separately.
+        if (spell.HasVerbalComponent)
+        {
+            var owner = GetComponent<CharacterController>();
+            if (owner != null && owner.Stats != null && owner.Stats.SilenceActive)
+            {
+                UnityEngine.Debug.Log($"[Silence] {owner.Stats.CharacterName} cannot cast {spell.Name} — silenced and spell has verbal component");
+                return false;
+            }
+        }
+
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             return CountAvailablePreparedSpell(spell) > 0;

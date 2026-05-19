@@ -758,6 +758,121 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // ── Death Knell buff ──
+        if (_character.Stats.DeathKnellActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.DeathKnellRoundsRemaining);
+            list.Add(new IconData
+            {
+                Key = "DeathKnell",
+                ShortLabel = "DK",
+                Tooltip = $"Death Knell\n+2 enhancement STR\n+1 caster level\nTemp HP gained\nDuration: {rounds} rounds",
+                Color = new Color(0.6f, 0.2f, 0.6f, 0.95f), // Dark purple
+                Duration = rounds
+            });
+        }
+
+        // ── Shield Other (protected) ──
+        if (_character.Stats.ShieldOtherProtectedActive && _character.Stats.ShieldOtherProtector != null)
+        {
+            string protectorName = _character.Stats.ShieldOtherProtector.Stats != null
+                ? _character.Stats.ShieldOtherProtector.Stats.CharacterName : "Unknown";
+            int soRounds = statusMgr != null ? statusMgr.GetRemainingRounds(SpellNames.SHIELD_OTHER) : -1;
+            list.Add(new IconData
+            {
+                Key = "ShieldOtherProtected",
+                ShortLabel = "SO",
+                Tooltip = $"Shield Other (Protected)\n+1 deflection AC, +1 resistance saves\nProtector: {protectorName}\nHalf damage shared with protector\nDuration: {(soRounds < 0 ? "∞" : $"{Mathf.Max(0, soRounds)} rounds")}",
+                Color = new Color(0.3f, 0.7f, 1f, 0.92f), // Blue
+                Duration = soRounds
+            });
+        }
+
+        // ── Shield Other (protector/caster) ──
+        if (_character.Stats.ShieldOtherProtectorActive && _character.Stats.ShieldOtherProtected != null)
+        {
+            string protectedName = _character.Stats.ShieldOtherProtected.Stats != null
+                ? _character.Stats.ShieldOtherProtected.Stats.CharacterName : "Unknown";
+            list.Add(new IconData
+            {
+                Key = "ShieldOtherProtector",
+                ShortLabel = "SO⚡",
+                Tooltip = $"Shield Other (Protector)\nAbsorbing half of {protectedName}'s damage",
+                Color = new Color(0.2f, 0.5f, 0.9f, 0.85f), // Darker blue
+                Duration = -1
+            });
+        }
+
+        // ── Silence ──
+        if (_character.Stats.SilenceActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.SilenceRoundsRemaining);
+            list.Add(new IconData
+            {
+                Key = "Silence",
+                ShortLabel = "🔇",
+                Tooltip = $"Silence\nCannot cast spells with verbal components\nAll sound negated in 20-ft radius\nDuration: {rounds} rounds",
+                Color = new Color(0.5f, 0.5f, 0.7f, 0.92f), // Muted purple
+                Duration = rounds
+            });
+        }
+
+        // ── Spiritual Weapon (caster) ──
+        if (_character.Stats.SpiritualWeaponActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.SpiritualWeaponRoundsRemaining);
+            string targetName = _character.Stats.SpiritualWeaponTarget?.Stats?.CharacterName ?? "None";
+            list.Add(new IconData
+            {
+                Key = "SpiritualWeapon",
+                ShortLabel = "SW",
+                Tooltip = $"Spiritual Weapon\nForce weapon attacks {targetName} each round\n1d8 + {Mathf.Min(5, _character.Stats.SpiritualWeaponCasterLevel / 3)} force damage\nDuration: {rounds} rounds",
+                Color = new Color(0.7f, 0.6f, 1f, 0.92f), // Light purple
+                Duration = rounds
+            });
+        }
+
+        // ── Consecrate (undead penalty) ──
+        if (_character.Stats.ConsecrateActive)
+        {
+            list.Add(new IconData
+            {
+                Key = "Consecrate",
+                ShortLabel = "CON",
+                Tooltip = "Consecrate\nUndead: -1 profane penalty to attacks, damage, and saves\nTurning checks: +3 sacred bonus in area",
+                Color = new Color(1f, 1f, 0.6f, 0.92f), // Holy yellow
+                Duration = -1
+            });
+        }
+
+        // ── Desecrate (undead bonus) ──
+        if (_character.Stats.DesecrateActive)
+        {
+            list.Add(new IconData
+            {
+                Key = "Desecrate",
+                ShortLabel = "DES",
+                Tooltip = "Desecrate\nUndead: +1 profane bonus to attacks, damage, and saves\nTurning checks: -3 profane penalty in area",
+                Color = new Color(0.5f, 0.2f, 0.5f, 0.92f), // Dark purple
+                Duration = -1
+            });
+        }
+
+        // ── Align Weapon ──
+        if (_character.Stats.AlignWeaponActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.AlignWeaponRoundsRemaining);
+            string alignment = _character.Stats.AlignWeaponAlignment ?? "unknown";
+            list.Add(new IconData
+            {
+                Key = "AlignWeapon",
+                ShortLabel = "AW",
+                Tooltip = $"Align Weapon ({alignment})\nWeapon bypasses DR/{alignment}\nDuration: {rounds} rounds",
+                Color = new Color(1f, 0.8f, 0.2f, 0.92f), // Golden
+                Duration = rounds
+            });
+        }
+
         return list;
     }
 

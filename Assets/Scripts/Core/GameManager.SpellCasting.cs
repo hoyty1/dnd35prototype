@@ -2157,7 +2157,37 @@ public partial class GameManager
             if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledDimensionalAnchor && !handledRemoveCurse && !handledDimensionDoor && result.Success)
                 handledLesserGlobe = TryResolveLesserGlobeSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledDimensionalAnchor && !handledRemoveCurse && !handledDimensionDoor && !handledLesserGlobe && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            // ── Cleric 2nd-level spell handlers (GameManager_ClericSpells2.cs) ──
+            bool anyPriorHandled = handledCauseFear || handledGhoulTouch || handledScare || handledRayOfEnfeeblement || handledTouchOfIdiocy || handledMelfsAcidArrow || handledRayOfExhaustion || handledVampiricTouch || handledEnervation || handledContagion || handledBestowCurse || handledGreaterInvisibility || handledPhantasmalKiller || handledFireShield || handledResilientSphere || handledAnimateRope || handledMirrorImage || handledDimensionalAnchor || handledRemoveCurse || handledDimensionDoor || handledLesserGlobe;
+
+            bool handledDeathKnell = false;
+            if (!anyPriorHandled && result.Success && !effectNegatedBySave)
+                handledDeathKnell = TryResolveDeathKnellSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledShieldOther = false;
+            if (!anyPriorHandled && !handledDeathKnell && result.Success && !effectNegatedBySave)
+                handledShieldOther = TryResolveShieldOtherSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledSilence = false;
+            if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && result.Success && !effectNegatedBySave)
+                handledSilence = TryResolveSilenceSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledSoundBurst = false;
+            if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && !handledSilence)
+                handledSoundBurst = TryResolveSoundBurstStunEffect(caster, target, _pendingSpell, result);
+
+            bool handledSpiritualWeapon = false;
+            if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && !handledSilence && !handledSoundBurst && result.Success)
+                handledSpiritualWeapon = TryResolveSpiritualWeaponSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledAlignWeapon = false;
+            if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && !handledSilence && !handledSoundBurst && !handledSpiritualWeapon && result.Success && !effectNegatedBySave)
+                handledAlignWeapon = TryResolveAlignWeaponSpellEffect(caster, target, _pendingSpell, result);
+
+            bool anyClericHandled = handledDeathKnell || handledSilence || handledSoundBurst || handledSpiritualWeapon || handledAlignWeapon;
+            // Note: handledShieldOther returns false to allow normal buff application (deflection/resistance)
+
+            if (!anyPriorHandled && !anyClericHandled && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -3557,6 +3587,57 @@ public partial class GameManager
             if (TryHandleConcealmentAreaSpellCast(caster, _pendingSpell, aoeCells, targets, out string concealmentAreaLog))
             {
                 _lastCombatLog = concealmentAreaLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Consecrate / Desecrate area effects (GameManager_ClericSpells2.cs) ──
+            if (TryResolveConsecrateAreaEffect(caster, _pendingSpell, aoeCells, targets, out string consecrateLog))
+            {
+                _lastCombatLog = consecrateLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            if (TryResolveDesecrateAreaEffect(caster, _pendingSpell, aoeCells, targets, out string desecrateLog))
+            {
+                _lastCombatLog = desecrateLog;
 
                 if (isSpontaneous)
                 {

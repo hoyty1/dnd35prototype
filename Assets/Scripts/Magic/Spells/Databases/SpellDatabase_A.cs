@@ -114,6 +114,34 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Ward/alarm not implemented]"
                 });
 
+        // ===== ALIGN WEAPON — PHB p.197 =====
+        // Transmutation. Cleric 2. V, S, DF.
+        // Casting Time: 1 standard action. Range: Touch.
+        // Duration: 1 min./level. Saving Throw: Will negates (harmless, object).
+        // Spell Resistance: Yes (harmless, object).
+        // Makes a weapon good, evil, lawful, or chaotic aligned for the purpose
+        // of overcoming damage reduction.
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.ALIGN_WEAPON,
+                    Name = "Align Weapon",
+                    Description = "Weapon becomes aligned (good, evil, lawful, or chaotic) for overcoming DR. 1 min/level. PHB p.197",
+                    SpellLevel = 2, School = "Transmutation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Buff,
+                    BuffDurationRounds = 10, // 1 min/level, scaled at cast time
+                    BuffType = SpellNames.ALIGN_WEAPON,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SaveHalves = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.ALTER_SELF,
