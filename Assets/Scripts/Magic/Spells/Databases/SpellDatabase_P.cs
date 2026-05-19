@@ -281,6 +281,35 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Fire interaction not implemented]"
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Poison — PHB p.262
+        // School: Necromancy
+        // Level: Cleric 4, Druid 3
+        // Range: Touch
+        // Target: Living creature touched
+        // Duration: Instantaneous (initial + secondary in 1 min)
+        // Saving Throw: Fortitude negates
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.POISON,
+                    Name = "Poison",
+                    Description = "Touch attack poisons target. Fort DC 14 negates. Initial: 1d10 CON damage. Secondary (1 min later): 1d10 CON damage. PHB p.262",
+                    SpellLevel = 4, School = "Necromancy",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         // Backward-compat aliases for older domain IDs.
         RegisterAlias("domain_protection_from_chaos", SpellNames.PROTECTION_FROM_CHAOS);
         RegisterAlias("domain_protection_from_good", SpellNames.PROTECTION_FROM_GOOD);

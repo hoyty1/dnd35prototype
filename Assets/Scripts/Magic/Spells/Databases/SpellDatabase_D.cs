@@ -794,6 +794,84 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Death Ward — PHB p.217
+        // School: Necromancy
+        // Level: Cleric 4, Druid 5, Paladin 4
+        // Range: Touch
+        // Duration: 1 min/level
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DEATH_WARD,
+                    Name = "Death Ward",
+                    Description = "Subject gains immunity to death spells, death effects, energy drain, and negative energy effects for 1 min/level. PHB p.217",
+                    SpellLevel = 4, School = "Necromancy",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1, // 1 min/level
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // ═══════════════════════════════════════════════════════════════
+        // Dismissal — PHB p.222
+        // School: Abjuration
+        // Level: Cleric 4, Sor/Wiz 5
+        // Range: Close
+        // Target: One extraplanar creature
+        // Duration: Instantaneous
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DISMISSAL,
+                    Name = "Dismissal",
+                    Description = "Forces an extraplanar creature back to its home plane. Will save negates. PHB p.222",
+                    SpellLevel = 4, School = "Abjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // ═══════════════════════════════════════════════════════════════
+        // Divine Power — PHB p.224
+        // School: Evocation
+        // Level: Cleric 4
+        // Range: Personal
+        // Target: You
+        // Duration: 1 round/level
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DIVINE_POWER,
+                    Name = "Divine Power",
+                    Description = "Grants +6 enhancement to STR, +1 temp HP/level, BAB = character level for 1 round/level. PHB p.224",
+                    SpellLevel = 4, School = "Evocation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1, // 1 round/level
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         // Aliases
         RegisterClassSpellAlias("detect_magic_clr", SpellNames.DETECT_MAGIC_WIZ, "Cleric", 0);
         RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);

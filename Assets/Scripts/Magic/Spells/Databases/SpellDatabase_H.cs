@@ -429,6 +429,34 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Holy Smite — PHB p.241
+        // School: Evocation [Good]
+        // Level: Cleric 4 (Good domain 4)
+        // Range: Medium
+        // Area: 20-ft-radius burst
+        // Duration: Instantaneous (1 round for blindness)
+        // Saving Throw: Will partial
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.HOLY_SMITE,
+                    Name = "Holy Smite",
+                    Description = "Burst of holy power: 1d8/2 CL (max 5d8) vs evil creatures + blinded 1 round. Will half damage and negates blind. PHB p.241",
+                    SpellLevel = 4, School = "Evocation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Damage,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         // Aliases / class-level variants
         RegisterAlias(SpellNames.HIDEOUS_LAUGHTER_LEGACY, SpellNames.HIDEOUS_LAUGHTER);
         RegisterClassSpellAlias("tashas_hideous_laughter_brd", SpellNames.HIDEOUS_LAUGHTER, "Bard", 1);

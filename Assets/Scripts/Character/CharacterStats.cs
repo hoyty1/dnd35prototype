@@ -2181,6 +2181,54 @@ public class CharacterStats
     /// <summary>Rounds remaining for Invisibility Purge emanation.</summary>
     [NonSerialized] public int InvisibilityPurgeRoundsRemaining;
 
+    // ══════════════════════════════════════════════════════════════
+    //  4th-Level Cleric Spell Buff Fields
+    // ══════════════════════════════════════════════════════════════
+
+    // ── Death Ward ──
+    /// <summary>True while this character is protected by Death Ward (immune to death effects, energy drain, negative energy).</summary>
+    [NonSerialized] public bool DeathWardActive;
+    /// <summary>Rounds remaining for Death Ward.</summary>
+    [NonSerialized] public int DeathWardRoundsRemaining;
+
+    // ── Divine Power ──
+    /// <summary>True while this character has Divine Power active (+6 STR, temp HP, BAB boost).</summary>
+    [NonSerialized] public bool DivinePowerActive;
+    /// <summary>Rounds remaining for Divine Power.</summary>
+    [NonSerialized] public int DivinePowerRoundsRemaining;
+    /// <summary>STR enhancement bonus applied by Divine Power (default +6).</summary>
+    [NonSerialized] public int DivinePowerStrBonus;
+    /// <summary>Temporary HP granted by Divine Power.</summary>
+    [NonSerialized] public int DivinePowerTempHP;
+    /// <summary>BAB bonus applied by Divine Power (character level minus current BAB).</summary>
+    [NonSerialized] public int DivinePowerBABBonus;
+
+    // ── Freedom of Movement ──
+    /// <summary>True while this character has Freedom of Movement (immune to paralysis, entanglement, grapple penalties).</summary>
+    [NonSerialized] public bool FreedomOfMovementActive;
+    /// <summary>Rounds remaining for Freedom of Movement.</summary>
+    [NonSerialized] public int FreedomOfMovementRoundsRemaining;
+
+    // ── Spell Immunity ──
+    /// <summary>True while this character has Spell Immunity active.</summary>
+    [NonSerialized] public bool SpellImmunityActive;
+    /// <summary>Rounds remaining for Spell Immunity.</summary>
+    [NonSerialized] public int SpellImmunityRoundsRemaining;
+    /// <summary>The SpellId this character is immune to (set at cast time).</summary>
+    [NonSerialized] public string SpellImmunitySpellId;
+
+    // ── Repel Vermin ──
+    /// <summary>True while this character has Repel Vermin emanation active.</summary>
+    [NonSerialized] public bool RepelVerminActive;
+    /// <summary>Rounds remaining for Repel Vermin.</summary>
+    [NonSerialized] public int RepelVerminRoundsRemaining;
+
+    // ── Neutralize Poison (immunity portion) ──
+    /// <summary>True while this character has Neutralize Poison immunity active.</summary>
+    [NonSerialized] public bool NeutralizePoisonImmunityActive;
+    /// <summary>Rounds remaining for Neutralize Poison immunity.</summary>
+    [NonSerialized] public int NeutralizePoisonImmunityRoundsRemaining;
+
     public int ArmorClass
     {
         get

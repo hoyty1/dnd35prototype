@@ -27,5 +27,32 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Aura manipulation not implemented]"
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Neutralize Poison — PHB p.257
+        // School: Conjuration (Healing)
+        // Level: Cleric 4, Druid 3, Paladin 4, Ranger 3, Bard 4
+        // Range: Touch
+        // Duration: Instantaneous (cure) + 10 min/level (immunity)
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.NEUTRALIZE_POISON,
+                    Name = "Neutralize Poison",
+                    Description = "Detoxifies any sort of venom in the target and grants immunity to poison for 10 min/level. PHB p.257",
+                    SpellLevel = 4, School = "Conjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10, // 10 min/level (immunity portion)
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

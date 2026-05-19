@@ -305,5 +305,33 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Trap/glyph placement system not implemented; registered for spell preparation]"
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Giant Vermin — PHB p.235
+        // School: Transmutation
+        // Level: Cleric 4, Druid 4
+        // Range: Close
+        // Target: 1-3 vermin (no bigger than Medium)
+        // Duration: 1 min/level
+        // Saving Throw: None
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.GIANT_VERMIN,
+                    Name = "Giant Vermin",
+                    Description = "Turns 1-3 centipedes, scorpions, or spiders into their giant counterparts. 1 min/level. PHB p.235",
+                    SpellLevel = 4, School = "Transmutation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1, // 1 min/level
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    IsPlaceholder = true,
+                    PlaceholderReason = "[PLACEHOLDER - Vermin size increase / creature transformation system not implemented]"
+                });
+
     }
 }

@@ -157,5 +157,33 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("owls_wisdom_pal", SpellNames.OWLS_WISDOM, "Paladin", 2);
         RegisterClassSpellAlias("owls_wisdom_rgr", SpellNames.OWLS_WISDOM, "Ranger", 2);
 
+        // ═══════════════════════════════════════════════════════════════
+        // Order's Wrath — PHB p.258
+        // School: Evocation [Lawful]
+        // Level: Cleric 4 (Law domain 4)
+        // Range: Medium
+        // Area: 20-ft-radius burst
+        // Duration: Instantaneous (1 round for daze)
+        // Saving Throw: Will partial
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.ORDERS_WRATH,
+                    Name = "Order's Wrath",
+                    Description = "Burst of lawful power: 1d8/2 CL (max 5d8) vs chaotic creatures + dazed 1 round. Will half damage and negates daze. PHB p.258",
+                    SpellLevel = 4, School = "Evocation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Damage,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

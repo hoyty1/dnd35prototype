@@ -472,5 +472,30 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("resist_energy_rgr", SpellNames.RESIST_ENERGY, "Ranger", 1);
         RegisterClassSpellAlias("resistance_clr", SpellNames.RESISTANCE_WIZ, "Cleric", 0);
 
+        // ═══════════════════════════════════════════════════════════════
+        // Repel Vermin — PHB p.271
+        // School: Abjuration
+        // Level: Cleric 4, Druid 4, Ranger 3, Bard 4
+        // Range: 10 ft/level emanation centered on you
+        // Duration: 10 min/level
+        // Saving Throw: None or Will negates
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.REPEL_VERMIN,
+                    Name = "Repel Vermin",
+                    Description = "An invisible barrier keeps vermin (and vermin swarms) out. Vermin with HD > 1/3 CL get a Will save. 10 min/level. PHB p.271",
+                    SpellLevel = 4, School = "Abjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10, // 10 min/level
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

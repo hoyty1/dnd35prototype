@@ -2209,7 +2209,60 @@ public partial class GameManager
                 || handledSearingLight || handledInvisibilityPurge || handledRemoveDisease || handledPrayer || handledRemoveBlindnessDeafness;
             // Note: handledShieldOther returns false to allow normal buff application (deflection/resistance)
 
-            if (!anyPriorHandled && !anyClericHandled && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            // ── 4th-level Cleric spells ──
+            bool handledChaosHammer = false;
+            if (!anyPriorHandled && !anyClericHandled && result.Success)
+                handledChaosHammer = TryResolveChaosHammerSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledHolySmite = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && result.Success)
+                handledHolySmite = TryResolveHolySmiteSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledOrdersWrath = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && result.Success)
+                handledOrdersWrath = TryResolveOrdersWrathSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledUnholyBlight = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && result.Success)
+                handledUnholyBlight = TryResolveUnholyBlightSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledDeathWard = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && result.Success)
+                handledDeathWard = TryResolveDeathWardSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledDivinePower = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && result.Success)
+                handledDivinePower = TryResolveDivinePowerSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledFreedomOfMovement = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && !handledDivinePower && result.Success)
+                handledFreedomOfMovement = TryResolveFreedomOfMovementSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledSpellImmunity = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && !handledDivinePower && !handledFreedomOfMovement && result.Success)
+                handledSpellImmunity = TryResolveSpellImmunitySpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledNeutralizePoison = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && !handledDivinePower && !handledFreedomOfMovement && !handledSpellImmunity && result.Success)
+                handledNeutralizePoison = TryResolveNeutralizePoisonSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledPoison = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && !handledDivinePower && !handledFreedomOfMovement && !handledSpellImmunity && !handledNeutralizePoison && result.Success)
+                handledPoison = TryResolvePoisonSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledDismissal = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && !handledDivinePower && !handledFreedomOfMovement && !handledSpellImmunity && !handledNeutralizePoison && !handledPoison && result.Success)
+                handledDismissal = TryResolveDismissalSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledRepelVermin = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && !handledDivinePower && !handledFreedomOfMovement && !handledSpellImmunity && !handledNeutralizePoison && !handledPoison && !handledDismissal && result.Success)
+                handledRepelVermin = TryResolveRepelVerminSpellEffect(caster, target, _pendingSpell, result);
+
+            bool anyCleric4Handled = handledChaosHammer || handledHolySmite || handledOrdersWrath || handledUnholyBlight
+                || handledDeathWard || handledDivinePower || handledFreedomOfMovement || handledSpellImmunity
+                || handledNeutralizePoison || handledPoison || handledDismissal || handledRepelVermin;
+
+            if (!anyPriorHandled && !anyClericHandled && !anyCleric4Handled && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -7443,6 +7496,10 @@ public partial class GameManager
         }
 
         TickCharacterItemSpellDurations(character);
+
+        // Tick custom cleric spell duration counters (level 3 + level 4)
+        TickClericSpell3Durations(character);
+        TickClericSpell4Durations(character);
     }
 
     private void TickCharacterItemSpellDurations(CharacterController character)

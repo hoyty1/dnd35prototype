@@ -426,5 +426,59 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Cure Critical Wounds — PHB p.215
+        // School: Conjuration (Healing)
+        // Level: Cleric 4, Druid 5, Bard 4
+        // Range: Touch
+        // Duration: Instantaneous
+        // Saving Throw: Will half (harmless)
+        // Spell Resistance: Yes (harmless)
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CURE_CRITICAL_WOUNDS,
+                    Name = "Cure Critical Wounds",
+                    Description = "Heals 4d8 + CL (max +20) HP. Touch range. PHB p.215",
+                    SpellLevel = 4, School = "Conjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Healing,
+                    HealDice = 8, HealCount = 4, BonusHealing = 7, // +CL (max +20)
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // ═══════════════════════════════════════════════════════════════
+        // Chaos Hammer — PHB p.208
+        // School: Evocation [Chaotic]
+        // Level: Cleric 4 (Chaos domain 4)
+        // Range: Medium
+        // Area: 20-ft-radius burst
+        // Duration: Instantaneous (1d6 rounds for slow)
+        // Saving Throw: Will partial
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CHAOS_HAMMER,
+                    Name = "Chaos Hammer",
+                    Description = "Burst of chaotic power: 1d8/2 CL (max 5d8) vs lawful creatures + slowed 1d6 rounds. Will half damage and negates slow. PHB p.208",
+                    SpellLevel = 4, School = "Evocation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Damage,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

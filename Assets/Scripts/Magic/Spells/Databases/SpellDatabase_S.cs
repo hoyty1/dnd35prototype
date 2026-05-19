@@ -968,5 +968,33 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("summon_monster_3_clr", SpellNames.SUMMON_MONSTER_3, "Cleric", 3);
         RegisterClassSpellAlias("summon_monster_4_clr", SpellNames.SUMMON_MONSTER_4, "Cleric", 4);
 
+        // ═══════════════════════════════════════════════════════════════
+        // Spell Immunity — PHB p.282
+        // School: Abjuration
+        // Level: Cleric 4
+        // Range: Touch
+        // Target: Creature touched
+        // Duration: 10 min/level
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SPELL_IMMUNITY,
+                    Name = "Spell Immunity",
+                    Description = "Subject becomes immune to one specified spell of 4th level or lower for 10 min/level. PHB p.282",
+                    SpellLevel = 4, School = "Abjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10, // 10 min/level
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

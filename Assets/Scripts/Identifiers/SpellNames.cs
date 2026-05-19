@@ -81,6 +81,9 @@ namespace DND35e.Identifiers
         /// <summary>Cause Fear (spell id: cause_fear)</summary>
         public const string CAUSE_FEAR = "cause_fear";
 
+        /// <summary>Chaos Hammer (spell id: chaos_hammer)</summary>
+        public const string CHAOS_HAMMER = "chaos_hammer";
+
         /// <summary>Charm Person (spell id: charm_person)</summary>
         public const string CHARM_PERSON = "charm_person";
 
@@ -126,6 +129,9 @@ namespace DND35e.Identifiers
         /// <summary>Cure Serious Wounds (spell id: cure_serious_wounds)</summary>
         public const string CURE_SERIOUS_WOUNDS = "cure_serious_wounds";
 
+        /// <summary>Cure Critical Wounds (spell id: cure_critical_wounds)</summary>
+        public const string CURE_CRITICAL_WOUNDS = "cure_critical_wounds";
+
         /// <summary>Dancing Lights (spell id: dancing_lights)</summary>
         public const string DANCING_LIGHTS = "dancing_lights";
 
@@ -146,6 +152,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Deathwatch (spell id: deathwatch)</summary>
         public const string DEATHWATCH = "deathwatch";
+
+        /// <summary>Death Ward (spell id: death_ward)</summary>
+        public const string DEATH_WARD = "death_ward";
 
         /// <summary>Delay Poison (spell id: delay_poison)</summary>
         public const string DELAY_POISON = "delay_poison";
@@ -183,11 +192,17 @@ namespace DND35e.Identifiers
         /// <summary>Disguise Self (spell id: disguise_self)</summary>
         public const string DISGUISE_SELF = "disguise_self";
 
+        /// <summary>Dismissal (spell id: dismissal)</summary>
+        public const string DISMISSAL = "dismissal";
+
         /// <summary>Disrupt Undead (spell id: disrupt_undead)</summary>
         public const string DISRUPT_UNDEAD = "disrupt_undead";
 
         /// <summary>Divine Favor (spell id: divine_favor)</summary>
         public const string DIVINE_FAVOR = "divine_favor";
+
+        /// <summary>Divine Power (spell id: divine_power)</summary>
+        public const string DIVINE_POWER = "divine_power";
 
         /// <summary>Barkskin (spell id: domain_barkskin)</summary>
         public const string DOMAIN_BARKSKIN = "domain_barkskin";
@@ -285,6 +300,9 @@ namespace DND35e.Identifiers
         /// <summary>Fox's Cunning (spell id: foxs_cunning)</summary>
         public const string FOXS_CUNNING = "foxs_cunning";
 
+        /// <summary>Freedom of Movement (spell id: freedom_of_movement)</summary>
+        public const string FREEDOM_OF_MOVEMENT = "freedom_of_movement";
+
         /// <summary>Gentle Repose (spell id: gentle_repose)</summary>
         public const string GENTLE_REPOSE = "gentle_repose";
 
@@ -293,6 +311,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Ghoul Touch (spell id: ghoul_touch)</summary>
         public const string GHOUL_TOUCH = "ghoul_touch";
+
+        /// <summary>Giant Vermin (spell id: giant_vermin)</summary>
+        public const string GIANT_VERMIN = "giant_vermin";
 
         /// <summary>Glitterdust (spell id: glitterdust)</summary>
         public const string GLITTERDUST = "glitterdust";
@@ -330,6 +351,9 @@ namespace DND35e.Identifiers
         /// <summary>Hold Portal (spell id: hold_portal)</summary>
         public const string HOLD_PORTAL = "hold_portal";
 
+        /// <summary>Holy Smite (spell id: holy_smite)</summary>
+        public const string HOLY_SMITE = "holy_smite";
+
         /// <summary>Hypnotic Pattern (spell id: hypnotic_pattern)</summary>
         public const string HYPNOTIC_PATTERN = "hypnotic_pattern";
 
@@ -338,6 +362,12 @@ namespace DND35e.Identifiers
 
         /// <summary>Identify (spell id: identify)</summary>
         public const string IDENTIFY = "identify";
+
+        /// <summary>Imbue with Spell Ability (spell id: imbue_with_spell_ability)</summary>
+        public const string IMBUE_WITH_SPELL_ABILITY = "imbue_with_spell_ability";
+
+        /// <summary>Inflict Critical Wounds (spell id: inflict_critical_wounds)</summary>
+        public const string INFLICT_CRITICAL_WOUNDS = "inflict_critical_wounds";
 
         /// <summary>Inflict Light Wounds (spell id: inflict_light_wounds)</summary>
         public const string INFLICT_LIGHT_WOUNDS = "inflict_light_wounds";
@@ -423,6 +453,9 @@ namespace DND35e.Identifiers
         /// <summary>Mount (spell id: mount)</summary>
         public const string MOUNT = "mount";
 
+        /// <summary>Neutralize Poison (spell id: neutralize_poison)</summary>
+        public const string NEUTRALIZE_POISON = "neutralize_poison";
+
         /// <summary>Nystul's Magic Aura (spell id: nystuls_magic_aura)</summary>
         public const string NYSTULS_MAGIC_AURA = "nystuls_magic_aura";
 
@@ -435,11 +468,17 @@ namespace DND35e.Identifiers
         /// <summary>Open/Close (spell id: open_close)</summary>
         public const string OPEN_CLOSE = "open_close";
 
+        /// <summary>Order's Wrath (spell id: orders_wrath)</summary>
+        public const string ORDERS_WRATH = "orders_wrath";
+
         /// <summary>Owl's Wisdom (spell id: owls_wisdom)</summary>
         public const string OWLS_WISDOM = "owls_wisdom";
 
         /// <summary>Prestidigitation (spell id: prestidigitation)</summary>
         public const string PRESTIDIGITATION = "prestidigitation";
+
+        /// <summary>Poison (spell id: poison)</summary>
+        public const string POISON = "poison";
 
         /// <summary>Prayer (spell id: prayer)</summary>
         public const string PRAYER = "prayer";
@@ -516,6 +555,9 @@ namespace DND35e.Identifiers
         /// <summary>Resist Energy (spell id: resist_energy)</summary>
         public const string RESIST_ENERGY = "resist_energy";
 
+        /// <summary>Repel Vermin (spell id: repel_vermin)</summary>
+        public const string REPEL_VERMIN = "repel_vermin";
+
         /// <summary>Resistance (spell id: resistance_wiz)</summary>
         public const string RESISTANCE_WIZ = "resistance_wiz";
 
@@ -585,6 +627,9 @@ namespace DND35e.Identifiers
         /// <summary>Spider Climb (spell id: spider_climb)</summary>
         public const string SPIDER_CLIMB = "spider_climb";
 
+        /// <summary>Spell Immunity (spell id: spell_immunity)</summary>
+        public const string SPELL_IMMUNITY = "spell_immunity";
+
         /// <summary>Spiritual Weapon (spell id: spiritual_weapon)</summary>
         public const string SPIRITUAL_WEAPON = "spiritual_weapon";
 
@@ -629,6 +674,9 @@ namespace DND35e.Identifiers
 
         /// <summary>True Strike (spell id: true_strike)</summary>
         public const string TRUE_STRIKE = "true_strike";
+
+        /// <summary>Unholy Blight (spell id: unholy_blight)</summary>
+        public const string UNHOLY_BLIGHT = "unholy_blight";
 
         /// <summary>Unseen Servant (spell id: unseen_servant)</summary>
         public const string UNSEEN_SERVANT = "unseen_servant";

@@ -296,5 +296,65 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Imbue with Spell Ability — PHB p.243
+        // School: Evocation
+        // Level: Cleric 4
+        // Range: Touch
+        // Target: Creature touched (nonspellcaster)
+        // Duration: Permanent until discharged
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.IMBUE_WITH_SPELL_ABILITY,
+                    Name = "Imbue with Spell Ability",
+                    Description = "Transfer up to 3 prepared spells (1st/2nd level only) to a nonspellcaster. Subject can cast the transferred spells. PHB p.243",
+                    SpellLevel = 4, School = "Evocation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Permanent,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    IsPlaceholder = true,
+                    PlaceholderReason = "[PLACEHOLDER - Spell transfer system not implemented; requires transferring prepared spells to nonspellcasters]"
+                });
+
+        // ═══════════════════════════════════════════════════════════════
+        // Inflict Critical Wounds — PHB p.244
+        // School: Necromancy
+        // Level: Cleric 4
+        // Range: Touch
+        // Target: Creature touched
+        // Duration: Instantaneous
+        // Saving Throw: Will half
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.INFLICT_CRITICAL_WOUNDS,
+                    Name = "Inflict Critical Wounds",
+                    Description = "Touch attack deals 4d8 + CL (max +20) negative energy damage. Will half. PHB p.244",
+                    SpellLevel = 4, School = "Necromancy",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 8, DamageCount = 4, BonusDamage = 7,
+                    DamageType = "negative",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SaveHalves = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

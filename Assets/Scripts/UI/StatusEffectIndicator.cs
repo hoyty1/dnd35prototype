@@ -887,6 +887,91 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // ── Death Ward ──
+        if (_character.Stats.DeathWardActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.DeathWardRoundsRemaining);
+            list.Add(new IconData
+            {
+                Key = "DeathWard",
+                ShortLabel = "🛡",
+                Tooltip = $"Death Ward\nImmune to death effects, energy drain, negative energy\nDuration: {rounds} rounds",
+                Color = new Color(0.8f, 1f, 0.8f, 0.92f), // Light green
+                Duration = rounds
+            });
+        }
+
+        // ── Divine Power ──
+        if (_character.Stats.DivinePowerActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.DivinePowerRoundsRemaining);
+            list.Add(new IconData
+            {
+                Key = "DivinePower",
+                ShortLabel = "⚔",
+                Tooltip = $"Divine Power\n+{_character.Stats.DivinePowerStrBonus} STR, +{_character.Stats.DivinePowerTempHP} temp HP, BAB +{_character.Stats.DivinePowerBABBonus}\nDuration: {rounds} rounds",
+                Color = new Color(1f, 0.85f, 0.3f, 0.92f), // Gold
+                Duration = rounds
+            });
+        }
+
+        // ── Freedom of Movement ──
+        if (_character.Stats.FreedomOfMovementActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.FreedomOfMovementRoundsRemaining);
+            list.Add(new IconData
+            {
+                Key = "FreedomOfMovement",
+                ShortLabel = "🦅",
+                Tooltip = $"Freedom of Movement\nImmune to paralysis, entanglement, grapple penalties\nDuration: {rounds} rounds",
+                Color = new Color(0.5f, 0.8f, 1f, 0.92f), // Sky blue
+                Duration = rounds
+            });
+        }
+
+        // ── Spell Immunity ──
+        if (_character.Stats.SpellImmunityActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.SpellImmunityRoundsRemaining);
+            string immuneSpell = _character.Stats.SpellImmunitySpellId ?? "unknown";
+            list.Add(new IconData
+            {
+                Key = "SpellImmunity",
+                ShortLabel = "SI",
+                Tooltip = $"Spell Immunity\nImmune to: {immuneSpell}\nDuration: {rounds} rounds",
+                Color = new Color(0.7f, 0.5f, 1f, 0.92f), // Purple
+                Duration = rounds
+            });
+        }
+
+        // ── Repel Vermin ──
+        if (_character.Stats.RepelVerminActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.RepelVerminRoundsRemaining);
+            list.Add(new IconData
+            {
+                Key = "RepelVermin",
+                ShortLabel = "🐛",
+                Tooltip = $"Repel Vermin\nVermin cannot approach\nDuration: {rounds} rounds",
+                Color = new Color(0.5f, 0.8f, 0.5f, 0.92f), // Green
+                Duration = rounds
+            });
+        }
+
+        // ── Neutralize Poison Immunity ──
+        if (_character.Stats.NeutralizePoisonImmunityActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.NeutralizePoisonImmunityRoundsRemaining);
+            list.Add(new IconData
+            {
+                Key = "NeutralizePoison",
+                ShortLabel = "🌿",
+                Tooltip = $"Neutralize Poison\nImmune to poison\nDuration: {rounds} rounds",
+                Color = new Color(0.4f, 0.9f, 0.4f, 0.92f), // Bright green
+                Duration = rounds
+            });
+        }
+
         // ── Align Weapon ──
         if (_character.Stats.AlignWeaponActive)
         {

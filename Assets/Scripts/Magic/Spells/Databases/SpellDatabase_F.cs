@@ -444,5 +444,32 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Freedom of Movement — PHB p.233
+        // School: Abjuration
+        // Level: Cleric 4, Druid 4, Ranger 4, Bard 4
+        // Range: Touch (personal)
+        // Duration: 10 min/level
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.FREEDOM_OF_MOVEMENT,
+                    Name = "Freedom of Movement",
+                    Description = "Subject can move and attack normally despite impediments. Immune to paralysis, grapple penalties, entanglement, and movement restrictions. 10 min/level. PHB p.233",
+                    SpellLevel = 4, School = "Abjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10, // 10 min/level
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

@@ -27,5 +27,33 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Servant/minion not implemented]"
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Unholy Blight — PHB p.297
+        // School: Evocation [Evil]
+        // Level: Cleric 4 (Evil domain 4)
+        // Range: Medium
+        // Area: 20-ft-radius burst
+        // Duration: Instantaneous (1d4 rounds for sicken)
+        // Saving Throw: Will partial
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.UNHOLY_BLIGHT,
+                    Name = "Unholy Blight",
+                    Description = "Burst of unholy power: 1d8/2 CL (max 5d8) vs good creatures + sickened 1d4 rounds. Will half damage and negates sicken. PHB p.297",
+                    SpellLevel = 4, School = "Evocation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Damage,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }
