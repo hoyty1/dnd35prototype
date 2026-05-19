@@ -2157,7 +2157,7 @@ public partial class GameManager
             if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledDimensionalAnchor && !handledRemoveCurse && !handledDimensionDoor && result.Success)
                 handledLesserGlobe = TryResolveLesserGlobeSpellEffect(caster, target, _pendingSpell, result);
 
-            // ── Cleric 2nd-level spell handlers (GameManager_ClericSpells2.cs) ──
+            // ── Cleric 2nd-level spell handlers (GameManager_NewSpells.cs) ──
             bool anyPriorHandled = handledCauseFear || handledGhoulTouch || handledScare || handledRayOfEnfeeblement || handledTouchOfIdiocy || handledMelfsAcidArrow || handledRayOfExhaustion || handledVampiricTouch || handledEnervation || handledContagion || handledBestowCurse || handledGreaterInvisibility || handledPhantasmalKiller || handledFireShield || handledResilientSphere || handledAnimateRope || handledMirrorImage || handledDimensionalAnchor || handledRemoveCurse || handledDimensionDoor || handledLesserGlobe;
 
             bool handledDeathKnell = false;
@@ -3609,7 +3609,7 @@ public partial class GameManager
                 return;
             }
 
-            // ── Consecrate / Desecrate area effects (GameManager_ClericSpells2.cs) ──
+            // ── Consecrate / Desecrate area effects (GameManager_HolyAreas.cs) ──
             if (TryResolveConsecrateAreaEffect(caster, _pendingSpell, aoeCells, targets, out string consecrateLog))
             {
                 _lastCombatLog = consecrateLog;
