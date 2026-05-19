@@ -394,5 +394,37 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("contagion_wiz", SpellNames.CONTAGION, "Wizard", 4);
         RegisterClassSpellAlias("contagion_sor", SpellNames.CONTAGION, "Sorcerer", 4);
 
+        // Aliases — Continual Flame: Clr 3 (base is Wiz 2)
+        RegisterClassSpellAlias("continual_flame_clr", SpellNames.CONTINUAL_FLAME, "Cleric", 3);
+
+        // ═══════════════════════════════════════════════════════════════
+        // Cure Serious Wounds — PHB p.216
+        // School: Conjuration (Healing)
+        // Level: Cleric 3, Druid 4, Paladin 4, Ranger 4
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Creature touched
+        // Duration: Instantaneous
+        // Saving Throw: Will half (harmless); see text
+        // Spell Resistance: Yes (harmless); see text
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CURE_SERIOUS_WOUNDS,
+                    Name = "Cure Serious Wounds",
+                    Description = "Heals 3d8 + CL (max +15) HP. Touch range. PHB p.216",
+                    SpellLevel = 3, School = "Conjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Healing,
+                    HealDice = 8, HealCount = 3, BonusHealing = 5, // +CL (max +15 at CL15, using 5 for CL5)
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

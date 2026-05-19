@@ -148,6 +148,9 @@ public static partial class SpellDatabase
         // Aliases
         RegisterClassSpellAlias("obscuring_mist_clr", SpellNames.OBSCURING_MIST, "Cleric", 1);
 
+        // Obscure Object: Cleric 3 (also Wizard 2 — already registered above)
+        RegisterClassSpellAlias("obscure_object_clr", SpellNames.OBSCURE_OBJECT, "Cleric", 3);
+
         // Aliases — Owl's Wisdom: Cleric 2, Druid 2, Paladin 2, Ranger 2
         RegisterClassSpellAlias("owls_wisdom_clr", SpellNames.OWLS_WISDOM, "Cleric", 2);
         RegisterClassSpellAlias("owls_wisdom_drd", SpellNames.OWLS_WISDOM, "Druid", 2);

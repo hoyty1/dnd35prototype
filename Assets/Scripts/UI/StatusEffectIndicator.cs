@@ -858,6 +858,35 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // ── Prayer ──
+        if (_character.Stats.PrayerActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.PrayerRoundsRemaining);
+            list.Add(new IconData
+            {
+                Key = "Prayer",
+                ShortLabel = "🙏",
+                Tooltip = $"Prayer\n+1 luck bonus to attack rolls, damage, and saves\nDuration: {rounds} rounds",
+                Color = new Color(1f, 0.85f, 0.3f, 0.92f), // Warm gold
+                Duration = rounds
+            });
+        }
+
+        // ── Invisibility Purge ──
+        if (_character.Stats.InvisibilityPurgeActive)
+        {
+            int rounds = Mathf.Max(0, _character.Stats.InvisibilityPurgeRoundsRemaining);
+            int radiusSquares = Mathf.Max(1, rounds > 0 ? (_character.Stats.GetCasterLevel()) : 1);
+            list.Add(new IconData
+            {
+                Key = "InvisibilityPurge",
+                ShortLabel = "👁",
+                Tooltip = $"Invisibility Purge\nSuppresses invisibility in {radiusSquares * 5}-ft radius\nDuration: {rounds} rounds",
+                Color = new Color(0.6f, 0.8f, 1f, 0.92f), // Light blue
+                Duration = rounds
+            });
+        }
+
         // ── Align Weapon ──
         if (_character.Stats.AlignWeaponActive)
         {

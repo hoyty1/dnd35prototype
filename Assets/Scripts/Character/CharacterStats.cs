@@ -2169,6 +2169,18 @@ public class CharacterStats
     /// <summary>Rounds remaining for Align Weapon.</summary>
     [NonSerialized] public int AlignWeaponRoundsRemaining;
 
+    // ── Prayer ──
+    /// <summary>True while this character is affected by a Prayer buff (+1 luck to attacks, damage, saves).</summary>
+    [NonSerialized] public bool PrayerActive;
+    /// <summary>Rounds remaining for Prayer buff on this character.</summary>
+    [NonSerialized] public int PrayerRoundsRemaining;
+
+    // ── Invisibility Purge ──
+    /// <summary>True while this character has Invisibility Purge active (emanation suppresses invisibility).</summary>
+    [NonSerialized] public bool InvisibilityPurgeActive;
+    /// <summary>Rounds remaining for Invisibility Purge emanation.</summary>
+    [NonSerialized] public int InvisibilityPurgeRoundsRemaining;
+
     public int ArmorClass
     {
         get

@@ -2184,7 +2184,29 @@ public partial class GameManager
             if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && !handledSilence && !handledSoundBurst && !handledSpiritualWeapon && result.Success && !effectNegatedBySave)
                 handledAlignWeapon = TryResolveAlignWeaponSpellEffect(caster, target, _pendingSpell, result);
 
-            bool anyClericHandled = handledDeathKnell || handledSilence || handledSoundBurst || handledSpiritualWeapon || handledAlignWeapon;
+            // ── 3rd-level Cleric spell resolution ──
+            bool handledSearingLight = false;
+            if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && !handledSilence && !handledSoundBurst && !handledSpiritualWeapon && !handledAlignWeapon && result.Success)
+                handledSearingLight = TryResolveSearingLightSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledInvisibilityPurge = false;
+            if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && !handledSilence && !handledSoundBurst && !handledSpiritualWeapon && !handledAlignWeapon && !handledSearingLight && result.Success)
+                handledInvisibilityPurge = TryResolveInvisibilityPurgeSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledRemoveDisease = false;
+            if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && !handledSilence && !handledSoundBurst && !handledSpiritualWeapon && !handledAlignWeapon && !handledSearingLight && !handledInvisibilityPurge && result.Success)
+                handledRemoveDisease = TryResolveRemoveDiseaseSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledPrayer = false;
+            if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && !handledSilence && !handledSoundBurst && !handledSpiritualWeapon && !handledAlignWeapon && !handledSearingLight && !handledInvisibilityPurge && !handledRemoveDisease && result.Success)
+                handledPrayer = TryResolvePrayerSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledRemoveBlindnessDeafness = false;
+            if (!anyPriorHandled && !handledDeathKnell && !handledShieldOther && !handledSilence && !handledSoundBurst && !handledSpiritualWeapon && !handledAlignWeapon && !handledSearingLight && !handledInvisibilityPurge && !handledRemoveDisease && !handledPrayer && result.Success)
+                handledRemoveBlindnessDeafness = TryResolveRemoveBlindnessDeafnessSpellEffect(caster, target, _pendingSpell, result);
+
+            bool anyClericHandled = handledDeathKnell || handledSilence || handledSoundBurst || handledSpiritualWeapon || handledAlignWeapon
+                || handledSearingLight || handledInvisibilityPurge || handledRemoveDisease || handledPrayer || handledRemoveBlindnessDeafness;
             // Note: handledShieldOther returns false to allow normal buff application (deflection/resistance)
 
             if (!anyPriorHandled && !anyClericHandled && result.Success && appliesTrackedEffect && !effectNegatedBySave)

@@ -73,6 +73,35 @@ public static partial class SpellDatabase
                     HasSomaticComponent = true
                 });
 
+        // ── Searing Light ──
+        // D&D 3.5e PHB p.275: Ranged touch attack. Damage varies by creature type:
+        //   Undead: 1d8 per 2 CL (max 5d8)
+        //   Constructs/Objects: 1d6 per 2 CL (max 5d6)
+        //   Others: 1d8 per 2 CL (max 5d8), but half damage (not half dice)
+        // Medium range (100 ft + 10 ft/level). Custom resolution required.
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SEARING_LIGHT,
+                    Name = "Searing Light",
+                    Description = "Ranged touch attack deals damage that varies by creature type. Undead: 1d8/2 CL (max 5d8). Constructs: 1d6/2 CL (max 5d6). Others: 1d8/2 CL (max 5d8) half damage. PHB p.275",
+                    SpellLevel = 3, School = "Evocation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    IsTouch = true,
+                    IsRangedTouch = true,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 8, DamageCount = 2, // Base 2d8 at CL3; custom resolution overrides
+                    DamageType = "divine", // Not fire — positive energy / light
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    DurationType = DurationType.Instantaneous,
+                    AllowsSavingThrow = false, // No save, ranged touch only
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.SCORCHING_RAY,

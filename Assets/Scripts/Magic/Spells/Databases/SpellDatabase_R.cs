@@ -146,6 +146,30 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Remove Blindness/Deafness ──
+        // D&D 3.5e PHB p.270: Cures a touched creature of blindness or deafness.
+        // Conjuration (Healing). Cleric 3, Paladin 3. Touch, instantaneous.
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.REMOVE_BLINDNESS_DEAFNESS,
+                    Name = "Remove Blindness/Deafness",
+                    Description = "Cures blindness or deafness (caster's choice) in a touched creature. Does not restore lost organs or undo magical effects that don't cause a condition. PHB p.270",
+                    SpellLevel = 3, School = "Conjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Healing, // Removal spell
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    DurationType = DurationType.Instantaneous,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.REMOVE_FEAR,
@@ -159,6 +183,31 @@ public static partial class SpellDatabase
                     BuffSaveBonus = 4, // +4 morale vs fear
                     BuffDurationRounds = 100, // 10 minutes = 100 rounds
                     BuffType = "morale_fear",
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // ── Remove Disease ──
+        // D&D 3.5e PHB p.271: Cures all diseases afflicting the touched subject.
+        // Conjuration (Healing). Cleric 3, Druid 3, Ranger 3. Touch, instantaneous.
+        // Requires caster level check (1d20+CL vs DC of each disease).
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.REMOVE_DISEASE,
+                    Name = "Remove Disease",
+                    Description = "Cures all diseases that the subject is suffering from, including magical diseases. Requires a caster level check (1d20 + caster level) vs each disease's DC. PHB p.271",
+                    SpellLevel = 3, School = "Conjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Healing, // Removal spell
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    DurationType = DurationType.Instantaneous,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

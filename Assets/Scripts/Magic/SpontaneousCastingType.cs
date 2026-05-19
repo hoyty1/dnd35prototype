@@ -43,8 +43,8 @@ public static class SpontaneousCastingHelper
                 case 0: return SpellNames.CURE_MINOR_WOUNDS;
                 case 1: return SpellNames.CURE_LIGHT_WOUNDS;
                 case 2: return SpellNames.CURE_MODERATE_WOUNDS;
+                case 3: return SpellNames.CURE_SERIOUS_WOUNDS;
                 // Future levels:
-                // case 3: return "cure_serious_wounds";
                 // case 4: return "cure_critical_wounds";
                 default: return null;
             }
@@ -56,8 +56,8 @@ public static class SpontaneousCastingHelper
                 case 0: return SpellNames.INFLICT_MINOR_WOUNDS;
                 case 1: return SpellNames.INFLICT_LIGHT_WOUNDS;
                 case 2: return SpellNames.INFLICT_MODERATE_WOUNDS;
+                case 3: return SpellNames.INFLICT_SERIOUS_WOUNDS;
                 // Future levels:
-                // case 3: return "inflict_serious_wounds";
                 // case 4: return "inflict_critical_wounds";
                 default: return null;
             }

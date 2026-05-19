@@ -123,6 +123,9 @@ namespace DND35e.Identifiers
         /// <summary>Cure Moderate Wounds (spell id: cure_moderate_wounds)</summary>
         public const string CURE_MODERATE_WOUNDS = "cure_moderate_wounds";
 
+        /// <summary>Cure Serious Wounds (spell id: cure_serious_wounds)</summary>
+        public const string CURE_SERIOUS_WOUNDS = "cure_serious_wounds";
+
         /// <summary>Dancing Lights (spell id: dancing_lights)</summary>
         public const string DANCING_LIGHTS = "dancing_lights";
 
@@ -294,6 +297,9 @@ namespace DND35e.Identifiers
         /// <summary>Glitterdust (spell id: glitterdust)</summary>
         public const string GLITTERDUST = "glitterdust";
 
+        /// <summary>Glyph of Warding (spell id: glyph_of_warding)</summary>
+        public const string GLYPH_OF_WARDING = "glyph_of_warding";
+
         /// <summary>Grease (spell id: grease)</summary>
         public const string GREASE = "grease";
 
@@ -341,6 +347,12 @@ namespace DND35e.Identifiers
 
         /// <summary>Inflict Moderate Wounds (spell id: inflict_moderate_wounds)</summary>
         public const string INFLICT_MODERATE_WOUNDS = "inflict_moderate_wounds";
+
+        /// <summary>Inflict Serious Wounds (spell id: inflict_serious_wounds)</summary>
+        public const string INFLICT_SERIOUS_WOUNDS = "inflict_serious_wounds";
+
+        /// <summary>Invisibility Purge (spell id: invisibility_purge)</summary>
+        public const string INVISIBILITY_PURGE = "invisibility_purge";
 
         /// <summary>Invisibility (spell id: invisibility)</summary>
         public const string INVISIBILITY = "invisibility";
@@ -429,6 +441,9 @@ namespace DND35e.Identifiers
         /// <summary>Prestidigitation (spell id: prestidigitation)</summary>
         public const string PRESTIDIGITATION = "prestidigitation";
 
+        /// <summary>Prayer (spell id: prayer)</summary>
+        public const string PRAYER = "prayer";
+
         /// <summary>Protection from Arrows (spell id: protection_from_arrows)</summary>
         public const string PROTECTION_FROM_ARROWS = "protection_from_arrows";
 
@@ -486,6 +501,12 @@ namespace DND35e.Identifiers
         /// <summary>Reduce Person, Mass (spell id: mass_reduce_person)</summary>
         public const string MASS_REDUCE_PERSON = "mass_reduce_person";
 
+        /// <summary>Remove Blindness/Deafness (spell id: remove_blindness_deafness)</summary>
+        public const string REMOVE_BLINDNESS_DEAFNESS = "remove_blindness_deafness";
+
+        /// <summary>Remove Disease (spell id: remove_disease)</summary>
+        public const string REMOVE_DISEASE = "remove_disease";
+
         /// <summary>Remove Fear (spell id: remove_fear)</summary>
         public const string REMOVE_FEAR = "remove_fear";
 
@@ -512,6 +533,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Scorching Ray (spell id: scorching_ray)</summary>
         public const string SCORCHING_RAY = "scorching_ray";
+
+        /// <summary>Searing Light (spell id: searing_light)</summary>
+        public const string SEARING_LIGHT = "searing_light";
 
         /// <summary>See Invisible (spell id: see_invisible)</summary>
         public const string SEE_INVISIBLE = "see_invisible";

@@ -88,6 +88,68 @@ public static partial class SpellDatabase
                 });
 
         // ═══════════════════════════════════════════════════════════════
+        // Inflict Serious Wounds — PHB p.244
+        // School: Necromancy
+        // Level: Cleric 3
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Creature touched
+        // Duration: Instantaneous
+        // Saving Throw: Will half
+        // Spell Resistance: Yes
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.INFLICT_SERIOUS_WOUNDS,
+                    Name = "Inflict Serious Wounds",
+                    Description = "Touch attack deals 3d8 + CL (max +15) negative energy damage. Will half. PHB p.244",
+                    SpellLevel = 3, School = "Necromancy",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 8, DamageCount = 3, BonusDamage = 5, // +CL (max +15)
+                    DamageType = "negative",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SaveHalves = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // ═══════════════════════════════════════════════════════════════
+        // Invisibility Purge — PHB p.245
+        // School: Evocation
+        // Level: Cleric 3
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Personal
+        // Target: You
+        // Duration: 1 min./level (D)
+        //
+        // You surround yourself with a sphere of power with a radius of
+        // 5 feet per caster level that negates all forms of invisibility.
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.INVISIBILITY_PURGE,
+                    Name = "Invisibility Purge",
+                    Description = "Dispels invisibility within 5 ft/level. 1 min/level. PHB p.245",
+                    SpellLevel = 3, School = "Evocation",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    BuffDurationRounds = 50, // 1 min/level at CL5 = 50 rounds
+                    DurationType = DurationType.MinutesPerLevel,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // ═══════════════════════════════════════════════════════════════
         // Invisibility — PHB p.245
         // School: Illusion (Glamer)
         // Level: Bard 2, Sorcerer/Wizard 2

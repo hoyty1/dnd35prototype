@@ -194,6 +194,37 @@ public static partial class SpellDatabase
         // Ranger gets it at level 2
         RegisterClassSpellAlias("protection_from_energy_rgr", SpellNames.PROTECTION_FROM_ENERGY, "Ranger", 2);
 
+        // ── Prayer ──
+        // D&D 3.5e PHB p.264: All allies gain +1 luck bonus on attack rolls,
+        // weapon damage, saves, and skill checks. All enemies take –1 penalty
+        // on same rolls. 40-ft-radius burst centered on caster. 1 round/level.
+        // Note: Prayer is resolved via custom TryResolvePrayerSpellEffect because
+        // it applies both buff (allies) and debuff (enemies) simultaneously.
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.PRAYER,
+                    Name = "Prayer",
+                    Description = "Allies gain +1 luck bonus on attack rolls, weapon damage rolls, saves, and skill checks. Enemies take –1 penalty on those same rolls. 40-ft-radius burst centered on caster. 1 round/level. PHB p.264",
+                    SpellLevel = 3, School = "Enchantment",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Self, // Custom AoE handled in resolution
+                    RangeSquares = 0, // Self-centered burst
+                    AreaRadius = 8, // 40 ft = 8 squares
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 8,
+                    AoERangeSquares = 0,
+                    EffectType = SpellEffectType.Buff,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.PURIFY_FOOD_DRINK,

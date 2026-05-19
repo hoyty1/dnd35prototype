@@ -268,5 +268,42 @@ public static partial class SpellDatabase
 
         RegisterClassSpellAlias("greater_invisibility_brd", SpellNames.GREATER_INVISIBILITY, "Bard", 4);
 
+        // ═══════════════════════════════════════════════════════════════
+        // Glyph of Warding — PHB p.236
+        // School: Abjuration
+        // Level: Cleric 3
+        // Components: V, S, M (200 gp powdered diamond)
+        // Casting Time: 10 minutes
+        // Range: Touch
+        // Target/Area: Object touched or up to 5 sq. ft./level
+        // Duration: Permanent until discharged (D)
+        // Saving Throw: See text
+        // Spell Resistance: No (object); Yes (see text)
+        //
+        // An inscribed glyph harms those who enter, pass, or open the
+        // warded area or object. Blast glyph deals 1d8/2 caster levels
+        // (max 5d8) acid/cold/fire/electricity/sonic damage. Reflex half.
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.GLYPH_OF_WARDING,
+                    Name = "Glyph of Warding",
+                    Description = "Inscribes a glyph that deals 1d8/2 CL (max 5d8) energy damage when triggered. Reflex half. 200 gp diamond dust. PHB p.236",
+                    SpellLevel = 3, School = "Abjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 8, DamageCount = 2, BonusDamage = 0, // 1d8/2 CL (2d8 at CL4-5)
+                    DamageType = "fire",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SaveHalves = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    IsPlaceholder = true,
+                    PlaceholderReason = "[PLACEHOLDER - Trap/glyph placement system not implemented; registered for spell preparation]"
+                });
+
     }
 }

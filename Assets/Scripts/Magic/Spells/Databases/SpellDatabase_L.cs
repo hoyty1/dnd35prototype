@@ -236,5 +236,8 @@ public static partial class SpellDatabase
         // Aliases
         RegisterClassSpellAlias("light_clr", SpellNames.LIGHT, "Cleric", 0);
 
+        // Locate Object: Cleric 3 (also Wizard 2, Bard 2 — already registered above)
+        RegisterClassSpellAlias("locate_object_clr", SpellNames.LOCATE_OBJECT, "Cleric", 3);
+
     }
 }
