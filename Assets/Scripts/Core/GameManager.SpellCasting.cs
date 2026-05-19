@@ -6795,6 +6795,74 @@ public partial class GameManager
             return effect;
         }
 
+        // ===== ENTROPIC SHIELD — D&D 3.5e PHB p.227 =====
+        // Self-only buff: ranged attacks against you have 20% miss chance. Duration 1 min/level.
+        if (spell != null && spell.SpellId == SpellNames.ENTROPIC_SHIELD)
+        {
+            CharacterController recipient = caster ?? target;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, recipient.Stats.CharacterName, casterLevel);
+            if (effect != null)
+            {
+                recipient.Stats.EntropicShieldActive = true;
+                recipient.Stats.EntropicShieldCasterLevel = casterLevel;
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88DDFF>🛡️ {recipient.Stats.CharacterName} casts Entropic Shield — ranged attacks have 20% miss chance (CL {casterLevel}) [{effect.GetDurationDisplayString()}]</color>");
+                Debug.Log($"[GameManager] Entropic Shield applied to {recipient.Stats.CharacterName}: CL {casterLevel}");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
+        // ===== MAGIC STONE — D&D 3.5e PHB p.251 =====
+        // Self buff: enchants up to 3 pebbles. +1 enhancement to attack, 1d6+1 damage, counts as magic.
+        // Duration 30 minutes or until discharged.
+        if (spell != null && spell.SpellId == SpellNames.DOMAIN_MAGIC_STONE)
+        {
+            CharacterController recipient = caster ?? target;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, recipient.Stats.CharacterName, casterLevel);
+            if (effect != null)
+            {
+                recipient.Stats.MagicStoneActive = true;
+                recipient.Stats.MagicStoneCharges = 3;
+                recipient.Stats.MagicStoneCasterLevel = casterLevel;
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88DDFF>🪨 {recipient.Stats.CharacterName} casts Magic Stone — 3 pebbles enchanted (+1 atk, 1d6+1 dmg, magic) (CL {casterLevel}) [{effect.GetDurationDisplayString()}]</color>");
+                Debug.Log($"[GameManager] Magic Stone applied to {recipient.Stats.CharacterName}: 3 charges, CL {casterLevel}");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         // ===== SHIELD OF FAITH — D&D 3.5e PHB p.278 =====
         // Deflection bonus scales: +2 base, +1 per 6 CL above 1st (max +5 at CL 18)
         if (spell != null && spell.SpellId == SpellNames.SHIELD_OF_FAITH)

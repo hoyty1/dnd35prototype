@@ -4570,6 +4570,19 @@ public class CharacterController : MonoBehaviour
         int totalFeatDmgBonus = featMods.TotalFeatDamageBonus + solidFogDmgPenalty;
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
+        // D&D 3.5e Magic Stone: when firing a sling with active Magic Stone charges,
+        // override damage to 1d6+1, add +1 enhancement to attack, and mark as magical (PHB p.251)
+        bool magicStoneUsed = false;
+        if (isRanged && equippedWeapon != null && equippedWeapon.Id == ItemIDs.SLING
+            && Stats.MagicStoneActive && Stats.MagicStoneCharges > 0)
+        {
+            damageDice = 6;
+            damageCount = 1;
+            bonusDamage = 1;
+            totalAtkMod += 1; // +1 enhancement bonus to attack
+            magicStoneUsed = true;
+        }
+
         NaturalAttackDefinition naturalAttackForOnHit = null;
         if (ShouldUseInnateNaturalAttackProfile(equippedWeapon))
             naturalAttackForOnHit = Stats.GetPrimaryNaturalAttack();
@@ -4626,6 +4639,27 @@ public class CharacterController : MonoBehaviour
         result.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
 
         TryApplyNaturalAttackOnHitEffects(target, result, naturalAttackForOnHit);
+
+        // D&D 3.5e Magic Stone: decrement charges after attack (magic DR bypass set in damage packet)
+        if (magicStoneUsed)
+        {
+            result.WeaponName = "Magic Stone (Sling)";
+            Stats.MagicStoneCharges--;
+            if (Stats.MagicStoneCharges <= 0)
+            {
+                Stats.MagicStoneActive = false;
+                Stats.MagicStoneCharges = 0;
+                Debug.Log($"[MagicStone] {Stats.CharacterName}: All magic stones discharged, spell ends.");
+                // Remove the spell effect since all charges are used
+                StatusEffectManager selfStatusMgr = GetComponent<StatusEffectManager>();
+                if (selfStatusMgr != null)
+                    selfStatusMgr.RemoveEffectsBySpellId(SpellNames.DOMAIN_MAGIC_STONE);
+            }
+            else
+            {
+                Debug.Log($"[MagicStone] {Stats.CharacterName}: {Stats.MagicStoneCharges} magic stone(s) remaining.");
+            }
+        }
 
         // HP tracking
         result.DefenderHPBefore = hpBefore;
@@ -4937,10 +4971,42 @@ public class CharacterController : MonoBehaviour
 
             int hpBeforeAtk = target.Stats.CurrentHP;
 
-            CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
-                damageDice, damageCount, bonusDamage, critThreatMin, critMult,
+            // D&D 3.5e Magic Stone: per-attack override for sling full attack (PHB p.251)
+            int atkDamageDice = damageDice;
+            int atkDamageCount = damageCount;
+            int atkBonusDamage = bonusDamage;
+            int magicStoneAtkBonus = 0;
+            bool fullAtkMagicStoneUsed = false;
+            if (isRanged && equippedWeapon != null && equippedWeapon.Id == ItemIDs.SLING
+                && Stats.MagicStoneActive && Stats.MagicStoneCharges > 0)
+            {
+                atkDamageDice = 6;
+                atkDamageCount = 1;
+                atkBonusDamage = 1;
+                magicStoneAtkBonus = 1;
+                fullAtkMagicStoneUsed = true;
+            }
+
+            CombatResult atk = PerformSingleAttackWithCrit(target, atkMod + magicStoneAtkBonus, isFlanking, flankingBonus, flankingPartnerName,
+                atkDamageDice, atkDamageCount, atkBonusDamage, critThreatMin, critMult,
                 equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus,
                 damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
+
+            // D&D 3.5e Magic Stone: decrement charges after each full attack hit
+            if (fullAtkMagicStoneUsed)
+            {
+                atk.WeaponName = "Magic Stone (Sling)";
+                Stats.MagicStoneCharges--;
+                if (Stats.MagicStoneCharges <= 0)
+                {
+                    Stats.MagicStoneActive = false;
+                    Stats.MagicStoneCharges = 0;
+                    Debug.Log($"[MagicStone] {Stats.CharacterName}: All magic stones discharged during full attack, spell ends.");
+                    StatusEffectManager selfStatusMgr = GetComponent<StatusEffectManager>();
+                    if (selfStatusMgr != null)
+                        selfStatusMgr.RemoveEffectsBySpellId(SpellNames.DOMAIN_MAGIC_STONE);
+                }
+            }
 
             atk.RacialAttackBonus = racialAtkBonus;
             atk.SizeAttackBonus = Stats.SizeModifier;
@@ -4975,8 +5041,9 @@ public class CharacterController : MonoBehaviour
                 atk.RangeIncrementNumber = rangeInfo.IncrementNumber;
                 atk.RangePenalty = rangeInfo.Penalty;
             }
-            atk.WeaponName = attackLabel;
-            atk.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
+            if (!fullAtkMagicStoneUsed)
+                atk.WeaponName = attackLabel;
+            atk.BaseDamageDiceStr = $"{atkDamageCount}d{atkDamageDice}";
 
             atk.DefenderHPBefore = hpBeforeAtk;
             atk.DefenderHPAfter = target.Stats.CurrentHP;
@@ -6472,6 +6539,11 @@ public class CharacterController : MonoBehaviour
             if (weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0))
                 attackTags |= DamageBypassTag.Ranged;
 
+            // D&D 3.5e Magic Stone: sling attacks with active Magic Stone count as magic weapons (PHB p.251)
+            if (Stats != null && Stats.MagicStoneActive && Stats.MagicStoneCharges >= 0
+                && weapon != null && weapon.Id == ItemIDs.SLING)
+                attackTags |= DamageBypassTag.Magic;
+
             var packet = new DamagePacket
             {
                 RawDamage = rawTotalDamage,
@@ -7894,6 +7966,10 @@ public class CharacterController : MonoBehaviour
             }
         }
 
+        // D&D 3.5e Entropic Shield: 20% miss chance against ranged attacks only (PHB p.227)
+        if (incomingIsRangedAttack && Stats != null && Stats.EntropicShieldActive)
+            bestMissChance = Mathf.Max(bestMissChance, 20);
+
         // Darkness does not block LOS, but attacks involving darkness squares still have 20% miss chance.
         if (attacker != null)
             bestMissChance = Mathf.Max(bestMissChance, DarknessAreaEffect.GetAttackConcealmentMissChance(attacker, this));
@@ -8024,6 +8100,10 @@ public class CharacterController : MonoBehaviour
                 }
             }
         }
+
+        // D&D 3.5e Entropic Shield: identify as concealment source for ranged attacks
+        if (incomingIsRangedAttack && Stats != null && Stats.EntropicShieldActive && sourceEffect == null && missChance == 20)
+            return "Entropic Shield (20% miss chance vs ranged attacks)";
 
         string sourceName = sourceEffect != null && !string.IsNullOrWhiteSpace(sourceEffect.ConcealmentSource)
             ? sourceEffect.ConcealmentSource

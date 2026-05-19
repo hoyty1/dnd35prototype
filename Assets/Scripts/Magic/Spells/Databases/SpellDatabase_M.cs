@@ -98,17 +98,23 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.DOMAIN_MAGIC_STONE,
                     Name = "Magic Stone",
-                    Description = "Three stones gain +1 on attack and deal 1d6+1 damage.",
+                    Description = "Up to 3 pebbles gain +1 enhancement bonus to attack rolls and deal 1d6+1 damage. Used as sling ammunition. Counts as magic weapon. Duration 30 minutes or until discharged. PHB p.251",
                     SpellLevel = 1,
                     School = "Transmutation",
                     ClassList = new string[] { "Cleric" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
+                    BuffDurationRounds = 300, // Legacy fallback: 30 minutes
+                    BuffType = "magic_stone",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 30,
+                    DurationScalesWithLevel = false,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Magic stone projectiles not implemented]"
+                    IsPlaceholder = false
                 });
 
         // =================================================================

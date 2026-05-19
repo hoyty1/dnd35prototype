@@ -44,7 +44,7 @@ public static partial class SpellDatabase
                     Name = "Endure Elements",
                     Description = "Exist comfortably in hot or cold environments. Duration 24 hours. PHB p.226",
                     SpellLevel = 1, School = "Abjuration",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Cleric" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
@@ -131,11 +131,16 @@ public static partial class SpellDatabase
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffACBonus = 2, // Simplified: 20% miss ~= +2 AC vs ranged
-                    BuffDurationRounds = 30,
+                    BuffDurationRounds = 10, // Legacy fallback: 1 minute
                     BuffType = "entropic",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
+                    ProvokesAoO = true,
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData

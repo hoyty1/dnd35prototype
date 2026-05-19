@@ -2084,6 +2084,20 @@ public class CharacterStats
     /// <summary>Morale bonus to saves vs fear from Remove Fear spell.</summary>
     [NonSerialized] public int RemoveFearMoraleBonus;
 
+    // ── Entropic Shield ──
+    /// <summary>True if the Entropic Shield spell is active on this character. Grants 20% miss chance vs ranged attacks.</summary>
+    [NonSerialized] public bool EntropicShieldActive;
+    /// <summary>Caster level of the Entropic Shield effect (for dispel checks and duration).</summary>
+    [NonSerialized] public int EntropicShieldCasterLevel;
+
+    // ── Magic Stone ──
+    /// <summary>True if Magic Stone is active and charges remain.</summary>
+    [NonSerialized] public bool MagicStoneActive;
+    /// <summary>Number of enchanted stone charges remaining (max 3).</summary>
+    [NonSerialized] public int MagicStoneCharges;
+    /// <summary>Caster level of the Magic Stone effect.</summary>
+    [NonSerialized] public int MagicStoneCasterLevel;
+
     // ── Shield of Faith ──
     /// <summary>The deflection bonus amount specifically from Shield of Faith (for CL scaling display).</summary>
     [NonSerialized] public int ShieldOfFaithDeflectionBonus;

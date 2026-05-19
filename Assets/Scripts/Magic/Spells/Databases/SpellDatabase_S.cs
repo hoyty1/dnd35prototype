@@ -670,7 +670,7 @@ public static partial class SpellDatabase
                     Name = "Summon Monster I",
                     Description = "Calls a creature to fight for you. Duration 1 round/level. PHB p.285",
                     SpellLevel = 1, School = "Conjuration",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Cleric" },
                     TargetType = SpellTargetType.Self,
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Buff,

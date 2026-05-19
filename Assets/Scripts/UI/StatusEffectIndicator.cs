@@ -716,6 +716,34 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        // ── Entropic Shield ──
+        if (_character.Stats != null && _character.Stats.EntropicShieldActive && statusMgr != null && statusMgr.HasEffect(SpellNames.ENTROPIC_SHIELD))
+        {
+            int esRounds = statusMgr.GetRemainingRounds(SpellNames.ENTROPIC_SHIELD);
+            list.Add(new IconData
+            {
+                Key = "EntropicShield",
+                ShortLabel = "ES",
+                Tooltip = $"Entropic Shield\n20% miss chance vs ranged attacks\nDuration: {(esRounds < 0 ? "∞" : $"{Mathf.Max(0, esRounds)} rounds")}",
+                Color = new Color(0.6f, 0.5f, 0.9f, 0.95f), // Purple
+                Duration = esRounds
+            });
+        }
+
+        // ── Magic Stone ──
+        if (_character.Stats != null && _character.Stats.MagicStoneActive && _character.Stats.MagicStoneCharges > 0 && statusMgr != null && statusMgr.HasEffect(SpellNames.DOMAIN_MAGIC_STONE))
+        {
+            int msRounds = statusMgr.GetRemainingRounds(SpellNames.DOMAIN_MAGIC_STONE);
+            list.Add(new IconData
+            {
+                Key = "MagicStone",
+                ShortLabel = $"MS:{_character.Stats.MagicStoneCharges}",
+                Tooltip = $"Magic Stone\n{_character.Stats.MagicStoneCharges} enchanted stone(s) remaining\n+1 enhancement to attack, 1d6+1 damage (magic)\nUsed with sling\nDuration: {(msRounds < 0 ? "∞" : $"{Mathf.Max(0, msRounds)} rounds")}",
+                Color = new Color(0.7f, 0.6f, 0.4f, 0.95f), // Earthy brown
+                Duration = msRounds
+            });
+        }
+
         // ── Shield of Faith ──
         if (_character.Stats != null && _character.Stats.ShieldOfFaithDeflectionBonus > 0 && statusMgr != null && statusMgr.HasEffect(SpellNames.SHIELD_OF_FAITH))
         {

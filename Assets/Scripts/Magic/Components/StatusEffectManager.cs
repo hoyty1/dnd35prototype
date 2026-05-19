@@ -295,6 +295,21 @@ public class StatusEffectManager : MonoBehaviour
             _stats.RemoveFearMoraleBonus = 0;
         }
 
+        // D&D 3.5e: Clear Entropic Shield when the spell effect expires or is removed.
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.ENTROPIC_SHIELD, System.StringComparison.Ordinal) && _stats != null)
+        {
+            _stats.EntropicShieldActive = false;
+            _stats.EntropicShieldCasterLevel = 0;
+        }
+
+        // D&D 3.5e: Clear Magic Stone when the spell effect expires or is removed.
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DOMAIN_MAGIC_STONE, System.StringComparison.Ordinal) && _stats != null)
+        {
+            _stats.MagicStoneActive = false;
+            _stats.MagicStoneCharges = 0;
+            _stats.MagicStoneCasterLevel = 0;
+        }
+
         // D&D 3.5e: Clear Shield of Faith deflection bonus when the spell effect expires or is removed.
         if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SHIELD_OF_FAITH, System.StringComparison.Ordinal) && _stats != null)
         {
