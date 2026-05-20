@@ -10,25 +10,39 @@ public static partial class SpellDatabase
 {
     private static void RegisterSpellsH()
     {
+        // ──────────────────────────────────────────────────────────────
+        // HEAT METAL  (PHB p.236)
+        // Transmutation [Fire]
+        // Level: Druid 2, Sun 2
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Target: Metal equipment of one creature per two levels
+        // Duration: 7 rounds
+        // Saving Throw: Will negates (object)
+        // Spell Resistance: Yes (object)
+        //
+        // Escalating fire damage: Rd1 no dmg, Rd2 1d4, Rd3-4 2d4,
+        // Rd5 2d4, Rd6 1d4, Rd7 no dmg.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.DOMAIN_HEAT_METAL,
                     Name = "Heat Metal",
-                    Description = "Make metal intensely hot. Creatures wearing metal armor take 1d4 to 2d4 fire damage per round.",
+                    Description = "Heats metal equipment: escalating fire damage over 7 rounds (0/1d4/2d4/2d4/2d4/1d4/0). Will negates (object). PHB p.236",
                     SpellLevel = 2,
                     School = "Transmutation",
                     ClassList = new string[] { "Cleric" },
                     TargetType = SpellTargetType.SingleEnemy,
-                    RangeSquares = 5,
+                    RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 4,
-                    DamageCount = 2,
                     DamageType = "fire",
-                    BuffDurationRounds = 7,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 7,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Ongoing damage over rounds not implemented]"
+                    ProvokesAoO = true
                 });
 
         // ──────────────────────────────────────────────────────────────
@@ -133,24 +147,36 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // HOLD ANIMAL  (PHB p.241)
+        // Enchantment (Compulsion) [Mind-Affecting]
+        // Level: Animal 2, Druid 2, Ranger 2
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Target: One animal
+        // Duration: 1 round/level (D); see text
+        // Saving Throw: Will negates; see text
+        // Spell Resistance: Yes
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.DOMAIN_HOLD_ANIMAL,
                     Name = "Hold Animal",
-                    Description = "Paralyzes one animal for 1 round/level.",
+                    Description = "Paralyzes one animal for 1 round/level. Will negates; new save each round with cumulative +2 bonus. PHB p.241",
                     SpellLevel = 2,
                     School = "Enchantment",
                     ClassList = new string[] { "Cleric" },
                     TargetType = SpellTargetType.SingleEnemy,
-                    RangeSquares = 6,
+                    RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Debuff,
-                    BuffDurationRounds = 30,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Hold/paralyze not implemented]"
+                    ProvokesAoO = true
                 });
 
         // ──────────────────────────────────────────────────────────────

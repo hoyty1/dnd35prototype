@@ -34,6 +34,11 @@ public static class AreaEffectColors
     public static readonly Color Darkness = new Color(0.1f, 0.1f, 0.1f, 0.9f);
     public static readonly Color DeeperDarkness = new Color(0.05f, 0.05f, 0.05f, 0.95f);
 
+    // Earth/Stone effects
+    public static readonly Color SoftenEarth = new Color(0.55f, 0.40f, 0.25f, 0.55f);
+    public static readonly Color SpikeStones = new Color(0.55f, 0.50f, 0.45f, 0.55f);
+    public static readonly Color PlantGrowth = new Color(0.2f, 0.5f, 0.15f, 0.50f);
+
     // Magical effects
     public static readonly Color Web = new Color(0.9f, 0.9f, 0.9f, 0.5f);
     public static readonly Color Entangle = new Color(0.4f, 0.6f, 0.3f, 0.6f);

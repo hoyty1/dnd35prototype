@@ -872,6 +872,40 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // DOMINATE ANIMAL  (PHB p.224)
+        // Enchantment (Compulsion) [Mind-Affecting]
+        // Level: Animal 3, Druid 3
+        // Casting Time: 1 round
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Target: One animal
+        // Duration: 1 round/level
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        //
+        // You can telepathically control the animal's actions.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DOMINATE_ANIMAL,
+                    Name = "Dominate Animal",
+                    Description = "Telepathic control over one animal. Will negates. 1 round/level. PHB p.224",
+                    SpellLevel = 3,
+                    School = "Enchantment",
+                    ClassList = new string[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Debuff,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true
+                });
+
         // Aliases
         RegisterClassSpellAlias("detect_magic_clr", SpellNames.DETECT_MAGIC_WIZ, "Cleric", 0);
         RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);

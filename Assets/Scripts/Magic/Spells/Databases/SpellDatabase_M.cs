@@ -257,6 +257,43 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // MAGIC VESTMENT  (PHB p.251)
+        // Transmutation
+        // Level: Cleric 3, Strength 3, War 3
+        // Components: V, S, DF
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Armor or shield touched
+        // Duration: 1 hour/level
+        // Saving Throw: Will negates (harmless, object)
+        // Spell Resistance: Yes (harmless, object)
+        //
+        // You imbue a suit of armor or a shield with an enhancement
+        // bonus of +1 per four caster levels (maximum +5 at 20th level).
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MAGIC_VESTMENT,
+                    Name = "Magic Vestment",
+                    Description = "Armor or shield gains +1 enhancement bonus per 4 caster levels (max +5). Duration 1 hour/level. PHB p.251",
+                    SpellLevel = 3,
+                    School = "Transmutation",
+                    ClassList = new string[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    BuffType = "enhancement",
+                    BuffBonusType = BonusType.Enhancement,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.MAKE_WHOLE,

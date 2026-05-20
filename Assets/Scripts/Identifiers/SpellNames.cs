@@ -99,6 +99,9 @@ namespace DND35e.Identifiers
         /// <summary>Command Undead (spell id: command_undead)</summary>
         public const string COMMAND_UNDEAD = "command_undead";
 
+        /// <summary>Command Plants (spell id: command_plants)</summary>
+        public const string COMMAND_PLANTS = "command_plants";
+
         /// <summary>Comprehend Languages (spell id: comprehend_languages)</summary>
         public const string COMPREHEND_LANGUAGES = "comprehend_languages";
 
@@ -239,6 +242,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Wind Wall (spell id: domain_wind_wall)</summary>
         public const string DOMAIN_WIND_WALL = "domain_wind_wall";
+
+        /// <summary>Dominate Animal (spell id: dominate_animal)</summary>
+        public const string DOMINATE_ANIMAL = "dominate_animal";
 
         /// <summary>Doom (spell id: doom)</summary>
         public const string DOOM = "doom";
@@ -432,6 +438,9 @@ namespace DND35e.Identifiers
         /// <summary>Magic Weapon (spell id: magic_weapon)</summary>
         public const string MAGIC_WEAPON = "magic_weapon";
 
+        /// <summary>Magic Vestment (spell id: magic_vestment)</summary>
+        public const string MAGIC_VESTMENT = "magic_vestment";
+
         /// <summary>Make Whole (spell id: make_whole)</summary>
         public const string MAKE_WHOLE = "make_whole";
 
@@ -479,6 +488,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Poison (spell id: poison)</summary>
         public const string POISON = "poison";
+
+        /// <summary>Plant Growth (spell id: plant_growth)</summary>
+        public const string PLANT_GROWTH = "plant_growth";
 
         /// <summary>Prayer (spell id: prayer)</summary>
         public const string PRAYER = "prayer";
@@ -626,6 +638,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Spider Climb (spell id: spider_climb)</summary>
         public const string SPIDER_CLIMB = "spider_climb";
+
+        /// <summary>Spike Stones (spell id: spike_stones)</summary>
+        public const string SPIKE_STONES = "spike_stones";
 
         /// <summary>Spell Immunity (spell id: spell_immunity)</summary>
         public const string SPELL_IMMUNITY = "spell_immunity";

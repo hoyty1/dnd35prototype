@@ -1675,6 +1675,7 @@ public class CharacterStats
     public int AttackRange;     // Square tiles for attack reach (1 = melee)
     public int BaseSpeed;       // Base movement speed in squares
     public int LandSpeedEnhancementBonusFeet; // Typed enhancement bonus to land speed (e.g., Expeditious Retreat)
+    public int MagicVestmentACBonus;             // Enhancement bonus to armor from Magic Vestment (PHB p.251)
     public int CritThreatMin;   // Minimum natural d20 roll for crit threat (from equipped weapon, default 20)
     public int CritMultiplier;  // Crit damage multiplier (from equipped weapon, default 2)
 
@@ -2265,7 +2266,8 @@ public class CharacterStats
                 dexToAC = MaxDexBonus;
             // Mage Armor is an armor bonus — it doesn't stack with worn armor.
             // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
-            int effectiveArmorBonus = Mathf.Max(ArmorBonus, SpellACBonus);
+            // Magic Vestment adds enhancement bonus to armor (stacks with base armor, not with other armor enhancements).
+            int effectiveArmorBonus = Mathf.Max(ArmorBonus + MagicVestmentACBonus, SpellACBonus);
             return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + SizeModifier
                    + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty
                    + HasteACBonus + SlowACPenalty;

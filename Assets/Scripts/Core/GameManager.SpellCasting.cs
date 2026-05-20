@@ -2262,10 +2262,37 @@ public partial class GameManager
             if (!anyPriorHandled && !anyClericHandled && !handledChaosHammer && !handledHolySmite && !handledOrdersWrath && !handledUnholyBlight && !handledDeathWard && !handledDivinePower && !handledFreedomOfMovement && !handledSpellImmunity && !handledNeutralizePoison && !handledPoison && !handledDismissal && !handledRepelVermin && result.Success)
                 handledImbueWithSpellAbility = TryResolveImbueWithSpellAbilitySpellEffect(caster, target, _pendingSpell, result);
 
+            // ── Domain spell handlers (single-target) ──
+            bool handledHoldAnimal = false;
+            if (!anyPriorHandled && !anyClericHandled && result.Success && !effectNegatedBySave)
+                handledHoldAnimal = TryResolveHoldAnimalSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledProduceFlame = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledHoldAnimal && result.Success)
+                handledProduceFlame = TryResolveProduceFlameSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledHeatMetal = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledHoldAnimal && !handledProduceFlame && result.Success && !effectNegatedBySave)
+                handledHeatMetal = TryResolveHeatMetalSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledMagicVestment = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledHoldAnimal && !handledProduceFlame && !handledHeatMetal && result.Success && !effectNegatedBySave)
+                handledMagicVestment = TryResolveMagicVestmentSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledDominateAnimal = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledHoldAnimal && !handledProduceFlame && !handledHeatMetal && !handledMagicVestment && result.Success && !effectNegatedBySave)
+                handledDominateAnimal = TryResolveDominateAnimalSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledCommandPlants = false;
+            if (!anyPriorHandled && !anyClericHandled && !handledHoldAnimal && !handledProduceFlame && !handledHeatMetal && !handledMagicVestment && !handledDominateAnimal && result.Success && !effectNegatedBySave)
+                handledCommandPlants = TryResolveCommandPlantsSpellEffect(caster, target, _pendingSpell, result);
+
             bool anyCleric4Handled = handledChaosHammer || handledHolySmite || handledOrdersWrath || handledUnholyBlight
                 || handledDeathWard || handledDivinePower || handledFreedomOfMovement || handledSpellImmunity
                 || handledNeutralizePoison || handledPoison || handledDismissal || handledRepelVermin
-                || handledImbueWithSpellAbility;
+                || handledImbueWithSpellAbility
+                || handledHoldAnimal || handledProduceFlame || handledHeatMetal || handledMagicVestment
+                || handledDominateAnimal || handledCommandPlants;
 
             if (!anyPriorHandled && !anyClericHandled && !anyCleric4Handled && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
@@ -4102,6 +4129,162 @@ public partial class GameManager
             if (TryResolveFlamingSphereAoECast(caster, _pendingSpell, aoeCells, out string flamingSphereLog))
             {
                 _lastCombatLog = flamingSphereLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Entangle (persistent entangling area effect) ──
+            if (TryResolveEntangleSpell(caster, _pendingSpell, targets, aoeCells, out string entangleLog))
+            {
+                _lastCombatLog = entangleLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Soften Earth and Stone (instantaneous difficult terrain) ──
+            if (TryResolveSoftenEarthSpell(caster, _pendingSpell, targets, aoeCells, out string softenEarthLog))
+            {
+                _lastCombatLog = softenEarthLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Spike Stones (persistent movement-damage area) ──
+            if (TryResolveSpikeStoneSpell(caster, _pendingSpell, targets, aoeCells, out string spikeStonesLog))
+            {
+                _lastCombatLog = spikeStonesLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Plant Growth (instantaneous overgrowth) ──
+            if (TryResolvePlantGrowthSpell(caster, _pendingSpell, targets, aoeCells, out string plantGrowthLog))
+            {
+                _lastCombatLog = plantGrowthLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Calm Animals (AoE HD-budget animal calming) ──
+            if (TryResolveCalmAnimalsSpell(caster, _pendingSpell, targets, aoeCells, out string calmAnimalsLog))
+            {
+                _lastCombatLog = calmAnimalsLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // ── Calm Emotions (AoE morale/emotion suppression) ──
+            if (TryResolveCalmEmotionsSpell(caster, _pendingSpell, targets, aoeCells, out string calmEmotionsLog))
+            {
+                _lastCombatLog = calmEmotionsLog;
 
                 if (isSpontaneous)
                 {

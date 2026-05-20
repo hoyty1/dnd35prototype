@@ -186,4 +186,67 @@ public partial class GameManager
         return character.HasActiveSlowEffect;
     }
 
+    // ================================================================
+    //  MAGIC VESTMENT — PHB p.251
+    //  Transmutation
+    //  +1 enhancement bonus to armor/shield per 4 caster levels (max +5)
+    //  Duration: 1 hour/level
+    // ================================================================
+
+    /// <summary>
+    /// Resolves Magic Vestment: grants +1 armor enhancement bonus per 4 caster levels
+    /// (max +5 at CL 20). Applied as a tracked buff via the StatusEffectManager and
+    /// stored in MagicVestmentACBonus on the target's stats.
+    /// </summary>
+    private bool TryResolveMagicVestmentSpellEffect(
+        CharacterController caster,
+        CharacterController target,
+        SpellData spell,
+        SpellResult result)
+    {
+        if (spell == null || !string.Equals(spell.SpellId, SpellNames.MAGIC_VESTMENT, StringComparison.Ordinal))
+            return false;
+
+        CharacterController recipient = target ?? caster;
+        if (recipient == null || recipient.Stats == null)
+            return true; // Handled but nothing to apply
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int enhBonus = Mathf.Clamp(casterLevel / 4, 1, 5);
+
+        // Track effect via StatusEffectManager for proper duration/dispel
+        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        if (recipientStatusMgr == null)
+            recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+        recipientStatusMgr.Init(recipient.Stats);
+
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
+            spell,
+            caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,
+            casterLevel);
+
+        if (effect != null)
+        {
+            // Apply armor enhancement bonus directly to stats
+            recipient.Stats.MagicVestmentACBonus = enhBonus;
+            effect.CustomTag = "MagicVestment";
+
+            SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+            if (recipientSpellComp != null)
+                recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+        }
+
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
+        bool selfCast = recipient == caster;
+        string targetName = selfCast ? "self" : recipient.Stats.CharacterName;
+
+        CombatUI?.ShowCombatLog($"<color=#88FF88>🛡 {casterName} casts Magic Vestment on {targetName}!</color>");
+        CombatUI?.ShowCombatLog($"<color=#AAFFAA>   +{enhBonus} enhancement bonus to armor (CL {casterLevel})</color>");
+        CombatUI?.ShowCombatLog($"<color=#AAFFAA>   Duration: {durationRounds} rounds ({durationRounds / 600} hours)</color>");
+
+        UpdateAllStatsUI();
+        return true;
+    }
+
 }

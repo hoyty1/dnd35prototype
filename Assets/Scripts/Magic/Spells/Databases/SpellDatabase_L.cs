@@ -103,23 +103,40 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Object location not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // LONGSTRIDER  (PHB p.249)
+        // Transmutation
+        // Level: Druid 1, Ranger 1 / Travel domain 1
+        // Components: V, S, M
+        // Casting Time: 1 standard action
+        // Range: Personal
+        // Target: You
+        // Duration: 1 hour/level (D)
+        //
+        // Your base land speed increases by 10 feet. This is an
+        // enhancement bonus.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.DOMAIN_LONGSTRIDER,
                     Name = "Longstrider",
-                    Description = "Your speed increases by 10 feet (+2 squares movement).",
+                    Description = "Your base land speed increases by 10 feet (+2 squares movement). Enhancement bonus, 1 hour/level. PHB p.249",
                     SpellLevel = 1,
                     School = "Transmutation",
                     ClassList = new string[] { "Cleric" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = -1, // 1 hour/level
-                    BuffType = "speed",
+                    BuffSpeedBonusFeet = 10,
+                    BuffType = "enhancement",
+                    BuffBonusType = BonusType.Enhancement,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Speed buff not implemented]"
+                    ProvokesAoO = true
                 });
 
         // ──────────────────────────────────────────────────────────────

@@ -81,25 +81,43 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // ENTANGLE  (PHB p.227)
+        // Transmutation
+        // Level: Druid 1, Plant 1, Ranger 1
+        // Casting Time: 1 standard action
+        // Range: Long (400 ft. + 40 ft./level)
+        // Area: Plants in a 40-ft.-radius spread
+        // Duration: 1 min/level (D)
+        // Saving Throw: Reflex partial; see text
+        // Spell Resistance: No
+        //
+        // Grasses, weeds, and other plants entangle creatures.
+        // Entangled: -2 attack, -4 Dex, can't move.
+        // Break free: DC 20 Str or Escape Artist check.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.DOMAIN_ENTANGLE,
                     Name = "Entangle",
-                    Description = "Grasses and weeds entangle creatures in 40-ft radius spread. Entangled creatures can break free with Strength or Escape Artist check.",
+                    Description = "Plants entangle creatures in 40-ft radius. Reflex partial. Entangled: -2 attack, -4 Dex, can't move. Break free: DC 20 Str/Escape Artist. PHB p.227",
                     SpellLevel = 1,
                     School = "Transmutation",
                     ClassList = new string[] { "Cleric" },
                     TargetType = SpellTargetType.Area,
-                    RangeSquares = 8,
+                    RangeCategory = SpellRangeCategory.Long,
                     AreaRadius = 8,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 8,
                     EffectType = SpellEffectType.Debuff,
-                    BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Reflex",
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Entangle/grapple not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData

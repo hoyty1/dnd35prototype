@@ -10,45 +10,75 @@ public static partial class SpellDatabase
 {
     private static void RegisterSpellsC()
     {
+        // ──────────────────────────────────────────────────────────────
+        // CALM ANIMALS  (PHB p.207)
+        // Enchantment (Compulsion) [Mind-Affecting]
+        // Level: Animal 1, Druid 1, Ranger 1
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Targets: Animals within 30 ft. of each other
+        // Duration: 1 min/level
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        //
+        // Calms 2d4 + caster level HD of animals, rendering them docile.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.DOMAIN_CALM_ANIMALS,
                     Name = "Calm Animals",
-                    Description = "Calms 2d4+level HD of animals, rendering them docile and harmless.",
+                    Description = "Calms 2d4+CL HD of animals, rendering them docile and harmless. Will negates. Breaks if threatened. PHB p.207",
                     SpellLevel = 1,
                     School = "Enchantment",
                     ClassList = new string[] { "Cleric" },
                     TargetType = SpellTargetType.Area,
-                    RangeSquares = 5,
+                    RangeCategory = SpellRangeCategory.Close,
                     AreaRadius = 2,
                     EffectType = SpellEffectType.Debuff,
-                    BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Animal calming not implemented]"
+                    ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // CALM EMOTIONS  (PHB p.207)
+        // Enchantment (Compulsion) [Mind-Affecting]
+        // Level: Brd 2, Clr 2, Law 2
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Area: Creatures in 20-ft.-radius spread
+        // Duration: Concentration, up to 1 round/level (D)
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        //
+        // Suppresses morale bonuses, rage, fear, and confusion effects.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.CALM_EMOTIONS,
                     Name = "Calm Emotions",
-                    Description = "Calms creatures in 20-ft radius, suppressing morale bonuses and emotion effects. Will negates. Concentration + 1 round/level. PHB p.207",
+                    Description = "Suppresses morale bonuses, rage, fear, and confusion in 20-ft radius. Will negates. Concentration + 1 round/level. PHB p.207",
                     SpellLevel = 2, School = "Enchantment",
                     ClassList = new[] { "Cleric" },
-                    TargetType = SpellTargetType.SingleEnemy,
-                    RangeSquares = 22,
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
                     AreaRadius = 4,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
                     EffectType = SpellEffectType.Debuff,
                     DurationType = DurationType.Concentration,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Emotion suppression not fully implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -475,6 +505,41 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // ──────────────────────────────────────────────────────────────
+        // COMMAND PLANTS  (PHB p.211)
+        // Transmutation
+        // Level: Druid 4, Plant 4, Ranger 3
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Targets: Up to 2 HD/level of plant creatures
+        // Duration: 1 day/level
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        //
+        // You command plant creatures (not ordinary plants) to do your
+        // bidding.  You can command 2 HD per caster level.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.COMMAND_PLANTS,
+                    Name = "Command Plants",
+                    Description = "Command up to 2 HD/level of plant creatures. Will negates. Duration 1 day/level. PHB p.211",
+                    SpellLevel = 4,
+                    School = "Transmutation",
+                    ClassList = new string[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Debuff,
+                    DurationType = DurationType.Days,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
                     SpellResistanceApplies = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true

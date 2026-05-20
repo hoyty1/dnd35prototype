@@ -56,6 +56,9 @@ public class ActiveSpellEffect
     public int AppliedSkillBonus;
     public int AppliedSpeedBonusFeet;
 
+    /// <summary>Optional tag for custom spell effects (e.g., "MagicVestment", "HeatMetal").</summary>
+    public string CustomTag;
+
     /// <summary>Temporary size-category shift applied by this effect (e.g., Enlarge +1, Reduce -1).</summary>
     public int AppliedSizeCategoryShift;
 

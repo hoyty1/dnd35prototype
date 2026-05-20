@@ -542,22 +542,36 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // SOFTEN EARTH AND STONE  (PHB p.280)
+        // Transmutation [Earth]
+        // Level: Druid 2, Earth 2
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Area: 10-ft. square/level; see text
+        // Duration: Instantaneous
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // Turns natural stone or earth to difficult terrain (mud/sand).
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.DOMAIN_SOFTEN_EARTH,
                     Name = "Soften Earth and Stone",
-                    Description = "Turns stone to clay or dirt to sand/mud.",
+                    Description = "Turns earth/stone into mud/sand creating difficult terrain. 10-ft square/level. Instantaneous. PHB p.280",
                     SpellLevel = 2,
                     School = "Transmutation",
                     ClassList = new string[] { "Cleric" },
                     TargetType = SpellTargetType.Area,
-                    RangeSquares = 5,
+                    RangeCategory = SpellRangeCategory.Close,
                     AreaRadius = 3,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 3,
                     EffectType = SpellEffectType.Debuff,
+                    DurationType = DurationType.Instantaneous,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Terrain modification not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -899,6 +913,47 @@ public static partial class SpellDatabase
                     HasVerbalComponent = true,
                     HasSomaticComponent = false,
                     IsPlaceholder = false
+                });
+
+        // ──────────────────────────────────────────────────────────────
+        // SPIKE STONES  (PHB p.283)
+        // Transmutation [Earth]
+        // Level: Druid 4, Earth 4
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Area: One 20-ft. square/level
+        // Duration: 1 hour/level (D)
+        // Saving Throw: Reflex partial
+        // Spell Resistance: Yes
+        //
+        // Rocky ground, stone floors, or similar surfaces shape themselves
+        // into sharp spikes. 1d8 damage per 5 ft of movement through area.
+        // Reflex DC 15 for half damage. Slows movement to half speed.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SPIKE_STONES,
+                    Name = "Spike Stones",
+                    Description = "Rocky terrain sprouts spikes: 1d8 damage per 5 ft moved, Reflex DC 15 half. Half speed. 1 hour/level. PHB p.283",
+                    SpellLevel = 4,
+                    School = "Transmutation",
+                    ClassList = new string[] { "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AreaRadius = 4,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    EffectType = SpellEffectType.Damage,
+                    DamageType = "piercing",
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
                 });
 
         // ──────────────────────────────────────────────────────────────

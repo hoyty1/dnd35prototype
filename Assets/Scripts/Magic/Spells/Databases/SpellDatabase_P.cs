@@ -27,11 +27,25 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Utility effects not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // PRODUCE FLAME  (PHB p.265)
+        // Evocation [Fire]
+        // Level: Druid 1, Fire 2
+        // Casting Time: 1 standard action
+        // Range: 0 ft.
+        // Effect: Flame in your palm
+        // Duration: 1 min/level (D)
+        // Saving Throw: None
+        // Spell Resistance: Yes
+        //
+        // 1d6 + min(CL,5) fire damage as melee touch or thrown (120 ft).
+        // Each attack expends the flame for that round.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.DOMAIN_PRODUCE_FLAME,
                     Name = "Produce Flame",
-                    Description = "Flames appear in your hand dealing 1d6+level fire damage as touch or ranged touch.",
+                    Description = "Conjures flame: 1d6 + min(CL,5) fire damage as melee touch or ranged touch (120 ft). Duration 1 min/level. PHB p.265",
                     SpellLevel = 2,
                     School = "Evocation",
                     ClassList = new string[] { "Cleric" },
@@ -40,13 +54,13 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Damage,
                     DamageDice = 6,
                     DamageCount = 1,
-                    BonusDamage = 3,
                     DamageType = "fire",
-                    BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Sustained flame not fully implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -306,6 +320,39 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Fortitude",
                     SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+                // ──────────────────────────────────────────────────────────────
+        // PLANT GROWTH  (PHB p.262)
+        // Transmutation
+        // Level: Druid 3, Plant 3, Ranger 3
+        // Casting Time: 1 standard action
+        // Range: See text
+        // Target/Area/Effect: See text
+        // Duration: Instantaneous
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // Overgrowth version: all normal vegetation in 100-ft radius
+        // becomes thick and overgrown. Movement quartered (×4 cost).
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.PLANT_GROWTH,
+                    Name = "Plant Growth",
+                    Description = "Vegetation in 100-ft radius becomes overgrown: movement quartered (×4 cost). Instantaneous. PHB p.262",
+                    SpellLevel = 3,
+                    School = "Transmutation",
+                    ClassList = new string[] { "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AreaRadius = 20,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 20,
+                    EffectType = SpellEffectType.Debuff,
+                    DurationType = DurationType.Instantaneous,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
