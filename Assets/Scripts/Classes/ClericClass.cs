@@ -91,7 +91,7 @@ public class ClericClass : ICharacterClass
             STR = 14, DEX = 10, CON = 14,
             INT = 10, WIS = 16, CHA = 12,
             SelectedFeats = new List<string> { "Combat Casting", "Weapon Focus" },
-            WeaponFocusChoice = "Mace",
+            WeaponFocusChoice = "Mace, Heavy",
             // Cleric selects 4 orisons (D&D 3.5e PHB)
             SelectedSpellIds = new List<string>
             {

@@ -1894,6 +1894,13 @@ public partial class GameManager : MonoBehaviour
                 stats.WeaponFocusChoice = data.WeaponFocusChoice;
             if (!string.IsNullOrEmpty(data.SkillFocusChoice))
                 stats.SkillFocusChoice = data.SkillFocusChoice;
+
+            // War domain: grant free Weapon Focus with deity's favored weapon (D&D 3.5e PHB p.191)
+            if (stats.ChosenDomains != null && stats.ChosenDomains.Contains("War"))
+            {
+                GrantWarDomainFeats(stats);
+            }
+
             FeatManager.ApplyPassiveFeats(stats);
 
             if (targetLevel > baseCreationLevel)
@@ -1962,6 +1969,48 @@ public partial class GameManager : MonoBehaviour
         else
         {
             armorBonus = 0; shieldBonus = 0; damageDice = 6;
+        }
+    }
+
+    /// <summary>
+    /// War domain granted power: free Weapon Focus feat with the deity's favored weapon,
+    /// plus martial weapon proficiency if the character doesn't already have it.
+    /// Per D&D 3.5e PHB p.191: "The character gets Weapon Focus as a bonus feat...
+    /// and proficiency... with the deity's favored weapon."
+    /// </summary>
+    private static void GrantWarDomainFeats(CharacterStats stats)
+    {
+        if (stats == null) return;
+
+        DeityDatabase.Init();
+        DeityData deity = DeityDatabase.GetDeity(stats.DeityId);
+        if (deity == null || string.IsNullOrWhiteSpace(deity.FavoredWeapon))
+        {
+            Debug.LogWarning($"[GameManager] War domain: no deity or favored weapon for {stats.CharacterName}");
+            return;
+        }
+
+        string favoredWeapon = deity.FavoredWeapon;
+
+        // Grant Weapon Focus if not already owned
+        if (!stats.HasFeat("Weapon Focus"))
+        {
+            stats.Feats.Add("Weapon Focus");
+            Debug.Log($"[GameManager] War domain: granted Weapon Focus to {stats.CharacterName}");
+        }
+
+        // Set weapon focus to deity's favored weapon (War domain overrides any previous choice)
+        stats.WeaponFocusChoice = favoredWeapon;
+        Debug.Log($"[GameManager] War domain: {stats.CharacterName} Weapon Focus set to {favoredWeapon} ({deity.Name}'s favored weapon)");
+
+        // Grant martial weapon proficiency for the favored weapon if needed.
+        // Clerics already have simple weapon proficiency; if the favored weapon is martial,
+        // they get proficiency as part of the War domain power.
+        // (Proficiency is handled by IsProficientWithWeapon checking ExtraWeaponProficiencies.)
+        if (!stats.IsProficientWithWeaponByName(favoredWeapon))
+        {
+            stats.ExtraWeaponProficiencies.Add(favoredWeapon);
+            Debug.Log($"[GameManager] War domain: granted {favoredWeapon} proficiency to {stats.CharacterName}");
         }
     }
 

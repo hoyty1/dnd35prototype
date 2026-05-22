@@ -30,6 +30,14 @@ public class FeatSelectionUI : MonoBehaviour
     private string _filterType = "All";
     private string _searchText = "";
 
+    // ========== WEAPON CHOICE STATE ==========
+    /// <summary>The weapon chosen for Weapon Focus (and related feats) during this selection session.</summary>
+    public string SelectedWeaponFocusChoice { get; private set; } = "";
+    private string _pendingWeaponFeatName = ""; // feat waiting for weapon pick
+    private GameObject _weaponPickerOverlay;
+    private GameObject _weaponPickerContent;
+    private ScrollRect _weaponPickerScroll;
+
     // ========== CALLBACKS ==========
     public Action<List<string>> OnFeatsConfirmed;
 
@@ -242,9 +250,71 @@ public class FeatSelectionUI : MonoBehaviour
             new Color(0.5f, 0.25f, 0.25f, 1f), Color.white, 14);
         cancelBtn.onClick.AddListener(Close);
 
+        // ===== WEAPON PICKER OVERLAY (hidden by default) =====
+        BuildWeaponPickerUI(canvas);
+
         SetPanelVisible(false);
         _isBuilt = true;
         Debug.Log("[FeatSelectionUI] UI built successfully.");
+    }
+
+    /// <summary>Build the weapon picker sub-panel used when selecting Weapon Focus and similar feats.</summary>
+    private void BuildWeaponPickerUI(Canvas canvas)
+    {
+        _weaponPickerOverlay = new GameObject("WeaponPickerOverlay");
+        _weaponPickerOverlay.transform.SetParent(canvas.transform, false);
+        var wpRT = _weaponPickerOverlay.AddComponent<RectTransform>();
+        wpRT.anchorMin = Vector2.zero;
+        wpRT.anchorMax = Vector2.one;
+        wpRT.sizeDelta = Vector2.zero;
+        var wpBg = _weaponPickerOverlay.AddComponent<Image>();
+        wpBg.color = new Color(0, 0, 0, 0.75f);
+
+        // Center panel
+        var panel = CreatePanel(_weaponPickerOverlay.transform, "WeaponPickerPanel",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(340, 420), COLOR_PANEL);
+
+        MakeText(panel.transform, "WPTitle",
+            new Vector2(0, 185), new Vector2(300, 30), "Choose Weapon", 18, Color.yellow, TextAnchor.MiddleCenter);
+
+        MakeText(panel.transform, "WPSubtitle",
+            new Vector2(0, 162), new Vector2(300, 20),
+            "Select a weapon you are proficient with", 11, new Color(0.7f, 0.8f, 0.9f), TextAnchor.MiddleCenter);
+
+        // Scroll area for weapon list
+        var scrollGO = new GameObject("WPScroll");
+        scrollGO.transform.SetParent(panel.transform, false);
+        var scrollRT = scrollGO.AddComponent<RectTransform>();
+        scrollRT.anchorMin = scrollRT.anchorMax = new Vector2(0.5f, 0.5f);
+        scrollRT.pivot = new Vector2(0.5f, 0.5f);
+        scrollRT.anchoredPosition = new Vector2(0, -10);
+        scrollRT.sizeDelta = new Vector2(310, 310);
+        scrollGO.AddComponent<Image>().color = new Color(0.1f, 0.1f, 0.12f, 1f);
+        scrollGO.AddComponent<Mask>().showMaskGraphic = true;
+        _weaponPickerScroll = scrollGO.AddComponent<ScrollRect>();
+        _weaponPickerScroll.horizontal = false;
+        _weaponPickerScroll.vertical = true;
+        _weaponPickerScroll.movementType = ScrollRect.MovementType.Clamped;
+        _weaponPickerScroll.scrollSensitivity = 30f;
+
+        _weaponPickerContent = new GameObject("WPContent");
+        _weaponPickerContent.transform.SetParent(scrollGO.transform, false);
+        var contentRT = _weaponPickerContent.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0, 1);
+        contentRT.anchorMax = new Vector2(1, 1);
+        contentRT.pivot = new Vector2(0.5f, 1);
+        contentRT.anchoredPosition = Vector2.zero;
+        contentRT.sizeDelta = new Vector2(0, 0);
+        _weaponPickerScroll.content = contentRT;
+
+        // Cancel button
+        var cancelBtn = MakeButton(panel.transform, "WPCancel",
+            new Vector2(0, -192), new Vector2(120, 30), "Cancel",
+            new Color(0.5f, 0.25f, 0.25f, 1f), Color.white, 12);
+        cancelBtn.onClick.AddListener(CloseWeaponPicker);
+
+        _weaponPickerOverlay.SetActive(false);
     }
 
     // ========================================================================
@@ -279,6 +349,8 @@ public class FeatSelectionUI : MonoBehaviour
         _monkBonusFeatList = null;
         _wizardBonusFeatList = null;
         _selectedFeats.Clear();
+        SelectedWeaponFocusChoice = "";
+        _pendingWeaponFeatName = "";
         _filterType = "All";
         _searchText = "";
 
@@ -618,6 +690,10 @@ public class FeatSelectionUI : MonoBehaviour
         if (_selectedFeats.Contains(featName))
         {
             _selectedFeats.Remove(featName);
+            // Clear weapon choice if removing the weapon-choice feat
+            var removedFeat = FeatDefinitions.GetFeat(featName);
+            if (removedFeat != null && removedFeat.Benefit != null && removedFeat.Benefit.RequiresWeaponChoice)
+                SelectedWeaponFocusChoice = "";
             Debug.Log($"[FeatSelectionUI] Deselected: {featName}");
         }
         else
@@ -640,6 +716,14 @@ public class FeatSelectionUI : MonoBehaviour
                     _featDetailText.text = $"<color=#FF6666>Cannot select {featName}: missing prerequisites ({string.Join(", ", unmet)})</color>";
                 RefreshFeatList();
                 return;
+            }
+
+            // If this feat requires a weapon choice (Weapon Focus, etc.), show the weapon picker
+            if (feat.Benefit != null && feat.Benefit.RequiresWeaponChoice)
+            {
+                _pendingWeaponFeatName = featName;
+                ShowWeaponPicker();
+                return; // Don't add to selected yet — wait for weapon pick
             }
 
             _selectedFeats.Add(featName);
@@ -730,7 +814,15 @@ public class FeatSelectionUI : MonoBehaviour
             string sel = "";
             for (int i = 0; i < _selectedFeats.Count; i++)
             {
-                sel += $"• {_selectedFeats[i]}\n";
+                string displayName = _selectedFeats[i];
+                // Show weapon choice next to weapon-choice feats
+                var fd = FeatDefinitions.GetFeat(displayName);
+                if (fd != null && fd.Benefit != null && fd.Benefit.RequiresWeaponChoice
+                    && !string.IsNullOrEmpty(SelectedWeaponFocusChoice))
+                {
+                    displayName += $" ({SelectedWeaponFocusChoice})";
+                }
+                sel += $"• {displayName}\n";
             }
             _selectedFeatsText.text = sel;
         }
@@ -776,6 +868,100 @@ public class FeatSelectionUI : MonoBehaviour
     private void RefreshFeatList()
     {
         PopulateFeatList();
+    }
+
+    // ========================================================================
+    // WEAPON PICKER
+    // ========================================================================
+
+    /// <summary>Show the weapon picker popup with all weapons the character is proficient with.</summary>
+    private void ShowWeaponPicker()
+    {
+        if (_weaponPickerOverlay == null || _weaponPickerContent == null) return;
+
+        // Clear old rows
+        for (int i = _weaponPickerContent.transform.childCount - 1; i >= 0; i--)
+            Destroy(_weaponPickerContent.transform.GetChild(i).gameObject);
+
+        // Build list of proficient weapons + Unarmed Strike
+        ItemDatabase.Init();
+        var weapons = new List<string>();
+        weapons.Add("Unarmed Strike");
+
+        foreach (var item in ItemDatabase.AllItems)
+        {
+            if (item == null || item.Type != ItemType.Weapon) continue;
+            if (_stats != null && _stats.IsProficientWithWeapon(item))
+                weapons.Add(item.Name);
+        }
+
+        weapons.Sort((a, b) =>
+        {
+            if (a == "Unarmed Strike") return -1;
+            if (b == "Unarmed Strike") return 1;
+            return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+        });
+
+        float rowH = 28f;
+        for (int i = 0; i < weapons.Count; i++)
+        {
+            string weaponName = weapons[i];
+            var rowGO = new GameObject($"WPRow_{weaponName}");
+            rowGO.transform.SetParent(_weaponPickerContent.transform, false);
+            var rowRT = rowGO.AddComponent<RectTransform>();
+            rowRT.anchorMin = new Vector2(0, 1);
+            rowRT.anchorMax = new Vector2(1, 1);
+            rowRT.pivot = new Vector2(0.5f, 1);
+            rowRT.anchoredPosition = new Vector2(0, -i * rowH);
+            rowRT.sizeDelta = new Vector2(0, rowH);
+
+            Color rowColor = (i % 2 == 0) ? COLOR_AVAILABLE : new Color(0.22f, 0.37f, 0.22f, 1f);
+            rowGO.AddComponent<Image>().color = rowColor;
+
+            var btn = MakeButton(rowGO.transform, "WPBtn",
+                Vector2.zero, new Vector2(290, 24), weaponName,
+                new Color(0, 0, 0, 0), Color.white, 12);
+            btn.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleLeft;
+            var btnRT = btn.GetComponent<RectTransform>();
+            btnRT.anchorMin = Vector2.zero;
+            btnRT.anchorMax = Vector2.one;
+            btnRT.sizeDelta = Vector2.zero;
+            btnRT.anchoredPosition = Vector2.zero;
+
+            string wn = weaponName;
+            btn.onClick.AddListener(() => OnWeaponPicked(wn));
+        }
+
+        var contentRT = _weaponPickerContent.GetComponent<RectTransform>();
+        contentRT.sizeDelta = new Vector2(0, weapons.Count * rowH + 5);
+
+        _weaponPickerOverlay.SetActive(true);
+        _weaponPickerOverlay.transform.SetAsLastSibling();
+        Debug.Log($"[FeatSelectionUI] Weapon picker opened for '{_pendingWeaponFeatName}': {weapons.Count} weapons listed");
+    }
+
+    private void OnWeaponPicked(string weaponName)
+    {
+        SelectedWeaponFocusChoice = weaponName;
+        Debug.Log($"[FeatSelectionUI] Weapon chosen: {weaponName} for feat '{_pendingWeaponFeatName}'");
+
+        // Now complete the feat selection
+        if (!string.IsNullOrEmpty(_pendingWeaponFeatName))
+        {
+            _selectedFeats.Add(_pendingWeaponFeatName);
+            _pendingWeaponFeatName = "";
+        }
+
+        CloseWeaponPicker();
+        UpdateSelectedDisplay();
+        RefreshFeatList();
+    }
+
+    private void CloseWeaponPicker()
+    {
+        if (_weaponPickerOverlay != null)
+            _weaponPickerOverlay.SetActive(false);
+        _pendingWeaponFeatName = "";
     }
 
     // ========================================================================

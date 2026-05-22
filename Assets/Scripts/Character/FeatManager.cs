@@ -131,11 +131,14 @@ public static class FeatManager
 
     /// <summary>
     /// Get attack bonus from Weapon Focus and Greater Weapon Focus for a specific weapon.
+    /// D&D 3.5e PHB: Weapon Focus applies only to the specific weapon chosen when the feat was taken.
     /// </summary>
     public static int GetWeaponFocusBonus(CharacterStats stats, string weaponName)
     {
+        if (!IsWeaponFocusMatch(stats, weaponName))
+            return 0;
+
         int bonus = 0;
-        // Check if the character has Weapon Focus (stored as "Weapon Focus" with weapon choice tracked separately)
         if (stats.HasFeat("Weapon Focus")) bonus += 1;
         if (stats.HasFeat("Greater Weapon Focus")) bonus += 1;
         return bonus;
@@ -143,13 +146,96 @@ public static class FeatManager
 
     /// <summary>
     /// Get damage bonus from Weapon Specialization and Greater Weapon Specialization.
+    /// D&D 3.5e PHB: Weapon Specialization applies only to the Weapon Focus weapon.
     /// </summary>
     public static int GetWeaponSpecializationBonus(CharacterStats stats, string weaponName)
     {
+        if (!IsWeaponFocusMatch(stats, weaponName))
+            return 0;
+
         int bonus = 0;
         if (stats.HasFeat("Weapon Specialization")) bonus += 2;
         if (stats.HasFeat("Greater Weapon Specialization")) bonus += 2;
         return bonus;
+    }
+
+    /// <summary>
+    /// Check if a weapon name matches the character's Weapon Focus choice.
+    /// Handles various naming conventions (e.g., "Mace, Heavy" matches "Mace, Heavy",
+    /// "Bite" for natural weapons, composite weapon variants like "Composite Longbow (+2)").
+    /// </summary>
+    public static bool IsWeaponFocusMatch(CharacterStats stats, string weaponName)
+    {
+        if (stats == null || string.IsNullOrWhiteSpace(stats.WeaponFocusChoice))
+            return false;
+        if (string.IsNullOrWhiteSpace(weaponName))
+            return false;
+
+        string choice = stats.WeaponFocusChoice.Trim();
+        string weapon = weaponName.Trim();
+
+        // Exact match (case-insensitive)
+        if (string.Equals(choice, weapon, System.StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Handle composite variants: "Composite Longbow (+2)" should match "Composite Longbow"
+        // and "Longbow" focus should match "Composite Longbow" (same weapon group in 3.5e)
+        string normalizedChoice = NormalizeWeaponName(choice);
+        string normalizedWeapon = NormalizeWeaponName(weapon);
+
+        if (string.Equals(normalizedChoice, normalizedWeapon, System.StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Normalize a weapon name for matching purposes.
+    /// Strips enhancement notation like "+1 Longsword" → "Longsword",
+    /// composite rating like "Composite Longbow (+2)" → "Composite Longbow",
+    /// and "Unarmed Strike" for natural weapon matching.
+    /// </summary>
+    private static string NormalizeWeaponName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "";
+
+        // Strip leading enhancement bonus: "+1 Longsword" → "Longsword"
+        string result = ItemData.StripEnhancementNotation(name).Trim();
+
+        // Strip trailing composite rating: "Composite Longbow (+2)" → "Composite Longbow"
+        int parenIdx = result.IndexOf(" (+");
+        if (parenIdx > 0)
+            result = result.Substring(0, parenIdx).Trim();
+
+        return result;
+    }
+
+    /// <summary>
+    /// Get Weapon Focus attack bonus for a specific weapon item.
+    /// This is the preferred overload when you have the actual weapon ItemData.
+    /// </summary>
+    public static int GetWeaponFocusBonus(CharacterStats stats, ItemData weapon)
+    {
+        if (weapon == null)
+        {
+            // Unarmed: check if WeaponFocusChoice is "Unarmed Strike"
+            return GetWeaponFocusBonus(stats, "Unarmed Strike");
+        }
+        return GetWeaponFocusBonus(stats, weapon.Name);
+    }
+
+    /// <summary>
+    /// Get Weapon Specialization damage bonus for a specific weapon item.
+    /// This is the preferred overload when you have the actual weapon ItemData.
+    /// </summary>
+    public static int GetWeaponSpecializationBonus(CharacterStats stats, ItemData weapon)
+    {
+        if (weapon == null)
+        {
+            return GetWeaponSpecializationBonus(stats, "Unarmed Strike");
+        }
+        return GetWeaponSpecializationBonus(stats, weapon.Name);
     }
 
     /// <summary>
@@ -358,12 +444,13 @@ public static class FeatManager
     {
         var lines = new List<string>();
 
-        // Attack bonuses
-        int wfBonus = GetWeaponFocusBonus(stats, "");
-        if (wfBonus > 0) lines.Add($"Weapon Focus: +{wfBonus} attack");
+        // Attack bonuses (display using chosen weapon name)
+        string wfWeapon = !string.IsNullOrWhiteSpace(stats.WeaponFocusChoice) ? stats.WeaponFocusChoice : "";
+        int wfBonus = GetWeaponFocusBonus(stats, wfWeapon);
+        if (wfBonus > 0) lines.Add($"Weapon Focus ({wfWeapon}): +{wfBonus} attack");
 
-        int wsBonus = GetWeaponSpecializationBonus(stats, "");
-        if (wsBonus > 0) lines.Add($"Weapon Spec: +{wsBonus} damage");
+        int wsBonus = GetWeaponSpecializationBonus(stats, wfWeapon);
+        if (wsBonus > 0) lines.Add($"Weapon Spec ({wfWeapon}): +{wsBonus} damage");
 
         if (stats.HasFeat("Weapon Finesse")) lines.Add("Weapon Finesse: DEX to attack");
 

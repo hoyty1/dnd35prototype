@@ -124,15 +124,15 @@ public static class AttackCalculator
     // ========================================================================
 
     /// <summary>
-    /// Get the Weapon Focus attack bonus from CharacterStats.
-    /// Delegates to the existing Stats property which already accounts for
-    /// Weapon Focus (+1) and Greater Weapon Focus (+1).
+    /// Get the Weapon Focus attack bonus for a specific weapon.
+    /// D&D 3.5e: Weapon Focus only applies when attacking with the chosen weapon.
     /// </summary>
     /// <param name="stats">Character's stats.</param>
-    /// <returns>Total Weapon Focus attack bonus.</returns>
-    public static int GetWeaponFocusBonus(CharacterStats stats)
+    /// <param name="weapon">The weapon being used for the attack (null for unarmed).</param>
+    /// <returns>Total Weapon Focus attack bonus (0 if wrong weapon).</returns>
+    public static int GetWeaponFocusBonus(CharacterStats stats, ItemData weapon = null)
     {
-        return stats.WeaponFocusAttackBonus;
+        return FeatManager.GetWeaponFocusBonus(stats, weapon);
     }
 
     // ========================================================================
@@ -140,15 +140,15 @@ public static class AttackCalculator
     // ========================================================================
 
     /// <summary>
-    /// Get the Weapon Specialization damage bonus from CharacterStats.
-    /// Delegates to the existing Stats property which already accounts for
-    /// Weapon Spec (+2) and Greater Weapon Spec (+2).
+    /// Get the Weapon Specialization damage bonus for a specific weapon.
+    /// D&D 3.5e: Weapon Specialization only applies when attacking with the chosen weapon.
     /// </summary>
     /// <param name="stats">Character's stats.</param>
-    /// <returns>Total Weapon Specialization damage bonus.</returns>
-    public static int GetWeaponSpecBonus(CharacterStats stats)
+    /// <param name="weapon">The weapon being used for the attack (null for unarmed).</param>
+    /// <returns>Total Weapon Specialization damage bonus (0 if wrong weapon).</returns>
+    public static int GetWeaponSpecBonus(CharacterStats stats, ItemData weapon = null)
     {
-        return stats.WeaponSpecDamageBonus;
+        return FeatManager.GetWeaponSpecializationBonus(stats, weapon);
     }
 
     // ========================================================================
@@ -324,11 +324,11 @@ public static class AttackCalculator
         CalculatePointBlankShot(stats, isRanged, distanceFeet,
             out result.PointBlankShotActive, out result.PointBlankShotAttackBonus, out result.PointBlankShotDamageBonus);
 
-        // Weapon Focus / Greater
-        result.WeaponFocusBonus = GetWeaponFocusBonus(stats);
+        // Weapon Focus / Greater (weapon-specific check)
+        result.WeaponFocusBonus = GetWeaponFocusBonus(stats, weapon);
 
-        // Weapon Specialization / Greater
-        result.WeaponSpecDamageBonus = GetWeaponSpecBonus(stats);
+        // Weapon Specialization / Greater (weapon-specific check)
+        result.WeaponSpecDamageBonus = GetWeaponSpecBonus(stats, weapon);
 
         // Weapon Finesse
         GetAttackAbilityModifier(stats, weapon, isRanged, out result.AbilityMod, out result.AbilityName);

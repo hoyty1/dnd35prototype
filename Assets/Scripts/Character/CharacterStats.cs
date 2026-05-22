@@ -1373,6 +1373,9 @@ public class CharacterStats
     /// <summary>Chosen weapon for Weapon Focus/Specialization/Improved Critical.</summary>
     public string WeaponFocusChoice;
 
+    /// <summary>Extra individual weapon proficiencies granted by domain powers or other features (display names).</summary>
+    public List<string> ExtraWeaponProficiencies = new List<string>();
+
     /// <summary>Chosen skill for Skill Focus.</summary>
     public string SkillFocusChoice;
 
@@ -4306,6 +4309,17 @@ public class CharacterStats
 
         if (HasClassSpecificWeaponProficiency(weaponId))
             return true;
+
+        // Extra proficiencies granted by domain powers or other features (matched by display name)
+        if (ExtraWeaponProficiencies != null && ExtraWeaponProficiencies.Count > 0)
+        {
+            string weaponName = weapon.Name ?? "";
+            for (int ep = 0; ep < ExtraWeaponProficiencies.Count; ep++)
+            {
+                if (string.Equals(ExtraWeaponProficiencies[ep], weaponName, System.StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
 
         if (weapon.Type == ItemType.Shield && weapon.Proficiency == WeaponProficiency.None)
             return HasMartialWeaponProficiency();

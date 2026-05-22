@@ -17,11 +17,11 @@ public static class DeityDatabase
 
         Register(new DeityData("pelor", "Pelor", Alignment.NeutralGood,
             new List<string> { "Good", "Healing", "Strength", "Sun" },
-            "Mace", "Sun, light, strength, healing", "God of the Sun"));
+            "Mace, Heavy", "Sun, light, strength, healing", "God of the Sun"));
 
         Register(new DeityData("st_cuthbert", "St. Cuthbert", Alignment.LawfulNeutral,
             new List<string> { "Destruction", "Law", "Protection", "Strength" },
-            "Mace", "Retribution, honesty, truth, discipline", "God of Retribution"));
+            "Mace, Heavy", "Retribution, honesty, truth, discipline", "God of Retribution"));
 
         Register(new DeityData("heironeous", "Heironeous", Alignment.LawfulGood,
             new List<string> { "Good", "Law", "War" },
@@ -41,7 +41,7 @@ public static class DeityDatabase
 
         Register(new DeityData("hextor", "Hextor", Alignment.LawfulEvil,
             new List<string> { "Destruction", "Evil", "Law", "War" },
-            "Flail", "Tyranny, war, discord, massacres, conflict", "God of Tyranny"));
+            "Flail, Heavy", "Tyranny, war, discord, massacres, conflict", "God of Tyranny"));
 
         Register(new DeityData("erythnul", "Erythnul", Alignment.ChaoticEvil,
             new List<string> { "Chaos", "Evil", "Trickery", "War" },
@@ -77,7 +77,19 @@ public static class DeityDatabase
 
         Register(new DeityData("yondalla", "Yondalla", Alignment.LawfulGood,
             new List<string> { "Good", "Law", "Protection" },
-            "Short Sword", "Halflings, protection, bounty, children, security, leadership", "Halfling Goddess"));
+            "Shortsword", "Halflings, protection, bounty, children, security, leadership", "Halfling Goddess"));
+
+        Register(new DeityData("garl_glittergold", "Garl Glittergold", Alignment.NeutralGood,
+            new List<string> { "Good", "Protection", "Trickery" },
+            "Battleaxe", "Gnomes, humor, gemcutting, jewelry, protection", "Gnome God"));
+
+        Register(new DeityData("gruumsh", "Gruumsh", Alignment.ChaoticEvil,
+            new List<string> { "Chaos", "Evil", "Strength", "War" },
+            "Spear", "Orcs, conquest, survival, territory, strength", "Orc God"));
+
+        Register(new DeityData("vecna", "Vecna", Alignment.NeutralEvil,
+            new List<string> { "Evil", "Knowledge", "Magic" },
+            "Dagger", "Destructive and evil secrets, magic, hidden knowledge, intrigue", "God of Secrets"));
 
         Debug.Log($"[DeityDatabase] Initialized {_deities.Count} deities.");
     }

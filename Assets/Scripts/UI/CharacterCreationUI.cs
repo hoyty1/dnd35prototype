@@ -1506,6 +1506,13 @@ public class CharacterCreationUI : MonoBehaviour
         var data = CreatedCharacters[CurrentCharacterIndex];
         data.SelectedFeats = new List<string>(feats);
 
+        // Capture weapon choice from feat UI (Weapon Focus, etc.)
+        if (FeatUI != null && !string.IsNullOrEmpty(FeatUI.SelectedWeaponFocusChoice))
+        {
+            data.WeaponFocusChoice = FeatUI.SelectedWeaponFocusChoice;
+            Debug.Log($"[CharCreation] Weapon Focus weapon: {data.WeaponFocusChoice}");
+        }
+
         Debug.Log($"[CharCreation] General feats selected: {string.Join(", ", feats)}");
 
         // Add selected feats to temp stats for prerequisite checking in next phase
@@ -1607,6 +1614,13 @@ public class CharacterCreationUI : MonoBehaviour
     {
         var data = CreatedCharacters[CurrentCharacterIndex];
         data.BonusFeats = new List<string>(feats);
+
+        // Capture weapon choice from bonus feat selection (Fighter bonus Weapon Focus, etc.)
+        if (FeatUI != null && !string.IsNullOrEmpty(FeatUI.SelectedWeaponFocusChoice))
+        {
+            data.WeaponFocusChoice = FeatUI.SelectedWeaponFocusChoice;
+            Debug.Log($"[CharCreation] Weapon Focus weapon (bonus): {data.WeaponFocusChoice}");
+        }
 
         Debug.Log($"[CharCreation] Bonus feats selected: {string.Join(", ", feats)}");
         GoToWizardFeatureOrSpellStep();
