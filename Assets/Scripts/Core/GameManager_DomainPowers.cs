@@ -5,13 +5,15 @@ using Random = UnityEngine.Random;
 
 /// <summary>
 /// D&D 3.5e Domain Powers — activated abilities for cleric domains.
-/// Phase 3 implementation:
+/// Implementation:
 ///   Strength: Enhancement bonus to STR (+CL) for 1 round, 1/day
 ///   Destruction: Smite — single melee attack at +4 attack, +cleric level damage, 1/day
 ///   Death: Death Touch — roll 1d6 per cleric level, target dies if roll >= current HP (no save), 1/day
 ///   Sun: Greater Turning — next turn undead at +2 effective level, +1d10 turning damage, 1/day
 ///   Travel: Freedom of Movement for 1 round per cleric level, 1/day (personal)
 ///   Plant: Rebuke/Command plant creatures (uses Turn Undead attempts pool)
+///   Air/Earth/Fire/Water: Turn or rebuke elementals of matching subtype (uses Turn Undead attempts pool)
+///     Good clerics turn/destroy; evil clerics rebuke/command.
 /// </summary>
 public partial class GameManager
 {
@@ -99,6 +101,17 @@ public partial class GameManager
                     return false;
                 }
                 break;
+            case "Air":
+            case "Earth":
+            case "Fire":
+            case "Water":
+                // Elemental domains use the Turn Undead attempts pool
+                if (cleric.Stats.TurnUndeadAttemptsUsedToday >= cleric.Stats.MaxTurnUndeadAttemptsPerDay)
+                {
+                    reason = "No Turn Undead attempts remaining";
+                    return false;
+                }
+                break;
             default:
                 reason = $"{domain} domain has no activated ability";
                 return false;
@@ -142,11 +155,28 @@ public partial class GameManager
                     case "Plant":
                         result.Add((domain, "Rebuke Plants"));
                         break;
+                    case "Air":
+                    case "Earth":
+                    case "Fire":
+                    case "Water":
+                        result.Add((domain, GetElementalTurningLabel(cleric, domain)));
+                        break;
                 }
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Returns appropriate label for elemental turning based on cleric alignment.
+    /// Good clerics turn; evil clerics rebuke; neutral clerics default to turn.
+    /// </summary>
+    private string GetElementalTurningLabel(CharacterController cleric, string domain)
+    {
+        bool isEvil = AlignmentHelper.IsEvil(cleric.Stats.CharacterAlignment);
+        string action = isEvil ? "Rebuke" : "Turn";
+        return $"{action} {domain} Creatures";
     }
 
     // ==================== ACTIVATION METHODS ====================
@@ -490,6 +520,13 @@ public partial class GameManager
                 // Plant domain: rebuke/command plants uses Turn Undead system
                 ActivatePlantRebuke(cleric);
                 break;
+            case "Air":
+            case "Earth":
+            case "Fire":
+            case "Water":
+                // Elemental domains: turn or rebuke elementals of matching subtype
+                ActivateElementalTurning(cleric, domain);
+                break;
         }
     }
 
@@ -655,5 +692,219 @@ public partial class GameManager
         if (checkTotal <= 18) return turnerLevel + 2;
         if (checkTotal <= 21) return turnerLevel + 3;
         return turnerLevel + 4;
+    }
+
+    // ==================== ELEMENTAL DOMAIN TURNING ====================
+
+    /// <summary>
+    /// Air/Earth/Fire/Water Domain: Turn or rebuke elementals of the matching subtype.
+    /// D&D 3.5e PHB:
+    ///   "Turn or destroy [element] creatures as a good cleric turns undead.
+    ///    Rebuke, command, or bolster [element] creatures as an evil cleric rebukes undead."
+    /// Uses the Turn Undead attempts pool. Good clerics turn (destroy on 2x HD or less);
+    /// evil clerics rebuke (command on 2x HD or less). Neutral clerics default to turning.
+    /// </summary>
+    public void ActivateElementalTurning(CharacterController cleric, string domain)
+    {
+        string reason;
+        if (!CanActivateDomainPower(cleric, domain, out reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use {domain} domain power: {reason}.");
+            return;
+        }
+
+        // Consume standard action
+        if (!cleric.CommitStandardAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use {domain} domain power: standard action unavailable.");
+            return;
+        }
+
+        bool isEvil = AlignmentHelper.IsEvil(cleric.Stats.CharacterAlignment);
+        string actionVerb = isEvil ? "rebuke" : "turn";
+        string actionVerbCap = isEvil ? "Rebuke" : "Turn";
+        string elementalSubtype = domain; // "Air", "Earth", "Fire", "Water"
+
+        cleric.Stats.TurnUndeadAttemptsUsedToday++;
+        int attemptsRemaining = cleric.Stats.MaxTurnUndeadAttemptsPerDay - cleric.Stats.TurnUndeadAttemptsUsedToday;
+
+        // Find matching elemental creatures in 60ft range
+        var elementals = GetElementalCreaturesInRange(cleric, 12, elementalSubtype); // 60ft = 12 squares
+        if (elementals.Count == 0)
+        {
+            string emoji = GetElementalEmoji(domain);
+            CombatUI?.ShowCombatLog($"{emoji} {cleric.Stats.CharacterName} channels energy to {actionVerb} {domain.ToLower()} creatures, but none are in range.");
+            CombatUI?.ShowCombatLog($"   Remaining attempts today: {attemptsRemaining}");
+            return;
+        }
+
+        // Turning check: d20 + CHA mod
+        int checkRoll = Random.Range(1, 21);
+        int checkTotal = checkRoll + cleric.Stats.CHAMod;
+        int clericLevel = cleric.Stats.GetClassLevel("Cleric");
+        int maxHD = GetMaxTurnableHD(checkTotal, clericLevel);
+
+        // Turning damage: 2d6 + cleric level + CHA mod
+        int turnDamageRoll = Random.Range(1, 7) + Random.Range(1, 7);
+        int turnPoolHd = turnDamageRoll + clericLevel + cleric.Stats.CHAMod;
+        if (turnPoolHd < 0) turnPoolHd = 0;
+
+        string emoji2 = GetElementalEmoji(domain);
+        string color = GetElementalColor(domain);
+        var sb = new StringBuilder();
+        sb.AppendLine($"<color={color}>{emoji2} {cleric.Stats.CharacterName} channels energy to {actionVerb} {domain.ToLower()} creatures!</color>");
+        sb.AppendLine($"   {actionVerbCap} Check: d20({checkRoll}) + CHA {CharacterStats.FormatMod(cleric.Stats.CHAMod)} = {checkTotal} → affects creatures up to {maxHD} HD");
+        sb.AppendLine($"   {actionVerbCap} Pool: 2d6({turnDamageRoll}) + level {clericLevel} + CHA {CharacterStats.FormatMod(cleric.Stats.CHAMod)} = {turnPoolHd} total HD");
+
+        // Apply turning/rebuking to elementals (by HD, lowest first)
+        elementals.Sort((a, b) => a.Stats.HitDice.CompareTo(b.Stats.HitDice));
+        int hdUsed = 0;
+        int affected = 0;
+        foreach (var elemental in elementals)
+        {
+            int elemHD = elemental.Stats.HitDice;
+            if (elemHD > maxHD)
+            {
+                sb.AppendLine($"   {elemental.Stats.CharacterName} ({elemHD} HD) is too powerful to {actionVerb}.");
+                continue;
+            }
+            if (hdUsed + elemHD > turnPoolHd)
+            {
+                sb.AppendLine($"   Insufficient HD pool for {elemental.Stats.CharacterName} ({elemHD} HD).");
+                break;
+            }
+            hdUsed += elemHD;
+            affected++;
+
+            if (isEvil)
+            {
+                // Rebuke: creature cowers for 10 rounds
+                // Command: if HD <= clericLevel / 2, creature is commanded instead
+                if (elemHD <= clericLevel / 2)
+                {
+                    sb.AppendLine($"<color={color}>   {elemental.Stats.CharacterName} ({elemHD} HD) is commanded! (Under cleric's control)</color>");
+                    elemental.ApplyCondition(CombatConditionType.Commanded, 100, cleric.Stats.CharacterName);
+                }
+                else
+                {
+                    sb.AppendLine($"<color={color}>   {elemental.Stats.CharacterName} ({elemHD} HD) is rebuked! (Cowers for 10 rounds)</color>");
+                    elemental.ApplyCondition(CombatConditionType.Cowering, 10, cleric.Stats.CharacterName);
+                }
+            }
+            else
+            {
+                // Turn: creature flees for 10 rounds
+                // Destroy: if HD <= clericLevel / 2, creature is destroyed instead
+                if (elemHD <= clericLevel / 2)
+                {
+                    int hpBefore = elemental.Stats.CurrentHP;
+                    elemental.Stats.CurrentHP = -10;
+                    sb.AppendLine($"<color=#FF0000>   {elemental.Stats.CharacterName} ({elemHD} HD) is destroyed! ({hpBefore} HP → -10)</color>");
+                }
+                else
+                {
+                    sb.AppendLine($"<color={color}>   {elemental.Stats.CharacterName} ({elemHD} HD) is turned! (Flees for 10 rounds)</color>");
+                    elemental.ApplyCondition(CombatConditionType.Turned, 10, cleric.Stats.CharacterName);
+                }
+            }
+        }
+
+        if (affected == 0)
+            sb.AppendLine($"   No {domain.ToLower()} creatures were affected.");
+
+        sb.AppendLine($"   Remaining attempts today: {attemptsRemaining}");
+        CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
+    }
+
+    /// <summary>
+    /// Find elemental creatures of a specific subtype within range (in grid squares).
+    /// Matches creatures with CreatureType "Elemental" AND the matching subtype tag in CreatureTags.
+    /// </summary>
+    private List<CharacterController> GetElementalCreaturesInRange(CharacterController turner, int rangeSquares, string elementalSubtype)
+    {
+        var result = new List<CharacterController>();
+        if (turner == null) return result;
+
+        Vector2Int turnerPos = turner.GridPosition;
+        var allCharacters = GetAllCharacters();
+        if (allCharacters == null) return result;
+
+        foreach (var character in allCharacters)
+        {
+            if (character == turner || character == null || character.Stats == null)
+                continue;
+            if (character.Stats.CurrentHP <= 0)
+                continue;
+            if (!IsElementalOfSubtype(character, elementalSubtype))
+                continue;
+
+            int dist = Mathf.Max(Mathf.Abs(character.GridPosition.x - turnerPos.x),
+                                 Mathf.Abs(character.GridPosition.y - turnerPos.y));
+            if (dist <= rangeSquares)
+                result.Add(character);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Check if a character is an elemental creature of the specified subtype.
+    /// Checks for CreatureType "Elemental" with the subtype in CreatureTags,
+    /// or a CreatureType that directly matches (e.g., "Air Elemental").
+    /// </summary>
+    public static bool IsElementalOfSubtype(CharacterController character, string subtype)
+    {
+        if (character == null || character.Stats == null || string.IsNullOrEmpty(subtype))
+            return false;
+
+        string creatureType = character.Stats.CreatureType ?? "";
+
+        // Direct match: CreatureType is "Elemental" and has subtype tag
+        if (creatureType == "Elemental")
+        {
+            if (character.Stats.CreatureTags != null && character.Stats.CreatureTags.Contains(subtype))
+                return true;
+        }
+
+        // Also match compound type like "Air Elemental", "Fire Elemental", etc.
+        if (creatureType.Equals($"{subtype} Elemental", System.StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Check tags for both "Elemental" type and subtype
+        if (character.Stats.CreatureTags != null)
+        {
+            bool hasElementalTag = character.Stats.CreatureTags.Contains("Elemental");
+            bool hasSubtypeTag = character.Stats.CreatureTags.Contains(subtype);
+            if (hasElementalTag && hasSubtypeTag)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Get a thematic emoji for an elemental domain.</summary>
+    private static string GetElementalEmoji(string domain)
+    {
+        switch (domain)
+        {
+            case "Air":   return "🌪️";
+            case "Earth": return "🪨";
+            case "Fire":  return "🔥";
+            case "Water": return "🌊";
+            default:      return "✨";
+        }
+    }
+
+    /// <summary>Get a thematic color for an elemental domain's combat log messages.</summary>
+    private static string GetElementalColor(string domain)
+    {
+        switch (domain)
+        {
+            case "Air":   return "#87CEEB"; // sky blue
+            case "Earth": return "#CD853F"; // peru/brown
+            case "Fire":  return "#FF6347"; // tomato red
+            case "Water": return "#4169E1"; // royal blue
+            default:      return "#FFFFFF";
+        }
     }
 }

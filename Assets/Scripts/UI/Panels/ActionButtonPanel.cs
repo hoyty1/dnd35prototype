@@ -666,7 +666,8 @@ public class ActionButtonPanel : MonoBehaviour
         // Domain Power button: visible for clerics with activatable domain powers
         bool hasDomainPowers = pc != null && pc.Stats != null && pc.Stats.IsCleric
             && pc.Stats.ChosenDomains != null && pc.Stats.ChosenDomains.Exists(d =>
-                d == "Strength" || d == "Destruction" || d == "Death" || d == "Sun" || d == "Travel" || d == "Plant");
+                d == "Strength" || d == "Destruction" || d == "Death" || d == "Sun" || d == "Travel" || d == "Plant"
+                || d == "Air" || d == "Earth" || d == "Fire" || d == "Water");
         bool canUseDomainPower = hasDomainPowers && context.Gm != null
             && context.Gm.GetAvailableDomainPowers(pc).Count > 0;
         string domainPowerLabel = !hasDomainPowers

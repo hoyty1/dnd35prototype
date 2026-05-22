@@ -45,6 +45,7 @@ public enum CombatConditionType
     Staggered,
     Stunned,
     Turned,
+    Commanded,
     Unconscious,
 
     Blinking,
