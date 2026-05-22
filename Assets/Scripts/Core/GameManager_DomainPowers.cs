@@ -8,7 +8,7 @@ using Random = UnityEngine.Random;
 /// Phase 3 implementation:
 ///   Strength: Enhancement bonus to STR (+CL) for 1 round, 1/day
 ///   Destruction: Smite — single melee attack at +4 attack, +cleric level damage, 1/day
-///   Death: Death Touch — roll 1d6 per 2 cleric levels (max 5d6), target dies if <= current HP, Will half, 1/day
+///   Death: Death Touch — roll 1d6 per cleric level, target dies if roll >= current HP (no save), 1/day
 ///   Sun: Greater Turning — next turn undead at +2 effective level, +1d10 turning damage, 1/day
 ///   Travel: Freedom of Movement for 1 round per cleric level, 1/day (personal)
 ///   Plant: Rebuke/Command plant creatures (uses Turn Undead attempts pool)
@@ -166,7 +166,7 @@ public partial class GameManager
             return;
         }
 
-        int clericLevel = cleric.Stats.GetCasterLevel();
+        int clericLevel = cleric.Stats.GetClassLevel("Cleric");
         int enhBonus = Mathf.Max(1, clericLevel);
 
         cleric.Stats.StrengthDomainUsesToday++;
@@ -202,18 +202,18 @@ public partial class GameManager
         cleric.Stats.DestructionSmiteActive = true;
 
         CombatUI?.ShowCombatLog($"<color=#FF4444>⚔️ {cleric.Stats.CharacterName} invokes Destruction Smite!</color>");
-        CombatUI?.ShowCombatLog($"   Next melee attack: +4 attack, +{cleric.Stats.GetCasterLevel()} damage");
+        CombatUI?.ShowCombatLog($"   Next melee attack: +4 attack, +{cleric.Stats.GetClassLevel("Cleric")} damage");
     }
 
     /// <summary>
     /// Death Domain: Death Touch — supernatural ability, melee touch attack.
-    /// D&D 3.5e: "You can use a death touch once per day. Your death touch is a supernatural ability
-    /// that produces a death effect. You must succeed on a melee touch attack against a living creature.
-    /// When you touch, roll 1d6 per cleric level you possess. If the total at least equals the creature's
-    /// current hit points, it dies (no save)."
+    /// D&D 3.5e PHB: "You can use a death touch once per day. Your death touch is a supernatural ability
+    /// that produces a death effect. You must succeed on a melee touch attack against a living creature
+    /// (using the rules for touch spells). When you touch, roll 1d6 per cleric level you possess.
+    /// If the total at least equals the creature's current hit points, it dies (no save)."
     /// 
-    /// Simplified for prototype: Roll 1d6 per 2 cleric levels (max 5d6). If total >= target HP, target dies.
-    /// Otherwise target takes the rolled amount as damage (Will save for half).
+    /// Key rules: 1d6 per cleric level (no cap), no damage on failure, no save,
+    /// death effect (does not affect undead, constructs, or creatures immune to death effects).
     /// </summary>
     public void ActivateDeathTouch(CharacterController cleric, CharacterController target)
     {
@@ -230,6 +230,14 @@ public partial class GameManager
             return;
         }
 
+        // Death effect: does not affect undead, constructs, or creatures immune to death effects
+        string creatureType = target.Stats.CreatureType ?? "";
+        if (creatureType == "Undead" || creatureType == "Construct")
+        {
+            CombatUI?.ShowCombatLog($"⚠ Death Touch has no effect on {target.Stats.CharacterName} ({creatureType} creatures are immune to death effects).");
+            return;
+        }
+
         // Consume the ability
         cleric.Stats.DeathDomainUsesToday++;
 
@@ -240,9 +248,8 @@ public partial class GameManager
             return;
         }
 
-        int clericLevel = cleric.Stats.GetCasterLevel();
-        int numDice = Mathf.Clamp(clericLevel / 2, 1, 5); // 1d6 per 2 levels, max 5d6
-        int dc = 10 + (clericLevel / 2) + cleric.Stats.CHAMod;
+        int clericLevel = cleric.Stats.GetClassLevel("Cleric");
+        int numDice = Mathf.Max(1, clericLevel); // 1d6 per cleric level, no cap
 
         // Melee touch attack
         int attackRoll = Random.Range(1, 21);
@@ -261,42 +268,30 @@ public partial class GameManager
             return;
         }
 
-        // Roll death touch damage
-        int totalDamage = 0;
+        // Roll 1d6 per cleric level
+        int totalRoll = 0;
         var diceResults = new List<int>();
         for (int i = 0; i < numDice; i++)
         {
             int roll = Random.Range(1, 7);
             diceResults.Add(roll);
-            totalDamage += roll;
+            totalRoll += roll;
         }
 
         string diceStr = string.Join("+", diceResults);
-        sb.AppendLine($"   Death Touch: {numDice}d6 = [{diceStr}] = {totalDamage}");
+        sb.AppendLine($"   Death Touch: {numDice}d6 = [{diceStr}] = {totalRoll} vs {target.Stats.CurrentHP} HP");
 
-        if (totalDamage >= target.Stats.CurrentHP)
+        if (totalRoll >= target.Stats.CurrentHP)
         {
-            // Instant death
+            // Instant death — no save
             int hpBefore = target.Stats.CurrentHP;
             target.Stats.CurrentHP = -10;
-            sb.AppendLine($"<color=#FF0000>   {target.Stats.CharacterName} is slain! ({totalDamage} ≥ {hpBefore} HP)</color>");
+            sb.AppendLine($"<color=#FF0000>   {target.Stats.CharacterName} is slain! ({totalRoll} ≥ {hpBefore} HP — no save)</color>");
         }
         else
         {
-            // Will save for half damage
-            int willSave = Random.Range(1, 21) + target.Stats.WillSave;
-            bool saved = willSave >= dc;
-            int finalDamage = saved ? Mathf.Max(1, totalDamage / 2) : totalDamage;
-
-            int hpBefore = target.Stats.CurrentHP;
-            target.Stats.CurrentHP -= finalDamage;
-            int hpAfter = target.Stats.CurrentHP;
-
-            sb.AppendLine($"   {target.Stats.CharacterName} HP ({hpBefore}) > {totalDamage} — no instant death");
-            sb.AppendLine($"   Will Save: d20+{target.Stats.WillSave} = {willSave} vs DC {dc} → {(saved ? "SAVED (half damage)" : "FAILED")}");
-            sb.AppendLine($"   Negative Energy Damage: {finalDamage} → {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
-
-            CheckConcentrationOnDamage(target, finalDamage);
+            // Death Touch fails — no damage dealt per PHB
+            sb.AppendLine($"   Death Touch fails — {totalRoll} < {target.Stats.CurrentHP} HP. No effect.");
         }
 
         CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
@@ -343,7 +338,7 @@ public partial class GameManager
             return;
         }
 
-        int clericLevel = cleric.Stats.GetCasterLevel();
+        int clericLevel = cleric.Stats.GetClassLevel("Cleric");
         int durationRounds = Mathf.Max(1, clericLevel);
 
         cleric.Stats.TravelDomainUsesToday++;
@@ -371,7 +366,7 @@ public partial class GameManager
             character.Stats.StrengthDomainBonusRounds--;
             if (character.Stats.StrengthDomainBonusRounds <= 0)
             {
-                int clericLevel = character.Stats.GetCasterLevel();
+                int clericLevel = character.Stats.GetClassLevel("Cleric");
                 character.Stats.TemporarySTRBonus -= Mathf.Max(1, clericLevel);
                 if (character.Stats.TemporarySTRBonus < 0) character.Stats.TemporarySTRBonus = 0;
                 CombatUI?.ShowCombatLog($"<color=#AAAAAA>💪 {character.Stats.CharacterName}'s Feat of Strength ends.</color>");
@@ -410,7 +405,7 @@ public partial class GameManager
     {
         if (attacker == null || attacker.Stats == null || !attacker.Stats.DestructionSmiteActive)
             return 0;
-        return Mathf.Max(1, attacker.Stats.GetCasterLevel());
+        return Mathf.Max(1, attacker.Stats.GetClassLevel("Cleric"));
     }
 
     /// <summary>
@@ -554,7 +549,7 @@ public partial class GameManager
         // Turning check (like evil cleric rebuke)
         int checkRoll = Random.Range(1, 21);
         int checkTotal = checkRoll + cleric.Stats.CHAMod;
-        int clericLevel = cleric.Stats.GetCasterLevel();
+        int clericLevel = cleric.Stats.GetClassLevel("Cleric");
         int maxHD = GetMaxTurnableHD(checkTotal, clericLevel);
 
         // Turning damage: 2d6 + cleric level + CHA mod
