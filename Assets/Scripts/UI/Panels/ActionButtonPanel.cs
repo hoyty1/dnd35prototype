@@ -829,19 +829,19 @@ public class ActionButtonPanel : MonoBehaviour
         bool canPickUp = string.IsNullOrEmpty(pickupDisabledReason);
         states.Set(PickUpItemButton, new ActionButtonState(hasNearbyGroundItem, canPickUp, canPickUp ? "Pick Up Item (Move, AoO)" : $"Pick Up Item ({pickupDisabledReason})"));
 
-        // Use Item button: visible if character has consumable items, enabled if can manipulate items
+        // Use Item button: visible if character has consumable items, enabled if full-round action available
+        // D&D 3.5e: Retrieving a stowed item and using it is a full-round action (PHB p.142).
+        // TODO: Future — bags, quick-draw pouches, feats may reduce this requirement.
         int useableItemCount = QuickItemUsePanel.GetUseableItemCount(pc);
         bool hasUseableItems = useableItemCount > 0;
         string useItemReason = "";
         bool canUseItem = hasUseableItems && context.Gm != null;
         if (canUseItem)
         {
-            // Check if the character has an action available for item manipulation
-            bool hasAction = pc.Actions.HasMoveAction || pc.Actions.CanConvertStandardToMove || pc.Actions.HasStandardAction;
-            if (!hasAction)
+            if (!context.Actions.HasFullRoundAction)
             {
                 canUseItem = false;
-                useItemReason = "No action";
+                useItemReason = "No full-round action";
             }
             else if (pc.HasCondition(CombatConditionType.Pinned))
             {
@@ -851,7 +851,7 @@ public class ActionButtonPanel : MonoBehaviour
         }
         string useItemLabel = !hasUseableItems
             ? "Use Item (None)"
-            : (canUseItem ? $"Use Item ({useableItemCount})" : $"Use Item ({useItemReason})");
+            : (canUseItem ? $"Use Item [Full-Rnd] ({useableItemCount})" : $"Use Item ({useItemReason})");
         states.Set(UseItemButton, new ActionButtonState(hasUseableItems, canUseItem, useItemLabel));
     }
 

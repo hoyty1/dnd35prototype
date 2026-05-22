@@ -4275,6 +4275,19 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Returns the action type required to use a stowed item from inventory.
+    /// Currently always FullRound (retrieve + use = full-round action).
+    /// TODO: Future — bags of holding, quick-draw pouches, and feats (e.g. Quick Draw for
+    /// alchemical items) can reduce this to standard or even move action.
+    /// </summary>
+    private string GetItemUseActionType(CharacterController actor)
+    {
+        // Future: check actor for bags, feats, or item-specific overrides here.
+        // e.g. if (actor.HasQuickDrawPouch()) return "Move";
+        return "FullRound";
+    }
+
     private bool CanUseItemManipulationAction(CharacterController actor, out string reason)
     {
         reason = string.Empty;
@@ -4290,10 +4303,22 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
+        string actionType = GetItemUseActionType(actor);
+        if (actionType == "FullRound")
+        {
+            // Retrieving a stowed item and using it requires a full-round action (PHB p.142).
+            if (actor.Actions.HasFullRoundAction)
+                return true;
+
+            reason = "No full-round action available (retrieving and using a stowed item is a full-round action).";
+            return false;
+        }
+
+        // Fallback for future reduced-action types
         if (actor.Actions.HasMoveAction || actor.Actions.CanConvertStandardToMove || actor.Actions.HasStandardAction)
             return true;
 
-        reason = "No move or standard action available to manipulate an item.";
+        reason = "No action available to manipulate an item.";
         return false;
     }
 
@@ -4301,6 +4326,14 @@ public partial class GameManager : MonoBehaviour
     {
         if (actor == null) return;
 
+        string actionType = GetItemUseActionType(actor);
+        if (actionType == "FullRound")
+        {
+            actor.Actions.UseFullRoundAction();
+            return;
+        }
+
+        // Fallback for future reduced-action types
         if (actor.Actions.HasMoveAction)
             actor.Actions.UseMoveAction();
         else if (actor.Actions.CanConvertStandardToMove)
@@ -4335,7 +4368,7 @@ public partial class GameManager : MonoBehaviour
         {
             ActionType = AoOProvokingAction.DrinkPotion,
             ActionName = $"USE {item.Name.ToUpper()}",
-            ActionDescription = $"Use {item.Name} (item manipulation)",
+            ActionDescription = $"Use {item.Name} (full-round action: retrieve + use)",
             Actor = actor,
             ThreateningEnemies = threateningEnemies,
             OnProceed = () => StartCoroutine(ResolveConsumableAoOsAndApply(actor, inventoryIndex, item, threateningEnemies)),
@@ -4349,7 +4382,7 @@ public partial class GameManager : MonoBehaviour
             yield break;
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} manipulates {item.Name} (provokes AoO).");
+        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} uses a full-round action to retrieve and use {item.Name} (provokes AoO).");
 
         foreach (var enemy in threateningEnemies)
         {
@@ -4429,7 +4462,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!CanUseItemManipulationAction(pc, out string reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use items: {reason}");
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use items: {reason} (retrieving and using a stowed item is a full-round action)");
             return;
         }
 
