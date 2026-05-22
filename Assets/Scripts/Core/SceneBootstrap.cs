@@ -834,6 +834,8 @@ public class SceneBootstrap : MonoBehaviour
             "Drop Equipped", new Color(0.45f, 0.18f, 0.18f));
         combatUI.PickUpItemButton = CreateGridButton(btnGrid.transform, "PickUpItemBtn",
             "Pick Up Item", new Color(0.2f, 0.45f, 0.28f));
+        combatUI.UseItemButton = CreateGridButton(btnGrid.transform, "UseItemBtn",
+            "Use Item", new Color(0.45f, 0.35f, 0.6f));
         combatUI.DamageModeToggleButton = CreateGridButton(btnGrid.transform, "DamageModeToggleBtn",
             "Damage: Lethal", new Color(0.65f, 0.2f, 0.2f));
         combatUI.EndTurnButton = CreateGridButton(btnGrid.transform, "EndTurnBtn",
@@ -1023,6 +1025,11 @@ public class SceneBootstrap : MonoBehaviour
 
             // Embed the InventoryUI into the CharacterSheetUI's right panel
             csUI.IntegrateInventoryUI(invUI);
+
+            // Quick Item Use panel for combat (search/filter/sort consumables)
+            QuickItemUsePanel quickItemPanel = canvas.gameObject.AddComponent<QuickItemUsePanel>();
+            quickItemPanel.BuildUI(canvas);
+            gm.QuickItemUsePanel = quickItemPanel;
         }
 
         if (canvas != null)
@@ -1186,6 +1193,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.PickUpItemButton.onClick.RemoveAllListeners();
             ui.PickUpItemButton.onClick.AddListener(() => GameManager.Instance.OnPickUpItemButtonPressed());
         }
+        if (ui.UseItemButton != null)
+            ui.UseItemButton.onClick.AddListener(() => GameManager.Instance.OnUseItemButtonPressed());
         if (ui.DamageModeToggleButton != null)
         {
             ui.DamageModeToggleButton.onClick.RemoveAllListeners();

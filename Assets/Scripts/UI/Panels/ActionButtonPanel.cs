@@ -52,6 +52,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button ReloadButton => _combatUI != null ? _combatUI.ReloadButton : null;
     private Button DropEquippedItemButton => _combatUI != null ? _combatUI.DropEquippedItemButton : null;
     private Button PickUpItemButton => _combatUI != null ? _combatUI.PickUpItemButton : null;
+    private Button UseItemButton => _combatUI != null ? _combatUI.UseItemButton : null;
     private Button DamageModeToggleButton => _combatUI != null ? _combatUI.DamageModeToggleButton : null;
     private Text ActionStatusText => _combatUI != null ? _combatUI.ActionStatusText : null;
     private Button FlurryOfBlowsButton => _combatUI != null ? _combatUI.FlurryOfBlowsButton : null;
@@ -827,6 +828,31 @@ public class ActionButtonPanel : MonoBehaviour
         string pickupDisabledReason = context.Gm != null ? context.Gm.GetPickUpItemDisabledReason(pc) : "Unavailable";
         bool canPickUp = string.IsNullOrEmpty(pickupDisabledReason);
         states.Set(PickUpItemButton, new ActionButtonState(hasNearbyGroundItem, canPickUp, canPickUp ? "Pick Up Item (Move, AoO)" : $"Pick Up Item ({pickupDisabledReason})"));
+
+        // Use Item button: visible if character has consumable items, enabled if can manipulate items
+        int useableItemCount = QuickItemUsePanel.GetUseableItemCount(pc);
+        bool hasUseableItems = useableItemCount > 0;
+        string useItemReason = "";
+        bool canUseItem = hasUseableItems && context.Gm != null;
+        if (canUseItem)
+        {
+            // Check if the character has an action available for item manipulation
+            bool hasAction = pc.Actions.HasMoveAction || pc.Actions.CanConvertStandardToMove || pc.Actions.HasStandardAction;
+            if (!hasAction)
+            {
+                canUseItem = false;
+                useItemReason = "No action";
+            }
+            else if (pc.HasCondition(CombatConditionType.Pinned))
+            {
+                canUseItem = false;
+                useItemReason = "Pinned";
+            }
+        }
+        string useItemLabel = !hasUseableItems
+            ? "Use Item (None)"
+            : (canUseItem ? $"Use Item ({useableItemCount})" : $"Use Item ({useItemReason})");
+        states.Set(UseItemButton, new ActionButtonState(hasUseableItems, canUseItem, useItemLabel));
     }
 
     private void ComputeGrappleActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
@@ -1120,6 +1146,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (ReloadButton != null) ReloadButton.gameObject.SetActive(false);
         if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
         if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
+        if (UseItemButton != null) UseItemButton.gameObject.SetActive(false);
         if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
         if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
         if (UseImbuedSpellButton != null) UseImbuedSpellButton.gameObject.SetActive(false);
@@ -1169,6 +1196,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (ReloadButton != null) ReloadButton.gameObject.SetActive(false);
         if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
         if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
+        if (UseItemButton != null) UseItemButton.gameObject.SetActive(false);
         if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
         if (FlurryOfBlowsButton != null) FlurryOfBlowsButton.gameObject.SetActive(false);
         if (RageButton != null) RageButton.gameObject.SetActive(false);

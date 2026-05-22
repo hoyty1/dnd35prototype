@@ -80,6 +80,9 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Pre-combat inventory UI shown after encounter selection and before initiative.</summary>
     public PreCombatInventoryUI PreCombatInventoryUI;
 
+    /// <summary>Quick item use panel for combat — search/filter/sort consumable items.</summary>
+    public QuickItemUsePanel QuickItemUsePanel;
+
     /// <summary>Shared party stash (session-only for now).</summary>
     public PartyStash PartyStash = new PartyStash();
 
@@ -4408,6 +4411,54 @@ public partial class GameManager : MonoBehaviour
             return "No held item";
 
         return string.Empty;
+    }
+
+    // ==================== QUICK ITEM USE ====================
+
+    /// <summary>
+    /// Called when the "Use Item" button is pressed in combat.
+    /// Opens the QuickItemUsePanel showing the active character's consumable items.
+    /// </summary>
+    public void OnUseItemButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "using items"))
+            return;
+
+        if (!CanUseItemManipulationAction(pc, out string reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use items: {reason}");
+            return;
+        }
+
+        if (QuickItemUsePanel == null)
+        {
+            CombatUI?.ShowCombatLog("⚠ Quick Item Use panel is not available.");
+            return;
+        }
+
+        // Set up callbacks
+        QuickItemUsePanel.OnItemSelected = (inventoryIndex) =>
+        {
+            // Delegate to existing consumable use system which handles AoO, action economy, etc.
+            if (TryUseConsumableFromInventory(pc, inventoryIndex, out string feedback))
+            {
+                CombatUI?.ShowCombatLog(feedback);
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog($"⚠ {feedback}");
+            }
+            ShowActionChoices();
+        };
+        QuickItemUsePanel.OnCancelled = () =>
+        {
+            ShowActionChoices();
+        };
+
+        QuickItemUsePanel.Open(pc);
     }
 
     public void OnDropEquippedItemButtonPressed()

@@ -142,6 +142,7 @@ public class CombatUI : MonoBehaviour
     public Button DismissJumpButton; // Dismiss Jump (Standard Action)
     public Button DismissInvisibilityButton; // Dismiss Invisibility (Standard Action)
     public Button DismissSeeInvisibilityButton; // Dismiss See Invisible (Free Action)
+    public Button UseItemButton;               // Quick Use Item (Move Action, opens QuickItemUsePanel)
     public Button BreakWallButton;             // Break Wall of Ice (STR check, Standard Action)
     public Text SpellSlotsText;            // Shows remaining spell slots
     [Header("Feat Controls")]
@@ -408,6 +409,7 @@ public class CombatUI : MonoBehaviour
             if (DismissSeeInvisibilityButton != null) DismissSeeInvisibilityButton.gameObject.SetActive(false);
             if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
             if (UseImbuedSpellButton != null) UseImbuedSpellButton.gameObject.SetActive(false);
+            if (UseItemButton != null) UseItemButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();
             HideSpecialStyleSelectionMenu();
             HideBullRushExtraPushChoice();
