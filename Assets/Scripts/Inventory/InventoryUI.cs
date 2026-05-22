@@ -780,7 +780,14 @@ public class InventoryUI : MonoBehaviour
 
         if (item != null)
         {
-            _generalSlotTexts[index].text = item.IconChar;
+            // Show icon with stack count for stackable items
+            string iconText = item.IconChar ?? "";
+            if (item.IsStackable && item.StackCount > 1)
+                iconText = $"{iconText}\n<size=9>x{item.StackCount}</size>";
+            else if (item.IsAmmunition && item.Quantity > 0)
+                iconText = $"{iconText}\n<size=9>x{item.Quantity}</size>";
+
+            _generalSlotTexts[index].text = iconText;
             _generalSlotTexts[index].color = item.IconColor;
             _generalSlotBgs[index].color = isSelected ? SlotSelected : SlotNormal;
         }
@@ -797,7 +804,10 @@ public class InventoryUI : MonoBehaviour
     {
         if (item == null || _tooltipPanel == null) return;
         _tooltipPanel.SetActive(true);
-        _tooltipNameText.text = item.FullNameWithEnhancement;
+        string tooltipName = item.FullNameWithEnhancement;
+        if (item.IsStackable && item.StackCount > 1)
+            tooltipName = $"{tooltipName} (x{item.StackCount})";
+        _tooltipNameText.text = tooltipName;
         _tooltipTypeText.text = item.Type.ToString();
         _tooltipStatsText.text = item.GetStatSummary();
         _tooltipDescText.text = item.Description;

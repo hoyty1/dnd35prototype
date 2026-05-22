@@ -5367,6 +5367,10 @@ public partial class GameManager : MonoBehaviour
                     return true;
                 }
 
+                // ── Potion: no class/ability restrictions (D&D 3.5e DMG) ──
+                // Potions can be used by anyone — skip scroll-style validation
+                // Just apply the spell effect directly
+
                 if (!TryApplySpellConsumableEffect(actor, currentItem, out spellSummary))
                 {
                     resultMessage = spellSummary;
@@ -5391,19 +5395,44 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        inv.RemoveItemAt(inventoryIndex);
+        // Handle stacking: decrement stack count instead of removing if stackable with count > 1
+        ConsumeOneFromStack(inv, inventoryIndex, currentItem);
+
+        string stackInfo = "";
+        if (currentItem.IsStackable && currentItem.StackCount > 0)
+            stackInfo = $" ({currentItem.StackCount} remaining)";
 
         if (currentItem.ConsumableEffect == ConsumableEffectType.SpellEffect)
         {
-            resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}. {spellSummary} Item consumed.";
+            string potionLabel = currentItem.IsPotion ? "🧪" : "🧪";
+            resultMessage = $"{potionLabel} {actor.Stats.CharacterName} uses {currentItem.Name}. {spellSummary} Item consumed.{stackInfo}";
             return true;
         }
 
         int newCurrentHP = actor.Stats.CurrentHP;
         int newNonlethal = actor.Stats.NonlethalDamage;
         int nonlethalHealed = Mathf.Max(nonlethalHealedAmount, Mathf.Max(0, oldNonlethal - newNonlethal));
-        resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP}) and removing {nonlethalHealed} nonlethal ({oldNonlethal} → {newNonlethal}). Item consumed.";
+        resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP}) and removing {nonlethalHealed} nonlethal ({oldNonlethal} → {newNonlethal}). Item consumed.{stackInfo}";
         return true;
+    }
+
+    /// <summary>
+    /// Consumes one item from a stack. If the stack has more than 1, decrements StackCount.
+    /// If only 1 remains (or item is not stackable), removes the item from the slot entirely.
+    /// </summary>
+    private void ConsumeOneFromStack(Inventory inv, int inventoryIndex, ItemData item)
+    {
+        if (item == null || inv == null) return;
+
+        if (item.IsStackable && item.StackCount > 1)
+        {
+            item.StackCount--;
+            // Item remains in the slot with reduced count
+        }
+        else
+        {
+            inv.RemoveItemAt(inventoryIndex);
+        }
     }
 
     private bool TryApplySpellConsumableEffect(CharacterController actor, ItemData item, out string summary)
@@ -5527,7 +5556,7 @@ public partial class GameManager : MonoBehaviour
                     {
                         // Scroll mishap: deal damage and consume scroll
                         actor.Stats.TakeDamage(clCheck.MishapDamage);
-                        if (inv != null) inv.RemoveItemAt(inventoryIndex);
+                        if (inv != null) ConsumeOneFromStack(inv, inventoryIndex, scrollItem);
                         UpdateAllStatsUI();
                         resultMessage = $"📜 SCROLL MISHAP! {charName} takes {clCheck.MishapDamage} damage from uncontrolled magical energy! Scroll destroyed.";
                         return true; // Return true so the calling code doesn't show a second error
@@ -5551,14 +5580,18 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        // Step 5: Consume the scroll
-        if (inv != null) inv.RemoveItemAt(inventoryIndex);
+        // Step 5: Consume the scroll (decrement stack or remove)
+        if (inv != null) ConsumeOneFromStack(inv, inventoryIndex, scrollItem);
+
+        string scrollStackInfo = "";
+        if (scrollItem.IsStackable && scrollItem.StackCount > 0)
+            scrollStackInfo = $" ({scrollItem.StackCount} remaining)";
 
         string clInfo = validation.UsedUMD
             ? "via UMD"
             : $"as {validation.MatchedClassName} (CL {scrollItem.ConsumableMinimumCasterLevel})";
 
-        resultMessage = $"📜 {charName} reads {scrollItem.Name} {clInfo}. {spellSummary} Scroll consumed.";
+        resultMessage = $"📜 {charName} reads {scrollItem.Name} {clInfo}. {spellSummary} Scroll consumed.{scrollStackInfo}";
         return true;
     }
 

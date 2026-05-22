@@ -75,11 +75,73 @@ public class Inventory
         GeneralSlots = new ItemData[GeneralSlotCount];
     }
 
-    /// <summary>Try to add an item to the first empty general slot. Grows capacity when needed.</summary>
+    /// <summary>Try to add an item to the first empty general slot. Grows capacity when needed.
+    /// For stackable items (scrolls, potions), merges into an existing stack of the same item ID first.</summary>
     public bool AddItem(ItemData item)
     {
         if (item == null) return false;
 
+        // Try stacking with existing identical stackable items first
+        if (item.IsStackable && !string.IsNullOrWhiteSpace(item.Id))
+        {
+            int addCount = Mathf.Max(1, item.StackCount);
+            int remaining = addCount;
+
+            // First pass: try to merge into existing stacks
+            for (int i = 0; i < GeneralSlots.Length && remaining > 0; i++)
+            {
+                ItemData existing = GeneralSlots[i];
+                if (existing == null || !existing.IsStackable) continue;
+                if (!string.Equals(existing.Id, item.Id, StringComparison.OrdinalIgnoreCase)) continue;
+
+                int maxStack = Mathf.Max(1, existing.MaxStackSize);
+                int currentCount = Mathf.Max(1, existing.StackCount);
+                int space = maxStack - currentCount;
+                if (space <= 0) continue;
+
+                int toAdd = Mathf.Min(remaining, space);
+                existing.StackCount = currentCount + toAdd;
+                remaining -= toAdd;
+            }
+
+            if (remaining <= 0)
+            {
+                if (!_isRecalculating) RecalculateStats();
+                return true;
+            }
+
+            // Create new stack(s) for the remainder
+            while (remaining > 0)
+            {
+                int emptyIdx = FindFirstEmptyGeneralSlotIndex();
+                if (emptyIdx < 0)
+                {
+                    EnsureGeneralSlotCapacity(Mathf.Max(GeneralSlots.Length + GeneralSlotGrowthStep, GeneralSlots.Length + 1));
+                    emptyIdx = FindFirstEmptyGeneralSlotIndex();
+                }
+                if (emptyIdx < 0) break;
+
+                int maxStack = Mathf.Max(1, item.MaxStackSize);
+                int stackSize = Mathf.Min(remaining, maxStack);
+                ItemData newStack = ItemDatabase.CloneItem(item.Id);
+                if (newStack == null)
+                {
+                    // Fallback: use the item directly
+                    item.StackCount = stackSize;
+                    GeneralSlots[emptyIdx] = item;
+                    remaining -= stackSize;
+                    break;
+                }
+                newStack.StackCount = stackSize;
+                GeneralSlots[emptyIdx] = newStack;
+                remaining -= stackSize;
+            }
+
+            if (!_isRecalculating) RecalculateStats();
+            return remaining <= 0;
+        }
+
+        // Non-stackable: original behavior
         int emptyIndex = FindFirstEmptyGeneralSlotIndex();
         if (emptyIndex < 0)
         {

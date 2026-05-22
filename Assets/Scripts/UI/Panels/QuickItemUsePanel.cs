@@ -320,6 +320,10 @@ public class QuickItemUsePanel : MonoBehaviour
         if (item.IsScroll)
             return ItemCategory.Scroll;
 
+        // Potions: use the IsPotion flag (set by PotionFactory), or fallback to name/ID patterns
+        if (item.IsPotion)
+            return ItemCategory.Potion;
+
         string nameLower = (item.Name ?? "").ToLowerInvariant();
         string idLower = (item.Id ?? "").ToLowerInvariant();
 
@@ -528,8 +532,10 @@ public class QuickItemUsePanel : MonoBehaviour
             new Vector2(-contentW / 2f + 22, 0), new Vector2(32, ROW_H),
             iconChar, 18, iconColor, TextAnchor.MiddleCenter);
 
-        // Name
+        // Name (with stack quantity if applicable)
         string displayName = entry.Item.Name ?? "Unknown Item";
+        if (entry.Item.IsStackable && entry.Item.StackCount > 1)
+            displayName = $"{displayName} (x{entry.Item.StackCount})";
         rowUI.NameText = MakeText(rowUI.Row.transform, "Name",
             new Vector2(-contentW / 2f + 56, 6), new Vector2(contentW - 120, 22),
             displayName, 14, Color.white, TextAnchor.MiddleLeft);

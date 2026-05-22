@@ -298,6 +298,20 @@ public class ItemData
     /// <summary>The spell level on the scroll (0-9). Used for validation and pricing.</summary>
     public int ScrollSpellLevel;
 
+    // --- Potion-specific (D&D 3.5e DMG) ---
+    /// <summary>True if this consumable is a potion. Anyone can drink a potion (no class/ability restrictions).</summary>
+    public bool IsPotion;
+    /// <summary>The spell level of the potion's spell (0-3). Used for pricing and identification.</summary>
+    public int PotionSpellLevel;
+
+    // --- Stackability ---
+    /// <summary>Whether this item can stack with identical items in inventory (e.g., scrolls, potions).</summary>
+    public bool IsStackable;
+    /// <summary>Maximum number of items in a single stack. Default 1 (non-stackable). Scrolls/potions use 20.</summary>
+    public int MaxStackSize = 1;
+    /// <summary>Current stack count for stackable consumables. 1 = single item. For ammunition, use Quantity instead.</summary>
+    public int StackCount = 1;
+
     // --- Visual ---
     public string IconChar;     // Unicode/emoji character for display (fallback icon)
     public Color IconColor;     // Color tint for the icon
@@ -965,13 +979,17 @@ public class ItemData
             else if (ConsumableEffect == ConsumableEffectType.SpellEffect)
             {
                 string spellLabel = string.IsNullOrEmpty(ConsumableSpellName) ? "Unknown Spell" : ConsumableSpellName;
-                stats = $"Spell Effect: {spellLabel}";
+                string itemTypeLabel = IsPotion ? "Potion" : IsScroll ? "Scroll" : "Spell Effect";
+                stats = $"{itemTypeLabel}: {spellLabel}";
 
                 if (ConsumableModifier != 0)
                     stats += $"\nModifier: {ConsumableModifier:+#;-#;0}";
 
                 if (ConsumableMinimumCasterLevel > 0)
                     stats += $"\nCaster Level: {ConsumableMinimumCasterLevel}";
+
+                if (IsPotion)
+                    stats += $"\nSpell Level: {PotionSpellLevel} | No class restrictions";
             }
             else if (HealAmount > 0)
             {
@@ -1046,6 +1064,13 @@ public class ItemData
                 ? $"{WeightLbs:0} lbs"
                 : $"{WeightLbs:0.##} lbs";
             stats = string.IsNullOrEmpty(stats) ? $"Weight: {weightLabel}" : $"{stats}\nWeight: {weightLabel}";
+        }
+
+        // Stack info for stackable consumables
+        if (IsStackable && MaxStackSize > 1)
+        {
+            string stackLabel = $"Stack: {StackCount}/{MaxStackSize}";
+            stats = string.IsNullOrEmpty(stats) ? stackLabel : $"{stats}\n{stackLabel}";
         }
 
         return stats;

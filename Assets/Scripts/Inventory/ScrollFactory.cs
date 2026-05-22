@@ -268,7 +268,10 @@ public static class ScrollFactory
             IconColor = iconColor,
             IsScroll = true,
             ScrollType = scrollType,
-            ScrollSpellLevel = spellLevel
+            ScrollSpellLevel = spellLevel,
+            IsStackable = true,
+            MaxStackSize = 20,
+            StackCount = 1
         };
 
         ItemDatabase.RegisterScrollItem(scrollItem);
