@@ -25,8 +25,12 @@ public class ClericClass : ICharacterClass
     public HashSet<string> ClassSkills { get; } = new HashSet<string>
     {
         "Diplomacy",
-        "Intimidate"
-        // Note: Concentration, Heal, Knowledge (Religion) not in prototype skill list
+        "Intimidate",
+        "Knowledge (Arcana)",
+        "Knowledge (History)",
+        "Knowledge (Religion)",
+        "Knowledge (The Planes)"
+        // Note: Concentration, Heal not in prototype skill list
     };
 
     // Starting Equipment Defaults

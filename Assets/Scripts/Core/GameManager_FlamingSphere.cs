@@ -193,7 +193,7 @@ public partial class GameManager
             }
         }
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
         int maxRangeSquares = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(casterLevel));
 

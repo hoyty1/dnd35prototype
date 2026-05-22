@@ -29,7 +29,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = casterLevel * 100; // 10 min/level
 
         // Cure existing poison

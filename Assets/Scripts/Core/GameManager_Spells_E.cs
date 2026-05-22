@@ -55,7 +55,7 @@ public partial class GameManager
         // Apply negative levels using existing system
         int newTotal = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, "Enervation");
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         // Duration = CL hours. In combat: 1 hour = 600 rounds (10 rounds/min × 60 min)
         int durationRounds = casterLevel * 600;
 

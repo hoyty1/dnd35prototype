@@ -144,6 +144,16 @@ public class SpellData
         return -1;
     }
 
+    // ========== DESCRIPTORS ==========
+    /// <summary>
+    /// D&D 3.5e spell descriptors (alignment, energy, etc.). Used for domain CL bonuses.
+    /// Example: Protection from Evil has SpellDescriptor.Good; Cure spells have SpellDescriptor.Healing.
+    /// </summary>
+    public SpellDescriptor Descriptors;
+
+    /// <summary>Check if this spell has a specific descriptor.</summary>
+    public bool HasDescriptor(SpellDescriptor descriptor) => (Descriptors & descriptor) != 0;
+
     // ========== TARGETING ==========
     public SpellTargetType TargetType;  // SingleEnemy, SingleAlly, Self, Area
 
@@ -534,6 +544,33 @@ public class SpellData
         string placeholderStr = IsPlaceholder ? " <color=#FF8800>[PLACEHOLDER]</color>" : "";
         return $"[{levelStr}] {Name} ({School}){placeholderStr}\n{effectStr} | Range: {rangeStr}{aoeStr}{durStr}";
     }
+}
+
+/// <summary>
+/// D&D 3.5e spell descriptors used for domain caster level bonuses and other mechanics.
+/// [Flags] allows a spell to have multiple descriptors (e.g., Holy Smite is [Good, Evocation]).
+/// </summary>
+[Flags]
+public enum SpellDescriptor
+{
+    None        = 0,
+    Good        = 1 << 0,   // [Good] descriptor — boosted by Good domain
+    Evil        = 1 << 1,   // [Evil] descriptor — boosted by Evil domain
+    Lawful      = 1 << 2,   // [Lawful] descriptor — boosted by Law domain
+    Chaotic     = 1 << 3,   // [Chaotic] descriptor — boosted by Chaos domain
+    Healing     = 1 << 4,   // [Healing] subschool — boosted by Healing domain
+    Divination  = 1 << 5,   // Divination school spells — boosted by Knowledge domain
+    Fire        = 1 << 6,
+    Cold        = 1 << 7,
+    Acid        = 1 << 8,
+    Electricity = 1 << 9,
+    Sonic       = 1 << 10,
+    Fear        = 1 << 11,
+    MindAffecting = 1 << 12,
+    Light       = 1 << 13,
+    Darkness    = 1 << 14,
+    Death       = 1 << 15,
+    Force       = 1 << 16,
 }
 
 /// <summary>Who or what the spell targets.</summary>

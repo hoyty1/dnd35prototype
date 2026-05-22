@@ -72,6 +72,17 @@ public class SpellApplicationService : MonoBehaviour
         return Mathf.Max(1, caster.Stats.GetCasterLevel());
     }
 
+    /// <summary>
+    /// Get the effective caster level for a specific spell, including domain bonuses.
+    /// D&D 3.5e: Clerics with certain domains get +1 CL on matching descriptor spells.
+    /// </summary>
+    public static int GetEffectiveCasterLevel(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || caster.Stats == null)
+            return 1;
+        return Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+    }
+
     // ==================== EFFECT APPLICATION HELPERS ====================
 
     /// <summary>

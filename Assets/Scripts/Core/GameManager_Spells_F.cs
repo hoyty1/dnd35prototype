@@ -29,7 +29,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = casterLevel * 100; // 10 min/level = 100 rounds/level
 
         target.Stats.FreedomOfMovementActive = true;
@@ -107,7 +107,7 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
         string casterName = caster.Stats.CharacterName;
 
@@ -167,7 +167,7 @@ public partial class GameManager
         if (recipient == null || recipient.Stats == null)
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
         // Use the player's shield-type choice; fall back to warm if not set (NPC casts)

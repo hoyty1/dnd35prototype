@@ -37,7 +37,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
 
         // Determine creature type
         string creatureType = target.Stats.CreatureType ?? "Humanoid";
@@ -105,7 +105,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = casterLevel * 100; // 10 min/level = 100 rounds/level
 
         // Default immune spell — in full implementation, player would choose
@@ -149,7 +149,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || spell == null)
             return null;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int saveDc = GetSpellSaveDC(caster, spell);
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
 
@@ -263,7 +263,7 @@ public partial class GameManager
         if (!IsShoutSpell(spell))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
@@ -440,7 +440,7 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
 
         target.Stats.SilenceActive = true;
@@ -546,7 +546,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || target == null || target.Stats == null)
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Min(casterLevel, 10); // Max 10 rounds at CL 10+
 
         // Set up the spiritual weapon tracking on the caster

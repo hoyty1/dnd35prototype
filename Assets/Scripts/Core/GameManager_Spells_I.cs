@@ -525,7 +525,7 @@ public partial class GameManager
             return true;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
         int radiusSquares = Mathf.Max(1, casterLevel); // 5 ft/level = 1 square/level
 
@@ -597,7 +597,7 @@ public partial class GameManager
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
             spell,
             caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,
@@ -768,7 +768,7 @@ public partial class GameManager
         if (!IsIceStormSpell(spell))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");

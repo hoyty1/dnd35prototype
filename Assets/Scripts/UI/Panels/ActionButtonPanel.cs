@@ -30,6 +30,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button FullAttackButton => _combatUI != null ? _combatUI.FullAttackButton : null;
     private Button SpecialAttackButton => _combatUI != null ? _combatUI.SpecialAttackButton : null;
     private Button TurnUndeadButton => _combatUI != null ? _combatUI.TurnUndeadButton : null;
+    private Button DomainPowerButton => _combatUI != null ? _combatUI.DomainPowerButton : null;
     private Button SmiteButton => _combatUI != null ? _combatUI.SmiteButton : null;
     private Button GrappleActionsButton => _combatUI != null ? _combatUI.GrappleActionsButton : null;
     private Button GrappleDamageButton => _combatUI != null ? _combatUI.GrappleDamageButton : null;
@@ -662,6 +663,17 @@ public class ActionButtonPanel : MonoBehaviour
 
         states.Set(TurnUndeadButton, new ActionButtonState(canEverUseTurnUndead, canUseTurnUndead, turnUndeadLabel));
 
+        // Domain Power button: visible for clerics with activatable domain powers
+        bool hasDomainPowers = pc != null && pc.Stats != null && pc.Stats.IsCleric
+            && pc.Stats.ChosenDomains != null && pc.Stats.ChosenDomains.Exists(d =>
+                d == "Strength" || d == "Destruction" || d == "Death" || d == "Sun" || d == "Travel" || d == "Plant");
+        bool canUseDomainPower = hasDomainPowers && context.Gm != null
+            && context.Gm.GetAvailableDomainPowers(pc).Count > 0;
+        string domainPowerLabel = !hasDomainPowers
+            ? "Domain Power (N/A)"
+            : (canUseDomainPower ? "Domain Power" : "Domain Power (Used)");
+        states.Set(DomainPowerButton, new ActionButtonState(hasDomainPowers, canUseDomainPower, domainPowerLabel));
+
         string smiteReason = string.Empty;
         bool canUseSmite = context.Gm != null && context.Gm.CanUseTemplateSmite(pc, out smiteReason);
         bool hasTemplateSmite = pc != null && pc.Stats != null && (pc.Stats.HasTemplateSmiteEvil || pc.Stats.HasTemplateSmiteGood);
@@ -1134,6 +1146,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (FullAttackButton != null) FullAttackButton.gameObject.SetActive(false);
         if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
         if (TurnUndeadButton != null) TurnUndeadButton.gameObject.SetActive(false);
+        if (DomainPowerButton != null) DomainPowerButton.gameObject.SetActive(false);
         if (SmiteButton != null) SmiteButton.gameObject.SetActive(false);
         if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
         if (GrappleDamageButton != null) GrappleDamageButton.gameObject.SetActive(false);

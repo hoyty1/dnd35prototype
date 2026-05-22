@@ -36,7 +36,7 @@ public partial class GameManager
         if (!result.Success)
             return true;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
 
         // Determine alignment to apply

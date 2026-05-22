@@ -919,6 +919,17 @@ public partial class GameManager : MonoBehaviour
             stats.TemplateSmiteUsed = false;
             stats.RagesUsedToday = 0;
             stats.TurnUndeadAttemptsUsedToday = 0;
+            // Reset domain power daily uses
+            stats.StrengthDomainUsesToday = 0;
+            stats.DestructionDomainUsesToday = 0;
+            stats.DeathDomainUsesToday = 0;
+            stats.SunDomainUsesToday = 0;
+            stats.TravelDomainUsesToday = 0;
+            stats.DestructionSmiteActive = false;
+            stats.StrengthDomainBonusRounds = 0;
+            stats.TravelDomainFreedomRounds = 0;
+            stats.GreaterTurningActive = false;
+            stats.TemporarySTRBonus = 0;
             stats.IsFatigued = false;
 
             if (pc.ActivePoisons != null)
@@ -3661,6 +3672,9 @@ public partial class GameManager : MonoBehaviour
             IsPC = IsPC(character),
             RoundNumber = CurrentRoundNumber
         });
+
+        // Tick domain power durations at start of turn
+        TickDomainPowerDurations(character);
 
         if (IsPC(character))
         {
@@ -8499,7 +8513,7 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int rounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
 
@@ -8551,7 +8565,7 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
         var conditionData = new AnimateRopeEntangledConditionData

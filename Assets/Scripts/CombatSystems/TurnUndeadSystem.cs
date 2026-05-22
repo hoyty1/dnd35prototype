@@ -834,13 +834,18 @@ public partial class GameManager
 
                 hdRemaining -= option.HitDice;
 
-                if (option.CanDestroy)
+                // Greater Turning (Sun domain): all affected undead are destroyed, not just turned
+                bool greaterTurning = context.Turner != null && context.Turner.Stats != null
+                    && context.Turner.Stats.GreaterTurningActive;
+
+                if (option.CanDestroy || greaterTurning)
                 {
                     int lethalDamage = Mathf.Max(1, option.Target.Stats.CurrentHP + 10);
                     option.Target.Stats.TakeDamage(lethalDamage);
                     HandleSummonDeathCleanup(option.Target);
                     destroyedCount++;
-                    CombatUI?.ShowCombatLog($"   💥 {option.Target.Stats.CharacterName} is destroyed by holy power! ({option.HitDice} HD)");
+                    string destroySource = greaterTurning && !option.CanDestroy ? "Greater Turning" : "holy power";
+                    CombatUI?.ShowCombatLog($"   💥 {option.Target.Stats.CharacterName} is destroyed by {destroySource}! ({option.HitDice} HD)");
                 }
                 else
                 {
@@ -858,6 +863,12 @@ public partial class GameManager
 
         if (turnedCount == 0 && destroyedCount == 0)
             CombatUI?.ShowCombatLog("   The divine surge fails to overcome any undead this turn.");
+
+        // Consume Greater Turning flag after resolution
+        if (context.Turner != null && context.Turner.Stats != null && context.Turner.Stats.GreaterTurningActive)
+        {
+            context.Turner.Stats.GreaterTurningActive = false;
+        }
 
         CombatUI?.ShowCombatLog($"   Results: {destroyedCount} destroyed, {turnedCount} turned, {hdRemaining} HD turning power unspent.");
         CombatUI?.ShowCombatLog($"   Remaining Turn Undead attempts today: {context.AttemptsRemainingAfterResolution}");

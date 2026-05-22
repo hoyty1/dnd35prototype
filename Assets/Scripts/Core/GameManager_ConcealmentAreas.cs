@@ -26,7 +26,7 @@ public partial class GameManager
         if (!isObscuringMist && !isFogCloud && !isDarkness && !isGustOfWind && !isSleetStorm && !isStinkingCloud && !isSolidFog)
             return false;
 
-        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
 
         if (isGustOfWind)
         {
@@ -315,7 +315,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || spell == null || !string.Equals(spell.SpellId, SpellNames.GLITTERDUST, System.StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
         int saveDc = GetSpellSaveDC(caster, spell);
 
@@ -419,7 +419,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || spell == null || !string.Equals(spell.SpellId, SpellNames.WEB, System.StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
         int saveDc = GetSpellSaveDC(caster, spell);
 

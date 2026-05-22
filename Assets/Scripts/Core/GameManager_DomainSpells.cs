@@ -54,7 +54,7 @@ public partial class GameManager
         }
 
         // Apply Hold Person–style paralysis
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int holdRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
         string sourceName = spell.Name;
 
@@ -110,7 +110,7 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMAIN_CALM_ANIMALS, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int saveDc = GetSpellSaveDC(caster, spell);
 
         // Roll 2d4 + caster level for HD budget
@@ -216,7 +216,7 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.CALM_EMOTIONS, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int saveDc = GetSpellSaveDC(caster, spell);
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
@@ -310,7 +310,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || caster == null || caster.Stats == null)
             return true;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int bonusDamage = Mathf.Min(casterLevel, 5); // +1 per CL, max +5
 
         // Ranged touch attack
@@ -375,7 +375,7 @@ public partial class GameManager
         if (target == null || target.Stats == null)
             return true;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         string casterName = caster?.Stats?.CharacterName ?? "Caster";
 
         // Track the effect via StatusEffectManager for duration/dispel
@@ -481,7 +481,7 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
         // Apply domination — reuse Command Undead pattern for side-switching
@@ -536,7 +536,7 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int maxHD = casterLevel * 2; // 2 HD per caster level
         int targetHD = Mathf.Max(1, target.Stats.Level);
 

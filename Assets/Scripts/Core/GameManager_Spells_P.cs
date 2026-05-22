@@ -36,7 +36,7 @@ public partial class GameManager
             return true;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = casterLevel; // 1 round/level
         int radiusSquares = 8; // 40 ft = 8 squares
 
@@ -130,7 +130,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
 
         // Check if target has Neutralize Poison immunity
         if (target.Stats.NeutralizePoisonImmunityActive)
@@ -200,7 +200,7 @@ public partial class GameManager
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int saveDc = GetSpellSaveDC(caster, spell);
 
         CombatUI?.ShowCombatLog($"<color=#6600CC>👻 {casterName} casts Phantasmal Killer on {targetName}!</color>");

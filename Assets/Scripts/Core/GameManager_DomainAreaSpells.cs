@@ -39,7 +39,7 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMAIN_ENTANGLE, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int saveDc = GetSpellSaveDC(caster, spell);
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
@@ -69,7 +69,7 @@ public partial class GameManager
         effect.CenterPosition = centerPosition;
         effect.RoundsRemaining = duration;
         effect.SaveDC = saveDC;
-        effect.CasterLevel = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+        effect.CasterLevel = caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1;
 
         Debug.Log($"[GameManager] Entangle area created at {centerPosition}, duration={duration}, DC={saveDC}");
     }
@@ -93,7 +93,7 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMAIN_SOFTEN_EARTH, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
 
         // Instantaneous but lasts rest of combat (999 rounds)
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
@@ -142,7 +142,7 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.SPIKE_STONES, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
@@ -190,7 +190,7 @@ public partial class GameManager
         if (spell == null || !string.Equals(spell.SpellId, SpellNames.PLANT_GROWTH, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
 
         // Instantaneous but persists for rest of combat
         Vector3 centerPos = CalculateAreaCenter(aoeCells);

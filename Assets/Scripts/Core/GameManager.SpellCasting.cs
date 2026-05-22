@@ -5439,7 +5439,7 @@ public partial class GameManager
             targetStatusMgr.Init(target.Stats);
         }
 
-        targetStatusMgr.AddEffect(spell, casterName, caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1);
+        targetStatusMgr.AddEffect(spell, casterName, caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1);
 
         if (result != null)
         {
@@ -5541,7 +5541,7 @@ public partial class GameManager
 
         string targetName = target.Stats.CharacterName;
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
 
         CombatUI?.ShowCombatLog($"✨ {casterName} casts Scare on {targetName}.");
 
@@ -5833,7 +5833,7 @@ public partial class GameManager
 
     private static int CalculateRayOfEnfeeblementPenalty(CharacterController caster)
     {
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int levelBonus = Mathf.Min(5, 1 + ((casterLevel - 1) / 2));
         int d6 = DiceService.D6("Enervation damage");
         return d6 + levelBonus;
@@ -5847,7 +5847,7 @@ public partial class GameManager
         if (result == null || !result.Success || (result.RequiredAttackRoll && !result.AttackHit))
             return false;
 
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1));
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1));
         int penalty = CalculateRayOfEnfeeblementPenalty(caster);
 
         EnfeebledConditionData previousEffect = target.ActiveEnfeeblementEffect;
@@ -5892,7 +5892,7 @@ public partial class GameManager
         if (result == null || !result.Success || (result.RequiredAttackRoll && !result.AttackHit))
             return false;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
         int intDamage = DiceService.D6("Touch of Idiocy INT damage");
@@ -6035,7 +6035,7 @@ public partial class GameManager
     {
         if (spell != null && (spell.SpellId == SpellNames.DAZE || spell.SpellId == SpellNames.DAZE_MONSTER))
         {
-            int dazeRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1));
+            int dazeRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1));
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
 
             if (_conditionService != null)
@@ -6061,7 +6061,7 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.HIDEOUS_LAUGHTER)
         {
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int laughterRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
             string sourceName = spell.Name;
 
@@ -6170,7 +6170,7 @@ public partial class GameManager
                 return null;
             }
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             bool isIntelligent = target.IsIntelligentUndead();
 
             CommandUndeadEffectData effectData;
@@ -6220,7 +6220,7 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.CHARM_PERSON)
         {
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int charmRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
             string sourceName = spell.Name;
 
@@ -6306,7 +6306,7 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.SLEEP)
         {
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
             int wakeDc = 10 + spell.SpellLevel + GetSpellSaveAbilityModifier(caster, spell);
 
@@ -6319,7 +6319,7 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.DEEP_SLUMBER)
         {
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
             int wakeDc = 10 + spell.SpellLevel + GetSpellSaveAbilityModifier(caster, spell);
 
@@ -6361,7 +6361,7 @@ public partial class GameManager
         {
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
             int casterLevel = caster != null && caster.Stats != null
-                ? Mathf.Max(1, caster.Stats.GetCasterLevel())
+                ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell))
                 : 1;
 
             bool wasExhausted = target.HasCondition(CombatConditionType.Exhausted);
@@ -6628,7 +6628,7 @@ public partial class GameManager
                 }
             }
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int resistance = casterLevel >= 11 ? 30 : (casterLevel >= 7 ? 20 : 10);
             int durationRounds = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
 
@@ -6681,7 +6681,7 @@ public partial class GameManager
                 }
             }
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int absorptionPool = ProtectionFromEnergyEffectData.CalculateAbsorptionPool(casterLevel);
             int durationRoundsProtEnergy = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
 
@@ -6800,7 +6800,7 @@ public partial class GameManager
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
 
-            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1;
+            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1;
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
@@ -6926,7 +6926,7 @@ public partial class GameManager
             if (target == null || target.Stats == null)
                 return null;
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int targetHD = target.Stats.HitDice > 0 ? target.Stats.HitDice : target.Stats.Level;
 
             // Create the attribute enhancement effect data
@@ -7059,7 +7059,7 @@ public partial class GameManager
             if (target == null || target.Stats == null)
                 return null;
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int saveDC = 10 + spell.SpellLevel + (caster != null && caster.Stats != null ? caster.Stats.WISMod : 0);
 
             StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
@@ -7092,7 +7092,7 @@ public partial class GameManager
             if (target == null || target.Stats == null)
                 return null;
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
 
             // Remove existing fear conditions (Frightened, Shaken, Panicked)
             bool removedFear = false;
@@ -7214,7 +7214,7 @@ public partial class GameManager
             if (target == null || target.Stats == null)
                 return null;
 
-            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
 
             // D&D 3.5e: +2 at CL 1-5, +3 at CL 6-11, +4 at CL 12-17, +5 at CL 18+
             int deflectionBonus = 2;
@@ -7777,7 +7777,7 @@ public partial class GameManager
 
         int dc = 15 + Mathf.Max(0, spell.SpellLevel);
         int roll = DiceService.D20("Dispel Magic check");
-        int bonus = Mathf.Max(0, caster.Stats.GetCasterLevel()) + GetSpellSaveAbilityModifier(caster, spell);
+        int bonus = Mathf.Max(0, caster.Stats.GetDomainBoostedCasterLevel(spell)) + GetSpellSaveAbilityModifier(caster, spell);
         int total = roll + bonus;
         bool success = total >= dc;
 
@@ -8087,7 +8087,7 @@ public partial class GameManager
             TransitionSummonSwarmToPostConcentration(caster, "new concentration spell");
         }
 
-        ActiveSpellEffect concentrationMarker = new ActiveSpellEffect(spell, caster.Stats != null ? caster.Stats.CharacterName : "Caster", caster.Stats != null ? caster.Stats.GetCasterLevel() : 1, caster.Stats != null ? caster.Stats.CharacterName : "Caster");
+        ActiveSpellEffect concentrationMarker = new ActiveSpellEffect(spell, caster.Stats != null ? caster.Stats.CharacterName : "Caster", caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1, caster.Stats != null ? caster.Stats.CharacterName : "Caster");
         string log = concMgr.BeginConcentration(concentrationMarker);
         if (!string.IsNullOrEmpty(log))
             CombatUI?.ShowCombatLog($"<color=#44AAFF>{log}</color>");
@@ -8351,7 +8351,7 @@ public partial class GameManager
         statusMgr.Init(caster.Stats);
 
         // Add spell effect for duration tracking
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
 
         // Create detection data

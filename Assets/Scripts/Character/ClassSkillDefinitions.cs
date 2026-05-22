@@ -35,6 +35,17 @@ public static class ClassSkillDefinitions
         ("Swim",                AbilityType.STR, false),
         ("Tumble",              AbilityType.DEX, true),
         ("Use Magic Device",    AbilityType.CHA, true),
+        // Knowledge skills (INT-based, trained only) — used by Knowledge domain, Bards, Wizards
+        ("Knowledge (Arcana)",       AbilityType.INT, true),
+        ("Knowledge (Religion)",     AbilityType.INT, true),
+        ("Knowledge (The Planes)",   AbilityType.INT, true),
+        ("Knowledge (Nature)",       AbilityType.INT, true),
+        ("Knowledge (History)",      AbilityType.INT, true),
+        ("Knowledge (Local)",        AbilityType.INT, true),
+        ("Knowledge (Nobility)",     AbilityType.INT, true),
+        ("Knowledge (Dungeoneering)",AbilityType.INT, true),
+        ("Knowledge (Architecture)", AbilityType.INT, true),
+        ("Knowledge (Geography)",    AbilityType.INT, true),
     };
 
     // ========== SKILL POINTS PER LEVEL ==========

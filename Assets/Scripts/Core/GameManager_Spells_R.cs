@@ -36,7 +36,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
 
         // Diseases are tracked via target.ActiveDiseases (populated by Contagion, etc.)
         if (target.ActiveDiseases == null || target.ActiveDiseases.Count == 0)
@@ -166,7 +166,7 @@ public partial class GameManager
         // Personal spell
         target = caster;
         string casterName = caster.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = casterLevel * 100; // 10 min/level
         int radiusFeet = casterLevel * 10; // 10 ft/level
 
@@ -204,7 +204,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || spell == null)
             return null;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
 
         // Rage duration: Concentration + 1 round/level (max 10 rounds after concentration ends)
         // For simplicity in combat, we use caster level rounds (max 10)
@@ -286,7 +286,7 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
         // PHB: Fortitude partial. Failed save = Exhausted. Successful save = Fatigued.
@@ -366,7 +366,7 @@ public partial class GameManager
         if (!IsRainbowPatternSpell(spell))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int saveDc = GetSpellSaveDC(caster, spell);
         int maxHDTotal = 24;
         int hdAffected = 0;

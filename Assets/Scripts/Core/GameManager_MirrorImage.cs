@@ -58,7 +58,7 @@ public partial class GameManager
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats);
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
         if (effect == null)
         {

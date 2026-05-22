@@ -586,6 +586,29 @@ public class CharacterStats
     /// <summary>Turn Undead attempts consumed today.</summary>
     public int TurnUndeadAttemptsUsedToday;
 
+    // ========== DOMAIN POWER DAILY USES ==========
+    /// <summary>Strength domain: feat of strength used today (1/day).</summary>
+    public int StrengthDomainUsesToday;
+    /// <summary>Destruction domain: smite used today (1/day).</summary>
+    public int DestructionDomainUsesToday;
+    /// <summary>Death domain: death touch used today (1/day).</summary>
+    public int DeathDomainUsesToday;
+    /// <summary>Sun domain: greater turning used today (1/day).</summary>
+    public int SunDomainUsesToday;
+    /// <summary>Travel domain: freedom of movement used today (1/day).</summary>
+    public int TravelDomainUsesToday;
+    /// <summary>Destruction domain smite is active for next melee attack.</summary>
+    public bool DestructionSmiteActive;
+    /// <summary>Strength domain enhancement bonus active rounds remaining.</summary>
+    public int StrengthDomainBonusRounds;
+    /// <summary>Travel domain freedom of movement rounds remaining.</summary>
+    public int TravelDomainFreedomRounds;
+    // Plant domain uses TurnUndeadAttemptsUsedToday (shares the pool per D&D 3.5e)
+    /// <summary>Sun domain: next turn undead destroys instead of turning.</summary>
+    public bool GreaterTurningActive;
+    /// <summary>Temporary enhancement bonus to STR from domain powers / spells.</summary>
+    public int TemporarySTRBonus;
+
     /// <summary>
     /// D&D 3.5e Turn Undead attempts per day:
     /// - Cleric: 3 + CHA modifier (minimum 1)
@@ -1349,6 +1372,55 @@ public class CharacterStats
     }
 
     /// <summary>
+    /// Get domain-boosted caster level for a specific spell.
+    /// D&D 3.5e PHB domain granted powers:
+    ///   Good domain: +1 CL on [Good] spells
+    ///   Evil domain: +1 CL on [Evil] spells
+    ///   Law domain:  +1 CL on [Lawful] spells
+    ///   Chaos domain: +1 CL on [Chaotic] spells
+    ///   Healing domain: +1 CL on [Healing] spells
+    ///   Knowledge domain: +1 CL on Divination spells
+    /// </summary>
+    public int GetDomainBoostedCasterLevel(SpellData spell, string className = null)
+    {
+        int baseCL = GetCasterLevel(className);
+        if (spell == null || ChosenDomains == null || ChosenDomains.Count == 0)
+            return baseCL;
+
+        int bonus = 0;
+
+        for (int i = 0; i < ChosenDomains.Count; i++)
+        {
+            string domain = ChosenDomains[i];
+            if (string.IsNullOrEmpty(domain)) continue;
+
+            switch (domain)
+            {
+                case "Good":
+                    if (spell.HasDescriptor(SpellDescriptor.Good)) bonus = Mathf.Max(bonus, 1);
+                    break;
+                case "Evil":
+                    if (spell.HasDescriptor(SpellDescriptor.Evil)) bonus = Mathf.Max(bonus, 1);
+                    break;
+                case "Law":
+                    if (spell.HasDescriptor(SpellDescriptor.Lawful)) bonus = Mathf.Max(bonus, 1);
+                    break;
+                case "Chaos":
+                    if (spell.HasDescriptor(SpellDescriptor.Chaotic)) bonus = Mathf.Max(bonus, 1);
+                    break;
+                case "Healing":
+                    if (spell.HasDescriptor(SpellDescriptor.Healing)) bonus = Mathf.Max(bonus, 1);
+                    break;
+                case "Knowledge":
+                    if (spell.HasDescriptor(SpellDescriptor.Divination)) bonus = Mathf.Max(bonus, 1);
+                    break;
+            }
+        }
+
+        return baseCL + bonus;
+    }
+
+    /// <summary>
     /// D&D 3.5e spellcasting concentration bonus used when casting in combat:
     /// caster level + CON modifier (+4 Combat Casting when applicable).
     /// </summary>
@@ -1995,7 +2067,7 @@ public class CharacterStats
     public int EffectiveWISScore => GetEffectiveAbilityScore(AbilityType.WIS);
     public int EffectiveCHAScore => GetEffectiveAbilityScore(AbilityType.CHA);
 
-    public int EffectiveStrengthScore => !HasStrength() ? NO_SCORE : Mathf.Max(1, EffectiveSTRScore - StrengthConditionPenalty - EnfeeblementStrengthPenalty);
+    public int EffectiveStrengthScore => !HasStrength() ? NO_SCORE : Mathf.Max(1, EffectiveSTRScore - StrengthConditionPenalty - EnfeeblementStrengthPenalty + TemporarySTRBonus);
     public int EffectiveDexterityScore => !HasDexterity() ? NO_SCORE : Mathf.Max(0, EffectiveDEXScore - DexterityConditionPenalty);
 
     public int STRMod => GetAbilityModifier(EffectiveStrengthScore);
@@ -4777,6 +4849,16 @@ public class CharacterStats
 
             foreach (string skillName in ClassSkillDefinitions.GetClassSkills(classLevel.ClassName))
                 classSkills.Add(skillName);
+        }
+
+        // Knowledge domain: all Knowledge skills become class skills (D&D 3.5e)
+        if (ChosenDomains != null && ChosenDomains.Contains("Knowledge"))
+        {
+            foreach (var skillDef in ClassSkillDefinitions.AllSkills)
+            {
+                if (skillDef.name.StartsWith("Knowledge"))
+                    classSkills.Add(skillDef.name);
+            }
         }
 
         foreach (KeyValuePair<string, Skill> kvp in Skills)

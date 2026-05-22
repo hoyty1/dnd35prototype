@@ -65,6 +65,7 @@ public static partial class SpellDatabase
         RegisterSpellsZ();
 
         AnnotateDomainAvailabilityFromDomainDatabase();
+        AnnotateSpellDescriptors();
 
         // Initialize the spell component system (tracks costly material components)
         SpellComponentRegistry.Init();
@@ -135,6 +136,147 @@ public static partial class SpellDatabase
                 spell.AddAvailability("Cleric", entry.Key, domain.Name);
             }
         }
+    }
+
+    /// <summary>
+    /// Annotate spells with D&D 3.5e descriptors used for domain caster level bonuses.
+    /// Auto-detects from school/properties, then applies explicit overrides per PHB.
+    /// </summary>
+    private static void AnnotateSpellDescriptors()
+    {
+        // === Pass 1: Auto-detect descriptors from spell properties ===
+        foreach (var spell in _spells.Values)
+        {
+            if (spell == null) continue;
+
+            // Divination school → Divination descriptor (for Knowledge domain +1 CL)
+            if (string.Equals(spell.School, "Divination", StringComparison.OrdinalIgnoreCase))
+                spell.Descriptors |= SpellDescriptor.Divination;
+
+            // Healing subschool: Conjuration(Healing) spells that heal HP
+            if (spell.EffectType == SpellEffectType.Healing &&
+                string.Equals(spell.School, "Conjuration", StringComparison.OrdinalIgnoreCase))
+                spell.Descriptors |= SpellDescriptor.Healing;
+
+            // Fire damage type
+            if (!string.IsNullOrEmpty(spell.DamageType))
+            {
+                string dt = spell.DamageType.ToLowerInvariant();
+                if (dt.Contains("fire")) spell.Descriptors |= SpellDescriptor.Fire;
+                if (dt.Contains("cold")) spell.Descriptors |= SpellDescriptor.Cold;
+                if (dt.Contains("acid")) spell.Descriptors |= SpellDescriptor.Acid;
+                if (dt.Contains("electric") || dt.Contains("lightning")) spell.Descriptors |= SpellDescriptor.Electricity;
+                if (dt.Contains("sonic")) spell.Descriptors |= SpellDescriptor.Sonic;
+                if (dt.Contains("force")) spell.Descriptors |= SpellDescriptor.Force;
+            }
+        }
+
+        // === Pass 2: Explicit [Good] descriptor spells (PHB) ===
+        SetDescriptor(SpellNames.BLESS, SpellDescriptor.Good);
+        SetDescriptor(SpellNames.CONSECRATE, SpellDescriptor.Good);
+        SetDescriptor(SpellNames.HOLY_SMITE, SpellDescriptor.Good);
+        SetDescriptor(SpellNames.PROTECTION_FROM_EVIL, SpellDescriptor.Good);
+        SetDescriptor("magic_circle_vs_evil", SpellDescriptor.Good);
+        SetDescriptor("dispel_evil", SpellDescriptor.Good);
+        SetDescriptor("holy_aura", SpellDescriptor.Good);
+        SetDescriptor("holy_word", SpellDescriptor.Good);
+        SetDescriptor(SpellNames.AID, SpellDescriptor.Good);
+
+        // === [Evil] descriptor spells ===
+        SetDescriptor(SpellNames.BANE, SpellDescriptor.Evil);
+        SetDescriptor(SpellNames.DOMAIN_DESECRATE, SpellDescriptor.Evil);
+        SetDescriptor("desecrate", SpellDescriptor.Evil);
+        SetDescriptor("unholy_blight", SpellDescriptor.Evil);
+        SetDescriptor(SpellNames.DEATH_KNELL, SpellDescriptor.Evil | SpellDescriptor.Death);
+        SetDescriptor(SpellNames.CONTAGION, SpellDescriptor.Evil);
+        SetDescriptor("animate_dead", SpellDescriptor.Evil);
+        SetDescriptor("create_undead", SpellDescriptor.Evil);
+        SetDescriptor("unholy_aura", SpellDescriptor.Evil);
+        SetDescriptor("blasphemy", SpellDescriptor.Evil);
+        // Fix: Protection from Good has [Evil] descriptor per PHB
+        SetDescriptor(SpellNames.PROTECTION_FROM_GOOD, SpellDescriptor.Evil);
+        SetDescriptor("magic_circle_vs_good", SpellDescriptor.Evil);
+        SetDescriptor("dispel_good", SpellDescriptor.Evil);
+
+        // === [Lawful] descriptor spells ===
+        SetDescriptor("order_wrath", SpellDescriptor.Lawful);
+        SetDescriptor("orders_wrath", SpellDescriptor.Lawful);
+        SetDescriptor(SpellNames.PROTECTION_FROM_CHAOS, SpellDescriptor.Lawful);
+        SetDescriptor("magic_circle_vs_chaos", SpellDescriptor.Lawful);
+        SetDescriptor("dispel_chaos", SpellDescriptor.Lawful);
+        SetDescriptor("shield_of_law", SpellDescriptor.Lawful);
+        SetDescriptor("dictum", SpellDescriptor.Lawful);
+
+        // === [Chaotic] descriptor spells ===
+        SetDescriptor(SpellNames.CHAOS_HAMMER, SpellDescriptor.Chaotic);
+        SetDescriptor(SpellNames.PROTECTION_FROM_LAW, SpellDescriptor.Chaotic);
+        SetDescriptor("magic_circle_vs_law", SpellDescriptor.Chaotic);
+        SetDescriptor("dispel_law", SpellDescriptor.Chaotic);
+        SetDescriptor("cloak_of_chaos", SpellDescriptor.Chaotic);
+        SetDescriptor("word_of_chaos", SpellDescriptor.Chaotic);
+
+        // === [Healing] descriptor — explicit cure spells ===
+        SetDescriptor(SpellNames.CURE_MINOR_WOUNDS, SpellDescriptor.Healing);
+        SetDescriptor(SpellNames.CURE_LIGHT_WOUNDS, SpellDescriptor.Healing);
+        SetDescriptor(SpellNames.CURE_MODERATE_WOUNDS, SpellDescriptor.Healing);
+        SetDescriptor(SpellNames.CURE_SERIOUS_WOUNDS, SpellDescriptor.Healing);
+        SetDescriptor(SpellNames.CURE_CRITICAL_WOUNDS, SpellDescriptor.Healing);
+        SetDescriptor("mass_cure_light_wounds", SpellDescriptor.Healing);
+        SetDescriptor("mass_cure_moderate_wounds", SpellDescriptor.Healing);
+        SetDescriptor("mass_cure_serious_wounds", SpellDescriptor.Healing);
+        SetDescriptor("mass_cure_critical_wounds", SpellDescriptor.Healing);
+        SetDescriptor("heal", SpellDescriptor.Healing);
+        SetDescriptor("mass_heal", SpellDescriptor.Healing);
+        SetDescriptor("remove_blindness_deafness", SpellDescriptor.Healing);
+        SetDescriptor(SpellNames.REMOVE_DISEASE, SpellDescriptor.Healing);
+        SetDescriptor("remove_paralysis", SpellDescriptor.Healing);
+        SetDescriptor("lesser_restoration", SpellDescriptor.Healing);
+        SetDescriptor("restoration_lesser", SpellDescriptor.Healing);
+        SetDescriptor(SpellNames.NEUTRALIZE_POISON, SpellDescriptor.Healing);
+        SetDescriptor("restoration", SpellDescriptor.Healing);
+        SetDescriptor("regenerate", SpellDescriptor.Healing);
+
+        // === [Death] descriptor ===
+        SetDescriptor("slay_living", SpellDescriptor.Death);
+        SetDescriptor("finger_of_death", SpellDescriptor.Death);
+        SetDescriptor("destruction", SpellDescriptor.Death);
+        SetDescriptor("wail_of_the_banshee", SpellDescriptor.Death);
+        SetDescriptor(SpellNames.CAUSE_FEAR, SpellDescriptor.Fear | SpellDescriptor.MindAffecting);
+
+        // === [Fear] / [Mind-Affecting] ===
+        SetDescriptor(SpellNames.DOOM, SpellDescriptor.Fear | SpellDescriptor.MindAffecting);
+        SetDescriptor(SpellNames.COMMAND, SpellDescriptor.MindAffecting);
+        SetDescriptor(SpellNames.HOLD_PERSON, SpellDescriptor.MindAffecting);
+        SetDescriptor(SpellNames.CHARM_PERSON, SpellDescriptor.MindAffecting);
+        SetDescriptor(SpellNames.CONFUSION, SpellDescriptor.MindAffecting);
+        SetDescriptor(SpellNames.SLEEP, SpellDescriptor.MindAffecting);
+        SetDescriptor(SpellNames.DAZE, SpellDescriptor.MindAffecting);
+        SetDescriptor(SpellNames.DAZE_MONSTER, SpellDescriptor.MindAffecting);
+
+        // === [Light] ===
+        SetDescriptor(SpellNames.CONTINUAL_FLAME, SpellDescriptor.Light);
+        SetDescriptor(SpellNames.FLARE, SpellDescriptor.Light);
+        SetDescriptor(SpellNames.FLAME_STRIKE, SpellDescriptor.Good); // Flame Strike is [Good] (divine fire)
+
+        // === [Darkness] ===
+        SetDescriptor(SpellNames.DARKNESS, SpellDescriptor.Darkness);
+
+        int annotated = 0;
+        foreach (var spell in _spells.Values)
+        {
+            if (spell != null && spell.Descriptors != SpellDescriptor.None)
+                annotated++;
+        }
+        Debug.Log($"[SpellDatabase] Annotated {annotated} spells with descriptors.");
+    }
+
+    /// <summary>Add a descriptor to a spell by ID (safe — no-op if spell doesn't exist).</summary>
+    private static void SetDescriptor(string spellId, SpellDescriptor descriptor)
+    {
+        if (string.IsNullOrEmpty(spellId)) return;
+        if (_spells.TryGetValue(spellId, out SpellData spell))
+            spell.Descriptors |= descriptor;
+        // Silently skip if spell doesn't exist — some may not be implemented yet
     }
 
     /// <summary>Get a spell by ID. Returns null if not found.</summary>

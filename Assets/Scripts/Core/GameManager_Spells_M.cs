@@ -31,7 +31,7 @@ public partial class GameManager
         bool isEnlarge = spell.SpellId == SpellNames.MASS_ENLARGE_PERSON;
         string spellName = isEnlarge ? "Mass Enlarge Person" : "Mass Reduce Person";
         string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int maxTargets = casterLevel; // One creature per caster level
         int saveDc = GetSpellSaveDC(caster, spell);
 
@@ -211,7 +211,7 @@ public partial class GameManager
         if (recipient == null || recipient.Stats == null)
             return true; // Handled but nothing to apply
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int enhBonus = Mathf.Clamp(casterLevel / 4, 1, 5);
 
         // Track effect via StatusEffectManager for proper duration/dispel

@@ -6087,7 +6087,10 @@ public class CharacterController : MonoBehaviour
             deniedDexFromBlink = GetDexBonusAppliedToArmorClass(target);
         }
 
-        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus;
+        // Destruction Domain Smite: +4 attack on next melee attack
+        int destructionSmiteAttackBonus = GameManager.GetDestructionSmiteAttackBonus(this);
+
+        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus;
 
         // D&D 3.5e: making an attack roll (or attempting to attack) breaks standard invisibility.
         // Greater Invisibility does NOT break on attack (BreaksOnAttack=false).
@@ -6231,6 +6234,14 @@ public class CharacterController : MonoBehaviour
         result.IsRangedAttack = isRangedAttack;
         result.NaturalTwenty = (roll == 20);
         result.NaturalOne = (roll == 1);
+
+        // Consume Destruction Domain Smite immediately after the attack roll (D&D 3.5e: declared before attack)
+        if (destructionSmiteAttackBonus > 0)
+        {
+            result.AddAttackBuffDebuffModifier("Destruction Smite", destructionSmiteAttackBonus);
+            GameManager.ConsumeDestructionSmite(this);
+        }
+
         AttachAttackBuffDebuffBreakdown(result);
 
         // NOTE: Weapon enhancement bonus is NOT added to AttackBuffDebuffModifiers here
@@ -6461,7 +6472,8 @@ public class CharacterController : MonoBehaviour
             {
                 // Normal damage - roll weapon dice separately for breakdown
                 baseDmgRoll = Stats.RollBaseDamage(damageDice, damageCount);
-                rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage + featDamageBonus + weaponEnhancementDamageBonus;
+                int destructionSmiteDmgBonus = GameManager.GetDestructionSmiteDamageBonus(this);
+                rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage + featDamageBonus + weaponEnhancementDamageBonus + destructionSmiteDmgBonus;
             }
             rawWeaponDamage = Mathf.Max(1, rawWeaponDamage); // Weapon hit always deals at least 1 before mitigation
             result.Damage = rawWeaponDamage;

@@ -29,7 +29,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
 
         target.Stats.DeathWardActive = true;
@@ -68,7 +68,7 @@ public partial class GameManager
         // Personal spell — target is always caster
         target = caster;
         string casterName = caster.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = casterLevel; // 1 round/level
 
         // +6 enhancement to STR
@@ -128,7 +128,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
 
         string creatureType = (target.Stats.CreatureType ?? "").Trim().ToLowerInvariant();
         bool isExtraplanar = creatureType == "outsider" || creatureType == "extraplanar";
@@ -186,7 +186,7 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.DAYLIGHT, System.StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
@@ -259,7 +259,7 @@ public partial class GameManager
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
             spell,
             caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,
@@ -365,7 +365,7 @@ public partial class GameManager
         var statusMgr = caster.GetComponent<StatusEffectManager>();
         if (statusMgr != null)
         {
-            int cl = caster.Stats.GetCasterLevel();
+            int cl = caster.Stats.GetDomainBoostedCasterLevel(spell);
             var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, cl);
             if (effect != null)
             {
@@ -439,7 +439,7 @@ public partial class GameManager
         }
 
         // ── Calculate range ──
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int rangeSquares = spell.GetRangeSquaresForCasterLevel(casterLevel);
         if (rangeSquares <= 0) rangeSquares = 80 + (casterLevel * 8); // fallback: 400ft + 40ft/level = 80sq + 8sq/level
 
@@ -686,7 +686,7 @@ public partial class GameManager
         }
 
         // Check if target already has Dimensional Anchor — refresh duration if so
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
@@ -744,7 +744,7 @@ public partial class GameManager
         if (!IsBlackTentaclesSpell(spell) || caster == null || caster.Stats == null || aoeCells == null)
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
         int tentacleGrappleMod = casterLevel + 8; // CL + Str mod (4) + Large size (4)
 

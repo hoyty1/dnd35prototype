@@ -48,7 +48,7 @@ public partial class GameManager
             statusMgr = caster.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(caster.Stats);
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         ActiveSpellEffect effect = statusMgr.AddEffect(
             spell,
             caster.Stats.CharacterName,
@@ -134,7 +134,7 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
 
         // Choose a random curse type

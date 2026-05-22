@@ -149,7 +149,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
 
         Alignment targetAlignment = target.Stats.CharacterAlignment;
         bool fullDamage = isFullDamageAlignment(targetAlignment);
@@ -341,7 +341,7 @@ public partial class GameManager
         if (!isFireball && !isLightningBolt)
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int diceCount = Mathf.Clamp(casterLevel, 1, 10); // 1d6/CL, max 10d6
         int saveDc = GetSpellSaveDC(caster, spell);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, spell);

@@ -288,7 +288,7 @@ public partial class GameManager
     private int GetGreaseDurationRounds(CharacterController caster)
     {
         int casterLevel = caster != null && caster.Stats != null
-            ? Mathf.Max(1, caster.Stats.GetCasterLevel())
+            ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell))
             : 1;
         return casterLevel;
     }
@@ -409,7 +409,7 @@ public partial class GameManager
         grease.RoundsRemaining = Mathf.Max(1, duration);
         grease.SaveDC = saveDC;
         grease.Caster = caster;
-        grease.CasterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        grease.CasterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
     }
 
     /// <summary>
@@ -545,7 +545,7 @@ public partial class GameManager
             {
                 Spell = effectSpell,
                 CasterName = caster.Stats.CharacterName,
-                CasterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel()),
+                CasterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)),
                 AffectedCharacterName = target.Stats.CharacterName,
                 DurationType = DurationType.Rounds,
                 RemainingRounds = durationRounds,
