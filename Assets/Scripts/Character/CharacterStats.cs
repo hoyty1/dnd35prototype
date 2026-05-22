@@ -200,6 +200,40 @@ public class CharacterStats
     /// <summary>Domains display string (e.g., "Healing, Good").</summary>
     public string DomainsDisplay => ChosenDomains.Count > 0 ? string.Join(", ", ChosenDomains) : "None";
 
+    /// <summary>Check if this character has a specific domain.</summary>
+    public bool HasDomain(string domainName)
+    {
+        if (string.IsNullOrEmpty(domainName) || ChosenDomains == null) return false;
+        for (int i = 0; i < ChosenDomains.Count; i++)
+        {
+            if (string.Equals(ChosenDomains[i], domainName, System.StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Check if this character has the Magic domain.
+    /// D&D 3.5e PHB: "Use spell completion and spell trigger items as a wizard of half your cleric level."
+    /// </summary>
+    public bool HasMagicDomain => HasDomain("Magic");
+
+    /// <summary>
+    /// Get the effective wizard level granted by the Magic domain power.
+    /// D&D 3.5e PHB: cleric level ÷ 2 (integer division, minimum 1 if cleric level > 0).
+    /// Used for caster level checks when using arcane spell completion/trigger items.
+    /// </summary>
+    public int MagicDomainEffectiveWizardLevel
+    {
+        get
+        {
+            if (!HasMagicDomain) return 0;
+            int clericLevel = GetClassLevel("Cleric");
+            if (clericLevel <= 0) return 0;
+            return Mathf.Max(1, clericLevel / 2);
+        }
+    }
+
     // ========== WIZARD SPECIALIZATION & FAMILIAR ==========
     public WizardSpecialization WizardSpecialization = WizardSpecialization.CreateGeneralist();
     public WizardFamiliar WizardFamiliar = WizardFamiliar.CreateNone();

@@ -14,6 +14,13 @@ using UnityEngine;
 ///    - On failure: DC 5 Wisdom check or scroll mishap
 ///
 /// Use Magic Device (DC 20 + scroll CL) can bypass all requirements.
+///
+/// Magic Domain (D&D 3.5e PHB):
+/// A cleric with the Magic domain can use spell completion (scrolls) and spell trigger (wands)
+/// items as if they were a wizard of half their cleric level. This allows them to use arcane
+/// scrolls even if the spell isn't on the cleric list. They still need the requisite INT score
+/// for arcane scrolls (10 + spell level) and may need a caster level check if their effective
+/// wizard level is lower than the scroll's CL.
 /// </summary>
 public static class ScrollValidator
 {
@@ -29,6 +36,7 @@ public static class ScrollValidator
         public string MatchedClassName;     // Which class grants access
         public int CharacterCasterLevel;    // Character's CL for the matched class
         public bool UsedUMD;                // True if UMD was used to bypass requirements
+        public bool UsedMagicDomain;        // True if Magic domain power was used
 
         /// <summary>Format a short summary for combat log.</summary>
         public string GetSummary()
@@ -37,6 +45,13 @@ public static class ScrollValidator
                 return FailureReason ?? "Cannot use this scroll.";
             if (UsedUMD)
                 return $"Using scroll via Use Magic Device.";
+            if (UsedMagicDomain)
+            {
+                string clCheck = NeedsCasterLevelCheck
+                    ? $" Caster level check needed (d20+{CharacterCasterLevel} vs DC {CasterLevelCheckDC})."
+                    : "";
+                return $"Uses Magic domain power to activate arcane scroll as a wizard of level {CharacterCasterLevel}.{clCheck}";
+            }
             if (NeedsCasterLevelCheck)
                 return $"Caster level check needed (d20+{CharacterCasterLevel} vs DC {CasterLevelCheckDC}).";
             return $"Scroll activated as {MatchedClassName} (CL {CharacterCasterLevel}).";
@@ -133,6 +148,27 @@ public static class ScrollValidator
             break;
         }
 
+        // ── Magic Domain check (D&D 3.5e PHB) ──
+        // A cleric with the Magic domain can use arcane spell completion items (scrolls)
+        // as if they were a wizard of half their cleric level. This check runs if no
+        // normal class match was found and the scroll is arcane.
+        bool usedMagicDomain = false;
+        if (matchedClass == null && scrollType == "Arcane" && stats.HasMagicDomain)
+        {
+            int effectiveWizLevel = stats.MagicDomainEffectiveWizardLevel;
+            if (effectiveWizLevel > 0)
+            {
+                // Magic domain treats the cleric as a wizard — check if spell is on wizard list
+                int wizSpellLevel = spell.GetSpellLevelFor("Wizard");
+                if (wizSpellLevel >= 0)
+                {
+                    matchedClass = "Wizard (Magic Domain)";
+                    characterCL = effectiveWizLevel;
+                    usedMagicDomain = true;
+                }
+            }
+        }
+
         if (matchedClass == null)
         {
             // Check if Use Magic Device can help
@@ -149,19 +185,24 @@ public static class ScrollValidator
                 return result;
             }
 
+            string magicDomainHint = stats.HasMagicDomain
+                ? " (Magic domain did not match — spell may not be on the Wizard list)"
+                : "";
             result.FailureReason = $"{stats.CharacterName} cannot use this {scrollType} scroll: " +
-                                   $"the spell is not on any of their class spell lists. " +
+                                   $"the spell is not on any of their class spell lists.{magicDomainHint} " +
                                    $"(Requires: {string.Join("/", classesToCheck)} with this spell, or Use Magic Device skill)";
             return result;
         }
 
         // Step 2: Check requisite ability score (10 + spell level)
+        // For Magic domain using arcane scrolls, the casting stat is INT (wizard's stat)
         int requiredAbilityScore = 10 + scrollSpellLevel;
-        int actualAbilityScore = GetAbilityScore(stats, matchedClass);
+        string effectiveClass = usedMagicDomain ? "Wizard" : matchedClass;
+        int actualAbilityScore = GetAbilityScore(stats, effectiveClass);
 
         if (actualAbilityScore < requiredAbilityScore)
         {
-            string abilityName = CastingAbility.TryGetValue(matchedClass, out string ab) ? ab : "???";
+            string abilityName = CastingAbility.TryGetValue(effectiveClass, out string ab) ? ab : "???";
 
             // Check UMD as fallback
             int umdBonus = stats.GetSkillBonus("Use Magic Device");
@@ -177,9 +218,12 @@ public static class ScrollValidator
                 return result;
             }
 
+            string domainNote = usedMagicDomain
+                ? $" (Magic domain grants wizard access, but requires INT for arcane scrolls)"
+                : "";
             result.FailureReason = $"{stats.CharacterName} needs {abilityName} ≥ {requiredAbilityScore} to use this scroll " +
-                                   $"(current: {actualAbilityScore}). A {matchedClass} needs {abilityName} {requiredAbilityScore} " +
-                                   $"to cast a level-{scrollSpellLevel} spell.";
+                                   $"(current: {actualAbilityScore}).{domainNote} " +
+                                   $"A {effectiveClass} needs {abilityName} {requiredAbilityScore} to cast a level-{scrollSpellLevel} spell.";
             return result;
         }
 
@@ -187,6 +231,7 @@ public static class ScrollValidator
         result.CanUse = true;
         result.MatchedClassName = matchedClass;
         result.CharacterCasterLevel = characterCL;
+        result.UsedMagicDomain = usedMagicDomain;
 
         if (characterCL < scrollCasterLevel)
         {

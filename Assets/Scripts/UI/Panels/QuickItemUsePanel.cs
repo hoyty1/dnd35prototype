@@ -615,6 +615,19 @@ public class QuickItemUsePanel : MonoBehaviour
             parts.Add(entry.Item.ConsumableSpellName);
         }
 
+        // Magic domain indicator for arcane scrolls/wands usable via Magic domain
+        if (_character != null && _character.Stats != null && _character.Stats.HasMagicDomain)
+        {
+            bool isArcaneScroll = entry.Item.IsScroll && string.Equals(entry.Item.ScrollType, "Arcane", StringComparison.OrdinalIgnoreCase);
+            bool isArcaneWand = entry.Item.IsWand; // Wands don't track type — check wizard list instead
+            if (isArcaneScroll || isArcaneWand)
+            {
+                int effWizLvl = _character.Stats.MagicDomainEffectiveWizardLevel;
+                if (effWizLvl > 0)
+                    parts.Add($"✦ Magic Domain (Wiz {effWizLvl})");
+            }
+        }
+
         return string.Join(" · ", parts);
     }
 

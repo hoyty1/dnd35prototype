@@ -5431,6 +5431,12 @@ public partial class GameManager : MonoBehaviour
                 }
             }
 
+            // Log Magic domain usage for healing wands
+            if (wandValidation.UsedMagicDomain)
+            {
+                CombatUI?.ShowCombatLog($"🪄 {actor.Stats.CharacterName} uses Magic domain power to activate arcane wand as a wizard of level {wandValidation.EffectiveWizardLevel}.");
+            }
+
             currentItem.CurrentCharges--;
             string chargeInfo = $" ({currentItem.CurrentCharges}/{currentItem.MaxCharges} charges)";
             string depletedNote = currentItem.CurrentCharges <= 0 ? " ⚠ WAND DEPLETED — now a useless stick!" : "";
@@ -5591,6 +5597,12 @@ public partial class GameManager : MonoBehaviour
         }
         else
         {
+            // Log Magic domain usage
+            if (validation.UsedMagicDomain)
+            {
+                CombatUI?.ShowCombatLog($"📜 {charName} uses Magic domain power to activate arcane scroll as a wizard of level {validation.CharacterCasterLevel}.");
+            }
+
             // Step 3: Caster level check if needed
             if (validation.NeedsCasterLevelCheck)
             {
@@ -5634,9 +5646,13 @@ public partial class GameManager : MonoBehaviour
         if (scrollItem.IsStackable && scrollItem.StackCount > 0)
             scrollStackInfo = $" ({scrollItem.StackCount} remaining)";
 
-        string clInfo = validation.UsedUMD
-            ? "via UMD"
-            : $"as {validation.MatchedClassName} (CL {scrollItem.ConsumableMinimumCasterLevel})";
+        string clInfo;
+        if (validation.UsedUMD)
+            clInfo = "via UMD";
+        else if (validation.UsedMagicDomain)
+            clInfo = $"via Magic domain (effective Wizard CL {validation.CharacterCasterLevel})";
+        else
+            clInfo = $"as {validation.MatchedClassName} (CL {scrollItem.ConsumableMinimumCasterLevel})";
 
         resultMessage = $"📜 {charName} reads {scrollItem.Name} {clInfo}. {spellSummary} Scroll consumed.{scrollStackInfo}";
         return true;
@@ -5686,6 +5702,12 @@ public partial class GameManager : MonoBehaviour
             validation.UsedUMD = true;
         }
 
+        // Log Magic domain usage
+        if (validation.UsedMagicDomain)
+        {
+            CombatUI?.ShowCombatLog($"🪄 {charName} uses Magic domain power to activate arcane wand as a wizard of level {validation.EffectiveWizardLevel}.");
+        }
+
         // Step 3: Apply the spell effect
         string spellSummary;
         if (!TryApplySpellConsumableEffect(actor, wandItem, out spellSummary))
@@ -5703,9 +5725,13 @@ public partial class GameManager : MonoBehaviour
             depletedNote = " ⚠ WAND DEPLETED — now a useless nonmagical stick!";
         }
 
-        string activationInfo = validation.UsedUMD
-            ? "via UMD"
-            : $"as {validation.MatchedClassName} (CL {wandItem.WandCasterLevel})";
+        string activationInfo;
+        if (validation.UsedUMD)
+            activationInfo = "via UMD";
+        else if (validation.UsedMagicDomain)
+            activationInfo = $"via Magic domain (effective Wizard CL {validation.EffectiveWizardLevel})";
+        else
+            activationInfo = $"as {validation.MatchedClassName} (CL {wandItem.WandCasterLevel})";
 
         resultMessage = $"🪄 {charName} activates {wandItem.Name} {activationInfo}. {spellSummary}{chargeInfo}{depletedNote}";
         return true;

@@ -35,7 +35,7 @@ public static class DomainDatabase
             new Dictionary<int, string> { { 1, SpellNames.MAGIC_WEAPON }, { 2, SpellNames.SPIRITUAL_WEAPON } }));
 
         Register(new DomainData("Magic",
-            "Use scrolls, staves, and wands as a wizard of one level higher.",
+            "Use spell completion and spell trigger items (scrolls, wands) as a wizard of half your cleric level.",
             new Dictionary<int, string> { { 1, SpellNames.NYSTULS_MAGIC_AURA }, { 2, SpellNames.IDENTIFY } }));
 
         Register(new DomainData("Knowledge",
