@@ -780,9 +780,16 @@ public class InventoryUI : MonoBehaviour
 
         if (item != null)
         {
-            // Show icon with stack count for stackable items
+            // Show icon with stack count / charge count for stackable items and wands
             string iconText = item.IconChar ?? "";
-            if (item.IsStackable && item.StackCount > 1)
+            if (item.IsWand)
+            {
+                if (item.CurrentCharges <= 0)
+                    iconText = $"{iconText}\n<size=8>empty</size>";
+                else
+                    iconText = $"{iconText}\n<size=8>{item.CurrentCharges}/{item.MaxCharges}</size>";
+            }
+            else if (item.IsStackable && item.StackCount > 1)
                 iconText = $"{iconText}\n<size=9>x{item.StackCount}</size>";
             else if (item.IsAmmunition && item.Quantity > 0)
                 iconText = $"{iconText}\n<size=9>x{item.Quantity}</size>";
@@ -805,7 +812,14 @@ public class InventoryUI : MonoBehaviour
         if (item == null || _tooltipPanel == null) return;
         _tooltipPanel.SetActive(true);
         string tooltipName = item.FullNameWithEnhancement;
-        if (item.IsStackable && item.StackCount > 1)
+        if (item.IsWand)
+        {
+            if (item.CurrentCharges <= 0)
+                tooltipName = $"{tooltipName} [DEPLETED]";
+            else
+                tooltipName = $"{tooltipName} ({item.CurrentCharges}/{item.MaxCharges} charges)";
+        }
+        else if (item.IsStackable && item.StackCount > 1)
             tooltipName = $"{tooltipName} (x{item.StackCount})";
         _tooltipNameText.text = tooltipName;
         _tooltipTypeText.text = item.Type.ToString();

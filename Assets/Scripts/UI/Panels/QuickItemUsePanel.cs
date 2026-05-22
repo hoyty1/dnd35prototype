@@ -29,6 +29,7 @@ public class QuickItemUsePanel : MonoBehaviour
         All,
         Potion,
         Scroll,
+        Wand,
         Alchemical
     }
 
@@ -72,6 +73,7 @@ public class QuickItemUsePanel : MonoBehaviour
     private Button _filterAllBtn;
     private Button _filterPotionBtn;
     private Button _filterScrollBtn;
+    private Button _filterWandBtn;
     private Button _filterAlchemBtn;
 
     // Sort button
@@ -160,29 +162,34 @@ public class QuickItemUsePanel : MonoBehaviour
 
         // Filter buttons row
         y -= 32;
-        float filterBtnW = 90f;
-        float filterSpacing = 8f;
-        float filterTotalW = filterBtnW * 4 + filterSpacing * 3;
+        float filterBtnW = 72f;
+        float filterSpacing = 6f;
+        float filterTotalW = filterBtnW * 5 + filterSpacing * 4;
         float filterStartX = -filterTotalW / 2f + filterBtnW / 2f;
 
         _filterAllBtn = MakeButton(_rootPanel.transform, "FilterAll",
             new Vector2(filterStartX, y), new Vector2(filterBtnW, 24),
-            "All", new Color(0.35f, 0.55f, 0.35f), Color.white, 12);
+            "All", new Color(0.35f, 0.55f, 0.35f), Color.white, 11);
         _filterAllBtn.onClick.AddListener(() => SetFilter(ItemCategory.All));
 
         _filterPotionBtn = MakeButton(_rootPanel.transform, "FilterPotion",
             new Vector2(filterStartX + filterBtnW + filterSpacing, y), new Vector2(filterBtnW, 24),
-            "Potions", new Color(0.55f, 0.25f, 0.25f), Color.white, 12);
+            "Potions", new Color(0.55f, 0.25f, 0.25f), Color.white, 11);
         _filterPotionBtn.onClick.AddListener(() => SetFilter(ItemCategory.Potion));
 
         _filterScrollBtn = MakeButton(_rootPanel.transform, "FilterScroll",
             new Vector2(filterStartX + (filterBtnW + filterSpacing) * 2, y), new Vector2(filterBtnW, 24),
-            "Scrolls", new Color(0.3f, 0.3f, 0.55f), Color.white, 12);
+            "Scrolls", new Color(0.3f, 0.3f, 0.55f), Color.white, 11);
         _filterScrollBtn.onClick.AddListener(() => SetFilter(ItemCategory.Scroll));
 
-        _filterAlchemBtn = MakeButton(_rootPanel.transform, "FilterAlchem",
+        _filterWandBtn = MakeButton(_rootPanel.transform, "FilterWand",
             new Vector2(filterStartX + (filterBtnW + filterSpacing) * 3, y), new Vector2(filterBtnW, 24),
-            "Alchemical", new Color(0.5f, 0.4f, 0.2f), Color.white, 12);
+            "Wands", new Color(0.45f, 0.3f, 0.6f), Color.white, 11);
+        _filterWandBtn.onClick.AddListener(() => SetFilter(ItemCategory.Wand));
+
+        _filterAlchemBtn = MakeButton(_rootPanel.transform, "FilterAlchem",
+            new Vector2(filterStartX + (filterBtnW + filterSpacing) * 4, y), new Vector2(filterBtnW, 24),
+            "Alchemical", new Color(0.5f, 0.4f, 0.2f), Color.white, 11);
         _filterAlchemBtn.onClick.AddListener(() => SetFilter(ItemCategory.Alchemical));
 
         // Sort button (right side)
@@ -320,6 +327,10 @@ public class QuickItemUsePanel : MonoBehaviour
         if (item.IsScroll)
             return ItemCategory.Scroll;
 
+        // Wands: use the IsWand flag (set by WandFactory)
+        if (item.IsWand)
+            return ItemCategory.Wand;
+
         // Potions: use the IsPotion flag (set by PotionFactory), or fallback to name/ID patterns
         if (item.IsPotion)
             return ItemCategory.Potion;
@@ -363,6 +374,10 @@ public class QuickItemUsePanel : MonoBehaviour
         // Scrolls store spell level directly
         if (item.IsScroll)
             return item.ScrollSpellLevel;
+
+        // Wands store spell level directly
+        if (item.IsWand)
+            return item.WandSpellLevel;
 
         if (string.IsNullOrEmpty(item.ConsumableSpellName))
             return -1;
@@ -534,7 +549,14 @@ public class QuickItemUsePanel : MonoBehaviour
 
         // Name (with stack quantity if applicable)
         string displayName = entry.Item.Name ?? "Unknown Item";
-        if (entry.Item.IsStackable && entry.Item.StackCount > 1)
+        if (entry.Item.IsWand)
+        {
+            if (entry.Item.CurrentCharges <= 0)
+                displayName = $"{displayName} [DEPLETED]";
+            else
+                displayName = $"{displayName} ({entry.Item.CurrentCharges}/{entry.Item.MaxCharges})";
+        }
+        else if (entry.Item.IsStackable && entry.Item.StackCount > 1)
             displayName = $"{displayName} (x{entry.Item.StackCount})";
         rowUI.NameText = MakeText(rowUI.Row.transform, "Name",
             new Vector2(-contentW / 2f + 56, 6), new Vector2(contentW - 120, 22),
@@ -617,6 +639,7 @@ public class QuickItemUsePanel : MonoBehaviour
         SetButtonHighlight(_filterAllBtn, _currentFilter == ItemCategory.All);
         SetButtonHighlight(_filterPotionBtn, _currentFilter == ItemCategory.Potion);
         SetButtonHighlight(_filterScrollBtn, _currentFilter == ItemCategory.Scroll);
+        SetButtonHighlight(_filterWandBtn, _currentFilter == ItemCategory.Wand);
         SetButtonHighlight(_filterAlchemBtn, _currentFilter == ItemCategory.Alchemical);
     }
 
@@ -654,6 +677,7 @@ public class QuickItemUsePanel : MonoBehaviour
         {
             case ItemCategory.Potion: return "🧪";
             case ItemCategory.Scroll: return "📜";
+            case ItemCategory.Wand: return "🪄";
             case ItemCategory.Alchemical: return "🔥";
             default: return "•";
         }
@@ -665,6 +689,7 @@ public class QuickItemUsePanel : MonoBehaviour
         {
             case ItemCategory.Potion: return "Potion";
             case ItemCategory.Scroll: return "Scroll";
+            case ItemCategory.Wand: return "Wand";
             case ItemCategory.Alchemical: return "Alchemical";
             default: return "Item";
         }
@@ -676,6 +701,7 @@ public class QuickItemUsePanel : MonoBehaviour
         {
             case ItemCategory.Potion: return new Color(0.8f, 0.2f, 0.2f);     // red
             case ItemCategory.Scroll: return new Color(0.3f, 0.3f, 0.85f);    // blue
+            case ItemCategory.Wand: return new Color(0.6f, 0.35f, 0.8f);      // purple
             case ItemCategory.Alchemical: return new Color(0.8f, 0.6f, 0.15f); // amber
             default: return new Color(0.5f, 0.5f, 0.5f);
         }

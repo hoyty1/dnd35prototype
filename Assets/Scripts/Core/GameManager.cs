@@ -4344,10 +4344,15 @@ public partial class GameManager : MonoBehaviour
 
     private void ResolveConsumableUseProvocation(CharacterController actor, int inventoryIndex, ItemData item)
     {
+        // D&D 3.5e DMG: Wand activation (spell trigger) does NOT provoke AoO.
+        // Only the retrieve-from-stowed action provokes (handled separately).
+        // Scrolls (spell completion) and potions DO provoke.
+        bool wandNoProvoke = item != null && item.IsWand;
+
         var threateningEnemies = ThreatSystem.GetThreateningEnemies(actor.GridPosition, actor, GetAllCharacters());
         threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
 
-        if (threateningEnemies.Count == 0)
+        if (wandNoProvoke || threateningEnemies.Count == 0)
         {
             if (ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string noThreatMessage))
             {
@@ -5367,6 +5372,15 @@ public partial class GameManager : MonoBehaviour
                     return true;
                 }
 
+                // ── Wand validation (D&D 3.5e DMG) ──
+                if (currentItem.IsWand)
+                {
+                    if (!TryUseWand(actor, currentItem, inventoryIndex, out resultMessage))
+                        return false;
+                    // TryUseWand handles charge consumption and message on success
+                    return true;
+                }
+
                 // ── Potion: no class/ability restrictions (D&D 3.5e DMG) ──
                 // Potions can be used by anyone — skip scroll-style validation
                 // Just apply the spell effect directly
@@ -5395,6 +5409,39 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
+        // ── Wand (HealHP path): consume charge instead of removing item ──
+        if (currentItem.IsWand)
+        {
+            // Validate wand usage before consuming charge
+            var wandValidation = WandValidator.Validate(actor, currentItem);
+            if (!wandValidation.CanUse)
+            {
+                resultMessage = $"🪄 {actor.Stats.CharacterName} cannot use {currentItem.Name}: {wandValidation.FailureReason}";
+                return false;
+            }
+
+            if (wandValidation.NeedsUMDCheck)
+            {
+                bool umdPassed = WandValidator.PerformUMDCheck(actor, currentItem, out string umdSummary);
+                CombatUI?.ShowCombatLog($"🪄 {actor.Stats.CharacterName} attempts UMD on {currentItem.Name}: {umdSummary}");
+                if (!umdPassed)
+                {
+                    resultMessage = $"🪄 {umdSummary}";
+                    return false;
+                }
+            }
+
+            currentItem.CurrentCharges--;
+            string chargeInfo = $" ({currentItem.CurrentCharges}/{currentItem.MaxCharges} charges)";
+            string depletedNote = currentItem.CurrentCharges <= 0 ? " ⚠ WAND DEPLETED — now a useless stick!" : "";
+
+            int newCurrentHP = actor.Stats.CurrentHP;
+            int newNonlethal = actor.Stats.NonlethalDamage;
+            int nonlethalHealed = Mathf.Max(nonlethalHealedAmount, Mathf.Max(0, oldNonlethal - newNonlethal));
+            resultMessage = $"🪄 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP}) and removing {nonlethalHealed} nonlethal ({oldNonlethal} → {newNonlethal}).{chargeInfo}{depletedNote}";
+            return true;
+        }
+
         // Handle stacking: decrement stack count instead of removing if stackable with count > 1
         ConsumeOneFromStack(inv, inventoryIndex, currentItem);
 
@@ -5409,10 +5456,10 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        int newCurrentHP = actor.Stats.CurrentHP;
-        int newNonlethal = actor.Stats.NonlethalDamage;
-        int nonlethalHealed = Mathf.Max(nonlethalHealedAmount, Mathf.Max(0, oldNonlethal - newNonlethal));
-        resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP}) and removing {nonlethalHealed} nonlethal ({oldNonlethal} → {newNonlethal}). Item consumed.{stackInfo}";
+        int newCurrentHP2 = actor.Stats.CurrentHP;
+        int newNonlethal2 = actor.Stats.NonlethalDamage;
+        int nonlethalHealed2 = Mathf.Max(nonlethalHealedAmount, Mathf.Max(0, oldNonlethal - newNonlethal2));
+        resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP2}) and removing {nonlethalHealed2} nonlethal ({oldNonlethal} → {newNonlethal2}). Item consumed.{stackInfo}";
         return true;
     }
 
@@ -5592,6 +5639,75 @@ public partial class GameManager : MonoBehaviour
             : $"as {validation.MatchedClassName} (CL {scrollItem.ConsumableMinimumCasterLevel})";
 
         resultMessage = $"📜 {charName} reads {scrollItem.Name} {clInfo}. {spellSummary} Scroll consumed.{scrollStackInfo}";
+        return true;
+    }
+
+    // ==================== WAND USAGE (D&D 3.5e DMG) ====================
+
+    /// <summary>
+    /// Attempts to use a wand, applying D&D 3.5e validation:
+    /// 1. Check if spell is on character's class list (or UMD DC 20)
+    /// 2. No ability score check needed (simpler than scrolls)
+    /// 3. No caster level check needed (wands always fire at wand's CL)
+    /// 4. Apply spell effect on success
+    /// 5. Consume 1 charge (wand stays in inventory; depleted at 0 charges)
+    /// </summary>
+    private bool TryUseWand(CharacterController actor, ItemData wandItem, int inventoryIndex, out string resultMessage)
+    {
+        resultMessage = string.Empty;
+        if (actor == null || actor.Stats == null || wandItem == null || !wandItem.IsWand)
+        {
+            resultMessage = "Invalid wand or character.";
+            return false;
+        }
+
+        string charName = actor.Stats.CharacterName;
+
+        // Step 1: Validate eligibility (class list or UMD)
+        var validation = WandValidator.Validate(actor, wandItem);
+
+        if (!validation.CanUse)
+        {
+            resultMessage = $"🪄 {charName} cannot use {wandItem.Name}: {validation.FailureReason}";
+            return false;
+        }
+
+        // Step 2: Handle UMD path if needed
+        if (validation.NeedsUMDCheck)
+        {
+            bool umdPassed = WandValidator.PerformUMDCheck(actor, wandItem, out string umdSummary);
+            CombatUI?.ShowCombatLog($"🪄 {charName} attempts Use Magic Device on {wandItem.Name}: {umdSummary}");
+
+            if (!umdPassed)
+            {
+                resultMessage = $"🪄 {umdSummary}";
+                return false; // UMD failed — wand charge is NOT consumed on failure
+            }
+            validation.UsedUMD = true;
+        }
+
+        // Step 3: Apply the spell effect
+        string spellSummary;
+        if (!TryApplySpellConsumableEffect(actor, wandItem, out spellSummary))
+        {
+            resultMessage = $"🪄 {charName} activates {wandItem.Name} but the spell fails: {spellSummary}";
+            return false;
+        }
+
+        // Step 4: Consume 1 charge (wand stays in inventory)
+        wandItem.CurrentCharges--;
+        string chargeInfo = $" ({wandItem.CurrentCharges}/{wandItem.MaxCharges} charges)";
+        string depletedNote = "";
+        if (wandItem.CurrentCharges <= 0)
+        {
+            depletedNote = " ⚠ WAND DEPLETED — now a useless nonmagical stick!";
+        }
+
+        string activationInfo = validation.UsedUMD
+            ? "via UMD"
+            : $"as {validation.MatchedClassName} (CL {wandItem.WandCasterLevel})";
+
+        resultMessage = $"🪄 {charName} activates {wandItem.Name} {activationInfo}. {spellSummary}{chargeInfo}{depletedNote}";
         return true;
     }
 

@@ -113,6 +113,9 @@ public class StoreInventory : MonoBehaviour
         // Potions — generated from SpellDatabase by PotionFactory
         PotionFactory.AddPotionsToStore(this);
 
+        // Wands — generated from SpellDatabase by WandFactory
+        WandFactory.AddWandsToStore(this);
+
         Debug.Log($"[Store] Initialized with {_availableItems.Count} items");
     }
 
@@ -209,6 +212,17 @@ public class StoreInventory : MonoBehaviour
     {
         #pragma warning disable CS0618 // Intentional use of string-based Add for dynamic potion IDs
         Add(potionItemId, category, priceGp);
+        #pragma warning restore CS0618
+    }
+
+    /// <summary>
+    /// Public entry point for WandFactory to add wand items to the store.
+    /// Uses string IDs since wands are dynamically generated (no ItemID enum entries).
+    /// </summary>
+    public void AddWandItem(string wandItemId, string category, int priceGp)
+    {
+        #pragma warning disable CS0618 // Intentional use of string-based Add for dynamic wand IDs
+        Add(wandItemId, category, priceGp);
         #pragma warning restore CS0618
     }
 

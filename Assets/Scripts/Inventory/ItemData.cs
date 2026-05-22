@@ -304,6 +304,20 @@ public class ItemData
     /// <summary>The spell level of the potion's spell (0-3). Used for pricing and identification.</summary>
     public int PotionSpellLevel;
 
+    // --- Wand-specific (D&D 3.5e DMG) ---
+    /// <summary>True if this item is a wand. Wands are spell-trigger items requiring class spell list or UMD.</summary>
+    public bool IsWand;
+    /// <summary>Current number of charges remaining (starts at 50 for new wands).</summary>
+    public int CurrentCharges;
+    /// <summary>Maximum charges this wand can hold (always 50 for standard wands).</summary>
+    public int MaxCharges = 50;
+    /// <summary>The spell ID stored in this wand (used for spell resolution).</summary>
+    public string WandSpellId;
+    /// <summary>The caster level at which the wand casts its spell.</summary>
+    public int WandCasterLevel;
+    /// <summary>The spell level of the wand's spell (0-4).</summary>
+    public int WandSpellLevel;
+
     // --- Stackability ---
     /// <summary>Whether this item can stack with identical items in inventory (e.g., scrolls, potions).</summary>
     public bool IsStackable;
@@ -979,7 +993,7 @@ public class ItemData
             else if (ConsumableEffect == ConsumableEffectType.SpellEffect)
             {
                 string spellLabel = string.IsNullOrEmpty(ConsumableSpellName) ? "Unknown Spell" : ConsumableSpellName;
-                string itemTypeLabel = IsPotion ? "Potion" : IsScroll ? "Scroll" : "Spell Effect";
+                string itemTypeLabel = IsWand ? "Wand" : IsPotion ? "Potion" : IsScroll ? "Scroll" : "Spell Effect";
                 stats = $"{itemTypeLabel}: {spellLabel}";
 
                 if (ConsumableModifier != 0)
@@ -988,7 +1002,15 @@ public class ItemData
                 if (ConsumableMinimumCasterLevel > 0)
                     stats += $"\nCaster Level: {ConsumableMinimumCasterLevel}";
 
-                if (IsPotion)
+                if (IsWand)
+                {
+                    string chargeStatus = CurrentCharges > 0
+                        ? $"{CurrentCharges}/{MaxCharges} charges"
+                        : "DEPLETED (0 charges)";
+                    stats += $"\nCharges: {chargeStatus}";
+                    stats += $"\nSpell Level: {WandSpellLevel} | Spell trigger (class list or UMD DC 20)";
+                }
+                else if (IsPotion)
                     stats += $"\nSpell Level: {PotionSpellLevel} | No class restrictions";
             }
             else if (HealAmount > 0)
