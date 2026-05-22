@@ -107,6 +107,9 @@ public class StoreInventory : MonoBehaviour
         Add(ItemID.GearRopeHemp, "Gear", 1);
         Add(ItemID.GearRopeSilk, "Gear", 10);
 
+        // Scrolls — generated from SpellDatabase by ScrollFactory
+        ScrollFactory.AddScrollsToStore(this);
+
         Debug.Log($"[Store] Initialized with {_availableItems.Count} items");
     }
 
@@ -182,6 +185,17 @@ public class StoreInventory : MonoBehaviour
         });
 
         _priceLookup[itemId] = normalizedPrice;
+    }
+
+    /// <summary>
+    /// Public entry point for ScrollFactory to add scroll items to the store.
+    /// Uses string IDs since scrolls are dynamically generated (no ItemID enum entries).
+    /// </summary>
+    public void AddScrollItem(string scrollItemId, string category, int priceGp)
+    {
+        #pragma warning disable CS0618 // Intentional use of string-based Add for dynamic scroll IDs
+        Add(scrollItemId, category, priceGp);
+        #pragma warning restore CS0618
     }
 
     public List<StoreItemEntry> GetItemsByCategory(string category)

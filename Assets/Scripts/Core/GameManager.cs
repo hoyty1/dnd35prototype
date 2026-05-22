@@ -5358,6 +5358,15 @@ public partial class GameManager : MonoBehaviour
             }
             case ConsumableEffectType.SpellEffect:
             {
+                // ── Scroll validation (D&D 3.5e DMG) ──
+                if (currentItem.IsScroll)
+                {
+                    if (!TryUseScroll(actor, currentItem, inventoryIndex, out resultMessage))
+                        return false;
+                    // TryUseScroll handles item removal and message on success
+                    return true;
+                }
+
                 if (!TryApplySpellConsumableEffect(actor, currentItem, out spellSummary))
                 {
                     resultMessage = spellSummary;
@@ -5457,6 +5466,100 @@ public partial class GameManager : MonoBehaviour
 
         summary = $"{consumableSpell.Name} is not supported for consumable use yet.";
         return false;
+    }
+
+    // ==================== SCROLL USAGE (D&D 3.5e DMG) ====================
+
+    /// <summary>
+    /// Attempts to use a spell scroll, applying full D&D 3.5e validation:
+    /// 1. Check if spell is on character's class list (or UMD)
+    /// 2. Check requisite ability score
+    /// 3. Perform caster level check if character CL < scroll CL
+    /// 4. Handle scroll mishap on failed CL check + failed Wis check
+    /// 5. Apply spell effect on success
+    /// 6. Consume scroll
+    /// </summary>
+    private bool TryUseScroll(CharacterController actor, ItemData scrollItem, int inventoryIndex, out string resultMessage)
+    {
+        resultMessage = string.Empty;
+        if (actor == null || actor.Stats == null || scrollItem == null || !scrollItem.IsScroll)
+        {
+            resultMessage = "Invalid scroll or character.";
+            return false;
+        }
+
+        string charName = actor.Stats.CharacterName;
+        var inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+
+        // Step 1: Validate eligibility
+        var validation = ScrollValidator.Validate(actor, scrollItem);
+
+        if (!validation.CanUse)
+        {
+            resultMessage = $"📜 {charName} cannot use {scrollItem.Name}: {validation.FailureReason}";
+            return false;
+        }
+
+        // Step 2: Handle UMD path
+        if (validation.UsedUMD)
+        {
+            bool umdPassed = ScrollValidator.PerformUMDCheck(actor, scrollItem, out string umdSummary);
+            CombatUI?.ShowCombatLog($"📜 {charName} attempts Use Magic Device on {scrollItem.Name}: {umdSummary}");
+
+            if (!umdPassed)
+            {
+                resultMessage = $"📜 {umdSummary}";
+                return false; // UMD failed — scroll is preserved, no effect
+            }
+            // UMD passed — proceed to apply effect (no CL check needed for UMD)
+        }
+        else
+        {
+            // Step 3: Caster level check if needed
+            if (validation.NeedsCasterLevelCheck)
+            {
+                var clCheck = ScrollValidator.PerformCasterLevelCheck(actor, scrollItem, validation.CharacterCasterLevel);
+                CombatUI?.ShowCombatLog($"📜 {charName} attempts caster level check: {clCheck.Summary}");
+
+                if (!clCheck.Success)
+                {
+                    if (clCheck.Mishap)
+                    {
+                        // Scroll mishap: deal damage and consume scroll
+                        actor.Stats.TakeDamage(clCheck.MishapDamage);
+                        if (inv != null) inv.RemoveItemAt(inventoryIndex);
+                        UpdateAllStatsUI();
+                        resultMessage = $"📜 SCROLL MISHAP! {charName} takes {clCheck.MishapDamage} damage from uncontrolled magical energy! Scroll destroyed.";
+                        return true; // Return true so the calling code doesn't show a second error
+                    }
+                    else
+                    {
+                        // CL check failed but no mishap — scroll preserved
+                        resultMessage = $"📜 {charName} fails to activate {scrollItem.Name}. {clCheck.Summary}";
+                        return false;
+                    }
+                }
+                // CL check passed — proceed to apply effect
+            }
+        }
+
+        // Step 4: Apply the spell effect
+        string spellSummary;
+        if (!TryApplySpellConsumableEffect(actor, scrollItem, out spellSummary))
+        {
+            resultMessage = $"📜 {charName} reads {scrollItem.Name} but the spell fails: {spellSummary}";
+            return false;
+        }
+
+        // Step 5: Consume the scroll
+        if (inv != null) inv.RemoveItemAt(inventoryIndex);
+
+        string clInfo = validation.UsedUMD
+            ? "via UMD"
+            : $"as {validation.MatchedClassName} (CL {scrollItem.ConsumableMinimumCasterLevel})";
+
+        resultMessage = $"📜 {charName} reads {scrollItem.Name} {clInfo}. {spellSummary} Scroll consumed.";
+        return true;
     }
 
     private static SpellData BuildConsumableSpellVariant(SpellData baseSpell, ItemData item)

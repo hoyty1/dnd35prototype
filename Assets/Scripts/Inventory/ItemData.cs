@@ -290,6 +290,14 @@ public class ItemData
     public int HealDiceSides;   // Sides per healing die (e.g., 8 for 1d8)
     public int HealBonus;       // Flat healing bonus (e.g., +1)
 
+    // --- Scroll-specific (D&D 3.5e DMG) ---
+    /// <summary>True if this consumable is a spell scroll. Enables scroll validation rules.</summary>
+    public bool IsScroll;
+    /// <summary>Arcane or Divine scroll type. Determines which caster types can use it natively.</summary>
+    public string ScrollType;   // "Arcane" or "Divine"
+    /// <summary>The spell level on the scroll (0-9). Used for validation and pricing.</summary>
+    public int ScrollSpellLevel;
+
     // --- Visual ---
     public string IconChar;     // Unicode/emoji character for display (fallback icon)
     public Color IconColor;     // Color tint for the icon

@@ -316,6 +316,10 @@ public class QuickItemUsePanel : MonoBehaviour
     {
         if (item == null) return ItemCategory.Alchemical;
 
+        // Scrolls: use the IsScroll flag (set by ScrollFactory), or fallback to name/ID patterns
+        if (item.IsScroll)
+            return ItemCategory.Scroll;
+
         string nameLower = (item.Name ?? "").ToLowerInvariant();
         string idLower = (item.Id ?? "").ToLowerInvariant();
 
@@ -324,7 +328,7 @@ public class QuickItemUsePanel : MonoBehaviour
             || idLower.Contains("potion_") || idLower.Contains("oil_"))
             return ItemCategory.Potion;
 
-        // Scrolls: name starts with "Scroll" or ID contains "scroll_"
+        // Scrolls: fallback name pattern
         if (nameLower.StartsWith("scroll") || idLower.Contains("scroll_"))
             return ItemCategory.Scroll;
 
@@ -350,14 +354,20 @@ public class QuickItemUsePanel : MonoBehaviour
     /// </summary>
     private int GetSpellLevel(ItemData item)
     {
-        if (item == null || string.IsNullOrEmpty(item.ConsumableSpellName))
+        if (item == null) return -1;
+
+        // Scrolls store spell level directly
+        if (item.IsScroll)
+            return item.ScrollSpellLevel;
+
+        if (string.IsNullOrEmpty(item.ConsumableSpellName))
             return -1;
 
         SpellDatabase.Init();
         SpellData spell = SpellDatabase.GetSpell(item.ConsumableSpellName);
         if (spell == null) return -1;
 
-        return spell.Level;
+        return spell.SpellLevel;
     }
 
     // ========== FILTER / SORT ==========
