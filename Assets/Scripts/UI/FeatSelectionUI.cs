@@ -31,8 +31,39 @@ public class FeatSelectionUI : MonoBehaviour
     private string _searchText = "";
 
     // ========== WEAPON CHOICE STATE ==========
-    /// <summary>The weapon chosen for Weapon Focus (and related feats) during this selection session.</summary>
-    public string SelectedWeaponFocusChoice { get; private set; } = "";
+    /// <summary>
+    /// All weapons chosen for weapon-choice feats during this selection session.
+    /// Maps feat name → weapon name (e.g., "Weapon Focus" → "Longsword").
+    /// Multiple entries are possible when taking the same feat for different weapons.
+    /// </summary>
+    public Dictionary<string, List<string>> SelectedWeaponChoices { get; private set; } = new Dictionary<string, List<string>>();
+
+    /// <summary>Backward-compatible: returns the first Weapon Focus weapon chosen this session (or "").</summary>
+    public string SelectedWeaponFocusChoice
+    {
+        get
+        {
+            // Collect all weapon choices across all weapon-choice feats
+            foreach (var kvp in SelectedWeaponChoices)
+            {
+                if (kvp.Value != null && kvp.Value.Count > 0)
+                    return kvp.Value[0];
+            }
+            return "";
+        }
+    }
+
+    /// <summary>Get all weapons selected for weapon-choice feats this session (flat list).</summary>
+    public List<string> GetAllSelectedWeapons()
+    {
+        var all = new List<string>();
+        foreach (var kvp in SelectedWeaponChoices)
+        {
+            if (kvp.Value != null) all.AddRange(kvp.Value);
+        }
+        return all;
+    }
+
     private string _pendingWeaponFeatName = ""; // feat waiting for weapon pick
     private GameObject _weaponPickerOverlay;
     private GameObject _weaponPickerContent;
@@ -349,7 +380,7 @@ public class FeatSelectionUI : MonoBehaviour
         _monkBonusFeatList = null;
         _wizardBonusFeatList = null;
         _selectedFeats.Clear();
-        SelectedWeaponFocusChoice = "";
+        SelectedWeaponChoices.Clear();
         _pendingWeaponFeatName = "";
         _filterType = "All";
         _searchText = "";
@@ -580,7 +611,18 @@ public class FeatSelectionUI : MonoBehaviour
         bool meetsPrereqs = _isMonkBonus ? true : MeetsPrerequisitesWithSelectedFeats(feat);
         bool alreadyHas = !feat.CanTakeMultiple && _stats.HasFeat(feat.FeatName);
         bool isSelected = _selectedFeats.Contains(feat.FeatName);
-        bool canSelect = meetsPrereqs && !alreadyHas && !isSelected;
+
+        // For CanTakeMultiple weapon-choice feats (Weapon Focus, etc.):
+        // "isSelected" is true if at least one instance is selected, but the feat can still be
+        // selected again for a DIFFERENT weapon (if there are proficient weapons left to pick).
+        bool canSelectAgain = false;
+        if (feat.CanTakeMultiple && feat.Benefit != null && feat.Benefit.RequiresWeaponChoice && isSelected)
+        {
+            // Can select again if there are unused proficient weapons and feat slots remaining
+            canSelectAgain = _selectedFeats.Count < _featsToSelect && HasUnusedProficientWeapons(feat.FeatName);
+        }
+
+        bool canSelect = meetsPrereqs && !alreadyHas && (!isSelected || canSelectAgain);
 
         // If fighter bonus only, also check that
         if (_isFighterBonus && !feat.IsFighterBonus)
@@ -632,7 +674,8 @@ public class FeatSelectionUI : MonoBehaviour
         // Select/deselect button
         string btnLabel;
         Color btnColor;
-        if (isSelected) { btnLabel = "Remove"; btnColor = new Color(0.6f, 0.3f, 0.3f, 1f); }
+        if (isSelected && canSelectAgain) { btnLabel = "Add +"; btnColor = new Color(0.3f, 0.5f, 0.3f, 1f); }
+        else if (isSelected) { btnLabel = "Remove"; btnColor = new Color(0.6f, 0.3f, 0.3f, 1f); }
         else if (canSelect) { btnLabel = "Select"; btnColor = COLOR_BUTTON; }
         else if (alreadyHas) { btnLabel = "Has"; btnColor = COLOR_BUTTON_DISABLED; }
         else { btnLabel = "Locked"; btnColor = COLOR_BUTTON_DISABLED; }
@@ -687,13 +730,35 @@ public class FeatSelectionUI : MonoBehaviour
 
     private void OnSelectClicked(string featName)
     {
-        if (_selectedFeats.Contains(featName))
+        var feat = FeatDefinitions.GetFeat(featName);
+        bool isAlreadySelected = _selectedFeats.Contains(featName);
+        bool isWeaponChoiceFeat = feat != null && feat.Benefit != null && feat.Benefit.RequiresWeaponChoice;
+        bool canTakeMultiple = feat != null && feat.CanTakeMultiple;
+
+        // For CanTakeMultiple weapon-choice feats that are already selected:
+        // Clicking the button means "add another instance" (for a different weapon)
+        if (isAlreadySelected && canTakeMultiple && isWeaponChoiceFeat)
+        {
+            // Check if we have room for another feat and unused weapons exist
+            if (_selectedFeats.Count < _featsToSelect && HasUnusedProficientWeapons(featName))
+            {
+                _pendingWeaponFeatName = featName;
+                ShowWeaponPicker();
+                return;
+            }
+            else
+            {
+                // Remove last instance instead (acts as toggle when maxed out)
+                RemoveLastWeaponChoice(featName);
+                Debug.Log($"[FeatSelectionUI] Deselected last instance: {featName}");
+            }
+        }
+        else if (isAlreadySelected)
         {
             _selectedFeats.Remove(featName);
-            // Clear weapon choice if removing the weapon-choice feat
-            var removedFeat = FeatDefinitions.GetFeat(featName);
-            if (removedFeat != null && removedFeat.Benefit != null && removedFeat.Benefit.RequiresWeaponChoice)
-                SelectedWeaponFocusChoice = "";
+            // Remove associated weapon choice if this is a weapon-choice feat
+            if (isWeaponChoiceFeat)
+                RemoveLastWeaponChoice(featName);
             Debug.Log($"[FeatSelectionUI] Deselected: {featName}");
         }
         else
@@ -704,9 +769,7 @@ public class FeatSelectionUI : MonoBehaviour
                 return;
             }
 
-            var feat = FeatDefinitions.GetFeat(featName);
-            if (feat == null)
-                return;
+            if (feat == null) return;
 
             if (!_isMonkBonus && !MeetsPrerequisitesWithSelectedFeats(feat))
             {
@@ -719,7 +782,7 @@ public class FeatSelectionUI : MonoBehaviour
             }
 
             // If this feat requires a weapon choice (Weapon Focus, etc.), show the weapon picker
-            if (feat.Benefit != null && feat.Benefit.RequiresWeaponChoice)
+            if (isWeaponChoiceFeat)
             {
                 _pendingWeaponFeatName = featName;
                 ShowWeaponPicker();
@@ -732,6 +795,21 @@ public class FeatSelectionUI : MonoBehaviour
 
         UpdateSelectedDisplay();
         RefreshFeatList();
+    }
+
+    /// <summary>Remove the most recent weapon choice for a feat and remove one instance from _selectedFeats.</summary>
+    private void RemoveLastWeaponChoice(string featName)
+    {
+        if (SelectedWeaponChoices.ContainsKey(featName) && SelectedWeaponChoices[featName].Count > 0)
+        {
+            string removed = SelectedWeaponChoices[featName][SelectedWeaponChoices[featName].Count - 1];
+            SelectedWeaponChoices[featName].RemoveAt(SelectedWeaponChoices[featName].Count - 1);
+            if (SelectedWeaponChoices[featName].Count == 0)
+                SelectedWeaponChoices.Remove(featName);
+            Debug.Log($"[FeatSelectionUI] Removed weapon choice '{removed}' for {featName}");
+        }
+        // Remove one instance of the feat name from _selectedFeats
+        _selectedFeats.Remove(featName);
     }
 
     private void OnFilterClicked(string filter)
@@ -812,15 +890,26 @@ public class FeatSelectionUI : MonoBehaviour
         else
         {
             string sel = "";
+            // Track which weapon-choice index we're at per feat name
+            var weaponIdx = new Dictionary<string, int>();
             for (int i = 0; i < _selectedFeats.Count; i++)
             {
-                string displayName = _selectedFeats[i];
+                string featName = _selectedFeats[i];
+                string displayName = featName;
+
                 // Show weapon choice next to weapon-choice feats
-                var fd = FeatDefinitions.GetFeat(displayName);
+                var fd = FeatDefinitions.GetFeat(featName);
                 if (fd != null && fd.Benefit != null && fd.Benefit.RequiresWeaponChoice
-                    && !string.IsNullOrEmpty(SelectedWeaponFocusChoice))
+                    && SelectedWeaponChoices.ContainsKey(featName))
                 {
-                    displayName += $" ({SelectedWeaponFocusChoice})";
+                    if (!weaponIdx.ContainsKey(featName)) weaponIdx[featName] = 0;
+                    int idx = weaponIdx[featName];
+                    var weaponList = SelectedWeaponChoices[featName];
+                    if (idx < weaponList.Count)
+                    {
+                        displayName += $" ({weaponList[idx]})";
+                        weaponIdx[featName] = idx + 1;
+                    }
                 }
                 sel += $"• {displayName}\n";
             }
@@ -874,7 +963,7 @@ public class FeatSelectionUI : MonoBehaviour
     // WEAPON PICKER
     // ========================================================================
 
-    /// <summary>Show the weapon picker popup with all weapons the character is proficient with.</summary>
+    /// <summary>Show the weapon picker popup with proficient weapons not yet chosen for this feat.</summary>
     private void ShowWeaponPicker()
     {
         if (_weaponPickerOverlay == null || _weaponPickerContent == null) return;
@@ -883,15 +972,31 @@ public class FeatSelectionUI : MonoBehaviour
         for (int i = _weaponPickerContent.transform.childCount - 1; i >= 0; i--)
             Destroy(_weaponPickerContent.transform.GetChild(i).gameObject);
 
-        // Build list of proficient weapons + Unarmed Strike
+        // Gather weapons already chosen for this feat (both this session and on the character)
+        var alreadyChosen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // From this selection session
+        if (SelectedWeaponChoices.ContainsKey(_pendingWeaponFeatName))
+        {
+            foreach (string w in SelectedWeaponChoices[_pendingWeaponFeatName])
+                alreadyChosen.Add(w);
+        }
+        // From the character's existing weapon focus list (across all feats sharing the pool)
+        if (_stats != null && _stats.WeaponFocusWeapons != null)
+        {
+            foreach (string w in _stats.WeaponFocusWeapons)
+                alreadyChosen.Add(w);
+        }
+
+        // Build list of proficient weapons + Unarmed Strike, excluding already-chosen
         ItemDatabase.Init();
         var weapons = new List<string>();
-        weapons.Add("Unarmed Strike");
+        if (!alreadyChosen.Contains("Unarmed Strike"))
+            weapons.Add("Unarmed Strike");
 
         foreach (var item in ItemDatabase.AllItems)
         {
             if (item == null || item.Type != ItemType.Weapon) continue;
-            if (_stats != null && _stats.IsProficientWithWeapon(item))
+            if (_stats != null && _stats.IsProficientWithWeapon(item) && !alreadyChosen.Contains(item.Name))
                 weapons.Add(item.Name);
         }
 
@@ -901,6 +1006,15 @@ public class FeatSelectionUI : MonoBehaviour
             if (b == "Unarmed Strike") return 1;
             return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
         });
+
+        if (weapons.Count == 0)
+        {
+            Debug.LogWarning($"[FeatSelectionUI] No unused proficient weapons available for {_pendingWeaponFeatName}");
+            if (_featDetailText != null)
+                _featDetailText.text = $"<color=#FF6666>No unused proficient weapons available for {_pendingWeaponFeatName}.</color>";
+            _pendingWeaponFeatName = "";
+            return;
+        }
 
         float rowH = 28f;
         for (int i = 0; i < weapons.Count; i++)
@@ -937,17 +1051,21 @@ public class FeatSelectionUI : MonoBehaviour
 
         _weaponPickerOverlay.SetActive(true);
         _weaponPickerOverlay.transform.SetAsLastSibling();
-        Debug.Log($"[FeatSelectionUI] Weapon picker opened for '{_pendingWeaponFeatName}': {weapons.Count} weapons listed");
+        Debug.Log($"[FeatSelectionUI] Weapon picker opened for '{_pendingWeaponFeatName}': " +
+                  $"{weapons.Count} weapons (excluded {alreadyChosen.Count} already chosen)");
     }
 
     private void OnWeaponPicked(string weaponName)
     {
-        SelectedWeaponFocusChoice = weaponName;
         Debug.Log($"[FeatSelectionUI] Weapon chosen: {weaponName} for feat '{_pendingWeaponFeatName}'");
 
-        // Now complete the feat selection
+        // Store weapon choice for this feat
         if (!string.IsNullOrEmpty(_pendingWeaponFeatName))
         {
+            if (!SelectedWeaponChoices.ContainsKey(_pendingWeaponFeatName))
+                SelectedWeaponChoices[_pendingWeaponFeatName] = new List<string>();
+            SelectedWeaponChoices[_pendingWeaponFeatName].Add(weaponName);
+
             _selectedFeats.Add(_pendingWeaponFeatName);
             _pendingWeaponFeatName = "";
         }
@@ -962,6 +1080,35 @@ public class FeatSelectionUI : MonoBehaviour
         if (_weaponPickerOverlay != null)
             _weaponPickerOverlay.SetActive(false);
         _pendingWeaponFeatName = "";
+    }
+
+    /// <summary>Check if there are proficient weapons not yet chosen for a given feat name.</summary>
+    private bool HasUnusedProficientWeapons(string featName)
+    {
+        var alreadyChosen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (SelectedWeaponChoices.ContainsKey(featName))
+        {
+            foreach (string w in SelectedWeaponChoices[featName])
+                alreadyChosen.Add(w);
+        }
+        if (_stats != null && _stats.WeaponFocusWeapons != null)
+        {
+            foreach (string w in _stats.WeaponFocusWeapons)
+                alreadyChosen.Add(w);
+        }
+
+        // Check Unarmed Strike
+        if (!alreadyChosen.Contains("Unarmed Strike"))
+            return true;
+
+        ItemDatabase.Init();
+        foreach (var item in ItemDatabase.AllItems)
+        {
+            if (item == null || item.Type != ItemType.Weapon) continue;
+            if (_stats != null && _stats.IsProficientWithWeapon(item) && !alreadyChosen.Contains(item.Name))
+                return true;
+        }
+        return false;
     }
 
     // ========================================================================

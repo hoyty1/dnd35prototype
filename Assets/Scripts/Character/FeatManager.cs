@@ -160,31 +160,37 @@ public static class FeatManager
     }
 
     /// <summary>
-    /// Check if a weapon name matches the character's Weapon Focus choice.
+    /// Check if a weapon name matches ANY of the character's Weapon Focus choices.
+    /// D&D 3.5e: Weapon Focus can be taken multiple times for different weapons.
     /// Handles various naming conventions (e.g., "Mace, Heavy" matches "Mace, Heavy",
     /// "Bite" for natural weapons, composite weapon variants like "Composite Longbow (+2)").
     /// </summary>
     public static bool IsWeaponFocusMatch(CharacterStats stats, string weaponName)
     {
-        if (stats == null || string.IsNullOrWhiteSpace(stats.WeaponFocusChoice))
+        if (stats == null || stats.WeaponFocusWeapons == null || stats.WeaponFocusWeapons.Count == 0)
             return false;
         if (string.IsNullOrWhiteSpace(weaponName))
             return false;
 
-        string choice = stats.WeaponFocusChoice.Trim();
         string weapon = weaponName.Trim();
-
-        // Exact match (case-insensitive)
-        if (string.Equals(choice, weapon, System.StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        // Handle composite variants: "Composite Longbow (+2)" should match "Composite Longbow"
-        // and "Longbow" focus should match "Composite Longbow" (same weapon group in 3.5e)
-        string normalizedChoice = NormalizeWeaponName(choice);
         string normalizedWeapon = NormalizeWeaponName(weapon);
 
-        if (string.Equals(normalizedChoice, normalizedWeapon, System.StringComparison.OrdinalIgnoreCase))
-            return true;
+        for (int i = 0; i < stats.WeaponFocusWeapons.Count; i++)
+        {
+            string choice = stats.WeaponFocusWeapons[i];
+            if (string.IsNullOrWhiteSpace(choice)) continue;
+
+            choice = choice.Trim();
+
+            // Exact match (case-insensitive)
+            if (string.Equals(choice, weapon, System.StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // Normalized match: handles composite variants, enhancement notation
+            string normalizedChoice = NormalizeWeaponName(choice);
+            if (string.Equals(normalizedChoice, normalizedWeapon, System.StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
 
         return false;
     }
@@ -444,13 +450,19 @@ public static class FeatManager
     {
         var lines = new List<string>();
 
-        // Attack bonuses (display using chosen weapon name)
-        string wfWeapon = !string.IsNullOrWhiteSpace(stats.WeaponFocusChoice) ? stats.WeaponFocusChoice : "";
-        int wfBonus = GetWeaponFocusBonus(stats, wfWeapon);
-        if (wfBonus > 0) lines.Add($"Weapon Focus ({wfWeapon}): +{wfBonus} attack");
+        // Attack bonuses — show each Weapon Focus weapon separately
+        if (stats.WeaponFocusWeapons != null && stats.WeaponFocusWeapons.Count > 0)
+        {
+            foreach (string wfWeapon in stats.WeaponFocusWeapons)
+            {
+                if (string.IsNullOrWhiteSpace(wfWeapon)) continue;
+                int wfBonus = GetWeaponFocusBonus(stats, wfWeapon);
+                if (wfBonus > 0) lines.Add($"Weapon Focus ({wfWeapon}): +{wfBonus} attack");
 
-        int wsBonus = GetWeaponSpecializationBonus(stats, wfWeapon);
-        if (wsBonus > 0) lines.Add($"Weapon Spec ({wfWeapon}): +{wsBonus} damage");
+                int wsBonus = GetWeaponSpecializationBonus(stats, wfWeapon);
+                if (wsBonus > 0) lines.Add($"Weapon Spec ({wfWeapon}): +{wsBonus} damage");
+            }
+        }
 
         if (stats.HasFeat("Weapon Finesse")) lines.Add("Weapon Finesse: DEX to attack");
 

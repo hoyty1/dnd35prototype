@@ -1890,8 +1890,20 @@ public partial class GameManager : MonoBehaviour
                 stats.AddFeats(data.BonusFeats);
                 Debug.Log($"[GameManager] {data.CharacterName} bonus feats: {string.Join(", ", data.BonusFeats)}");
             }
-            if (!string.IsNullOrEmpty(data.WeaponFocusChoice))
+            // Apply weapon focus weapons from creation data (list-based)
+            if (data.WeaponFocusWeapons != null && data.WeaponFocusWeapons.Count > 0)
+            {
+                foreach (string w in data.WeaponFocusWeapons)
+                {
+                    if (!string.IsNullOrWhiteSpace(w) && !stats.WeaponFocusWeapons.Contains(w))
+                        stats.WeaponFocusWeapons.Add(w);
+                }
+            }
+            else if (!string.IsNullOrEmpty(data.WeaponFocusChoice))
+            {
+                // Legacy single-weapon path (quickstart presets)
                 stats.WeaponFocusChoice = data.WeaponFocusChoice;
+            }
             if (!string.IsNullOrEmpty(data.SkillFocusChoice))
                 stats.SkillFocusChoice = data.SkillFocusChoice;
 
@@ -1999,9 +2011,10 @@ public partial class GameManager : MonoBehaviour
             Debug.Log($"[GameManager] War domain: granted Weapon Focus to {stats.CharacterName}");
         }
 
-        // Set weapon focus to deity's favored weapon (War domain overrides any previous choice)
-        stats.WeaponFocusChoice = favoredWeapon;
-        Debug.Log($"[GameManager] War domain: {stats.CharacterName} Weapon Focus set to {favoredWeapon} ({deity.Name}'s favored weapon)");
+        // Add deity's favored weapon to Weapon Focus weapons list
+        if (!stats.WeaponFocusWeapons.Contains(favoredWeapon))
+            stats.WeaponFocusWeapons.Add(favoredWeapon);
+        Debug.Log($"[GameManager] War domain: {stats.CharacterName} Weapon Focus added {favoredWeapon} ({deity.Name}'s favored weapon)");
 
         // Grant martial weapon proficiency for the favored weapon if needed.
         // Clerics already have simple weapon proficiency; if the favored weapon is martial,

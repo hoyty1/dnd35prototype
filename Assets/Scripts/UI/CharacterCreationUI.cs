@@ -1506,11 +1506,18 @@ public class CharacterCreationUI : MonoBehaviour
         var data = CreatedCharacters[CurrentCharacterIndex];
         data.SelectedFeats = new List<string>(feats);
 
-        // Capture weapon choice from feat UI (Weapon Focus, etc.)
-        if (FeatUI != null && !string.IsNullOrEmpty(FeatUI.SelectedWeaponFocusChoice))
+        // Capture weapon choices from feat UI (Weapon Focus, etc.)
+        if (FeatUI != null)
         {
-            data.WeaponFocusChoice = FeatUI.SelectedWeaponFocusChoice;
-            Debug.Log($"[CharCreation] Weapon Focus weapon: {data.WeaponFocusChoice}");
+            var allWeapons = FeatUI.GetAllSelectedWeapons();
+            if (allWeapons.Count > 0)
+            {
+                data.WeaponFocusWeapons.AddRange(allWeapons);
+                // Also set legacy single field for backward compat
+                if (string.IsNullOrEmpty(data.WeaponFocusChoice) && allWeapons.Count > 0)
+                    data.WeaponFocusChoice = allWeapons[0];
+                Debug.Log($"[CharCreation] Weapon Focus weapons: {string.Join(", ", allWeapons)}");
+            }
         }
 
         Debug.Log($"[CharCreation] General feats selected: {string.Join(", ", feats)}");
@@ -1615,11 +1622,17 @@ public class CharacterCreationUI : MonoBehaviour
         var data = CreatedCharacters[CurrentCharacterIndex];
         data.BonusFeats = new List<string>(feats);
 
-        // Capture weapon choice from bonus feat selection (Fighter bonus Weapon Focus, etc.)
-        if (FeatUI != null && !string.IsNullOrEmpty(FeatUI.SelectedWeaponFocusChoice))
+        // Capture weapon choices from bonus feat selection (Fighter bonus Weapon Focus, etc.)
+        if (FeatUI != null)
         {
-            data.WeaponFocusChoice = FeatUI.SelectedWeaponFocusChoice;
-            Debug.Log($"[CharCreation] Weapon Focus weapon (bonus): {data.WeaponFocusChoice}");
+            var allWeapons = FeatUI.GetAllSelectedWeapons();
+            if (allWeapons.Count > 0)
+            {
+                data.WeaponFocusWeapons.AddRange(allWeapons);
+                if (string.IsNullOrEmpty(data.WeaponFocusChoice) && allWeapons.Count > 0)
+                    data.WeaponFocusChoice = allWeapons[0];
+                Debug.Log($"[CharCreation] Weapon Focus weapons (bonus): {string.Join(", ", allWeapons)}");
+            }
         }
 
         Debug.Log($"[CharCreation] Bonus feats selected: {string.Join(", ", feats)}");
@@ -2095,7 +2108,12 @@ public class CharacterCreationUI : MonoBehaviour
                 foreach (string feat in data.BonusFeats)
                     review += $"  • {feat}\n";
             }
-            if (!string.IsNullOrEmpty(data.WeaponFocusChoice))
+            if (data.WeaponFocusWeapons != null && data.WeaponFocusWeapons.Count > 0)
+            {
+                foreach (string w in data.WeaponFocusWeapons)
+                    review += $"  Weapon Focus: {w}\n";
+            }
+            else if (!string.IsNullOrEmpty(data.WeaponFocusChoice))
                 review += $"  Weapon Focus: {data.WeaponFocusChoice}\n";
             if (!string.IsNullOrEmpty(data.SkillFocusChoice))
                 review += $"  Skill Focus: {data.SkillFocusChoice}\n";
@@ -3111,7 +3129,12 @@ public class CharacterCreationUI : MonoBehaviour
                 foreach (string feat in data.BonusFeats)
                     s += $"  • {feat}\n";
             }
-            if (!string.IsNullOrEmpty(data.WeaponFocusChoice))
+            if (data.WeaponFocusWeapons != null && data.WeaponFocusWeapons.Count > 0)
+            {
+                foreach (string w in data.WeaponFocusWeapons)
+                    s += $"  Weapon Focus: {w}\n";
+            }
+            else if (!string.IsNullOrEmpty(data.WeaponFocusChoice))
                 s += $"  Weapon Focus: {data.WeaponFocusChoice}\n";
             if (!string.IsNullOrEmpty(data.SkillFocusChoice))
                 s += $"  Skill Focus: {data.SkillFocusChoice}\n";

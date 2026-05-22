@@ -1370,8 +1370,40 @@ public class CharacterStats
             breakdown += " + Combat Casting +4";
         return breakdown;
     }
-    /// <summary>Chosen weapon for Weapon Focus/Specialization/Improved Critical.</summary>
-    public string WeaponFocusChoice;
+    /// <summary>
+    /// All weapons chosen for Weapon Focus (and related feats like Weapon Specialization, Improved Critical).
+    /// D&D 3.5e: Weapon Focus can be taken multiple times, each time for a different weapon.
+    /// </summary>
+    public List<string> WeaponFocusWeapons = new List<string>();
+
+    /// <summary>
+    /// Backward-compatible accessor for the first/primary Weapon Focus weapon.
+    /// Setting this adds the weapon to the list if not already present.
+    /// Getting returns the first weapon in the list (or null/empty if none).
+    /// </summary>
+    public string WeaponFocusChoice
+    {
+        get => WeaponFocusWeapons.Count > 0 ? WeaponFocusWeapons[0] : null;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+            if (!WeaponFocusWeapons.Contains(value))
+                WeaponFocusWeapons.Add(value);
+        }
+    }
+
+    /// <summary>Check if the character has Weapon Focus for a specific weapon.</summary>
+    public bool HasWeaponFocus(string weaponName)
+    {
+        if (string.IsNullOrWhiteSpace(weaponName) || WeaponFocusWeapons.Count == 0)
+            return false;
+        for (int i = 0; i < WeaponFocusWeapons.Count; i++)
+        {
+            if (string.Equals(WeaponFocusWeapons[i], weaponName, System.StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>Extra individual weapon proficiencies granted by domain powers or other features (display names).</summary>
     public List<string> ExtraWeaponProficiencies = new List<string>();
@@ -1474,11 +1506,15 @@ public class CharacterStats
     /// <summary>AC bonus from Dodge feat.</summary>
     public int FeatACBonus => FeatManager.GetACBonus(this);
 
-    /// <summary>Attack bonus from Weapon Focus/Greater Weapon Focus.</summary>
-    public int WeaponFocusAttackBonus => FeatManager.GetWeaponFocusBonus(this, WeaponFocusChoice ?? "");
+    /// <summary>Attack bonus from Weapon Focus/Greater Weapon Focus (for primary/first weapon).</summary>
+    public int WeaponFocusAttackBonus => WeaponFocusWeapons.Count > 0
+        ? FeatManager.GetWeaponFocusBonus(this, WeaponFocusWeapons[0])
+        : 0;
 
-    /// <summary>Damage bonus from Weapon Specialization/Greater Weapon Specialization.</summary>
-    public int WeaponSpecDamageBonus => FeatManager.GetWeaponSpecializationBonus(this, WeaponFocusChoice ?? "");
+    /// <summary>Damage bonus from Weapon Specialization/Greater Weapon Specialization (for primary/first weapon).</summary>
+    public int WeaponSpecDamageBonus => WeaponFocusWeapons.Count > 0
+        ? FeatManager.GetWeaponSpecializationBonus(this, WeaponFocusWeapons[0])
+        : 0;
 
     /// <summary>Get feat bonus for a specific skill.</summary>
     public int GetFeatSkillBonus(string skillName) => FeatManager.GetSkillFeatBonus(this, skillName);

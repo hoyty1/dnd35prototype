@@ -59,7 +59,9 @@ public class CharacterCreationData
     // Step 5b: Feats
     public List<string> SelectedFeats = new List<string>();
     public List<string> BonusFeats = new List<string>(); // Fighter bonus feats
-    public string WeaponFocusChoice = "";
+    public string WeaponFocusChoice = ""; // Legacy single weapon — still used by quickstart presets
+    /// <summary>All weapons chosen for Weapon Focus during creation (one per feat instance).</summary>
+    public List<string> WeaponFocusWeapons = new List<string>();
     public string SkillFocusChoice = "";
 
     // Step 5c: Spells (Wizard spellbook selection)

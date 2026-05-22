@@ -1160,12 +1160,35 @@ public class CharacterSheetUI : MonoBehaviour
         }
 
         // Group feats by type using FeatDefinitions
+        // Build display list: expand weapon-choice feats into per-weapon entries
+        var displayEntries = new List<System.Tuple<string, FeatDefinition>>();
         var sortedFeats = stats.Feats.OrderBy(f => f).ToList();
         foreach (var featName in sortedFeats)
         {
             FeatDefinition def = null;
             if (FeatDefinitions.AllFeats != null && FeatDefinitions.AllFeats.ContainsKey(featName))
                 def = FeatDefinitions.AllFeats[featName];
+
+            // For weapon-choice feats with multiple weapons, expand each into a separate entry
+            if (def != null && def.Benefit != null && def.Benefit.RequiresWeaponChoice
+                && stats.WeaponFocusWeapons != null && stats.WeaponFocusWeapons.Count > 0)
+            {
+                foreach (string weapon in stats.WeaponFocusWeapons)
+                {
+                    if (!string.IsNullOrWhiteSpace(weapon))
+                        displayEntries.Add(System.Tuple.Create($"{featName} ({weapon})", def));
+                }
+            }
+            else
+            {
+                displayEntries.Add(System.Tuple.Create(featName, def));
+            }
+        }
+
+        foreach (var entry in displayEntries)
+        {
+            string displayName = entry.Item1;
+            FeatDefinition def = entry.Item2;
 
             string typeTag = "";
             Color typeColor = LightText;
@@ -1182,7 +1205,7 @@ public class CharacterSheetUI : MonoBehaviour
             }
 
             // Feat name with type badge
-            var featGO = new GameObject($"Feat_{featName}");
+            var featGO = new GameObject($"Feat_{displayName}");
             featGO.transform.SetParent(content, false);
             var le = featGO.AddComponent<LayoutElement>();
             le.preferredHeight = 15;
@@ -1190,7 +1213,7 @@ public class CharacterSheetUI : MonoBehaviour
             featGO.AddComponent<RectTransform>();
 
             MakeText(featGO.transform, "Name", V2(0, 0), V2(0, 1), V2(0, 0.5f),
-                V2(10, 0), V2(200, 0), $"\u2726 {featName}", 12, LightText, TextAnchor.MiddleLeft);
+                V2(10, 0), V2(200, 0), $"\u2726 {displayName}", 12, LightText, TextAnchor.MiddleLeft);
 
             MakeText(featGO.transform, "Type", V2(0, 0), V2(0, 1), V2(0, 0.5f),
                 V2(220, 0), V2(120, 0), typeTag, 10, typeColor, TextAnchor.MiddleLeft);
