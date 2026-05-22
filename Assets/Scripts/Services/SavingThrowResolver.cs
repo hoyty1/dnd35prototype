@@ -119,6 +119,12 @@ public static class SavingThrowResolver
         string context = $"{characterName} {saveTypeName} save vs {effectName ?? "effect"}";
 
         int roll = DiceService.D20(context);
+        // Apply Luck domain reroll if armed
+        if (stats != null)
+        {
+            roll = stats.ApplyLuckReroll(roll, $"{saveTypeName} saving throw");
+            GameManager.Instance?.LogLuckRerollIfTriggered(stats);
+        }
         int modifier = GetSaveModifier(stats, saveType);
         int total = roll + modifier;
         bool succeeded = total >= dc;

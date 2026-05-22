@@ -101,6 +101,18 @@ public partial class GameManager
                     return false;
                 }
                 break;
+            case "Luck":
+                if (cleric.Stats.LuckDomainUsesToday >= 1)
+                {
+                    reason = "Already used Luck reroll today";
+                    return false;
+                }
+                if (cleric.Stats.LuckRerollPending)
+                {
+                    reason = "Luck reroll is already armed";
+                    return false;
+                }
+                break;
             case "Air":
             case "Earth":
             case "Fire":
@@ -154,6 +166,9 @@ public partial class GameManager
                         break;
                     case "Plant":
                         result.Add((domain, "Rebuke Plants"));
+                        break;
+                    case "Luck":
+                        result.Add((domain, "Luck Reroll"));
                         break;
                     case "Air":
                     case "Earth":
@@ -447,6 +462,58 @@ public partial class GameManager
             attacker.Stats.DestructionSmiteActive = false;
     }
 
+    // ==================== LUCK DOMAIN ====================
+
+    /// <summary>
+    /// Luck Domain: Arm the reroll — the next d20 roll (attack, save, skill check, ability check)
+    /// will be rolled twice, taking the better result. Once per day.
+    /// </summary>
+    public void ActivateLuckReroll(CharacterController cleric)
+    {
+        string reason;
+        if (!CanActivateDomainPower(cleric, "Luck", out reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Luck Reroll: {reason}.");
+            return;
+        }
+
+        cleric.Stats.LuckRerollPending = true;
+
+        CombatUI?.ShowCombatLog($"<color=#00CC66>🍀 {cleric.Stats.CharacterName} invokes the Luck domain — next d20 roll will be rerolled!</color>");
+    }
+
+    /// <summary>
+    /// Deactivate (disarm) Luck reroll without consuming the daily use.
+    /// Called when the player toggles off or when combat ends with it still armed.
+    /// </summary>
+    public void DeactivateLuckReroll(CharacterController cleric)
+    {
+        if (cleric == null || cleric.Stats == null) return;
+
+        if (cleric.Stats.LuckRerollPending)
+        {
+            cleric.Stats.LuckRerollPending = false;
+            CombatUI?.ShowCombatLog($"<color=#00CC66>🍀 {cleric.Stats.CharacterName} disarms the Luck reroll (not consumed).</color>");
+        }
+    }
+
+    /// <summary>
+    /// If a Luck reroll was triggered during the last d20 roll, emit the combat log and clear the flag.
+    /// Call this after any d20 roll that may have triggered a reroll (attack, save, skill).
+    /// </summary>
+    public void LogLuckRerollIfTriggered(CharacterStats stats)
+    {
+        if (stats == null || !stats.LastLuckRerollTriggered) return;
+
+        string usedLabel = stats.LastLuckRerollUsed == stats.LastLuckRerollOriginal ? "original" : "reroll";
+        CombatUI?.ShowCombatLog(
+            $"<color=#00CC66>🍀 Luck reroll on {stats.LastLuckRerollContext}: " +
+            $"original {stats.LastLuckRerollOriginal}, reroll {stats.LastLuckRerollSecond} → " +
+            $"using {usedLabel} ({stats.LastLuckRerollUsed}). Luck domain power expended for today.</color>");
+
+        stats.LastLuckRerollTriggered = false;
+    }
+
     // ==================== UI BUTTON HANDLER ====================
 
     /// <summary>
@@ -456,12 +523,20 @@ public partial class GameManager
     /// For self-buffs (Strength, Travel), activates immediately.
     /// For Destruction Smite, sets the flag for the next melee attack.
     /// For Greater Turning, sets the flag and then invokes Turn Undead.
+    /// For Luck, arms the reroll toggle for the next d20 roll.
     /// </summary>
     public void OnDomainPowerButtonPressed()
     {
         CharacterController activePC = ActivePC;
         if (activePC == null || activePC.Stats == null)
             return;
+
+        // Toggle off Luck reroll if it is currently armed
+        if (activePC.Stats.LuckRerollPending)
+        {
+            DeactivateLuckReroll(activePC);
+            return;
+        }
 
         var powers = GetAvailableDomainPowers(activePC);
         if (powers.Count == 0)
@@ -519,6 +594,9 @@ public partial class GameManager
             case "Plant":
                 // Plant domain: rebuke/command plants uses Turn Undead system
                 ActivatePlantRebuke(cleric);
+                break;
+            case "Luck":
+                ActivateLuckReroll(cleric);
                 break;
             case "Air":
             case "Earth":

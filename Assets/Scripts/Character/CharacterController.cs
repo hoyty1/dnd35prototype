@@ -6227,6 +6227,10 @@ public class CharacterController : MonoBehaviour
 
         // Step 1: Roll to hit
         var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkModWithTrueStrike, targetAC);
+
+        // Log Luck domain reroll if it was triggered during the attack roll
+        GameManager.Instance?.LogLuckRerollIfTriggered(Stats);
+
         result.DieRoll = roll;
         result.TotalRoll = total;
         result.TargetAC = targetAC;

@@ -638,6 +638,50 @@ public class CharacterStats
     /// <summary>Travel domain freedom of movement rounds remaining.</summary>
     public int TravelDomainFreedomRounds;
     // Plant domain uses TurnUndeadAttemptsUsedToday (shares the pool per D&D 3.5e)
+
+    // ========== LUCK DOMAIN ==========
+    /// <summary>Luck domain: reroll used today (1/day).</summary>
+    public int LuckDomainUsesToday;
+    /// <summary>Luck domain: reroll is armed and will trigger on the next d20 roll.</summary>
+    public bool LuckRerollPending;
+
+    /// <summary>
+    /// Apply the Luck domain reroll if armed: roll a second d20 and take the better result.
+    /// Consumes the daily use and disarms the reroll toggle.
+    /// </summary>
+    /// <param name="originalRoll">The first d20 result.</param>
+    /// <param name="context">Description of the roll (e.g. "attack", "save", "skill check") for logging.</param>
+    /// <returns>The (possibly improved) d20 result to use.</returns>
+    public int ApplyLuckReroll(int originalRoll, string context)
+    {
+        if (!LuckRerollPending) return originalRoll;
+
+        int reroll = UnityEngine.Random.Range(1, 21);
+        int best = Mathf.Max(originalRoll, reroll);
+
+        // Consume the power
+        LuckRerollPending = false;
+        LuckDomainUsesToday = 1;
+
+        string usedLabel = best == originalRoll ? "original" : "reroll";
+        Debug.Log($"[Luck Domain] {CharacterName} rerolls {context}: original {originalRoll}, reroll {reroll}, using {usedLabel} ({best})");
+
+        // Store info for combat-log display by the caller
+        LastLuckRerollOriginal = originalRoll;
+        LastLuckRerollSecond = reroll;
+        LastLuckRerollUsed = best;
+        LastLuckRerollContext = context;
+        LastLuckRerollTriggered = true;
+
+        return best;
+    }
+
+    // Transient fields for combat-log display after a Luck reroll
+    [System.NonSerialized] public bool LastLuckRerollTriggered;
+    [System.NonSerialized] public int LastLuckRerollOriginal;
+    [System.NonSerialized] public int LastLuckRerollSecond;
+    [System.NonSerialized] public int LastLuckRerollUsed;
+    [System.NonSerialized] public string LastLuckRerollContext;
     /// <summary>Sun domain: next turn undead destroys instead of turning.</summary>
     public bool GreaterTurningActive;
     /// <summary>Temporary enhancement bonus to STR from domain powers / spells.</summary>
@@ -3276,6 +3320,7 @@ public class CharacterStats
     public (bool hit, int roll, int total) RollToHit(int targetAC)
     {
         int roll = UnityEngine.Random.Range(1, 21); // 1-20
+        roll = ApplyLuckReroll(roll, "attack roll");
         int total = roll + AttackBonus;
 
         // Natural 20 always hits, natural 1 always misses
@@ -3293,6 +3338,7 @@ public class CharacterStats
     public (bool hit, int roll, int total) RollToHitWithFlanking(int targetAC, int flankingBonus)
     {
         int roll = UnityEngine.Random.Range(1, 21);
+        roll = ApplyLuckReroll(roll, "attack roll");
         int total = roll + AttackBonus + flankingBonus;
 
         bool hit;
@@ -3311,6 +3357,7 @@ public class CharacterStats
     public (bool hit, int roll, int total) RollToHitWithMod(int totalAttackMod, int targetAC)
     {
         int roll = UnityEngine.Random.Range(1, 21);
+        roll = ApplyLuckReroll(roll, "attack roll");
         int total = roll + totalAttackMod;
 
         bool hit;
@@ -5153,6 +5200,8 @@ public class CharacterStats
         }
 
         int d20 = UnityEngine.Random.Range(1, 21);
+        d20 = ApplyLuckReroll(d20, $"{skillName} skill check");
+        GameManager.Instance?.LogLuckRerollIfTriggered(this);
         int totalBonus = skill.GetTotalBonus(abilityMod);
         int featBonus = GetFeatSkillBonus(skillName);
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);

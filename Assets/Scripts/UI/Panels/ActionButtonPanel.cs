@@ -668,13 +668,23 @@ public class ActionButtonPanel : MonoBehaviour
         bool hasDomainPowers = pc != null && pc.Stats != null && pc.Stats.IsCleric
             && pc.Stats.ChosenDomains != null && pc.Stats.ChosenDomains.Exists(d =>
                 d == "Strength" || d == "Destruction" || d == "Death" || d == "Sun" || d == "Travel" || d == "Plant"
-                || d == "Air" || d == "Earth" || d == "Fire" || d == "Water");
+                || d == "Air" || d == "Earth" || d == "Fire" || d == "Water" || d == "Luck");
         bool canUseDomainPower = hasDomainPowers && context.Gm != null
             && context.Gm.GetAvailableDomainPowers(pc).Count > 0;
-        string domainPowerLabel = !hasDomainPowers
-            ? "Domain Power (N/A)"
-            : (canUseDomainPower ? "Domain Power" : "Domain Power (Used)");
-        states.Set(DomainPowerButton, new ActionButtonState(hasDomainPowers, canUseDomainPower, domainPowerLabel));
+        // Show armed state for Luck reroll toggle
+        bool luckArmed = pc != null && pc.Stats != null && pc.Stats.LuckRerollPending;
+        string domainPowerLabel;
+        if (!hasDomainPowers)
+            domainPowerLabel = "Domain Power (N/A)";
+        else if (luckArmed)
+            domainPowerLabel = "🍀 Luck Reroll (Armed)";
+        else if (canUseDomainPower)
+            domainPowerLabel = "Domain Power";
+        else
+            domainPowerLabel = "Domain Power (Used)";
+        // When Luck reroll is armed, allow clicking to disarm (toggle off)
+        bool domainPowerInteractable = canUseDomainPower || luckArmed;
+        states.Set(DomainPowerButton, new ActionButtonState(hasDomainPowers, domainPowerInteractable, domainPowerLabel));
 
         string smiteReason = string.Empty;
         bool canUseSmite = context.Gm != null && context.Gm.CanUseTemplateSmite(pc, out smiteReason);

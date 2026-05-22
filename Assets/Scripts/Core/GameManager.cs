@@ -928,6 +928,8 @@ public partial class GameManager : MonoBehaviour
             stats.DeathDomainUsesToday = 0;
             stats.SunDomainUsesToday = 0;
             stats.TravelDomainUsesToday = 0;
+            stats.LuckDomainUsesToday = 0;
+            stats.LuckRerollPending = false;
             stats.DestructionSmiteActive = false;
             stats.StrengthDomainBonusRounds = 0;
             stats.TravelDomainFreedomRounds = 0;
