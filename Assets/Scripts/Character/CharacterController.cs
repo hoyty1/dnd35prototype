@@ -474,6 +474,29 @@ public class CharacterController : MonoBehaviour
     [SerializeField] private int _regenerationSuppressedRoundsRemaining;
     [SerializeField] private int _swarmBleedingPerRound;
 
+    // Incorporeal creatures (Shadow, Wraith, Allip)
+    [SerializeField] private bool _isIncorporeal;
+    public bool IsIncorporeal => _isIncorporeal;
+
+    // Breath weapon tracking
+    [SerializeField] private BreathWeaponDefinition _breathWeapon;
+    [SerializeField] private int _breathWeaponCooldownRemaining;
+    public bool HasBreathWeapon => _breathWeapon != null;
+    public bool IsBreathWeaponReady => _breathWeapon != null && _breathWeaponCooldownRemaining <= 0;
+
+    // Engulf tracking
+    [SerializeField] private EngulfDefinition _engulf;
+    public bool HasEngulf => _engulf != null;
+
+    // Stench aura
+    [SerializeField] private int _stenchAuraDC;
+    [SerializeField] private int _stenchAuraRange;
+    public bool HasStenchAura => _stenchAuraDC > 0;
+
+    // Supernatural aura (babble, moan)
+    [SerializeField] private AuraAbilityDefinition _auraAbility;
+    public bool HasAuraAbility => _auraAbility != null;
+
     public int BombardierAcidSprayCooldownRounds => Mathf.Max(0, _bombardierAcidSprayCooldownRounds);
     public bool HasBombardierAcidSprayReady => _bombardierAcidSprayCooldownRounds <= 0;
     public bool HasRegeneration => _regenerationAmountPerRound > 0;
@@ -3596,6 +3619,54 @@ public class CharacterController : MonoBehaviour
         _regenerationSuppressedRoundsRemaining = 0;
     }
 
+    /// <summary>Configure incorporeal trait (Shadow, Wraith, Allip).</summary>
+    public void ConfigureIncorporeal(bool isIncorporeal)
+    {
+        _isIncorporeal = isIncorporeal;
+    }
+
+    /// <summary>Configure breath weapon (Hell Hound, future dragons).</summary>
+    public void ConfigureBreathWeapon(BreathWeaponDefinition bw)
+    {
+        _breathWeapon = bw?.Clone();
+        _breathWeaponCooldownRemaining = 0;
+    }
+
+    /// <summary>Configure engulf ability (Gelatinous Cube, Cloaker).</summary>
+    public void ConfigureEngulf(EngulfDefinition engulf)
+    {
+        _engulf = engulf?.Clone();
+    }
+
+    /// <summary>Configure stench aura (Troglodyte).</summary>
+    public void ConfigureStenchAura(int dc, int rangeFeet)
+    {
+        _stenchAuraDC = dc;
+        _stenchAuraRange = rangeFeet;
+    }
+
+    /// <summary>Configure supernatural aura (Allip babble, Cloaker moan).</summary>
+    public void ConfigureAuraAbility(AuraAbilityDefinition aura)
+    {
+        _auraAbility = aura?.Clone();
+    }
+
+    /// <summary>Tick breath weapon cooldown at start of turn.</summary>
+    public void TickBreathWeaponCooldown()
+    {
+        if (_breathWeaponCooldownRemaining > 0)
+            _breathWeaponCooldownRemaining--;
+    }
+
+    /// <summary>Use breath weapon (sets cooldown). Returns the definition for resolution.</summary>
+    public BreathWeaponDefinition UseBreathWeapon()
+    {
+        if (_breathWeapon == null || _breathWeaponCooldownRemaining > 0)
+            return null;
+        _breathWeaponCooldownRemaining = _breathWeapon.RechargeRounds;
+        return _breathWeapon;
+    }
+
     public void ApplyRegenerationAtTurnStart()
     {
         if (_regenerationAmountPerRound <= 0 || Stats == null || Stats.CurrentHP <= -10)
@@ -4382,11 +4453,71 @@ public class CharacterController : MonoBehaviour
         if (target == null || attackResult == null || !attackResult.Hit || naturalAttack == null)
             return;
 
+        // --- Poison on hit ---
         string poisonId = naturalAttack.PoisonOnHitId;
-        if (string.IsNullOrWhiteSpace(poisonId))
-            return;
+        if (!string.IsNullOrWhiteSpace(poisonId))
+            target.ApplyPoison(poisonId);
 
-        target.ApplyPoison(poisonId);
+        // --- Disease on hit (Dire Rat filth fever, etc.) ---
+        if (naturalAttack.HasDiseaseOnHit)
+        {
+            target.ExposeToDisease(naturalAttack.DiseaseOnHitType);
+            Debug.Log($"[OnHit] {Stats?.CharacterName ?? "?"} exposes {target.Stats?.CharacterName ?? "?"} to {naturalAttack.DiseaseOnHitType}");
+        }
+
+        // --- Paralysis on hit (Gelatinous Cube tentacle, Ghoul, etc.) ---
+        if (naturalAttack.ParalysisOnHitDC > 0 && target.Stats != null)
+        {
+            int roll = UnityEngine.Random.Range(1, 21);
+            int total = roll + target.Stats.FortitudeSave;
+            if (total < naturalAttack.ParalysisOnHitDC)
+            {
+                int duration = Mathf.Max(1, naturalAttack.ParalysisOnHitDurationRounds);
+                target.Conditions.ApplyCondition(CombatConditionType.Paralyzed, duration, Stats?.CharacterName ?? "Paralysis");
+                Debug.Log($"[OnHit] {target.Stats.CharacterName} paralyzed for {duration} rounds (Fort d20({roll})+{target.Stats.FortitudeSave}={total} < DC {naturalAttack.ParalysisOnHitDC})");
+            }
+            else
+            {
+                Debug.Log($"[OnHit] {target.Stats.CharacterName} resists paralysis (Fort d20({roll})+{target.Stats.FortitudeSave}={total} >= DC {naturalAttack.ParalysisOnHitDC})");
+            }
+        }
+
+        // --- Energy drain on hit (Wight, Wraith) ---
+        if (naturalAttack.EnergyDrainOnHit > 0)
+        {
+            target.ApplyNegativeLevels(naturalAttack.EnergyDrainOnHit, Stats?.CharacterName ?? "Energy Drain");
+            Debug.Log($"[OnHit] {target.Stats?.CharacterName ?? "?"} drains {naturalAttack.EnergyDrainOnHit} level(s) from {target.Stats?.CharacterName ?? "?"}");
+        }
+
+        // --- Ability drain on hit (Shadow STR drain, Wraith CON drain, Allip WIS drain) ---
+        if (naturalAttack.AbilityDrainAmount > 0)
+        {
+            target.ApplyAbilityDrain(naturalAttack.AbilityDrainType, naturalAttack.AbilityDrainAmount, Stats?.CharacterName ?? "Ability Drain");
+            Debug.Log($"[OnHit] {target.Stats?.CharacterName ?? "?"} drains {naturalAttack.AbilityDrainAmount} {naturalAttack.AbilityDrainType} from {target.Stats?.CharacterName ?? "?"}");
+        }
+
+        // --- Petrification on hit (Cockatrice) ---
+        if (naturalAttack.PetrificationOnHitDC > 0 && target.Stats != null)
+        {
+            int roll = UnityEngine.Random.Range(1, 21);
+            int total = roll + target.Stats.FortitudeSave;
+            if (total < naturalAttack.PetrificationOnHitDC)
+            {
+                target.Conditions.ApplyCondition(CombatConditionType.Petrified, 999, Stats?.CharacterName ?? "Petrification");
+                Debug.Log($"[OnHit] {target.Stats.CharacterName} PETRIFIED (Fort d20({roll})+{target.Stats.FortitudeSave}={total} < DC {naturalAttack.PetrificationOnHitDC})");
+            }
+            else
+            {
+                Debug.Log($"[OnHit] {target.Stats.CharacterName} resists petrification (Fort d20({roll})+{target.Stats.FortitudeSave}={total} >= DC {naturalAttack.PetrificationOnHitDC})");
+            }
+        }
+
+        // --- Blood drain (Stirge: Con damage while attached) ---
+        if (naturalAttack.HasBloodDrain && naturalAttack.BloodDrainConDamagePerRound > 0)
+        {
+            target.ApplyAbilityDrain(AbilityType.CON, naturalAttack.BloodDrainConDamagePerRound, Stats?.CharacterName ?? "Blood Drain");
+            Debug.Log($"[OnHit] {Stats?.CharacterName ?? "?"} blood drains {naturalAttack.BloodDrainConDamagePerRound} CON from {target.Stats?.CharacterName ?? "?"}");
+        }
     }
 
     // ========== SINGLE ATTACK (Standard Action) ==========
@@ -8009,6 +8140,13 @@ public class CharacterController : MonoBehaviour
         // Wall of Fire is opaque (PHB p.298) — attacks through active wall cells have 20% miss chance.
         if (attacker != null)
             bestMissChance = Mathf.Max(bestMissChance, WallOfFireAreaEffect.GetAttackConcealmentMissChance(attacker, this));
+
+        // Incorporeal creatures: 50% miss chance from non-magical, non-ghost-touch, non-force attacks
+        if (_isIncorporeal)
+        {
+            // TODO: Skip miss chance if attacker uses ghost touch weapon or force effects
+            bestMissChance = Mathf.Max(bestMissChance, 50);
+        }
 
         return bestMissChance;
     }

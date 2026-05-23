@@ -228,6 +228,18 @@ public static class PoisonDatabase
             Description = "Venom from huge monstrous centipede. Fort DC 14, initial and secondary 1d6 Dex damage."
         };
 
+        _poisons["medium_centipede_poison"] = new PoisonData
+        {
+            Id = "medium_centipede_poison",
+            Name = "Medium Centipede Poison",
+            Type = PoisonType.Injury,
+            FortitudeDC = 13,
+            InitialDamage = Damage(AbilityType.DEX, "1d3"),
+            SecondaryDamage = Damage(AbilityType.DEX, "1d3"),
+            PriceInGold = 0,
+            Description = "Venom from medium monstrous centipede (giant centipede). Fort DC 13, initial and secondary 1d3 Dex damage."
+        };
+
         _poisons["large_viper_poison"] = new PoisonData
         {
             Id = "large_viper_poison",

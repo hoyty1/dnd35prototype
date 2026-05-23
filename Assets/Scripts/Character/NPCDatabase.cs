@@ -38,6 +38,7 @@ public static partial class NPCDatabase
         RegisterCreatures_O();
         RegisterCreatures_R();
         RegisterCreatures_S();
+        RegisterCreatures_T();
         RegisterCreatures_V();
         RegisterCreatures_W();
         RegisterCreatures_Y();
@@ -111,7 +112,21 @@ public static partial class NPCDatabase
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
             new EncounterPreset("ogre_bodyguard", "Ogre Bodyguard", "A dangerous large brute protected by disciplined infantry.", new List<string> { "ogre_brute", "hobgoblin_sergeant", "goblin_warchief" }),
-            new EncounterPreset("mixed_patrol", "Mixed Patrol", "Varied enemies showcasing melee, ranged, and size differences.", new List<string> { "wolf_pack_hunter", "skeleton_archer", "orc_berserker", "goblin_warchief" })
+            new EncounterPreset("mixed_patrol", "Mixed Patrol", "Varied enemies showcasing melee, ranged, and size differences.", new List<string> { "wolf_pack_hunter", "skeleton_archer", "orc_berserker", "goblin_warchief" }),
+
+            // Tiers 1-3 Monster encounters
+            new EncounterPreset("tier1_vermin_rats", "🐀 Tier 1: Rat Infestation", "4 giant rats and 2 dire rats (with filth fever). Low-level vermin encounter (EL 2).", new List<string> { "giant_rat", "giant_rat", "giant_rat", "giant_rat", "dire_rat", "dire_rat" }),
+            new EncounterPreset("tier1_goblinoid_raid", "⚔️ Tier 1: Goblinoid Raid", "2 gnolls and a bugbear ambush party. Humanoid skirmish (EL 3).", new List<string> { "gnoll", "gnoll", "bugbear" }),
+            new EncounterPreset("tier1_cave_crawl", "🕳️ Tier 1: Cave Crawl", "Troglodyte with stench aura, giant centipede with poison, and 2 stirges. Diverse low-level threats (EL 3).", new List<string> { "troglodyte", "giant_centipede", "stirge", "stirge" }),
+            new EncounterPreset("tier2_ooze_dungeon", "🧪 Tier 2: Ooze Dungeon", "Gelatinous cube (paralysis + engulf) and ochre jelly (acid + split). Ooze gauntlet (EL 5).", new List<string> { "gelatinous_cube", "ochre_jelly" }),
+            new EncounterPreset("tier2_gargoyle_roost", "🗿 Tier 2: Gargoyle Roost", "2 gargoyles with DR 10/magic. Tests magic weapon requirements (EL 6).", new List<string> { "gargoyle", "gargoyle" }),
+            new EncounterPreset("tier2_undead_shadows", "👻 Tier 2: Shadows & Wight", "2 shadows (incorporeal, STR drain) and a wight (energy drain). Incorporeal + drain combo (EL 5).", new List<string> { "shadow", "shadow", "wight_dreadwalker" }),
+            new EncounterPreset("tier2_cockatrice_nest", "🐓 Tier 2: Cockatrice Nest", "2 cockatrices with petrification bite (DC 12 Fort). Save-or-die encounter (EL 5).", new List<string> { "cockatrice", "cockatrice" }),
+            new EncounterPreset("tier2_troll_bridge", "🧌 Tier 2: Troll Bridge", "Troll with regeneration 5 (fire/acid). Tests regeneration suppression (EL 5).", new List<string> { "troll" }),
+            new EncounterPreset("tier3_incorporeal_gauntlet", "💀 Tier 3: Incorporeal Gauntlet", "Wraith (CON drain + energy drain) and allip (WIS drain + babble). All incorporeal (EL 6).", new List<string> { "wraith", "allip" }),
+            new EncounterPreset("tier3_hell_hound_pack", "🔥 Tier 3: Hell Hound Pack", "3 hell hounds with breath weapons and fiery bite. Tests breath weapon system (EL 7).", new List<string> { "hell_hound", "hell_hound", "hell_hound" }),
+            new EncounterPreset("tier3_cloaker_ambush", "🦇 Tier 3: Cloaker Ambush", "Cloaker with engulf, moan aura, and shadow shift. Boss-style encounter (EL 5).", new List<string> { "cloaker" }),
+            new EncounterPreset("tier1_3_showcase", "🏟️ Tiers 1-3 Monster Showcase", "One of each new creature type for testing all mechanics. WARNING: High difficulty!", new List<string> { "giant_rat", "stirge", "gnoll", "troglodyte", "cockatrice", "shadow", "troll", "wraith" })
         };
     }
 
@@ -200,6 +215,75 @@ public static partial class NPCDatabase
 
 }
 
+// ======================================================================
+// Support classes for monster special abilities (Tiers 1-3)
+// ======================================================================
+
+public enum BreathWeaponShape { Cone, Line }
+
+/// <summary>
+/// Breath weapon definition (Hell Hound, future dragons, etc.).
+/// </summary>
+[System.Serializable]
+public class BreathWeaponDefinition
+{
+    public BreathWeaponShape Shape = BreathWeaponShape.Cone;
+    public int RangeFeet = 30;          // e.g., 30 ft. cone or 60 ft. line
+    public int DamageDice = 6;          // die size (d6, d8, etc.)
+    public int DamageCount = 2;         // number of dice
+    public DamageType DamageType = DamageType.Fire;
+    public int SaveDC = 13;
+    public bool IsReflexSave = true;    // true = Reflex, false = Fort
+    public int RechargeRounds = 3;      // min rounds between uses (1d4 = avg 2-3)
+
+    public BreathWeaponDefinition Clone()
+    {
+        return (BreathWeaponDefinition)MemberwiseClone();
+    }
+}
+
+/// <summary>
+/// Engulf ability (Gelatinous Cube, Ochre Jelly, Cloaker).
+/// </summary>
+[System.Serializable]
+public class EngulfDefinition
+{
+    public int ReflexSaveDC = 13;       // DC to avoid engulf
+    public int DamagePerRound = 6;      // automatic acid/bludgeoning damage per round
+    public DamageType DamageType = DamageType.Acid;
+    public int ParalysisDC;             // 0 = no paralysis (Gelatinous Cube has this)
+    public int ParalysisDurationRounds = 4;
+    public int EscapeDC = 15;           // Grapple/STR check to escape
+
+    public EngulfDefinition Clone()
+    {
+        return (EngulfDefinition)MemberwiseClone();
+    }
+}
+
+public enum AuraEffectType { Sickened, Frightened, Fascinated, Confused, Wisdom_Drain }
+
+/// <summary>
+/// Supernatural aura ability (Allip babble, Cloaker moan, Troglodyte stench).
+/// </summary>
+[System.Serializable]
+public class AuraAbilityDefinition
+{
+    public string Name = "Aura";
+    public int SaveDC = 15;
+    public bool IsWillSave = true;      // true = Will, false = Fort
+    public int RangeFeet = 60;
+    public AuraEffectType Effect = AuraEffectType.Frightened;
+    public int DurationRounds = 4;
+    /// <summary>For Wisdom drain aura (Allip): amount drained on failed save.</summary>
+    public int AbilityDrainAmount;
+
+    public AuraAbilityDefinition Clone()
+    {
+        return (AuraAbilityDefinition)MemberwiseClone();
+    }
+}
+
 /// <summary>
 /// Complete definition of an NPC type — everything needed to instantiate
 /// a fully configured CharacterStats, equip items, and choose AI behavior.
@@ -262,6 +346,26 @@ public class NPCDefinition
     public int SpellResistance;
     public int BaseHitDieHP;
 
+    // --- Incorporeal trait ---
+    /// <summary>True for incorporeal undead (Shadow, Wraith, Allip). 50% miss chance, deflection AC from CHA, no STR.</summary>
+    public bool IsIncorporeal;
+
+    // --- Breath weapon ---
+    public BreathWeaponDefinition BreathWeapon;
+
+    // --- Engulf ---
+    /// <summary>Engulf ability (Gelatinous Cube, Cloaker). Reflex save or engulfed; auto-damage per round.</summary>
+    public EngulfDefinition Engulf;
+
+    // --- Stench/Aura ---
+    /// <summary>Stench aura (Troglodyte). Fort save or sickened.</summary>
+    public int StenchAuraDC;
+    public int StenchAuraRange;
+
+    // --- Moan/Babble aura ---
+    /// <summary>Supernatural aura (Allip babble, Cloaker moan). Will save or affected.</summary>
+    public AuraAbilityDefinition AuraAbility;
+
     // Template-afforded actions
     public bool GainsSmiteEvil;
     public bool GainsSmiteGood;
@@ -316,33 +420,11 @@ public class NPCDefinition
             {
                 NaturalAttackDefinition attack = NaturalAttacks[i];
                 if (attack == null) continue;
-                clone.NaturalAttacks.Add(new NaturalAttackDefinition
-                {
-                    Name = attack.Name,
-                    DamageDice = attack.DamageDice,
-                    DamageCount = attack.DamageCount,
-                    Count = attack.Count,
-                    BonusDamageSource = attack.BonusDamageSource,
-                    Range = attack.Range,
-                    IsPrimary = attack.IsPrimary,
-                    PoisonOnHitId = attack.PoisonOnHitId
-                });
+                clone.NaturalAttacks.Add(attack.Clone());
             }
         }
 
-        clone.RakeAttack = RakeAttack == null
-            ? null
-            : new NaturalAttackDefinition
-            {
-                Name = RakeAttack.Name,
-                DamageDice = RakeAttack.DamageDice,
-                DamageCount = RakeAttack.DamageCount,
-                Count = RakeAttack.Count,
-                BonusDamageSource = RakeAttack.BonusDamageSource,
-                Range = RakeAttack.Range,
-                IsPrimary = RakeAttack.IsPrimary,
-                PoisonOnHitId = RakeAttack.PoisonOnHitId
-            };
+        clone.RakeAttack = RakeAttack?.Clone();
 
         clone.DamageResistances = new List<DamageResistanceEntry>();
         if (DamageResistances != null)
@@ -414,6 +496,11 @@ public class NPCDefinition
         clone.BackpackItemIds = BackpackItemIds != null
             ? new List<string>(BackpackItemIds)
             : new List<string>();
+
+        // Deep-clone monster special ability definitions
+        clone.BreathWeapon = BreathWeapon?.Clone();
+        clone.Engulf = Engulf?.Clone();
+        clone.AuraAbility = AuraAbility?.Clone();
 
         return clone;
     }

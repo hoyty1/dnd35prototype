@@ -113,7 +113,12 @@ public static partial class NPCDatabase
             NaturalArmorBonus = 1,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true,
+                    HasDiseaseOnHit = true, DiseaseOnHitType = DiseaseType.FilthFever
+                }
             },
             BaseSpeed = 8,
             BaseHitDieHP = 5,

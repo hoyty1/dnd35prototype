@@ -130,6 +130,17 @@ public static partial class NPCDatabase
             DamageImmunities = new List<DamageType> { DamageType.Fire },
             CreatureTags = new List<string> { "Outsider", "Evil", "Extraplanar", "Fire", "Lawful", "SummonBase" },
             HasScent = true,
+            BreathWeapon = new BreathWeaponDefinition
+            {
+                Shape = BreathWeaponShape.Cone,
+                RangeFeet = 10,
+                DamageDice = 6,
+                DamageCount = 2,
+                DamageType = DamageType.Fire,
+                SaveDC = 13,
+                IsReflexSave = true,
+                RechargeRounds = 3 // 1d4 rounds average
+            },
             SpecialAbilities = new List<string> { "Breath weapon (10-ft. cone, 2d6 fire, Ref DC 13 half, 1/2d4 rds)", "Fiery bite (+1d6 fire)", "Immunity to fire", "Vulnerability to cold (+50%)", "Darkvision 60 ft.", "Scent" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
@@ -138,7 +149,7 @@ public static partial class NPCDatabase
             SpriteColor = new Color(0.82f, 0.28f, 0.15f, 1f),
             PanelColor = new Color(0.32f, 0.08f, 0.05f, 0.85f),
             NameColor = new Color(1f, 0.65f, 0.45f),
-            Description = "Hell hound. Bite +5 (1d8+1 + 1d6 fire). Breath weapon 2d6 fire cone. Immune to fire, vulnerable to cold. MM 3.5e p.151."
+            Description = "Hell hound (CR 3). Bite +5 (1d8+1 + 1d6 fire). Breath weapon 2d6 fire cone. Immune to fire, vulnerable to cold. MM 3.5e p.151."
         });
     }
 

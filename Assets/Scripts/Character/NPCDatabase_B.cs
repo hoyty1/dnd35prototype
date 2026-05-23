@@ -10,6 +10,7 @@ public static partial class NPCDatabase
     {
         RegisterBadger();
         RegisterBatSwarm();
+        RegisterBugbear();
         RegisterGiantBee();
         RegisterGiantBombardierBeetle();
     
@@ -104,6 +105,48 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.12f, 0.12f, 0.16f, 0.85f),
             NameColor = new Color(0.86f, 0.86f, 0.92f),
             Description = "Monster Manual bat swarm. Diminutive animal swarm with blindsense, distraction, and wounding blood-loss pressure."
+        });
+    }
+
+    /// <summary>
+    /// Bugbear (CR 2) — MM 3.5e p.29. Goblinoid brute with natural armor and stealth.
+    /// 3d8+3 HP (16), morningstar 1d8+2 or javelin 1d6+2. AC 17 (+1 Dex, +3 natural, +2 leather, +1 shield).
+    /// </summary>
+    private static void RegisterBugbear()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "bugbear",
+            Name = "Bugbear",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            HitDice = 3,
+            BABOverride = BABProgression.Medium,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 15, DEX = 12, CON = 13, WIS = 10, INT = 10, CHA = 9,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Morningstar", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 16,
+            HasScent = true,
+            CreatureTags = new List<string> { "Humanoid", "Goblinoid", "MM35" },
+            Feats = new List<string> { "Alertness", "Weapon Focus" },
+            WeaponFocusChoice = "Morningstar",
+            SpecialAbilities = new List<string> { "Darkvision 60 ft.", "Scent", "Move Silently +6, Hide +3" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.62f, 0.48f, 0.32f, 1f),
+            PanelColor = new Color(0.25f, 0.18f, 0.1f, 0.85f),
+            NameColor = new Color(0.9f, 0.75f, 0.55f),
+            Description = "Bugbear (CR 2). Stealthy goblinoid brute. Morningstar +4 (1d8+2). Darkvision, scent. MM 3.5e p.29."
         });
     }
 

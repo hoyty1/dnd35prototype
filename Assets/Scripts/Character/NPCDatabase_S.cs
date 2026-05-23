@@ -8,11 +8,106 @@ public static partial class NPCDatabase
 {
     private static void RegisterCreatures_S()
     {
+        RegisterShadow();
         RegisterSpiderSwarm();
+        RegisterStirge();
         RegisterMonstrousScorpions();
         RegisterMonstrousSpiders();
     
         RegisterSummonSmallViper();
+    }
+
+    /// <summary>
+    /// Shadow (CR 3) — MM 3.5e p.221. Incorporeal undead, Str drain touch attack.
+    /// 3d12 HP (19), incorporeal touch +3 (1d6 Str drain). Undead traits, +2 deflection AC.
+    /// </summary>
+    private static void RegisterShadow()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "shadow",
+            Name = "Shadow",
+            ChallengeRating = "3",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 0, DEX = 14, CON = 0, WIS = 12, INT = 6, CHA = 13,
+            NaturalArmorBonus = 0, // Incorporeal — uses deflection from CHA
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Incorporeal Touch", DamageDice = 6, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true,
+                    AbilityDrainType = AbilityType.STR, AbilityDrainAmount = 1
+                }
+            },
+            BaseSpeed = 6, // Fly 40 ft (good)
+            BaseHitDieHP = 19,
+            IsIncorporeal = true,
+            IsMindless = false,
+            DamageImmunities = new List<DamageType>(),
+            CreatureTags = new List<string> { "Undead", "Incorporeal", "MM35" },
+            Feats = new List<string> { "Dodge" },
+            SpecialAbilities = new List<string> { "Incorporeal", "Str drain (1d6)", "Darkvision 60 ft.", "Undead traits", "+2 turn resistance", "Fly 40 ft. (good)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.3f, 0.3f, 0.35f, 0.6f),
+            PanelColor = new Color(0.1f, 0.1f, 0.15f, 0.85f),
+            NameColor = new Color(0.6f, 0.6f, 0.75f),
+            Description = "Shadow (CR 3). Incorporeal undead. Touch attack drains 1d6 STR. 50% miss chance vs corporeal attacks. MM 3.5e p.221."
+        });
+    }
+
+    /// <summary>
+    /// Stirge (CR 1/2) — MM 3.5e p.236. Tiny blood-draining vermin.
+    /// 1d10 HP (5), touch attack +7 (attach), blood drain 1d4 Con/round.
+    /// </summary>
+    private static void RegisterStirge()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "stirge",
+            Name = "Stirge",
+            ChallengeRating = "1/2",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Tiny,
+            IsTallCreature = false,
+            STR = 3, DEX = 19, CON = 10, WIS = 12, INT = 1, CHA = 6,
+            NaturalArmorBonus = 0,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Touch", DamageDice = 0, DamageCount = 0, Count = 1,
+                    BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true,
+                    HasBloodDrain = true, BloodDrainConDamagePerRound = 1
+                }
+            },
+            BaseSpeed = 2, // 10 ft, fly 40 ft (average)
+            BaseHitDieHP = 5,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Touch",
+            CreatureTags = new List<string> { "Magical Beast", "MM35" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Attach (improved grab)", "Blood drain (1d4 Con/round)", "Darkvision 60 ft.", "Low-light vision", "Fly 40 ft. (average)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.55f, 0.25f, 0.25f, 1f),
+            PanelColor = new Color(0.22f, 0.08f, 0.08f, 0.85f),
+            NameColor = new Color(0.9f, 0.5f, 0.5f),
+            Description = "Stirge (CR 1/2). Tiny blood-draining flyer. Attaches and drains 1d4 CON per round. MM 3.5e p.236."
+        });
     }
 
     private static void RegisterSpiderSwarm()

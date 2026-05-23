@@ -234,22 +234,28 @@ public static partial class NPCDatabase
             BAB = 3,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition
+                {
+                    Name = "Slam", DamageDice = 4, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true,
+                    EnergyDrainOnHit = 1, EnergyDrainRemovalDC = 14
+                }
             },
             BaseSpeed = 6,
             BaseHitDieHP = 26,
-            CreatureTags = new List<string> { "Undead" },
+            CreatureTags = new List<string> { "Undead", "MM35" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Silver,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
+            SpecialAbilities = new List<string> { "Energy drain (1 negative level on slam)", "Create spawn", "Darkvision 60 ft.", "Undead traits" },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.78f, 0.82f, 0.9f, 1f),
             PanelColor = new Color(0.19f, 0.18f, 0.3f, 0.85f),
             NameColor = new Color(0.72f, 0.9f, 1f),
-            Description = "A malevolent wight animated by hunger and shadow. Tough enough to be turned but not instantly destroyed in cleric test encounters."
+            Description = "Wight Dreadwalker (CR 3). Undead with energy drain (1 negative level per slam). DR 5/silver. MM 3.5e p.255."
         });
     }
 

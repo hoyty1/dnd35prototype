@@ -595,6 +595,18 @@ public partial class GameManager
         npc.ConfigureBombardierAcidSprayCooldown(0);
         npc.ConfigureRegeneration(def.RegenerationAmount, def.RegenerationSuppressedBy);
 
+        // Monster special abilities (Tiers 1-3)
+        if (def.IsIncorporeal)
+            npc.ConfigureIncorporeal(true);
+        if (def.BreathWeapon != null)
+            npc.ConfigureBreathWeapon(def.BreathWeapon);
+        if (def.Engulf != null)
+            npc.ConfigureEngulf(def.Engulf);
+        if (def.StenchAuraDC > 0)
+            npc.ConfigureStenchAura(def.StenchAuraDC, def.StenchAuraRange);
+        if (def.AuraAbility != null)
+            npc.ConfigureAuraAbility(def.AuraAbility);
+
         CharacterTeam npcTeam = def.IsAlly ? CharacterTeam.Player : CharacterTeam.Enemy;
         npc.ConfigureTeamControl(npcTeam, def.IsControllable);
 

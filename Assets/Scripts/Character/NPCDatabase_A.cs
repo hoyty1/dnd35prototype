@@ -8,7 +8,63 @@ public static partial class NPCDatabase
 {
     private static void RegisterCreatures_A()
     {
+        RegisterAllip();
         RegisterSummonApe();
+    }
+
+    /// <summary>
+    /// Allip (CR 3) — MM 3.5e p.10. Incorporeal undead with Wisdom drain and babble aura.
+    /// 4d12 HP (26), incorporeal touch +3 (1d4 Wis drain). Babble: DC 15 Will or hypnotized (fascinated).
+    /// </summary>
+    private static void RegisterAllip()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "allip",
+            Name = "Allip",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 0, DEX = 12, CON = 0, WIS = 11, INT = 11, CHA = 18,
+            NaturalArmorBonus = 0,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Incorporeal Touch", DamageDice = 4, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true,
+                    AbilityDrainType = AbilityType.WIS, AbilityDrainAmount = 1
+                }
+            },
+            BaseSpeed = 6, // Fly 30 ft (perfect)
+            BaseHitDieHP = 26,
+            IsIncorporeal = true,
+            IsMindless = false,
+            AuraAbility = new AuraAbilityDefinition
+            {
+                Name = "Babble",
+                SaveDC = 16,
+                IsWillSave = true,
+                RangeFeet = 60,
+                Effect = AuraEffectType.Fascinated,
+                DurationRounds = 3
+            },
+            CreatureTags = new List<string> { "Undead", "Incorporeal", "MM35" },
+            Feats = new List<string> { "Improved Initiative", "Lightning Reflexes" },
+            SpecialAbilities = new List<string> { "Incorporeal", "Wisdom drain (1d4)", "Babble (DC 16 Will, hypnotism 2d4 rounds, 60 ft.)", "Madness (+4 CHA for save DC, -6 WIS)", "Darkvision 60 ft.", "Undead traits", "Fly 30 ft. (perfect)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.4f, 0.35f, 0.55f, 0.5f),
+            PanelColor = new Color(0.12f, 0.1f, 0.22f, 0.85f),
+            NameColor = new Color(0.7f, 0.6f, 0.9f),
+            Description = "Allip (CR 3). Incorporeal undead. Touch drains 1d4 WIS. Babble aura fascinates (DC 16 Will). MM 3.5e p.10."
+        });
     }
 
     private static void RegisterSummonApe()

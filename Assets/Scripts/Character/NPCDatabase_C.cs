@@ -8,10 +8,112 @@ public static partial class NPCDatabase
 {
     private static void RegisterCreatures_C()
     {
+        RegisterCloaker();
+        RegisterCockatrice();
         RegisterMonstrousCentipedes();
     
         RegisterSummonCrocodile();
         RegisterSummonConstrictorSnake();
+    }
+
+    /// <summary>
+    /// Cloaker (CR 5) — MM 3.5e p.36. Aberration with engulf, moan, shadow shift.
+    /// 6d8+18 HP (45), tail slap 1d6+5. Engulf = grapple wrap + bite 1d4+5.
+    /// </summary>
+    private static void RegisterCloaker()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "cloaker",
+            Name = "Cloaker",
+            ChallengeRating = "5",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 19, DEX = 16, CON = 17, WIS = 15, INT = 14, CHA = 15,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Tail Slap", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 2, // 10 ft, fly 40 ft (average)
+            BaseHitDieHP = 45,
+            Engulf = new EngulfDefinition
+            {
+                ReflexSaveDC = 17,
+                DamagePerRound = 8, // 1d4+5 bite while engulfed
+                DamageType = DamageType.Bludgeoning,
+                EscapeDC = 17
+            },
+            AuraAbility = new AuraAbilityDefinition
+            {
+                Name = "Moan",
+                SaveDC = 15,
+                IsWillSave = true,
+                RangeFeet = 60,
+                Effect = AuraEffectType.Frightened,
+                DurationRounds = 2
+            },
+            CreatureTags = new List<string> { "Aberration", "MM35" },
+            Feats = new List<string> { "Alertness", "Combat Reflexes", "Improved Initiative" },
+            SpecialAbilities = new List<string> { "Engulf (wrap + bite)", "Moan (DC 15 Will, various effects, 60 ft.)", "Shadow shift (blur, mirror image, silent image)", "Darkvision 60 ft.", "Fly 40 ft. (average)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.25f, 0.22f, 0.3f, 1f),
+            PanelColor = new Color(0.1f, 0.08f, 0.15f, 0.85f),
+            NameColor = new Color(0.55f, 0.5f, 0.7f),
+            Description = "Cloaker (CR 5). Aberration. Tail slap, engulf wrap + bite, moan aura (fear/nausea/hold). MM 3.5e p.36."
+        });
+    }
+
+    /// <summary>
+    /// Cockatrice (CR 3) — MM 3.5e p.37. Small magical beast with petrification bite.
+    /// 5d10 HP (27), bite 1d4-2 + petrification (Fort DC 12).
+    /// </summary>
+    private static void RegisterCockatrice()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "cockatrice",
+            Name = "Cockatrice",
+            ChallengeRating = "3",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            HitDice = 5,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 6, DEX = 17, CON = 11, WIS = 13, INT = 2, CHA = 9,
+            NaturalArmorBonus = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true,
+                    PetrificationOnHitDC = 12
+                }
+            },
+            BaseSpeed = 4, // 20 ft, fly 60 ft (poor)
+            BaseHitDieHP = 27,
+            CreatureTags = new List<string> { "Magical Beast", "MM35" },
+            Feats = new List<string> { "Alertness", "Dodge", "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Petrification (DC 12 Fort or turned to stone)", "Darkvision 60 ft.", "Low-light vision", "Fly 60 ft. (poor)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.75f, 0.6f, 0.35f, 1f),
+            PanelColor = new Color(0.3f, 0.22f, 0.1f, 0.85f),
+            NameColor = new Color(0.95f, 0.82f, 0.5f),
+            Description = "Cockatrice (CR 3). Small magical beast. Bite + petrification (DC 12 Fort). Fly 60 ft. MM 3.5e p.37."
+        });
     }
 
     private static void RegisterMonstrousCentipedes()

@@ -8,9 +8,63 @@ public static partial class NPCDatabase
 {
     private static void RegisterCreatures_O()
     {
+        RegisterOchreJelly();
         RegisterOwl();
     
         RegisterSummonOctopus();
+    }
+
+    /// <summary>
+    /// Ochre Jelly (CR 5) — MM 3.5e p.202. Large ooze with acid and split ability.
+    /// 6d10+36 HP (69), slam 2d4+3 + acid 1d4. Immune to electricity, splits on slashing/piercing.
+    /// </summary>
+    private static void RegisterOchreJelly()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ochre_jelly",
+            Name = "Ochre Jelly",
+            ChallengeRating = "5",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Ooze",
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 15, DEX = 1, CON = 22, WIS = 1, INT = 0, CHA = 1,
+            NaturalArmorBonus = 0,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Slam", DamageDice = 4, DamageCount = 2, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true,
+                    BonusElementalDamageDice = 4, BonusElementalDamageCount = 1, BonusElementalDamageType = DamageType.Acid
+                }
+            },
+            BaseSpeed = 2, // 10 ft, climb 10 ft
+            BaseHitDieHP = 69,
+            IsMindless = true,
+            DamageImmunities = new List<DamageType> { DamageType.Electricity },
+            Engulf = new EngulfDefinition
+            {
+                ReflexSaveDC = 15,
+                DamagePerRound = 8, // 1d4 acid + constriction
+                DamageType = DamageType.Acid,
+                EscapeDC = 15
+            },
+            CreatureTags = new List<string> { "Ooze", "MM35" },
+            Feats = new List<string>(),
+            SpecialAbilities = new List<string> { "Blindsight 60 ft.", "Acid (1d4)", "Constrict 2d4+2 + 1d4 acid", "Improved grab", "Split (slashing/piercing splits into two)", "Immunity to electricity", "Mindless" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.None,
+            SpriteColor = new Color(0.85f, 0.65f, 0.2f, 0.8f),
+            PanelColor = new Color(0.35f, 0.25f, 0.05f, 0.85f),
+            NameColor = new Color(1f, 0.85f, 0.4f),
+            Description = "Ochre Jelly (CR 5). Large ooze. Slam + acid + constrict. Splits when hit by slashing/piercing. MM 3.5e p.202."
+        });
     }
 
     private static void RegisterOwl()

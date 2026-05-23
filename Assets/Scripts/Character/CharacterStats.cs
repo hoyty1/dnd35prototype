@@ -48,6 +48,35 @@ public class NaturalAttackDefinition
     public bool IsPrimary = true;
     public string PoisonOnHitId;
 
+    // --- On-hit special effects (Tiers 1-3 monsters) ---
+    /// <summary>Fort save DC for paralysis on hit (0 = no paralysis). Duration in rounds.</summary>
+    public int ParalysisOnHitDC;
+    public int ParalysisOnHitDurationRounds;
+
+    /// <summary>Number of negative levels applied on hit (0 = none). Fort DC for removal next day.</summary>
+    public int EnergyDrainOnHit;
+    public int EnergyDrainRemovalDC;
+
+    /// <summary>Ability drain on hit: type and amount (0 = none).</summary>
+    public AbilityType AbilityDrainType = AbilityType.STR;
+    public int AbilityDrainAmount;
+
+    /// <summary>Disease exposure on hit (None = no disease).</summary>
+    public DiseaseType DiseaseOnHitType = DiseaseType.FilthFever;
+    public bool HasDiseaseOnHit;
+
+    /// <summary>Fort save DC for petrification on hit (0 = no petrification).</summary>
+    public int PetrificationOnHitDC;
+
+    /// <summary>Bonus elemental damage on hit (e.g., Hell Hound's fiery bite).</summary>
+    public int BonusElementalDamageDice;
+    public int BonusElementalDamageCount;
+    public DamageType BonusElementalDamageType = DamageType.Fire;
+
+    /// <summary>Blood drain (Con damage per round while attached, e.g., Stirge).</summary>
+    public bool HasBloodDrain;
+    public int BloodDrainConDamagePerRound;
+
     public int GetDamageBonus(int strengthModifier)
     {
         switch (BonusDamageSource)
@@ -75,7 +104,21 @@ public class NaturalAttackDefinition
             BonusDamageSource = BonusDamageSource,
             Range = Mathf.Max(1, Range),
             IsPrimary = IsPrimary,
-            PoisonOnHitId = PoisonOnHitId
+            PoisonOnHitId = PoisonOnHitId,
+            ParalysisOnHitDC = ParalysisOnHitDC,
+            ParalysisOnHitDurationRounds = ParalysisOnHitDurationRounds,
+            EnergyDrainOnHit = EnergyDrainOnHit,
+            EnergyDrainRemovalDC = EnergyDrainRemovalDC,
+            AbilityDrainType = AbilityDrainType,
+            AbilityDrainAmount = AbilityDrainAmount,
+            DiseaseOnHitType = DiseaseOnHitType,
+            HasDiseaseOnHit = HasDiseaseOnHit,
+            PetrificationOnHitDC = PetrificationOnHitDC,
+            BonusElementalDamageDice = BonusElementalDamageDice,
+            BonusElementalDamageCount = BonusElementalDamageCount,
+            BonusElementalDamageType = BonusElementalDamageType,
+            HasBloodDrain = HasBloodDrain,
+            BloodDrainConDamagePerRound = BloodDrainConDamagePerRound
         };
     }
 }
