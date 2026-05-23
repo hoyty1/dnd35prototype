@@ -164,9 +164,10 @@ public class SecondaryBreathWeaponDefinition
     public bool IsWillSave;            // true = Will save, false = Fort save
     public int UsesPerDay = 3;
     public int UsesRemaining;
-    public int DurationDice = 6;       // 1d6 for duration roll
-    public int DurationBonus = 3;      // +3 added to duration roll
-    public int AbilityDamageAmount = 6; // Die for str damage (1d6)
+    public int DurationDice = 6;       // Die size for duration (d6 for most, d4 for Gold weakening gas)
+    public int DurationBonus = 3;      // Bonus added to 1d(DurationDice) roll; for most = age category (1-6)
+                                       // For Gold weakening gas: repurposed as number of dice (2 for 2d4)
+    public int AbilityDamageAmount = 6; // Gold weakening gas: flat STR damage (scaled by age: 1/2/3/4/6/12)
 
     public SecondaryBreathWeaponDefinition Clone()
     {

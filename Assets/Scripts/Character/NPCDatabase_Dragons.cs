@@ -64,7 +64,7 @@ public static partial class NPCDatabase
         if (template.IsMetallic && template.SecondaryBreath != SecondaryBreathType.None
             && stats.SecondaryBreathUsesPerDay > 0)
         {
-            secondaryBreath = BuildSecondaryBreathWeapon(template, stats, size);
+            secondaryBreath = BuildSecondaryBreathWeapon(template, stats, size, age);
         }
 
         // --- Frightful Presence (Young Adult+ only) ---
@@ -254,12 +254,16 @@ public static partial class NPCDatabase
 
     /// <summary>
     /// Build secondary breath weapon definition for metallic dragons.
+    /// Duration scales with age category: 1d6 + age (Wyrmling=1 ... Adult=6).
+    /// Gold weakening gas STR damage scales by age: 1/2/3/4/6/12.
+    /// Bronze repulsion gas uses Will save (mind-affecting compulsion).
     /// </summary>
     private static SecondaryBreathWeaponDefinition BuildSecondaryBreathWeapon(
-        DragonTypeTemplate template, DragonAgeStats stats, SizeCategory size)
+        DragonTypeTemplate template, DragonAgeStats stats, SizeCategory size, DragonAgeCategory age)
     {
-        // Secondary breath uses the same shape/range as primary for simplicity
-        // In D&D 3.5e, it uses a cone for cone-breathers and line for line-breathers
+        int ageValue = (int)age; // Wyrmling=1, VeryYoung=2, Young=3, Juvenile=4, YoungAdult=5, Adult=6
+
+        // Secondary breath uses the same shape/range as primary
         var sbw = new SecondaryBreathWeaponDefinition
         {
             EffectType = template.SecondaryBreath,
@@ -270,43 +274,62 @@ public static partial class NPCDatabase
             UsesRemaining = stats.SecondaryBreathUsesPerDay
         };
 
-        // Configure save type and effect-specific parameters
+        // Configure save type and effect-specific parameters per MM 3.5e
         switch (template.SecondaryBreath)
         {
             case SecondaryBreathType.WeakeningGas:
-                // Gold: 1d6 Str damage, Fort negates
+                // Gold: STR damage (Fort negates), duration 2d4 rounds
+                // STR damage scales by age: 1/2/3/4/6/12
                 sbw.IsWillSave = false; // Fort save
-                sbw.AbilityDamageAmount = 6; // 1d6
-                sbw.DurationDice = 0;
-                sbw.DurationBonus = 0;
+                sbw.AbilityDamageAmount = GetGoldWeakeningDamage(age);
+                sbw.DurationDice = 4;   // 2d4 rounds (DurationDice=die size)
+                sbw.DurationBonus = 2;  // number of dice (repurposed: 2d4 = roll 2 × d4)
                 break;
             case SecondaryBreathType.ParalysisGas:
-                // Silver: paralyzed 1d6+3 rounds, Fort negates
+                // Silver: paralyzed 1d6+age rounds, Fort negates
                 sbw.IsWillSave = false; // Fort save
                 sbw.DurationDice = 6;
-                sbw.DurationBonus = 3;
+                sbw.DurationBonus = ageValue;
                 break;
             case SecondaryBreathType.RepulsionGas:
-                // Bronze: knockback 1d6×10 feet, Fort negates
-                sbw.IsWillSave = false; // Fort save
-                sbw.DurationDice = 0;
-                sbw.DurationBonus = 0;
+                // Bronze: compelled to leave 1d6+age rounds, Will negates (mind-affecting)
+                sbw.IsWillSave = true; // Will save — mind-affecting compulsion per MM
+                sbw.DurationDice = 6;
+                sbw.DurationBonus = ageValue;
                 break;
             case SecondaryBreathType.SlowGas:
-                // Copper: slowed 1d6+3 rounds, Fort negates
+                // Copper: slowed 1d6+age rounds, Fort negates
                 sbw.IsWillSave = false; // Fort save
                 sbw.DurationDice = 6;
-                sbw.DurationBonus = 3;
+                sbw.DurationBonus = ageValue;
                 break;
             case SecondaryBreathType.SleepGas:
-                // Brass: sleep 1d6+3 rounds, Will negates
+                // Brass: sleep 1d6+age rounds, Will negates
                 sbw.IsWillSave = true; // Will save
                 sbw.DurationDice = 6;
-                sbw.DurationBonus = 3;
+                sbw.DurationBonus = ageValue;
                 break;
         }
 
         return sbw;
+    }
+
+    /// <summary>
+    /// Gold Dragon weakening gas STR damage by age category.
+    /// Scales: Wyrmling=1, Very Young=2, Young=3, Juvenile=4, Young Adult=6, Adult=12.
+    /// </summary>
+    private static int GetGoldWeakeningDamage(DragonAgeCategory age)
+    {
+        switch (age)
+        {
+            case DragonAgeCategory.Wyrmling:   return 1;
+            case DragonAgeCategory.VeryYoung:  return 2;
+            case DragonAgeCategory.Young:      return 3;
+            case DragonAgeCategory.Juvenile:   return 4;
+            case DragonAgeCategory.YoungAdult: return 6;
+            case DragonAgeCategory.Adult:      return 12;
+            default:                           return 3;
+        }
     }
 
     /// <summary>
@@ -327,14 +350,15 @@ public static partial class NPCDatabase
         if (template.IsMetallic && template.SecondaryBreath != SecondaryBreathType.None
             && stats.SecondaryBreathUsesPerDay > 0)
         {
+            int ageVal = (int)age;
             string effectName;
             switch (template.SecondaryBreath)
             {
-                case SecondaryBreathType.WeakeningGas: effectName = "Weakening Gas (1d6 Str, Fort negates)"; break;
-                case SecondaryBreathType.ParalysisGas: effectName = "Paralysis Gas (1d6+3 rds, Fort negates)"; break;
-                case SecondaryBreathType.RepulsionGas: effectName = "Repulsion Gas (knockback, Fort negates)"; break;
-                case SecondaryBreathType.SlowGas: effectName = "Slow Gas (1d6+3 rds, Fort negates)"; break;
-                case SecondaryBreathType.SleepGas: effectName = "Sleep Gas (1d6+3 rds, Will negates)"; break;
+                case SecondaryBreathType.WeakeningGas: effectName = $"Weakening Gas ({GetGoldWeakeningDamage(age)} Str, 2d4 rds, Fort negates)"; break;
+                case SecondaryBreathType.ParalysisGas: effectName = $"Paralysis Gas (1d6+{ageVal} rds, Fort negates)"; break;
+                case SecondaryBreathType.RepulsionGas: effectName = $"Repulsion Gas (1d6+{ageVal} rds, Will negates)"; break;
+                case SecondaryBreathType.SlowGas: effectName = $"Slow Gas (1d6+{ageVal} rds, Fort negates)"; break;
+                case SecondaryBreathType.SleepGas: effectName = $"Sleep Gas (1d6+{ageVal} rds, Will negates)"; break;
                 default: effectName = template.SecondaryBreath.ToString(); break;
             }
             abilities.Add($"Secondary Breath: {effectName}, {stats.SecondaryBreathUsesPerDay}/day, DC {stats.SecondaryBreathSaveDC}");
