@@ -85,11 +85,29 @@ namespace DND35.AI.Profiles
                     score += 4f;
             }
 
-            if (SpellSelection.BuffBeforeDamage && spell.EffectType == SpellEffectType.Buff && caster != null && caster.Stats != null)
+            if (spell.EffectType == SpellEffectType.Buff && caster != null && caster.Stats != null)
             {
-                float hpPct = caster.Stats.TotalMaxHP > 0 ? (float)caster.Stats.CurrentHP / caster.Stats.TotalMaxHP : 1f;
-                if (hpPct > 0.65f)
-                    score += 4f;
+                // ── Buff-already-active check ──
+                // D&D 3.5e: Same spell doesn't stack. Heavily penalize buff spells that are
+                // already active on the caster to prevent wasting actions and spell slots.
+                StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
+                if (statusMgr != null && statusMgr.HasEffect(spell.SpellId))
+                {
+                    int remaining = statusMgr.GetRemainingRounds(spell.SpellId);
+                    if (remaining > 1 || remaining == -1)
+                    {
+                        score -= 1000f; // Effectively skip this spell
+                        return score;
+                    }
+                    // remaining ≤ 1: about to expire, allow recasting with normal priority
+                }
+
+                if (SpellSelection.BuffBeforeDamage)
+                {
+                    float hpPct = caster.Stats.TotalMaxHP > 0 ? (float)caster.Stats.CurrentHP / caster.Stats.TotalMaxHP : 1f;
+                    if (hpPct > 0.65f)
+                        score += 4f;
+                }
             }
 
             if (SpellSelection.ConserveHighLevelSpells && spell.SpellLevel >= 3)

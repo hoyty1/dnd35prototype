@@ -2304,11 +2304,34 @@ public class AIService : MonoBehaviour
             ? _gameManager.GetAllCharactersForAI()
             : new List<CharacterController>();
 
+        // Cache StatusEffectManager for buff-already-active checks (prevents wasting spell slots).
+        StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
+
         for (int i = 0; i < castable.Count; i++)
         {
             SpellData spell = castable[i];
             if (spell == null)
                 continue;
+
+            // ── Buff-already-active check ──
+            // D&D 3.5e: Same spell doesn't stack — skip buff spells already active on the caster.
+            // This prevents AI from wasting actions and spell slots recasting Mage Armor, Shield,
+            // Bull's Strength, etc. when they're already providing their benefit.
+            if (spell.EffectType == SpellEffectType.Buff && statusMgr != null)
+            {
+                bool alreadyActive = statusMgr.HasEffect(spell.SpellId);
+                if (alreadyActive)
+                {
+                    int remaining = statusMgr.GetRemainingRounds(spell.SpellId);
+                    // Allow recasting if about to expire (≤ 1 round remaining) — useful for
+                    // long fights where the dragon wants to maintain its buffs.
+                    if (remaining > 1 || remaining == -1) // -1 = indefinite duration
+                    {
+                        Debug.Log($"[AI][Spell] {caster.Stats.CharacterName}: Skipping {spell.Name} — already active ({remaining} rounds remaining)");
+                        continue;
+                    }
+                }
+            }
 
             float score;
 
