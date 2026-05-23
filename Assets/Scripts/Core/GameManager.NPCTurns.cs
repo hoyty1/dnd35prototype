@@ -1200,6 +1200,13 @@ public partial class GameManager
         // D&D 3.5e: Sanctuary/Hide from Undead end if the warded creature attacks
         CombatFlowService.BreakProtectiveWardsOnAttack(npc);
 
+        // --- Frightful Presence (dragons, Young Adult+) ---
+        // Triggers once per combat when the dragon first attacks or uses breath weapon.
+        if (npc.HasFrightfulPresence && !npc.HasFrightfulPresenceTriggered)
+        {
+            yield return StartCoroutine(ResolveFrightfulPresence(npc));
+        }
+
         if (npc.aiProfile != null)
             npc.aiProfile.TryEnsureWeaponFallback(npc);
 
@@ -1549,6 +1556,12 @@ public partial class GameManager
         if (npc == null || aimTarget == null || !npc.HasBreathWeapon || !npc.IsBreathWeaponReady)
             yield break;
 
+        // --- Frightful Presence (dragons) triggers on first attack/breath ---
+        if (npc.HasFrightfulPresence && !npc.HasFrightfulPresenceTriggered)
+        {
+            yield return StartCoroutine(ResolveFrightfulPresence(npc));
+        }
+
         BreathWeaponDefinition bw = npc.UseBreathWeapon(); // consumes use, starts cooldown
         if (bw == null)
             yield break;
@@ -1664,5 +1677,90 @@ public partial class GameManager
             Debug.Log(log.ToString());
 
         yield return new WaitForSeconds(1.0f);
+    }
+
+    // ================================================================
+    // Frightful Presence — D&D 3.5e Dragon Special Attack
+    // ================================================================
+
+    /// <summary>
+    /// Resolves Frightful Presence for a dragon (Young Adult+).
+    /// All enemies within range must make a Will save or become:
+    ///   - Panicked (if HD &lt;= threshold, typically 4)
+    ///   - Shaken (if HD &gt; threshold)
+    /// Duration: 4d6 rounds. On success: immune for 24 hours (rest of combat).
+    /// Dragons are immune to other dragons' Frightful Presence.
+    /// </summary>
+    private IEnumerator ResolveFrightfulPresence(CharacterController dragon)
+    {
+        if (dragon == null || !dragon.HasFrightfulPresence)
+            yield break;
+
+        dragon.MarkFrightfulPresenceTriggered();
+
+        FrightfulPresenceDefinition fp = dragon.GetFrightfulPresenceDefinition();
+        if (fp == null) yield break;
+
+        int rangeSquares = Mathf.Max(1, fp.RangeFeet / 5);
+        string dragonName = dragon.Stats != null ? dragon.Stats.CharacterName : "Dragon";
+
+        CombatUI?.ShowCombatLog($"🐉 <b>{dragonName}</b> radiates Frightful Presence! (DC {fp.SaveDC}, {fp.RangeFeet} ft.)");
+        yield return new WaitForSeconds(0.6f);
+
+        // Gather all player characters in range
+        List<CharacterController> allChars = GetAllCharacters();
+        for (int i = 0; i < allChars.Count; i++)
+        {
+            CharacterController target = allChars[i];
+            if (target == null || target.Stats == null || target.Stats.IsDead)
+                continue;
+            if (target == dragon)
+                continue;
+            // Dragons are immune to frightful presence
+            if (target.Stats.CreatureType == "Dragon")
+                continue;
+            // Only affects enemies
+            if (target.Team == dragon.Team)
+                continue;
+
+            int distance = Mathf.Abs(target.GridPosition.x - dragon.GridPosition.x)
+                         + Mathf.Abs(target.GridPosition.y - dragon.GridPosition.y);
+            if (distance > rangeSquares)
+                continue;
+
+            string targetName = target.Stats.CharacterName;
+            int targetHD = target.Stats.Level > 0 ? target.Stats.Level : 1;
+
+            // Will save
+            int roll = Random.Range(1, 21);
+            int willMod = target.Stats.WillSave;
+            int total = roll + willMod;
+
+            if (total >= fp.SaveDC)
+            {
+                CombatUI?.ShowCombatLog($"  ✅ {targetName} resists Frightful Presence (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}) — immune for remainder of combat");
+                continue;
+            }
+
+            // Failed save — determine Panicked vs Shaken
+            int durationRounds = 0;
+            for (int d = 0; d < fp.DurationDice; d++)
+                durationRounds += Random.Range(1, fp.DurationDieSides + 1);
+
+            if (targetHD <= fp.HDThresholdForPanic)
+            {
+                // Panicked
+                target.ApplyCondition(CombatConditionType.Panicked, durationRounds, dragonName);
+                CombatUI?.ShowCombatLog($"  😱 {targetName} is <b>Panicked</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}, {targetHD} HD ≤ {fp.HDThresholdForPanic})");
+            }
+            else
+            {
+                // Shaken
+                target.ApplyCondition(CombatConditionType.Shaken, durationRounds, dragonName);
+                CombatUI?.ShowCombatLog($"  😰 {targetName} is <b>Shaken</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC})");
+            }
+        }
+
+        yield return new WaitForSeconds(0.5f);
     }
 }

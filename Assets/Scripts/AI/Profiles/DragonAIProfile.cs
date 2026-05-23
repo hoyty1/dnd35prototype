@@ -55,6 +55,7 @@ namespace DND35.AI.Profiles
         [System.NonSerialized] public bool WantsToUseBreathWeapon;
         [System.NonSerialized] public CharacterController BreathWeaponAimTarget;
         [System.NonSerialized] public int BreathWeaponExpectedHits;
+        [System.NonSerialized] public bool WantsToUseSecondaryBreath;
 
         private void OnEnable()
         {
@@ -218,6 +219,47 @@ namespace DND35.AI.Profiles
             Debug.Log($"[AI][Dragon] {self.Stats.CharacterName} plans breath weapon aimed at {bestTarget.Stats.CharacterName} " +
                       $"(expected hits: {bestEnemyHits} enemies, {bestAllyHits} allies)");
 
+            return true;
+        }
+
+        // ── Secondary Breath Weapon Evaluation (Metallic Dragons) ─────
+
+        /// <summary>
+        /// Evaluates whether the dragon should use its secondary breath weapon
+        /// (paralysis gas, sleep gas, etc.) instead of its primary. Returns true
+        /// if the secondary breath is available and tactically preferable.
+        /// Priority: use secondary when primary is on cooldown, or when the
+        /// secondary effect (disable/CC) would be more valuable than damage.
+        /// </summary>
+        public bool EvaluateSecondaryBreathWeapon(
+            CharacterController self,
+            List<CharacterController> allCombatants,
+            GameManager gameManager)
+        {
+            WantsToUseSecondaryBreath = false;
+
+            if (self == null || !self.HasSecondaryBreathWeapon || !self.IsSecondaryBreathWeaponReady)
+                return false;
+
+            // Only use secondary if primary is on cooldown, OR if we're facing many enemies
+            // (CC is more valuable than raw damage against groups)
+            bool primaryAvailable = self.HasBreathWeapon && self.IsBreathWeaponReady;
+            int enemyCount = 0;
+            for (int i = 0; i < allCombatants.Count; i++)
+            {
+                var c = allCombatants[i];
+                if (c != null && c.Stats != null && !c.Stats.IsDead && c != self
+                    && gameManager.IsEnemyTeamForAI(self, c))
+                    enemyCount++;
+            }
+
+            // Use secondary when: primary is on cooldown, or 3+ enemies (CC value)
+            if (primaryAvailable && enemyCount < 3)
+                return false;
+
+            WantsToUseSecondaryBreath = true;
+            Debug.Log($"[AI][Dragon] {self.Stats.CharacterName} wants to use secondary breath weapon " +
+                      $"(primary ready={primaryAvailable}, enemies={enemyCount})");
             return true;
         }
 

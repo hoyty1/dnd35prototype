@@ -42,6 +42,7 @@ public static partial class NPCDatabase
         RegisterCreatures_V();
         RegisterCreatures_W();
         RegisterCreatures_Y();
+        RegisterCreatures_Dragons();
 
         // Register summon compatibility aliases (map legacy IDs to existing creature entries).
         RegisterSummonCreatureAliases();
@@ -73,7 +74,7 @@ public static partial class NPCDatabase
     /// </summary>
     public static List<EncounterPreset> ListEncounterPresets()
     {
-        return new List<EncounterPreset>
+        var presets = new List<EncounterPreset>
         {
             new EncounterPreset("test_2_goblins", "🧪 Test: 2 Goblins", "Quick test encounter - 2 basic goblins for fast combat and loot validation.", new List<string> { "goblin", "goblin" }),
             new EncounterPreset("grapple_test", "🧪 Grapple Test Encounter", "Fighter vs orc in adjacent squares for dedicated grappling checks.", new List<string> { "orc_grapple_drill" }),
@@ -128,6 +129,11 @@ public static partial class NPCDatabase
             new EncounterPreset("tier3_cloaker_ambush", "🦇 Tier 3: Cloaker Ambush", "Cloaker with engulf, moan aura, and shadow shift. Boss-style encounter (EL 5).", new List<string> { "cloaker" }),
             new EncounterPreset("tier1_3_showcase", "🏟️ Tiers 1-3 Monster Showcase", "One of each new creature type for testing all mechanics. WARNING: High difficulty!", new List<string> { "giant_rat", "stirge", "gnoll", "troglodyte", "cockatrice", "shadow", "troll", "wraith" })
         };
+
+        // Add dragon encounter presets
+        presets.AddRange(GetDragonEncounterPresets());
+
+        return presets;
     }
 
     public static EncounterPreset GetEncounterPreset(string presetId)
@@ -353,6 +359,14 @@ public class NPCDefinition
     // --- Breath weapon ---
     public BreathWeaponDefinition BreathWeapon;
 
+    // --- Secondary breath weapon (metallic dragons) ---
+    /// <summary>Secondary (non-damaging) breath weapon for metallic dragons (paralysis gas, sleep gas, etc.).</summary>
+    public SecondaryBreathWeaponDefinition SecondaryBreathWeapon;
+
+    // --- Frightful Presence (Young Adult+ dragons) ---
+    /// <summary>Frightful presence aura triggered when the dragon attacks. Will save or Shaken/Panicked.</summary>
+    public FrightfulPresenceDefinition FrightfulPresence;
+
     // --- Engulf ---
     /// <summary>Engulf ability (Gelatinous Cube, Cloaker). Reflex save or engulfed; auto-damage per round.</summary>
     public EngulfDefinition Engulf;
@@ -499,6 +513,8 @@ public class NPCDefinition
 
         // Deep-clone monster special ability definitions
         clone.BreathWeapon = BreathWeapon?.Clone();
+        clone.SecondaryBreathWeapon = SecondaryBreathWeapon?.Clone();
+        clone.FrightfulPresence = FrightfulPresence?.Clone();
         clone.Engulf = Engulf?.Clone();
         clone.AuraAbility = AuraAbility?.Clone();
 

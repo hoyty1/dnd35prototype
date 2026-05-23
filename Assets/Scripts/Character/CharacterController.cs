@@ -486,6 +486,20 @@ public class CharacterController : MonoBehaviour
     /// <summary>Read-only access to breath weapon definition (does NOT consume/trigger cooldown).</summary>
     public BreathWeaponDefinition GetBreathWeaponDefinition() => _breathWeapon;
 
+    // Secondary breath weapon (metallic dragons)
+    [SerializeField] private SecondaryBreathWeaponDefinition _secondaryBreathWeapon;
+    public bool HasSecondaryBreathWeapon => _secondaryBreathWeapon != null;
+    public bool IsSecondaryBreathWeaponReady => _secondaryBreathWeapon != null && _secondaryBreathWeapon.UsesRemaining > 0;
+    public SecondaryBreathWeaponDefinition GetSecondaryBreathWeaponDefinition() => _secondaryBreathWeapon;
+
+    // Frightful Presence (Young Adult+ dragons)
+    [SerializeField] private FrightfulPresenceDefinition _frightfulPresence;
+    [SerializeField] private bool _hasFrightfulPresenceTriggered; // Triggers once per combat
+    public bool HasFrightfulPresence => _frightfulPresence != null;
+    public FrightfulPresenceDefinition GetFrightfulPresenceDefinition() => _frightfulPresence;
+    public bool HasFrightfulPresenceTriggered => _hasFrightfulPresenceTriggered;
+    public void MarkFrightfulPresenceTriggered() { _hasFrightfulPresenceTriggered = true; }
+
     // Engulf tracking
     [SerializeField] private EngulfDefinition _engulf;
     public bool HasEngulf => _engulf != null;
@@ -3627,11 +3641,33 @@ public class CharacterController : MonoBehaviour
         _isIncorporeal = isIncorporeal;
     }
 
-    /// <summary>Configure breath weapon (Hell Hound, future dragons).</summary>
+    /// <summary>Configure breath weapon (Hell Hound, dragons).</summary>
     public void ConfigureBreathWeapon(BreathWeaponDefinition bw)
     {
         _breathWeapon = bw?.Clone();
         _breathWeaponCooldownRemaining = 0;
+    }
+
+    /// <summary>Configure secondary breath weapon (metallic dragons: paralysis gas, sleep gas, etc.).</summary>
+    public void ConfigureSecondaryBreathWeapon(SecondaryBreathWeaponDefinition sbw)
+    {
+        _secondaryBreathWeapon = sbw?.Clone();
+    }
+
+    /// <summary>Configure frightful presence (Young Adult+ dragons).</summary>
+    public void ConfigureFrightfulPresence(FrightfulPresenceDefinition fp)
+    {
+        _frightfulPresence = fp?.Clone();
+        _hasFrightfulPresenceTriggered = false;
+    }
+
+    /// <summary>Use secondary breath weapon (decrements uses remaining). Returns the definition for resolution.</summary>
+    public SecondaryBreathWeaponDefinition UseSecondaryBreathWeapon()
+    {
+        if (_secondaryBreathWeapon == null || _secondaryBreathWeapon.UsesRemaining <= 0)
+            return null;
+        _secondaryBreathWeapon.UsesRemaining--;
+        return _secondaryBreathWeapon;
     }
 
     /// <summary>Configure engulf ability (Gelatinous Cube, Cloaker).</summary>

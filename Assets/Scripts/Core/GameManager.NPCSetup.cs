@@ -600,6 +600,10 @@ public partial class GameManager
             npc.ConfigureIncorporeal(true);
         if (def.BreathWeapon != null)
             npc.ConfigureBreathWeapon(def.BreathWeapon);
+        if (def.SecondaryBreathWeapon != null)
+            npc.ConfigureSecondaryBreathWeapon(def.SecondaryBreathWeapon);
+        if (def.FrightfulPresence != null)
+            npc.ConfigureFrightfulPresence(def.FrightfulPresence);
         if (def.Engulf != null)
             npc.ConfigureEngulf(def.Engulf);
         if (def.StenchAuraDC > 0)
