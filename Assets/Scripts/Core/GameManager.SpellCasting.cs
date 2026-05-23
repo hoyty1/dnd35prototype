@@ -4571,7 +4571,7 @@ public partial class GameManager
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
                 srRoll = DiceService.D20("Hypnotism SR check");
-                srTotal = srRoll + casterLevel;
+                srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
                 if (srTotal < target.Stats.SpellResistance)
                 {
                     logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
@@ -4741,7 +4741,7 @@ public partial class GameManager
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
                 int srRoll = DiceService.D20("Sleep SR check");
-                int srTotal = srRoll + casterLevel;
+                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
                 if (srTotal < target.Stats.SpellResistance)
                 {
                     logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
@@ -4864,7 +4864,7 @@ public partial class GameManager
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
                 int srRoll = DiceService.D20("Color Spray SR check");
-                int srTotal = srRoll + casterLevel;
+                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
                 if (srTotal < target.Stats.SpellResistance)
                 {
                     logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
@@ -4954,7 +4954,7 @@ public partial class GameManager
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
                 int srRoll = DiceService.D20("Dazing Touch SR check");
-                int srTotal = srRoll + casterLevel;
+                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
                 if (srTotal < target.Stats.SpellResistance)
                 {
                     logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks Color Spray (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
@@ -5705,7 +5705,7 @@ public partial class GameManager
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
                 int srRoll = DiceService.D20("Fear SR check");
-                int srTotal = srRoll + casterLevel;
+                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
                 if (srTotal < target.Stats.SpellResistance)
                 {
                     logBuilder.AppendLine($"  • {targetName}: SR blocks Fear (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");

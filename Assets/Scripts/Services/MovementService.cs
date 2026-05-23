@@ -264,7 +264,7 @@ public class MovementService : MonoBehaviour
         if (!ThreatSystem.CanMakeAoO(threatener))
             return null;
 
-        return ThreatSystem.ExecuteAoO(threatener, target);
+        return ThreatSystem.ExecuteAoO(threatener, target, isFromMovement: true);
     }
 
     // ========== MOVEMENT EXECUTION ==========

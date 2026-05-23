@@ -825,7 +825,7 @@ public partial class GameManager
 
                     CombatResult aooResult = _movementService != null
                         ? _movementService.TriggerAoO(threatener, pc)
-                        : ThreatSystem.ExecuteAoO(threatener, pc);
+                        : ThreatSystem.ExecuteAoO(threatener, pc, isFromMovement: true);
                     if (aooResult == null)
                         continue;
 
@@ -958,7 +958,7 @@ public partial class GameManager
 
                 CombatResult aooResult = _movementService != null
                     ? _movementService.TriggerAoO(threatener, mover)
-                    : ThreatSystem.ExecuteAoO(threatener, mover);
+                    : ThreatSystem.ExecuteAoO(threatener, mover, isFromMovement: true);
 
                 if (aooResult != null)
                     CombatUI?.ShowCombatLog($"⚔ AoO (Withdraw): {aooResult.GetDetailedSummary()}");

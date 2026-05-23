@@ -6373,7 +6373,7 @@ public partial class GameManager : MonoBehaviour
 
                 CombatResult aooResult = _movementService != null
                     ? _movementService.TriggerAoO(threatener, pc)
-                    : ThreatSystem.ExecuteAoO(threatener, pc);
+                    : ThreatSystem.ExecuteAoO(threatener, pc, isFromMovement: true);
                 if (aooResult == null)
                     continue;
 
@@ -10036,7 +10036,7 @@ public partial class GameManager : MonoBehaviour
     public List<AoOThreatInfo> CheckForAoO(CharacterController mover, List<Vector2Int> path, bool suppressFirstSquareAoO = false)
         => _movementService != null ? _movementService.CheckForAoO(mover, path, suppressFirstSquareAoO) : new List<AoOThreatInfo>();
     public CombatResult TriggerAoO(CharacterController threatener, CharacterController target)
-        => _movementService != null ? _movementService.TriggerAoO(threatener, target) : ThreatSystem.ExecuteAoO(threatener, target);
+        => _movementService != null ? _movementService.TriggerAoO(threatener, target) : ThreatSystem.ExecuteAoO(threatener, target, isFromMovement: true);
     public bool CanTake5FootStep(CharacterController character, Vector2Int destination)
         => _movementService != null && _movementService.CanTake5FootStep(character, destination);
 

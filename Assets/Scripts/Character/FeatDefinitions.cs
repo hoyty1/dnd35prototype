@@ -1010,10 +1010,38 @@ public static class FeatDefinitions
         // (Not adding - cleric specific)
 
         // --- Spell Focus / Greater Spell Focus ---
-        // (Not adding metamagic-adjacent)
+        var spellFocus = new FeatDefinition("Spell Focus",
+            "Add +1 to the Difficulty Class for all saving throws against spells from the school of magic you select.",
+            FeatType.General)
+        {
+            RequiresChoice = true
+        };
+        spellFocus.Benefit.Description = "+1 to save DCs for spells of chosen school";
+        Add(spellFocus);
+
+        var greaterSpellFocus = new FeatDefinition("Greater Spell Focus",
+            "Add +1 to the Difficulty Class for all saving throws against spells from the school of magic you select. This bonus stacks with Spell Focus.",
+            FeatType.General)
+        {
+            RequiresChoice = true
+        };
+        greaterSpellFocus.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Feat, "Spell Focus", 0));
+        greaterSpellFocus.Benefit.Description = "+1 to save DCs for spells of chosen school (stacks with Spell Focus)";
+        Add(greaterSpellFocus);
 
         // --- Spell Penetration / Greater Spell Penetration ---
-        // (Not adding - caster specific)
+        var spellPenetration = new FeatDefinition("Spell Penetration",
+            "You get a +2 bonus on caster level checks to overcome a creature's spell resistance.",
+            FeatType.General);
+        spellPenetration.Benefit.Description = "+2 to caster level checks vs spell resistance";
+        Add(spellPenetration);
+
+        var greaterSpellPenetration = new FeatDefinition("Greater Spell Penetration",
+            "You get a +2 bonus on caster level checks to overcome a creature's spell resistance. This bonus stacks with Spell Penetration.",
+            FeatType.General);
+        greaterSpellPenetration.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Feat, "Spell Penetration", 0));
+        greaterSpellPenetration.Benefit.Description = "+2 to caster level checks vs spell resistance (stacks with Spell Penetration)";
+        Add(greaterSpellPenetration);
     }
 
     // ========================================================================

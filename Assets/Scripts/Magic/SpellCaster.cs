@@ -365,7 +365,10 @@ public static class SpellCaster
             result.SaveType = spell.SavingThrowType;
             int castingMod = casterStats.IsWizard ? casterStats.INTMod : casterStats.WISMod;
             // Heighten Spell increases save DC by using the heightened spell level
-            result.SaveDC = 10 + effectiveSpellLevel + castingMod;
+            int spellFocusBonus = FeatManager.GetSpellFocusDCBonus(casterStats, spell.School);
+            result.SaveDC = 10 + effectiveSpellLevel + castingMod + spellFocusBonus;
+            if (spellFocusBonus > 0)
+                Debug.Log($"[SpellCaster] Spell Focus bonus +{spellFocusBonus} to DC for {spell.School} school");
 
             if (forceTargetToFailSave)
             {
@@ -842,10 +845,15 @@ public static class SpellCaster
             return 0;
 
         int casterLevel = casterStats.GetCasterLevel();
-        if (casterLevel > 0)
-            return casterLevel;
+        if (casterLevel <= 0)
+            casterLevel = Mathf.Max(1, casterStats.EffectiveCharacterLevel);
 
-        return Mathf.Max(1, casterStats.EffectiveCharacterLevel);
+        // Spell Penetration (+2) and Greater Spell Penetration (+2) stack
+        int spellPenBonus = FeatManager.GetSpellPenetrationBonus(casterStats);
+        if (spellPenBonus > 0)
+            Debug.Log($"[SpellCaster] Spell Penetration bonus +{spellPenBonus} to SR check");
+
+        return casterLevel + spellPenBonus;
     }
 
     /// <summary>

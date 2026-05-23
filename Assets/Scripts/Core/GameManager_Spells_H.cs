@@ -179,7 +179,7 @@ public partial class GameManager
             if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
                 int srRoll = UnityEngine.Random.Range(1, 21);
-                int srTotal = srRoll + casterLevel;
+                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
                 bool srOvercome = srTotal >= target.Stats.SpellResistance;
                 sb.AppendLine($"  SR Check: d20({srRoll}) + {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
                 if (!srOvercome)

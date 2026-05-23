@@ -4168,6 +4168,13 @@ public class CharacterController : MonoBehaviour
             if (_currentHPState == HPState.Stable && newHP == oldHP)
                 return HPState.Stable;
 
+            // Diehard: remain conscious (Disabled) at negative HP, auto-stabilize
+            if (Stats != null && FeatManager.HasDiehard(Stats))
+            {
+                Debug.Log($"[Diehard] {Stats.CharacterName} remains conscious at {newHP} HP (Diehard feat)");
+                return HPState.Disabled;
+            }
+
             return HPState.Dying;
         }
 
@@ -4302,6 +4309,15 @@ public class CharacterController : MonoBehaviour
     {
         if (Stats == null || _currentHPState != HPState.Dying)
             return;
+
+        // Diehard characters auto-stabilize and don't lose HP each round
+        if (FeatManager.HasDiehard(Stats))
+        {
+            SetHPState(HPState.Disabled, emitLog: true);
+            if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
+                GameManager.Instance.CombatUI.ShowCombatLog($"💪 {Stats.CharacterName} stabilizes automatically (Diehard feat) and remains conscious at {Stats.CurrentHP} HP.");
+            return;
+        }
 
         int roll = DiceService.D20("Stabilization check");
         int conMod = Stats.CONMod;

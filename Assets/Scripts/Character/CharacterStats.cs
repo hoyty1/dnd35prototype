@@ -1561,6 +1561,12 @@ public class CharacterStats
     /// <summary>Chosen skill for Skill Focus.</summary>
     public string SkillFocusChoice;
 
+    /// <summary>Chosen school for Spell Focus (e.g. "Evocation", "Conjuration").</summary>
+    public string SpellFocusSchool;
+
+    /// <summary>Chosen school for Greater Spell Focus.</summary>
+    public string GreaterSpellFocusSchool;
+
     /// <summary>Combat Expertise value (0 to 5): trade attack for AC.</summary>
     public int CombatExpertiseValue;
 

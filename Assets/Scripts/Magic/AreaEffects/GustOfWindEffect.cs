@@ -62,7 +62,7 @@ public class GustOfWindEffect
             if (spell != null && spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
                 int srRoll = UnityEngine.Random.Range(1, 21);
-                int srTotal = srRoll + casterLevel;
+                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
                 bool overcameSR = srTotal >= target.Stats.SpellResistance;
                 log.AppendLine($"    SR check: d20({srRoll}) + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance} {(overcameSR ? "PASS" : "BLOCKED")}");
                 if (!overcameSR)

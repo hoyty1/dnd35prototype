@@ -440,6 +440,58 @@ public static class FeatManager
     public static bool HasImprovedUnarmedStrike(CharacterStats stats) => stats != null && stats.HasFeat("Improved Unarmed Strike");
 
     // ========================================================================
+    // SPELL FOCUS / SPELL PENETRATION
+    // ========================================================================
+
+    /// <summary>
+    /// Returns the total Spell Focus DC bonus for a given spell school.
+    /// Spell Focus = +1, Greater Spell Focus = +1 (stacking to +2 total).
+    /// </summary>
+    public static int GetSpellFocusDCBonus(CharacterStats stats, string spellSchool)
+    {
+        if (stats == null || string.IsNullOrEmpty(spellSchool))
+            return 0;
+
+        int bonus = 0;
+        if (stats.HasFeat("Spell Focus") &&
+            string.Equals(stats.SpellFocusSchool, spellSchool, System.StringComparison.OrdinalIgnoreCase))
+            bonus += 1;
+
+        if (stats.HasFeat("Greater Spell Focus") &&
+            string.Equals(stats.GreaterSpellFocusSchool, spellSchool, System.StringComparison.OrdinalIgnoreCase))
+            bonus += 1;
+
+        return bonus;
+    }
+
+    /// <summary>
+    /// Returns the total Spell Penetration bonus to caster level checks vs SR.
+    /// Spell Penetration = +2, Greater Spell Penetration = +2 (stacking to +4 total).
+    /// </summary>
+    public static int GetSpellPenetrationBonus(CharacterStats stats)
+    {
+        if (stats == null)
+            return 0;
+
+        int bonus = 0;
+        if (stats.HasFeat("Spell Penetration"))
+            bonus += 2;
+        if (stats.HasFeat("Greater Spell Penetration"))
+            bonus += 2;
+
+        return bonus;
+    }
+
+    /// <summary>Does this character have Mobility (+4 AC vs movement AoO)?</summary>
+    public static bool HasMobility(CharacterStats stats) => stats != null && stats.HasFeat("Mobility");
+
+    /// <summary>Does this character have Diehard (conscious at negative HP)?</summary>
+    public static bool HasDiehard(CharacterStats stats) => stats != null && stats.HasFeat("Diehard");
+
+    /// <summary>Does this character have the Run feat (5× speed)?</summary>
+    public static bool HasRun(CharacterStats stats) => stats != null && stats.HasFeat("Run");
+
+    // ========================================================================
     // FEAT SUMMARY FOR DISPLAY
     // ========================================================================
 
@@ -494,6 +546,14 @@ public static class FeatManager
         if (stats.HasFeat("Combat Reflexes")) lines.Add($"Combat Reflexes: {GetMaxAoOPerRound(stats)} AoO/round");
         if (stats.HasFeat("Blind-Fight")) lines.Add("Blind-Fight: Reroll concealment miss");
         if (stats.HasFeat("Improved Critical")) lines.Add("Improved Critical: Double threat range");
+        if (stats.HasFeat("Spell Focus")) lines.Add($"Spell Focus ({stats.SpellFocusSchool}): +1 DC");
+        if (stats.HasFeat("Greater Spell Focus")) lines.Add($"Greater Spell Focus ({stats.GreaterSpellFocusSchool}): +1 DC");
+        if (stats.HasFeat("Spell Penetration")) lines.Add("Spell Penetration: +2 vs SR");
+        if (stats.HasFeat("Greater Spell Penetration")) lines.Add("Greater Spell Penetration: +2 vs SR");
+        if (stats.HasFeat("Mobility")) lines.Add("Mobility: +4 dodge AC vs movement AoO");
+        if (stats.HasFeat("Diehard")) lines.Add("Diehard: Conscious at negative HP");
+        if (stats.HasFeat("Run")) lines.Add("Run: 5× speed");
+        if (stats.HasFeat("Quick Draw")) lines.Add("Quick Draw: Draw weapon as free action");
 
         // Metamagic feats
         foreach (var mmId in MetamagicData.AllMetamagicFeats)

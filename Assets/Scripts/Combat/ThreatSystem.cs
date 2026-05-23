@@ -488,7 +488,7 @@ public static class ThreatSystem
     /// <param name="threatener">The character making the AoO.</param>
     /// <param name="target">The character being attacked (the one who provoked).</param>
     /// <returns>The CombatResult of the AoO, or null if the AoO couldn't be made.</returns>
-    public static CombatResult ExecuteAoO(CharacterController threatener, CharacterController target)
+    public static CombatResult ExecuteAoO(CharacterController threatener, CharacterController target, bool isFromMovement = false)
     {
         if (threatener == null || target == null || threatener.Stats == null || target.Stats == null)
             return null;
@@ -515,11 +515,19 @@ public static class ThreatSystem
         Debug.Log($"[ThreatSystem] === ATTACK OF OPPORTUNITY ===");
         Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} makes AoO against {target.Stats.CharacterName}!");
 
+        // Mobility feat: +4 dodge bonus to AC against AoO from movement
+        int mobilityPenalty = 0;
+        if (isFromMovement && FeatManager.HasMobility(target.Stats))
+        {
+            mobilityPenalty = -4; // Applied as attack penalty (equivalent to +4 dodge AC)
+            Debug.Log($"[ThreatSystem] Mobility: {target.Stats.CharacterName} gains +4 dodge AC vs movement AoO (applied as -4 attack penalty)");
+        }
+
         // AoO is a single melee attack at full BAB (no flanking, no range).
         // Prefer an actually melee-capable equipped weapon so an off-hand melee weapon
         // can still be used when the primary slot is currently ranged.
         ItemData aooWeapon = ResolveBestAoOWeapon(threatener);
-        CombatResult result = threatener.Attack(target, false, 0, null, null, null, aooWeapon);
+        CombatResult result = threatener.Attack(target, false, 0, null, null, null, aooWeapon, mobilityPenalty);
 
         // Mark this as an AoO in the result for logging
         result.IsAttackOfOpportunity = true;

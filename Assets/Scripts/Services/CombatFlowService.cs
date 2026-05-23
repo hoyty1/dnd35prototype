@@ -331,6 +331,36 @@ public class CombatFlowService : MonoBehaviour
         return currentType == GameManager.AttackType.Ranged || currentType == GameManager.AttackType.Thrown;
     }
 
+    /// <summary>
+    /// Find an alive enemy adjacent to the attacker for Cleave/Great Cleave.
+    /// Excludes the original target (already dead). Returns null if none found.
+    /// </summary>
+    private CharacterController FindAdjacentEnemy(CharacterController attacker, CharacterController excludeTarget)
+    {
+        if (_gameManager == null || attacker == null)
+            return null;
+
+        var allChars = _gameManager.Combat_GetAllCharacters();
+        if (allChars == null)
+            return null;
+
+        foreach (var candidate in allChars)
+        {
+            if (candidate == null || candidate == attacker || candidate == excludeTarget)
+                continue;
+            if (candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (candidate.Team == attacker.Team)
+                continue; // Skip allies
+            if (!SquareGridUtils.IsAdjacent(attacker.GridPosition, candidate.GridPosition))
+                continue;
+
+            return candidate;
+        }
+
+        return null;
+    }
+
     private void LogDeathPoint(string context, CharacterController attacker, CharacterController target)
     {
         string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "<null>";
@@ -843,6 +873,63 @@ public class CombatFlowService : MonoBehaviour
                     return;
 
                 _gameManager.CombatUI?.ShowCombatLog(log + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
+            }
+
+            // === CLEAVE / GREAT CLEAVE ===
+            // After dropping a foe with a melee attack, grant bonus attack(s) against adjacent enemies.
+            if (!result.IsRangedAttack && attacker.Stats != null &&
+                (FeatManager.HasCleave(attacker.Stats) || FeatManager.HasGreatCleave(attacker.Stats)))
+            {
+                bool isGreatCleave = FeatManager.HasGreatCleave(attacker.Stats);
+                bool cleaving = true;
+                int cleaveCount = 0;
+
+                while (cleaving)
+                {
+                    // Find an alive enemy adjacent to the attacker (within melee reach)
+                    CharacterController cleaveTarget = FindAdjacentEnemy(attacker, target);
+                    if (cleaveTarget == null)
+                    {
+                        if (cleaveCount == 0)
+                            Debug.Log($"[Cleave] {attacker.Stats.CharacterName} has no adjacent enemies for cleave.");
+                        break;
+                    }
+
+                    cleaveCount++;
+                    string cleaveFeatName = isGreatCleave ? "Great Cleave" : "Cleave";
+                    _gameManager.CombatUI?.ShowCombatLog($"⚔️ {cleaveFeatName}! {attacker.Stats.CharacterName} strikes {cleaveTarget.Stats.CharacterName}!");
+
+                    // Cleave attack uses the same weapon at full BAB
+                    CombatResult cleaveResult = attacker.Attack(cleaveTarget, false, 0, null, null, null, attackWeapon);
+                    string cleaveLog = BuildAttackLog(attacker, false, null, cleaveResult);
+                    _gameManager.CombatUI?.ShowCombatLog(cleaveLog);
+
+                    if (cleaveResult.Hit && cleaveResult.TotalDamage > 0)
+                        _gameManager.Combat_CheckConcentrationOnDamage(cleaveTarget, cleaveResult.TotalDamage);
+
+                    if (cleaveResult.Hit && !cleaveResult.IsRangedAttack)
+                        MeleeReactionService.TriggerReactions(attacker, cleaveTarget, cleaveResult);
+
+                    if (cleaveResult.TargetKilled)
+                    {
+                        LogDeathPoint("Cleave:TargetKilled", attacker, cleaveTarget);
+                        _gameManager.Combat_HandleSummonDeathCleanup(cleaveTarget);
+                        _gameManager.CombatUI?.ShowCombatLog($"⚔️ {cleaveTarget.Stats.CharacterName} is slain by {cleaveFeatName}!");
+                        _gameManager.Combat_UpdateAllStatsUI();
+
+                        if (TryHandleVictoryAfterEnemyDeath("Cleave", attacker, cleaveTarget))
+                            return;
+
+                        // Great Cleave: continue cleaving. Regular Cleave: stop after first.
+                        if (!isGreatCleave)
+                            cleaving = false;
+                    }
+                    else
+                    {
+                        // Cleave target survived — stop cleaving
+                        cleaving = false;
+                    }
+                }
             }
         }
 

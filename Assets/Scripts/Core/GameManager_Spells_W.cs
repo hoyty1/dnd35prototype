@@ -913,7 +913,7 @@ public partial class GameManager
             if (spell.SpellResistanceApplies && creature.Stats.SpellResistance > 0)
             {
                 int srRoll = UnityEngine.Random.Range(1, 21);
-                int srTotal = srRoll + casterLevel;
+                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
                 if (srTotal < creature.Stats.SpellResistance)
                 {
                     CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {creature.Stats.CharacterName} resists the Resilient Sphere via Spell Resistance — sphere fails to form!</color>");
