@@ -145,7 +145,7 @@ public static partial class NPCDatabase
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
-            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            AIProfileArchetype = NPCAIProfileArchetype.Dragon,
             SpriteColor = new Color(0.82f, 0.28f, 0.15f, 1f),
             PanelColor = new Color(0.32f, 0.08f, 0.05f, 0.85f),
             NameColor = new Color(1f, 0.65f, 0.45f),

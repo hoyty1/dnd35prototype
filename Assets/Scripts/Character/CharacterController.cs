@@ -483,6 +483,8 @@ public class CharacterController : MonoBehaviour
     [SerializeField] private int _breathWeaponCooldownRemaining;
     public bool HasBreathWeapon => _breathWeapon != null;
     public bool IsBreathWeaponReady => _breathWeapon != null && _breathWeaponCooldownRemaining <= 0;
+    /// <summary>Read-only access to breath weapon definition (does NOT consume/trigger cooldown).</summary>
+    public BreathWeaponDefinition GetBreathWeaponDefinition() => _breathWeapon;
 
     // Engulf tracking
     [SerializeField] private EngulfDefinition _engulf;

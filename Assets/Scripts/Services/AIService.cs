@@ -207,6 +207,13 @@ public class AIService : MonoBehaviour
                 yield break;
             }
 
+            // ── Dragon / breath-weapon tactical AI ──
+            if (profile is DragonAIProfile dragonProfile)
+            {
+                yield return _gameManager.StartCoroutine(ExecuteDragonTurn(npc, targetPC, dragonProfile));
+                yield break;
+            }
+
             // Profile drives targeting/maneuvers, while NPCAIBehavior still selects tactical shell.
             if (behavior == NPCAIBehavior.DefensiveMelee)
             {
@@ -485,6 +492,136 @@ public class AIService : MonoBehaviour
             // ── AI: Wall of Ice interaction ──
             // If the NPC cannot reach the target but is adjacent to a Wall of Ice,
             // try to attack or break through the wall to clear the path.
+            yield return _gameManager.StartCoroutine(TryAIWallInteraction(npc, target));
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Dragon Tactical Turn
+    // ══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Executes a full dragon tactical turn following the priority:
+    /// 1. Cast buff spells (if not in melee)
+    /// 2. Cast attack spells (if not in melee)
+    /// 3. Avoid AoOs
+    /// 4. Prioritize healers/mages (unless closer target)
+    /// 5. Use breath weapon when available to hit most targets
+    /// 6. Full melee attack as last resort
+    /// </summary>
+    private IEnumerator ExecuteDragonTurn(CharacterController npc, CharacterController target, DragonAIProfile dragonProfile)
+    {
+        if (npc == null || target == null || target.Stats == null || target.Stats.IsDead)
+            yield break;
+
+        if (npc.Stats.CurrentHP <= 0)
+        {
+            Debug.Log($"🔥 [AI][Dragon] {npc.Stats.CharacterName} is dead/disabled (HP={npc.Stats.CurrentHP}) — turn ended");
+            yield break;
+        }
+
+        List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
+
+        // Reset breath weapon decision state
+        dragonProfile.WantsToUseBreathWeapon = false;
+        dragonProfile.BreathWeaponAimTarget = null;
+
+        // ── Priority 1 & 2: Cast buff/attack spells if not in melee ──
+        if (!dragonProfile.IsTooCloseForCasting(npc, allCombatants, _gameManager))
+        {
+            if (npc.Stats.IsSpellcaster && TryExecuteSpellcastAction(npc, target))
+            {
+                Debug.Log($"[AI][Dragon] {npc.Stats.CharacterName} cast a spell (priority 1/2).");
+                yield return new WaitForSeconds(0.8f);
+                yield break;
+            }
+        }
+
+        // ── Priority 5: Evaluate breath weapon ──
+        bool breathReady = dragonProfile.EvaluateBreathWeapon(npc, allCombatants, _gameManager);
+
+        if (breathReady && dragonProfile.BreathWeaponAimTarget != null)
+        {
+            // Use breath weapon — this is a standard action
+            Debug.Log($"[AI][Dragon] {npc.Stats.CharacterName} uses breath weapon (hits {dragonProfile.BreathWeaponExpectedHits} enemies)!");
+            yield return _gameManager.StartCoroutine(
+                _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget));
+
+            // After breath weapon, dragon may still have move action for positioning
+            if (npc.Stats.CurrentHP > 0 && npc.Actions.HasMoveAction)
+            {
+                // Try to step away from melee threats (AoO avoidance — priority 3)
+                CharacterController closestEnemy = SelectBestTarget(npc, allCombatants);
+                if (closestEnemy != null)
+                {
+                    int dist = SquareGridUtils.GetDistance(npc.GridPosition, closestEnemy.GridPosition);
+                    if (dist <= 1)
+                    {
+                        SquareCell retreatCell = EvaluateMovementOptions(npc, closestEnemy.GridPosition, retreat: true, profile: dragonProfile);
+                        if (retreatCell != null && retreatCell.Coords != npc.GridPosition)
+                        {
+                            yield return _gameManager.StartCoroutine(
+                                _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                            npc.Actions.UseMoveAction();
+                            _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} repositions after breath weapon.");
+                            yield return new WaitForSeconds(0.3f);
+                        }
+                    }
+                }
+            }
+
+            yield break;
+        }
+
+        // ── Priority 3 & 4 & 6: Movement + melee attack ──
+        // Check for charge opportunity first
+        AIActionType action = SelectBestAction(npc, target, preferAggression: true);
+        if (action == AIActionType.Charge)
+        {
+            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target));
+            yield break;
+        }
+
+        // Move toward target if not in range (priority 3: movement evaluator respects AoO avoidance)
+        if (!npc.IsTargetInCurrentWeaponRange(target))
+        {
+            SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, dragonProfile);
+            if (bestCell != null)
+            {
+                yield return _gameManager.StartCoroutine(
+                    _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+
+                if (npc.Stats.CurrentHP <= 0)
+                {
+                    Debug.Log($"🔥 [AI][Dragon] {npc.Stats.CharacterName} killed during movement — turn ended");
+                    yield break;
+                }
+
+                npc.Actions.UseMoveAction();
+                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!");
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        if (npc.Stats.CurrentHP <= 0)
+            yield break;
+
+        // Re-evaluate target after movement (priority 4: profile ScoreTarget already weights healers/mages)
+        target = SelectBestTarget(npc, allCombatants);
+        if (target == null)
+            yield break;
+
+        // ── Priority 6: Full melee attack ──
+        if (npc.IsTargetInCurrentWeaponRange(target) && !target.Stats.IsDead)
+        {
+            bool usedSpecial = ShouldUseManeuver(npc, target) && TryExecutePreferredManeuver(npc, target, dragonProfile);
+            if (!usedSpecial)
+                yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, target));
+            else
+                yield return new WaitForSeconds(0.8f);
+        }
+        else
+        {
             yield return _gameManager.StartCoroutine(TryAIWallInteraction(npc, target));
         }
     }

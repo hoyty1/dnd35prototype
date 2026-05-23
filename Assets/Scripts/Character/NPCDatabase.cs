@@ -556,7 +556,8 @@ public enum NPCAIProfileArchetype
     Necromancer,
     UndeadMindless,
     Swarm,
-    IndiscriminateSwarm
+    IndiscriminateSwarm,
+    Dragon
 }
 
 /// <summary>

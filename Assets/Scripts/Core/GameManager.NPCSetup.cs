@@ -716,6 +716,8 @@ public partial class GameManager
                 return ScriptableObject.CreateInstance<SwarmAI>();
             case NPCAIProfileArchetype.IndiscriminateSwarm:
                 return ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
+            case NPCAIProfileArchetype.Dragon:
+                return ScriptableObject.CreateInstance<DragonAIProfile>();
             default:
                 return null;
         }

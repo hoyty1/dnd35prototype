@@ -1534,4 +1534,135 @@ public partial class GameManager
         Debug.Log("[GameManager] Quickened spell tracking reset for new round");
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    //  Breath Weapon Execution (called from AIService for dragon-type AI)
+    // ══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Resolves a breath weapon attack aimed at <paramref name="aimTarget"/>.
+    /// Computes the affected cells (cone or line), rolls damage, and applies
+    /// Reflex/Fort saves per D&amp;D 3.5e rules. Returns true if the breath
+    /// weapon was successfully used.
+    /// </summary>
+    public IEnumerator NPCExecuteBreathWeaponForAI(CharacterController npc, CharacterController aimTarget)
+    {
+        if (npc == null || aimTarget == null || !npc.HasBreathWeapon || !npc.IsBreathWeaponReady)
+            yield break;
+
+        BreathWeaponDefinition bw = npc.UseBreathWeapon(); // consumes use, starts cooldown
+        if (bw == null)
+            yield break;
+
+        int rangeSquares = Mathf.Max(1, bw.RangeFeet / 5);
+        string shapeName = bw.Shape == BreathWeaponShape.Cone ? "cone" : "line";
+
+        // Compute affected cells
+        HashSet<Vector2Int> cells;
+        if (bw.Shape == BreathWeaponShape.Cone)
+            cells = AoESystem.GetConeCells(npc.GridPosition, aimTarget.GridPosition, rangeSquares, Grid);
+        else
+            cells = AoESystem.GetLineCellsToTarget(npc.GridPosition, aimTarget.GridPosition, rangeSquares, Grid);
+
+        if (cells == null || cells.Count == 0)
+        {
+            Debug.LogWarning($"[AI][BreathWeapon] {npc.Stats.CharacterName} breath weapon produced no cells!");
+            yield break;
+        }
+
+        // Roll damage: DamageCount × d(DamageDice)
+        int totalDamage = 0;
+        for (int i = 0; i < bw.DamageCount; i++)
+            totalDamage += Random.Range(1, bw.DamageDice + 1);
+
+        // Gather targets in the area
+        List<CharacterController> allChars = GetAllCharacters();
+        var targets = new List<CharacterController>();
+        for (int i = 0; i < allChars.Count; i++)
+        {
+            CharacterController c = allChars[i];
+            if (c == null || c.Stats == null || c.Stats.IsDead || c == npc)
+                continue;
+            if (cells.Contains(c.GridPosition))
+                targets.Add(c);
+        }
+
+        // Build combat log
+        var log = new System.Text.StringBuilder();
+        log.AppendLine("═══════════════════════════════════");
+        log.AppendLine($"🔥 {npc.Stats.CharacterName} unleashes a {bw.RangeFeet}-ft {shapeName} of {bw.DamageType}!");
+        log.AppendLine($"  Damage: {bw.DamageCount}d{bw.DamageDice} = {totalDamage}");
+        log.AppendLine($"  Save DC {bw.SaveDC} ({(bw.IsReflexSave ? "Reflex" : "Fortitude")}) for half damage");
+        log.AppendLine($"  Targets: {targets.Count} creature(s) in {cells.Count} squares");
+        log.AppendLine();
+
+        for (int t = 0; t < targets.Count; t++)
+        {
+            CharacterController target = targets[t];
+            log.AppendLine($"  --- {target.Stats.CharacterName} ---");
+
+            // Check damage immunity
+            if (target.Stats.DamageImmunities != null && target.Stats.DamageImmunities.Contains(bw.DamageType))
+            {
+                log.AppendLine($"  IMMUNE to {bw.DamageType}! No damage taken.");
+                log.AppendLine();
+                continue;
+            }
+
+            // Roll saving throw
+            int saveBonus = bw.IsReflexSave ? target.Stats.ReflexSave : target.Stats.FortitudeSave;
+            int saveRoll = Random.Range(1, 21);
+            int saveTotal = saveRoll + saveBonus;
+            bool saved = saveTotal >= bw.SaveDC;
+
+            int damageTaken = saved ? totalDamage / 2 : totalDamage;
+
+            // Check damage resistance
+            if (target.Stats.DamageResistances != null)
+            {
+                for (int r = 0; r < target.Stats.DamageResistances.Count; r++)
+                {
+                    var res = target.Stats.DamageResistances[r];
+                    if (res != null && res.Type == bw.DamageType && res.Amount > 0)
+                    {
+                        int reduced = Mathf.Min(damageTaken, res.Amount);
+                        damageTaken -= reduced;
+                        log.AppendLine($"  Resistance ({bw.DamageType} {res.Amount}): -{reduced} damage");
+                        break;
+                    }
+                }
+            }
+
+            string saveResult = saved ? "SAVED" : "FAILED";
+            log.AppendLine($"  {(bw.IsReflexSave ? "Reflex" : "Fortitude")} save DC {bw.SaveDC}: d20={saveRoll}+{saveBonus}={saveTotal} - {saveResult}!");
+
+            int hpBefore = target.Stats.CurrentHP;
+            if (damageTaken > 0)
+                target.Stats.TakeDamage(damageTaken);
+            int hpAfter = target.Stats.CurrentHP;
+
+            log.AppendLine($"  Damage: {damageTaken} {bw.DamageType}{(saved ? " (half)" : "")}");
+            log.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
+
+            if (target.Stats.IsDead || hpAfter <= -10)
+            {
+                target.OnDeath();
+                HandleSummonDeathCleanup(target);
+                log.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
+            }
+
+            // Check concentration
+            if (damageTaken > 0)
+                CheckConcentrationOnDamage(target, damageTaken);
+
+            log.AppendLine();
+        }
+
+        log.Append("═══════════════════════════════════");
+
+        CombatUI?.ShowCombatLog(log.ToString());
+        if (LogAttacksToConsole)
+            Debug.Log(log.ToString());
+
+        yield return new WaitForSeconds(1.0f);
+    }
 }
