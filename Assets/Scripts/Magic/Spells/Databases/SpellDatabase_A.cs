@@ -146,17 +146,25 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.ALTER_SELF,
                     Name = "Alter Self",
-                    Description = "Assume form of a similar creature. +10 Disguise, may gain abilities. 10 min/level. PHB p.197",
+                    Description = "Transmutation. Assume form of a Small or Medium creature of your type. Gain +2 size bonus to STR (if larger form) or +2 size bonus to DEX (if smaller form). Gain natural attacks of new form. Do NOT gain extraordinary special attacks/qualities. +10 circumstance bonus to Disguise. Duration: 10 min/level (D). PHB p.197",
                     SpellLevel = 2, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = -1,
+                    BuffStatName = "STR",
+                    BuffStatBonus = 2, // Size bonus to STR (simplified — could be DEX if smaller)
+                    BuffBonusType = BonusType.Size,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Transformation not implemented]"
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData

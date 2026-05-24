@@ -109,5 +109,31 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ── TRUE SEEING — PHB p.296 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.TRUE_SEEING,
+                    Name = "True Seeing",
+                    Description = "Divination. Subject sees through normal and magical darkness, notices secret doors, sees invisible creatures/objects, sees through illusions, sees true form of polymorphed creatures. Range: 120 ft. Duration: 1 min/level. Material: ointment for eyes costing 250 gp. PHB p.296",
+                    SpellLevel = 5, School = "Divination",
+                    ClassList = new[] { "Cleric", "Druid" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Divination,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: ointment worth 250 gp
+                    IsPlaceholder = false
+                });
+
     }
 }

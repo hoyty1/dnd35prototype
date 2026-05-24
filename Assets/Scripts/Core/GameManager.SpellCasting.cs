@@ -4502,6 +4502,64 @@ public partial class GameManager
                 return;
             }
 
+            // ── Phase 2 AoE Spells ──
+
+            // Sunburst — 80-ft burst, 6d6 damage + blindness
+            if (TryResolveSunburstSpell(caster, _pendingSpell, targets, aoeCells, out string sunburstLog))
+            {
+                _lastCombatLog = sunburstLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("Sunburst"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Earthquake — 80-ft spread, knocks prone + debris damage
+            if (TryResolveEarthquakeSpell(caster, _pendingSpell, targets, aoeCells, out string earthquakeLog))
+            {
+                _lastCombatLog = earthquakeLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("Earthquake"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Shield of Law — AoE buff, +4 deflection AC + +4 saves
+            if (TryResolveShieldOfLawSpell(caster, _pendingSpell, targets, aoeCells, out string shieldOfLawLog))
+            {
+                _lastCombatLog = shieldOfLawLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
             // ── Evard's Black Tentacles (persistent grappling area effect) ──
             if (TryResolveBlackTentaclesAoECast(caster, _pendingSpell, aoeCells, out string blackTentaclesLog))
             {
@@ -7566,6 +7624,62 @@ public partial class GameManager
             TryResolveGlobeOfInvulnerabilitySpell(caster, spell, out string globeLog);
             CombatUI?.ShowCombatLog(globeLog);
             return null;
+        }
+
+        // ===== PHASE 2 & 3 SINGLE-TARGET SPELLS =====
+
+        // Disintegrate — ranged touch ray, massive damage
+        if (spell != null && spell.SpellId == SpellNames.DISINTEGRATE)
+        {
+            return ApplyDisintegrateEffect(caster, target, spell, spellComp);
+        }
+
+        // Protection from Spells — +8 resistance saves
+        if (spell != null && spell.SpellId == SpellNames.PROTECTION_FROM_SPELLS)
+        {
+            return ApplyProtectionFromSpellsEffect(caster, target, spell, spellComp);
+        }
+
+        // Spell Turning — reflect spells
+        if (spell != null && spell.SpellId == SpellNames.SPELL_TURNING)
+        {
+            return ApplySpellTurningEffect(caster, target, spell, spellComp);
+        }
+
+        // Heal — major healing + condition cure
+        if (spell != null && spell.SpellId == SpellNames.HEAL)
+        {
+            return ApplyHealSpellEffect(caster, target, spell, spellComp);
+        }
+
+        // Resurrection — restore dead to life
+        if (spell != null && spell.SpellId == SpellNames.RESURRECTION)
+        {
+            return ApplyResurrectionEffect(caster, target, spell, spellComp);
+        }
+
+        // True Seeing — see through illusions/invisibility
+        if (spell != null && spell.SpellId == SpellNames.TRUE_SEEING)
+        {
+            return ApplyTrueSeeingEffect(caster, target, spell, spellComp);
+        }
+
+        // Mislead — Greater Invisibility + illusory double
+        if (spell != null && spell.SpellId == SpellNames.MISLEAD)
+        {
+            return ApplyMisleadEffect(caster, target, spell, spellComp);
+        }
+
+        // Dancing Lights — utility cantrip
+        if (spell != null && spell.SpellId == SpellNames.DANCING_LIGHTS)
+        {
+            return ApplyDancingLightsEffect(caster, target, spell, spellComp);
+        }
+
+        // Alter Self — shape change buff
+        if (spell != null && spell.SpellId == SpellNames.ALTER_SELF)
+        {
+            return ApplyAlterSelfEffect(caster, target, spell, spellComp);
         }
 
         // ===== LEGACY FALLBACK (no StatusEffectManager) =====

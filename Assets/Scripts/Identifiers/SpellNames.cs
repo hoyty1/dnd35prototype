@@ -856,5 +856,34 @@ namespace DND35e.Identifiers
 
         /// <summary>Barkskin (spell id: barkskin) — Druid/Ranger version</summary>
         public const string BARKSKIN = "barkskin";
+
+        // ── Phase 2 & 3 staff spells ──
+
+        /// <summary>Disintegrate (spell id: disintegrate)</summary>
+        public const string DISINTEGRATE = "disintegrate";
+
+        /// <summary>Sunburst (spell id: sunburst)</summary>
+        public const string SUNBURST = "sunburst";
+
+        /// <summary>Earthquake (spell id: earthquake)</summary>
+        public const string EARTHQUAKE = "earthquake";
+
+        /// <summary>Shield of Law (spell id: shield_of_law)</summary>
+        public const string SHIELD_OF_LAW = "shield_of_law";
+
+        /// <summary>Protection from Spells (spell id: protection_from_spells)</summary>
+        public const string PROTECTION_FROM_SPELLS = "protection_from_spells";
+
+        /// <summary>Spell Turning (spell id: spell_turning)</summary>
+        public const string SPELL_TURNING = "spell_turning";
+
+        /// <summary>Heal (spell id: heal)</summary>
+        public const string HEAL = "heal";
+
+        /// <summary>True Seeing (spell id: true_seeing)</summary>
+        public const string TRUE_SEEING = "true_seeing";
+
+        /// <summary>Mislead (spell id: mislead)</summary>
+        public const string MISLEAD = "mislead";
     }
 }

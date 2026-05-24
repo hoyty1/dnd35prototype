@@ -292,5 +292,35 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("eagles_splendor_pal", SpellNames.EAGLES_SPLENDOR, "Paladin", 2);
         RegisterClassSpellAlias("endure_elements_clr", SpellNames.ENDURE_ELEMENTS, "Cleric", 1);
 
+        // ── EARTHQUAKE — PHB p.225 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.EARTHQUAKE,
+                    Name = "Earthquake",
+                    Description = "Evocation [Earth]. 80-ft-radius spread. Intense tremor shakes terrain. Creatures must succeed on Reflex save DC 15 or fall prone. Structures take massive damage. Duration: 1 round. Caves may collapse. PHB p.225",
+                    SpellLevel = 8, School = "Evocation",
+                    ClassList = new[] { "Cleric", "Druid" },
+                    TargetType = SpellTargetType.Area,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 16,  // 80-ft radius
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.All,
+                    RangeCategory = SpellRangeCategory.Long,
+                    EffectType = SpellEffectType.Control,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SaveHalves = false,
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

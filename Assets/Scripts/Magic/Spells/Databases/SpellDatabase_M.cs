@@ -587,5 +587,29 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("magic_weapon_clr", SpellNames.MAGIC_WEAPON, "Cleric", 1);
         RegisterClassSpellAlias("mending_clr", SpellNames.MENDING, "Cleric", 0);
 
+        // ── MISLEAD — PHB p.254 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MISLEAD,
+                    Name = "Mislead",
+                    Description = "Illusion (Figment/Glamer). Caster becomes invisible (as Greater Invisibility) and an illusory double appears in caster's place. Double moves as caster directs (move action). Duration: 1 round/level (concentration). PHB p.254",
+                    SpellLevel = 6, School = "Illusion",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Illusion,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = false, // S only
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

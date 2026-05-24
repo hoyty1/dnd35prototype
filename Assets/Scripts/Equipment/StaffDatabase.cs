@@ -205,7 +205,7 @@ public static class StaffDatabase
                 Spell(SpellNames.SHIELD, "Shield", 1, 1),
                 Spell(SpellNames.SHIELD_OF_FAITH, "Shield of Faith", 1, 1),
                 Spell(SpellNames.SHIELD_OTHER, "Shield Other", 2, 1),
-                StubSpell("shield_of_law", "Shield of Law", 8, 3, "8th-level abjuration not yet registered")
+                Spell(SpellNames.SHIELD_OF_LAW, "Shield of Law", 8, 3)
             }
         });
     }
@@ -347,10 +347,10 @@ public static class StaffDatabase
             ImplementationNotes = "2/4 spells work (Flare, Daylight). Dancing Lights is placeholder. Sunburst (L8) not registered.",
             Spells = new List<StaffSpellEntry>
             {
-                StubSpell("dancing_lights", "Dancing Lights", 0, 1, "Creates up to 4 lights, lasts 1 minute"),
+                Spell(SpellNames.DANCING_LIGHTS, "Dancing Lights", 0, 1),
                 Spell(SpellNames.FLARE, "Flare", 0, 1),
                 Spell(SpellNames.DAYLIGHT, "Daylight", 3, 1),
-                StubSpell("sunburst", "Sunburst", 8, 2, "80-ft radius burst, 8d6 damage + permanent blindness, Reflex half/negates")
+                Spell(SpellNames.SUNBURST, "Sunburst", 8, 2)
             }
         });
 
@@ -428,7 +428,7 @@ public static class StaffDatabase
                 StubSpell("major_image", "Major Image", 3, 1, "Creates visual, auditory, olfactory, and thermal figment"),
                 Spell(SpellNames.RAINBOW_PATTERN, "Rainbow Pattern", 4, 2),
                 Spell(SpellNames.PERSISTENT_IMAGE, "Persistent Image", 5, 2),
-                StubSpell("mislead", "Mislead", 6, 3, "Caster becomes invisible + creates illusory double")
+                Spell(SpellNames.MISLEAD, "Mislead", 6, 3)
             }
         });
 
@@ -484,11 +484,11 @@ public static class StaffDatabase
             Spells = new List<StaffSpellEntry>
             {
                 Spell(SpellNames.EXPEDITIOUS_RETREAT, "Expeditious Retreat", 1, 1),
-                StubSpell("alter_self", "Alter Self", 2, 1, "Assume form of similar creature, placeholder"),
+                Spell(SpellNames.ALTER_SELF, "Alter Self", 2, 1),
                 Spell(SpellNames.BLINK, "Blink", 3, 1),
                 StubSpell("polymorph", "Polymorph", 4, 2, "Change target into another form, Fort negates"),
                 StubSpell("baleful_polymorph", "Baleful Polymorph", 5, 2, "Permanently transforms target into harmless animal"),
-                StubSpell("disintegrate", "Disintegrate", 6, 3, "Thin green ray, 2d6/CL damage (max 40d6) or destroys object")
+                Spell(SpellNames.DISINTEGRATE, "Disintegrate", 6, 3)
             }
         });
     }
@@ -515,8 +515,8 @@ public static class StaffDatabase
             ImplementationNotes = "Neither Heal (L6) nor Resurrection (L7) are registered.",
             Spells = new List<StaffSpellEntry>
             {
-                StubSpell("heal", "Heal", 6, 1, "Heals 10 HP/CL (max 150), cures conditions"),
-                StubSpell("resurrection", "Resurrection", 7, 5, "Restores life to dead creature")
+                Spell(SpellNames.HEAL, "Heal", 6, 1),
+                Spell(SpellNames.RESURRECTION, "Resurrection", 7, 5)
             }
         });
 
@@ -564,7 +564,7 @@ public static class StaffDatabase
                 StubSpell("detect_secret_doors", "Detect Secret Doors", 1, 1, "Reveals hidden doors within 60 ft"),
                 StubSpell("locate_object", "Locate Object", 2, 1, "Senses direction toward object"),
                 StubSpell("tongues", "Tongues", 3, 1, "Speak and understand any language"),
-                StubSpell("true_seeing", "True Seeing", 5, 3, "See all things as they actually are"),
+                Spell(SpellNames.TRUE_SEEING, "True Seeing", 5, 3),
                 StubSpell("prying_eyes", "Prying Eyes", 5, 4, "Creates 1d4+CL floating eyes for scouting")
             }
         });
@@ -587,7 +587,7 @@ public static class StaffDatabase
             {
                 Spell(SpellNames.PASSWALL, "Passwall", 5, 1),
                 StubSpell("move_earth", "Move Earth", 6, 3, "Moves dirt slowly over large areas"),
-                StubSpell("earthquake", "Earthquake", 8, 5, "Intense tremor shakes terrain in 80-ft radius")
+                Spell(SpellNames.EARTHQUAKE, "Earthquake", 8, 5)
             }
         });
 
@@ -653,8 +653,8 @@ public static class StaffDatabase
                 // Additional Magi spells
                 Spell(SpellNames.TELEKINESIS, "Telekinesis", 5, 1),
                 StubSpell("plane_shift", "Plane Shift", 7, 2, "Transport to another plane of existence"),
-                StubSpell("spell_turning", "Spell Turning", 7, 2, "Reflect 1d4+6 spell levels back at caster"),
-                StubSpell("protection_from_spells", "Protection from Spells", 8, 2, "+8 resistance bonus to saves vs spells"),
+                Spell(SpellNames.SPELL_TURNING, "Spell Turning", 7, 2),
+                Spell(SpellNames.PROTECTION_FROM_SPELLS, "Protection from Spells", 8, 2),
                 StubSpell("summon_monster_ix", "Summon Monster IX", 9, 2, "Summons powerful extraplanar creature")
             }
         });

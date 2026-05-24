@@ -497,5 +497,29 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── RESURRECTION — PHB p.272 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.RESURRECTION,
+                    Name = "Resurrection",
+                    Description = "Conjuration (Healing). Restores dead creature to life with full HP. Target loses one level (or 2 CON if level 1). Can restore creatures dead up to 10 years/CL. Cannot raise undead, constructs, or outsiders. Requires a body part. Material: 10,000 gp diamond. PHB p.272",
+                    SpellLevel = 7, School = "Conjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Touch,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Healing,
+                    DurationType = DurationType.Instantaneous,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard, // 10-minute casting normally, but staff is Standard
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: 10,000 gp diamond
+                    IsPlaceholder = false
+                });
+
     }
 }

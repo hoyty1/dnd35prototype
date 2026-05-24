@@ -526,5 +526,31 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("tashas_hideous_laughter_brd", SpellNames.HIDEOUS_LAUGHTER, "Bard", 1);
         RegisterClassSpellAlias("hideous_laughter_brd", SpellNames.HIDEOUS_LAUGHTER, "Bard", 1);
 
+        // ── HEAL — PHB p.239 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.HEAL,
+                    Name = "Heal",
+                    Description = "Conjuration (Healing). Heals 10 HP/CL (max 150). Cures: ability damage, blinded, confused, dazed, dazzled, deafened, diseased, exhausted, fatigued, feebleminded, insanity, nauseated, sickened, stunned, poisoned. Does NOT cure negative levels. No effect on undead (use Harm). PHB p.239",
+                    SpellLevel = 6, School = "Conjuration",
+                    ClassList = new[] { "Cleric", "Druid" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Healing,
+                    HealDice = 1, // Handled manually — 10 HP/level, max 150
+                    HealCount = 1,
+                    BonusHealing = 0,
+                    DurationType = DurationType.Instantaneous,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

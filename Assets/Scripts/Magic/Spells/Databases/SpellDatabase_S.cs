@@ -1085,5 +1085,94 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ── SUNBURST — PHB p.289 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SUNBURST,
+                    Name = "Sunburst",
+                    Description = "Evocation [Light]. 80-ft-radius burst. 6d6 damage to all creatures in area. Undead take 1d6/CL (max 25d6). Creatures blinded permanently (undead destroyed if fail save). Reflex save negates blindness and halves damage. SR: Yes. PHB p.289",
+                    SpellLevel = 8, School = "Evocation",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Druid" },
+                    TargetType = SpellTargetType.Area,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 16,  // 80-ft radius
+                    AoERangeSquares = 0,  // Long range to center
+                    AoEFilter = AoETargetFilter.All,
+                    RangeCategory = SpellRangeCategory.Long,
+                    EffectType = SpellEffectType.Damage,
+                    DamageType = "light",
+                    DamageDice = 6,
+                    DamageCount = 6,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ── SHIELD OF LAW — PHB p.278 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SHIELD_OF_LAW,
+                    Name = "Shield of Law",
+                    Description = "Abjuration [Lawful]. +4 deflection AC, +4 resistance bonus on saves, SR 25 vs chaotic spells, blocks mental control by chaotic creatures. Affects one creature/level in 20-ft radius. Duration: 1 round/level (D). PHB p.278",
+                    SpellLevel = 8, School = "Abjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,  // 20-ft radius
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.AlliesOnly,
+                    RangeCategory = SpellRangeCategory.Custom,
+                    RangeSquares = 4,
+                    EffectType = SpellEffectType.Buff,
+                    BuffDeflectionBonus = 4,
+                    BuffSaveBonus = 4,
+                    BuffBonusType = BonusType.Deflection,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ── SPELL TURNING — PHB p.282 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SPELL_TURNING,
+                    Name = "Spell Turning",
+                    Description = "Abjuration. Reflect 1d4+6 spell levels of spells that target you back at caster. Only single-target spells are reflected. Duration: until expended or 10 min/level. PHB p.282",
+                    SpellLevel = 7, School = "Abjuration",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = false,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

@@ -14,17 +14,20 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.DANCING_LIGHTS,
                     Name = "Dancing Lights",
-                    Description = "Creates up to four lights that move as you direct. Lasts 1 minute.",
+                    Description = "Evocation. Creates up to 4 torch-like lights (or 1 glowing humanoid shape). Move lights up to 100 ft/round as a move action. Lights wink out if they exceed range. Duration: 1 minute. PHB p.216",
                     SpellLevel = 0, School = "Evocation",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.Self,
-                    RangeSquares = 20,
-                    EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = 10,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Utility,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Light/illumination not implemented]"
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData
@@ -911,6 +914,32 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);
         // Druid alias for Dispel Magic at level 4
         RegisterClassSpellAlias("dispel_magic_drd", SpellNames.DISPEL_MAGIC, "Druid", 4);
+
+        // ── DISINTEGRATE — PHB p.222 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DISINTEGRATE,
+                    Name = "Disintegrate",
+                    Description = "Transmutation. Thin green ray that deals 2d6/CL damage (max 40d6). On failed Fort save, creature/object is entirely disintegrated (reduced to fine dust). On successful save, creature takes 5d6 damage instead. Only first creature or object struck. SR: Yes. PHB p.222",
+                    SpellLevel = 6, School = "Transmutation",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    IsRangedTouch = true,
+                    EffectType = SpellEffectType.Damage,
+                    DamageType = "force",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SaveHalves = false, // Fort partial — handled manually (5d6 on save)
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true,
+                    IsPlaceholder = false
+                });
 
     }
 }

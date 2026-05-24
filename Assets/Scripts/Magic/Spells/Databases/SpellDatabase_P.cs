@@ -431,5 +431,35 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ── PROTECTION FROM SPELLS — PHB p.266 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.PROTECTION_FROM_SPELLS,
+                    Name = "Protection from Spells",
+                    Description = "Abjuration. Grants +8 resistance bonus on saving throws against spells and spell-like abilities. Affects 1 creature touched per 4 caster levels. Does not stack with other resistance bonuses. Duration: 10 min/level. Material: 500gp diamond. PHB p.266",
+                    SpellLevel = 8, School = "Abjuration",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    BuffSaveBonus = 8,
+                    BuffBonusType = BonusType.Resistance,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: diamond worth 500 gp that is consumed
+                    IsPlaceholder = false
+                });
+
     }
 }
