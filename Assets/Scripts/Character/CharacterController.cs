@@ -6280,7 +6280,15 @@ public class CharacterController : MonoBehaviour
         // Destruction Domain Smite: +4 attack on next melee attack
         int destructionSmiteAttackBonus = GameManager.GetDestructionSmiteAttackBonus(this);
 
-        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + masterworkAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus;
+        // Enchantment attack bonus (e.g., Bane +2 vs matching creature type)
+        int enchantmentAttackBonus = 0;
+        if (weapon != null && weapon.IsEnchanted && target != null && target.Stats != null)
+        {
+            string targetCreatureType = target.Stats.CreatureType ?? "";
+            enchantmentAttackBonus = EnchantmentEffects.GetEnchantmentAttackBonus(weapon, targetCreatureType);
+        }
+
+        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + masterworkAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus + enchantmentAttackBonus;
 
         // D&D 3.5e: making an attack roll (or attempting to attack) breaks standard invisibility.
         // Greater Invisibility does NOT break on attack (BreaksOnAttack=false).
@@ -6735,6 +6743,141 @@ public class CharacterController : MonoBehaviour
                     : $"{result.SpecialAttackNote} Torch vs swarm: 1d3({torchDamage}) fire damage.";
             }
 
+            // ================================================================
+            // ENCHANTMENT BONUS DAMAGE (D&D 3.5 DMG special abilities)
+            // ================================================================
+            int enchantmentBonusDamage = 0;
+            string enchantmentDamageLog = "";
+            if (weapon != null && weapon.IsEnchanted)
+            {
+                // --- Elemental damage (Flaming, Frost, Shock, etc.) ---
+                var elemDmg = EnchantmentEffects.RollElementalDamage(weapon);
+                for (int ed = 0; ed < elemDmg.Count; ed++)
+                {
+                    enchantmentBonusDamage += elemDmg[ed].Amount;
+                    enchantmentDamageLog += $" {elemDmg[ed]}";
+                }
+
+                // --- Crit bonus damage (Flaming Burst, Icy Burst, Shocking Burst, Thundering) ---
+                if (critConfirmed)
+                {
+                    var critDmg = EnchantmentEffects.RollCritBonusDamage(weapon, critMultiplier);
+                    for (int cd = 0; cd < critDmg.Count; cd++)
+                    {
+                        enchantmentBonusDamage += critDmg[cd].Amount;
+                        enchantmentDamageLog += $" {critDmg[cd]}";
+                    }
+                }
+
+                // --- Alignment damage (Holy, Unholy, Axiomatic, Anarchic) ---
+                if (target != null && target.Stats != null)
+                {
+                    var alignDmg = EnchantmentEffects.RollAlignmentDamage(weapon, target.Stats.CharacterAlignment);
+                    for (int ad = 0; ad < alignDmg.Count; ad++)
+                    {
+                        enchantmentBonusDamage += alignDmg[ad].Amount;
+                        enchantmentDamageLog += $" {alignDmg[ad]}";
+                    }
+
+                    // --- Bane damage ---
+                    string targetCreatureType = target.Stats.CreatureType ?? "";
+                    var baneDmg = EnchantmentEffects.RollBaneDamage(weapon, targetCreatureType);
+                    for (int bd = 0; bd < baneDmg.Count; bd++)
+                    {
+                        enchantmentBonusDamage += baneDmg[bd].Amount;
+                        enchantmentDamageLog += $" {baneDmg[bd]}";
+                    }
+                }
+
+                // --- Vicious damage (to target and backlash to wielder) ---
+                if (EnchantmentEffects.RollViciousDamage(weapon, out int viciousTarget, out int viciousBacklash))
+                {
+                    enchantmentBonusDamage += viciousTarget;
+                    enchantmentDamageLog += $" +{viciousTarget} (Vicious)";
+                    if (viciousBacklash > 0 && Stats != null)
+                    {
+                        Stats.TakeDamage(viciousBacklash);
+                        Debug.Log($"[Enchantment] Vicious backlash: {Stats.CharacterName} takes {viciousBacklash} damage from Vicious weapon.");
+                    }
+                }
+
+                // --- Vorpal (instant kill on natural 20 confirmed crit) ---
+                if (EnchantmentEffects.CheckVorpalEffect(weapon, result.DieRoll, critConfirmed))
+                {
+                    if (target != null && target.Stats != null)
+                    {
+                        Debug.Log($"[Enchantment] VORPAL! {Stats.CharacterName}'s {weapon.Name} decapitates {target.Stats.CharacterName}!");
+                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                            ? "⚔ VORPAL DECAPITATION!"
+                            : $"{result.SpecialAttackNote} ⚔ VORPAL DECAPITATION!";
+                        // Vorpal is instant death (set HP to lethal threshold)
+                        target.Stats.TakeDamage(target.Stats.CurrentHP + 100);
+                    }
+                }
+
+                // --- Wounding (1 CON damage per hit) ---
+                if (EnchantmentEffects.HasWoundingEffect(weapon) && target != null && target.Stats != null)
+                {
+                    Debug.Log($"[Enchantment] Wounding: {target.Stats.CharacterName} takes 1 CON damage from Wounding weapon.");
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? "Wounding: -1 CON"
+                        : $"{result.SpecialAttackNote} Wounding: -1 CON";
+                    // Note: actual CON damage tracking would need ability damage system
+                }
+
+                if (enchantmentBonusDamage > 0)
+                {
+                    Debug.Log($"[Enchantment] {Stats.CharacterName}'s enchanted {weapon.Name} deals +{enchantmentBonusDamage} bonus damage:{enchantmentDamageLog}");
+                }
+            }
+
+            rawTotalDamage += enchantmentBonusDamage;
+
+            // ================================================================
+            // FORTIFICATION CHECK (defender's armor/shield)
+            // ================================================================
+            if (critConfirmed || (result.SneakAttackApplied && rawSneakDamage > 0))
+            {
+                Inventory targetInv = target?.GetInventoryData();
+                ItemData defenderArmor = targetInv?.ArmorRobeSlot;
+                ItemData defenderShield = (targetInv?.LeftHandSlot != null && targetInv.LeftHandSlot.IsShield) ? targetInv.LeftHandSlot : null;
+                if (EnchantmentEffects.CheckFortification(defenderArmor, defenderShield, out int fortRoll))
+                {
+                    int fortPercent = EnchantmentEffects.GetFortificationPercent(defenderArmor)
+                                    + EnchantmentEffects.GetFortificationPercent(defenderShield);
+                    fortPercent = Mathf.Min(fortPercent, 100);
+                    Debug.Log($"[Enchantment] Fortification! Roll {fortRoll} ≤ {fortPercent}%: crit/sneak negated for {target.Stats.CharacterName}.");
+
+                    // Negate critical: revert to normal damage
+                    if (critConfirmed)
+                    {
+                        // Recalculate as non-crit damage
+                        int normalDmg = Stats.RollBaseDamage(damageDice, damageCount)
+                                      + damageModifier + bonusDamage + featDamageBonus
+                                      + weaponEnhancementDamageBonus + materialDamageModifier;
+                        normalDmg = Mathf.Max(1, normalDmg);
+                        rawWeaponDamage = normalDmg;
+                        result.CritConfirmed = false;
+                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                            ? $"Fortification ({fortPercent}%): crit negated"
+                            : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): crit negated";
+                    }
+
+                    // Negate sneak attack damage
+                    if (result.SneakAttackApplied)
+                    {
+                        rawSneakDamage = 0;
+                        result.SneakAttackDamage = 0;
+                        result.SneakAttackApplied = false;
+                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                            ? $"Fortification ({fortPercent}%): sneak attack negated"
+                            : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): sneak attack negated";
+                    }
+
+                    rawTotalDamage = rawWeaponDamage + rawSneakDamage + enchantmentBonusDamage;
+                }
+            }
+
             result.Damage = rawWeaponDamage;
             result.RawTotalDamage = rawTotalDamage;
 
@@ -6746,6 +6889,10 @@ public class CharacterController : MonoBehaviour
             DamageBypassTag attackTags = weapon != null ? weapon.GetBypassTags() : DamageBypassTag.Bludgeoning;
             if (weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0))
                 attackTags |= DamageBypassTag.Ranged;
+
+            // Add enchantment bypass tags (Holy → Good, Unholy → Evil, etc.)
+            if (weapon != null && weapon.IsEnchanted)
+                attackTags |= EnchantmentEffects.GetEnchantmentBypassTags(weapon);
 
             // D&D 3.5e Magic Stone: sling attacks with active Magic Stone count as magic weapons (PHB p.251)
             if (Stats != null && Stats.MagicStoneActive && Stats.MagicStoneCharges >= 0

@@ -37,6 +37,10 @@ public static class ItemDatabase
         PotionFactory.RegisterAllPotions();
         WandFactory.RegisterAllWands();
         ItemMaterialFactory.RegisterAllMaterialVariants();
+
+        // Initialize enchantment database and create common enchanted items
+        EnchantmentProperties.Initialize();
+        RegisterCommonEnchantedItems();
     }
 
     // ============================================================
@@ -1602,6 +1606,88 @@ public static class ItemDatabase
     /// </summary>
     public static void RegisterItem(ItemData item) => Register(item);
 
+        // ============================================================
+    //  COMMON ENCHANTED ITEMS (D&D 3.5 DMG examples)
+    // ============================================================
+
+    private static void RegisterCommonEnchantedItems()
+    {
+        string result;
+        int created = 0;
+
+        // --- Common Enchanted Weapons ---
+
+        // +1 Flaming Longsword (iconic fire weapon)
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.LONGSWORD, 1,
+            new[] { EnchantmentType.Flaming }, out result) != null) created++;
+
+        // +1 Frost Longsword
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.LONGSWORD, 1,
+            new[] { EnchantmentType.Frost }, out result) != null) created++;
+
+        // +1 Shock Longsword
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.LONGSWORD, 1,
+            new[] { EnchantmentType.Shock }, out result) != null) created++;
+
+        // +1 Holy Longsword (paladin staple)
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.LONGSWORD, 1,
+            new[] { EnchantmentType.Holy }, out result) != null) created++;
+
+        // +1 Keen Longsword (popular fighter choice)
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.LONGSWORD, 1,
+            new[] { EnchantmentType.Keen }, out result) != null) created++;
+
+        // +1 Flaming Burst Greatsword
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.GREATSWORD, 1,
+            new[] { EnchantmentType.FlamingBurst }, out result) != null) created++;
+
+        // +2 Speed Longsword (powerful haste weapon)
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.LONGSWORD, 2,
+            new[] { EnchantmentType.Speed }, out result) != null) created++;
+
+        // +1 Bane (Undead) Longsword
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.LONGSWORD, 1,
+            new[] { EnchantmentType.Bane }, out result, "Undead") != null) created++;
+
+        // +1 Returning Dagger (classic rogue item)
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.DAGGER, 1,
+            new[] { EnchantmentType.Returning }, out result) != null) created++;
+
+        // +1 Vicious Greatsword
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.GREATSWORD, 1,
+            new[] { EnchantmentType.Vicious }, out result) != null) created++;
+
+        // --- Common Enchanted Armor ---
+
+        // +1 Fortification (Light) Chain Shirt
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.CHAIN_SHIRT, 1,
+            new[] { EnchantmentType.FortificationLight }, out result) != null) created++;
+
+        // +1 Fortification (Moderate) Full Plate
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.FULL_PLATE, 1,
+            new[] { EnchantmentType.FortificationModerate }, out result) != null) created++;
+
+        // +1 Energy Resistance (Fire) Breastplate
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.BREASTPLATE, 1,
+            new[] { EnchantmentType.EnergyResistanceFire }, out result) != null) created++;
+
+        // +1 Shadow Chain Shirt (rogue stealth armor)
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.CHAIN_SHIRT, 1,
+            new[] { EnchantmentType.Shadow }, out result) != null) created++;
+
+        // --- Common Enchanted Shields ---
+
+        // +1 Arrow Deflection Heavy Steel Shield
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.SHIELD_HEAVY_STEEL, 1,
+            new[] { EnchantmentType.ArrowDeflection }, out result) != null) created++;
+
+        // +1 Bashing Heavy Steel Shield
+        if (EnchantmentFactory.CreateEnchantedVariant(ItemIDs.SHIELD_HEAVY_STEEL, 1,
+            new[] { EnchantmentType.Bashing }, out result) != null) created++;
+
+        UnityEngine.Debug.Log($"[ItemDatabase] Registered {created} common enchanted items.");
+    }
+
     private static void Register(ItemData item)
     {
         if (item == null || string.IsNullOrWhiteSpace(item.Id))
@@ -1772,6 +1858,7 @@ public static class ItemDatabase
         clone.SpecialProperties = src.SpecialProperties;
         clone.IsMasterwork = src.IsMasterwork;
         clone.Material = src.Material?.Clone();
+        clone.Enchantment = src.Enchantment?.Clone();
         clone.CountsAsMagicForBypass = src.CountsAsMagicForBypass;
         clone.IsSilvered = src.IsSilvered;
         clone.IsColdIron = src.IsColdIron;

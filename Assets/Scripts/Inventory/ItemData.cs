@@ -280,6 +280,13 @@ public class ItemData
     // --- Active item spell effects (duration tracked on item instance) ---
     public List<ItemSpellEffect> ActiveSpellEffects = new List<ItemSpellEffect>();
 
+    // --- Magic Item Enchantments (D&D 3.5 DMG special abilities) ---
+    /// <summary>
+    /// Enchantment data for this item (special abilities like Flaming, Holy, Keen, Fortification, etc.).
+    /// Null if the item has no special abilities (plain magic or mundane).
+    /// </summary>
+    public ItemEnchantmentData Enchantment;
+
     // --- Consumable ---
     public ConsumableEffectType ConsumableEffect; // Generic effect type for extensibility
     public string ConsumableSpellName;            // Legacy spell identifier this consumable emulates
@@ -430,6 +437,64 @@ public class ItemData
 
     public bool IsSunderable => IsWeapon || IsArmor || IsShield;
 
+    /// <summary>True if this item has any special abilities (enchantments) applied.</summary>
+    public bool IsEnchanted => Enchantment != null && Enchantment.Abilities.Count > 0;
+
+    /// <summary>True if this is a ranged weapon (WeaponCat == Ranged).</summary>
+    public bool IsRangedWeapon => IsWeapon && WeaponCat == WeaponCategory.Ranged;
+
+    /// <summary>True if this is a melee weapon (WeaponCat == Melee).</summary>
+    public bool IsMeleeWeapon => IsWeapon && WeaponCat == WeaponCategory.Melee;
+
+    /// <summary>
+    /// True if this melee weapon can be thrown (either naturally via IsThrown or via Throwing enchantment).
+    /// </summary>
+    public bool CanBeThrown => IsWeapon && (IsThrown || HasEnchantment(EnchantmentType.Throwing));
+
+    /// <summary>Check if this item has a specific enchantment.</summary>
+    public bool HasEnchantment(EnchantmentType type)
+    {
+        if (Enchantment == null) return false;
+        for (int i = 0; i < Enchantment.Abilities.Count; i++)
+        {
+            if (Enchantment.Abilities[i] == type) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Get the total effective enhancement bonus for pricing, including special ability bonus equivalents.
+    /// E.g., a +1 Flaming weapon has effective bonus of +2 (1 base + 1 flaming) for pricing.
+    /// </summary>
+    public int GetEffectiveBonusForPricing()
+    {
+        int baseBonus = Mathf.Max(0, ResolveEnhancementBonus());
+        if (Enchantment == null) return baseBonus;
+        int abilityBonus = 0;
+        for (int i = 0; i < Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(Enchantment.Abilities[i]);
+            if (stats != null) abilityBonus += stats.BonusEquivalent;
+        }
+        return baseBonus + abilityBonus;
+    }
+
+    /// <summary>
+    /// Get the total flat cost of enchantments that use flat pricing instead of bonus equivalents.
+    /// </summary>
+    public int GetEnchantmentFlatCostGp()
+    {
+        if (Enchantment == null) return 0;
+        int total = 0;
+        for (int i = 0; i < Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(Enchantment.Abilities[i]);
+            if (stats != null && stats.BonusEquivalent == 0)
+                total += stats.FlatCostGp;
+        }
+        return total;
+    }
+
     /// <summary>Enhancement bonus clamped to D&D 3.5e item range (0-5).</summary>
     public int ClampedEnhancementBonus => Mathf.Clamp(ResolveEnhancementBonus(), 0, 5);
 
@@ -441,20 +506,22 @@ public class ItemData
 
     /// <summary>
     /// Calculate final price from a mundane base price using D&D 3.5e enhancement formulas:
-    /// weapon = base + bonus²×2000, armor/shield = base + bonus²×1000.
+    /// weapon = base + effectiveBonus²×2000, armor/shield = base + effectiveBonus²×1000.
+    /// Effective bonus = enhancement bonus + sum of special ability bonus equivalents.
+    /// Flat-cost abilities are added separately.
     /// </summary>
     public int GetEnhancedPriceGp(int basePriceGp)
     {
         int clampedBase = Mathf.Max(0, basePriceGp);
-        int bonus = ClampedEnhancementBonus;
-        if (bonus <= 0)
-            return clampedBase;
+        int effectiveBonus = GetEffectiveBonusForPricing();
+        if (effectiveBonus <= 0)
+            return clampedBase + GetEnchantmentFlatCostGp();
 
         int multiplier = IsWeapon ? 2000 : (IsArmor || IsShield ? 1000 : 0);
         if (multiplier <= 0)
             return clampedBase;
 
-        return clampedBase + (bonus * bonus * multiplier);
+        return clampedBase + (effectiveBonus * effectiveBonus * multiplier) + GetEnchantmentFlatCostGp();
     }
 
     /// <summary>
@@ -752,13 +819,34 @@ public class ItemData
             if (IsMasterwork && enhBonus <= 0 && string.IsNullOrEmpty(matPrefix))
                 mwPrefix = "Masterwork";
 
-            // Build name
+            // Enchantment suffix (special abilities)
+            string enchSuffix = "";
+            if (IsEnchanted)
+            {
+                var names = new System.Text.StringBuilder();
+                for (int i = 0; i < Enchantment.Abilities.Count; i++)
+                {
+                    string abilityName = EnchantmentProperties.GetDisplayName(Enchantment.Abilities[i]);
+
+                    // For Bane, append creature type
+                    if (Enchantment.Abilities[i] == EnchantmentType.Bane && !string.IsNullOrEmpty(Enchantment.BaneCreatureType))
+                        abilityName = $"Bane ({Enchantment.BaneCreatureType})";
+
+                    if (names.Length > 0) names.Append("/");
+                    names.Append(abilityName);
+                }
+                if (names.Length > 0) enchSuffix = names.ToString();
+            }
+
+            // Build name: "+1 Flaming Frost Longsword" or "+1 Adamantine Keen Longsword"
             string prefix = "";
             if (!string.IsNullOrEmpty(enhPrefix))
                 prefix = enhPrefix;
             if (!string.IsNullOrEmpty(matPrefix))
                 prefix = string.IsNullOrEmpty(prefix) ? matPrefix : $"{prefix} {matPrefix}";
-            if (!string.IsNullOrEmpty(mwPrefix))
+            if (!string.IsNullOrEmpty(enchSuffix))
+                prefix = string.IsNullOrEmpty(prefix) ? enchSuffix : $"{prefix} {enchSuffix}";
+            if (!string.IsNullOrEmpty(mwPrefix) && string.IsNullOrEmpty(prefix))
                 prefix = mwPrefix;
 
             return string.IsNullOrEmpty(prefix) ? baseName : $"{prefix} {baseName}";
