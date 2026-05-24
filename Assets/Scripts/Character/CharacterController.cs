@@ -4317,7 +4317,8 @@ public class CharacterController : MonoBehaviour
         UpdateConditionsForHPState(newState);
         EnsureStatusTagManager().UpdateHPStateTags(newState);
 
-        Actions.SingleActionOnly = (newState == HPState.Disabled || newState == HPState.Staggered);
+        Actions.SingleActionOnly = (newState == HPState.Disabled || newState == HPState.Staggered)
+            || (Stats != null && Stats.IsSingleActionsOnly);
 
         if (newState == HPState.Unconscious || newState == HPState.Dying || newState == HPState.Stable)
         {
@@ -9779,7 +9780,8 @@ public class CharacterController : MonoBehaviour
         WithdrawFirstStepProtected = false;
         IsFightingDefensively = false; // lasts until start of this character's next turn
         Actions.Reset();
-        Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered);
+        Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered)
+            || (Stats != null && Stats.IsSingleActionsOnly);
         ProgressiveAttackPool.Clear();
         _grappleAttackBonusesThisTurn.Clear();
         _grappleAttacksUsedThisTurn = 0;

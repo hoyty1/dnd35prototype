@@ -536,6 +536,7 @@ public partial class GameManager
             stats.Immunities.MergeFrom(def.Immunities);
 
         stats.ApplyMindlessTrait(def.IsMindless);
+        stats.IsSingleActionsOnly = def.IsSingleActionsOnly;
         stats.IsSwarm = def.IsSwarm || (def.SwarmTraits != null && def.SwarmTraits.IsSwarm);
         stats.SwarmTraits = def.SwarmTraits != null
             ? new SwarmTraits

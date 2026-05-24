@@ -1815,6 +1815,9 @@ public class CharacterStats
     /// </summary>
     public bool IsMindless;
 
+    /// <summary>Zombie-style: can only take move OR standard each turn, never both (except charge). Persists across turns.</summary>
+    public bool IsSingleActionsOnly;
+
     /// <summary>True when this creature uses D&D 3.5e swarm rules.</summary>
     public bool IsSwarm;
 

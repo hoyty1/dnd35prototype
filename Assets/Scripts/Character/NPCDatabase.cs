@@ -44,6 +44,7 @@ public static partial class NPCDatabase
         RegisterCreatures_Y();
         RegisterCreatures_Dragons();
         RegisterCreatures_Skeletons();
+        RegisterCreatures_Zombies();
 
         // Register summon compatibility aliases (map legacy IDs to existing creature entries).
         RegisterSummonCreatureAliases();
@@ -136,6 +137,9 @@ public static partial class NPCDatabase
 
         // Add skeleton encounter presets
         presets.AddRange(GetSkeletonEncounterPresets());
+
+        // Add zombie encounter presets
+        presets.AddRange(GetZombieEncounterPresets());
 
         return presets;
     }
@@ -348,6 +352,8 @@ public class NPCDefinition
     public List<DamageType> DamageImmunities = new List<DamageType>();
     public CreatureImmunities Immunities = new CreatureImmunities();
     public bool IsMindless;
+    /// <summary>Zombie-style single actions only: can take move OR standard each turn, never both (except charge).</summary>
+    public bool IsSingleActionsOnly;
     public bool IsSwarm;
     public SwarmTraits SwarmTraits = new SwarmTraits();
     public bool CanMakeAttacksOfOpportunity = true;
@@ -460,6 +466,7 @@ public class NPCDefinition
             : new List<DamageType>();
         clone.Immunities = Immunities != null ? Immunities.Clone() : new CreatureImmunities();
         clone.IsMindless = IsMindless;
+        clone.IsSingleActionsOnly = IsSingleActionsOnly;
         clone.IsSwarm = IsSwarm;
         clone.SwarmTraits = SwarmTraits != null
             ? new SwarmTraits
