@@ -120,6 +120,23 @@ public abstract class SpecificItemBehavior
     public virtual void OnAttackedBy(CombatResult attackResult, ref bool forceReroll, List<string> logNotes) { }
 
     // ========================================================================
+    //  SPELL DEFENSE HOOKS (called from spell resolution)
+    // ========================================================================
+
+    /// <summary>
+    /// Called when the wielder/wearer is targeted by a spell. Can absorb or negate the spell.
+    /// Returns true if the spell was absorbed/negated and should not take effect.
+    /// </summary>
+    /// <param name="spellName">Name of the incoming spell.</param>
+    /// <param name="spellLevel">Level of the incoming spell.</param>
+    /// <param name="caster">The caster of the spell.</param>
+    /// <param name="logNotes">Append notes for combat log.</param>
+    public virtual bool OnSpellTargeted(string spellName, int spellLevel, CharacterController caster, List<string> logNotes)
+    {
+        return false; // By default, spells are not absorbed
+    }
+
+    // ========================================================================
     //  PASSIVE STAT MODIFICATIONS (called from Inventory.RecalculateStats)
     // ========================================================================
 

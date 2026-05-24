@@ -35,15 +35,14 @@ public class SunBladeBehavior : SpecificItemBehavior
     //  ATTACK ROLL: Built-in finesse + bonus vs evil
     // ========================================================================
 
-    public override void OnPreAttackRoll(CharacterController attacker, CharacterController target,
-        ItemData weapon, ref int attackBonus, List<string> logNotes)
+    public override void OnPreAttackRoll(CharacterController target, ref int attackBonus, List<string> logNotes)
     {
-        if (attacker?.Stats == null) return;
+        if (Wielder?.Stats == null) return;
 
         // Built-in finesse: if DEX > STR, add the difference as a bonus
         // This simulates using DEX for attack rolls without requiring Weapon Finesse feat
-        int str = attacker.Stats.STR;
-        int dex = attacker.Stats.DEX;
+        int str = Wielder.Stats.STR;
+        int dex = Wielder.Stats.DEX;
         int strMod = (str - 10) / 2;
         int dexMod = (dex - 10) / 2;
 
@@ -69,8 +68,7 @@ public class SunBladeBehavior : SpecificItemBehavior
     //  DAMAGE ROLL: Bonus vs evil + double damage vs undead
     // ========================================================================
 
-    public override void OnDamageRoll(CharacterController attacker, CharacterController target,
-        ItemData weapon, ref int damage, List<string> logNotes)
+    public override void OnDamageRoll(CharacterController target, ref int damage, bool isCrit, List<string> logNotes)
     {
         if (target?.Stats == null) return;
 
@@ -97,8 +95,7 @@ public class SunBladeBehavior : SpecificItemBehavior
     //  CRITICAL HIT: Blind undead on crit
     // ========================================================================
 
-    public override void OnCriticalHit(CharacterController attacker, CharacterController target,
-        ItemData weapon, ref int damage, List<string> logNotes)
+    public override void OnCriticalHit(CharacterController target, int damage, List<string> logNotes)
     {
         if (target?.Stats == null) return;
 

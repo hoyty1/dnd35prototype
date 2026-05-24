@@ -95,7 +95,8 @@ public enum SpecificItemType
     SpinedShield,               // +1 heavy steel shield, 3/day spine ranged attack
     LionsShield,                // +2 heavy steel shield, 3/day lion bite (2d6)
     WingedShield,               // +3 heavy wood shield, fly 1/day
-    AbsorbingShield,            // +1 heavy steel shield, disintegrate object 1/2 days
+    AbsorbingShield,            // +1 heavy steel shield, disintegrate object 1/2 days, spell absorption (50 levels)
+    AbsorbingShieldGreater,     // +1 heavy steel shield (greater), disintegrate 1/day, spell absorption (100 levels)
     AnimatedShield,             // +2 heavy steel shield, animates for hands-free defense
     AnimatedShieldGreater,      // +5 heavy steel shield, animates for hands-free defense
 }

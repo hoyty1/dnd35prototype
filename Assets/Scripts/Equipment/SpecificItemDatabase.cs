@@ -183,7 +183,9 @@ public static class SpecificItemDatabase
             case SpecificItemType.WingedShield:
                 return new WingedShieldBehavior();
             case SpecificItemType.AbsorbingShield:
-                return new AbsorbingShieldBehavior();
+                return new AbsorbingShieldBehavior(isGreater: false);
+            case SpecificItemType.AbsorbingShieldGreater:
+                return new AbsorbingShieldBehavior(isGreater: true);
 
             // --- Luck Blade variants (SRD / DMG p.227) ---
             case SpecificItemType.LuckBlade0:
@@ -218,6 +220,12 @@ public static class SpecificItemDatabase
                 return new AnimatedShieldBehavior(isGreater: false);
             case SpecificItemType.AnimatedShieldGreater:
                 return new AnimatedShieldBehavior(isGreater: true);
+
+            // --- Tier 3 Complex items (Oathbow, Holy Avenger) ---
+            case SpecificItemType.Oathbow:
+                return new OathbowBehavior();
+            case SpecificItemType.HolyAvenger:
+                return new HolyAvengerBehavior();
 
             default:
                 return null; // No custom behavior for this item type
@@ -1172,8 +1180,24 @@ public static class SpecificItemDatabase
             CasterLevel = 17,
             PriorityTier = 3,
             HasCustomBehavior = true,
-            UniqueProperties = { ["DisintegrateObject"] = true, ["CooldownDays"] = 2 },
-            ImplementationNotes = "Custom disintegrate-on-touch ability."
+            UniqueProperties = { ["DisintegrateObject"] = true, ["CooldownDays"] = 2, ["SpellAbsorptionMax"] = 50 },
+            ImplementationNotes = "Custom disintegrate-on-touch ability + spell absorption (50 levels)."
+        });
+
+        Register(new SpecificItemDefinition
+        {
+            Type = SpecificItemType.AbsorbingShieldGreater,
+            Name = "Absorbing Shield (Greater)",
+            Description = "This +1 heavy steel shield with a black surface can disintegrate a touched object once per day. Absorbs up to 100 spell levels of targeted spells.",
+            BaseItemId = "Heavy Steel Shield",
+            ItemCategory = ItemType.Shield,
+            EnhancementBonus = 1,
+            MarketPrice = 82670,
+            CasterLevel = 17,
+            PriorityTier = 3,
+            HasCustomBehavior = true,
+            UniqueProperties = { ["DisintegrateObject"] = true, ["CooldownDays"] = 1, ["SpellAbsorptionMax"] = 100 },
+            ImplementationNotes = "Greater variant: 1-day recharge, 100 spell levels absorption."
         });
 
         // ================================================================
