@@ -46,8 +46,8 @@ public static class ItemMaterialFactory
         clone.Id = $"{prefix}_{baseWeapon.Id}";
         clone.Name = baseWeapon.Name; // FullDisplayName handles prefix
 
-        // Cost: base + masterwork + material
-        clone.BasePriceGp = baseWeapon.BasePriceGp + 300 + clone.Material.AdditionalCostGp;
+        // Cost: base + masterwork + material (masterwork cost from central source)
+        clone.BasePriceGp = baseWeapon.BasePriceGp + MaterialProperties.GetMasterworkCost(baseWeapon) + clone.Material.AdditionalCostGp;
 
         // Set legacy bypass flags for backward compatibility
         switch (material)
@@ -83,8 +83,8 @@ public static class ItemMaterialFactory
         clone.Id = $"{prefix}_{baseArmor.Id}";
         clone.Name = baseArmor.Name;
 
-        // Cost: base + masterwork + material
-        clone.BasePriceGp = baseArmor.BasePriceGp + 150 + clone.Material.AdditionalCostGp;
+        // Cost: base + masterwork + material (masterwork cost from central source)
+        clone.BasePriceGp = baseArmor.BasePriceGp + MaterialProperties.GetMasterworkCost(baseArmor) + clone.Material.AdditionalCostGp;
 
         return clone;
     }
@@ -285,6 +285,59 @@ public static class ItemMaterialFactory
     {
         ItemIDs.AMMO_ARROW, ItemIDs.AMMO_BOLT, ItemIDs.AMMO_SLING_BULLET,
     };
+
+    // ═══════════════════════════════════════════════════════════
+    //  Runtime Convenience: Apply material to any existing item
+    // ═══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Apply a special material to an existing item instance at runtime.
+    /// Does NOT create a clone — mutates the item in-place.
+    /// Use for dynamic loot, scripted events, or editor tools.
+    /// Returns true if the material was successfully applied.
+    /// </summary>
+    public static bool ApplyMaterial(ItemData item, ItemMaterialType material)
+    {
+        if (item == null) return false;
+        if (material == ItemMaterialType.Standard) return false;
+        if (!MaterialProperties.IsMaterialValidForItem(material, item)) return false;
+
+        // All special material items are masterwork
+        item.IsMasterwork = true;
+
+        // Apply the correct material properties from the central source
+        if (item.IsWeapon || item.AmmoType != AmmunitionType.None)
+        {
+            item.Material = MaterialProperties.GetWeaponMaterial(material, item);
+        }
+        else if (item.IsArmor || item.IsShield)
+        {
+            item.Material = MaterialProperties.GetArmorMaterial(material, item);
+        }
+        else
+        {
+            return false; // Material not applicable to this item type
+        }
+
+        // Recalculate cost: base + masterwork + material
+        item.BasePriceGp += MaterialProperties.GetMasterworkCost(item) + item.Material.AdditionalCostGp;
+
+        // Set legacy bypass flags for backward compatibility
+        switch (material)
+        {
+            case ItemMaterialType.AlchemicalSilver:
+                item.IsSilvered = true;
+                break;
+            case ItemMaterialType.ColdIron:
+                item.IsColdIron = true;
+                break;
+            case ItemMaterialType.Adamantine:
+                item.IsAdamantine = true;
+                break;
+        }
+
+        return true;
+    }
 
     // ═══════════════════════════════════════════════════════════
     //  Internal Helpers
