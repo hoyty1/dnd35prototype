@@ -359,6 +359,18 @@ public class ItemData
     /// <summary>The spell level of the wand's spell (0-4).</summary>
     public int WandSpellLevel;
 
+    // --- Staff-specific (D&D 3.5e DMG p.243 — Core rules only) ---
+    // Staves are non-rechargeable under core DMG 3.5e rules.
+    // Once all charges are expended, the staff becomes a non-magical quarterstaff (worthless).
+    /// <summary>True if this item is a magic staff. Staves hold multiple spells with variable charge costs.</summary>
+    public bool IsStaff;
+    /// <summary>Key into StaffDatabase, e.g. "staff_of_fire". Null/empty if not a staff.</summary>
+    public string StaffId;
+    /// <summary>Current charges remaining. Starts at 50 (or 10 for some staves). Cannot be recharged under core rules.</summary>
+    public int StaffCharges;
+    /// <summary>The caster level at which the staff casts its spells (uses staff's CL, not wielder's).</summary>
+    public int StaffCasterLevel;
+
     // --- Stackability ---
     /// <summary>Whether this item can stack with identical items in inventory (e.g., scrolls, potions).</summary>
     public bool IsStackable;
@@ -1380,7 +1392,7 @@ public class ItemData
             else if (ConsumableEffect == ConsumableEffectType.SpellEffect)
             {
                 string spellLabel = string.IsNullOrEmpty(ConsumableSpellName) ? "Unknown Spell" : ConsumableSpellName;
-                string itemTypeLabel = IsWand ? "Wand" : IsPotion ? "Potion" : IsScroll ? "Scroll" : "Spell Effect";
+                string itemTypeLabel = IsStaff ? "Staff" : IsWand ? "Wand" : IsPotion ? "Potion" : IsScroll ? "Scroll" : "Spell Effect";
                 stats = $"{itemTypeLabel}: {spellLabel}";
 
                 if (ConsumableModifier != 0)
@@ -1389,7 +1401,17 @@ public class ItemData
                 if (ConsumableMinimumCasterLevel > 0)
                     stats += $"\nCaster Level: {ConsumableMinimumCasterLevel}";
 
-                if (IsWand)
+                if (IsStaff)
+                {
+                    string chargeStatus = StaffCharges > 0
+                        ? $"{StaffCharges} charges remaining"
+                        : "EXPENDED (non-magical)";
+                    stats += $"\nCharges: {chargeStatus}";
+                    stats += $"\nCaster Level: {StaffCasterLevel} | Spell trigger (class list or UMD DC 20)";
+                    if (StaffCharges <= 0)
+                        stats += "\n(Cannot be recharged — core DMG 3.5e rules)";
+                }
+                else if (IsWand)
                 {
                     string chargeStatus = CurrentCharges > 0
                         ? $"{CurrentCharges}/{MaxCharges} charges"
