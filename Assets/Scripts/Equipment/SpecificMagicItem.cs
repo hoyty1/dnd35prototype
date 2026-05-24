@@ -78,6 +78,7 @@ public enum SpecificItemType
     BreastplateOfCommand,       // +2 breastplate, +2 Cha/Leadership
     MithralFullPlateOfSpeed,    // +1 mithral full plate, haste 10 rnd/day
     DemonArmor,                 // +4 full plate, claw attacks, contagion, evil
+    ArmorOfRage,                // +1 breastplate, barbarian rage +6 STR/CON (instead of +4)
     PlateArmorOfEtherealness,   // +1 full plate + Etherealness enhancement (NOT in SRD specific items)
 
     // ================================================================

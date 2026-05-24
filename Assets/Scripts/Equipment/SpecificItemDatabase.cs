@@ -195,6 +195,16 @@ public static class SpecificItemDatabase
             case SpecificItemType.LuckBlade3:
                 return new LuckBladeBehavior(wishCharges: 3);
 
+            // --- Tier 3 Quick Win items ---
+            case SpecificItemType.SwordOfLifeStealing:
+                return new SwordOfLifeStealingBehavior();
+            case SpecificItemType.FrostBrand:
+                return new FrostBrandBehavior();
+            case SpecificItemType.ArmorOfRage:
+                return new ArmorOfRageBehavior();
+            case SpecificItemType.MaceOfSmiting:
+                return new MaceOfSmitingBehavior();
+
             default:
                 return null; // No custom behavior for this item type
         }
@@ -986,6 +996,22 @@ public static class SpecificItemDatabase
                 ["NonEvilNegativeLevel"] = 1
             },
             ImplementationNotes = "Custom claw attacks + contagion + alignment restriction."
+        });
+
+        Register(new SpecificItemDefinition
+        {
+            Type = SpecificItemType.ArmorOfRage,
+            Name = "Armor of Rage",
+            Description = "This +1 breastplate enhances a barbarian's rage, granting an additional +2 bonus to STR and CON (for +6 total each) while raging.",
+            BaseItemId = "Breastplate",
+            ItemCategory = ItemType.Armor,
+            EnhancementBonus = 1,
+            MarketPrice = 16300,
+            CasterLevel = 7,
+            PriorityTier = 1,
+            HasCustomBehavior = true,
+            UniqueProperties = { ["ExtraRageSTR"] = 2, ["ExtraRageCON"] = 2, ["RequiresBarbarian"] = true },
+            ImplementationNotes = "Custom rage enhancement: +2 extra STR/CON while raging (barbarian only)."
         });
 
         // NOTE: "Plate Armor of Etherealness" is NOT in the 3.5e SRD specific items list.
