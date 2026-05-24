@@ -82,6 +82,7 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>Quick item use panel for combat — search/filter/sort consumable items.</summary>
     public QuickItemUsePanel QuickItemUsePanel;
+    public WishUI WishUI;
 
     /// <summary>Shared party stash (session-only for now).</summary>
     public PartyStash PartyStash = new PartyStash();

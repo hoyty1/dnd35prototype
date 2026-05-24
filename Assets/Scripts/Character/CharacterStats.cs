@@ -1449,13 +1449,13 @@ public class CharacterStats
     }
 
     /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
-    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
+    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + LuckSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
 
     /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
-    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
+    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + LuckSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
 
     /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus + condition modifiers.</summary>
-    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + ConditionWillModifier;
+    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + LuckSaveBonus + ConditionWillModifier;
 
     // ========== FEATS (D&D 3.5) ==========
     /// <summary>Set of feats this character has.</summary>
@@ -1877,6 +1877,66 @@ public class CharacterStats
 
     [SerializeField] private AbilityScoreDamage _abilityScoreDamage = new AbilityScoreDamage();
     public AbilityScoreDamage AbilityScoreDamage => _abilityScoreDamage ?? (_abilityScoreDamage = new AbilityScoreDamage());
+
+    // ========== INHERENT BONUSES (from Wish spell, tomes, manuals) ==========
+    // D&D 3.5e PHB p.302: +1 inherent bonus to ability score, stackable to +5 max
+    // with multiple wishes. Inherent bonuses are permanent and don't stack with
+    // themselves from the same source type (e.g., two Tomes of STR +2 don't stack).
+    public int InherentSTR;
+    public int InherentDEX;
+    public int InherentCON;
+    public int InherentWIS;
+    public int InherentINT;
+    public int InherentCHA;
+
+    /// <summary>Get inherent bonus for a specific ability type.</summary>
+    public int GetInherentBonus(AbilityType ability)
+    {
+        switch (ability)
+        {
+            case AbilityType.STR: return InherentSTR;
+            case AbilityType.DEX: return InherentDEX;
+            case AbilityType.CON: return InherentCON;
+            case AbilityType.INT: return InherentINT;
+            case AbilityType.WIS: return InherentWIS;
+            case AbilityType.CHA: return InherentCHA;
+            default: return 0;
+        }
+    }
+
+    /// <summary>
+    /// Grant an inherent bonus to an ability score (from Wish, tomes, manuals).
+    /// Returns the new total inherent bonus, or -1 if already at max (+5).
+    /// </summary>
+    public int GrantInherentBonus(AbilityType ability, int amount = 1)
+    {
+        int current = GetInherentBonus(ability);
+        int newValue = Mathf.Min(5, current + amount);
+        if (newValue <= current)
+            return -1; // Already at max
+
+        int delta = newValue - current;
+        switch (ability)
+        {
+            case AbilityType.STR: InherentSTR = newValue; STR += delta; break;
+            case AbilityType.DEX: InherentDEX = newValue; DEX += delta; break;
+            case AbilityType.CON:
+                InherentCON = newValue;
+                CON += delta;
+                // CON increase grants retroactive HP (2 HP per level per +1 CON mod)
+                int oldMod = GetAbilityModifier(CON - delta);
+                int newMod = GetAbilityModifier(CON);
+                int hpGain = (newMod - oldMod) * Level;
+                if (hpGain > 0) { MaxHP += hpGain; CurrentHP += hpGain; }
+                break;
+            case AbilityType.INT: InherentINT = newValue; INT += delta; break;
+            case AbilityType.WIS: InherentWIS = newValue; WIS += delta; break;
+            case AbilityType.CHA: InherentCHA = newValue; CHA += delta; break;
+        }
+
+        Debug.Log($"[Wish] {CharacterName}: Inherent {ability} bonus now +{newValue} (was +{current}, delta +{delta})");
+        return newValue;
+    }
 
     // ========== EQUIPMENT / BONUSES ==========
     public int ArmorBonus;      // From worn armor (e.g., chain shirt = +4)
@@ -2309,6 +2369,9 @@ public class CharacterStats
 
     /// <summary>Morale bonus to saving throws from spells (e.g., Bless).</summary>
     public int MoraleSaveBonus;
+
+    /// <summary>Luck bonus to saving throws from items (e.g., Luck Blade, Stone of Good Luck).</summary>
+    public int LuckSaveBonus;
 
     // ── Sanctuary ──
     /// <summary>True if the Sanctuary spell is active on this character. Enemies must make a Will save to attack.</summary>

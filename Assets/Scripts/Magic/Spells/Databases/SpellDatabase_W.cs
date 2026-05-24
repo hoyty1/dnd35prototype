@@ -249,5 +249,42 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ================================================================
+        //  WISH — Universal 9th-level (PHB p.302)
+        // ================================================================
+        // The mightiest spell a mortal can cast. Grants one of 10 standard
+        // effects; resolved via WishExecutor + WishUI. XP cost 5,000 for
+        // most uses (waived when cast from a magic item such as a Luck Blade).
+        // TargetType = Self because the WishUI handles sub-targeting.
+        Register(
+            new SpellData
+            {
+                SpellId   = SpellNames.WISH,
+                Name      = "Wish",
+                SpellLevel = 9,
+                School     = "Universal",
+                ClassList  = new[] { "Sorcerer", "Wizard" },
+                AvailableFor = new List<SpellAvailability>
+                {
+                    new SpellAvailability { ClassName = "Sorcerer", Level = 9 },
+                    new SpellAvailability { ClassName = "Wizard",   Level = 9 }
+                },
+                Description = "Wish is the mightiest spell a wizard or sorcerer can cast. "
+                    + "By simply speaking aloud, you can alter reality to better suit you. "
+                    + "Choose one of ten standard effects (see WishUI). "
+                    + "Most options cost 5,000 XP; duplicating spells of 7th level or lower is free.",
+                TargetType = SpellTargetType.Self,
+                EffectType = SpellEffectType.Utility,
+                RangeCategory = SpellRangeCategory.Personal,
+                DurationType = DurationType.Instantaneous,
+                ActionType   = SpellActionType.Standard,
+                ProvokesAoO  = true,
+                HasVerbalComponent  = true,
+                HasSomaticComponent = false,
+                HasMaterialComponent = false, // XP cost handled by WishExecutor
+                SpellResistanceApplies = false,
+                IsPlaceholder = false
+            });
+
     }
 }

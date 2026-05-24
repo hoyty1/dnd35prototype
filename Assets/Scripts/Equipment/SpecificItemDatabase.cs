@@ -185,6 +185,16 @@ public static class SpecificItemDatabase
             case SpecificItemType.AbsorbingShield:
                 return new AbsorbingShieldBehavior();
 
+            // --- Luck Blade variants (SRD / DMG p.227) ---
+            case SpecificItemType.LuckBlade0:
+                return new LuckBladeBehavior(wishCharges: 0);
+            case SpecificItemType.LuckBlade1:
+                return new LuckBladeBehavior(wishCharges: 1);
+            case SpecificItemType.LuckBlade2:
+                return new LuckBladeBehavior(wishCharges: 2);
+            case SpecificItemType.LuckBlade3:
+                return new LuckBladeBehavior(wishCharges: 3);
+
             default:
                 return null; // No custom behavior for this item type
         }

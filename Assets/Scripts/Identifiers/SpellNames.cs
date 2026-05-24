@@ -801,5 +801,10 @@ namespace DND35e.Identifiers
         /// <summary>Evard's Black Tentacles (spell id: evards_black_tentacles)</summary>
         public const string EVARDS_BLACK_TENTACLES = "evards_black_tentacles";
 
+        /// <summary>Wish (spell id: wish)</summary>
+        public const string WISH = "wish";
+
+        /// <summary>Resurrection (spell id: resurrection)</summary>
+        public const string RESURRECTION = "resurrection";
     }
 }

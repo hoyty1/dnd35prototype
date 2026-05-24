@@ -1030,4 +1030,135 @@ public partial class GameManager
         sphere.ExpireEffect();
     }
 
+    // ================================================================
+    //  WISH — The mightiest spell (PHB p.302)
+    // ================================================================
+
+    /// <summary>
+    /// Entry point when a Wish spell is cast. Opens WishUI for player characters
+    /// or auto-decides via WishExecutor.DecideAIWish() for AI-controlled casters.
+    /// Called from BeginPendingSpellTargeting in GameManager.SpellCasting.cs.
+    /// </summary>
+    private void HandleWishSpellCast(CharacterController caster)
+    {
+        if (caster == null || caster.Stats == null) return;
+
+        Debug.Log($"[Wish] HandleWishSpellCast — caster={caster.Stats.CharacterName}  isPlayer={caster.Stats.IsPlayerControlled}");
+
+        // Consume the spell slot (already handled by the spell casting pipeline before
+        // BeginPendingSpellTargeting is called). We just need to handle the Wish effect.
+
+        if (caster.Stats.IsPlayerControlled)
+        {
+            // Player: open the WishUI selection panel
+            if (WishUI == null)
+            {
+                CombatUI?.ShowCombatLog("⚠ Wish UI not available — spell fizzles.");
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                ShowActionChoices();
+                return;
+            }
+
+            WishUI.OnWishConfirmed = (option, target, ability, affliction, spellId) =>
+            {
+                Debug.Log($"[Wish] Player confirmed: option={option}  target={target?.Stats?.CharacterName}  ability={ability}  affliction={affliction}  spellId={spellId}");
+
+                bool success = WishExecutor.ExecuteWish(caster, option, target, ability,
+                    affliction, spellId, isItemWish: false);
+
+                if (success)
+                    CombatUI?.ShowCombatLog($"<color=#FFD700>✨ {caster.Stats.CharacterName}'s Wish is granted!</color>");
+                else
+                    CombatUI?.ShowCombatLog($"<color=#FF6666>✨ {caster.Stats.CharacterName}'s Wish fails.</color>");
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                ShowActionChoices();
+            };
+
+            WishUI.OnCancelled = () =>
+            {
+                CombatUI?.ShowCombatLog($"{caster.Stats.CharacterName} decides not to make a Wish.");
+                // Note: spell slot is already consumed; this is intentional for D&D 3.5e (casting began).
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                ShowActionChoices();
+            };
+
+            WishUI.Open(caster, isItemWish: false);
+        }
+        else
+        {
+            // AI: auto-decide
+            var decision = WishExecutor.DecideAIWish(caster);
+            Debug.Log($"[Wish] AI decision: option={decision.option}  target={decision.target?.Stats?.CharacterName}  ability={decision.ability}  spellId={decision.spellId}");
+
+            bool success = WishExecutor.ExecuteWish(caster, decision.option, decision.target,
+                decision.ability, decision.affliction, decision.spellId, isItemWish: false);
+
+            if (success)
+                CombatUI?.ShowCombatLog($"<color=#FFD700>✨ {caster.Stats.CharacterName}'s Wish is granted!</color>");
+            else
+                CombatUI?.ShowCombatLog($"<color=#FF6666>✨ {caster.Stats.CharacterName}'s Wish fails.</color>");
+
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            ShowActionChoices();
+        }
+    }
+
+    /// <summary>
+    /// Handles a Wish cast from a magic item (e.g., Luck Blade). No XP cost.
+    /// Can be called from item behavior code.
+    /// </summary>
+    public void HandleItemWishCast(CharacterController caster)
+    {
+        if (caster == null || caster.Stats == null) return;
+
+        Debug.Log($"[Wish] HandleItemWishCast — caster={caster.Stats.CharacterName}  isPlayer={caster.Stats.IsPlayerControlled}");
+
+        if (caster.Stats.IsPlayerControlled)
+        {
+            if (WishUI == null)
+            {
+                CombatUI?.ShowCombatLog("⚠ Wish UI not available.");
+                return;
+            }
+
+            WishUI.OnWishConfirmed = (option, target, ability, affliction, spellId) =>
+            {
+                bool success = WishExecutor.ExecuteWish(caster, option, target, ability,
+                    affliction, spellId, isItemWish: true);
+
+                if (success)
+                    CombatUI?.ShowCombatLog($"<color=#FFD700>✨ The Luck Blade grants {caster.Stats.CharacterName}'s Wish!</color>");
+                else
+                    CombatUI?.ShowCombatLog($"<color=#FF6666>✨ The Wish from the Luck Blade fails.</color>");
+
+                ShowActionChoices();
+            };
+
+            WishUI.OnCancelled = () =>
+            {
+                CombatUI?.ShowCombatLog($"{caster.Stats.CharacterName} decides not to use the Luck Blade's Wish.");
+                ShowActionChoices();
+            };
+
+            WishUI.Open(caster, isItemWish: true);
+        }
+        else
+        {
+            // AI uses Luck Blade wish
+            var decision = WishExecutor.DecideAIWish(caster);
+            bool success = WishExecutor.ExecuteWish(caster, decision.option, decision.target,
+                decision.ability, decision.affliction, decision.spellId, isItemWish: true);
+
+            if (success)
+                CombatUI?.ShowCombatLog($"<color=#FFD700>✨ The Luck Blade grants {caster.Stats.CharacterName}'s Wish!</color>");
+            else
+                CombatUI?.ShowCombatLog($"<color=#FF6666>✨ The Wish from the Luck Blade fails.</color>");
+        }
+    }
+
 }

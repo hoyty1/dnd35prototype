@@ -888,6 +888,13 @@ public partial class GameManager
             return;
         }
 
+        // Wish: open selection UI for players, auto-decide for AI (PHB p.302)
+        if (string.Equals(_pendingSpell.SpellId, SpellNames.WISH, StringComparison.Ordinal))
+        {
+            HandleWishSpellCast(caster);
+            return;
+        }
+
         // Determine targeting based on spell type
         if (_pendingSpell.TargetType == SpellTargetType.Self)
         {

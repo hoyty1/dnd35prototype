@@ -1030,6 +1030,11 @@ public class SceneBootstrap : MonoBehaviour
             QuickItemUsePanel quickItemPanel = canvas.gameObject.AddComponent<QuickItemUsePanel>();
             quickItemPanel.BuildUI(canvas);
             gm.QuickItemUsePanel = quickItemPanel;
+
+            // Wish spell option selection panel
+            WishUI wishUI = canvas.gameObject.AddComponent<WishUI>();
+            wishUI.BuildUI(canvas);
+            gm.WishUI = wishUI;
         }
 
         if (canvas != null)
