@@ -134,7 +134,8 @@ public enum MaterialComposition
     Stone,
     Wood,
     Energy,
-    Mixed
+    Mixed,
+    Bone
 }
 
 /// <summary>

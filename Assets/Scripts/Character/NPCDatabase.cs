@@ -43,6 +43,7 @@ public static partial class NPCDatabase
         RegisterCreatures_W();
         RegisterCreatures_Y();
         RegisterCreatures_Dragons();
+        RegisterCreatures_Skeletons();
 
         // Register summon compatibility aliases (map legacy IDs to existing creature entries).
         RegisterSummonCreatureAliases();
@@ -132,6 +133,9 @@ public static partial class NPCDatabase
 
         // Add dragon encounter presets
         presets.AddRange(GetDragonEncounterPresets());
+
+        // Add skeleton encounter presets
+        presets.AddRange(GetSkeletonEncounterPresets());
 
         return presets;
     }
