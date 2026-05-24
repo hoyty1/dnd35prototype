@@ -51,6 +51,7 @@ public static class AreaEffectColors
 
     // Force effects
     public static readonly Color ResilientSphere = new Color(0.6f, 0.3f, 0.9f, 0.50f); // Purple/violet for force
+    public static readonly Color WallOfForce = new Color(0.5f, 0.4f, 0.9f, 0.55f); // Slightly lighter purple for force wall
 
     // Illusion (concealment / invisibility emanations)
     public static readonly Color InvisibilitySphere = new Color(0.6f, 0.7f, 1.0f, 0.35f);

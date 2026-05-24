@@ -4152,6 +4152,44 @@ public partial class GameManager
                 return;
             }
 
+            // ── Wall of Force (invisible force wall, persistent area effect) ──
+            // No saves, no SR — just placement. Immune to all damage.
+            if (IsWallOfForceSpell(_pendingSpell))
+            {
+                // Capture local copies for the callback closure
+                SpellData forceSpell = _pendingSpell;
+                bool forceIsSpontaneous = isSpontaneous;
+                string forceSpontaneousSacrificedSpellId = spontaneousSacrificedSpellId;
+                bool forceIsQuickened = isQuickened;
+                List<CharacterController> forceTargets = targets;
+                HashSet<Vector2Int> forceAoeCells = aoeCells;
+
+                ResolveWallOfForce(caster, forceSpell, forceTargets, forceAoeCells, forceLog =>
+                {
+                    _lastCombatLog = forceLog;
+
+                    if (forceIsSpontaneous)
+                    {
+                        string sacrificeInfo = !string.IsNullOrEmpty(forceSpontaneousSacrificedSpellId)
+                            ? $"Sacrificed: {forceSpontaneousSacrificedSpellId}"
+                            : "Converted prepared spell";
+                        _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {forceSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                    }
+
+                    if (forceIsQuickened)
+                        _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {forceSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                    CombatUI.ShowCombatLog(_lastCombatLog);
+                    UpdateAllStatsUI();
+                    Grid.ClearAllHighlights();
+
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                });
+                return;
+            }
+
             if (TryResolveFlamingSphereAoECast(caster, _pendingSpell, aoeCells, out string flamingSphereLog))
             {
                 _lastCombatLog = flamingSphereLog;

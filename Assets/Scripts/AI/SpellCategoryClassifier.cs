@@ -160,6 +160,7 @@ public static class SpellCategoryClassifier
     {
         SpellNames.WALL_OF_FIRE,
         SpellNames.WALL_OF_ICE,
+        SpellNames.WALL_OF_FORCE,
         SpellNames.OBSCURING_MIST,
         SpellNames.FOG_CLOUD,
     };

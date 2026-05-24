@@ -319,14 +319,14 @@ public static class StaffDatabase
             MarketPrice = 82000,
             AllowedClasses = new[] { "Wizard", "Sorcerer" },
             Status = StaffImplementationStatus.Partial,
-            ImplementationNotes = "4/6 spells work. Wall of Force (L5) and Chain Lightning (L6) not registered.",
+            ImplementationNotes = "5/6 spells work. Chain Lightning (L6) not yet registered.",
             Spells = new List<StaffSpellEntry>
             {
                 Spell(SpellNames.MAGIC_MISSILE, "Magic Missile", 1, 1),
                 Spell(SpellNames.SHATTER, "Shatter", 2, 1),
                 Spell(SpellNames.LIGHTNING_BOLT, "Lightning Bolt", 3, 1),
                 Spell(SpellNames.ICE_STORM, "Ice Storm", 4, 2),
-                StubSpell("wall_of_force", "Wall of Force", 5, 2, "Invisible wall of force, immune to damage, blocks movement"),
+                Spell(SpellNames.WALL_OF_FORCE, "Wall of Force", 5, 2),
                 Spell(SpellNames.CHAIN_LIGHTNING, "Chain Lightning", 6, 3)
             }
         });
@@ -450,8 +450,7 @@ public static class StaffDatabase
             HasRetributiveStrike = true,
             RetributiveStrikeDamageFactor = 8,
             Status = StaffImplementationStatus.Partial,
-            ImplementationNotes = "4/10 spells work (Magic Missile, Ray of Enfeeblement, Fireball, Lightning Bolt). " +
-                                  "6 spells missing including L5-6. Passive bonuses and Retributive Strike need implementation.",
+            ImplementationNotes = "9/10 spells functional. Passive bonuses and Retributive Strike need implementation.",
             Spells = new List<StaffSpellEntry>
             {
                 Spell(SpellNames.MAGIC_MISSILE, "Magic Missile", 1, 1),
@@ -462,7 +461,7 @@ public static class StaffDatabase
                 Spell(SpellNames.FIREBALL, "Fireball", 3, 1),
                 Spell(SpellNames.CONE_OF_COLD, "Cone of Cold", 5, 2),
                 Spell(SpellNames.HOLD_MONSTER, "Hold Monster", 5, 2),
-                StubSpell("wall_of_force", "Wall of Force", 5, 2, "Invisible wall of force, immune to damage"),
+                Spell(SpellNames.WALL_OF_FORCE, "Wall of Force", 5, 2),
                 Spell(SpellNames.GLOBE_OF_INVULNERABILITY, "Globe of Invulnerability", 6, 2)
             }
         });
@@ -635,7 +634,7 @@ public static class StaffDatabase
             HasRetributiveStrike = true,
             RetributiveStrikeDamageFactor = 8,
             Status = StaffImplementationStatus.Partial,
-            ImplementationNotes = "14/16 spells functional (87.5%). Remaining stubs: Wall of Force (L5), Summon Monster IX (L9).",
+            ImplementationNotes = "15/16 spells functional (93.75%). Remaining stubs: Summon Monster IX (L9).",
             Spells = new List<StaffSpellEntry>
             {
                 // Staff of Power spells
@@ -648,7 +647,7 @@ public static class StaffDatabase
                 Spell(SpellNames.DISPEL_MAGIC, "Dispel Magic", 3, 1),
                 Spell(SpellNames.CONE_OF_COLD, "Cone of Cold", 5, 2),
                 Spell(SpellNames.HOLD_MONSTER, "Hold Monster", 5, 2),
-                StubSpell("wall_of_force", "Wall of Force", 5, 2, "Invisible wall of force"),
+                Spell(SpellNames.WALL_OF_FORCE, "Wall of Force", 5, 2),
                 Spell(SpellNames.GLOBE_OF_INVULNERABILITY, "Globe of Invulnerability", 6, 2),
                 // Additional Magi spells
                 Spell(SpellNames.TELEKINESIS, "Telekinesis", 5, 1),

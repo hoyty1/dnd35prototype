@@ -249,6 +249,48 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ── Wall of Force (PHB p.298) ────────────────────────────────────
+        // Evocation [Force]. Invisible, impenetrable wall of force.
+        // Up to one 10-ft square per CL. Immune to all damage; only
+        // Disintegrate or Rod of Cancellation can destroy it.
+        // Duration: 1 round/level. No save, no SR.
+        // Close range (25 ft + 5 ft/2 levels).
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.WALL_OF_FORCE,
+                    Name = "Wall of Force",
+                    Description = "Evocation [Force]. Creates an invisible wall of force. "
+                        + "The wall is immune to all damage and cannot be dispelled. "
+                        + "It blocks all physical passage, line of effect, and spells. "
+                        + "Only Disintegrate or Rod of Cancellation can destroy it. "
+                        + "Duration 1 round/level. No save, no SR. PHB p.298",
+                    SpellLevel = 5,
+                    School = "Evocation [Force]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 5),
+                        new SpellAvailability("Wizard", 5)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Close,
+                    AoEShapeType = AoEShape.Line,
+                    AoESizeSquares = 8, // Default; runtime scales per CL
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Wall,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: powdered quartz (common — covered by spell component pouch)
+                    IsPlaceholder = false
+                });
+
         // ================================================================
         //  WISH — Universal 9th-level (PHB p.302)
         // ================================================================

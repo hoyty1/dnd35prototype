@@ -344,6 +344,15 @@ public class SquareGrid : MonoBehaviour
                 if (WallOfIceAreaEffect.DoesDiagonalMoveCrossWall(current, neighbor))
                     continue;
 
+                // ── Wall of Force movement block ──
+                // Wall of Force is immune to damage — all cells permanently block.
+                if (WallOfForceAreaEffect.DoesCellBlockMovement(neighbor))
+                    continue;
+
+                // ── Wall of Force diagonal corner block ──
+                if (WallOfForceAreaEffect.DoesDiagonalMoveCrossWall(current, neighbor))
+                    continue;
+
                 // Calculate step cost (weighted: orthogonal < diagonal to prefer straight paths)
                 bool isDiag = SquareGridUtils.IsDiagonalStep(current, neighbor);
                 int stepCost = isDiag ? DIAG_COST : ORTH_COST;
@@ -405,6 +414,20 @@ public class SquareGrid : MonoBehaviour
 
             // Check Wall of Ice diagonal corner blocking for fallback path
             if (WallOfIceAreaEffect.DoesDiagonalMoveCrossWall(prev, step))
+            {
+                firstInvalidIndex = i;
+                break;
+            }
+
+            // Check Wall of Force blocking for fallback path
+            if (WallOfForceAreaEffect.DoesCellBlockMovement(step))
+            {
+                firstInvalidIndex = i;
+                break;
+            }
+
+            // Check Wall of Force diagonal corner blocking for fallback path
+            if (WallOfForceAreaEffect.DoesDiagonalMoveCrossWall(prev, step))
             {
                 firstInvalidIndex = i;
                 break;
