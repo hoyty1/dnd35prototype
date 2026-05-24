@@ -3678,7 +3678,10 @@ public class PreCombatInventoryUI : MonoBehaviour
         string statSummary = item.GetStatSummary();
         string desc = string.IsNullOrWhiteSpace(item.Description) ? "No description." : item.Description;
         string quantityLine = quantity > 1 ? $"\nQty: {quantity}" : string.Empty;
-        _tooltipText.text = $"<b>{item.FullNameWithEnhancement}</b>{quantityLine}\n{statSummary}\n\n{desc}";
+        // D&D 3.5e: Color-code item name by quality (masterwork/material/magic)
+        Color qualityColor = item.GetQualityColor();
+        string colorHex = ColorUtility.ToHtmlStringRGB(qualityColor);
+        _tooltipText.text = $"<b><color=#{colorHex}>{item.FullNameWithEnhancement}</color></b>{quantityLine}\n{statSummary}\n\n{desc}";
 
         _tooltipPanel.SetActive(true);
         _tooltipActive = true;

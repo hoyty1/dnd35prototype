@@ -36,6 +36,7 @@ public static class ItemDatabase
         ScrollFactory.RegisterAllScrolls();
         PotionFactory.RegisterAllPotions();
         WandFactory.RegisterAllWands();
+        ItemMaterialFactory.RegisterAllMaterialVariants();
     }
 
     // ============================================================
@@ -1596,6 +1597,11 @@ public static class ItemDatabase
     //  UTILITY METHODS
     // ============================================================
 
+    /// <summary>
+    /// Register a new item in the database (public entry point for external factories).
+    /// </summary>
+    public static void RegisterItem(ItemData item) => Register(item);
+
     private static void Register(ItemData item)
     {
         if (item == null || string.IsNullOrWhiteSpace(item.Id))
@@ -1764,6 +1770,8 @@ public static class ItemDatabase
         clone.DamageType = src.DamageType;
         clone.NoStrengthToDamage = src.NoStrengthToDamage;
         clone.SpecialProperties = src.SpecialProperties;
+        clone.IsMasterwork = src.IsMasterwork;
+        clone.Material = src.Material?.Clone();
         clone.CountsAsMagicForBypass = src.CountsAsMagicForBypass;
         clone.IsSilvered = src.IsSilvered;
         clone.IsColdIron = src.IsColdIron;

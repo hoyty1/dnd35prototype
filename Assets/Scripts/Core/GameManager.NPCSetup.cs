@@ -619,9 +619,37 @@ public partial class GameManager
         if (inv == null) inv = npc.gameObject.AddComponent<InventoryComponent>();
         inv.Init(stats);
 
+        // Parse CR for material variant selection
+        int npcCR = 0;
+        if (!string.IsNullOrWhiteSpace(def.ChallengeRating))
+        {
+            string crStr = def.ChallengeRating.Trim();
+            if (crStr.Contains("/"))
+                npcCR = 0; // Fractional CR (e.g., "1/2") → treat as CR 0
+            else
+                int.TryParse(crStr, out npcCR);
+        }
+
         foreach (var eq in def.EquipmentIds)
         {
-            ItemData item = ItemDatabase.CloneItem(eq.ItemId);
+            ItemData item = null;
+
+            // D&D 3.5e: NPCs at higher CRs may have masterwork or special material equipment.
+            // Only attempt upgrade for standard equipment (not already a material variant).
+            if (npcCR >= 1 && eq.ItemId != null && !eq.ItemId.StartsWith("mw_") && !eq.ItemId.StartsWith("adamantine_")
+                && !eq.ItemId.StartsWith("mithral_") && !eq.ItemId.StartsWith("cold_iron_") && !eq.ItemId.StartsWith("silver_"))
+            {
+                ItemData baseItem = ItemDatabase.Get(eq.ItemId);
+                if (baseItem != null && baseItem.IsWeapon)
+                    item = ItemMaterialFactory.GetRandomMaterialWeapon(eq.ItemId, npcCR);
+                else if (baseItem != null && (baseItem.IsArmor || baseItem.IsShield))
+                    item = ItemMaterialFactory.GetRandomMaterialArmor(eq.ItemId, npcCR);
+            }
+
+            // Fall back to standard item
+            if (item == null)
+                item = ItemDatabase.CloneItem(eq.ItemId);
+
             if (item != null)
                 inv.CharacterInventory.DirectEquip(item, eq.Slot);
             else

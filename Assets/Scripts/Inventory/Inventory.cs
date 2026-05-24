@@ -355,9 +355,10 @@ public class Inventory
             OwnerStats.ArmorBonus = ArmorRobeSlot != null ? ArmorRobeSlot.GetTotalArmorBonus() : 0;
 
             // Max Dex cap from armor only (-1 means no limit).
+            // D&D 3.5e: Mithral increases max Dex bonus by +2.
             int armorMaxDex = -1;
             if (ArmorRobeSlot != null)
-                armorMaxDex = ArmorRobeSlot.MaxDexBonus;
+                armorMaxDex = ArmorRobeSlot.EffectiveMaxDexBonus;
 
             // --- Shield Bonus & Properties ---
             OwnerStats.ShieldBonus = 0;
@@ -387,21 +388,28 @@ public class Inventory
 
             // --- Armor Check Penalty ---
             // Effective ACP is the most restrictive between armor/shield ACP and encumbrance ACP.
+            // D&D 3.5e: Masterwork reduces ACP by 1, Mithral reduces ACP by 3 (via EffectiveArmorCheckPenalty).
             int totalACP = 0;
             if (ArmorRobeSlot != null)
-                totalACP += ArmorRobeSlot.ArmorCheckPenalty;
+                totalACP += ArmorRobeSlot.EffectiveArmorCheckPenalty;
             if (LeftHandSlot != null && LeftHandSlot.IsShield)
-                totalACP += LeftHandSlot.ArmorCheckPenalty;
+                totalACP += LeftHandSlot.EffectiveArmorCheckPenalty;
             OwnerStats.EquipmentArmorCheckPenalty = totalACP;
             OwnerStats.ArmorCheckPenalty = Mathf.Max(totalACP, encAcp);
 
             // --- Arcane Spell Failure (sum of armor + shield) ---
+            // D&D 3.5e: Mithral reduces ASF by 10%.
             int totalASF = 0;
             if (ArmorRobeSlot != null)
-                totalASF += ArmorRobeSlot.ArcaneSpellFailure;
+                totalASF += ArmorRobeSlot.EffectiveArcaneSpellFailure;
             if (LeftHandSlot != null && LeftHandSlot.IsShield)
-                totalASF += LeftHandSlot.ArcaneSpellFailure;
+                totalASF += LeftHandSlot.EffectiveArcaneSpellFailure;
             OwnerStats.ArcaneSpellFailure = totalASF;
+
+            // --- Adamantine Armor DR ---
+            // D&D 3.5e DMG p.283: Adamantine armor grants DR 1/— (light), 2/— (medium), 3/— (heavy).
+            // Applied as a special DR entry on the character.
+            ApplyAdamantineArmorDR(ArmorRobeSlot);
 
             // --- Weapon Stats ---
             // Primary weapon from right hand, then left hand.
@@ -501,14 +509,14 @@ public class Inventory
         {
             ItemData equipped = GetEquipped(slot);
             if (equipped != null)
-                total += Mathf.Max(0f, equipped.WeightLbs);
+                total += Mathf.Max(0f, equipped.EffectiveWeightLbs); // D&D 3.5e: mithral/darkwood halves weight
         }
 
         for (int i = 0; i < GeneralSlots.Length; i++)
         {
             ItemData item = GeneralSlots[i];
             if (item != null)
-                total += Mathf.Max(0f, item.WeightLbs);
+                total += Mathf.Max(0f, item.EffectiveWeightLbs); // D&D 3.5e: material weight modifiers
         }
 
         return total;
@@ -673,5 +681,34 @@ public class Inventory
     public bool HasAmmo(AmmunitionType ammoType)
     {
         return FindBestAmmo(ammoType) != null;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Adamantine Armor DR
+    //  D&D 3.5e DMG p.283: Adamantine armor grants DR X/—
+    //  Light = DR 1/—, Medium = DR 2/—, Heavy = DR 3/—.
+    // ════════════════════════════════════════════════════════════
+
+    private int _currentAdamantineDR;
+
+    private void ApplyAdamantineArmorDR(ItemData armor)
+    {
+        // Remove previous adamantine armor DR if any
+        if (_currentAdamantineDR > 0 && OwnerStats != null)
+        {
+            OwnerStats.RemoveDamageReduction(_currentAdamantineDR, DamageBypassTag.None, false);
+            _currentAdamantineDR = 0;
+        }
+
+        if (armor == null || armor.Material == null) return;
+        if (armor.Material.MaterialType != ItemMaterialType.Adamantine) return;
+        if (armor.Material.ArmorDRAmount <= 0) return;
+
+        _currentAdamantineDR = armor.Material.ArmorDRAmount;
+        if (OwnerStats != null)
+        {
+            // DR X/— (BypassTag = None means nothing bypasses it except epic)
+            OwnerStats.AddDamageReduction(_currentAdamantineDR, DamageBypassTag.None, false);
+        }
     }
 }

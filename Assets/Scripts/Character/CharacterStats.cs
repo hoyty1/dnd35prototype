@@ -908,7 +908,11 @@ public class CharacterStats
         {
             if (!IsBarbarian) return 0;
             // +10 ft = 2 squares, only in medium or lighter armor and while not carrying a heavy/overloaded load.
-            if (EquippedArmorItem != null && EquippedArmorItem.ArmorCat == ArmorCategory.Heavy)
+            // D&D 3.5e: Mithral makes armor one category lighter for this check.
+            ArmorCategory effectiveCat = EquippedArmorItem != null
+                ? MaterialProperties.GetEffectiveArmorCategory(EquippedArmorItem)
+                : ArmorCategory.Light;
+            if (effectiveCat == ArmorCategory.Heavy)
                 return 0;
             if (CurrentEncumbrance == EncumbranceLevel.Heavy || CurrentEncumbrance == EncumbranceLevel.Overloaded)
                 return 0;
@@ -4632,7 +4636,9 @@ public class CharacterStats
         if (equippedItem.Type != ItemType.Armor)
             return true;
 
-        switch (equippedItem.ArmorCat)
+        // D&D 3.5e: Mithral armor counts as one category lighter for proficiency.
+        ArmorCategory effectiveCat = MaterialProperties.GetEffectiveArmorCategory(equippedItem);
+        switch (effectiveCat)
         {
             case ArmorCategory.Light: return HasLightArmorProficiency();
             case ArmorCategory.Medium: return HasMediumArmorProficiency();
@@ -4656,10 +4662,10 @@ public class CharacterStats
         int totalPenalty = 0;
 
         if (EquippedArmorItem != null && !IsProficientWithArmor(EquippedArmorItem))
-            totalPenalty -= Mathf.Abs(EquippedArmorItem.ArmorCheckPenalty);
+            totalPenalty -= Mathf.Abs(EquippedArmorItem.EffectiveArmorCheckPenalty);
 
         if (EquippedShieldItem != null && !IsProficientWithArmor(EquippedShieldItem))
-            totalPenalty -= Mathf.Abs(EquippedShieldItem.ArmorCheckPenalty);
+            totalPenalty -= Mathf.Abs(EquippedShieldItem.EffectiveArmorCheckPenalty);
 
         return totalPenalty;
     }
@@ -4708,7 +4714,8 @@ public class CharacterStats
     {
         if (item == null) return 0;
 
-        int acp = Mathf.Abs(item.ArmorCheckPenalty);
+        // D&D 3.5e: Use effective ACP (reduced by masterwork/mithral) for skill checks.
+        int acp = Mathf.Abs(item.EffectiveArmorCheckPenalty);
         if (acp <= 0) return 0;
 
         if (!IsProficientWithArmor(item))

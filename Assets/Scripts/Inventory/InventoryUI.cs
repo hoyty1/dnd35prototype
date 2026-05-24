@@ -761,7 +761,9 @@ public class InventoryUI : MonoBehaviour
         {
             string displayName = item.FullNameWithEnhancement;
             text.text = string.IsNullOrEmpty(item.IconChar) ? displayName : $"{item.IconChar}\n{displayName}";
-            text.color = item.IconColor;
+            // D&D 3.5e: Color text by quality tier (masterwork=blue, material=purple, magic=gold)
+            Color qualityColor = item.GetQualityColor();
+            text.color = qualityColor == Color.white ? item.IconColor : qualityColor;
             bg.color = SlotEquipped;
         }
         else
@@ -822,6 +824,7 @@ public class InventoryUI : MonoBehaviour
         else if (item.IsStackable && item.StackCount > 1)
             tooltipName = $"{tooltipName} (x{item.StackCount})";
         _tooltipNameText.text = tooltipName;
+        _tooltipNameText.color = item.GetQualityColor(); // Color-coded by quality tier
         _tooltipTypeText.text = item.Type.ToString();
         _tooltipStatsText.text = item.GetStatSummary();
         _tooltipDescText.text = item.Description;

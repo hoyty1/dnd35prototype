@@ -6242,7 +6242,11 @@ public class CharacterController : MonoBehaviour
 
         int weaponEnhancementAttackBonus = weapon != null ? weapon.GetEnhancementAttackBonus() : 0;
         int weaponEnhancementDamageBonus = weapon != null ? weapon.GetEnhancementDamageBonus() : 0;
-        result.WeaponEnhancementAttackBonus = weaponEnhancementAttackBonus;
+        // D&D 3.5e PHB p.126: Masterwork weapons grant +1 attack (does not stack with magic enhancement).
+        int masterworkAttackBonus = weapon != null ? weapon.MasterworkAttackBonus : 0;
+        // D&D 3.5e PHB p.284: Alchemical silver weapons take -1 damage penalty.
+        int materialDamageModifier = weapon != null ? weapon.MaterialDamageModifier : 0;
+        result.WeaponEnhancementAttackBonus = weaponEnhancementAttackBonus + masterworkAttackBonus;
         result.WeaponEnhancementDamageBonus = weaponEnhancementDamageBonus;
 
         int blindedTargetAttackBonus = target != null && target.HasCondition(CombatConditionType.Blinded) ? 2 : 0;
@@ -6276,7 +6280,7 @@ public class CharacterController : MonoBehaviour
         // Destruction Domain Smite: +4 attack on next melee attack
         int destructionSmiteAttackBonus = GameManager.GetDestructionSmiteAttackBonus(this);
 
-        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus;
+        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + masterworkAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus;
 
         // D&D 3.5e: making an attack roll (or attempting to attack) breaks standard invisibility.
         // Greater Invisibility does NOT break on attack (BreaksOnAttack=false).
@@ -6665,6 +6669,8 @@ public class CharacterController : MonoBehaviour
                 int destructionSmiteDmgBonus = GameManager.GetDestructionSmiteDamageBonus(this);
                 rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage + featDamageBonus + weaponEnhancementDamageBonus + destructionSmiteDmgBonus;
             }
+            // D&D 3.5e PHB p.284: Alchemical silver weapons take -1 penalty to damage rolls.
+            rawWeaponDamage += materialDamageModifier;
             rawWeaponDamage = Mathf.Max(1, rawWeaponDamage); // Weapon hit always deals at least 1 before mitigation
             result.Damage = rawWeaponDamage;
             result.BaseDamageRoll = baseDmgRoll;

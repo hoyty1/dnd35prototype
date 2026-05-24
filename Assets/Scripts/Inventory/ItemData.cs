@@ -202,6 +202,10 @@ public class ItemData
     public bool NoStrengthToDamage; // Special-case weapons (e.g., torch) that never add STR to damage.
     public string SpecialProperties; // Extensible comma-separated flags for special weapon behavior/UI.
 
+    // --- Masterwork & Special Material (D&D 3.5e PHB p.126-128, DMG p.283-284) ---
+    public bool IsMasterwork;              // Masterwork quality: weapons +1 attack, armor -1 ACP
+    public ItemMaterial Material;          // Special material (adamantine, mithral, cold iron, silver, darkwood)
+
     // --- Damage bypass/material/alignment properties (for DR interactions) ---
     public bool CountsAsMagicForBypass;    // Bypasses DR/magic
     public bool IsSilvered;                // Bypasses DR/silver
@@ -331,6 +335,25 @@ public class ItemData
     public string IconChar;     // Unicode/emoji character for display (fallback icon)
     public Color IconColor;     // Color tint for the icon
 
+    /// <summary>
+    /// Returns a display color based on the item's quality tier:
+    ///   Standard = White, Masterwork = Light Blue, Special Material = Purple, Magic = Gold.
+    /// </summary>
+    public Color GetQualityColor()
+    {
+        int enhBonus = ResolveEnhancementBonus();
+        if (enhBonus > 0)
+            return new Color(1f, 0.84f, 0f); // Gold for magic items
+
+        if (Material != null && Material.MaterialType != ItemMaterialType.Standard)
+            return new Color(0.7f, 0.5f, 1f); // Purple for special material
+
+        if (IsMasterwork)
+            return new Color(0.6f, 0.85f, 1f); // Light blue for masterwork
+
+        return Color.white; // Standard
+    }
+
     /// <summary>Create an empty/null item.</summary>
     public static ItemData Empty => null;
 
@@ -411,7 +434,7 @@ public class ItemData
     public int ClampedEnhancementBonus => Mathf.Clamp(ResolveEnhancementBonus(), 0, 5);
 
     /// <summary>Human-readable item name that includes enhancement prefix when present (for example "+1 Longsword").</summary>
-    public string FullNameWithEnhancement => FormatEnhancedName(Name, ResolveEnhancementBonus());
+    public string FullNameWithEnhancement => FullDisplayName;
 
     /// <summary>Price in gp after enhancement formula is applied to BasePriceGp.</summary>
     public int EnhancedPriceGp => GetEnhancedPriceGp(BasePriceGp);
@@ -604,6 +627,143 @@ public class ItemData
     }
 
     public bool IsMagicForBypass => CountsAsMagicForBypass || HasMagicBypassFromActiveEffects() || GetHighestWeaponEnhancementBonus() > 0;
+
+    // ── Masterwork & Material Bonus Properties ──
+
+    /// <summary>
+    /// D&D 3.5e PHB p.126: Masterwork weapons grant +1 enhancement bonus to attack rolls.
+    /// This does NOT stack with magic enhancement bonuses (magic weapons are already masterwork).
+    /// Returns +1 only if masterwork AND not already magic-enhanced.
+    /// </summary>
+    public int MasterworkAttackBonus
+    {
+        get
+        {
+            if (!IsMasterwork || (!IsWeapon && !IsAmmunition)) return 0;
+            // Magic enhancement bonus already includes masterwork quality
+            if (GetEnhancementAttackBonus() > 0) return 0;
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// D&D 3.5e PHB p.284: Alchemical silver weapons take -1 penalty to damage rolls.
+    /// </summary>
+    public int MaterialDamageModifier => Material != null ? Material.DamageModifier : 0;
+
+    /// <summary>
+    /// D&D 3.5e PHB p.126: Masterwork armor/shields reduce armor check penalty by 1.
+    /// Returns the ACP reduction (positive value) from masterwork quality.
+    /// Does NOT stack with magic enhancement (magic armor is already masterwork).
+    /// </summary>
+    public int MasterworkACPReduction
+    {
+        get
+        {
+            if (!IsMasterwork || (!IsArmor && !IsShield)) return 0;
+            if (ResolveEnhancementBonus() > 0) return 0; // Magic armor already masterwork
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Total armor check penalty reduction from masterwork + material.
+    /// Masterwork: -1 ACP. Mithral: additional -3 ACP.
+    /// </summary>
+    public int TotalACPReduction
+    {
+        get
+        {
+            int reduction = MasterworkACPReduction;
+            if (Material != null)
+                reduction += Material.ArmorCheckPenaltyReduction;
+            return reduction;
+        }
+    }
+
+    /// <summary>
+    /// Effective armor check penalty after masterwork and material reductions.
+    /// Minimum 0 (ACP cannot become a bonus).
+    /// </summary>
+    public int EffectiveArmorCheckPenalty => Mathf.Max(0, ArmorCheckPenalty - TotalACPReduction);
+
+    /// <summary>
+    /// Effective Max Dex Bonus after material increases (mithral +2).
+    /// -1 means no limit.
+    /// </summary>
+    public int EffectiveMaxDexBonus
+    {
+        get
+        {
+            if (MaxDexBonus < 0) return -1; // No limit
+            int increase = Material != null ? Material.MaxDexBonusIncrease : 0;
+            return MaxDexBonus + increase;
+        }
+    }
+
+    /// <summary>
+    /// Effective arcane spell failure after material reductions (mithral -10%).
+    /// Minimum 0%.
+    /// </summary>
+    public int EffectiveArcaneSpellFailure
+    {
+        get
+        {
+            int reduction = Material != null ? Material.ArcaneSpellFailureReduction : 0;
+            return Mathf.Max(0, ArcaneSpellFailure - reduction);
+        }
+    }
+
+    /// <summary>
+    /// Effective weight after material multiplier (mithral/darkwood = half).
+    /// </summary>
+    public float EffectiveWeightLbs
+    {
+        get
+        {
+            float mult = Material != null ? Material.WeightMultiplier : 1f;
+            return WeightLbs * mult;
+        }
+    }
+
+    /// <summary>
+    /// Full display name including masterwork/material prefix and enhancement.
+    /// E.g. "Masterwork Longsword", "Adamantine Full Plate", "+1 Mithral Chain Shirt".
+    /// </summary>
+    public string FullDisplayName
+    {
+        get
+        {
+            string baseName = Name;
+            int enhBonus = ResolveEnhancementBonus();
+
+            // Material prefix
+            string matPrefix = "";
+            if (Material != null && Material.MaterialType != ItemMaterialType.Standard)
+                matPrefix = MaterialProperties.GetMaterialPrefix(Material.MaterialType);
+
+            // Enhancement prefix (magic items)
+            string enhPrefix = "";
+            if (enhBonus > 0)
+                enhPrefix = $"+{enhBonus}";
+
+            // Masterwork (only shown if no magic enhancement and no special material name)
+            string mwPrefix = "";
+            if (IsMasterwork && enhBonus <= 0 && string.IsNullOrEmpty(matPrefix))
+                mwPrefix = "Masterwork";
+
+            // Build name
+            string prefix = "";
+            if (!string.IsNullOrEmpty(enhPrefix))
+                prefix = enhPrefix;
+            if (!string.IsNullOrEmpty(matPrefix))
+                prefix = string.IsNullOrEmpty(prefix) ? matPrefix : $"{prefix} {matPrefix}";
+            if (!string.IsNullOrEmpty(mwPrefix))
+                prefix = mwPrefix;
+
+            return string.IsNullOrEmpty(prefix) ? baseName : $"{prefix} {baseName}";
+        }
+    }
 
     public int GetEnhancementAttackBonus()
     {
@@ -837,6 +997,10 @@ public class ItemData
         if (IsAlignedLawful) tags |= DamageBypassTag.Lawful;
         if (IsAlignedChaotic) tags |= DamageBypassTag.Chaotic;
 
+        // D&D 3.5e: Special material bypass tags (supplements legacy bool flags)
+        if (Material != null)
+            tags |= Material.WeaponBypassTags;
+
         if (WeaponCat == WeaponCategory.Ranged || RangeIncrement > 0)
             tags |= DamageBypassTag.Ranged;
 
@@ -946,24 +1110,69 @@ public class ItemData
                 stats += $"\n{props}";
             }
             stats += $"\n{Proficiency} {WeaponCat}";
+
+            // Masterwork & material info for weapons
+            if (IsMasterwork && MasterworkAttackBonus > 0)
+                stats += "\n✦ Masterwork (+1 attack)";
+            if (Material != null && Material.MaterialType != ItemMaterialType.Standard)
+            {
+                string matName = MaterialProperties.GetMaterialPrefix(Material.MaterialType);
+                if (Material.DamageModifier != 0)
+                    stats += $"\n✦ {matName} ({Material.DamageModifier} damage)";
+                if (Material.WeaponBypassTags != DamageBypassTag.None)
+                    stats += $"\n✦ Bypasses DR/{matName.ToLowerInvariant()}";
+                if (Material.WeightMultiplier < 1f)
+                    stats += $"\n✦ Weight: {EffectiveWeightLbs:F1} lbs (half)";
+            }
         }
         else if (Type == ItemType.Armor)
         {
-            stats = $"AC Bonus: +{GetTotalArmorBonus()} ({ArmorCat})";
+            ArmorCategory effectiveCat = MaterialProperties.GetEffectiveArmorCategory(this);
+            string catLabel = effectiveCat != ArmorCat
+                ? $"{ArmorCat} → {effectiveCat}"
+                : $"{ArmorCat}";
+            stats = $"AC Bonus: +{GetTotalArmorBonus()} ({catLabel})";
             if (ClampedEnhancementBonus > 0)
                 stats += $"\nEnhancement: +{ClampedEnhancementBonus} armor";
-            if (MaxDexBonus >= 0) stats += $"\nMax Dex: +{MaxDexBonus}";
-            if (ArmorCheckPenalty > 0) stats += $" | Check: -{ArmorCheckPenalty}";
-            if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";
+            int effMaxDex = EffectiveMaxDexBonus;
+            int effACP = EffectiveArmorCheckPenalty;
+            int effASF = EffectiveArcaneSpellFailure;
+            if (effMaxDex >= 0) stats += $"\nMax Dex: +{effMaxDex}";
+            if (effACP > 0) stats += $" | Check: -{effACP}";
+            if (effASF > 0) stats += $"\nSpell Fail: {effASF}%";
+            // Show material/masterwork notes
+            if (IsMasterwork && MasterworkACPReduction > 0)
+                stats += "\n✦ Masterwork (-1 ACP)";
+            if (Material != null && Material.MaterialType != ItemMaterialType.Standard)
+            {
+                string matName = MaterialProperties.GetMaterialPrefix(Material.MaterialType);
+                if (Material.ArmorDRAmount > 0)
+                    stats += $"\n✦ {matName}: DR {Material.ArmorDRAmount}/—";
+                if (Material.ArmorCategoryShift < 0)
+                    stats += $"\n✦ {matName}: Counts as {effectiveCat} for movement/proficiency";
+                if (Material.WeightMultiplier < 1f)
+                    stats += $"\n✦ Weight: {EffectiveWeightLbs:F1} lbs (half)";
+            }
         }
         else if (Type == ItemType.Shield)
         {
             stats = $"Shield Bonus: +{GetTotalShieldBonus()}";
             if (ClampedEnhancementBonus > 0)
                 stats += $"\nEnhancement: +{ClampedEnhancementBonus} shield";
-            if (MaxDexBonus >= 0) stats += $"\nMax Dex: +{MaxDexBonus}";
-            if (ArmorCheckPenalty > 0) stats += $" | Check: -{ArmorCheckPenalty}";
-            if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";
+            int effMaxDex = EffectiveMaxDexBonus;
+            int effACP = EffectiveArmorCheckPenalty;
+            int effASF = EffectiveArcaneSpellFailure;
+            if (effMaxDex >= 0) stats += $"\nMax Dex: +{effMaxDex}";
+            if (effACP > 0) stats += $" | Check: -{effACP}";
+            if (effASF > 0) stats += $"\nSpell Fail: {effASF}%";
+            if (IsMasterwork && MasterworkACPReduction > 0)
+                stats += "\n✦ Masterwork (-1 ACP)";
+            if (Material != null && Material.MaterialType != ItemMaterialType.Standard)
+            {
+                string matName = MaterialProperties.GetMaterialPrefix(Material.MaterialType);
+                if (Material.WeightMultiplier < 1f)
+                    stats += $"\n✦ {matName}: Weight {EffectiveWeightLbs:F1} lbs (half)";
+            }
 
             // D&D 3.5 shield bash profile (when present on this shield definition).
             if (DamageDice > 0 && DamageCount > 0)
