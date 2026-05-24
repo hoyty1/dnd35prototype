@@ -395,7 +395,7 @@ public static class StaffDatabase
             MarketPrice = 82000,
             AllowedClasses = new[] { "Wizard", "Sorcerer", "Bard" },
             Status = StaffImplementationStatus.Partial,
-            ImplementationNotes = "3/6 spells work (Sleep, Hideous Laughter, Confusion). Suggestion, Crushing Despair, Mind Fog, Mass Suggestion not registered.",
+            ImplementationNotes = "2/6 spells work (Sleep, Hideous Laughter). Suggestion, Crushing Despair, Mind Fog, Mass Suggestion not registered.",
             Spells = new List<StaffSpellEntry>
             {
                 Spell(SpellNames.SLEEP, "Sleep", 1, 1),
