@@ -623,3 +623,284 @@ public struct EnchantmentDamageResult
         return $"+{Amount}{typeStr} ({DisplayName})";
     }
 }
+
+// ============================================================================
+// ADVANCED ENCHANTMENT EFFECTS (Phase 5-6)
+// ============================================================================
+
+/// <summary>
+/// Advanced enchantment combat effects: Brilliant Energy, Disruption,
+/// Spell Resistance from armor, Dancing weapon state, and more.
+/// </summary>
+public static class AdvancedEnchantmentEffects
+{
+    // ========================================================================
+    // BRILLIANT ENERGY - Ignore armor/shield/natural armor
+    // ========================================================================
+
+    /// <summary>
+    /// Calculate AC reduction when attacking with a Brilliant Energy weapon.
+    /// Brilliant Energy ignores armor, shield, and natural armor bonuses.
+    /// Returns the amount to subtract from the target's effective AC.
+    /// </summary>
+    /// <param name="weapon">The attacking weapon.</param>
+    /// <param name="targetArmor">Target's equipped armor (can be null).</param>
+    /// <param name="targetShield">Target's equipped shield (can be null).</param>
+    /// <param name="targetNaturalArmor">Target's natural armor bonus.</param>
+    /// <returns>AC reduction amount (0 if weapon is not Brilliant Energy).</returns>
+    public static int GetBrilliantEnergyACReduction(ItemData weapon, ItemData targetArmor, ItemData targetShield, int targetNaturalArmor)
+    {
+        if (weapon == null || !weapon.IsEnchanted) return 0;
+
+        bool hasBrilliantEnergy = false;
+        for (int i = 0; i < weapon.Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(weapon.Enchantment.Abilities[i]);
+            if (stats != null && stats.BrilliantEnergyEffect) { hasBrilliantEnergy = true; break; }
+        }
+        if (!hasBrilliantEnergy) return 0;
+
+        int reduction = 0;
+
+        // Remove armor bonus (base + enhancement)
+        if (targetArmor != null)
+            reduction += targetArmor.GetTotalArmorBonus();
+
+        // Remove shield bonus (base + enhancement)
+        if (targetShield != null)
+            reduction += targetShield.GetTotalShieldBonus();
+
+        // Remove natural armor
+        reduction += Mathf.Max(0, targetNaturalArmor);
+
+        return reduction;
+    }
+
+    /// <summary>
+    /// Check if a Brilliant Energy weapon cannot harm the target.
+    /// Brilliant Energy weapons cannot harm undead, constructs, or objects.
+    /// </summary>
+    public static bool BrilliantEnergyCannotHarm(ItemData weapon, string targetCreatureType)
+    {
+        if (weapon == null || !weapon.IsEnchanted) return false;
+
+        bool hasBrilliantEnergy = false;
+        for (int i = 0; i < weapon.Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(weapon.Enchantment.Abilities[i]);
+            if (stats != null && stats.BrilliantEnergyEffect) { hasBrilliantEnergy = true; break; }
+        }
+        if (!hasBrilliantEnergy) return false;
+
+        if (string.IsNullOrEmpty(targetCreatureType)) return false;
+        string ct = targetCreatureType.Trim().ToLowerInvariant();
+        return ct == "undead" || ct == "construct";
+    }
+
+    // ========================================================================
+    // DISRUPTION - Destroy undead on hit
+    // ========================================================================
+
+    /// <summary>
+    /// Check if Disruption effect triggers: undead hit must make Fort save or be destroyed.
+    /// Returns true if the undead is destroyed.
+    /// </summary>
+    /// <param name="weapon">The attacking weapon.</param>
+    /// <param name="targetCreatureType">Target's creature type string.</param>
+    /// <param name="targetFortSaveBonus">Target's Fortitude save bonus.</param>
+    /// <param name="saveRoll">Output: the actual d20 save roll for logging.</param>
+    /// <param name="saveDC">Output: the DC of the save.</param>
+    /// <returns>True if the undead fails the save and is destroyed.</returns>
+    public static bool CheckDisruptionEffect(ItemData weapon, string targetCreatureType,
+        int targetFortSaveBonus, out int saveRoll, out int saveDC)
+    {
+        saveRoll = 0;
+        saveDC = 0;
+
+        if (weapon == null || !weapon.IsEnchanted) return false;
+        if (string.IsNullOrEmpty(targetCreatureType)) return false;
+        if (!targetCreatureType.Trim().Equals("Undead", System.StringComparison.OrdinalIgnoreCase)) return false;
+
+        for (int i = 0; i < weapon.Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(weapon.Enchantment.Abilities[i]);
+            if (stats == null || !stats.DisruptionEffect) continue;
+
+            saveDC = stats.DisruptionSaveDC;
+            saveRoll = DiceService.D20("Disruption Fort save");
+            int totalSave = saveRoll + targetFortSaveBonus;
+
+            if (totalSave < saveDC)
+            {
+                Debug.Log($"[Enchantment] Disruption: Undead fails Fort save ({saveRoll}+{targetFortSaveBonus}={totalSave} < DC {saveDC}) — DESTROYED!");
+                return true;
+            }
+            else
+            {
+                Debug.Log($"[Enchantment] Disruption: Undead passes Fort save ({saveRoll}+{targetFortSaveBonus}={totalSave} ≥ DC {saveDC}).");
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // ========================================================================
+    // SPELL RESISTANCE FROM ARMOR/SHIELD
+    // ========================================================================
+
+    /// <summary>
+    /// Get the total spell resistance from equipped armor and shield enchantments.
+    /// Takes the highest SR value (SR from different sources does not stack).
+    /// Also considers the character's innate SR.
+    /// </summary>
+    /// <param name="innateSpellResistance">Character's innate SR (from race, class, etc.).</param>
+    /// <param name="armor">Equipped armor (can be null).</param>
+    /// <param name="shield">Equipped shield (can be null).</param>
+    /// <returns>The highest applicable spell resistance value.</returns>
+    public static int GetTotalSpellResistance(int innateSpellResistance, ItemData armor, ItemData shield)
+    {
+        int armorSR = EnchantmentEffects.GetSpellResistance(armor, shield);
+        return Mathf.Max(innateSpellResistance, armorSR);
+    }
+
+    /// <summary>
+    /// Perform a caster level check against spell resistance.
+    /// The caster must roll 1d20 + caster level ≥ SR to overcome.
+    /// </summary>
+    /// <param name="casterLevel">The caster's level.</param>
+    /// <param name="spellResistance">The target's effective SR.</param>
+    /// <param name="roll">Output: the actual d20 roll.</param>
+    /// <returns>True if the spell overcomes SR (caster succeeds).</returns>
+    public static bool CheckCasterLevelVsSR(int casterLevel, int spellResistance, out int roll)
+    {
+        if (spellResistance <= 0)
+        {
+            roll = 0;
+            return true; // No SR to overcome
+        }
+
+        roll = DiceService.D20("Caster level check vs SR");
+        int total = roll + casterLevel;
+        bool overcame = total >= spellResistance;
+
+        Debug.Log($"[Enchantment] SR check: 1d20({roll})+CL({casterLevel})={total} vs SR {spellResistance} → {(overcame ? "OVERCAME" : "RESISTED")}");
+        return overcame;
+    }
+
+    // ========================================================================
+    // INVULNERABILITY DR - Apply DR 5/magic
+    // ========================================================================
+
+    /// <summary>
+    /// Apply Invulnerability DR to incoming weapon damage.
+    /// DR 5/magic is bypassed by any attack with an enhancement bonus ≥ +1 or magic tag.
+    /// </summary>
+    /// <param name="rawDamage">The incoming raw damage.</param>
+    /// <param name="attackIsMagic">Whether the attacking weapon/spell is magic.</param>
+    /// <param name="attackEnhancementBonus">Enhancement bonus of the attacking weapon.</param>
+    /// <param name="armor">Defender's equipped armor.</param>
+    /// <param name="shield">Defender's equipped shield.</param>
+    /// <returns>Damage after DR application.</returns>
+    public static int ApplyInvulnerabilityDR(int rawDamage, bool attackIsMagic, int attackEnhancementBonus,
+        ItemData armor, ItemData shield)
+    {
+        int dr = EnchantmentEffects.GetEnchantmentDR(armor, shield);
+        if (dr <= 0) return rawDamage;
+
+        // DR X/magic is bypassed by magic attacks
+        if (attackIsMagic || attackEnhancementBonus > 0) return rawDamage;
+
+        int reduced = Mathf.Max(0, rawDamage - dr);
+        if (reduced < rawDamage)
+        {
+            Debug.Log($"[Enchantment] Invulnerability DR {dr}/magic: reduced damage from {rawDamage} to {reduced}.");
+        }
+        return reduced;
+    }
+
+    // ========================================================================
+    // DANCING WEAPON STATE
+    // ========================================================================
+
+    /// <summary>
+    /// Check if a weapon has the Dancing ability.
+    /// </summary>
+    public static bool HasDancingAbility(ItemData weapon)
+    {
+        if (weapon == null || !weapon.IsEnchanted) return false;
+        for (int i = 0; i < weapon.Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(weapon.Enchantment.Abilities[i]);
+            if (stats != null && stats.DancingEffect) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Get the number of rounds a Dancing weapon fights independently.
+    /// </summary>
+    public static int GetDancingDuration(ItemData weapon)
+    {
+        if (weapon == null || !weapon.IsEnchanted) return 0;
+        for (int i = 0; i < weapon.Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(weapon.Enchantment.Abilities[i]);
+            if (stats != null && stats.DancingEffect) return stats.DancingDuration;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // GHOST TOUCH WEAPON - Full damage vs incorporeal
+    // ========================================================================
+
+    /// <summary>
+    /// Check if weapon can deal full damage to incorporeal creatures.
+    /// </summary>
+    public static bool HasGhostTouchWeapon(ItemData weapon)
+    {
+        if (weapon == null || !weapon.IsEnchanted) return false;
+        for (int i = 0; i < weapon.Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(weapon.Enchantment.Abilities[i]);
+            if (stats != null && stats.GhostTouchWeaponEffect) return true;
+        }
+        return false;
+    }
+
+    // ========================================================================
+    // KI FOCUS - Monk abilities through weapon
+    // ========================================================================
+
+    /// <summary>
+    /// Check if weapon allows monk ki strike abilities through it.
+    /// </summary>
+    public static bool HasKiFocus(ItemData weapon)
+    {
+        if (weapon == null || !weapon.IsEnchanted) return false;
+        for (int i = 0; i < weapon.Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(weapon.Enchantment.Abilities[i]);
+            if (stats != null && stats.KiFocusEffect) return true;
+        }
+        return false;
+    }
+
+    // ========================================================================
+    // ANIMATED SHIELD
+    // ========================================================================
+
+    /// <summary>
+    /// Check if a shield has the Animated ability (floats, provides bonus without being held).
+    /// </summary>
+    public static bool IsAnimatedShield(ItemData shield)
+    {
+        if (shield == null || !shield.IsEnchanted) return false;
+        for (int i = 0; i < shield.Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(shield.Enchantment.Abilities[i]);
+            if (stats != null && stats.AnimatedEffect) return true;
+        }
+        return false;
+    }
+}

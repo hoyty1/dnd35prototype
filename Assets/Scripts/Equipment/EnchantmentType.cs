@@ -67,10 +67,15 @@ public enum EnchantmentType
     Defending,          // Transfer enhancement bonus to AC
 
     // ========================================================================
-    // WEAPON SPECIAL ABILITIES - Spell-like
+    // WEAPON SPECIAL ABILITIES - Spell-like / Special
     // ========================================================================
     SpellStoring,       // Store and release spell on hit (up to 3rd level)
     MercifulWeapon,     // +1d6 nonlethal, suppress to deal lethal
+    BrilliantEnergy,    // Ignores armor, shield, and natural armor (not force/deflection)
+    Dancing,            // Weapon fights on its own for 4 rounds
+    Disruption,         // Undead must Fort DC 14 or be destroyed (bludgeoning only)
+    KiFocus,            // Allows monk ki abilities through weapon
+    GhostTouchWeapon,   // Full damage vs incorporeal creatures
 
     // ========================================================================
     // ARMOR/SHIELD SPECIAL ABILITIES - Fortification
@@ -113,6 +118,9 @@ public enum EnchantmentType
     GhostTouch,         // Full AC vs incorporeal
     Invulnerability,    // DR 5/magic
     WildArmor,          // Armor melds with wild shape
+    Glamered,           // Disguise Self at will on armor appearance
+    Etherealness,       // Ethereal Jaunt 1/day for 10 min
+    UndeadControlling,  // Command undead as evil cleric
 
     // ========================================================================
     // SHIELD SPECIFIC
@@ -120,6 +128,9 @@ public enum EnchantmentType
     ArrowDeflection,    // Deflect one ranged attack per round
     Bashing,            // Shield deals damage as if 2 sizes larger
     Blinding,           // Flash 2/day, Fort DC 14 or blind 1d4 rounds
+    Animated,           // Shield floats, defends without being held
+    Reflecting,         // Reflect targeted spells back at caster 1/day
+    GhostTouchShield,   // Shield blocks incorporeal touch attacks
 
     // ========================================================================
     // ARMOR SPECIAL ABILITIES - Spell Resistance

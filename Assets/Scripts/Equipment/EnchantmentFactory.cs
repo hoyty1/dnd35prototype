@@ -201,6 +201,14 @@ public static class EnchantmentFactory
                 return $"{stats.DisplayName} requires a slashing or piercing weapon.";
         }
 
+        // Bludgeoning only restriction (for Disruption)
+        if (stats.BludgeoningOnly && item.IsWeapon)
+        {
+            var dmgTypes = item.GetDamageTypes();
+            if (!dmgTypes.Contains(DamageType.Bludgeoning))
+                return $"{stats.DisplayName} requires a bludgeoning weapon.";
+        }
+
         // Minimum enhancement bonus
         if (stats.MinimumEnhancementBonus > 0 && enhancementBonus < stats.MinimumEnhancementBonus)
             return $"{stats.DisplayName} requires minimum +{stats.MinimumEnhancementBonus} enhancement bonus.";

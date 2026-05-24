@@ -272,6 +272,62 @@ public class EnchantmentStats
     public bool BashingEffect;
 
     // ========================================================================
+    // ADVANCED WEAPON EFFECTS (Phase 5-6)
+    // ========================================================================
+
+    /// <summary>If true, attacks ignore armor, shield, and natural armor bonuses to AC (Brilliant Energy).</summary>
+    public bool BrilliantEnergyEffect;
+
+    /// <summary>If true, weapon fights autonomously for 4 rounds after activation (Dancing).</summary>
+    public bool DancingEffect;
+
+    /// <summary>Number of rounds the Dancing weapon fights on its own.</summary>
+    public int DancingDuration;
+
+    /// <summary>If true, undead hit must Fort save or be destroyed (Disruption).</summary>
+    public bool DisruptionEffect;
+
+    /// <summary>Fort save DC for Disruption effect.</summary>
+    public int DisruptionSaveDC;
+
+    /// <summary>If true, weapon only works on bludgeoning weapons (Disruption).</summary>
+    public bool BludgeoningOnly;
+
+    /// <summary>If true, allows monk to channel ki abilities through weapon (Ki Focus).</summary>
+    public bool KiFocusEffect;
+
+    /// <summary>If true, weapon deals full damage to incorporeal creatures (Ghost Touch Weapon).</summary>
+    public bool GhostTouchWeaponEffect;
+
+    /// <summary>If true, can store a spell up to MaxStoredSpellLevel (Spell Storing).</summary>
+    public bool CanStoreSpell;
+
+    /// <summary>Maximum spell level that can be stored (typically 3).</summary>
+    public int MaxStoredSpellLevel;
+
+    // ========================================================================
+    // ADVANCED ARMOR/SHIELD EFFECTS (Phase 5-6)
+    // ========================================================================
+
+    /// <summary>If true, shield floats and defends without being held (Animated).</summary>
+    public bool AnimatedEffect;
+
+    /// <summary>If true, can reflect targeted spells back at caster once per day (Reflecting).</summary>
+    public bool ReflectingEffect;
+
+    /// <summary>If true, shield blocks incorporeal touch attacks (Ghost Touch Shield).</summary>
+    public bool GhostTouchShieldEffect;
+
+    /// <summary>If true, allows Ethereal Jaunt 1/day for 10 minutes (Etherealness).</summary>
+    public bool EtherealJauntEffect;
+
+    /// <summary>If true, armor appearance can be disguised at will (Glamered).</summary>
+    public bool GlameredEffect;
+
+    /// <summary>If true, can command undead as evil cleric (Undead Controlling).</summary>
+    public bool UndeadControllingEffect;
+
+    // ========================================================================
     // CONSTRUCTOR
     // ========================================================================
 

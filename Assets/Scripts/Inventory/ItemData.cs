@@ -350,7 +350,17 @@ public class ItemData
     {
         int enhBonus = ResolveEnhancementBonus();
         if (enhBonus > 0)
-            return new Color(1f, 0.84f, 0f); // Gold for magic items
+        {
+            // Tiered enchantment colors based on effective bonus (enhancement + ability equivalents)
+            int effectiveBonus = GetEffectiveBonusForPricing();
+            if (effectiveBonus >= 8)
+                return new Color(1f, 0.5f, 0f);    // Orange - Legendary (+8 or higher)
+            if (effectiveBonus >= 5)
+                return new Color(0.7f, 0.5f, 1f);  // Purple - Epic (+5 to +7)
+            if (effectiveBonus >= 3)
+                return new Color(0.3f, 0.5f, 1f);  // Blue - Rare (+3 to +4)
+            return new Color(0.2f, 0.8f, 0.2f);    // Green - Uncommon (+1 to +2)
+        }
 
         if (Material != null && Material.MaterialType != ItemMaterialType.Standard)
             return new Color(0.7f, 0.5f, 1f); // Purple for special material
@@ -493,6 +503,53 @@ public class ItemData
                 total += stats.FlatCostGp;
         }
         return total;
+    }
+
+    /// <summary>
+    /// Build a tooltip section listing all enchantment abilities with descriptions.
+    /// Returns empty string if no enchantments are applied.
+    /// </summary>
+    public string GetEnchantmentTooltipSection()
+    {
+        if (!IsEnchanted) return "";
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("\n── Enchantments ──");
+
+        for (int i = 0; i < Enchantment.Abilities.Count; i++)
+        {
+            var ench = EnchantmentProperties.Get(Enchantment.Abilities[i]);
+            if (ench == null) continue;
+
+            string bonusLabel = ench.BonusEquivalent > 0
+                ? $" [+{ench.BonusEquivalent} equiv]"
+                : (ench.FlatCostGp > 0 ? $" [{ench.FlatCostGp:N0} gp]" : "");
+
+            string name = ench.DisplayName;
+            if (Enchantment.Abilities[i] == EnchantmentType.Bane && !string.IsNullOrEmpty(Enchantment.BaneCreatureType))
+                name = $"Bane ({Enchantment.BaneCreatureType})";
+
+            sb.Append($"\n✧ {name}{bonusLabel}");
+
+            // Short description line
+            if (!string.IsNullOrEmpty(ench.Description))
+            {
+                string desc = ench.Description.Length > 80
+                    ? ench.Description.Substring(0, 77) + "..."
+                    : ench.Description;
+                sb.Append($"\n   {desc}");
+            }
+        }
+
+        // Total effective bonus and price
+        int effectiveBonus = GetEffectiveBonusForPricing();
+        int flatCost = GetEnchantmentFlatCostGp();
+        sb.Append($"\nTotal Effective Bonus: +{effectiveBonus}");
+        if (flatCost > 0)
+            sb.Append($" + {flatCost:N0} gp flat");
+        sb.Append($"\nEnchanted Value: {EnhancedPriceGp:N0} gp");
+
+        return sb.ToString();
     }
 
     /// <summary>Enhancement bonus clamped to D&D 3.5e item range (0-5).</summary>
@@ -1212,6 +1269,7 @@ public class ItemData
                 if (Material.WeightMultiplier < 1f)
                     stats += $"\n✦ Weight: {EffectiveWeightLbs:F1} lbs (half)";
             }
+            stats += GetEnchantmentTooltipSection();
         }
         else if (Type == ItemType.Armor)
         {
@@ -1241,6 +1299,7 @@ public class ItemData
                 if (Material.WeightMultiplier < 1f)
                     stats += $"\n✦ Weight: {EffectiveWeightLbs:F1} lbs (half)";
             }
+            stats += GetEnchantmentTooltipSection();
         }
         else if (Type == ItemType.Shield)
         {
@@ -1271,6 +1330,7 @@ public class ItemData
                 string prof = Proficiency == WeaponProficiency.None ? "Martial" : Proficiency.ToString();
                 stats += $"\nShield Bash: {bashDmg} {dmgType} ({prof})";
             }
+            stats += GetEnchantmentTooltipSection();
         }
         else if (Type == ItemType.Consumable)
         {

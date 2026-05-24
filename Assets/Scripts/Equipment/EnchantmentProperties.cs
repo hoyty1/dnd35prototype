@@ -115,6 +115,9 @@ public static class EnchantmentProperties
         // --- Weapon: Spell-like ---
         RegisterWeaponSpellAbilities();
 
+        // --- Weapon: Advanced (Phase 5-6) ---
+        RegisterAdvancedWeaponAbilities();
+
         // --- Armor/Shield: Fortification ---
         RegisterFortificationAbilities();
 
@@ -132,6 +135,9 @@ public static class EnchantmentProperties
 
         // --- Shield Specific ---
         RegisterShieldSpecificAbilities();
+
+        // --- Advanced Armor/Shield (Phase 5-6) ---
+        RegisterAdvancedArmorShieldAbilities();
     }
 
     // ========================================================================
@@ -535,6 +541,75 @@ public static class EnchantmentProperties
             BonusEquivalent = 1,
             Slot = EnchantmentSlot.Weapon,
             MeleeOnly = true,
+            CanStoreSpell = true,
+            MaxStoredSpellLevel = 3,
+        });
+    }
+
+    // ========================================================================
+    // WEAPON - ADVANCED ABILITIES (Phase 5-6)
+    // ========================================================================
+
+    private static void RegisterAdvancedWeaponAbilities()
+    {
+        // Brilliant Energy: +4 bonus, ignores armor/shield/natural armor
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.BrilliantEnergy,
+            DisplayName = "Brilliant Energy",
+            Description = "Weapon ignores armor, shield, and natural armor bonuses to AC. Cannot harm undead, constructs, or objects.",
+            BonusEquivalent = 4,
+            Slot = EnchantmentSlot.Weapon,
+            BrilliantEnergyEffect = true,
+        });
+
+        // Dancing: +4 bonus, weapon fights on its own for 4 rounds
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.Dancing,
+            DisplayName = "Dancing",
+            Description = "As a free action, release the weapon to fight on its own for 4 rounds, then returns to hand.",
+            BonusEquivalent = 4,
+            Slot = EnchantmentSlot.Weapon,
+            MeleeOnly = true,
+            DancingEffect = true,
+            DancingDuration = 4,
+        });
+
+        // Disruption: +2 bonus, undead must Fort DC 14 or be destroyed
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.Disruption,
+            DisplayName = "Disruption",
+            Description = "Undead hit by this weapon must succeed on a DC 14 Fortitude save or be destroyed.",
+            BonusEquivalent = 2,
+            Slot = EnchantmentSlot.Weapon,
+            BludgeoningOnly = true,
+            DisruptionEffect = true,
+            DisruptionSaveDC = 14,
+        });
+
+        // Ki Focus: +1 bonus, allows monk ki attacks through weapon
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.KiFocus,
+            DisplayName = "Ki Focus",
+            Description = "Allows a monk to use ki strike abilities and unarmed attack feats through this weapon.",
+            BonusEquivalent = 1,
+            Slot = EnchantmentSlot.Weapon,
+            MeleeOnly = true,
+            KiFocusEffect = true,
+        });
+
+        // Ghost Touch (weapon): +1 bonus, full damage vs incorporeal
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.GhostTouchWeapon,
+            DisplayName = "Ghost Touch",
+            Description = "Weapon deals full damage to incorporeal creatures as if they were corporeal.",
+            BonusEquivalent = 1,
+            Slot = EnchantmentSlot.Weapon,
+            GhostTouchWeaponEffect = true,
         });
     }
 
@@ -796,6 +871,79 @@ public static class EnchantmentProperties
             Description = "Shield can flash brilliantly twice per day. Creatures within 20 ft. must make Fort DC 14 or be blinded for 1d4 rounds.",
             BonusEquivalent = 1,
             Slot = EnchantmentSlot.Shield,
+        });
+    }
+
+    // ========================================================================
+    // ADVANCED ARMOR/SHIELD ABILITIES (Phase 5-6)
+    // ========================================================================
+
+    private static void RegisterAdvancedArmorShieldAbilities()
+    {
+        // Animated: +2 bonus, shield floats and defends without being held
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.Animated,
+            DisplayName = "Animated",
+            Description = "Shield floats near the wielder, providing its shield bonus without being held, freeing both hands.",
+            BonusEquivalent = 2,
+            Slot = EnchantmentSlot.Shield,
+            AnimatedEffect = true,
+        });
+
+        // Reflecting: +5 bonus, reflect targeted spells
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.Reflecting,
+            DisplayName = "Reflecting",
+            Description = "Once per day, the shield can reflect a single targeted spell back at its caster.",
+            BonusEquivalent = 5,
+            Slot = EnchantmentSlot.Shield,
+            ReflectingEffect = true,
+        });
+
+        // Ghost Touch (shield): +3 bonus, blocks incorporeal touch attacks
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.GhostTouchShield,
+            DisplayName = "Ghost Touch",
+            Description = "Shield's enhancement bonus applies fully against incorporeal touch attacks.",
+            BonusEquivalent = 3,
+            Slot = EnchantmentSlot.Shield,
+            GhostTouchShieldEffect = true,
+        });
+
+        // Glamered: flat cost 2,700 gp, disguise armor appearance
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.Glamered,
+            DisplayName = "Glamered",
+            Description = "Armor can appear as any normal clothing. The illusion does not change its properties.",
+            FlatCostGp = 2700,
+            Slot = EnchantmentSlot.Armor,
+            GlameredEffect = true,
+        });
+
+        // Etherealness: +4 equivalent (DMG: on command, become ethereal 1/day, 10 min)
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.Etherealness,
+            DisplayName = "Etherealness",
+            Description = "Once per day, the wearer can become ethereal (as Ethereal Jaunt) for up to 10 minutes.",
+            BonusEquivalent = 4, // Per DMG errata: counted as +4 equivalent in practice
+            Slot = EnchantmentSlot.Armor,
+            EtherealJauntEffect = true,
+        });
+
+        // Undead Controlling: +3 bonus, command undead as evil cleric
+        Register(new EnchantmentStats
+        {
+            Type = EnchantmentType.UndeadControlling,
+            DisplayName = "Undead Controlling",
+            Description = "Wearer can command undead 3 times per day as a cleric of 3 levels lower than their character level.",
+            BonusEquivalent = 3,
+            Slot = EnchantmentSlot.ArmorOrShield,
+            UndeadControllingEffect = true,
         });
     }
 }
