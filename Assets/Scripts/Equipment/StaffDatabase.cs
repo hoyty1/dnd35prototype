@@ -233,7 +233,7 @@ public static class StaffDatabase
             Spells = new List<StaffSpellEntry>
             {
                 Spell(SpellNames.CHARM_PERSON, "Charm Person", 1, 1),
-                StubSpell("charm_monster", "Charm Monster", 4, 2, "As Charm Person but affects any living creature")
+                Spell(SpellNames.CHARM_MONSTER, "Charm Monster", 4, 2)
             }
         });
 
@@ -255,7 +255,7 @@ public static class StaffDatabase
             {
                 Spell(SpellNames.ICE_STORM, "Ice Storm", 4, 1),
                 Spell(SpellNames.WALL_OF_ICE, "Wall of Ice", 4, 1),
-                StubSpell("cone_of_cold", "Cone of Cold", 5, 2, "60-ft cone, 1d6/CL cold damage (max 15d6), Reflex half")
+                Spell(SpellNames.CONE_OF_COLD, "Cone of Cold", 5, 2)
             }
         });
 
@@ -277,7 +277,7 @@ public static class StaffDatabase
             {
                 Spell(SpellNames.ENLARGE_PERSON, "Enlarge Person", 1, 1),
                 Spell(SpellNames.REDUCE_PERSON, "Reduce Person", 1, 1),
-                StubSpell("shrink_item", "Shrink Item", 3, 1, "Shrinks one nonmagical item to 1/16 size, utility only")
+                Spell(SpellNames.SHRINK_ITEM, "Shrink Item", 3, 1)
             }
         });
 
@@ -302,7 +302,7 @@ public static class StaffDatabase
                 Spell(SpellNames.HALT_UNDEAD, "Halt Undead", 3, 1),
                 Spell(SpellNames.ENERVATION, "Enervation", 4, 2),
                 StubSpell("waves_of_fatigue", "Waves of Fatigue", 5, 2, "30-ft cone, all creatures fatigued, no save"),
-                StubSpell("circle_of_death", "Circle of Death", 6, 3, "Kills 1d4 HD/CL of creatures in 40-ft radius, Fort negates")
+                Spell(SpellNames.CIRCLE_OF_DEATH, "Circle of Death", 6, 3)
             }
         });
 
@@ -327,7 +327,7 @@ public static class StaffDatabase
                 Spell(SpellNames.LIGHTNING_BOLT, "Lightning Bolt", 3, 1),
                 Spell(SpellNames.ICE_STORM, "Ice Storm", 4, 2),
                 StubSpell("wall_of_force", "Wall of Force", 5, 2, "Invisible wall of force, immune to damage, blocks movement"),
-                StubSpell("chain_lightning", "Chain Lightning", 6, 3, "1d6/CL to primary, half to secondary targets")
+                Spell(SpellNames.CHAIN_LIGHTNING, "Chain Lightning", 6, 3)
             }
         });
 
@@ -371,7 +371,7 @@ public static class StaffDatabase
             Spells = new List<StaffSpellEntry>
             {
                 Spell(SpellNames.SUMMON_SWARM, "Summon Swarm", 2, 1),
-                StubSpell("insect_plague", "Insect Plague", 5, 3, "Summons several swarms of locusts covering large area")
+                Spell(SpellNames.INSECT_PLAGUE, "Insect Plague", 5, 3)
             }
         });
     }
@@ -401,9 +401,9 @@ public static class StaffDatabase
                 Spell(SpellNames.SLEEP, "Sleep", 1, 1),
                 Spell(SpellNames.HIDEOUS_LAUGHTER, "Tasha's Hideous Laughter", 2, 1),
                 StubSpell("suggestion", "Suggestion", 3, 1, "Target follows reasonable suggestion, Will negates"),
-                StubSpell("crushing_despair", "Crushing Despair", 4, 2, "Targets take -2 on attacks/saves/checks, Will negates"),
-                StubSpell("mind_fog", "Mind Fog", 5, 2, "Creatures in fog take -10 on Wis checks and Will saves"),
-                StubSpell("mass_suggestion", "Mass Suggestion", 6, 3, "As Suggestion but affects one subject/level")
+                Spell(SpellNames.CRUSHING_DESPAIR, "Crushing Despair", 4, 2),
+                Spell(SpellNames.MIND_FOG, "Mind Fog", 5, 2),
+                Spell(SpellNames.MASS_SUGGESTION, "Mass Suggestion", 6, 3)
             }
         });
 
@@ -427,7 +427,7 @@ public static class StaffDatabase
                 Spell(SpellNames.MIRROR_IMAGE, "Mirror Image", 2, 1),
                 StubSpell("major_image", "Major Image", 3, 1, "Creates visual, auditory, olfactory, and thermal figment"),
                 Spell(SpellNames.RAINBOW_PATTERN, "Rainbow Pattern", 4, 2),
-                StubSpell("persistent_image", "Persistent Image", 5, 2, "As Major Image but no concentration needed"),
+                Spell(SpellNames.PERSISTENT_IMAGE, "Persistent Image", 5, 2),
                 StubSpell("mislead", "Mislead", 6, 3, "Caster becomes invisible + creates illusory double")
             }
         });
@@ -456,14 +456,14 @@ public static class StaffDatabase
             {
                 Spell(SpellNames.MAGIC_MISSILE, "Magic Missile", 1, 1),
                 Spell(SpellNames.RAY_OF_ENFEEBLEMENT, "Ray of Enfeeblement", 1, 1),
-                StubSpell("continual_flame", "Continual Flame", 2, 1, "Creates permanent heatless flame, placeholder"),
-                StubSpell("levitate", "Levitate", 2, 1, "Vertical movement 20 ft/round, placeholder"),
+                Spell(SpellNames.CONTINUAL_FLAME, "Continual Flame", 2, 1),
+                Spell(SpellNames.LEVITATE, "Levitate", 2, 1),
                 Spell(SpellNames.LIGHTNING_BOLT, "Lightning Bolt", 3, 1),
                 Spell(SpellNames.FIREBALL, "Fireball", 3, 1),
-                StubSpell("cone_of_cold", "Cone of Cold", 5, 2, "60-ft cone, 1d6/CL cold damage (max 15d6), Reflex half"),
-                StubSpell("hold_monster", "Hold Monster", 5, 2, "As Hold Person but affects any living creature, Will negates"),
+                Spell(SpellNames.CONE_OF_COLD, "Cone of Cold", 5, 2),
+                Spell(SpellNames.HOLD_MONSTER, "Hold Monster", 5, 2),
                 StubSpell("wall_of_force", "Wall of Force", 5, 2, "Invisible wall of force, immune to damage"),
-                StubSpell("globe_of_invulnerability", "Globe of Invulnerability", 6, 2, "Excludes all spell effects of 4th level or lower")
+                Spell(SpellNames.GLOBE_OF_INVULNERABILITY, "Globe of Invulnerability", 6, 2)
             }
         });
 
@@ -539,7 +539,7 @@ public static class StaffDatabase
                 StubSpell("charm_animal", "Charm Animal", 1, 1, "Charms one animal, Will negates"),
                 StubSpell("speak_with_animals", "Speak with Animals", 1, 1, "Communicate with animals"),
                 Spell(SpellNames.DOMAIN_BARKSKIN, "Barkskin", 2, 2),
-                StubSpell("wall_of_thorns", "Wall of Thorns", 5, 3, "Creates wall of thorny brush that damages creatures passing through"),
+                Spell(SpellNames.WALL_OF_THORNS, "Wall of Thorns", 5, 3),
                 StubSpell("summon_natures_ally_vi", "Summon Nature's Ally VI", 6, 3, "Summons nature creature"),
                 StubSpell("animate_plants", "Animate Plants", 7, 4, "Animates trees to fight for caster")
             }
@@ -585,7 +585,7 @@ public static class StaffDatabase
             ImplementationNotes = "0/3 spells registered. All are L5+.",
             Spells = new List<StaffSpellEntry>
             {
-                StubSpell("passwall", "Passwall", 5, 1, "Creates passage through wood, plaster, or stone walls"),
+                Spell(SpellNames.PASSWALL, "Passwall", 5, 1),
                 StubSpell("move_earth", "Move Earth", 6, 3, "Moves dirt slowly over large areas"),
                 StubSpell("earthquake", "Earthquake", 8, 5, "Intense tremor shakes terrain in 80-ft radius")
             }
@@ -608,7 +608,7 @@ public static class StaffDatabase
             Spells = new List<StaffSpellEntry>
             {
                 Spell(SpellNames.DIMENSION_DOOR, "Dimension Door", 4, 1),
-                StubSpell("passwall", "Passwall", 5, 1, "Creates passage through wood, plaster, or stone walls"),
+                Spell(SpellNames.PASSWALL, "Passwall", 5, 1),
                 StubSpell("phase_door", "Phase Door", 7, 2, "Creates ethereal passage through solid objects"),
                 StubSpell("greater_teleport", "Greater Teleport", 7, 2, "Teleport with no off-target chance"),
                 StubSpell("astral_projection", "Astral Projection", 9, 2, "Projects you and companions onto Astral Plane")
@@ -641,17 +641,17 @@ public static class StaffDatabase
                 // Staff of Power spells
                 Spell(SpellNames.MAGIC_MISSILE, "Magic Missile", 1, 1),
                 Spell(SpellNames.RAY_OF_ENFEEBLEMENT, "Ray of Enfeeblement", 1, 1),
-                StubSpell("continual_flame", "Continual Flame", 2, 1, "Creates permanent heatless flame"),
-                StubSpell("levitate", "Levitate", 2, 1, "Vertical movement 20 ft/round"),
+                Spell(SpellNames.CONTINUAL_FLAME, "Continual Flame", 2, 1),
+                Spell(SpellNames.LEVITATE, "Levitate", 2, 1),
                 Spell(SpellNames.LIGHTNING_BOLT, "Lightning Bolt", 3, 1),
                 Spell(SpellNames.FIREBALL, "Fireball", 3, 1),
                 Spell(SpellNames.DISPEL_MAGIC, "Dispel Magic", 3, 1),
-                StubSpell("cone_of_cold", "Cone of Cold", 5, 2, "60-ft cone cold damage"),
-                StubSpell("hold_monster", "Hold Monster", 5, 2, "Paralyzes any creature"),
+                Spell(SpellNames.CONE_OF_COLD, "Cone of Cold", 5, 2),
+                Spell(SpellNames.HOLD_MONSTER, "Hold Monster", 5, 2),
                 StubSpell("wall_of_force", "Wall of Force", 5, 2, "Invisible wall of force"),
-                StubSpell("globe_of_invulnerability", "Globe of Invulnerability", 6, 2, "Excludes spells L4 or lower"),
+                Spell(SpellNames.GLOBE_OF_INVULNERABILITY, "Globe of Invulnerability", 6, 2),
                 // Additional Magi spells
-                StubSpell("telekinesis", "Telekinesis", 5, 1, "Move objects or creatures with telekinetic force"),
+                Spell(SpellNames.TELEKINESIS, "Telekinesis", 5, 1),
                 StubSpell("plane_shift", "Plane Shift", 7, 2, "Transport to another plane of existence"),
                 StubSpell("spell_turning", "Spell Turning", 7, 2, "Reflect 1d4+6 spell levels back at caster"),
                 StubSpell("protection_from_spells", "Protection from Spells", 8, 2, "+8 resistance bonus to saves vs spells"),

@@ -364,5 +364,72 @@ public static partial class SpellDatabase
 
         // Legacy alias retained for existing prepared spell references.
         RegisterClassSpellAlias("protection_from_evil_clr", SpellNames.PROTECTION_FROM_EVIL, "Cleric", 1);
+
+        // ── Passwall (PHB p.259) ─────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.PASSWALL,
+                    Name = "Passwall",
+                    Description = "Transmutation. You create a passage through wooden, plaster, or stone walls, but not through "
+                        + "metal or other harder materials. The passage is 5 ft wide, 8 ft tall, and 10 ft deep (plus 5 ft "
+                        + "deep per 3 additional caster levels). Duration 1 hour/level (D). PHB p.259",
+                    SpellLevel = 5,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 5),
+                        new SpellAvailability("Wizard", 5)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Utility,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: sesame seeds
+                    IsPlaceholder = false
+                });
+
+        // ── Persistent Image (PHB p.260) ─────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.PERSISTENT_IMAGE,
+                    Name = "Persistent Image",
+                    Description = "Illusion (Figment). As Major Image, except that the figment includes visual, auditory, olfactory, "
+                        + "and thermal elements, and the spell is permanent — no concentration is required to maintain it. "
+                        + "Will disbelief (if interacted with). Duration 1 min/level (D). PHB p.260",
+                    SpellLevel = 5,
+                    School = "Illusion",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 5),
+                        new SpellAvailability("Sorcerer", 5),
+                        new SpellAvailability("Wizard", 5)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Long,
+                    EffectType = SpellEffectType.Illusion,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = false, // Will disbelief only if interacted with
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: a bit of fleece and jade dust worth 25 gp
+                    IsPlaceholder = false
+                });
+
     }
 }

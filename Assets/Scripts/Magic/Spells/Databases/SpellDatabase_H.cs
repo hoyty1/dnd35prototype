@@ -483,6 +483,44 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Hold Monster (PHB p.241) ──────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.HOLD_MONSTER,
+                    Name = "Hold Monster",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. As Hold Person, except that it affects any living creature. "
+                        + "The target is paralyzed and frozen in place, aware and breathing but unable to take any actions. "
+                        + "Each round on its turn, the subject may attempt a new Will saving throw with a cumulative +2 bonus "
+                        + "to end the effect. Will negates. SR: Yes. Duration 1 round/level (D). PHB p.241",
+                    SpellLevel = 5,
+                    School = "Enchantment",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 4),
+                        new SpellAvailability("Sorcerer", 5),
+                        new SpellAvailability("Wizard", 5)
+                    },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    BuffDurationRounds = 1, // Legacy fallback: 1 round/level
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: one hard metal bar or rod
+                    IsPlaceholder = false
+                });
+
         // Aliases / class-level variants
         RegisterAlias(SpellNames.HIDEOUS_LAUGHTER_LEGACY, SpellNames.HIDEOUS_LAUGHTER);
         RegisterClassSpellAlias("tashas_hideous_laughter_brd", SpellNames.HIDEOUS_LAUGHTER, "Bard", 1);

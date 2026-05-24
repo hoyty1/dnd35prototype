@@ -315,17 +315,28 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.CONTINUAL_FLAME,
                     Name = "Continual Flame",
-                    Description = "Makes a permanent, heatless flame. Requires 50 gp ruby dust. PHB p.213",
-                    SpellLevel = 2, School = "Evocation",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.Self,
+                    Description = "Evocation [Light]. A flame, equivalent in brightness to a torch, springs forth from an object. "
+                        + "The effect looks like a regular flame, but creates no heat and doesn't use oxygen. "
+                        + "Continual Flame can be covered and hidden but not smothered or quenched. "
+                        + "Material component: ruby dust worth 50 gp. Duration: Permanent. PHB p.213",
+                    SpellLevel = 2, School = "Evocation [Light]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Cleric", 3),
+                        new SpellAvailability("Sorcerer", 2),
+                        new SpellAvailability("Wizard", 2)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
-                    EffectType = SpellEffectType.Buff,
+                    EffectType = SpellEffectType.Utility,
+                    DurationType = DurationType.Permanent,
                     BuffDurationRounds = -1,
+                    HasMaterialComponent = true, // 50 gp ruby dust
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Light/illumination not implemented]"
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData
@@ -545,5 +556,198 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Cone of Cold (PHB p.212) ──────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CONE_OF_COLD,
+                    Name = "Cone of Cold",
+                    Description = "Evocation [Cold]. Cone of Cold creates an area of extreme cold, originating at your hand "
+                        + "and extending outward in a cone. It drains heat, dealing 1d6 points of cold damage per caster level "
+                        + "(maximum 15d6). Reflex half. SR: Yes. Components: V, S, M (crystal or glass cone). PHB p.212",
+                    SpellLevel = 5,
+                    School = "Evocation [Cold]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 5),
+                        new SpellAvailability("Wizard", 5)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Close,
+                    AoEShapeType = AoEShape.Cone,
+                    AoESizeSquares = 12, // 60-ft cone = 12 squares
+                    AoERangeSquares = 0, // Cone originates from caster
+                    AoEFilter = AoETargetFilter.All,
+                    AreaRadius = 12,
+                    RangeSquares = 12,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 6,
+                    DamageCount = 1, // Actual: min(CL, 15) d6 resolved at cast time
+                    DamageType = "cold",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    HasMaterialComponent = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ── Charm Monster (PHB p.209) ─────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CHARM_MONSTER,
+                    Name = "Charm Monster",
+                    Description = "Enchantment (Charm) [Mind-Affecting]. As Charm Person, except that it affects any living creature. "
+                        + "The target regards you as its trusted friend and ally. Will negates. SR: Yes. "
+                        + "Duration 1 day/level. PHB p.209",
+                    SpellLevel = 4,
+                    School = "Enchantment",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 3),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Debuff,
+                    IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Days,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 1440, // Legacy fallback: 1 day/level in rounds
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ── Chain Lightning (PHB p.208) ───────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CHAIN_LIGHTNING,
+                    Name = "Chain Lightning",
+                    Description = "Evocation [Electricity]. You create a bolt of lightning that arcs to secondary targets. "
+                        + "Primary target takes 1d6/caster level (max 20d6) electricity damage. Secondary targets "
+                        + "(one per caster level, max 20) each take half as much damage. Reflex half for both primary "
+                        + "and secondary. SR: Yes. PHB p.208",
+                    SpellLevel = 6,
+                    School = "Evocation [Electricity]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 6),
+                        new SpellAvailability("Wizard", 6)
+                    },
+                    TargetType = SpellTargetType.Area, // Multi-target, starts with primary
+                    RangeCategory = SpellRangeCategory.Long,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 6, // Secondary targets within 30 ft of primary
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
+                    AreaRadius = 6,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 6,
+                    DamageCount = 1, // Actual: min(CL, 20) d6 for primary, half for secondary
+                    DamageType = "electricity",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ── Crushing Despair (PHB p.215) ──────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CRUSHING_DESPAIR,
+                    Name = "Crushing Despair",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. An invisible cone of despair causes creatures "
+                        + "to take a -2 penalty on attack rolls, saving throws, ability checks, skill checks, and weapon "
+                        + "damage rolls. Will negates. SR: Yes. Duration 1 min/level. PHB p.215",
+                    SpellLevel = 4,
+                    School = "Enchantment",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 3),
+                        new SpellAvailability("Sorcerer", 4),
+                        new SpellAvailability("Wizard", 4)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Close,
+                    AoEShapeType = AoEShape.Cone,
+                    AoESizeSquares = 6, // 30-ft cone
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
+                    AreaRadius = 6,
+                    RangeSquares = 6,
+                    EffectType = SpellEffectType.Debuff,
+                    IsMindAffecting = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 10, // Legacy fallback: 1 min/level = 10 rounds/level
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ── Circle of Death (PHB p.210) ───────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CIRCLE_OF_DEATH,
+                    Name = "Circle of Death",
+                    Description = "Necromancy [Death]. A circle of negative energy snuffs out the life force of living creatures, "
+                        + "killing 1d4 HD worth of creatures per caster level (max 20d4) starting from lowest HD. "
+                        + "40-ft-radius burst. Fort negates. SR: Yes. PHB p.210",
+                    SpellLevel = 6,
+                    School = "Necromancy [Death]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 6),
+                        new SpellAvailability("Wizard", 6)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 8, // 40-ft radius = 8 squares
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
+                    AreaRadius = 8,
+                    EffectType = SpellEffectType.Damage,
+                    DamageType = "negative_energy",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = true,
+                    HasMaterialComponent = true, // M: crushed black pearl worth 500 gp
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // Aliases — Continual Flame for Cleric
+        RegisterClassSpellAlias("continual_flame_clr", SpellNames.CONTINUAL_FLAME, "Cleric", 3);
     }
 }

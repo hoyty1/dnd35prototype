@@ -365,5 +365,46 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Insect Plague (PHB p.244) ────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.INSECT_PLAGUE,
+                    Name = "Insect Plague",
+                    Description = "Conjuration (Summoning). You summon a number of swarms of locusts (one per three levels, max 6). "
+                        + "Each swarm attacks any creature occupying its area. Each swarm deals 2d6 points of damage per round "
+                        + "to all creatures within it. Creatures in a swarm must make a Fortitude save or become nauseated for 1 round. "
+                        + "Spellcasting within a swarm requires a concentration check (DC 20 + spell level). "
+                        + "Duration 1 min/level. PHB p.244",
+                    SpellLevel = 5,
+                    School = "Conjuration",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Cleric", 5),
+                        new SpellAvailability("Druid", 5)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Long,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 8, // Multiple swarms, large area coverage
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.All,
+                    AreaRadius = 8,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 6,
+                    DamageCount = 2, // 2d6 per swarm per round
+                    DamageType = "swarm",
+                    AllowsSavingThrow = false, // No save for damage; nausea is Fort
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasDivineFocus = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

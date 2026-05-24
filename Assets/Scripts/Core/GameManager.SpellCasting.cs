@@ -1258,6 +1258,20 @@ public partial class GameManager
             return true;
         }
 
+        // Charm Monster — any living creature, no HD limit, mind-affecting
+        if (spell.SpellId == SpellNames.CHARM_MONSTER)
+        {
+            if (IsImmuneToMindAffecting(target)) return false;
+            return true;
+        }
+
+        // Hold Monster — any living creature, mind-affecting
+        if (spell.SpellId == SpellNames.HOLD_MONSTER)
+        {
+            if (IsImmuneToMindAffecting(target)) return false;
+            return true;
+        }
+
         if (spell.SpellId == SpellNames.TOUCH_OF_IDIOCY)
         {
             // TARGETING OVERRIDE: Removed enemy-only restriction. Still requires living creature.
@@ -4319,6 +4333,175 @@ public partial class GameManager
                 return;
             }
 
+            // ── Phase 1 Staff AoE Spells ──
+
+            // Cone of Cold — 60-ft cone, 1d6/CL cold (max 15d6), Reflex half
+            if (TryResolveConeOfColdSpell(caster, _pendingSpell, targets, aoeCells, out string coneOfColdLog))
+            {
+                _lastCombatLog = coneOfColdLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("ConeOfCold"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Chain Lightning — 1d6/CL (max 20d6) primary, half secondary
+            if (TryResolveChainLightningSpell(caster, _pendingSpell, targets, aoeCells, out string chainLightningLog))
+            {
+                _lastCombatLog = chainLightningLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("ChainLightning"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Circle of Death — [Death] 40-ft burst, kills 1d4 HD/CL, Fort negates
+            if (TryResolveCircleOfDeathSpell(caster, _pendingSpell, targets, aoeCells, out string circleOfDeathLog))
+            {
+                _lastCombatLog = circleOfDeathLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("CircleOfDeath"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Crushing Despair — 30-ft cone, -2 attacks/saves/checks, Will negates
+            if (TryResolveCrushingDespairSpell(caster, _pendingSpell, targets, aoeCells, out string crushingDespairLog))
+            {
+                _lastCombatLog = crushingDespairLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Mind Fog — 20-ft radius, -10 Wis checks & Will saves, Will negates
+            if (TryResolveMindFogSpell(caster, _pendingSpell, targets, aoeCells, out string mindFogLog))
+            {
+                _lastCombatLog = mindFogLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Mass Suggestion — multi-target charm, Will negates
+            if (TryResolveMassSuggestionSpell(caster, _pendingSpell, targets, aoeCells, out string massSuggestionLog))
+            {
+                _lastCombatLog = massSuggestionLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Insect Plague — swarm damage + nausea
+            if (TryResolveInsectPlagueSpell(caster, _pendingSpell, targets, aoeCells, out string insectPlagueLog))
+            {
+                _lastCombatLog = insectPlagueLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("InsectPlague"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Wall of Thorns — wall dealing 25 - AC damage to creatures passing through
+            if (TryResolveWallOfThornsSpell(caster, _pendingSpell, targets, aoeCells, out string wallOfThornsLog))
+            {
+                _lastCombatLog = wallOfThornsLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("WallOfThorns"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Persistent Image — illusion creation (no combat effect)
+            if (TryResolvePersistentImageSpell(caster, _pendingSpell, targets, aoeCells, out string persistentImageLog))
+            {
+                _lastCombatLog = persistentImageLog;
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId) ? $"Sacrificed: {spontaneousSacrificedSpellId}" : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+                if (isQuickened) _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+                _pendingSpell = null; _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
             // ── Evard's Black Tentacles (persistent grappling area effect) ──
             if (TryResolveBlackTentaclesAoECast(caster, _pendingSpell, aoeCells, out string blackTentaclesLog))
             {
@@ -6127,6 +6310,12 @@ public partial class GameManager
             return ApplyHoldPersonBuff(caster, target, spell, spellComp);
         }
 
+        // Hold Monster — as Hold Person but affects any living creature (Phase 1)
+        if (spell != null && spell.SpellId == SpellNames.HOLD_MONSTER)
+        {
+            return ApplyHoldMonsterEffect(caster, target, spell, spellComp);
+        }
+
         if (spell != null && spell.SpellId == SpellNames.RAGE)
         {
             return ApplyRageSpellBuff(caster, target, spell, spellComp);
@@ -6268,6 +6457,12 @@ public partial class GameManager
 
             CombatUI?.ShowCombatLog($"<color=#FFD699>💞 {target.Stats.CharacterName} is charmed by {charmData.CasterName} for {charmRounds} round(s)!</color>");
             return null;
+        }
+
+        // Charm Monster — as Charm Person but affects any living creature (Phase 1)
+        if (spell != null && spell.SpellId == SpellNames.CHARM_MONSTER)
+        {
+            return ApplyCharmMonsterEffect(caster, target, spell, spellComp);
         }
 
         if (spell != null && spell.SpellId == SpellNames.ENERVATION)
@@ -7325,6 +7520,52 @@ public partial class GameManager
 
             UpdateAllStatsUI();
             return effect;
+        }
+
+        // ===== PHASE 1 STAFF SINGLE-TARGET SPELLS =====
+
+        // Telekinesis (Violent Thrust mode)
+        if (spell != null && spell.SpellId == SpellNames.TELEKINESIS)
+        {
+            return ApplyTelekinesisEffect(caster, target, spell, spellComp);
+        }
+
+        // Continual Flame — permanent light
+        if (spell != null && spell.SpellId == SpellNames.CONTINUAL_FLAME)
+        {
+            return ApplyContinualFlameEffect(caster, target, spell, spellComp);
+        }
+
+        // Levitate — vertical movement buff
+        if (spell != null && spell.SpellId == SpellNames.LEVITATE)
+        {
+            return ApplyLevitateEffect(caster, target, spell, spellComp);
+        }
+
+        // Shrink Item — utility
+        if (spell != null && spell.SpellId == SpellNames.SHRINK_ITEM)
+        {
+            return ApplyShrinkItemEffect(caster, target, spell, spellComp);
+        }
+
+        // Barkskin (Druid/Ranger) — natural armor enhancement
+        if (spell != null && (spell.SpellId == SpellNames.BARKSKIN || spell.SpellId == SpellNames.DOMAIN_BARKSKIN))
+        {
+            return ApplyBarkskinEffect(caster, target, spell, spellComp);
+        }
+
+        // Passwall — creates passage through walls
+        if (spell != null && spell.SpellId == SpellNames.PASSWALL)
+        {
+            return ApplyPasswallEffect(caster, target, spell, spellComp);
+        }
+
+        // Globe of Invulnerability — self-targeting abjuration sphere
+        if (spell != null && spell.SpellId == SpellNames.GLOBE_OF_INVULNERABILITY)
+        {
+            TryResolveGlobeOfInvulnerabilitySpell(caster, spell, out string globeLog);
+            CombatUI?.ShowCombatLog(globeLog);
+            return null;
         }
 
         // ===== LEGACY FALLBACK (no StatusEffectManager) =====

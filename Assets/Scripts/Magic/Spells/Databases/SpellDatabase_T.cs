@@ -76,5 +76,38 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Telekinesis (PHB p.292) ──────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.TELEKINESIS,
+                    Name = "Telekinesis",
+                    Description = "Transmutation. You move objects or creatures by concentrating on them. Three versions: "
+                        + "Sustained Force (move 25 lb/CL, concentration up to 1 rd/level), "
+                        + "Combat Maneuver (one bull rush/disarm/grapple/trip per round, Concentration), "
+                        + "Violent Thrust (hurl creatures or objects within range, 25 lb/CL total, 1d6 damage per 25 lb). "
+                        + "Will negates (object) or none (see text). SR: Yes (object). PHB p.292",
+                    SpellLevel = 5,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 5),
+                        new SpellAvailability("Wizard", 5)
+                    },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Long,
+                    EffectType = SpellEffectType.Control,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Rounds, // Concentration, up to 1 rd/level
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

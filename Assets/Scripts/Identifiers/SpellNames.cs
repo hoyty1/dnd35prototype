@@ -806,5 +806,55 @@ namespace DND35e.Identifiers
 
         /// <summary>Resurrection (spell id: resurrection)</summary>
         public const string RESURRECTION = "resurrection";
+
+        // ── Phase 1 Staff Spells ──────────────────────────────────────────
+
+        /// <summary>Cone of Cold (spell id: cone_of_cold)</summary>
+        public const string CONE_OF_COLD = "cone_of_cold";
+
+        /// <summary>Hold Monster (spell id: hold_monster)</summary>
+        public const string HOLD_MONSTER = "hold_monster";
+
+        /// <summary>Charm Monster (spell id: charm_monster)</summary>
+        public const string CHARM_MONSTER = "charm_monster";
+
+        /// <summary>Chain Lightning (spell id: chain_lightning)</summary>
+        public const string CHAIN_LIGHTNING = "chain_lightning";
+
+        /// <summary>Globe of Invulnerability (spell id: globe_of_invulnerability)</summary>
+        public const string GLOBE_OF_INVULNERABILITY = "globe_of_invulnerability";
+
+        /// <summary>Shrink Item (spell id: shrink_item)</summary>
+        public const string SHRINK_ITEM = "shrink_item";
+
+        /// <summary>Crushing Despair (spell id: crushing_despair)</summary>
+        public const string CRUSHING_DESPAIR = "crushing_despair";
+
+        /// <summary>Mind Fog (spell id: mind_fog)</summary>
+        public const string MIND_FOG = "mind_fog";
+
+        /// <summary>Mass Suggestion (spell id: mass_suggestion)</summary>
+        public const string MASS_SUGGESTION = "mass_suggestion";
+
+        /// <summary>Circle of Death (spell id: circle_of_death)</summary>
+        public const string CIRCLE_OF_DEATH = "circle_of_death";
+
+        /// <summary>Insect Plague (spell id: insect_plague)</summary>
+        public const string INSECT_PLAGUE = "insect_plague";
+
+        /// <summary>Wall of Thorns (spell id: wall_of_thorns)</summary>
+        public const string WALL_OF_THORNS = "wall_of_thorns";
+
+        /// <summary>Passwall (spell id: passwall)</summary>
+        public const string PASSWALL = "passwall";
+
+        /// <summary>Persistent Image (spell id: persistent_image)</summary>
+        public const string PERSISTENT_IMAGE = "persistent_image";
+
+        /// <summary>Telekinesis (spell id: telekinesis)</summary>
+        public const string TELEKINESIS = "telekinesis";
+
+        /// <summary>Barkskin (spell id: barkskin) — Druid/Ranger version</summary>
+        public const string BARKSKIN = "barkskin";
     }
 }

@@ -34,18 +34,71 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.DOMAIN_BARKSKIN,
                     Name = "Barkskin",
-                    Description = "Grants +2 enhancement bonus to natural armor (+1 for every three levels above 3rd, max +5 at 12th).",
+                    Description = "Transmutation. Barkskin toughens a creature's skin, granting a +2 enhancement bonus to natural "
+                        + "armor, which increases by 1 for every three caster levels above 3rd (max +5 at 12th). "
+                        + "Duration 10 min/level. Components: V, S, DF. PHB p.202",
                     SpellLevel = 2,
                     School = "Transmutation",
                     ClassList = new string[] { "Cleric" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
                     EffectType = SpellEffectType.Buff,
                     BuffACBonus = 2,
-                    BuffDurationRounds = 30,
+                    BuffDurationRounds = 100, // Legacy fallback: 10 min/level
                     BuffType = "natural_armor",
+                    BuffBonusType = BonusType.Enhancement,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasDivineFocus = true,
+                    IsPlaceholder = false
+                });
+
+        // ── Barkskin — Druid/Ranger version (PHB p.202) ──────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.BARKSKIN,
+                    Name = "Barkskin",
+                    Description = "Transmutation. Barkskin toughens a creature's skin, granting a +2 enhancement bonus to natural "
+                        + "armor, which increases by 1 for every three caster levels above 3rd (max +5 at 12th). "
+                        + "Duration 10 min/level. Components: V, S, DF. PHB p.202",
+                    SpellLevel = 2,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 2),
+                        new SpellAvailability("Ranger", 2)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    BuffACBonus = 2,
+                    BuffDurationRounds = 100, // Legacy fallback: 10 min/level
+                    BuffType = "natural_armor",
+                    BuffBonusType = BonusType.Enhancement,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasDivineFocus = true,
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData

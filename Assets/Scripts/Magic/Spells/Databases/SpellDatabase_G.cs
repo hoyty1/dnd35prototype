@@ -333,5 +333,40 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Vermin size increase / creature transformation system not implemented]"
                 });
 
+        // ── Globe of Invulnerability (PHB p.236) ─────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.GLOBE_OF_INVULNERABILITY,
+                    Name = "Globe of Invulnerability",
+                    Description = "Abjuration. An immobile, faintly shimmering magical sphere surrounds you and excludes all "
+                        + "spell effects of 4th level or lower. The area or effect of any such spells does not include "
+                        + "the area of the globe. Such spells fail to affect any target located within the globe. "
+                        + "Spells of 5th level and higher are not affected. SR: No. Duration 1 round/level (D). PHB p.236",
+                    SpellLevel = 6,
+                    School = "Abjuration",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 6),
+                        new SpellAvailability("Wizard", 6)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    AreaRadius = 2, // 10-ft radius emanation
+                    EffectType = SpellEffectType.Buff,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    BuffDurationRounds = 1, // 1 round/level
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: glass or crystal bead
+                    IsPlaceholder = false
+                });
+
     }
 }

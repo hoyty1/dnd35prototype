@@ -31,18 +31,34 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.LEVITATE,
                     Name = "Levitate",
-                    Description = "Subject moves up or down at your direction. 1 min/level. Will negates (object). PHB p.248",
+                    Description = "Transmutation. Levitate allows you to move yourself, another creature, or an object up and down "
+                        + "as you wish. A creature must be willing to be levitated, and an object must be unattended or possessed "
+                        + "by a willing creature. You can mentally direct the recipient to move up or down as much as 20 feet each "
+                        + "round; doing so is a move action. Duration 1 min/level (D). Will negates (object). SR: Yes. PHB p.248",
                     SpellLevel = 2, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 2),
+                        new SpellAvailability("Wizard", 2)
+                    },
                     TargetType = SpellTargetType.SingleAlly,
-                    RangeSquares = 5,
+                    RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = 30,
+                    BuffDurationRounds = 10, // Legacy: 1 min/level = 10 rounds/level
                     BuffType = SpellNames.LEVITATE,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = true, // Will negates (harmless or object)
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Vertical movement not implemented]"
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    HasMaterialComponent = true, // M: leather loop or golden wire
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData

@@ -286,5 +286,36 @@ public static partial class SpellDatabase
                 IsPlaceholder = false
             });
 
+        // ── Wall of Thorns (PHB p.301) ──────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.WALL_OF_THORNS,
+                    Name = "Wall of Thorns",
+                    Description = "Conjuration (Creation). A wall of thorny brush springs into existence. Any creature forced "
+                        + "into or attempting to move through the wall takes 25 points of damage minus the creature's AC "
+                        + "(minimum 1). The wall is 10 ft thick. Creatures can hack through with slashing weapons "
+                        + "(HP per 5-ft section = 1/inch thickness × area). Duration 10 min/level. PHB p.301",
+                    SpellLevel = 5,
+                    School = "Conjuration",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 5)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Wall,
+                    DamageType = "piercing",
+                    AllowsSavingThrow = false, // No save, damage applied on passage
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }

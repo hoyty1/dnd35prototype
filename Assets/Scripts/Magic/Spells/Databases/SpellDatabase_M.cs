@@ -503,6 +503,86 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ── Mind Fog (PHB p.253) ─────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MIND_FOG,
+                    Name = "Mind Fog",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. A Mind Fog produces a bank of thin mist that "
+                        + "weakens the mental resistance of those caught in it. Creatures in the Mind Fog take a -10 competence "
+                        + "penalty on Wisdom checks and Will saves. The fog is stationary and lasts for 30 minutes. "
+                        + "A creature that fails its save is affected even if it leaves the fog. 20-ft-radius spread. "
+                        + "Will negates. SR: Yes. PHB p.253",
+                    SpellLevel = 5,
+                    School = "Enchantment",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 5),
+                        new SpellAvailability("Sorcerer", 5),
+                        new SpellAvailability("Wizard", 5)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4, // 20-ft radius
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
+                    AreaRadius = 4,
+                    EffectType = SpellEffectType.Debuff,
+                    IsMindAffecting = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 30,
+                    DurationScalesWithLevel = false, // Fixed 30 minutes
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ── Mass Suggestion (PHB p.285) ──────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MASS_SUGGESTION,
+                    Name = "Mass Suggestion",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting, Language-Dependent]. As Suggestion, except that "
+                        + "it can affect more creatures — one subject per caster level, all of which must be within 30 ft "
+                        + "of each other. The same suggestion applies to all. Will negates. SR: Yes. "
+                        + "Duration 1 hour/level or until completed. PHB p.285",
+                    SpellLevel = 6,
+                    School = "Enchantment",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 5),
+                        new SpellAvailability("Sorcerer", 6),
+                        new SpellAvailability("Wizard", 6)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 6, // 30-ft radius (all within 30 ft)
+                    AoERangeSquares = 0,
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
+                    AreaRadius = 6,
+                    EffectType = SpellEffectType.Control,
+                    IsMindAffecting = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = false, // No somatic for Mass Suggestion
+                    HasMaterialComponent = true, // M: tongue and honeycomb
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("magic_weapon_clr", SpellNames.MAGIC_WEAPON, "Cleric", 1);
         RegisterClassSpellAlias("mending_clr", SpellNames.MENDING, "Cleric", 0);

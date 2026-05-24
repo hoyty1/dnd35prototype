@@ -1051,5 +1051,39 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Shrink Item (PHB p.279) ──────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SHRINK_ITEM,
+                    Name = "Shrink Item",
+                    Description = "Transmutation. You are able to shrink one nonmagical item (up to 2 cu. ft./level) to 1/16 of "
+                        + "its normal size in each dimension (to about 1/4,096 the original volume and mass). Optionally the "
+                        + "object also changes to a cloth-like consistency. Objects changed by a Shrink Item spell can be returned "
+                        + "to normal composition and size merely by tossing them onto any solid surface or by a word of command. "
+                        + "Duration 1 day/level. PHB p.279",
+                    SpellLevel = 3,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Utility,
+                    AllowsSavingThrow = false, // Object only, Will negates (object)
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Days,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
     }
 }
