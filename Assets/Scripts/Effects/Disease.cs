@@ -17,7 +17,8 @@ public enum DiseaseType
     SlimyDoom,
     MummyRot,
     DevilChills,
-    DemonFever
+    DemonFever,
+    Lycanthropy
 }
 
 /// <summary>

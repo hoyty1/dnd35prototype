@@ -45,6 +45,7 @@ public static partial class NPCDatabase
         RegisterCreatures_Dragons();
         RegisterCreatures_Skeletons();
         RegisterCreatures_Zombies();
+        RegisterCreatures_Lycanthropes();
 
         // Register summon compatibility aliases (map legacy IDs to existing creature entries).
         RegisterSummonCreatureAliases();
@@ -140,6 +141,9 @@ public static partial class NPCDatabase
 
         // Add zombie encounter presets
         presets.AddRange(GetZombieEncounterPresets());
+
+        // Add lycanthrope encounter presets
+        presets.AddRange(GetLycanthropeEncounterPresets());
 
         return presets;
     }
