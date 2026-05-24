@@ -151,7 +151,7 @@ public static class SpecificItemDatabase
         {
             Type = SpecificItemType.SleepArrow,
             Name = "Sleep Arrow",
-            Description = "This +1 arrow deals nonlethal damage. Any creature hit must succeed on a DC 11 Will save or fall asleep for 1 minute.",
+            Description = "This +1 arrow converts its damage to nonlethal on hit, and target must make DC 11 Will save or fall asleep.",
             BaseItemId = "Arrow",
             ItemCategory = ItemType.Ammunition,
             EnhancementBonus = 1,
@@ -265,7 +265,7 @@ public static class SpecificItemDatabase
         {
             Type = SpecificItemType.TridentOfWarning,
             Name = "Trident of Warning",
-            Description = "This +2 trident detects hostile aquatic creatures within 680 feet. The wielder cannot be surprised by aquatic creatures.",
+            Description = "This +2 trident enables wielder to determine location, depth, kind, and number of aquatic predators within 680 feet (1 round to scan).",
             BaseItemId = "Trident",
             ItemCategory = ItemType.Weapon,
             EnhancementBonus = 2,
@@ -281,23 +281,23 @@ public static class SpecificItemDatabase
         {
             Type = SpecificItemType.AssassinsDagger,
             Name = "Assassin's Dagger",
-            Description = "This wicked +2 dagger grants +1 to the DC of an assassin's death attack and can release poison (Fort DC 14) once per day.",
+            Description = "This wicked-looking, curved +2 dagger provides a +1 bonus to the DC of a Fortitude save forced by the death attack of an assassin.",
             BaseItemId = "Dagger",
             ItemCategory = ItemType.Weapon,
             EnhancementBonus = 2,
-            MarketPrice = 10302,
+            MarketPrice = 18302, // SRD: 18,302 gp (not 10,302)
             CasterLevel = 9,
             PriorityTier = 2,
             HasCustomBehavior = true,
-            UniqueProperties = { ["DeathAttackDCBonus"] = 1, ["PoisonDC"] = 14, ["UsesPerDay"] = 1 },
-            ImplementationNotes = "Custom death attack DC bonus + daily poison."
+            UniqueProperties = { ["DeathAttackDCBonus"] = 1 },
+            ImplementationNotes = "Only adds +1 to Assassin class Death Attack DC. No poison ability."
         });
 
         Register(new SpecificItemDefinition
         {
             Type = SpecificItemType.ShiftersSorrow,
             Name = "Shifter's Sorrow",
-            Description = "This +1/+1 silver two-bladed sword forces shapechangers to revert to natural form on hit (no save) and deals +2d6 damage vs shapechangers.",
+            Description = "This +1/+1 alchemical silver two-bladed sword deals +2d6 vs shapechangers. Shapechangers hit must make DC 15 Will save or revert to natural form.",
             BaseItemId = "Two-Bladed Sword",
             ItemCategory = ItemType.Weapon,
             EnhancementBonus = 1,
@@ -306,7 +306,7 @@ public static class SpecificItemDatabase
             MaterialOverride = ItemMaterialType.AlchemicalSilver,
             PriorityTier = 3,
             HasCustomBehavior = true,
-            UniqueProperties = { ["AntiShapechanger"] = true, ["BonusDamageVsShapechanger"] = "2d6" },
+            UniqueProperties = { ["AntiShapechanger"] = true, ["BonusDamageVsShapechanger"] = "2d6", ["RevertFormDC"] = 15 },
             ImplementationNotes = "Custom anti-shapechanger effect."
         });
 
@@ -379,7 +379,7 @@ public static class SpecificItemDatabase
         {
             Type = SpecificItemType.SwordOfThePlanes,
             Name = "Sword of the Planes",
-            Description = "This longsword's enhancement varies by plane: +1 on Material, +2 on Astral, +3 vs extraplanar on other planes.",
+            Description = "This longsword: +1 on Material, +2 on Elemental/vs Elementals, +3 Astral/Ethereal/vs natives, +4 other planes/vs Outsiders.",
             BaseItemId = "Longsword",
             ItemCategory = ItemType.Weapon,
             EnhancementBonus = 1, // Base (Material Plane)
@@ -387,15 +387,19 @@ public static class SpecificItemDatabase
             CasterLevel = 15,
             PriorityTier = 3,
             HasCustomBehavior = true,
-            UniqueProperties = { ["MaterialPlaneBonus"] = 1, ["AstralPlaneBonus"] = 2, ["OtherPlaneBonus"] = 3 },
-            ImplementationNotes = "Variable enhancement by plane. Niche (planar travel)."
+            UniqueProperties = {
+                ["MaterialPlaneBonus"] = 1, ["ElementalPlaneBonus"] = 2,
+                ["BonusVsElementals"] = 2, ["AstralEtherealBonus"] = 3,
+                ["OtherPlaneBonus"] = 4, ["BonusVsOutsiders"] = 4
+            },
+            ImplementationNotes = "Variable enhancement by plane and target creature type."
         });
 
         Register(new SpecificItemDefinition
         {
             Type = SpecificItemType.NineLivesStealer,
             Name = "Nine Lives Stealer",
-            Description = "This +2 longsword can kill on critical hit (Fort DC 20, 9 charges). Evil-aligned; good wielders gain 1 negative level.",
+            Description = "This +2 longsword can kill on crit (Fort DC 20, 9 charges, no effect vs crit-immune). Evil; good wielders gain 2 negative levels.",
             BaseItemId = "Longsword",
             ItemCategory = ItemType.Weapon,
             EnhancementBonus = 2,
@@ -403,7 +407,7 @@ public static class SpecificItemDatabase
             CasterLevel = 13,
             PriorityTier = 2,
             HasCustomBehavior = true,
-            UniqueProperties = { ["DeathOnCritDC"] = 20, ["ChargesRemaining"] = 9, ["EvilAligned"] = true },
+            UniqueProperties = { ["DeathOnCritDC"] = 20, ["ChargesRemaining"] = 9, ["EvilAligned"] = true, ["GoodWielderNegLevels"] = 2 },
             ImplementationNotes = "Custom critical hit death effect with charge tracking."
         });
 
@@ -419,8 +423,14 @@ public static class SpecificItemDatabase
             CasterLevel = 15,
             PriorityTier = 1,
             HasCustomBehavior = true,
-            UniqueProperties = { ["SwornEnemyBonus"] = 5, ["SwornEnemyDamage"] = "2d6", ["NonSwornPenalty"] = -1, ["OathDuration"] = 7 },
-            ImplementationNotes = "Custom sworn enemy tracking. Elf-crafted."
+            UniqueProperties = {
+                ["SwornEnemyBonus"] = 5, ["SwornEnemyDamage"] = "2d6",
+                ["SwornEnemyCritMultiplier"] = 4,   // x4 instead of x3
+                ["NonSwornMasterworkOnly"] = true,   // Only masterwork (no magic) vs non-sworn
+                ["NonSwornPenalty"] = -1,             // -1 on all weapon attacks while oath active
+                ["OathDurationDays"] = 7
+            },
+            ImplementationNotes = "Custom sworn enemy tracking. Masterwork only vs non-sworn. Elf-crafted."
         });
 
         Register(new SpecificItemDefinition
@@ -491,7 +501,7 @@ public static class SpecificItemDatabase
         {
             Type = SpecificItemType.RapierOfPuncturing,
             Name = "Rapier of Puncturing",
-            Description = "This +2 wounding rapier can deal 1d6 Constitution damage 3/day on command (Fort DC 17 negates).",
+            Description = "This +2 wounding rapier can make a touch attack 3/day dealing 1d6 Con damage (by blood drain). Crit-immune creatures are immune.",
             BaseItemId = "Rapier",
             ItemCategory = ItemType.Weapon,
             EnhancementBonus = 2,
@@ -500,8 +510,8 @@ public static class SpecificItemDatabase
             CasterLevel = 13,
             PriorityTier = 2,
             HasCustomBehavior = true,
-            UniqueProperties = { ["ConDamageDC"] = 17, ["ConDamage"] = "1d6", ["UsesPerDay"] = 3 },
-            ImplementationNotes = "Standard Wounding + custom activated Con damage."
+            UniqueProperties = { ["ConDamage"] = "1d6", ["UsesPerDay"] = 3, ["TouchAttack"] = true, ["CritImmuneResists"] = true },
+            ImplementationNotes = "Standard Wounding + 3/day touch attack for Con damage. No save — touch attack."
         });
 
         Register(new SpecificItemDefinition
@@ -586,7 +596,7 @@ public static class SpecificItemDatabase
         {
             Type = SpecificItemType.MaceOfSmiting,
             Name = "Mace of Smiting",
-            Description = "This +3 adamantine heavy mace has +5 vs constructs, ×4 crit multiplier vs constructs, and can destroy constructs/outsiders on critical hit (Fort DC 23).",
+            Description = "This +3 adamantine heavy mace has +5 enhancement vs constructs. Crit vs construct = instant destruction (no save). Crit vs outsider = x4 damage instead of x2.",
             BaseItemId = "Heavy Mace",
             ItemCategory = ItemType.Weapon,
             EnhancementBonus = 3,
@@ -596,10 +606,11 @@ public static class SpecificItemDatabase
             PriorityTier = 2,
             HasCustomBehavior = true,
             UniqueProperties = {
-                ["BonusVsConstructs"] = 5, ["CritMultiplierVsConstructs"] = 4,
-                ["DestroyOnCritDC"] = 23, ["DestroyTargets"] = "Construct,Outsider"
+                ["BonusVsConstructs"] = 5,
+                ["CritDestroyConstruct"] = true,      // No save, instant destruction
+                ["CritMultiplierVsOutsider"] = 4      // x4 instead of x2 on crit vs outsiders
             },
-            ImplementationNotes = "Custom construct/outsider bonuses + crit destruction."
+            ImplementationNotes = "Custom construct destruction on crit (no save) + outsider crit multiplier."
         });
 
         Register(new SpecificItemDefinition
@@ -775,15 +786,13 @@ public static class SpecificItemDatabase
         {
             Type = SpecificItemType.DwarvenPlate,
             Name = "Dwarven Plate",
-            Description = "Mithral full plate treated as medium armor. AC +8, Max Dex +3, ACP -4, ASF 25%, DR 3/—.",
+            Description = "This full plate is made of adamantine, giving its wearer DR 3/—. Nonmagical.",
             BaseItemId = "Full Plate",
             ItemCategory = ItemType.Armor,
-            MaterialOverride = ItemMaterialType.Mithral,
+            MaterialOverride = ItemMaterialType.Adamantine, // SRD: adamantine, NOT mithral
             MarketPrice = 16500,
             PriorityTier = 2,
-            HasCustomBehavior = true,
-            UniqueProperties = { ["AdditionalDR"] = 3 },
-            ImplementationNotes = "Mithral full plate with adamantine-like DR."
+            ImplementationNotes = "Adamantine full plate. DR comes from adamantine heavy armor."
         });
 
         // ── Magical Armors ──
@@ -909,19 +918,22 @@ public static class SpecificItemDatabase
             ImplementationNotes = "Custom claw attacks + contagion + alignment restriction."
         });
 
+        // NOTE: "Plate Armor of Etherealness" is NOT in the 3.5e SRD specific items list.
+        // In 3.5e, "Etherealness" is an armor enhancement (+49,000 gp modifier), not a specific item.
+        // This entry is retained as a convenience item representing +1 full plate with the Etherealness enhancement.
         Register(new SpecificItemDefinition
         {
             Type = SpecificItemType.PlateArmorOfEtherealness,
             Name = "Plate Armor of Etherealness",
-            Description = "This +5 full plate allows the wearer to become ethereal 1/day for 10 minutes (as ethereal jaunt).",
+            Description = "This +1 full plate with the Etherealness enhancement allows the wearer to become ethereal (as ethereal jaunt) 1/day. NOT a standard SRD specific item.",
             BaseItemId = "Full Plate",
             ItemCategory = ItemType.Armor,
-            EnhancementBonus = 5,
+            EnhancementBonus = 1,
             StandardEnchantments = new List<EnchantmentType> { EnchantmentType.Etherealness },
             MarketPrice = 57150,
-            CasterLevel = 15,
+            CasterLevel = 13,
             PriorityTier = 3,
-            ImplementationNotes = "Standard +5 enhancement + Etherealness enchantment."
+            ImplementationNotes = "NOT in 3.5e SRD specific items. Convenience entry for +1 full plate + Etherealness enhancement."
         });
     }
 

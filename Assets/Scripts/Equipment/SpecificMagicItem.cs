@@ -68,7 +68,7 @@ public enum SpecificItemType
     DragonhidePlate,            // Dragonhide full plate (druid-compatible)
     ElvenChain,                 // Mithral chainmail (light armor)
     AdamantineBreastplate,      // Adamantine breastplate (DR 2/—)
-    DwarvenPlate,               // Mithral full plate (medium, DR 3/—)
+    DwarvenPlate,               // Adamantine full plate (DR 3/—, nonmagical)
 
     // --- Magical ---
     RhinoHide,                  // +2 hide, +2d6 charge damage
@@ -78,7 +78,7 @@ public enum SpecificItemType
     BreastplateOfCommand,       // +2 breastplate, +2 Cha/Leadership
     MithralFullPlateOfSpeed,    // +1 mithral full plate, haste 10 rnd/day
     DemonArmor,                 // +4 full plate, claw attacks, contagion, evil
-    PlateArmorOfEtherealness,   // +5 full plate, ethereal jaunt 1/day
+    PlateArmorOfEtherealness,   // +1 full plate + Etherealness enhancement (NOT in SRD specific items)
 
     // ================================================================
     // SPECIFIC SHIELDS (DMG p.222-223)
