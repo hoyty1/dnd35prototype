@@ -465,6 +465,48 @@ public static class ZombieFactory
     }
 
     /// <summary>
+    /// Human Warrior Zombie — Armed zombie variant.
+    /// Base: Human warrior 1 (Medium humanoid, 1 HD).
+    /// </summary>
+    public static NPCDefinition HumanWarriorZombie()
+    {
+        var baseDef = new NPCDefinition
+        {
+            Id = "base_human_warrior",
+            Name = "Human Warrior",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 13, DEX = 11, CON = 12, WIS = 11, INT = 10, CHA = 8,
+            BAB = 1,
+            BaseSpeed = 6, // 30 ft
+            NaturalArmorBonus = 0,
+            CreatureType = "Humanoid",
+        };
+
+        var zombie = ZombieTemplate.Apply(baseDef, "zombie_human_warrior", "Human Warrior Zombie");
+
+        // Armed zombie with chainmail and longsword
+        zombie.EquipmentIds = new List<EquipmentSlotPair>
+        {
+            new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor),
+            new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.RightHand)
+        };
+        zombie.BackpackItemIds = new List<string>();
+
+        // 1 base HD → 2 zombie HD (2d12)
+        // STR 15 (13+2), DEX 9 (11-2), no CON/INT, WIS 10, CHA 1
+        // HP: 2d12 + Toughness = 13 + 3 = 16
+        // Natural armor: 0 (base) + 2 (Medium zombie) = 2
+        // BAB: +1 (half of 2 HD)
+        // CR: 1/2
+
+        zombie.Description = "A shambling warrior corpse in rusted chainmail, still clutching its longsword. " +
+                            "It fights with crude, single-minded determination.";
+        return zombie;
+    }
+
+    /// <summary>
     /// Troglodyte Zombie — Medium undead with stench-less slam.
     /// Base: Troglodyte (Medium humanoid, 2 HD).
     /// </summary>

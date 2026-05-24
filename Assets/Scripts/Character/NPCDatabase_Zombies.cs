@@ -14,13 +14,14 @@ public static partial class NPCDatabase
     {
         // ── Standard zombie variants (MM p.265-266) ──
         Register(ZombieFactory.HumanCommonerZombie());
+        Register(ZombieFactory.HumanWarriorZombie());
         Register(ZombieFactory.TroglodyteZombie());
         Register(ZombieFactory.OgreZombie());
         Register(ZombieFactory.MinotaurZombie());
         Register(ZombieFactory.OwlbearZombie());
         Register(ZombieFactory.BugbearZombie());
 
-        Debug.Log("[NPCDatabase] Registered 6 zombie template variants.");
+        Debug.Log("[NPCDatabase] Registered 7 zombie template variants.");
     }
 
     /// <summary>
