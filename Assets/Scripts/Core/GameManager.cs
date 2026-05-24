@@ -82,6 +82,10 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>Quick item use panel for combat — search/filter/sort consumable items.</summary>
     public QuickItemUsePanel QuickItemUsePanel;
+
+    /// <summary>Staff spell selection panel — lets wielder choose which spell to cast from a staff.</summary>
+    public StaffSpellSelectionPanel StaffSpellSelectionPanel;
+
     public WishUI WishUI;
 
     /// <summary>Shared party stash (session-only for now).</summary>
@@ -5408,6 +5412,15 @@ public partial class GameManager : MonoBehaviour
                     return true;
                 }
 
+                // ── Staff validation (D&D 3.5e DMG p.243) ──
+                if (currentItem.IsStaff)
+                {
+                    if (!TryUseStaff(actor, currentItem, out resultMessage))
+                        return false;
+                    // TryUseStaff opens spell selection panel; casting handled via callback
+                    return true;
+                }
+
                 // ── Potion: no class/ability restrictions (D&D 3.5e DMG) ──
                 // Potions can be used by anyone — skip scroll-style validation
                 // Just apply the spell effect directly
@@ -5763,6 +5776,243 @@ public partial class GameManager : MonoBehaviour
 
         resultMessage = $"🪄 {charName} activates {wandItem.Name} {activationInfo}. {spellSummary}{chargeInfo}{depletedNote}";
         return true;
+    }
+
+    // ==================== STAFF USAGE (D&D 3.5e DMG p.243) ====================
+
+    /// <summary>
+    /// Attempts to use a staff, applying D&D 3.5e validation:
+    /// 1. Check if character has a qualifying class (or UMD DC 20)
+    /// 2. Open spell selection panel for player to choose which spell
+    /// 3. Casting is handled by CastStaffSpell callback
+    ///
+    /// Staves CANNOT be recharged under core DMG 3.5e rules.
+    /// Once expended, they become non-magical and worthless.
+    /// </summary>
+    private bool TryUseStaff(CharacterController actor, ItemData staffItem, out string resultMessage)
+    {
+        resultMessage = string.Empty;
+        if (actor == null || actor.Stats == null || staffItem == null || !staffItem.IsStaff)
+        {
+            resultMessage = "Invalid staff or character.";
+            return false;
+        }
+
+        string charName = actor.Stats.CharacterName;
+
+        // Step 1: Validate eligibility (class list or UMD)
+        var validation = StaffValidator.Validate(actor, staffItem);
+
+        if (!validation.CanUse)
+        {
+            resultMessage = $"⚡ {charName} cannot use {staffItem.Name}: {validation.FailureReason}";
+            return false;
+        }
+
+        // Step 2: Handle UMD path if needed
+        if (validation.NeedsUMDCheck)
+        {
+            bool umdPassed = StaffValidator.PerformUMDCheck(actor, staffItem, out string umdSummary);
+            CombatUI?.ShowCombatLog($"⚡ {charName} attempts Use Magic Device on {staffItem.Name}: {umdSummary}");
+
+            if (!umdPassed)
+            {
+                resultMessage = $"⚡ {umdSummary}";
+                return false; // UMD failed — no charge consumed on failure
+            }
+            validation.UsedUMD = true;
+        }
+
+        // Log Magic domain usage
+        if (validation.UsedMagicDomain)
+        {
+            CombatUI?.ShowCombatLog($"⚡ {charName} uses Magic domain power to activate staff as a wizard of level {validation.EffectiveWizardLevel}.");
+        }
+
+        // Step 3: Open spell selection panel
+        if (StaffSpellSelectionPanel == null)
+        {
+            resultMessage = $"⚡ Staff spell selection panel is not available.";
+            return false;
+        }
+
+        // Set up callbacks
+        StaffSpellSelectionPanel.OnSpellSelected = (spellEntry, staff) =>
+        {
+            CastStaffSpell(actor, staff, spellEntry, validation);
+        };
+        StaffSpellSelectionPanel.OnCancelled = () =>
+        {
+            ShowActionChoices();
+        };
+
+        StaffSpellSelectionPanel.Open(actor, staffItem);
+
+        string activationInfo;
+        if (validation.UsedUMD)
+            activationInfo = "via UMD";
+        else if (validation.UsedMagicDomain)
+            activationInfo = $"via Magic domain (effective Wizard CL {validation.EffectiveWizardLevel})";
+        else
+            activationInfo = $"as {validation.MatchedClassName}";
+
+        resultMessage = $"⚡ {charName} activates {staffItem.Name} {activationInfo} — selecting spell...";
+        return true;
+    }
+
+    /// <summary>
+    /// Cast a selected spell from a staff. Called by StaffSpellSelectionPanel callback.
+    /// Consumes charges. If staff reaches 0, converts to mundane quarterstaff.
+    /// </summary>
+    public void CastStaffSpell(CharacterController actor, ItemData staffItem, StaffSpellEntry spellEntry,
+        StaffValidator.StaffValidationResult validation = null)
+    {
+        if (actor == null || staffItem == null || spellEntry == null) return;
+
+        string charName = actor.Stats?.CharacterName ?? "Unknown";
+        var staffDef = staffItem.GetStaffDefinition();
+        string staffName = staffDef?.Name ?? staffItem.Name;
+
+        // Double-check charges
+        if (staffItem.StaffCharges < spellEntry.ChargeCost)
+        {
+            CombatUI?.ShowCombatLog($"⚡ Insufficient charges on {staffName}!");
+            ShowActionChoices();
+            return;
+        }
+
+        // Consume charges
+        staffItem.StaffCharges -= spellEntry.ChargeCost;
+
+        string chargeInfo = $" ({staffItem.StaffCharges}/{staffDef?.MaxCharges ?? 50} charges)";
+        CombatUI?.ShowCombatLog($"⚡ {charName} uses {staffName}: {spellEntry.SpellName}{chargeInfo}");
+
+        // Cast the spell
+        if (spellEntry.IsStub)
+        {
+            // Stub spell — just log the description
+            CombatUI?.ShowCombatLog($"⚡ <color=#888888>{spellEntry.SpellName} effect (stub): {spellEntry.StubDescription ?? "Not yet implemented"}</color>");
+        }
+        else
+        {
+            // Get actual spell from database and apply
+            SpellDatabase.Init();
+            SpellData spell = null;
+
+            // Try by spell ID first, then by name
+            if (!string.IsNullOrWhiteSpace(spellEntry.SpellId))
+                spell = SpellDatabase.GetSpell(spellEntry.SpellId);
+            if (spell == null && !string.IsNullOrWhiteSpace(spellEntry.SpellName))
+                spell = SpellDatabase.GetSpellByName(spellEntry.SpellName);
+
+            if (spell != null)
+            {
+                // Clone spell and override caster level to staff's CL
+                SpellData staffSpell = spell.Clone();
+                int staffCL = staffDef?.CasterLevel ?? staffItem.StaffCasterLevel;
+
+                // Apply the spell effect using the existing consumable system
+                // Build a temporary item-like context for the spell
+                if (staffSpell.EffectType == SpellEffectType.Healing)
+                {
+                    int healRoll = RollHealingFromSpell(staffSpell);
+                    int nonlethalHealed;
+                    int oldHP = actor.Stats.CurrentHP;
+                    int hpHealed = actor.Stats.HealDamage(healRoll, out nonlethalHealed);
+                    int newHP = actor.Stats.CurrentHP;
+                    CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} heals {hpHealed} HP ({oldHP} → {newHP}) at CL {staffCL}.");
+                }
+                else if (staffSpell.EffectType == SpellEffectType.Buff || staffSpell.EffectType == SpellEffectType.Debuff ||
+                         staffSpell.EffectType == SpellEffectType.Illusion || staffSpell.EffectType == SpellEffectType.Control)
+                {
+                    var statusMgr = actor.GetComponent<StatusEffectManager>();
+                    if (statusMgr == null)
+                    {
+                        statusMgr = actor.gameObject.AddComponent<StatusEffectManager>();
+                        statusMgr.Init(actor.Stats);
+                    }
+                    var effect = statusMgr.AddEffect(staffSpell, staffName, staffCL);
+                    if (effect != null)
+                        CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} applied [{effect.GetDurationDisplayString()}] at CL {staffCL}.");
+                    else
+                        CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} could not be applied (stacking or stronger existing effect).");
+                }
+                else if (staffSpell.EffectType == SpellEffectType.Damage || staffSpell.EffectType == SpellEffectType.Wall)
+                {
+                    // For damage/wall spells, log that they'd be cast
+                    // Full targeting integration is aspirational — for now, log the intent
+                    CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} cast at CL {staffCL}. (Full targeting integration pending)");
+                }
+                else
+                {
+                    CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} cast at CL {staffCL}.");
+                }
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog($"⚡ <color=#888888>Spell '{spellEntry.SpellName}' not found in SpellDatabase — effect not applied.</color>");
+            }
+        }
+
+        // Low charge warning
+        if (staffItem.StaffCharges > 0 && staffItem.StaffCharges <= 5)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FFAA00>⚠ WARNING: {staffName} running low on charges! ({staffItem.StaffCharges} remaining)</color>");
+        }
+
+        // Check if expended
+        if (staffItem.StaffCharges <= 0)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF4444>⚡ {staffName} expends its final charge and becomes inert!</color>");
+            CombatUI?.ShowCombatLog($"<color=#FF4444>⚡ The staff is now a non-magical quarterstaff and worthless.</color>");
+            ConvertStaffToMundane(staffItem);
+        }
+
+        ShowActionChoices();
+    }
+
+    /// <summary>
+    /// Convert an expended staff to a mundane quarterstaff.
+    /// D&D 3.5e: Expended staves become non-magical and worthless.
+    /// </summary>
+    private void ConvertStaffToMundane(ItemData staffItem)
+    {
+        if (staffItem == null) return;
+
+        staffItem.IsStaff = false;
+        staffItem.StaffId = null;
+        staffItem.StaffCharges = 0;
+        staffItem.StaffCasterLevel = 0;
+        staffItem.Name = "Expended Staff (Mundane Quarterstaff)";
+        staffItem.Description = "This staff has expended all its magical charges and is now just a mundane quarterstaff. " +
+                                "It retains no magical properties and is worthless as a magic item. (Core DMG 3.5e rules)";
+        staffItem.MarketPrice = 0;
+    }
+
+    /// <summary>
+    /// Open the staff spell selection UI for a character.
+    /// Called from OnUseItemButtonPressed when a staff is selected.
+    /// </summary>
+    public void UseStaff(ItemData staff, CharacterController wielder)
+    {
+        if (!staff.IsStaff)
+        {
+            Debug.LogError("[GameManager] UseStaff called on non-staff item!");
+            return;
+        }
+
+        if (staff.IsStaffExpended())
+        {
+            CombatUI?.ShowCombatLog($"⚡ {staff.Name} has no charges remaining — it is now non-magical!");
+            return;
+        }
+
+        string resultMessage;
+        TryUseStaff(wielder, staff, out resultMessage);
+        if (!string.IsNullOrEmpty(resultMessage))
+        {
+            CombatUI?.ShowCombatLog(resultMessage);
+        }
     }
 
     private static SpellData BuildConsumableSpellVariant(SpellData baseSpell, ItemData item)

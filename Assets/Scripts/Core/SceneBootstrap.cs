@@ -1031,6 +1031,12 @@ public class SceneBootstrap : MonoBehaviour
             quickItemPanel.BuildUI(canvas);
             gm.QuickItemUsePanel = quickItemPanel;
 
+            // Staff system initialization (D&D 3.5e DMG p.243 — core rules only, no recharging)
+            StaffDatabase.Init();
+            StaffSpellSelectionPanel staffPanel = canvas.gameObject.AddComponent<StaffSpellSelectionPanel>();
+            staffPanel.BuildUI(canvas);
+            gm.StaffSpellSelectionPanel = staffPanel;
+
             // Wish spell option selection panel
             WishUI wishUI = canvas.gameObject.AddComponent<WishUI>();
             wishUI.BuildUI(canvas);

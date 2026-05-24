@@ -1951,6 +1951,10 @@ public static class ItemDatabase
         clone.WandSpellId = src.WandSpellId;
         clone.WandCasterLevel = src.WandCasterLevel;
         clone.WandSpellLevel = src.WandSpellLevel;
+        clone.IsStaff = src.IsStaff;
+        clone.StaffId = src.StaffId;
+        clone.StaffCharges = src.StaffCharges;
+        clone.StaffCasterLevel = src.StaffCasterLevel;
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

@@ -371,6 +371,19 @@ public class ItemData
     /// <summary>The caster level at which the staff casts its spells (uses staff's CL, not wielder's).</summary>
     public int StaffCasterLevel;
 
+    /// <summary>Look up this staff's definition from StaffDatabase. Returns null if not a staff.</summary>
+    public StaffDefinition GetStaffDefinition()
+    {
+        if (!IsStaff || string.IsNullOrEmpty(StaffId)) return null;
+        return StaffDatabase.GetStaff(StaffId);
+    }
+
+    /// <summary>True if this is a staff that has been fully expended (0 charges). Now non-magical.</summary>
+    public bool IsStaffExpended()
+    {
+        return IsStaff && StaffCharges <= 0;
+    }
+
     // --- Stackability ---
     /// <summary>Whether this item can stack with identical items in inventory (e.g., scrolls, potions).</summary>
     public bool IsStackable;
