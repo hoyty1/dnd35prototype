@@ -96,6 +96,8 @@ public enum SpecificItemType
     LionsShield,                // +2 heavy steel shield, 3/day lion bite (2d6)
     WingedShield,               // +3 heavy wood shield, fly 1/day
     AbsorbingShield,            // +1 heavy steel shield, disintegrate object 1/2 days
+    AnimatedShield,             // +2 heavy steel shield, animates for hands-free defense
+    AnimatedShieldGreater,      // +5 heavy steel shield, animates for hands-free defense
 }
 
 /// <summary>

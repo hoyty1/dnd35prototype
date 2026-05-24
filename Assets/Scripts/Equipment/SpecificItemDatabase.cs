@@ -205,6 +205,20 @@ public static class SpecificItemDatabase
             case SpecificItemType.MaceOfSmiting:
                 return new MaceOfSmitingBehavior();
 
+            // --- Tier 3 Batch 2 items ---
+            case SpecificItemType.NineLivesStealer:
+                return new NineLivesStealerBehavior();
+            case SpecificItemType.DwarvenThrower:
+                return new DwarvenThrowerBehavior();
+            case SpecificItemType.DemonArmor:
+                return new DemonArmorBehavior();
+            case SpecificItemType.SunBlade:
+                return new SunBladeBehavior();
+            case SpecificItemType.AnimatedShield:
+                return new AnimatedShieldBehavior(isGreater: false);
+            case SpecificItemType.AnimatedShieldGreater:
+                return new AnimatedShieldBehavior(isGreater: true);
+
             default:
                 return null; // No custom behavior for this item type
         }
@@ -1160,6 +1174,42 @@ public static class SpecificItemDatabase
             HasCustomBehavior = true,
             UniqueProperties = { ["DisintegrateObject"] = true, ["CooldownDays"] = 2 },
             ImplementationNotes = "Custom disintegrate-on-touch ability."
+        });
+
+        // ================================================================
+        //  ANIMATED SHIELD (SRD / DMG p.219)
+        // ================================================================
+
+        Register(new SpecificItemDefinition
+        {
+            Type = SpecificItemType.AnimatedShield,
+            Name = "Animated Shield",
+            Description = "This +2 heavy steel shield can be commanded to float nearby, granting shield AC while leaving both hands free. Animation lasts 4 rounds, 2/day.",
+            BaseItemId = "Heavy Steel Shield",
+            ItemCategory = ItemType.Shield,
+            EnhancementBonus = 2,
+            MarketPrice = 15170,
+            CasterLevel = 12,
+            PriorityTier = 2,
+            HasCustomBehavior = true,
+            UniqueProperties = { ["AnimationRounds"] = 4, ["UsesPerDay"] = 2, ["HandsFree"] = true },
+            ImplementationNotes = "Custom animation ability — shield floats for hands-free AC."
+        });
+
+        Register(new SpecificItemDefinition
+        {
+            Type = SpecificItemType.AnimatedShieldGreater,
+            Name = "Animated Shield (Greater)",
+            Description = "This +5 heavy steel shield can be commanded to float nearby, granting shield AC while leaving both hands free. Animation lasts 4 rounds, 2/day.",
+            BaseItemId = "Heavy Steel Shield",
+            ItemCategory = ItemType.Shield,
+            EnhancementBonus = 5,
+            MarketPrice = 49170,
+            CasterLevel = 15,
+            PriorityTier = 3,
+            HasCustomBehavior = true,
+            UniqueProperties = { ["AnimationRounds"] = 4, ["UsesPerDay"] = 2, ["HandsFree"] = true },
+            ImplementationNotes = "Greater variant of Animated Shield with +5 enhancement."
         });
     }
 }
