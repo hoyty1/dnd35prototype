@@ -634,8 +634,8 @@ public static class StaffDatabase
             PassiveSaveBonus = 2,
             HasRetributiveStrike = true,
             RetributiveStrikeDamageFactor = 8,
-            Status = StaffImplementationStatus.Stub,
-            ImplementationNotes = "Aspirational. Depends on Staff of Power completion plus 6+ additional L5-9 spells.",
+            Status = StaffImplementationStatus.Partial,
+            ImplementationNotes = "14/16 spells functional (87.5%). Remaining stubs: Wall of Force (L5), Summon Monster IX (L9).",
             Spells = new List<StaffSpellEntry>
             {
                 // Staff of Power spells
