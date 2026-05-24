@@ -299,6 +299,10 @@ public class ItemData
     [System.NonSerialized]
     public SpecificItemDefinition SpecificItemData;
 
+    /// <summary>Custom behavior script for specific magic items (combat hooks, activated abilities, etc.). Null for non-specific items.</summary>
+    [System.NonSerialized]
+    public SpecificItemBehavior SpecificItemBehavior;
+
     /// <summary>Check if this specific item has a named unique property.</summary>
     public bool HasSpecificProperty(string key)
     {

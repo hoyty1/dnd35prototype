@@ -6310,7 +6310,19 @@ public class CharacterController : MonoBehaviour
             }
         }
 
-        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + masterworkAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus + enchantmentAttackBonus;
+        // --- Specific Item Behavior: OnPreAttackRoll ---
+        int specificItemAttackBonus = 0;
+        if (weapon != null && weapon.SpecificItemBehavior != null && target != null)
+        {
+            var behaviorNotes = new System.Collections.Generic.List<string>();
+            weapon.SpecificItemBehavior.OnPreAttackRoll(target, ref specificItemAttackBonus, behaviorNotes);
+            foreach (var note in behaviorNotes)
+            {
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? note : $"{result.SpecialAttackNote} {note}";
+            }
+        }
+
+        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + masterworkAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus + enchantmentAttackBonus + specificItemAttackBonus;
 
         // D&D 3.5e: making an attack roll (or attempting to attack) breaks standard invisibility.
         // Greater Invisibility does NOT break on attack (BreaksOnAttack=false).
@@ -6875,6 +6887,31 @@ public class CharacterController : MonoBehaviour
             rawTotalDamage += enchantmentBonusDamage;
 
             // ================================================================
+            // SPECIFIC ITEM BEHAVIOR: OnDamageRoll + OnCriticalHit
+            // ================================================================
+            if (weapon != null && weapon.SpecificItemBehavior != null && target != null)
+            {
+                var behaviorDmgNotes = new System.Collections.Generic.List<string>();
+
+                // OnDamageRoll: modify damage (e.g., Sword of Subtlety +4, Sylvan Scimitar +1d6)
+                int specificDamageBonus = rawTotalDamage;
+                weapon.SpecificItemBehavior.OnDamageRoll(target, ref rawTotalDamage, critConfirmed, behaviorDmgNotes);
+                int specificDelta = rawTotalDamage - specificDamageBonus;
+                rawWeaponDamage += specificDelta; // Track in weapon damage too
+
+                // OnCriticalHit: crit-triggered effects
+                if (critConfirmed)
+                {
+                    weapon.SpecificItemBehavior.OnCriticalHit(target, rawTotalDamage, behaviorDmgNotes);
+                }
+
+                foreach (var note in behaviorDmgNotes)
+                {
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? note : $"{result.SpecialAttackNote} {note}";
+                }
+            }
+
+            // ================================================================
             // FORTIFICATION CHECK (defender's armor/shield)
             // ================================================================
             if (critConfirmed || (result.SneakAttackApplied && rawSneakDamage > 0))
@@ -6970,6 +7007,76 @@ public class CharacterController : MonoBehaviour
             {
                 target.OnDeath();
                 result.TargetKilled = true;
+            }
+
+            // ================================================================
+            // SPECIFIC ITEM BEHAVIOR: OnHitApplied + OnKill
+            // ================================================================
+            if (weapon != null && weapon.SpecificItemBehavior != null && target != null)
+            {
+                var behaviorHitNotes = new System.Collections.Generic.List<string>();
+
+                // OnHitApplied: post-damage effects (sleep, ability damage, slaying, etc.)
+                if (!target.Stats.IsDead)
+                {
+                    weapon.SpecificItemBehavior.OnHitApplied(target, result.FinalDamageDealt, behaviorHitNotes);
+
+                    // Check if the behavior caused death (e.g., Slaying Arrow)
+                    if (target.Stats.IsDead && !result.TargetKilled)
+                    {
+                        target.OnDeath();
+                        result.TargetKilled = true;
+                    }
+                }
+
+                // OnKill: kill-triggered effects (Cleave from Sylvan Scimitar, etc.)
+                if (result.TargetKilled)
+                {
+                    weapon.SpecificItemBehavior.OnKill(target, behaviorHitNotes);
+                }
+
+                foreach (var note in behaviorHitNotes)
+                {
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? note : $"{result.SpecialAttackNote} {note}";
+                }
+            }
+
+            // ================================================================
+            // DEFENSIVE ITEM BEHAVIORS: OnAttackedBy (on defender's equipped items)
+            // ================================================================
+            if (target != null)
+            {
+                Inventory defInv = target.GetInventoryData();
+                if (defInv != null)
+                {
+                    var defNotes = new System.Collections.Generic.List<string>();
+                    bool forceReroll = false;
+
+                    // Check armor behavior
+                    ItemData defArmor = defInv.ArmorRobeSlot;
+                    if (defArmor?.SpecificItemBehavior != null)
+                        defArmor.SpecificItemBehavior.OnAttackedBy(result, ref forceReroll, defNotes);
+
+                    // Check shield behavior
+                    ItemData defShield = (defInv.LeftHandSlot != null && defInv.LeftHandSlot.IsShield) ? defInv.LeftHandSlot : null;
+                    if (defShield?.SpecificItemBehavior != null)
+                        defShield.SpecificItemBehavior.OnAttackedBy(result, ref forceReroll, defNotes);
+
+                    foreach (var note in defNotes)
+                    {
+                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? note : $"{result.SpecialAttackNote} {note}";
+                    }
+
+                    // If a defensive behavior forced a reroll (Banded Mail of Luck), 
+                    // note it in the result. Full reroll logic would re-invoke the attack.
+                    if (forceReroll)
+                    {
+                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                            ? "Forced reroll!"
+                            : $"{result.SpecialAttackNote} Forced reroll!";
+                        Debug.Log($"[SpecificItem] Defensive behavior forced attack reroll against {target.Stats?.CharacterName}");
+                    }
+                }
             }
         }
 

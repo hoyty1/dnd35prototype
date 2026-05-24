@@ -1862,6 +1862,7 @@ public static class ItemDatabase
         clone.IsSpecificItem = src.IsSpecificItem;
         clone.SpecificItemType = src.SpecificItemType;
         clone.SpecificItemData = src.SpecificItemData; // Reference copy (shared definition)
+        clone.SpecificItemBehavior = src.SpecificItemBehavior; // Behaviors are stateful — shared reference on clone
         clone.CountsAsMagicForBypass = src.CountsAsMagicForBypass;
         clone.IsSilvered = src.IsSilvered;
         clone.IsColdIron = src.IsColdIron;

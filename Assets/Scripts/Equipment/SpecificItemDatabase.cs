@@ -127,7 +127,67 @@ public static class SpecificItemDatabase
         // Override price to DMG fixed price
         item.BasePriceGp = def.MarketPrice;
 
+        // Attach specific item behavior (custom combat/activated ability scripts)
+        item.SpecificItemBehavior = CreateBehavior(type);
+        if (item.SpecificItemBehavior != null)
+        {
+            item.SpecificItemBehavior.Initialize(item);
+        }
+
         return item;
+    }
+
+    /// <summary>
+    /// Factory method: creates the appropriate SpecificItemBehavior for a given item type.
+    /// Returns null for items without custom behavior scripts.
+    /// </summary>
+    private static SpecificItemBehavior CreateBehavior(SpecificItemType type)
+    {
+        switch (type)
+        {
+            // --- Tier 2 Weapons ---
+            case SpecificItemType.SleepArrow:
+                return new SleepArrowBehavior();
+            case SpecificItemType.JavelinOfLightning:
+                return new JavelinOfLightningBehavior();
+            case SpecificItemType.SlayingArrow:
+                return new SlayingArrowBehavior("Humanoid", isGreater: false);
+            case SpecificItemType.GreaterSlayingArrow:
+                return new SlayingArrowBehavior("Humanoid", isGreater: true);
+            case SpecificItemType.Shatterspike:
+                return new ShatterspikeBehavior();
+            case SpecificItemType.SwordOfSubtlety:
+                return new SwordOfSubtletyBehavior();
+            case SpecificItemType.SwordOfThePlanes:
+                return new SwordOfThePlanesBehavior();
+            case SpecificItemType.MaceOfTerror:
+                return new MaceOfTerrorBehavior();
+            case SpecificItemType.SylvanScimitar:
+                return new SylvanScimitarBehavior();
+            case SpecificItemType.RapierOfPuncturing:
+                return new RapierOfPuncturingBehavior();
+
+            // --- Tier 2 Armor ---
+            case SpecificItemType.BreastplateOfCommand:
+                return new BreastplateOfCommandBehavior();
+            case SpecificItemType.MithralFullPlateOfSpeed:
+                return new MithralFullPlateOfSpeedBehavior();
+            case SpecificItemType.BandedMailOfLuck:
+                return new BandedMailOfLuckBehavior();
+
+            // --- Tier 2 Shields ---
+            case SpecificItemType.CastersShield:
+                return new CastersShieldBehavior();
+            case SpecificItemType.LionsShield:
+                return new LionsShieldBehavior();
+            case SpecificItemType.WingedShield:
+                return new WingedShieldBehavior();
+            case SpecificItemType.AbsorbingShield:
+                return new AbsorbingShieldBehavior();
+
+            default:
+                return null; // No custom behavior for this item type
+        }
     }
 
     // ========================================================================
