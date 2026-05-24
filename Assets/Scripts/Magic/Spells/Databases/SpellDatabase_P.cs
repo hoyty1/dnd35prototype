@@ -431,6 +431,32 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ── PLANE SHIFT — PHB p.262 ──
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.PLANE_SHIFT,
+                    Name = "Plane Shift",
+                    Description = "Conjuration (Teleportation). Touch attack transports target to another plane of existence. "
+                        + "Willing creatures are transported automatically. Unwilling targets get a Will save to negate. "
+                        + "For combat purposes, target is removed from the battlefield. SR: Yes. PHB p.262",
+                    SpellLevel = 7, School = "Conjuration",
+                    ClassList = new[] { "Cleric", "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Control,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         // ── PROTECTION FROM SPELLS — PHB p.266 ──
         Register(new SpellData
                 {

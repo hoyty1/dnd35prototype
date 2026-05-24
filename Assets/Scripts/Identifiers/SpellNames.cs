@@ -885,5 +885,8 @@ namespace DND35e.Identifiers
 
         /// <summary>Mislead (spell id: mislead)</summary>
         public const string MISLEAD = "mislead";
+
+        /// <summary>Plane Shift (spell id: plane_shift)</summary>
+        public const string PLANE_SHIFT = "plane_shift";
     }
 }

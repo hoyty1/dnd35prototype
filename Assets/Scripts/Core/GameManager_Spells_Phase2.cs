@@ -721,6 +721,76 @@ public partial class GameManager
     }
 
     // ================================================================
+    //  PLANE SHIFT — PHB p.262
+    //  Conjuration (Teleportation). Touch attack, Will negates.
+    //  On failed save: target is removed from combat (shifted to another plane).
+    //  Treated as instant removal for combat purposes. SR: Yes.
+    // ================================================================
+
+    private StatusEffect ApplyPlaneShiftEffect(
+        CharacterController caster,
+        CharacterController target,
+        SpellData spell,
+        SpellcastingComponent spellComp)
+    {
+        if (caster == null || target == null || spell == null) return null;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int saveDc = GetSpellSaveDC(caster, spell);
+        string casterName = caster.Stats.CharacterName;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"🌀 {casterName} casts Plane Shift!");
+        sb.AppendLine($"  School: Conjuration (Teleportation) | Level: 7 | Touch");
+        sb.AppendLine($"  Will DC {saveDc} negates | SR: Yes");
+        sb.AppendLine($"  Target: {target.Stats.CharacterName}");
+
+        // Spell Resistance check
+        if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+        {
+            int srRoll = UnityEngine.Random.Range(1, 21);
+            int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
+            bool srOk = srTotal >= target.Stats.SpellResistance;
+            sb.AppendLine($"  SR Check: d20({srRoll}) + {casterLevel}+pen = {srTotal} vs SR {target.Stats.SpellResistance} → {(srOk ? "OVERCOME" : "RESISTED")}");
+            if (!srOk)
+            {
+                sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
+                sb.Append("═══════════════════════════════════");
+                CombatUI?.ShowCombatLog(sb.ToString());
+                return null;
+            }
+        }
+
+        // Will save
+        int saveRoll = UnityEngine.Random.Range(1, 21);
+        int saveTotal = saveRoll + target.Stats.WillSave;
+        bool saved = saveTotal >= saveDc;
+        sb.AppendLine($"  Will Save: d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
+
+        if (saved)
+        {
+            sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists the planar transport!");
+        }
+        else
+        {
+            sb.AppendLine($"  🌀 {target.Stats.CharacterName} is shifted to another plane!");
+            sb.AppendLine($"  Target is removed from combat!");
+
+            // Remove from combat: kill the target (treated as removed from battlefield)
+            // Set HP to lethal threshold to trigger death/removal
+            target.Stats.CurrentHP = -10;
+            target.OnDeath();
+            HandleSummonDeathCleanup(target);
+            sb.AppendLine($"  💫 {target.Stats.CharacterName} vanishes in a shimmer of planar energy!");
+        }
+
+        sb.Append("═══════════════════════════════════");
+        CombatUI?.ShowCombatLog(sb.ToString());
+        return null;
+    }
+
+    // ================================================================
     //  ALTER SELF — PHB p.197
     //  Transmutation. Change form. +2 size STR (or DEX).
     //  +10 Disguise. Duration: 10 min/level (D).

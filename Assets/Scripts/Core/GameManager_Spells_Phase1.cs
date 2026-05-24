@@ -1163,10 +1163,11 @@ public partial class GameManager
     }
 
     // ================================================================
-    //  TELEKINESIS — PHB p.292
-    //  Transmutation. Three modes: Sustained Force, Combat Maneuver,
-    //  Violent Thrust. Combat mode: Violent Thrust.
-    //  Hurl objects/creatures, 1d6 per 25 lb. Will negates. SR: Yes.
+    //  TELEKINESIS — PHB p.292  (Combat Maneuver Mode)
+    //  Transmutation. Use caster level as BAB for one bull rush attempt.
+    //  +CL bonus on opposed check. SR: Yes. Range: Close (25 ft + 5/2 CL).
+    //  D&D 3.5e: Can attempt bull rush, disarm, grapple, or trip.
+    //  Simplified: implements bull rush (push back) only.
     // ================================================================
 
     private ActiveSpellEffect ApplyTelekinesisEffect(
@@ -1178,56 +1179,71 @@ public partial class GameManager
         if (target == null || target.Stats == null || spell == null)
             return null;
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int casterLevel = caster != null && caster.Stats != null
+            ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        string casterName = caster != null && caster.Stats != null
+            ? caster.Stats.CharacterName : "Caster";
 
-        // Violent Thrust: ~1d6 per CL (25 lb per CL hurled), cap at 15d6
-        int damageDice = Mathf.Min(casterLevel, 15);
-        int damage = 0;
-        for (int i = 0; i < damageDice; i++)
-            damage += UnityEngine.Random.Range(1, 7);
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"🫳 {casterName} casts Telekinesis (Combat Maneuver — Bull Rush)!");
+        sb.AppendLine($"  School: Transmutation | Level: 5 | Range: Close");
+        sb.AppendLine($"  Uses CL {casterLevel} as BAB for opposed bull rush check | SR: Yes");
+        sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
-        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-        CombatUI?.ShowCombatLog($"<color=#CCAAFF>🫳 {casterName} casts Telekinesis (Violent Thrust) on {target.Stats.CharacterName}!</color>");
-
-        // SR check
+        // Spell Resistance check
         if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
         {
             int srRoll = UnityEngine.Random.Range(1, 21);
             int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-            if (srTotal < target.Stats.SpellResistance)
+            bool srOk = srTotal >= target.Stats.SpellResistance;
+            sb.AppendLine($"  SR Check: d20({srRoll}) + {casterLevel}+pen = {srTotal} vs SR {target.Stats.SpellResistance} → {(srOk ? "OVERCOME" : "RESISTED")}");
+            if (!srOk)
             {
-                CombatUI?.ShowCombatLog($"<color=#CCAAFF>   SR: d20({srRoll}) + {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance} → BLOCKED!</color>");
+                sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
+                sb.Append("═══════════════════════════════════");
+                CombatUI?.ShowCombatLog(sb.ToString());
                 return null;
             }
         }
 
-        // Will save
-        int willRoll = UnityEngine.Random.Range(1, 21);
-        int willMod = target.Stats.WillSave;
-        int willTotal = willRoll + willMod;
-        bool saved = willTotal >= saveDc;
+        // Telekinetic bull rush: use caster level as BAB
+        // Attacker check: d20 + CL (as BAB) + CL (telekinetic force bonus) + STR mod (use INT for caster)
+        int intMod = caster != null && caster.Stats != null ? caster.Stats.INTMod : 0;
+        int attackRoll = UnityEngine.Random.Range(1, 21);
+        int attackTotal = attackRoll + casterLevel + intMod;
+        sb.AppendLine($"  Bull Rush (Attacker): d20({attackRoll}) + CL({casterLevel}) + INT({intMod}) = {attackTotal}");
 
-        CombatUI?.ShowCombatLog($"<color=#CCAAFF>   Will: d20({willRoll}) + {willMod} = {willTotal} vs DC {saveDc} → {(saved ? "SAVED (negated)" : "FAILED")}</color>");
+        // Defender check: d20 + BAB + STR mod + size
+        int defRoll = UnityEngine.Random.Range(1, 21);
+        int defBAB = target.Stats.BaseAttackBonus;
+        int defSTR = target.Stats.STRMod;
+        int defTotal = defRoll + defBAB + defSTR;
+        sb.AppendLine($"  Bull Rush (Defender): d20({defRoll}) + BAB({defBAB}) + STR({defSTR}) = {defTotal}");
 
-        if (!saved)
+        bool success = attackTotal > defTotal;
+        int margin = Mathf.Max(0, attackTotal - defTotal);
+        int pushSquares = success ? 1 + (margin / 5) : 0;
+
+        if (success)
         {
-            int hpBefore = target.Stats.CurrentHP;
-            target.Stats.TakeDamage(damage);
-            int hpAfter = target.Stats.CurrentHP;
+            sb.AppendLine($"  ✦ SUCCESS! {target.Stats.CharacterName} pushed back {pushSquares} square(s) ({pushSquares * 5} ft)!");
+            sb.AppendLine($"    (Telekinetic force wins by {margin})");
 
-            CombatUI?.ShowCombatLog($"<color=#CCAAFF>   💥 {damage} bludgeoning damage ({damageDice}d6)! {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP</color>");
-
-            CheckConcentrationOnDamage(target, damage);
-
-            if (target.Stats.IsDead)
+            // Apply prone if pushed more than 2 squares (falling over obstacles)
+            if (pushSquares >= 3)
             {
-                target.OnDeath();
-                HandleSummonDeathCleanup(target);
-                CombatUI?.ShowCombatLog($"<color=#FF6666>   ☠ {target.Stats.CharacterName} is slain!</color>");
+                target.Stats.ApplyCondition(CombatConditionType.Prone, 1, "Telekinesis (Bull Rush)");
+                sb.AppendLine($"    🔻 {target.Stats.CharacterName} is knocked PRONE from the impact!");
             }
         }
+        else
+        {
+            sb.AppendLine($"  ✘ FAILED! {target.Stats.CharacterName} resists the telekinetic force.");
+        }
 
+        sb.Append("═══════════════════════════════════");
+        CombatUI?.ShowCombatLog(sb.ToString());
         UpdateAllStatsUI();
         return null;
     }

@@ -7676,6 +7676,12 @@ public partial class GameManager
             return ApplyDancingLightsEffect(caster, target, spell, spellComp);
         }
 
+        // Plane Shift — touch attack, Will save or removed from combat
+        if (spell != null && spell.SpellId == SpellNames.PLANE_SHIFT)
+        {
+            return ApplyPlaneShiftEffect(caster, target, spell, spellComp);
+        }
+
         // Alter Self — shape change buff
         if (spell != null && spell.SpellId == SpellNames.ALTER_SELF)
         {

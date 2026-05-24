@@ -652,7 +652,7 @@ public static class StaffDatabase
                 Spell(SpellNames.GLOBE_OF_INVULNERABILITY, "Globe of Invulnerability", 6, 2),
                 // Additional Magi spells
                 Spell(SpellNames.TELEKINESIS, "Telekinesis", 5, 1),
-                StubSpell("plane_shift", "Plane Shift", 7, 2, "Transport to another plane of existence"),
+                Spell(SpellNames.PLANE_SHIFT, "Plane Shift", 7, 2),
                 Spell(SpellNames.SPELL_TURNING, "Spell Turning", 7, 2),
                 Spell(SpellNames.PROTECTION_FROM_SPELLS, "Protection from Spells", 8, 2),
                 StubSpell("summon_monster_ix", "Summon Monster IX", 9, 2, "Summons powerful extraplanar creature")
