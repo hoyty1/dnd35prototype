@@ -2028,8 +2028,12 @@ public partial class GameManager
             SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, forceTargetToFailSave, caster, target);
 
             // Apply tracked buff/debuff effects based on spell type
+            // Includes expanded categories that also apply status effects
             bool appliesTrackedEffect = _pendingSpell.EffectType == SpellEffectType.Buff ||
-                                        _pendingSpell.EffectType == SpellEffectType.Debuff;
+                                        _pendingSpell.EffectType == SpellEffectType.Debuff ||
+                                        _pendingSpell.EffectType == SpellEffectType.Control ||
+                                        _pendingSpell.EffectType == SpellEffectType.Illusion ||
+                                        _pendingSpell.EffectType == SpellEffectType.Wall;
 
             bool causeFearSaveReduced = IsCauseFearSpell(_pendingSpell) && result.RequiredSave && result.SaveSucceeded;
             bool scareSaveReduced = IsScareSpell(_pendingSpell) && result.RequiredSave && result.SaveSucceeded;
@@ -2043,7 +2047,8 @@ public partial class GameManager
                 && _pendingSpell.SpellId == SpellNames.COMMAND_UNDEAD
                 && target != null && !target.IsIntelligentUndead();
 
-            bool effectNegatedBySave = ((_pendingSpell.EffectType == SpellEffectType.Debuff)
+            bool effectNegatedBySave = ((_pendingSpell.EffectType == SpellEffectType.Debuff ||
+                                        _pendingSpell.EffectType == SpellEffectType.Control)
                                        || blurSaveNegated)
                                        && result.RequiredSave
                                        && result.SaveSucceeded
@@ -4371,8 +4376,10 @@ public partial class GameManager
                         continue;
                     }
 
-                    // For buff/debuff spells, apply tracked effects
-                    if (_pendingSpell.EffectType == SpellEffectType.Buff || _pendingSpell.EffectType == SpellEffectType.Debuff)
+                    // For buff/debuff/control/illusion/wall spells, apply tracked effects
+                    if (_pendingSpell.EffectType == SpellEffectType.Buff || _pendingSpell.EffectType == SpellEffectType.Debuff ||
+                        _pendingSpell.EffectType == SpellEffectType.Control || _pendingSpell.EffectType == SpellEffectType.Illusion ||
+                        _pendingSpell.EffectType == SpellEffectType.Wall)
                     {
                         var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -4382,7 +4389,8 @@ public partial class GameManager
                             BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
                         }
 
-                        string effectLabel = _pendingSpell.EffectType == SpellEffectType.Debuff ? "DEBUFF APPLIED" : "BUFF APPLIED";
+                        string effectLabel = (_pendingSpell.EffectType == SpellEffectType.Debuff || _pendingSpell.EffectType == SpellEffectType.Control)
+                            ? "DEBUFF APPLIED" : "BUFF APPLIED";
                         logBuilder.AppendLine($"  {effectLabel}! {_pendingSpell.Description}");
                         Debug.Log($"[AoE] {_pendingSpell.EffectType} applied to {target.Stats.CharacterName}");
                     }
@@ -7297,7 +7305,7 @@ public partial class GameManager
                 }
 
                 string durStr = effect.GetDurationDisplayString();
-                bool isDebuff = spell.EffectType == SpellEffectType.Debuff;
+                bool isDebuff = spell.EffectType == SpellEffectType.Debuff || spell.EffectType == SpellEffectType.Control;
                 string color = isDebuff ? "#FF8888" : "#88FF88";
                 string effectLabel = isDebuff ? "debuff" : "buff";
                 CombatUI?.ShowCombatLog($"<color={color}>✨ {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} [{durStr}]</color>");

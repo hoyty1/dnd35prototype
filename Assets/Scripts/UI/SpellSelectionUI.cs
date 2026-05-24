@@ -825,6 +825,30 @@ public class SpellSelectionUI : MonoBehaviour
             case SpellEffectType.Debuff:
                 return "<color=#FFAA44>Debuff</color>";
 
+            case SpellEffectType.Control:
+                return "<color=#FF44AA>Control</color>";
+
+            case SpellEffectType.Summon:
+                return "<color=#88CC44>Summon</color>";
+
+            case SpellEffectType.Illusion:
+                return "<color=#AA44FF>Illusion</color>";
+
+            case SpellEffectType.Wall:
+                return "<color=#CC8833>Area Denial</color>";
+
+            case SpellEffectType.Dispel:
+                return "<color=#CCCC44>Dispel</color>";
+
+            case SpellEffectType.Escape:
+                return "<color=#44CCCC>Escape</color>";
+
+            case SpellEffectType.Divination:
+                return "<color=#AAAAFF>Divination</color>";
+
+            case SpellEffectType.Utility:
+                return "<color=#AAAAAA>Utility</color>";
+
             default:
                 return "";
         }

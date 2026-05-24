@@ -974,7 +974,9 @@ public partial class GameManager
 
         SpellResult result = SpellCaster.Cast(spell, npc.Stats, target.Stats, null, skipFriendlyTouchAttackRoll, forceTargetToFailSave, npc, target);
 
-        bool appliesTrackedEffect = spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff;
+        bool appliesTrackedEffect = spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff ||
+                                   spell.EffectType == SpellEffectType.Control || spell.EffectType == SpellEffectType.Illusion ||
+                                   spell.EffectType == SpellEffectType.Wall;
         bool causeFearSaveReduced = IsCauseFearSpell(spell) && result.RequiredSave && result.SaveSucceeded;
         bool blurSaveNegated = spell != null
                                && string.Equals(spell.SpellId, SpellNames.BLUR, StringComparison.Ordinal)

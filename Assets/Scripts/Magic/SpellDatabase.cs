@@ -70,6 +70,9 @@ public static partial class SpellDatabase
         // Initialize the spell component system (tracks costly material components)
         SpellComponentRegistry.Init();
 
+        // Reclassify spells into expanded effect types for AI tactical awareness
+        SpellCategoryClassifier.ReclassifyAll();
+
         int total = _spells.Count;
         int functional = 0;
         int placeholder = 0;

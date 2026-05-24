@@ -3623,6 +3623,9 @@ public partial class GameManager : MonoBehaviour
         string orderStr = _turnService != null ? _turnService.GetInitiativeOrderString() : "No combatants";
         Debug.Log($"[Initiative] Combat begins! Initiative order:\n{orderStr}");
 
+        // Reset AI spellcasting state for new encounter
+        AISpellcastingStrategist.ResetCombatState();
+
         // Publish combat started event
         GameEventSystem.Instance.Publish(new CombatStartedEvent
         {
@@ -5528,7 +5531,8 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        if (consumableSpell.EffectType == SpellEffectType.Buff || consumableSpell.EffectType == SpellEffectType.Debuff)
+        if (consumableSpell.EffectType == SpellEffectType.Buff || consumableSpell.EffectType == SpellEffectType.Debuff ||
+            consumableSpell.EffectType == SpellEffectType.Illusion || consumableSpell.EffectType == SpellEffectType.Control)
         {
             var statusMgr = actor.GetComponent<StatusEffectManager>();
             if (statusMgr == null)

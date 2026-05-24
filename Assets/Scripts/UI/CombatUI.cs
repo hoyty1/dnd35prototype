@@ -2318,6 +2318,12 @@ public class CombatUI : MonoBehaviour
             case SpellEffectType.Damage: btnColor = new Color(0.5f, 0.2f, 0.2f, 1f); break;
             case SpellEffectType.Healing: btnColor = new Color(0.2f, 0.5f, 0.2f, 1f); break;
             case SpellEffectType.Buff: btnColor = new Color(0.2f, 0.3f, 0.6f, 1f); break;
+            case SpellEffectType.Control: btnColor = new Color(0.6f, 0.2f, 0.5f, 1f); break;   // Magenta
+            case SpellEffectType.Summon: btnColor = new Color(0.4f, 0.5f, 0.2f, 1f); break;     // Olive
+            case SpellEffectType.Illusion: btnColor = new Color(0.4f, 0.2f, 0.6f, 1f); break;   // Purple
+            case SpellEffectType.Wall: btnColor = new Color(0.5f, 0.35f, 0.15f, 1f); break;     // Brown
+            case SpellEffectType.Dispel: btnColor = new Color(0.5f, 0.5f, 0.2f, 1f); break;     // Gold
+            case SpellEffectType.Escape: btnColor = new Color(0.2f, 0.5f, 0.5f, 1f); break;     // Teal
             default: btnColor = new Color(0.3f, 0.3f, 0.4f, 1f); break;
         }
 
@@ -2436,6 +2442,12 @@ public class CombatUI : MonoBehaviour
             case SpellEffectType.Damage: btnColor = new Color(0.5f, 0.2f, 0.2f, 1f); break;
             case SpellEffectType.Healing: btnColor = new Color(0.2f, 0.5f, 0.2f, 1f); break;
             case SpellEffectType.Buff: btnColor = new Color(0.2f, 0.3f, 0.6f, 1f); break;
+            case SpellEffectType.Control: btnColor = new Color(0.6f, 0.2f, 0.5f, 1f); break;
+            case SpellEffectType.Summon: btnColor = new Color(0.4f, 0.5f, 0.2f, 1f); break;
+            case SpellEffectType.Illusion: btnColor = new Color(0.4f, 0.2f, 0.6f, 1f); break;
+            case SpellEffectType.Wall: btnColor = new Color(0.5f, 0.35f, 0.15f, 1f); break;
+            case SpellEffectType.Dispel: btnColor = new Color(0.5f, 0.5f, 0.2f, 1f); break;
+            case SpellEffectType.Escape: btnColor = new Color(0.2f, 0.5f, 0.5f, 1f); break;
             default: btnColor = new Color(0.3f, 0.3f, 0.4f, 1f); break;
         }
 

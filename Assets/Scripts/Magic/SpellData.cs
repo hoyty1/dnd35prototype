@@ -583,13 +583,21 @@ public enum SpellTargetType
     Area            // Area of effect (future: Fireball)
 }
 
-/// <summary>What the spell does.</summary>
+/// <summary>What the spell does — expanded for AI tactical awareness (D&D 3.5e).</summary>
 public enum SpellEffectType
 {
     Damage,
     Healing,
     Buff,
-    Debuff
+    Debuff,
+    Control,        // Action denial: Hold Person, Web, Grease, Entangle, Sleep, Deep Slumber, Color Spray
+    Summon,         // Summon Monster I–IV, Summon Swarm, Summon Nature's Ally
+    Utility,        // Non-combat: Detect Magic, Identify, Knock, Tongues
+    Escape,         // Mobility/retreat: Dimension Door, Gaseous Form, Expeditious Retreat
+    Dispel,         // Counter-magic: Dispel Magic, Remove Curse, Break Enchantment
+    Wall,           // Area denial: Wall of Fire, Wall of Ice, Wall of Stone, Wind Wall
+    Illusion,       // Concealment/deception: Invisibility, Mirror Image, Displacement, Blur
+    Divination      // Information: Detect Evil, See Invisibility, True Seeing, Detect Undead
 }
 
 /// <summary>Action type required to cast.</summary>

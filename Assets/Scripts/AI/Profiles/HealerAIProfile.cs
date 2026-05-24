@@ -160,7 +160,10 @@ namespace DND35.AI.Profiles
                     return score - 18f;
 
                 case HealerActionType.OffensiveSpell:
-                    if (spell.EffectType == SpellEffectType.Damage || spell.EffectType == SpellEffectType.Debuff) return score + 12f;
+                    if (spell.EffectType == SpellEffectType.Damage || spell.EffectType == SpellEffectType.Debuff ||
+                        spell.EffectType == SpellEffectType.Control) return score + 12f;
+                    if (spell.EffectType == SpellEffectType.Summon) return score + 8f;
+                    if (spell.EffectType == SpellEffectType.Dispel) return score + 6f;
                     return score - 10f;
 
                 default:

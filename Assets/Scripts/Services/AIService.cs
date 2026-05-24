@@ -199,10 +199,33 @@ public class AIService : MonoBehaviour
                 {
                     CharacterController healTarget = healerProfile.GetPriorityHealTarget(npc, allCombatants);
                     if (healTarget != null && healTarget.Stats != null)
-                        Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} would prioritize healing {healTarget.Stats.CharacterName}.");
+                    {
+                        Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} targeting {healTarget.Stats.CharacterName} for healing.");
+                        // T1.1 FIX: Actually attempt to cast heal spell on the ally target
+                        bool healCasted = TryExecuteSpellcastAction(npc, healTarget);
+                        if (healCasted)
+                        {
+                            Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} successfully healed {healTarget.Stats.CharacterName}.");
+                            yield return new WaitForSeconds(0.5f);
+                            yield break;
+                        }
+                        Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} failed to heal — falling back to ranged kiter.");
+                    }
                 }
 
-                // Spell execution remains handled by existing combat flow; keep support casters in ranged shell for now.
+                if (actionType == HealerActionType.Buffing)
+                {
+                    // T1.1 FIX: Actually attempt to cast buff spell (ally targeting now works)
+                    bool buffCasted = TryExecuteSpellcastAction(npc, null);
+                    if (buffCasted)
+                    {
+                        Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} successfully cast buff spell.");
+                        yield return new WaitForSeconds(0.5f);
+                        yield break;
+                    }
+                }
+
+                // Spell execution handled by ranged kiter turn (includes offensive spells)
                 yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
                 yield break;
             }
@@ -2165,6 +2188,38 @@ public class AIService : MonoBehaviour
             return false;
         }
 
+        // ── T1.3: Defensive casting awareness ──
+        List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
+        int defensiveResult = AISpellcastingStrategist.EvaluateDefensiveCasting(caster, spell, allCombatants);
+        if (defensiveResult == 0)
+        {
+            // Can't safely cast in melee — try a lower-level spell
+            SpellData altSpell = SelectLowerLevelAlternative(caster, fallbackTarget, spell.SpellLevel);
+            if (altSpell != null)
+            {
+                int altResult = AISpellcastingStrategist.EvaluateDefensiveCasting(caster, altSpell, allCombatants);
+                if (altResult > 0)
+                {
+                    Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} switches from {spell.Name} (too risky in melee) to {altSpell.Name}");
+                    spell = altSpell;
+                }
+                else
+                {
+                    Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} can't safely cast any spell while threatened — aborting spellcasting.");
+                    return false;
+                }
+            }
+            else
+            {
+                Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} can't safely cast {spell.Name} while threatened and has no alternatives.");
+                return false;
+            }
+        }
+        else if (defensiveResult == 1)
+        {
+            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} will cast {spell.Name} defensively (threatened in melee).");
+        }
+
         CharacterController spellTarget = SelectBestSpellTarget(caster, spell, fallbackTarget);
         if (spellTarget == null)
         {
@@ -2175,7 +2230,9 @@ public class AIService : MonoBehaviour
 
         int targetDistance = SquareGridUtils.GetDistance(caster.GridPosition, spellTarget.GridPosition);
         int spellRange = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(caster.Stats.GetCasterLevel()));
-        Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name}: target={spellTarget.Stats.CharacterName}, distance={targetDistance}, range={spellRange}, castablePrepared={castableCount}");
+        bool isAllyTargeted = AISpellcastingStrategist.IsAllyTargetedSpell(spell);
+        string targetRelation = isAllyTargeted ? "ally" : "enemy";
+        Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name}: target={spellTarget.Stats.CharacterName} ({targetRelation}), distance={targetDistance}, range={spellRange}, castablePrepared={castableCount}");
 
         bool casted = _gameManager.TryNPCPerformSpellCastForAI(caster, spellTarget, spell);
         if (!casted)
@@ -2188,60 +2245,52 @@ public class AIService : MonoBehaviour
         return true;
     }
 
+    /// <summary>Find a lower-level spell alternative when the primary choice is too risky in melee.</summary>
+    private SpellData SelectLowerLevelAlternative(CharacterController caster, CharacterController target, int maxLevel)
+    {
+        if (caster == null || caster.Stats == null) return null;
+
+        SpellcastingComponent spellcasting = caster.GetComponent<SpellcastingComponent>();
+        if (spellcasting == null) return null;
+
+        List<SpellData> castable = spellcasting.GetCastablePreparedSpells();
+        if (castable == null) return null;
+
+        SpellData best = null;
+        float bestScore = float.NegativeInfinity;
+
+        List<CharacterController> allCombatants = _gameManager?.GetAllCharactersForAI() ?? new List<CharacterController>();
+
+        for (int i = 0; i < castable.Count; i++)
+        {
+            SpellData spell = castable[i];
+            if (spell == null || spell.SpellLevel >= maxLevel) continue;
+
+            float score = AISpellcastingStrategist.ScoreSpellComprehensive(
+                spell, caster, target, allCombatants, _gameManager);
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = spell;
+            }
+        }
+
+        return best;
+    }
+
     private CharacterController SelectBestSpellTarget(CharacterController caster, SpellData spell, CharacterController fallbackTarget)
     {
         if (_gameManager == null || caster == null || spell == null)
             return fallbackTarget;
 
-        CharacterController mirrorPriorityTarget = _gameManager.GetMirrorImagePriorityTargetForAI(caster);
-        if (mirrorPriorityTarget != null)
-        {
-            int mirrorDistance = SquareGridUtils.GetDistance(caster.GridPosition, mirrorPriorityTarget.GridPosition);
-            int mirrorRange = spell.GetRangeSquaresForCasterLevel(caster.Stats != null ? caster.Stats.GetCasterLevel() : 1);
-            if (mirrorRange <= 0)
-                mirrorRange = 1;
-
-            if (mirrorDistance <= mirrorRange)
-                return mirrorPriorityTarget;
-        }
-
         List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
         if (allCombatants == null || allCombatants.Count == 0)
             return fallbackTarget;
 
-        int rangeSquares = spell.GetRangeSquaresForCasterLevel(caster.Stats != null ? caster.Stats.GetCasterLevel() : 1);
-        if (rangeSquares <= 0)
-            rangeSquares = 1;
-
-        CharacterController bestTarget = null;
-        float bestScore = float.NegativeInfinity;
-
-        for (int i = 0; i < allCombatants.Count; i++)
-        {
-            CharacterController candidate = allCombatants[i];
-            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
-                continue;
-
-            if (!_gameManager.IsEnemyTeamForAI(caster, candidate))
-                continue;
-
-            int distance = SquareGridUtils.GetDistance(caster.GridPosition, candidate.GridPosition);
-            if (distance > rangeSquares)
-                continue;
-
-            bool requiresLineOfSight = spell.TargetType == SpellTargetType.SingleEnemy;
-            if (requiresLineOfSight && !caster.CanSee(candidate, spell.IsRangedTouchSpell()))
-                continue;
-
-            float score = GetTargetPriority(caster, candidate);
-            if (score > bestScore)
-            {
-                bestScore = score;
-                bestTarget = candidate;
-            }
-        }
-
-        return bestTarget;
+        // ── T1.1: Use comprehensive target selection (supports allies AND enemies) ──
+        return AISpellcastingStrategist.SelectBestSpellTarget(
+            caster, spell, fallbackTarget, allCombatants, _gameManager);
     }
 
     private static bool HasCreatureTag(CharacterController character, string tag)
@@ -2314,10 +2363,10 @@ public class AIService : MonoBehaviour
                 continue;
 
             // ── Buff-already-active check ──
-            // D&D 3.5e: Same spell doesn't stack — skip buff spells already active on the caster.
+            // D&D 3.5e: Same spell doesn't stack — skip buff/illusion spells already active on the caster.
             // This prevents AI from wasting actions and spell slots recasting Mage Armor, Shield,
-            // Bull's Strength, etc. when they're already providing their benefit.
-            if (spell.EffectType == SpellEffectType.Buff && statusMgr != null)
+            // Mirror Image, etc. when they're already providing their benefit.
+            if ((spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Illusion) && statusMgr != null)
             {
                 bool alreadyActive = statusMgr.HasEffect(spell.SpellId);
                 if (alreadyActive)
@@ -2341,15 +2390,9 @@ public class AIService : MonoBehaviour
             }
             else
             {
-                score = 0f;
-                if (spell.EffectType == SpellEffectType.Healing)
-                    score += caster.Stats.CurrentHP <= Mathf.CeilToInt(caster.Stats.TotalMaxHP * 0.4f) ? 10f : 2f;
-                if (spell.EffectType == SpellEffectType.Buff)
-                    score += 4f;
-                if (spell.EffectType == SpellEffectType.Damage || spell.EffectType == SpellEffectType.Debuff)
-                    score += 6f;
-                if (target != null && target.Stats != null && target.Stats.CurrentHP <= Mathf.CeilToInt(target.Stats.TotalMaxHP * 0.35f))
-                    score += 2f;
+                // ── Comprehensive scoring for non-profile casters (Tiers 1–4) ──
+                score = AISpellcastingStrategist.ScoreSpellComprehensive(
+                    spell, caster, target, allCombatants, _gameManager);
             }
 
             if (score > bestScore)

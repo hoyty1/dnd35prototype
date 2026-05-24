@@ -58,10 +58,11 @@ namespace DND35.AI.Profiles
 
             float score = 0f;
 
-            // School preference
+            // ── School preference (profile-driven) ──
             SpellSchool school = SpellSchoolUtils.Parse(spell.School);
             score += GetSchoolPriority(school) * 10f;
 
+            // ── AoE evaluation (profile-driven) ──
             bool isAoe = spell.TargetType == SpellTargetType.Area || spell.AoEShapeType != AoEShape.None;
 
             if (isAoe)
@@ -85,21 +86,19 @@ namespace DND35.AI.Profiles
                     score += 4f;
             }
 
-            if (spell.EffectType == SpellEffectType.Buff && caster != null && caster.Stats != null)
+            // ── Buff-already-active check ──
+            if ((spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Illusion)
+                && caster != null && caster.Stats != null)
             {
-                // ── Buff-already-active check ──
-                // D&D 3.5e: Same spell doesn't stack. Heavily penalize buff spells that are
-                // already active on the caster to prevent wasting actions and spell slots.
                 StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
                 if (statusMgr != null && statusMgr.HasEffect(spell.SpellId))
                 {
                     int remaining = statusMgr.GetRemainingRounds(spell.SpellId);
                     if (remaining > 1 || remaining == -1)
                     {
-                        score -= 1000f; // Effectively skip this spell
+                        score -= 1000f;
                         return score;
                     }
-                    // remaining ≤ 1: about to expire, allow recasting with normal priority
                 }
 
                 if (SpellSelection.BuffBeforeDamage)
@@ -110,6 +109,7 @@ namespace DND35.AI.Profiles
                 }
             }
 
+            // ── Profile-driven preferences ──
             if (SpellSelection.ConserveHighLevelSpells && spell.SpellLevel >= 3)
             {
                 int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
@@ -120,13 +120,18 @@ namespace DND35.AI.Profiles
 
             if (SpellSelection.CounterEnemySpells && primaryTarget != null && primaryTarget.Stats != null
                 && (primaryTarget.Stats.IsWizard || primaryTarget.Stats.IsCleric)
-                && spell.EffectType == SpellEffectType.Debuff)
+                && (spell.EffectType == SpellEffectType.Debuff || spell.EffectType == SpellEffectType.Control))
             {
                 score += 2f;
             }
 
-            if (!SpellSelection.UseUtilitySpells && spell.EffectType == SpellEffectType.Buff && spell.DamageCount <= 0 && spell.HealCount <= 0)
+            if (!SpellSelection.UseUtilitySpells &&
+                (spell.EffectType == SpellEffectType.Utility || spell.EffectType == SpellEffectType.Divination))
                 score -= 5f;
+
+            // ── Comprehensive AI Strategist scoring (Tiers 1–4) ──
+            score += AISpellcastingStrategist.ScoreSpellComprehensive(
+                spell, caster, primaryTarget, allCombatants, gameManager, this);
 
             return score;
         }
