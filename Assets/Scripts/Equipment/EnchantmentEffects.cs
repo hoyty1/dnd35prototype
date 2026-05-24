@@ -679,6 +679,7 @@ public static class AdvancedEnchantmentEffects
     /// <summary>
     /// Check if a Brilliant Energy weapon cannot harm the target.
     /// Brilliant Energy weapons cannot harm undead, constructs, or objects.
+    /// D&D 3.5 DMG p.224: "It cannot harm undead, constructs, and objects."
     /// </summary>
     public static bool BrilliantEnergyCannotHarm(ItemData weapon, string targetCreatureType)
     {
@@ -695,6 +696,15 @@ public static class AdvancedEnchantmentEffects
         if (string.IsNullOrEmpty(targetCreatureType)) return false;
         string ct = targetCreatureType.Trim().ToLowerInvariant();
         return ct == "undead" || ct == "construct";
+    }
+
+    /// <summary>
+    /// Convenience overload: Check if a Brilliant Energy weapon cannot harm a target CharacterController.
+    /// </summary>
+    public static bool BrilliantEnergyCannotHarm(ItemData weapon, CharacterController target)
+    {
+        if (target == null || target.Stats == null) return false;
+        return BrilliantEnergyCannotHarm(weapon, target.Stats.CreatureType ?? "");
     }
 
     // ========================================================================

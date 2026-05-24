@@ -287,6 +287,31 @@ public class ItemData
     /// </summary>
     public ItemEnchantmentData Enchantment;
 
+    // --- Specific Magic Item (DMG named items like Flame Tongue, Holy Avenger) ---
+
+    /// <summary>True if this is a named specific magic item from the DMG.</summary>
+    public bool IsSpecificItem;
+
+    /// <summary>The specific item type enum (e.g., FlameTongue, HolyAvenger). Only valid if IsSpecificItem is true.</summary>
+    public SpecificItemType SpecificItemType;
+
+    /// <summary>Reference to the specific item's definition data. Null for non-specific items.</summary>
+    [System.NonSerialized]
+    public SpecificItemDefinition SpecificItemData;
+
+    /// <summary>Check if this specific item has a named unique property.</summary>
+    public bool HasSpecificProperty(string key)
+    {
+        return IsSpecificItem && SpecificItemData != null && SpecificItemData.HasProperty(key);
+    }
+
+    /// <summary>Get a typed unique property from the specific item definition.</summary>
+    public T GetSpecificProperty<T>(string key, T defaultValue = default)
+    {
+        if (!IsSpecificItem || SpecificItemData == null) return defaultValue;
+        return SpecificItemData.GetProperty(key, defaultValue);
+    }
+
     // --- Consumable ---
     public ConsumableEffectType ConsumableEffect; // Generic effect type for extensibility
     public string ConsumableSpellName;            // Legacy spell identifier this consumable emulates

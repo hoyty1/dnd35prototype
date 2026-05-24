@@ -392,7 +392,7 @@ public static class MagicItemLootGenerator
     {
         if (item == null) return 0;
 
-        int value = item.BasePrice;
+        int value = item.BasePriceGp;
         int enhancement = item.EnhancementBonus;
         if (enhancement <= 0) return value;
 

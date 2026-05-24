@@ -6288,6 +6288,28 @@ public class CharacterController : MonoBehaviour
             enchantmentAttackBonus = EnchantmentEffects.GetEnchantmentAttackBonus(weapon, targetCreatureType);
         }
 
+        // D&D 3.5 DMG: Brilliant Energy weapons cannot harm undead, constructs, or objects.
+        // The weapon passes harmlessly through them. Return an automatic miss.
+        if (weapon != null && weapon.IsEnchanted && target != null && target.Stats != null)
+        {
+            string targetCT = target.Stats.CreatureType ?? "";
+            if (AdvancedEnchantmentEffects.BrilliantEnergyCannotHarm(weapon, targetCT))
+            {
+                result.Hit = false;
+                result.DieRoll = 0;
+                result.TotalRoll = 0;
+                result.TargetAC = 0;
+                result.DefenderHPBefore = target.Stats.CurrentHP;
+                result.DefenderHPAfter = target.Stats.CurrentHP;
+                string attackerName = Stats != null ? Stats.CharacterName : name;
+                string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+                result.SpecialAttackNote = $"Brilliant Energy weapon passes harmlessly through {targetName} ({targetCT}) — cannot harm undead or constructs.";
+                if (GameManager.Instance?.CombatUI != null)
+                    GameManager.Instance.CombatUI.ShowCombatLog($"<color=#FFDD44>✦ {attackerName}'s Brilliant Energy weapon passes harmlessly through {targetName} ({targetCT})!</color>");
+                return result;
+            }
+        }
+
         int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + masterworkAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus + blinkAttackerBonus + destructionSmiteAttackBonus + enchantmentAttackBonus;
 
         // D&D 3.5e: making an attack roll (or attempting to attack) breaks standard invisibility.
@@ -6308,6 +6330,25 @@ public class CharacterController : MonoBehaviour
         }
 
         int targetAC = GetSituationalTargetArmorClass(target, this, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
+
+        // D&D 3.5 DMG: Brilliant Energy weapons ignore armor, shield, and natural armor bonuses.
+        // Only deflection, dodge, luck, sacred, profane, and force bonuses still apply.
+        if (weapon != null && weapon.IsEnchanted && target != null && target.Stats != null)
+        {
+            Inventory targetInvBE = target.GetInventoryData();
+            ItemData beArmor = targetInvBE?.ArmorRobeSlot;
+            ItemData beShield = (targetInvBE?.LeftHandSlot != null && targetInvBE.LeftHandSlot.IsShield) ? targetInvBE.LeftHandSlot : null;
+            int natArmor = target.Stats.NaturalArmorBonus;
+            int brilliantACReduction = AdvancedEnchantmentEffects.GetBrilliantEnergyACReduction(weapon, beArmor, beShield, natArmor);
+            if (brilliantACReduction > 0)
+            {
+                targetAC -= brilliantACReduction;
+                string beNote = $"Brilliant Energy: ignores armor/shield/natural armor (-{brilliantACReduction} AC).";
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? beNote
+                    : $"{result.SpecialAttackNote} {beNote}";
+            }
+        }
 
         // D&D 3.5e PHB p.141: Defender who can't see the attacker loses Dex bonus to AC.
         // Applied from the pre-break invisible attacker state captured above.

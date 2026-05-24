@@ -1859,6 +1859,9 @@ public static class ItemDatabase
         clone.IsMasterwork = src.IsMasterwork;
         clone.Material = src.Material?.Clone();
         clone.Enchantment = src.Enchantment?.Clone();
+        clone.IsSpecificItem = src.IsSpecificItem;
+        clone.SpecificItemType = src.SpecificItemType;
+        clone.SpecificItemData = src.SpecificItemData; // Reference copy (shared definition)
         clone.CountsAsMagicForBypass = src.CountsAsMagicForBypass;
         clone.IsSilvered = src.IsSilvered;
         clone.IsColdIron = src.IsColdIron;
