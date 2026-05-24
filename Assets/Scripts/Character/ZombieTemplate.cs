@@ -107,7 +107,7 @@ public static class ZombieTemplate
         {
             for (int i = 0; i < zombie.NaturalAttacks.Count; i++)
             {
-                StripSpecialEffects(zombie.NaturalAttacks[i]);
+                UndeadTemplateUtils.StripSpecialEffects(zombie.NaturalAttacks[i]);
             }
         }
         else
@@ -351,23 +351,7 @@ public static class ZombieTemplate
     /// Strip all on-hit special effects from a natural attack
     /// (poison, paralysis, disease, energy drain, etc.)
     /// </summary>
-    private static void StripSpecialEffects(NaturalAttackDefinition attack)
-    {
-        if (attack == null) return;
-
-        attack.PoisonOnHitId = null;
-        attack.ParalysisOnHitDC = 0;
-        attack.ParalysisOnHitDurationRounds = 0;
-        attack.EnergyDrainOnHit = 0;
-        attack.EnergyDrainRemovalDC = 0;
-        attack.AbilityDrainAmount = 0;
-        attack.HasDiseaseOnHit = false;
-        attack.PetrificationOnHitDC = 0;
-        attack.BonusElementalDamageDice = 0;
-        attack.BonusElementalDamageCount = 0;
-        attack.HasBloodDrain = false;
-        attack.BloodDrainConDamagePerRound = 0;
-    }
+    // StripSpecialEffects moved to UndeadTemplateUtils.StripSpecialEffects()
 
     /// <summary>
     /// Build the Special Abilities display list for a zombie.
@@ -613,32 +597,7 @@ public static class ZombieFactory
     /// </summary>
     public static NPCDefinition MinotaurZombie()
     {
-        var baseDef = new NPCDefinition
-        {
-            Id = "base_minotaur",
-            Name = "Minotaur",
-            HitDice = 6,
-            SizeCategory = SizeCategory.Large,
-            IsTallCreature = true,
-            STR = 19, DEX = 10, CON = 15, WIS = 10, INT = 7, CHA = 8,
-            BAB = 6,
-            BaseSpeed = 6, // 30 ft
-            NaturalArmorBonus = 5,
-            CreatureType = "MonstrousHumanoid",
-            NaturalAttacks = new List<NaturalAttackDefinition>
-            {
-                new NaturalAttackDefinition
-                {
-                    Name = "Gore",
-                    DamageDice = 8,
-                    DamageCount = 1,
-                    Count = 1,
-                    BonusDamageSource = DamageBonusSource.Strength,
-                    IsPrimary = true,
-                    Range = 1
-                }
-            }
-        };
+        var baseDef = BaseCreatureDefinitions.Minotaur();
 
         var zombie = ZombieTemplate.Apply(baseDef, "zombie_minotaur", "Minotaur Zombie");
 
@@ -665,44 +624,7 @@ public static class ZombieFactory
     /// </summary>
     public static NPCDefinition OwlbearZombie()
     {
-        var baseDef = new NPCDefinition
-        {
-            Id = "base_owlbear",
-            Name = "Owlbear",
-            HitDice = 5,
-            SizeCategory = SizeCategory.Large,
-            IsTallCreature = true,
-            STR = 21, DEX = 12, CON = 21, WIS = 12, INT = 2, CHA = 10,
-            BAB = 5,
-            BaseSpeed = 6, // 30 ft
-            NaturalArmorBonus = 5,
-            CreatureType = "MagicalBeast",
-            NaturalAttacks = new List<NaturalAttackDefinition>
-            {
-                new NaturalAttackDefinition
-                {
-                    Name = "Claw",
-                    DamageDice = 6,
-                    DamageCount = 1,
-                    Count = 2,
-                    BonusDamageSource = DamageBonusSource.Strength,
-                    IsPrimary = true,
-                    Range = 1
-                },
-                new NaturalAttackDefinition
-                {
-                    Name = "Bite",
-                    DamageDice = 8,
-                    DamageCount = 1,
-                    Count = 1,
-                    BonusDamageSource = DamageBonusSource.StrengthHalf,
-                    IsPrimary = false,
-                    Range = 1
-                }
-            },
-            HasImprovedGrab = true,
-            ImprovedGrabTriggerAttackName = "Claw"
-        };
+        var baseDef = BaseCreatureDefinitions.Owlbear();
 
         var zombie = ZombieTemplate.Apply(baseDef, "zombie_owlbear", "Owlbear Zombie");
         zombie.EquipmentIds = new List<EquipmentSlotPair>();

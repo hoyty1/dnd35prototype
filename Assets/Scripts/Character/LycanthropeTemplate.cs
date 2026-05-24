@@ -725,6 +725,7 @@ public static class LycanthropeFactory
         lycan.Description = "A werewolf in hybrid form — a snarling humanoid-wolf blend wielding " +
                            "a battleaxe alongside savage claws and fangs. Natural lycanthrope, " +
                            "DR 10/silver. Its bite can spread the curse of lycanthropy (DC 15 Fort).";
+        lycan.CharacterAlignment = Alignment.ChaoticEvil;
         return lycan;
     }
 
@@ -792,6 +793,7 @@ public static class LycanthropeFactory
         lycan.Description = "A terrifying werewolf lord in hybrid form — a Large, " +
                            "battle-hardened fighter merged with a dire wolf. Wields a bastard sword " +
                            "alongside devastating natural attacks. DR 10/silver, CR 14.";
+        lycan.CharacterAlignment = Alignment.ChaoticEvil;
         return lycan;
     }
 
@@ -850,6 +852,7 @@ public static class LycanthropeFactory
         lycan.Description = "A wererat in hybrid form — a hunched, rat-faced humanoid with " +
                            "twitching whiskers and beady eyes. Wields a rapier with supernatural " +
                            "dexterity. Prefers ambush and flanking tactics. DR 10/silver.";
+        lycan.CharacterAlignment = Alignment.LawfulEvil;
         return lycan;
     }
 
@@ -905,6 +908,7 @@ public static class LycanthropeFactory
         lycan.Description = "A wereboar in hybrid form — a bristly, pig-snouted brute " +
                            "with thick, tough hide and a vicious temper. Wields a greataxe " +
                            "and gores with savage tusks. DR 10/silver.";
+        lycan.CharacterAlignment = Alignment.ChaoticNeutral;
         return lycan;
     }
 
@@ -960,6 +964,7 @@ public static class LycanthropeFactory
         lycan.Description = "A weretiger in hybrid form — a sleek, powerful predator " +
                            "with rippling muscles beneath striped fur. Large size, devastating " +
                            "claws and fangs. Can pounce for full attacks on a charge. DR 10/silver.";
+        lycan.CharacterAlignment = Alignment.TrueNeutral;
         return lycan;
     }
 
@@ -1012,6 +1017,7 @@ public static class LycanthropeFactory
         lycan.Description = "A werebear in hybrid form — a towering, fur-covered humanoid " +
                            "with the raw power of a brown bear. Unlike most lycanthropes, " +
                            "werebears are typically lawful good protectors of the wild. DR 10/silver.";
+        lycan.CharacterAlignment = Alignment.LawfulGood;
         return lycan;
     }
 
@@ -1074,6 +1080,7 @@ public static class LycanthropeFactory
         lycan.Description = "A dire wereboar in hybrid form — a massive, bristling brute " +
                            "even larger and more fearsome than a standard wereboar. Its thick " +
                            "hide and dire boar heritage make it incredibly tough. DR 10/silver.";
+        lycan.CharacterAlignment = Alignment.ChaoticNeutral;
         return lycan;
     }
 
@@ -1119,6 +1126,7 @@ public static class LycanthropeFactory
         lycan.Description = "An afflicted werewolf — a recently cursed human struggling " +
                            "to control the beast within. Weaker than natural werewolves, " +
                            "with only DR 5/silver and no ability to spread the curse.";
+        lycan.CharacterAlignment = Alignment.ChaoticEvil;
         return lycan;
     }
 }

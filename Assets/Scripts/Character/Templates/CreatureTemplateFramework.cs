@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -9,6 +10,17 @@ using UnityEngine;
 public interface ICreatureTemplate
 {
     string TemplateId { get; }
+
+    /// <summary>
+    /// Determines the order in which templates are applied when multiple templates
+    /// are composed onto a single creature.  Lower values are applied first.
+    /// Recommended tiers:
+    ///   10 = Undead (Skeleton, Zombie) — radical creature-type change
+    ///   15 = Lycanthrope — creature merger
+    ///   20 = Outsider (Celestial, Fiendish) — stat overlay enhancement
+    /// </summary>
+    int ApplicationOrder { get; }
+
     void ApplyToDefinition(NPCDefinition definition);
 }
 
@@ -16,6 +28,16 @@ public static class CreatureTemplateRegistry
 {
     private static readonly Dictionary<string, ICreatureTemplate> _templates = new Dictionary<string, ICreatureTemplate>(StringComparer.OrdinalIgnoreCase)
     {
+        // Undead templates — ApplicationOrder 10
+        { "skeleton", new SkeletonCreatureTemplate() },
+        { "zombie", new ZombieCreatureTemplate() },
+        // Lycanthrope templates — ApplicationOrder 15
+        { "werewolf", new WerewolfCreatureTemplate() },
+        { "wererat", new WereratCreatureTemplate() },
+        { "wereboar", new WereboarCreatureTemplate() },
+        { "weretiger", new WeretigerCreatureTemplate() },
+        { "werebear", new WerebearCreatureTemplate() },
+        // Outsider templates — ApplicationOrder 20
         { "celestial", new CelestialTemplate() },
         { "fiendish", new FiendishTemplate() },
     };
@@ -49,6 +71,8 @@ public static class CreatureTemplateRegistry
 
         NPCDefinition clone = source.Clone();
         List<ICreatureTemplate> templates = ResolveTemplates(clone);
+        // Sort by ApplicationOrder so radical changes (undead) happen before enhancements (outsider)
+        templates.Sort((a, b) => a.ApplicationOrder.CompareTo(b.ApplicationOrder));
         for (int i = 0; i < templates.Count; i++)
             templates[i].ApplyToDefinition(clone);
 
@@ -59,6 +83,9 @@ public static class CreatureTemplateRegistry
 public abstract class OutsiderTemplateBase : ICreatureTemplate
 {
     public abstract string TemplateId { get; }
+
+    /// <summary>Outsider templates are stat-overlay enhancements, applied last.</summary>
+    public int ApplicationOrder => 20;
 
     protected abstract bool IsGoodTemplate { get; }
 

@@ -323,6 +323,7 @@ public class NPCDefinition
     public int Level;
     public string CharacterClass;
     public string CreatureType = "Humanoid";
+    public Alignment CharacterAlignment = Alignment.None;
     public MaterialComposition MaterialComposition = MaterialComposition.Organic;
     public int HitDice = 1;
     public BABProgression? BABOverride;
