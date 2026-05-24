@@ -11,6 +11,7 @@ public static partial class NPCDatabase
         RegisterLanternArchon();
         RegisterLemure();
         RegisterLion();
+        RegisterDireLion();
     
         RegisterSummonLargeShark();
         RegisterSummonLargeViper();
@@ -191,6 +192,63 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.28f, 0.22f, 0.1f, 0.85f),
             NameColor = new Color(1f, 0.92f, 0.7f),
             Description = "Monster Manual lion (CR 3). 2 claws +7 (1d4+5), bite +2 (1d8+2). Pounce, improved grab, rake 2×1d4+2. MM 3.5e p.274."
+        });
+    }
+
+    /// <summary>
+    /// Dire Lion (CR 5) — Large animal with pounce, improved grab, and rake.
+    /// MM 3.5e p.63. 8 HD, pounce (full attack on charge), rake 1d6+3 (x2).
+    /// Stronger version of lion used by Lion's Shield, Greater.
+    /// </summary>
+    private static void RegisterDireLion()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "dire_lion",
+            Name = "Dire Lion",
+            ChallengeRating = "5",
+            Level = 8,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 8,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 25, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 10,
+            BAB = 6,
+            NaturalArmorBonus = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 60, // 8d8+24
+            HasPounce = true,
+            HasRake = true,
+            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
+            HasScent = true,
+            CreatureTags = new List<string> { "Animal", "Dire", "MM35" },
+            Feats = new List<string> { "Alertness", "Run", "Weapon Focus (Claw)" },
+            SpecialAbilities = new List<string>
+            {
+                "Pounce (full attack on charge)",
+                "Improved Grab (bite)",
+                "Rake (2 × 1d6+3)",
+                "Low-light vision",
+                "Scent",
+                "Skills: Hide +2 (+8 in tall grass), Listen +7, Move Silently +7, Spot +7",
+                "Alignment: True Neutral"
+            },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.78f, 0.62f, 0.30f, 1f),
+            PanelColor = new Color(0.30f, 0.20f, 0.08f, 0.85f),
+            NameColor = new Color(1f, 0.88f, 0.6f),
+            Description = "Monster Manual dire lion (CR 5). 2 claws +12 (1d6+7), bite +7 (1d8+3). Pounce, improved grab, rake 2×1d6+3. MM 3.5e p.63."
         });
     }
 

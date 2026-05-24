@@ -251,6 +251,27 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Current combat round number (starts at 1 once combat begins).</summary>
     public int CurrentRound => _turnService != null ? _turnService.CurrentRound : 0;
 
+    // ========================================================================
+    //  PLANAR SYSTEM — Tracks which plane of existence the party is on.
+    //  Used by: Sword of the Planes, Plane Shift, creature origin tracking.
+    // ========================================================================
+
+    private PlaneType _currentPlane = PlaneType.Material;
+
+    /// <summary>The current plane of existence the party is on.</summary>
+    public PlaneType CurrentPlane => _currentPlane;
+
+    /// <summary>
+    /// Set the current plane of existence. Called by Plane Shift or scenario setup.
+    /// </summary>
+    public void SetCurrentPlane(PlaneType plane)
+    {
+        PlaneType previous = _currentPlane;
+        _currentPlane = plane;
+        Debug.Log($"[PlaneSystem] Plane changed: {PlaneHelper.GetDisplayName(previous)} → {PlaneHelper.GetDisplayName(plane)}");
+        CombatUI?.ShowCombatLog($"<color=#9370DB>🌌 The party is now on the {PlaneHelper.GetDisplayName(plane)}.</color>");
+    }
+
     /// <summary>Returns the PC whose turn it currently is (null during NPC turns).</summary>
     public CharacterController ActivePC
     {

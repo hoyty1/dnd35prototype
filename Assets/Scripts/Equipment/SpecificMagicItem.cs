@@ -94,6 +94,7 @@ public enum SpecificItemType
     CastersShield,              // +1 light wood shield, scroll slot (3rd level)
     SpinedShield,               // +1 heavy steel shield, 3/day spine ranged attack
     LionsShield,                // +2 heavy steel shield, 3/day lion bite (2d6)
+    LionsShieldGreater,         // +2 heavy steel shield, 3/day lion bite (2d8+2), 1/day summon dire lion
     WingedShield,               // +3 heavy wood shield, fly 1/day
     AbsorbingShield,            // +1 heavy steel shield, disintegrate object 1/2 days, spell absorption (50 levels)
     AbsorbingShieldGreater,     // +1 heavy steel shield (greater), disintegrate 1/day, spell absorption (100 levels)

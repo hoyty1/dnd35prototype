@@ -179,7 +179,9 @@ public static class SpecificItemDatabase
             case SpecificItemType.CastersShield:
                 return new CastersShieldBehavior();
             case SpecificItemType.LionsShield:
-                return new LionsShieldBehavior();
+                return new LionsShieldBehavior(isGreater: false);
+            case SpecificItemType.LionsShieldGreater:
+                return new LionsShieldBehavior(isGreater: true);
             case SpecificItemType.WingedShield:
                 return new WingedShieldBehavior();
             case SpecificItemType.AbsorbingShield:
@@ -1150,6 +1152,22 @@ public static class SpecificItemDatabase
             HasCustomBehavior = true,
             UniqueProperties = { ["BiteDamage"] = "2d6", ["UsesPerDay"] = 3 },
             ImplementationNotes = "Custom bite attack ability."
+        });
+
+        Register(new SpecificItemDefinition
+        {
+            Type = SpecificItemType.LionsShieldGreater,
+            Name = "Lion's Shield, Greater",
+            Description = "This +2 heavy steel shield bears an enhanced magical lion head. 3/day bite (2d8+2 damage) and 1/day summon a dire lion ally for 10 rounds.",
+            BaseItemId = "Heavy Steel Shield",
+            ItemCategory = ItemType.Shield,
+            EnhancementBonus = 2,
+            MarketPrice = 16670,
+            CasterLevel = 13,
+            PriorityTier = 3,
+            HasCustomBehavior = true,
+            UniqueProperties = { ["BiteDamage"] = "2d8+2", ["BitesPerDay"] = 3, ["SummonPerDay"] = 1, ["SummonNpcId"] = "dire_lion", ["SummonDuration"] = 10 },
+            ImplementationNotes = "Enhanced bite + dire lion summon. Uses NPCDatabase 'dire_lion' + SummoningService."
         });
 
         Register(new SpecificItemDefinition
