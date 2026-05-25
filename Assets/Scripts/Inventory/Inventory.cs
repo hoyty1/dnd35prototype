@@ -1032,6 +1032,15 @@ public class Inventory
         OwnerStats.WondrousNaturalArmorBonus = 0;
         OwnerStats.WondrousBracersArmorBonus = 0;
         OwnerStats.WondrousSaveAllBonus = 0;
+        OwnerStats.WondrousSpeedBonus = 0;
+
+        // Reset wondrous ability score enhancement bonuses (Big Six)
+        OwnerStats.WondrousEnhancementSTR = 0;
+        OwnerStats.WondrousEnhancementDEX = 0;
+        OwnerStats.WondrousEnhancementCON = 0;
+        OwnerStats.WondrousEnhancementINT = 0;
+        OwnerStats.WondrousEnhancementWIS = 0;
+        OwnerStats.WondrousEnhancementCHA = 0;
 
         // Check all equipment slots for wondrous items
         foreach (EquipSlot slot in AllEquipmentSlots)
@@ -1094,6 +1103,35 @@ public class Inventory
         {
             // Enhancement bonuses to speed don't stack; use highest
             OwnerStats.WondrousSpeedBonus = Mathf.Max(OwnerStats.WondrousSpeedBonus, item.WondrousSpeedBonus);
+        }
+
+        // --- Ability Score Enhancement Bonuses (Big Six items) ---
+        // Enhancement bonuses to the same ability score don't stack; use highest.
+        // D&D 3.5e DMG: Belt of Giant Strength, Gloves of Dexterity, Amulet of Health,
+        // Headband of Intellect, Periapt of Wisdom, Cloak of Charisma, Gauntlets of Ogre Power.
+        if (item.WondrousAbilityBonus > 0 && !string.IsNullOrEmpty(item.WondrousAbilityType))
+        {
+            switch (item.WondrousAbilityType)
+            {
+                case "Str":
+                    OwnerStats.WondrousEnhancementSTR = Mathf.Max(OwnerStats.WondrousEnhancementSTR, item.WondrousAbilityBonus);
+                    break;
+                case "Dex":
+                    OwnerStats.WondrousEnhancementDEX = Mathf.Max(OwnerStats.WondrousEnhancementDEX, item.WondrousAbilityBonus);
+                    break;
+                case "Con":
+                    OwnerStats.WondrousEnhancementCON = Mathf.Max(OwnerStats.WondrousEnhancementCON, item.WondrousAbilityBonus);
+                    break;
+                case "Int":
+                    OwnerStats.WondrousEnhancementINT = Mathf.Max(OwnerStats.WondrousEnhancementINT, item.WondrousAbilityBonus);
+                    break;
+                case "Wis":
+                    OwnerStats.WondrousEnhancementWIS = Mathf.Max(OwnerStats.WondrousEnhancementWIS, item.WondrousAbilityBonus);
+                    break;
+                case "Cha":
+                    OwnerStats.WondrousEnhancementCHA = Mathf.Max(OwnerStats.WondrousEnhancementCHA, item.WondrousAbilityBonus);
+                    break;
+            }
         }
     }
 }

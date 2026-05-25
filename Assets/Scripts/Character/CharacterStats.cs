@@ -1703,8 +1703,21 @@ public class CharacterStats
     /// <summary>HP bonus from feats (Toughness).</summary>
     public int FeatHPBonus => FeatManager.GetTotalHPBonus(this);
 
-    /// <summary>Total Max HP including feat bonuses, spell bonuses, familiar bonuses, and negative level reduction.</summary>
-    public int TotalMaxHP => Mathf.Max(1, MaxHP + FeatHPBonus + BonusMaxHP + (WizardFamiliar != null ? WizardFamiliar.HitPointBonus : 0) - NegativeLevelHpPenalty);
+    /// <summary>Bonus HP from wondrous item CON enhancement (e.g., Amulet of Health). = delta_CON_mod × level.</summary>
+    public int WondrousCONBonusHP
+    {
+        get
+        {
+            if (WondrousEnhancementCON <= 0 || !HasConstitution()) return 0;
+            int baseCONMod = GetAbilityModifier(GetEffectiveAbilityScore(AbilityType.CON)); // without enhancement
+            int enhancedCONMod = GetAbilityModifier(GetEffectiveAbilityScore(AbilityType.CON) + WondrousEnhancementCON);
+            int delta = enhancedCONMod - baseCONMod;
+            return delta * Level;
+        }
+    }
+
+    /// <summary>Total Max HP including feat bonuses, spell bonuses, familiar bonuses, wondrous CON bonus, and negative level reduction.</summary>
+    public int TotalMaxHP => Mathf.Max(1, MaxHP + FeatHPBonus + BonusMaxHP + WondrousCONBonusHP + (WizardFamiliar != null ? WizardFamiliar.HitPointBonus : 0) - NegativeLevelHpPenalty);
 
     /// <summary>AC bonus from Dodge feat.</summary>
     public int FeatACBonus => FeatManager.GetACBonus(this);
@@ -2254,12 +2267,13 @@ public class CharacterStats
         return $"{currentDisplay}/{baseScore}";
     }
 
-    public int EffectiveSTRScore => GetEffectiveAbilityScore(AbilityType.STR);
-    public int EffectiveDEXScore => GetEffectiveAbilityScore(AbilityType.DEX);
-    public int EffectiveCONScore => GetEffectiveAbilityScore(AbilityType.CON);
-    public int EffectiveINTScore => GetEffectiveAbilityScore(AbilityType.INT);
-    public int EffectiveWISScore => GetEffectiveAbilityScore(AbilityType.WIS);
-    public int EffectiveCHAScore => GetEffectiveAbilityScore(AbilityType.CHA);
+    // EffectiveXXXScore: base score - ability damage/drain + wondrous enhancement bonus
+    public int EffectiveSTRScore { get { int s = GetEffectiveAbilityScore(AbilityType.STR); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementSTR; } }
+    public int EffectiveDEXScore { get { int s = GetEffectiveAbilityScore(AbilityType.DEX); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementDEX; } }
+    public int EffectiveCONScore { get { int s = GetEffectiveAbilityScore(AbilityType.CON); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementCON; } }
+    public int EffectiveINTScore { get { int s = GetEffectiveAbilityScore(AbilityType.INT); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementINT; } }
+    public int EffectiveWISScore { get { int s = GetEffectiveAbilityScore(AbilityType.WIS); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementWIS; } }
+    public int EffectiveCHAScore { get { int s = GetEffectiveAbilityScore(AbilityType.CHA); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementCHA; } }
 
     public int EffectiveStrengthScore => !HasStrength() ? NO_SCORE : Mathf.Max(1, EffectiveSTRScore - StrengthConditionPenalty - EnfeeblementStrengthPenalty + TemporarySTRBonus);
     public int EffectiveDexterityScore => !HasDexterity() ? NO_SCORE : Mathf.Max(0, EffectiveDEXScore - DexterityConditionPenalty);
@@ -2457,6 +2471,22 @@ public class CharacterStats
     public int WondrousSaveAllBonus;
     /// <summary>Enhancement bonus to base land speed from Boots of Striding (+10 ft). Highest wins.</summary>
     public int WondrousSpeedBonus;
+
+    // ── Wondrous Item Ability Score Enhancement Bonuses (Big Six) ──
+    // Enhancement bonuses to ability scores from wondrous items. Highest wins per ability.
+    // These are applied via Inventory.ApplyWondrousItemBonuses on equip/recalculate.
+    /// <summary>Enhancement bonus to Strength from Belt of Giant Strength / Gauntlets of Ogre Power.</summary>
+    public int WondrousEnhancementSTR;
+    /// <summary>Enhancement bonus to Dexterity from Gloves of Dexterity.</summary>
+    public int WondrousEnhancementDEX;
+    /// <summary>Enhancement bonus to Constitution from Amulet of Health.</summary>
+    public int WondrousEnhancementCON;
+    /// <summary>Enhancement bonus to Intelligence from Headband of Intellect.</summary>
+    public int WondrousEnhancementINT;
+    /// <summary>Enhancement bonus to Wisdom from Periapt of Wisdom.</summary>
+    public int WondrousEnhancementWIS;
+    /// <summary>Enhancement bonus to Charisma from Cloak of Charisma.</summary>
+    public int WondrousEnhancementCHA;
 
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
     public int TempHP;
