@@ -2511,8 +2511,8 @@ public class CharacterCreationUI : MonoBehaviour
             _premadeOverlayPanel.AddComponent<CanvasGroup>();
         }
 
-        string[] classKeys = { "Fighter", "Rogue", "Cleric", "Wizard", "Monk", "Barbarian" };
-        float panelH = 560f;
+        string[] classKeys = { "Fighter", "Rogue", "Cleric", "Wizard", "Monk", "Barbarian", "Sorcerer", "Ranger", "Paladin" };
+        float panelH = 620f;
         float panelW = 520f;
 
         GameObject panel = CreatePanel(_premadeOverlayPanel.transform, "PremadePanel",
@@ -2644,7 +2644,9 @@ public class CharacterCreationUI : MonoBehaviour
             { "Wizard", WizardClass.GetQuickStartCharacter() },
             { "Monk", MonkClass.GetQuickStartCharacter() },
             { "Barbarian", BarbarianClass.GetQuickStartCharacter() },
-            { "Sorcerer", SorcererClass.GetQuickStartCharacter() }
+            { "Sorcerer", SorcererClass.GetQuickStartCharacter() },
+            { "Ranger", RangerClass.GetQuickStartCharacter() },
+            { "Paladin", PaladinClass.GetQuickStartCharacter() }
         };
         Debug.Log($"[QuickStart] Initialized {_qsAvailableCharacters.Count} quick start characters");
     }

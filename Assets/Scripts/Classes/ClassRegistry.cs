@@ -33,6 +33,8 @@ public static class ClassRegistry
         Register(new WizardClass());
         Register(new ClericClass());
         Register(new SorcererClass());
+        Register(new RangerClass());
+        Register(new PaladinClass());
 
         ClassNames = new string[_classList.Count];
         for (int i = 0; i < _classList.Count; i++)

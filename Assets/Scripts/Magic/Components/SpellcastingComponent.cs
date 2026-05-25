@@ -87,7 +87,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>Whether this character is currently holding a melee touch spell charge.</summary>
     public bool HasHeldTouchCharge => HeldTouchSpell != null;
     /// <summary>Whether this character has any supported spellcasting ability.</summary>
-    public bool CanCastSpells => UsesPreparedSlotSystem || IsSpontaneousCaster;
+    public bool CanCastSpells => UsesPreparedSlotSystem || IsSpontaneousCaster || IsPartialCaster;
 
     /// <summary>
     /// Spontaneous casting data for Sorcerer (and future Bard).
@@ -97,6 +97,15 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>Whether this character uses the spontaneous casting system (Sorcerer, Bard).</summary>
     public bool IsSpontaneousCaster => SpontaneousData != null && SpontaneousData.IsInitialized;
+
+    /// <summary>
+    /// Partial caster data for Ranger and Paladin (WIS-based, max 4th-level spells).
+    /// Null for full casters and non-casters.
+    /// </summary>
+    public PartialCasterData PartialData { get; private set; }
+
+    /// <summary>Whether this character uses the partial caster system (Ranger, Paladin).</summary>
+    public bool IsPartialCaster => PartialData != null && PartialData.IsInitialized;
 
     private static bool IsDruidClass(CharacterStats stats)
     {
@@ -407,6 +416,13 @@ public class SpellcastingComponent : MonoBehaviour
             InitSpontaneousCaster(stats);
         }
 
+        // ── Partial caster initialization (Ranger, Paladin) ──
+        PartialData = null;
+        if (PartialCasterData.IsPartialCasterClass(stats))
+        {
+            InitPartialCaster(stats);
+        }
+
         string[] classOrder = { "Wizard", "Cleric", "Druid" };
         for (int i = 0; i < classOrder.Length; i++)
         {
@@ -452,6 +468,8 @@ public class SpellcastingComponent : MonoBehaviour
         string classSummary = _preparedCasterClasses.Count > 0 ? string.Join("/", _preparedCasterClasses) : "None";
         if (IsSpontaneousCaster)
             classSummary = (classSummary == "None" ? "" : classSummary + "/") + SpontaneousData.ClassName;
+        if (IsPartialCaster)
+            classSummary = (classSummary == "None" ? "" : classSummary + "/") + PartialData.ClassName + "(partial)";
         Debug.Log($"[Spellcasting] {stats.CharacterName} ({classSummary}): {KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
 
         if (_preparedCasterClasses.Count > 0)
@@ -459,6 +477,9 @@ public class SpellcastingComponent : MonoBehaviour
 
         if (IsSpontaneousCaster)
             Debug.Log($"[Spellcasting] {stats.CharacterName} spontaneous: {SpontaneousData.GetDebugSummary()}");
+
+        if (IsPartialCaster)
+            Debug.Log($"[Spellcasting] {stats.CharacterName} partial caster: {PartialData.GetDebugSummary()}");
     }
 
     private void InitializePreparedCasterClass(string className, int level)
@@ -532,6 +553,37 @@ public class SpellcastingComponent : MonoBehaviour
         // Set up legacy SlotsMax/SlotsRemaining arrays for UI compatibility
         SlotsMax = SpontaneousData.GetSlotsMaxArray();
         SlotsRemaining = SpontaneousData.GetSlotsRemainingArray();
+    }
+
+    /// <summary>
+    /// Initialize partial caster system for Ranger/Paladin.
+    /// Partial casters are prepared divine casters with WIS-based slots, max 4th-level spells.
+    /// They begin casting at class level 4 (first actual slots at level 5 with sufficient WIS).
+    /// </summary>
+    private void InitPartialCaster(CharacterStats stats)
+    {
+        string className = null;
+        int classLevel = 0;
+
+        if (stats.IsRanger)
+        {
+            className = "Ranger";
+            classLevel = stats.GetClassLevel("Ranger");
+        }
+        else if (stats.IsPaladin)
+        {
+            className = "Paladin";
+            classLevel = stats.GetClassLevel("Paladin");
+        }
+
+        if (className == null || classLevel <= 0) return;
+
+        int wisMod = stats.WISMod;
+        PartialData = new PartialCasterData();
+        PartialData.Initialize(className, classLevel, wisMod);
+
+        Debug.Log($"[Spellcasting] {stats.CharacterName}: Initialized {className} partial caster " +
+                  $"(L{classLevel}, WIS mod {wisMod}). Highest spell level: {PartialData.GetHighestSpellLevel()}");
     }
 
     private void SyncPrimaryClassLegacyView()

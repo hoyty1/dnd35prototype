@@ -494,6 +494,67 @@ public class CharacterStats
     /// <summary>Whether this character is a Fighter.</summary>
     public bool IsFighter => HasClass("Fighter");
 
+    /// <summary>Whether this character is a Ranger.</summary>
+    public bool IsRanger => HasClass("Ranger");
+
+    // ─────────────────────────────────────────────
+    // Ranger Class Features (PHB p.46-48)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Ranger's favored enemy tracking data. Initialized during character creation/level-up.</summary>
+    public FavoredEnemyData RangerFavoredEnemies;
+
+    /// <summary>Ranger's chosen combat style data (Archery or Two-Weapon Fighting).</summary>
+    public CombatStyleData RangerCombatStyle;
+
+    /// <summary>Ranger's animal companion data. Initialized when companion is gained at level 4.</summary>
+    public AnimalCompanionData RangerAnimalCompanion;
+
+    /// <summary>Ranger has Woodland Stride at level 7 (PHB p.48): move through natural terrain at normal speed.</summary>
+    public bool HasWoodlandStride => IsRanger && GetClassLevel("Ranger") >= 7;
+
+    /// <summary>Ranger has Swift Tracker at level 8 (PHB p.48): track at normal speed without penalty.</summary>
+    public bool HasSwiftTracker => IsRanger && GetClassLevel("Ranger") >= 8;
+
+    /// <summary>Ranger has Camouflage at level 13 (PHB p.48): use Hide in any natural terrain.</summary>
+    public bool HasCamouflage => IsRanger && GetClassLevel("Ranger") >= 13;
+
+    /// <summary>Ranger has Hide in Plain Sight at level 17 (PHB p.48): Hide even while observed in natural terrain.</summary>
+    public bool HasHideInPlainSight => IsRanger && GetClassLevel("Ranger") >= 17;
+
+    /// <summary>Ranger's effective druid level for animal companion = ranger level - 3.</summary>
+    public int RangerEffectiveDruidLevel => IsRanger ? RangerClass.GetEffectiveDruidLevel(GetClassLevel("Ranger")) : 0;
+
+    // ─────────────────────────────────────────────
+    // Paladin Class Features (PHB p.42-45)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Paladin's smite evil tracking data.</summary>
+    public SmiteEvilData PaladinSmiteEvil;
+
+    /// <summary>Paladin's lay on hands tracking data.</summary>
+    public LayOnHandsData PaladinLayOnHands;
+
+    /// <summary>
+    /// Divine Grace (L2): Add CHA modifier (if positive) as bonus to all saving throws.
+    /// </summary>
+    public int DivineGraceBonus => (IsPaladin && GetClassLevel("Paladin") >= 2) ? Mathf.Max(0, CHAMod) : 0;
+
+    /// <summary>Aura of Courage (L3): Immune to fear, allies within 10ft get +4 vs fear.</summary>
+    public bool HasAuraOfCourage => IsPaladin && GetClassLevel("Paladin") >= 3;
+
+    /// <summary>Divine Health (L3): Immune to all diseases.</summary>
+    public bool HasDivineHealth => IsPaladin && GetClassLevel("Paladin") >= 3;
+
+    /// <summary>Smites per day at current paladin level (PHB p.44).</summary>
+    public int SmitesPerDay => IsPaladin ? PaladinClass.SmitesPerDay(GetClassLevel("Paladin")) : 0;
+
+    /// <summary>Lay on Hands pool = paladin level × CHA modifier.</summary>
+    public int LayOnHandsTotalPool => IsPaladin ? PaladinClass.LayOnHandsPool(GetClassLevel("Paladin"), CHAMod) : 0;
+
+    /// <summary>Remove Disease uses per week (PHB p.44).</summary>
+    public int RemoveDiseasePerWeek => IsPaladin ? PaladinClass.RemoveDiseasePerWeek(GetClassLevel("Paladin")) : 0;
+
     /// <summary>
     /// Number of Fighter bonus combat feats available at current level (D&D 3.5e PHB p.37).
     /// Bonus feat at levels 1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 (11 total by L20).
@@ -668,7 +729,7 @@ public class CharacterStats
     /// Evasion: On a successful Reflex save for half damage, take no damage instead.
     /// Monk gains this at level 2. Rogue also gains at level 2.
     /// </summary>
-    public bool HasEvasion => (IsMonk && GetClassLevel("Monk") >= 2) || (IsRogue && GetClassLevel("Rogue") >= 2) || RingGrantsEvasion;
+    public bool HasEvasion => (IsMonk && GetClassLevel("Monk") >= 2) || (IsRogue && GetClassLevel("Rogue") >= 2) || (IsRanger && GetClassLevel("Ranger") >= 9) || RingGrantsEvasion;
 
     /// <summary>
     /// Flurry of Blows attack bonuses at current level.
