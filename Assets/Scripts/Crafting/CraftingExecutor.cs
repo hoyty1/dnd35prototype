@@ -121,10 +121,13 @@ public static class CraftingExecutor
         result.GoldSpent = project.GoldCost;
         result.XPSpent = project.XPCost;
         result.DaysElapsed = project.CraftingDays;
-        result.Message = $"Successfully crafted {craftedItem.Name}! ({project.GoldCost:N0} gp, {project.XPCost:N0} XP, {project.CraftingDays} day{(project.CraftingDays != 1 ? "s" : "")})";
+        string scrollNote = project.ScrollCostGp > 0
+            ? $" (includes {project.ScrollCostGp:N0} gp for scrolls)"
+            : "";
+        result.Message = $"Successfully crafted {craftedItem.Name}! ({project.GoldCost:N0} gp{scrollNote}, {project.XPCost:N0} XP, {project.CraftingDays} day{(project.CraftingDays != 1 ? "s" : "")})";
 
         Debug.Log($"[CraftingExecutor] ✅ {crafter.CharacterName} crafted {craftedItem.Name}. " +
-            $"Gold: -{project.GoldCost}, XP: -{project.XPCost}, Days: {project.CraftingDays}");
+            $"Gold: -{project.GoldCost} (scrolls: {project.ScrollCostGp}), XP: -{project.XPCost}, Days: {project.CraftingDays}");
 
         return result;
     }

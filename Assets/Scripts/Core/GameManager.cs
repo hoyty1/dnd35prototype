@@ -1467,7 +1467,8 @@ public partial class GameManager : MonoBehaviour
             crafter.Stats,
             spellComp,
             inventory,
-            onClose: () => ReturnToPreCombatHubFromSubWindow("CraftingWorkshop.Back"));
+            onClose: () => ReturnToPreCombatHubFromSubWindow("CraftingWorkshop.Back"),
+            partyMembers: partyMembers);
 
         Debug.Log($"[CraftingWorkshop] Opened for {crafter.Stats.CharacterName}");
     }

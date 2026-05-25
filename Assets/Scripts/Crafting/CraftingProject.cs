@@ -56,6 +56,19 @@ public class CraftingProject
     /// </summary>
     public int ItemCasterLevel;
 
+    /// <summary>
+    /// Party-wide spell source analysis. Shows who provides each required spell,
+    /// which spells need scroll substitution, and which are truly missing.
+    /// Populated by CraftingValidator.CheckSpellSources().
+    /// </summary>
+    public SpellAvailabilityInfo SpellSources;
+
+    /// <summary>
+    /// Total gold cost of scrolls needed to substitute for missing spells.
+    /// Already included in GoldCost — this field is for display purposes.
+    /// </summary>
+    public int ScrollCostGp;
+
     /// <summary>Whether this crafting project passed all validation checks.</summary>
     public bool IsValid;
 
@@ -68,10 +81,20 @@ public class CraftingProject
     public string GetSummary()
     {
         string name = Definition?.DisplayName ?? "Unknown Item";
+
+        // Base cost line (GoldCost already includes scroll costs)
         string costLine = $"Gold: {GoldCost:N0} gp | XP: {XPCost:N0} | Time: {CraftingDays} day{(CraftingDays != 1 ? "s" : "")}";
+
+        // Scroll cost breakdown if any
+        string scrollLine = ScrollCostGp > 0
+            ? $"\n📜 Includes {ScrollCostGp:N0} gp for scroll substitution"
+            : "";
+
+        // Missing spells that couldn't be covered at all
         string missingLine = MissingSpells.Count > 0
             ? $"\n⚠ Missing spells ({MissingSpells.Count}): Spellcraft DC {SpellcraftDC}"
             : "";
-        return $"Craft: {name}\n{costLine}{missingLine}";
+
+        return $"Craft: {name}\n{costLine}{scrollLine}{missingLine}";
     }
 }

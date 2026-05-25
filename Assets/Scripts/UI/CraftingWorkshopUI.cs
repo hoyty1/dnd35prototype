@@ -35,6 +35,10 @@ public class CraftingWorkshopUI : MonoBehaviour
     private SpellcastingComponent _spellComp;
     private Inventory _targetInventory;
 
+    // Party-wide spell assistance
+    private List<CharacterController> _partyMembers;
+    private bool _useScrollsForMissing;
+
     // UI elements
     private Text _titleText;
     private Text _statsBarText;
@@ -42,8 +46,11 @@ public class CraftingWorkshopUI : MonoBehaviour
     private Text _previewCostText;
     private Text _previewDescText;
     private Text _previewWarningText;
+    private Text _previewSpellSourcesText;
     private Button _craftButton;
     private Text _craftButtonLabel;
+    private Button _scrollToggleButton;
+    private Text _scrollToggleLabel;
     private GameObject _itemListContent;
     private GameObject _featTabsContent;
     private Text _categoryLabel;
@@ -85,12 +92,16 @@ public class CraftingWorkshopUI : MonoBehaviour
     /// <summary>
     /// Open the Crafting Workshop for the specified crafter.
     /// </summary>
-    public void Open(CharacterStats crafter, SpellcastingComponent spellComp, Inventory inventory, Action onClose)
+    /// <param name="partyMembers">All active party members — used for party-wide spell prerequisite checking.</param>
+    public void Open(CharacterStats crafter, SpellcastingComponent spellComp, Inventory inventory, Action onClose,
+        List<CharacterController> partyMembers = null)
     {
         _crafterStats = crafter;
         _spellComp = spellComp;
         _targetInventory = inventory;
         _onClose = onClose;
+        _partyMembers = partyMembers;
+        _useScrollsForMissing = false;
         _selectedFeat = null;
         _selectedItem = null;
         _currentProject = null;
@@ -212,12 +223,35 @@ public class CraftingWorkshopUI : MonoBehaviour
             DimTextColor, TextAnchor.UpperLeft);
 
         _previewCostText = CreateText(rightPanel.transform, "PreviewCost", "",
-            new Vector2(0.05f, 0.32f), new Vector2(0.95f, 0.55f), new Vector2(0.5f, 1f),
+            new Vector2(0.05f, 0.48f), new Vector2(0.95f, 0.55f), new Vector2(0.5f, 1f),
             Vector2.zero, Vector2.zero, 16, FontStyle.Normal,
             TextColor, TextAnchor.UpperLeft);
 
+        // Spell source lines — shows who provides each required spell
+        _previewSpellSourcesText = CreateText(rightPanel.transform, "PreviewSpellSources", "",
+            new Vector2(0.05f, 0.22f), new Vector2(0.95f, 0.48f), new Vector2(0.5f, 1f),
+            Vector2.zero, Vector2.zero, 13, FontStyle.Normal,
+            TextColor, TextAnchor.UpperLeft);
+
+        // Scroll substitution toggle button
+        var scrollToggleObj = new GameObject("ScrollToggleBtn", typeof(RectTransform), typeof(Image), typeof(Button));
+        scrollToggleObj.transform.SetParent(rightPanel.transform, false);
+        var scrollToggleRect = scrollToggleObj.GetComponent<RectTransform>();
+        scrollToggleRect.anchorMin = new Vector2(0.05f, 0.16f);
+        scrollToggleRect.anchorMax = new Vector2(0.95f, 0.21f);
+        scrollToggleRect.pivot = new Vector2(0.5f, 0.5f);
+        scrollToggleRect.anchoredPosition = Vector2.zero;
+        scrollToggleRect.sizeDelta = Vector2.zero;
+        scrollToggleObj.GetComponent<Image>().color = ButtonColor;
+        _scrollToggleButton = scrollToggleObj.GetComponent<Button>();
+        _scrollToggleButton.onClick.AddListener(OnScrollToggleClicked);
+        _scrollToggleLabel = CreateText(scrollToggleObj.transform, "Label", "📜 Use Scrolls for Missing Spells: OFF",
+            new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 13, FontStyle.Bold,
+            Color.white, TextAnchor.MiddleCenter);
+
         _previewWarningText = CreateText(rightPanel.transform, "PreviewWarning", "",
-            new Vector2(0.05f, 0.22f), new Vector2(0.95f, 0.32f), new Vector2(0.5f, 1f),
+            new Vector2(0.05f, 0.13f), new Vector2(0.95f, 0.16f), new Vector2(0.5f, 1f),
             Vector2.zero, Vector2.zero, 14, FontStyle.Italic,
             WarningColor, TextAnchor.UpperLeft);
 
@@ -361,10 +395,40 @@ public class CraftingWorkshopUI : MonoBehaviour
         _selectedItem = item;
         _upgradeTarget = null;
 
-        // Validate
-        _currentProject = CraftingValidator.Validate(item, _crafterStats, _spellComp, _upgradeTarget);
+        // Validate with party-wide spell checking and scroll substitution option
+        _currentProject = CraftingValidator.Validate(
+            item, _crafterStats, _spellComp, _upgradeTarget,
+            _partyMembers, _useScrollsForMissing);
 
         RefreshPreview();
+    }
+
+    private void OnScrollToggleClicked()
+    {
+        _useScrollsForMissing = !_useScrollsForMissing;
+
+        // Update toggle button appearance
+        if (_scrollToggleLabel != null)
+        {
+            _scrollToggleLabel.text = _useScrollsForMissing
+                ? "📜 Use Scrolls for Missing Spells: ON"
+                : "📜 Use Scrolls for Missing Spells: OFF";
+        }
+        if (_scrollToggleButton != null)
+        {
+            _scrollToggleButton.GetComponent<Image>().color = _useScrollsForMissing
+                ? ButtonActiveColor
+                : ButtonColor;
+        }
+
+        // Re-validate the current item with the new scroll setting
+        if (_selectedItem != null)
+        {
+            _currentProject = CraftingValidator.Validate(
+                _selectedItem, _crafterStats, _spellComp, _upgradeTarget,
+                _partyMembers, _useScrollsForMissing);
+            RefreshPreview();
+        }
     }
 
     // ============================== PREVIEW PANEL ==============================
@@ -386,25 +450,50 @@ public class CraftingWorkshopUI : MonoBehaviour
             : "No description available.";
 
         // Cost breakdown
-        string costText = $"💰 Gold Cost: {project.GoldCost:N0} gp\n" +
-            $"✨ XP Cost: {project.XPCost:N0}\n" +
-            $"🕐 Crafting Time: {project.CraftingDays} day{(project.CraftingDays != 1 ? "s" : "")}\n" +
-            $"📊 Market Value: {project.MarketPriceGp:N0} gp\n" +
-            $"🎯 Required CL: {item.RequiredCasterLevel}";
+        string costText = $"💰 Gold Cost: {project.GoldCost:N0} gp";
+        if (project.ScrollCostGp > 0)
+            costText += $"  (includes 📜 {project.ScrollCostGp:N0} gp scrolls)";
+        costText += $"\n✨ XP Cost: {project.XPCost:N0}" +
+            $"\n🕐 Crafting Time: {project.CraftingDays} day{(project.CraftingDays != 1 ? "s" : "")}" +
+            $"\n📊 Market Value: {project.MarketPriceGp:N0} gp" +
+            $"\n🎯 Required CL: {item.RequiredCasterLevel}";
 
-        if (project.MissingSpells.Count > 0)
+        _previewCostText.text = costText;
+
+        // Spell source lines — show who provides each required spell
+        string spellSourceText = "";
+        if (project.SpellSources != null && project.SpellSources.Sources.Count > 0)
         {
-            costText += $"\n\n⚠ Missing Spells ({project.MissingSpells.Count}):";
+            spellSourceText = "Spell Prerequisites:\n";
+            foreach (var source in project.SpellSources.Sources)
+            {
+                spellSourceText += $"  {source.GetDisplayLine()}\n";
+            }
+
+            if (project.SpellcraftDC > 0)
+                spellSourceText += $"\n🎲 Spellcraft DC: {project.SpellcraftDC}";
+        }
+        else if (item.RequiredSpells != null && item.RequiredSpells.Count > 0)
+        {
+            // Fallback if SpellSources wasn't populated (shouldn't happen)
+            spellSourceText = $"⚠ Missing Spells ({project.MissingSpells.Count}):";
             foreach (string spellId in project.MissingSpells)
             {
                 var spell = SpellDatabase.GetSpell(spellId);
                 string spellName = spell != null ? spell.Name : spellId;
-                costText += $"\n  • {spellName}";
+                spellSourceText += $"\n  • {spellName}";
             }
-            costText += $"\nSpellcraft DC: {project.SpellcraftDC}";
+            if (project.SpellcraftDC > 0)
+                spellSourceText += $"\nSpellcraft DC: {project.SpellcraftDC}";
         }
 
-        _previewCostText.text = costText;
+        if (_previewSpellSourcesText != null)
+            _previewSpellSourcesText.text = spellSourceText;
+
+        // Show/hide scroll toggle based on whether there are spell requirements
+        bool hasSpellReqs = item.RequiredSpells != null && item.RequiredSpells.Count > 0;
+        if (_scrollToggleButton != null)
+            _scrollToggleButton.gameObject.SetActive(hasSpellReqs);
 
         // Warning / error
         if (!project.IsValid)
@@ -438,7 +527,9 @@ public class CraftingWorkshopUI : MonoBehaviour
         if (_previewTitleText != null) _previewTitleText.text = "";
         if (_previewDescText != null) _previewDescText.text = "Select an item to see details.";
         if (_previewCostText != null) _previewCostText.text = "";
+        if (_previewSpellSourcesText != null) _previewSpellSourcesText.text = "";
         if (_previewWarningText != null) _previewWarningText.text = "";
+        if (_scrollToggleButton != null) _scrollToggleButton.gameObject.SetActive(false);
         if (_craftButton != null)
         {
             _craftButton.interactable = false;
@@ -534,6 +625,23 @@ public class CraftingWorkshopUI : MonoBehaviour
         if (_confirmDialog == null || project == null) return;
 
         string summary = project.GetSummary();
+
+        // Add spell source summary to confirmation
+        if (project.SpellSources != null && project.SpellSources.Sources.Count > 0)
+        {
+            int partyProvided = 0;
+            int scrollCount = 0;
+            foreach (var src in project.SpellSources.Sources)
+            {
+                if (src.SourceType == SpellSourceType.PartyMemberKnown) partyProvided++;
+                else if (src.SourceType == SpellSourceType.ScrollSubstitute) scrollCount++;
+            }
+            if (partyProvided > 0)
+                summary += $"\n👥 {partyProvided} spell{(partyProvided != 1 ? "s" : "")} provided by party members";
+            if (scrollCount > 0)
+                summary += $"\n📜 {scrollCount} spell{(scrollCount != 1 ? "s" : "")} via scroll substitution ({project.ScrollCostGp:N0} gp)";
+        }
+
         summary += $"\n\nAfter crafting:\n" +
             $"  Gold: {_crafterStats.ComponentGold:N0} → {_crafterStats.ComponentGold - project.GoldCost:N0} gp\n" +
             $"  XP: {_crafterStats.ExperiencePoints:N0} → {_crafterStats.ExperiencePoints - project.XPCost:N0}";

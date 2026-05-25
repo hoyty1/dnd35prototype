@@ -1,6 +1,7 @@
 // ============================================================================
 // D&D 3.5e Item Creation Feats - Crafting Validator
 // Full prerequisite validation pipeline per DMG p.282-285
+// Supports party-wide spell checking and scroll substitution.
 // ============================================================================
 
 using System.Collections.Generic;
@@ -11,21 +12,144 @@ using UnityEngine;
 /// Validates whether a character can craft a specific item, checking:
 /// 1. Required feat ownership
 /// 2. Caster level requirement
-/// 3. Spell prerequisites (with +5 DC substitution per missing spell)
-/// 4. Gold and XP affordability
+/// 3. Spell prerequisites — checks entire party, with scroll substitution option
+/// 4. Gold and XP affordability (including scroll costs if enabled)
 /// 5. XP level-loss prevention
 /// </summary>
 public static class CraftingValidator
 {
+    // ============================== PARTY-WIDE SPELL CHECKING ==============================
+
     /// <summary>
-    /// Validate a complete crafting project. Returns a CraftingProject with IsValid set
-    /// and any validation errors described.
+    /// Analyze spell availability for a crafting project across the entire party.
+    /// Checks crafter first, then each party member, and calculates scroll costs for missing spells.
+    /// </summary>
+    /// <param name="requiredSpellIds">Spell IDs required by the item.</param>
+    /// <param name="crafter">The character performing the crafting.</param>
+    /// <param name="crafterSpellComp">The crafter's spellcasting component (may be null).</param>
+    /// <param name="partyMembers">All party member CharacterControllers (may be null or empty).</param>
+    /// <param name="useScrolls">If true, missing spells are set to ScrollSubstitute instead of Missing.</param>
+    /// <returns>SpellAvailabilityInfo with per-spell source details.</returns>
+    public static SpellAvailabilityInfo CheckSpellSources(
+        List<string> requiredSpellIds,
+        CharacterStats crafter,
+        SpellcastingComponent crafterSpellComp,
+        List<CharacterController> partyMembers,
+        bool useScrolls = false)
+    {
+        var info = new SpellAvailabilityInfo();
+        if (requiredSpellIds == null || requiredSpellIds.Count == 0)
+            return info;
+
+        // Build crafter's known spell set
+        var crafterSpells = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        if (crafterSpellComp != null)
+        {
+            foreach (string s in crafterSpellComp.GetAllKnownSpells())
+            {
+                if (!string.IsNullOrEmpty(s))
+                    crafterSpells.Add(s);
+            }
+        }
+
+        // Build per-party-member spell sets (excluding crafter to avoid double-counting)
+        var partySpellSets = new List<(string Name, HashSet<string> Spells)>();
+        if (partyMembers != null)
+        {
+            foreach (var member in partyMembers)
+            {
+                if (member == null || member.Stats == null) continue;
+                // Skip the crafter themselves
+                if (crafter != null && member.Stats == crafter) continue;
+
+                var sc = member.GetComponent<SpellcastingComponent>();
+                if (sc == null) continue;
+
+                var spells = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+                foreach (string s in sc.GetAllKnownSpells())
+                {
+                    if (!string.IsNullOrEmpty(s))
+                        spells.Add(s);
+                }
+
+                if (spells.Count > 0)
+                    partySpellSets.Add((member.Stats.CharacterName, spells));
+            }
+        }
+
+        // Analyze each required spell
+        foreach (string spellId in requiredSpellIds)
+        {
+            if (string.IsNullOrEmpty(spellId)) continue;
+
+            var spell = SpellDatabase.GetSpell(spellId);
+            string spellName = spell != null ? spell.Name : spellId;
+            int spellLevel = spell != null ? spell.SpellLevel : 1;
+            int minCL = CraftingCostCalculator.MinimumCasterLevelForSpell(spellLevel);
+            int scrollCost = CraftingCostCalculator.ScrollMarketPrice(spellLevel, minCL);
+
+            var source = new SpellSource
+            {
+                SpellId = spellId,
+                SpellName = spellName,
+                SpellLevel = spellLevel,
+                ScrollCostGp = scrollCost
+            };
+
+            // 1. Check crafter first
+            if (crafterSpells.Contains(spellId))
+            {
+                source.SourceType = SpellSourceType.CrafterKnown;
+                source.ProviderName = crafter?.CharacterName ?? "You";
+            }
+            // 2. Check party members
+            else
+            {
+                string provider = null;
+                foreach (var (name, spells) in partySpellSets)
+                {
+                    if (spells.Contains(spellId))
+                    {
+                        provider = name;
+                        break;
+                    }
+                }
+
+                if (provider != null)
+                {
+                    source.SourceType = SpellSourceType.PartyMemberKnown;
+                    source.ProviderName = provider;
+                }
+                // 3. Mark as scroll substitute or missing
+                else if (useScrolls)
+                {
+                    source.SourceType = SpellSourceType.ScrollSubstitute;
+                }
+                else
+                {
+                    source.SourceType = SpellSourceType.Missing;
+                }
+            }
+
+            info.Sources.Add(source);
+        }
+
+        return info;
+    }
+
+    // ============================== MAIN VALIDATION ==============================
+
+    /// <summary>
+    /// Validate a complete crafting project with party-wide spell checking.
+    /// This is the primary validation entry point used by the UI.
     /// </summary>
     public static CraftingProject Validate(
         CraftableItemDefinition definition,
         CharacterStats crafter,
         SpellcastingComponent spellComp,
-        ItemData upgradeTarget = null)
+        ItemData upgradeTarget = null,
+        List<CharacterController> partyMembers = null,
+        bool useScrollsForMissing = false)
     {
         var project = new CraftingProject
         {
@@ -67,12 +191,11 @@ public static class CraftingValidator
             return project;
         }
 
-        // ============================== 3. CALCULATE COSTS ==============================
+        // ============================== 3. CALCULATE BASE COSTS ==============================
         CraftingCostCalculator.CraftingCost cost;
 
         if (definition.IsUpgrade && upgradeTarget != null)
         {
-            // For upgrades, calculate incremental cost
             int currentBonus = upgradeTarget.ResolveEnhancementBonus();
             int targetBonus = definition.EnhancementTier;
 
@@ -99,34 +222,32 @@ public static class CraftingValidator
         project.MarketPriceGp = cost.MarketPriceGp;
         project.ItemCasterLevel = definition.RequiredCasterLevel;
 
-        // ============================== 4. SPELL PREREQUISITES ==============================
-        if (definition.RequiredSpellIds != null && definition.RequiredSpellIds.Count > 0 && spellComp != null)
+        // ============================== 4. SPELL PREREQUISITES (PARTY-WIDE) ==============================
+        if (definition.RequiredSpellIds != null && definition.RequiredSpellIds.Count > 0)
         {
-            var knownSpells = new HashSet<string>(
-                spellComp.GetAllKnownSpells().Where(s => !string.IsNullOrEmpty(s)),
-                System.StringComparer.OrdinalIgnoreCase);
+            project.SpellSources = CheckSpellSources(
+                definition.RequiredSpellIds, crafter, spellComp,
+                partyMembers, useScrollsForMissing);
 
-            foreach (string reqSpell in definition.RequiredSpellIds)
-            {
-                if (!string.IsNullOrEmpty(reqSpell) && !knownSpells.Contains(reqSpell))
-                {
-                    project.MissingSpells.Add(reqSpell);
-                }
-            }
+            // Add scroll costs to gold cost
+            project.ScrollCostGp = project.SpellSources.TotalScrollCostGp;
+            project.GoldCost += project.ScrollCostGp;
 
-            if (project.MissingSpells.Count > 0)
-            {
-                // DMG p.282: +5 DC per missing spell prerequisite
-                project.SpellcraftDC = CraftingConstants.BaseCraftingDC
-                    + (project.MissingSpells.Count * CraftingConstants.MissingSpellDCIncrease);
-            }
+            // Track truly missing spells (not covered by anyone or scroll)
+            project.MissingSpells = project.SpellSources.TrulyMissingSpells
+                .Select(s => s.SpellId).ToList();
+
+            // Spellcraft DC from truly missing spells only
+            project.SpellcraftDC = project.SpellSources.SpellcraftDC;
         }
 
-        // ============================== 5. GOLD CHECK ==============================
+        // ============================== 5. GOLD CHECK (includes scroll costs) ==============================
         if (crafter.ComponentGold < project.GoldCost)
         {
             project.IsValid = false;
-            project.ValidationError = $"Insufficient gold. Need {project.GoldCost:N0} gp, have {crafter.ComponentGold:N0} gp.";
+            project.ValidationError = $"Insufficient gold. Need {project.GoldCost:N0} gp" +
+                (project.ScrollCostGp > 0 ? $" (includes {project.ScrollCostGp:N0} gp scrolls)" : "") +
+                $", have {crafter.ComponentGold:N0} gp.";
             return project;
         }
 
