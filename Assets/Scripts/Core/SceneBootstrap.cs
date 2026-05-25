@@ -1031,6 +1031,9 @@ public class SceneBootstrap : MonoBehaviour
             quickItemPanel.BuildUI(canvas);
             gm.QuickItemUsePanel = quickItemPanel;
 
+            // Ring system initialization (D&D 3.5e DMG pp. 229–233 — core rules only)
+            RingDatabase.Init();
+
             // Staff system initialization (D&D 3.5e DMG p.243 — core rules only, no recharging)
             StaffDatabase.Init();
             StaffSpellSelectionPanel staffPanel = canvas.gameObject.AddComponent<StaffSpellSelectionPanel>();
@@ -1047,6 +1050,7 @@ public class SceneBootstrap : MonoBehaviour
         {
             RaceDatabase.Init();
             ItemDatabase.Init();
+            RingDatabase.RegisterAllRingsInItemDatabase();
             FeatDefinitions.Init();
 
             CharacterCreationUI ccUI = canvas.gameObject.AddComponent<CharacterCreationUI>();

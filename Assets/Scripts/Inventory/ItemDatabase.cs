@@ -1707,6 +1707,16 @@ public static class ItemDatabase
     }
 
     /// <summary>
+    /// Public registration entry point for external subsystems (RingDatabase, etc.)
+    /// that need to inject items after Init() has completed.
+    /// </summary>
+    public static void RegisterExternal(ItemData item)
+    {
+        if (!_initialized) Init();
+        Register(item);
+    }
+
+    /// <summary>
     /// Ensures every registered weapon has an explicit D&D 3.5 size/handedness category.
     /// Also keeps legacy IsLightWeapon/IsTwoHanded flags synchronized for older systems.
     /// </summary>
@@ -1955,6 +1965,26 @@ public static class ItemDatabase
         clone.StaffId = src.StaffId;
         clone.StaffCharges = src.StaffCharges;
         clone.StaffCasterLevel = src.StaffCasterLevel;
+
+        // Ring properties
+        clone.IsRing = src.IsRing;
+        clone.RingId = src.RingId;
+        clone.RingDeflectionBonus = src.RingDeflectionBonus;
+        clone.RingResistanceSaveBonus = src.RingResistanceSaveBonus;
+        clone.RingShieldBonus = src.RingShieldBonus;
+        clone.RingEnergyType = src.RingEnergyType;
+        clone.RingEnergyResistanceAmount = src.RingEnergyResistanceAmount;
+        clone.RingSkillBonus = src.RingSkillBonus;
+        clone.RingSkillName = src.RingSkillName;
+        clone.RingGrantsEvasion = src.RingGrantsEvasion;
+        clone.RingGrantsFreedomOfMovement = src.RingGrantsFreedomOfMovement;
+        clone.RingGrantsFeatherFall = src.RingGrantsFeatherFall;
+        clone.RingGrantsWaterWalking = src.RingGrantsWaterWalking;
+        clone.RingGrantsSustenance = src.RingGrantsSustenance;
+        clone.RingGrantsMindShielding = src.RingGrantsMindShielding;
+        clone.RingGrantsColdEndurance = src.RingGrantsColdEndurance;
+        clone.RingCasterLevel = src.RingCasterLevel;
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

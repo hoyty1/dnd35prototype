@@ -629,7 +629,7 @@ public class CharacterStats
     /// Evasion: On a successful Reflex save for half damage, take no damage instead.
     /// Monk gains this at level 2. Rogue also gains at level 2.
     /// </summary>
-    public bool HasEvasion => (IsMonk && GetClassLevel("Monk") >= 2) || (IsRogue && GetClassLevel("Rogue") >= 2);
+    public bool HasEvasion => (IsMonk && GetClassLevel("Monk") >= 2) || (IsRogue && GetClassLevel("Rogue") >= 2) || RingGrantsEvasion;
 
     /// <summary>
     /// Flurry of Blows attack bonuses at current level.
@@ -1449,13 +1449,13 @@ public class CharacterStats
     }
 
     /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
-    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + LuckSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
+    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + LuckSaveBonus + RingResistanceSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
 
     /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
-    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + LuckSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
+    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + LuckSaveBonus + RingResistanceSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
 
     /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus + condition modifiers.</summary>
-    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + LuckSaveBonus + ConditionWillModifier;
+    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + LuckSaveBonus + RingResistanceSaveBonus + ConditionWillModifier;
 
     // ========== FEATS (D&D 3.5) ==========
     /// <summary>Set of feats this character has.</summary>
@@ -2416,6 +2416,37 @@ public class CharacterStats
 
     /// <summary>Enhancement bonus to Jump checks from active effects (e.g., Jump spell).</summary>
     public int JumpEnhancementBonus;
+
+    // ── Ring Equipment Bonuses (D&D 3.5e DMG pp. 229–233) ──
+    // These fields are set by Inventory.RecalculateStats() when rings are equipped.
+    // They use the "best value wins" stacking rule for same bonus type.
+
+    /// <summary>Resistance bonus to all saving throws from equipped rings (Ring of Resistance +1–+5). Does not stack with spell resistance bonuses.</summary>
+    public int RingResistanceSaveBonus;
+    /// <summary>Competence bonus to Climb from equipped rings (Ring of Climbing: +5).</summary>
+    public int RingClimbBonus;
+    /// <summary>Competence bonus to Swim from equipped rings (Ring of Swimming: +5).</summary>
+    public int RingSwimBonus;
+    /// <summary>Competence bonus to Jump from equipped rings (Ring of Jumping: +5).</summary>
+    public int RingJumpBonus;
+    /// <summary>Competence bonus to Hide from equipped rings (Ring of Chameleon Power: +10).</summary>
+    public int RingHideBonus;
+    /// <summary>True if any equipped ring grants Evasion (Ring of Evasion).</summary>
+    public bool RingGrantsEvasion;
+    /// <summary>True if any equipped ring grants continuous Freedom of Movement.</summary>
+    public bool RingGrantsFreedomOfMovement;
+    /// <summary>True if any equipped ring grants continuous Feather Fall.</summary>
+    public bool RingGrantsFeatherFall;
+    /// <summary>True if any equipped ring grants Water Walking.</summary>
+    public bool RingGrantsWaterWalking;
+    /// <summary>True if any equipped ring grants Sustenance (no food/water/sleep).</summary>
+    public bool RingGrantsSustenance;
+    /// <summary>True if any equipped ring grants Mind Shielding (immune to detect thoughts, etc.).</summary>
+    public bool RingGrantsMindShielding;
+    /// <summary>True if any equipped ring grants Cold Endurance (Ring of Warmth).</summary>
+    public bool RingGrantsColdEndurance;
+    /// <summary>Shield bonus from ring (Ring of Force Shield: +2). Stacks are handled via max with physical shield.</summary>
+    public int RingForceShieldBonus;
 
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
     public int TempHP;
@@ -5233,6 +5264,16 @@ public class CharacterStats
             modifier += OwnerCharacter.GetInvisibilityHideBonus();
             modifier += OwnerCharacter.GetGlitterdustHidePenalty();
         }
+
+        // Ring competence bonuses (D&D 3.5e: competence bonuses do not stack — use highest)
+        if (string.Equals(skillName, "Climb", System.StringComparison.OrdinalIgnoreCase))
+            modifier += RingClimbBonus;
+        if (string.Equals(skillName, "Swim", System.StringComparison.OrdinalIgnoreCase))
+            modifier += RingSwimBonus;
+        if (string.Equals(skillName, "Jump", System.StringComparison.OrdinalIgnoreCase))
+            modifier += RingJumpBonus;
+        if (string.Equals(skillName, "Hide", System.StringComparison.OrdinalIgnoreCase))
+            modifier += RingHideBonus;
 
         return modifier;
     }

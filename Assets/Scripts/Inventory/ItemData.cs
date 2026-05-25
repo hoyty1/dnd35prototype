@@ -13,7 +13,8 @@ public enum ItemType
     Shield,
     Consumable,
     Misc,
-    Ammunition
+    Ammunition,
+    Ring
 }
 
 /// <summary>
@@ -384,6 +385,42 @@ public class ItemData
         return IsStaff && StaffCharges <= 0;
     }
 
+    // --- Ring-specific (D&D 3.5e DMG pp. 229–233 — Core rules only) ---
+    /// <summary>True if this item is a magic ring. Rings occupy the LeftRing or RightRing equipment slots.</summary>
+    public bool IsRing;
+    /// <summary>Key into RingDatabase, e.g. "ring_of_protection_3". Null/empty if not a ring.</summary>
+    public string RingId;
+    /// <summary>Deflection bonus to AC (+1 to +5 for Protection rings). 0 if not applicable.</summary>
+    public int RingDeflectionBonus;
+    /// <summary>Resistance bonus to all saving throws (+1 to +5 for Resistance rings). 0 if not applicable.</summary>
+    public int RingResistanceSaveBonus;
+    /// <summary>Shield bonus to AC (for Ring of Force Shield: +2). 0 if not applicable.</summary>
+    public int RingShieldBonus;
+    /// <summary>Energy type for Energy Resistance rings (Acid, Cold, Electricity, Fire, Sonic). Null if not applicable.</summary>
+    public string RingEnergyType;
+    /// <summary>Energy resistance amount (10=Minor, 20=Major, 30=Greater). 0 if not applicable.</summary>
+    public int RingEnergyResistanceAmount;
+    /// <summary>Competence bonus to a specific skill (+5 for Climbing/Swimming/Jumping, +10 for Chameleon Power). 0 if not applicable.</summary>
+    public int RingSkillBonus;
+    /// <summary>Skill name for competence bonus ("Climb", "Swim", "Jump", "Hide"). Null if not applicable.</summary>
+    public string RingSkillName;
+    /// <summary>Grants Evasion ability (Ring of Evasion). Default false.</summary>
+    public bool RingGrantsEvasion;
+    /// <summary>Grants continuous Freedom of Movement (Ring of Freedom of Movement). Default false.</summary>
+    public bool RingGrantsFreedomOfMovement;
+    /// <summary>Grants continuous Feather Fall (Ring of Feather Falling). Default false.</summary>
+    public bool RingGrantsFeatherFall;
+    /// <summary>Grants ability to walk on water (Ring of Water Walking). Default false.</summary>
+    public bool RingGrantsWaterWalking;
+    /// <summary>Grants no need for food, water, or sleep (Ring of Sustenance). Default false.</summary>
+    public bool RingGrantsSustenance;
+    /// <summary>Grants immunity to detect thoughts, discern lies, alignment detection (Ring of Mind Shielding). Default false.</summary>
+    public bool RingGrantsMindShielding;
+    /// <summary>Grants resistance to cold environments (Ring of Warmth). Default false.</summary>
+    public bool RingGrantsColdEndurance;
+    /// <summary>Caster level of the ring's magical effect. Used for dispel checks.</summary>
+    public int RingCasterLevel;
+
     // --- Stackability ---
     /// <summary>Whether this item can stack with identical items in inventory (e.g., scrolls, potions).</summary>
     public bool IsStackable;
@@ -421,6 +458,10 @@ public class ItemData
 
         if (IsMasterwork)
             return new Color(0.6f, 0.85f, 1f); // Light blue for masterwork
+
+        // Magic rings always show as magical quality
+        if (IsRing && Type == ItemType.Ring)
+            return new Color(0.3f, 0.5f, 1f); // Blue - Rare (magic ring)
 
         return Color.white; // Standard
     }
@@ -498,6 +539,7 @@ public class ItemData
     public bool IsArmor => Type == ItemType.Armor;
     public bool IsShield => Type == ItemType.Shield;
     public bool IsConsumable => Type == ItemType.Consumable;
+    public bool IsRingItem => Type == ItemType.Ring;
 
     public bool IsSunderable => IsWeapon || IsArmor || IsShield;
 
@@ -1468,6 +1510,27 @@ public class ItemData
                     stats += $"\n{label}{details} ({eff.GetDurationDisplayString()}, {eff.EnchantedAmmoRemaining} enchanted)";
                 }
             }
+        }
+
+        // --- Ring Tooltip ---
+        if (Type == ItemType.Ring && IsRing)
+        {
+            stats = "Ring (magic)";
+            if (RingDeflectionBonus > 0) stats += $"\n+{RingDeflectionBonus} deflection bonus to AC";
+            if (RingResistanceSaveBonus > 0) stats += $"\n+{RingResistanceSaveBonus} resistance bonus to all saves";
+            if (RingShieldBonus > 0) stats += $"\n+{RingShieldBonus} shield bonus to AC (force)";
+            if (RingEnergyResistanceAmount > 0 && !string.IsNullOrEmpty(RingEnergyType))
+                stats += $"\nEnergy Resistance {RingEnergyResistanceAmount} ({RingEnergyType})";
+            if (RingGrantsEvasion) stats += "\nGrants Evasion";
+            if (RingGrantsFreedomOfMovement) stats += "\nContinuous Freedom of Movement";
+            if (RingGrantsFeatherFall) stats += "\nContinuous Feather Fall";
+            if (RingSkillBonus > 0 && !string.IsNullOrEmpty(RingSkillName))
+                stats += $"\n+{RingSkillBonus} competence bonus to {RingSkillName}";
+            if (RingGrantsWaterWalking) stats += "\nWalk on water";
+            if (RingGrantsSustenance) stats += "\nNo need for food, water, or sleep";
+            if (RingGrantsMindShielding) stats += "\nImmune to detect thoughts, discern lies, alignment detection";
+            if (RingGrantsColdEndurance) stats += "\nResist cold environments (endure elements vs cold)";
+            if (RingCasterLevel > 0) stats += $"\nCaster Level: {RingCasterLevel}";
         }
 
         if (IsSunderable)

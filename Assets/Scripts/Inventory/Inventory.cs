@@ -411,6 +411,21 @@ public class Inventory
             // Applied as a special DR entry on the character.
             ApplyAdamantineArmorDR(ArmorRobeSlot);
 
+            // --- Ring Bonuses (D&D 3.5e DMG pp. 229–233) ---
+            // Reset all ring-derived stats, then re-apply from both ring slots.
+            // Same bonus type from two rings does NOT stack (use highest per D&D 3.5e stacking rules).
+            ResetRingBonuses();
+            ApplyRingBonuses(LeftRingSlot);
+            ApplyRingBonuses(RightRingSlot);
+
+            // Apply ring deflection bonus to AC (stacks with highest only — use max with spell deflection)
+            if (OwnerStats.RingForceShieldBonus > 0)
+            {
+                // Ring of Force Shield: shield bonus that does NOT stack with physical shield
+                // Use the higher of physical shield or ring shield
+                OwnerStats.ShieldBonus = Mathf.Max(OwnerStats.ShieldBonus, OwnerStats.RingForceShieldBonus);
+            }
+
             // --- Weapon Stats ---
             // Primary weapon from right hand, then left hand.
             // If neither hand has a weapon, allow spiked gauntlet in Hands slot as primary attack option.
@@ -709,6 +724,154 @@ public class Inventory
         {
             // DR X/— (BypassTag = None means nothing bypasses it except epic)
             OwnerStats.AddDamageReduction(_currentAdamantineDR, DamageBypassTag.None, false);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Ring Bonus System (D&D 3.5e DMG pp. 229–233)
+    //  Handles all Tier 1 passive ring effects.
+    //  Same bonus type does NOT stack between two rings — highest wins.
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Reset all ring-derived stats on OwnerStats to zero/false.
+    /// Called at the start of RecalculateStats() before re-applying.
+    /// </summary>
+    private void ResetRingBonuses()
+    {
+        if (OwnerStats == null) return;
+
+        // Remove ring-applied deflection bonus (only the ring portion)
+        // DeflectionBonus may also contain spell bonuses; ring adds on top.
+        // We track ring deflection separately and add via max in ApplyRingBonuses.
+        _ringDeflectionBonus = 0;
+
+        OwnerStats.RingResistanceSaveBonus = 0;
+        OwnerStats.RingForceShieldBonus = 0;
+        OwnerStats.RingClimbBonus = 0;
+        OwnerStats.RingSwimBonus = 0;
+        OwnerStats.RingJumpBonus = 0;
+        OwnerStats.RingHideBonus = 0;
+        OwnerStats.RingGrantsEvasion = false;
+        OwnerStats.RingGrantsFreedomOfMovement = false;
+        OwnerStats.RingGrantsFeatherFall = false;
+        OwnerStats.RingGrantsWaterWalking = false;
+        OwnerStats.RingGrantsSustenance = false;
+        OwnerStats.RingGrantsMindShielding = false;
+        OwnerStats.RingGrantsColdEndurance = false;
+
+        // Remove previous ring energy resistance effects
+        RemoveRingEnergyResistances();
+    }
+
+    private int _ringDeflectionBonus;
+    private readonly System.Collections.Generic.List<ResistEnergyEffectData> _ringEnergyResistEffects
+        = new System.Collections.Generic.List<ResistEnergyEffectData>();
+
+    /// <summary>
+    /// Apply all bonuses from a single equipped ring to OwnerStats.
+    /// Uses "highest wins" stacking for same bonus types.
+    /// </summary>
+    private void ApplyRingBonuses(ItemData ring)
+    {
+        if (ring == null || !ring.IsRing || OwnerStats == null) return;
+
+        // --- Deflection bonus to AC ---
+        // D&D 3.5e: Deflection bonuses do not stack; use highest.
+        // Ring adds to DeflectionBonus field (which also holds spell bonuses like Shield of Faith).
+        if (ring.RingDeflectionBonus > 0)
+        {
+            int newRingDeflection = Mathf.Max(_ringDeflectionBonus, ring.RingDeflectionBonus);
+            // Adjust OwnerStats.DeflectionBonus: remove old ring portion, add new
+            OwnerStats.DeflectionBonus += (newRingDeflection - _ringDeflectionBonus);
+            _ringDeflectionBonus = newRingDeflection;
+        }
+
+        // --- Resistance bonus to all saves ---
+        // D&D 3.5e: Resistance bonuses do not stack; use highest.
+        if (ring.RingResistanceSaveBonus > 0)
+            OwnerStats.RingResistanceSaveBonus = Mathf.Max(OwnerStats.RingResistanceSaveBonus, ring.RingResistanceSaveBonus);
+
+        // --- Shield bonus (force) ---
+        if (ring.RingShieldBonus > 0)
+            OwnerStats.RingForceShieldBonus = Mathf.Max(OwnerStats.RingForceShieldBonus, ring.RingShieldBonus);
+
+        // --- Energy Resistance ---
+        // Continuous effect — rings grant permanent energy resistance (not duration-based).
+        // Use large duration so it never expires during gameplay.
+        if (ring.RingEnergyResistanceAmount > 0 && !string.IsNullOrEmpty(ring.RingEnergyType))
+        {
+            ResistEnergyType reType = ParseEnergyType(ring.RingEnergyType);
+            var effect = new ResistEnergyEffectData
+            {
+                EnergyType = reType,
+                ResistanceAmount = ring.RingEnergyResistanceAmount,
+                DurationRemainingRounds = 999999, // Permanent while worn
+                Caster = null
+            };
+            OwnerStats.SetResistEnergyEffect(effect);
+            _ringEnergyResistEffects.Add(effect);
+        }
+
+        // --- Skill competence bonuses ---
+        // D&D 3.5e: Competence bonuses do not stack; use highest.
+        if (ring.RingSkillBonus > 0 && !string.IsNullOrEmpty(ring.RingSkillName))
+        {
+            string skill = ring.RingSkillName;
+            if (string.Equals(skill, "Climb", System.StringComparison.OrdinalIgnoreCase))
+                OwnerStats.RingClimbBonus = Mathf.Max(OwnerStats.RingClimbBonus, ring.RingSkillBonus);
+            else if (string.Equals(skill, "Swim", System.StringComparison.OrdinalIgnoreCase))
+                OwnerStats.RingSwimBonus = Mathf.Max(OwnerStats.RingSwimBonus, ring.RingSkillBonus);
+            else if (string.Equals(skill, "Jump", System.StringComparison.OrdinalIgnoreCase))
+                OwnerStats.RingJumpBonus = Mathf.Max(OwnerStats.RingJumpBonus, ring.RingSkillBonus);
+            else if (string.Equals(skill, "Hide", System.StringComparison.OrdinalIgnoreCase))
+                OwnerStats.RingHideBonus = Mathf.Max(OwnerStats.RingHideBonus, ring.RingSkillBonus);
+        }
+
+        // --- Boolean ability grants (OR logic — any ring grants it) ---
+        if (ring.RingGrantsEvasion) OwnerStats.RingGrantsEvasion = true;
+        if (ring.RingGrantsFreedomOfMovement)
+        {
+            OwnerStats.RingGrantsFreedomOfMovement = true;
+            OwnerStats.FreedomOfMovementActive = true; // Activate the existing FoM flag
+        }
+        if (ring.RingGrantsFeatherFall) OwnerStats.RingGrantsFeatherFall = true;
+        if (ring.RingGrantsWaterWalking) OwnerStats.RingGrantsWaterWalking = true;
+        if (ring.RingGrantsSustenance) OwnerStats.RingGrantsSustenance = true;
+        if (ring.RingGrantsMindShielding) OwnerStats.RingGrantsMindShielding = true;
+        if (ring.RingGrantsColdEndurance) OwnerStats.RingGrantsColdEndurance = true;
+    }
+
+    /// <summary>Remove ring-applied energy resistance effects from OwnerStats.</summary>
+    private void RemoveRingEnergyResistances()
+    {
+        if (OwnerStats == null) return;
+
+        // Remove each ring energy resistance effect that we previously added.
+        // We track them in _ringEnergyResistEffects so we can cleanly remove only ring-sourced ones.
+        if (_ringEnergyResistEffects.Count > 0 && OwnerStats.ActiveResistEnergyEffects != null)
+        {
+            foreach (var effect in _ringEnergyResistEffects)
+            {
+                OwnerStats.ActiveResistEnergyEffects.Remove(effect);
+            }
+        }
+        _ringEnergyResistEffects.Clear();
+    }
+
+    /// <summary>Parse energy type string to ResistEnergyType enum.</summary>
+    private static ResistEnergyType ParseEnergyType(string type)
+    {
+        if (string.IsNullOrEmpty(type)) return ResistEnergyType.Fire;
+
+        switch (type.ToLower())
+        {
+            case "acid": return ResistEnergyType.Acid;
+            case "cold": return ResistEnergyType.Cold;
+            case "electricity": return ResistEnergyType.Electricity;
+            case "fire": return ResistEnergyType.Fire;
+            case "sonic": return ResistEnergyType.Sonic;
+            default: return ResistEnergyType.Fire;
         }
     }
 }
