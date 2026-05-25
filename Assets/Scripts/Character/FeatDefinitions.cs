@@ -1310,103 +1310,104 @@ public static class FeatDefinitions
     // ========================================================================
     private static void DefineItemCreationFeats()
     {
-        // --- Scribe Scroll ---
+        // --- Scribe Scroll (PHB p.99) ---
+        // Wizards receive Scribe Scroll as a FREE bonus feat at level 1.
         var scribeScroll = new FeatDefinition("Scribe Scroll",
-            "You can create a scroll of any spell that you know. Scribing a scroll takes one day for each 1,000 gp in its base price. The base price of a scroll is its spell level × its caster level × 25 gp. To scribe a scroll, you must spend 1/25 of this base price in XP and use up raw materials costing one-half of this base price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            "You can create a scroll of any spell that you know. Scribing a scroll takes one day for each 1,000 gp in its base price. The base price of a scroll is its spell level × its caster level × 25 gp. To scribe a scroll, you must spend 1/25 of this base price in XP and use up raw materials costing one-half of this base price.",
             FeatType.ItemCreation)
         {
             IsWizardBonus = true,
-            IsPlaceholder = true
+            IsPlaceholder = false
         };
         scribeScroll.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 1));
-        scribeScroll.Benefit.Description = "Create spell scrolls from your known spells. [PLACEHOLDER]";
+        scribeScroll.Benefit.Description = "Create spell scrolls from your known spells. Access the Crafting Workshop from the Pre-Combat Hub to scribe scrolls.";
         Add(scribeScroll);
 
-        // --- Brew Potion ---
+        // --- Brew Potion (PHB p.89) ---
         var brewPotion = new FeatDefinition("Brew Potion",
-            "You can create a potion of any 3rd-level or lower spell that you know and that targets one or more creatures. Brewing a potion takes one day. The base price of a potion is its spell level × its caster level × 50 gp (minimum caster level is always at least high enough to cast the spell). To brew a potion, you must spend 1/25 of this base price in XP and use up raw materials costing one-half this base price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            "You can create a potion of any 3rd-level or lower spell that you know and that targets one or more creatures. Brewing a potion takes one day. The base price of a potion is its spell level × its caster level × 50 gp. To brew a potion, you must spend 1/25 of this base price in XP and use up raw materials costing one-half this base price.",
             FeatType.ItemCreation)
         {
             IsWizardBonus = true,
-            IsPlaceholder = true
+            IsPlaceholder = false
         };
         brewPotion.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 3));
-        brewPotion.Benefit.Description = "Brew magic potions from spells of 3rd level or lower. [PLACEHOLDER]";
+        brewPotion.Benefit.Description = "Brew magic potions from spells of 3rd level or lower. Access the Crafting Workshop to brew potions.";
         Add(brewPotion);
 
-        // --- Craft Wondrous Item ---
+        // --- Craft Wondrous Item (PHB p.92) ---
         var craftWondrous = new FeatDefinition("Craft Wondrous Item",
-            "You can create any wondrous item whose prerequisites you meet. Enchanting a wondrous item takes one day for each 1,000 gp in its price. To enchant a wondrous item, you must spend 1/25 of the item's price in XP and use up raw materials costing half of this price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            "You can create any wondrous item whose prerequisites you meet. Enchanting a wondrous item takes one day for each 1,000 gp in its price. To enchant a wondrous item, you must spend 1/25 of the item's price in XP and use up raw materials costing half of this price.",
             FeatType.ItemCreation)
         {
             IsWizardBonus = true,
-            IsPlaceholder = true
+            IsPlaceholder = false
         };
         craftWondrous.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 3));
-        craftWondrous.Benefit.Description = "Create wondrous magic items (cloaks, boots, amulets, etc.). [PLACEHOLDER]";
+        craftWondrous.Benefit.Description = "Create wondrous magic items (cloaks, boots, amulets, etc.). Access the Crafting Workshop to craft items.";
         Add(craftWondrous);
 
-        // --- Craft Magic Arms and Armor ---
+        // --- Craft Magic Arms and Armor (PHB p.92) ---
         var craftArms = new FeatDefinition("Craft Magic Arms and Armor",
-            "You can create any magic weapon, armor, or shield whose prerequisites you meet. Enhancing a weapon, suit of armor, or shield takes one day for each 1,000 gp in the price of its magical features. To enhance a weapon, suit of armor, or shield, you must spend 1/25 of its features' total price in XP and use up raw materials costing half of this total price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            "You can create any magic weapon, armor, or shield whose prerequisites you meet. Enhancing a weapon, suit of armor, or shield takes one day for each 1,000 gp in the price of its magical features. To enhance a weapon, suit of armor, or shield, you must spend 1/25 of its features' total price in XP and use up raw materials costing half of this total price.",
             FeatType.ItemCreation)
         {
             IsWizardBonus = true,
-            IsPlaceholder = true
+            IsPlaceholder = false
         };
         craftArms.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 5));
-        craftArms.Benefit.Description = "Create magic weapons, armor, and shields. [PLACEHOLDER]";
+        craftArms.Benefit.Description = "Create magic weapons, armor, and shields. Upgrade masterwork items via the Crafting Workshop.";
         Add(craftArms);
 
-        // --- Craft Wand ---
+        // --- Craft Wand (PHB p.92) ---
         var craftWand = new FeatDefinition("Craft Wand",
-            "You can create a wand of any 4th-level or lower spell that you know. Crafting a wand takes one day for each 1,000 gp in its base price. The base price of a wand is its caster level × the spell level × 750 gp. To craft a wand, you must spend 1/25 of this base price in XP and use up raw materials costing half of this base price. A newly created wand has 50 charges. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            "You can create a wand of any 4th-level or lower spell that you know. Crafting a wand takes one day for each 1,000 gp in its base price. The base price of a wand is its caster level × the spell level × 750 gp. To craft a wand, you must spend 1/25 of this base price in XP and use up raw materials costing half of this base price. A newly created wand has 50 charges.",
             FeatType.ItemCreation)
         {
             IsWizardBonus = true,
-            IsPlaceholder = true
+            IsPlaceholder = false
         };
         craftWand.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 5));
-        craftWand.Benefit.Description = "Create magic wands with spells of 4th level or lower. [PLACEHOLDER]";
+        craftWand.Benefit.Description = "Create magic wands with spells of 4th level or lower. Access the Crafting Workshop to craft wands.";
         Add(craftWand);
 
-        // --- Craft Rod ---
+        // --- Craft Rod (PHB p.92) ---
         var craftRod = new FeatDefinition("Craft Rod",
-            "You can create any rod whose prerequisites you meet. Crafting a rod takes one day for each 1,000 gp in its base price. To craft a rod, you must spend 1/25 of its base price in XP and use up raw materials costing half of its base price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            "You can create any rod whose prerequisites you meet. Crafting a rod takes one day for each 1,000 gp in its base price. To craft a rod, you must spend 1/25 of its base price in XP and use up raw materials costing half of its base price.",
             FeatType.ItemCreation)
         {
             IsWizardBonus = true,
-            IsPlaceholder = true
+            IsPlaceholder = false
         };
         craftRod.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 9));
-        craftRod.Benefit.Description = "Create magic rods. [PLACEHOLDER]";
+        craftRod.Benefit.Description = "Create magic rods. Access the Crafting Workshop to craft rods.";
         Add(craftRod);
 
-        // --- Craft Staff ---
+        // --- Craft Staff (PHB p.92) ---
         var craftStaff = new FeatDefinition("Craft Staff",
-            "You can create any staff whose prerequisites you meet. Crafting a staff takes one day for each 1,000 gp in its base price. To craft a staff, you must spend 1/25 of its base price in XP and use up raw materials costing half of its base price. A newly created staff has 50 charges. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            "You can create any staff whose prerequisites you meet. Crafting a staff takes one day for each 1,000 gp in its base price. To craft a staff, you must spend 1/25 of its base price in XP and use up raw materials costing half of its base price. A newly created staff has 50 charges.",
             FeatType.ItemCreation)
         {
             IsWizardBonus = true,
-            IsPlaceholder = true
+            IsPlaceholder = false
         };
         craftStaff.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 12));
-        craftStaff.Benefit.Description = "Create magic staves. [PLACEHOLDER]";
+        craftStaff.Benefit.Description = "Create magic staves. Access the Crafting Workshop to craft staves.";
         Add(craftStaff);
 
-        // --- Forge Ring ---
+        // --- Forge Ring (PHB p.94) ---
         var forgeRing = new FeatDefinition("Forge Ring",
-            "You can create any ring whose prerequisites you meet. Crafting a ring takes one day for each 1,000 gp in its base price. To forge a ring, you must spend 1/25 of its base price in XP and use up raw materials costing half of its base price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            "You can create any ring whose prerequisites you meet. Crafting a ring takes one day for each 1,000 gp in its base price. To forge a ring, you must spend 1/25 of its base price in XP and use up raw materials costing half of its base price.",
             FeatType.ItemCreation)
         {
             IsWizardBonus = true,
-            IsPlaceholder = true
+            IsPlaceholder = false
         };
         forgeRing.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 12));
-        forgeRing.Benefit.Description = "Create magic rings. [PLACEHOLDER]";
+        forgeRing.Benefit.Description = "Create magic rings. Access the Crafting Workshop to forge rings.";
         Add(forgeRing);
 
-        Debug.Log("[Feats] 8 item creation feat definitions registered (all PLACEHOLDERS, marked as Wizard bonus feats).");
+        Debug.Log("[Feats] 8 item creation feat definitions registered (ACTIVE — crafting system functional).");
     }
 
     // ========================================================================

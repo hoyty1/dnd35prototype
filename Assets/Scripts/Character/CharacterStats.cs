@@ -2996,6 +2996,55 @@ public class CharacterStats
         return Mathf.FloorToInt(safeRaw * 0.8f);
     }
 
+    // ========== CRAFTING XP SPENDING (D&D 3.5e Item Creation Feats) ==========
+
+    /// <summary>
+    /// Maximum XP the character can spend on crafting without dropping below their current level's minimum XP.
+    /// D&D 3.5e DMG p.282: A character cannot reduce their XP below the minimum for their current level.
+    /// </summary>
+    public int MaxSpendableXP()
+    {
+        int currentLevelMinXP = ExperienceCalculator.GetXPForLevel(Mathf.Max(1, Level));
+        return Mathf.Max(0, ExperiencePoints - currentLevelMinXP);
+    }
+
+    /// <summary>
+    /// Spend XP on crafting a magic item. Returns true if successful.
+    /// Fails if spending would drop XP below current level minimum.
+    /// </summary>
+    public bool SpendXP(int xpCost)
+    {
+        if (xpCost <= 0) return true; // No cost, always succeeds
+        if (xpCost > MaxSpendableXP())
+        {
+            Debug.LogWarning($"[Crafting] {CharacterName} cannot spend {xpCost} XP — would drop below level {Level} minimum. Max spendable: {MaxSpendableXP()}");
+            return false;
+        }
+
+        int oldXP = ExperiencePoints;
+        ExperiencePoints -= xpCost;
+        Debug.Log($"[Crafting] {CharacterName} spent {xpCost} XP on crafting. XP: {oldXP} → {ExperiencePoints}");
+        return true;
+    }
+
+    /// <summary>
+    /// Spend ComponentGold for crafting raw materials. Returns true if successful.
+    /// </summary>
+    public bool SpendComponentGold(int goldCost)
+    {
+        if (goldCost <= 0) return true;
+        if (goldCost > ComponentGold)
+        {
+            Debug.LogWarning($"[Crafting] {CharacterName} cannot spend {goldCost} gp — only has {ComponentGold} gp component gold.");
+            return false;
+        }
+
+        int oldGold = ComponentGold;
+        ComponentGold -= goldCost;
+        Debug.Log($"[Crafting] {CharacterName} spent {goldCost} gp on crafting materials. Gold: {oldGold} → {ComponentGold}");
+        return true;
+    }
+
     public bool AddExperience(int xp)
     {
         int gain = Mathf.Max(0, xp);

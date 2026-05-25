@@ -29,6 +29,7 @@ public class PreCombatHubUI : MonoBehaviour
     private Action _onOpenStore;
     private Action _onOpenInventory;
     private Action _onOpenSpellPreparation;
+    private Action _onOpenCraftingWorkshop;
     private Action _onStartEncounter;
     private Action _onBackToEncounterSelection;
 
@@ -40,7 +41,8 @@ public class PreCombatHubUI : MonoBehaviour
         Action onOpenSpellPreparation,
         Action onStartEncounter,
         Action onBackToEncounterSelection,
-        List<string> spellcasterStatusLines = null)
+        List<string> spellcasterStatusLines = null,
+        Action onOpenCraftingWorkshop = null)
     {
         EnsureBuilt();
         if (_root == null)
@@ -49,6 +51,7 @@ public class PreCombatHubUI : MonoBehaviour
         _onOpenStore = onOpenStore;
         _onOpenInventory = onOpenInventory;
         _onOpenSpellPreparation = onOpenSpellPreparation;
+        _onOpenCraftingWorkshop = onOpenCraftingWorkshop;
         _onStartEncounter = onStartEncounter;
         _onBackToEncounterSelection = onBackToEncounterSelection;
 
@@ -147,9 +150,10 @@ public class PreCombatHubUI : MonoBehaviour
         CreateButton(_root.transform, "InventoryButton", "📦 Manage Inventory (Stash)", new Vector2(0f, firstButtonY), new Color(0.23f, 0.38f, 0.63f, 1f), () => _onOpenInventory?.Invoke());
         CreateButton(_root.transform, "StoreButton", "🏪 Open Store", new Vector2(0f, firstButtonY - step), new Color(0.2f, 0.48f, 0.3f, 1f), () => _onOpenStore?.Invoke());
         CreateButton(_root.transform, "SpellPrepButton", "🔮 Prepare Spells", new Vector2(0f, firstButtonY - (step * 2f)), new Color(0.37f, 0.3f, 0.62f, 1f), () => _onOpenSpellPreparation?.Invoke());
+        CreateButton(_root.transform, "CraftingButton", "⚒ Crafting Workshop", new Vector2(0f, firstButtonY - (step * 3f)), new Color(0.55f, 0.4f, 0.15f, 1f), () => _onOpenCraftingWorkshop?.Invoke());
 
-        CreateButton(_root.transform, "StartButton", "⚔ Start Encounter", new Vector2(0f, firstButtonY - (step * 3f)), new Color(0.19f, 0.58f, 0.27f, 1f), () => _onStartEncounter?.Invoke());
-        CreateButton(_root.transform, "BackButton", "← Back to Encounter Selection", new Vector2(0f, firstButtonY - (step * 4f)), new Color(0.55f, 0.23f, 0.23f, 1f), () => _onBackToEncounterSelection?.Invoke());
+        CreateButton(_root.transform, "StartButton", "⚔ Start Encounter", new Vector2(0f, firstButtonY - (step * 4f)), new Color(0.19f, 0.58f, 0.27f, 1f), () => _onStartEncounter?.Invoke());
+        CreateButton(_root.transform, "BackButton", "← Back to Encounter Selection", new Vector2(0f, firstButtonY - (step * 5f)), new Color(0.55f, 0.23f, 0.23f, 1f), () => _onBackToEncounterSelection?.Invoke());
 
         Debug.Log("[PreCombatHub] Panel: (0,0) to (1,1) - FULLSCREEN");
         _root.SetActive(false);

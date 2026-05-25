@@ -1427,7 +1427,49 @@ public partial class GameManager : MonoBehaviour
                 PreCombatHubUI?.Close();
                 PromptEncounterSelection();
             },
-            spellcasterStatusLines: BuildSpellPreparationStatusLines(partyMembers));
+            spellcasterStatusLines: BuildSpellPreparationStatusLines(partyMembers),
+            onOpenCraftingWorkshop: () => OpenCraftingWorkshopFromPreCombat(partyMembers));
+    }
+
+    private CraftingWorkshopUI _craftingWorkshopUI;
+
+    private void OpenCraftingWorkshopFromPreCombat(List<CharacterController> partyMembers)
+    {
+        // Find the first party member with any item creation feat
+        CharacterController crafter = null;
+        foreach (var member in partyMembers)
+        {
+            if (member != null && member.Stats != null && CraftingValidator.HasAnyCraftingFeat(member.Stats))
+            {
+                crafter = member;
+                break;
+            }
+        }
+
+        if (crafter == null)
+        {
+            Debug.Log("[CraftingWorkshop] No party members have item creation feats.");
+            // TODO: Show a message to the player
+            return;
+        }
+
+        if (_craftingWorkshopUI == null)
+            _craftingWorkshopUI = FindObjectOfType<CraftingWorkshopUI>();
+        if (_craftingWorkshopUI == null)
+            _craftingWorkshopUI = gameObject.AddComponent<CraftingWorkshopUI>();
+
+        PreCombatHubUI?.HideMenu();
+
+        var spellComp = crafter.GetComponent<SpellcastingComponent>();
+        var inventory = crafter.GetComponent<Inventory>();
+
+        _craftingWorkshopUI.Open(
+            crafter.Stats,
+            spellComp,
+            inventory,
+            onClose: () => ReturnToPreCombatHubFromSubWindow("CraftingWorkshop.Back"));
+
+        Debug.Log($"[CraftingWorkshop] Opened for {crafter.Stats.CharacterName}");
     }
 
     private void OpenInventoryFromPreCombat(List<CharacterController> partyMembers)

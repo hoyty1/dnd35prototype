@@ -1075,6 +1075,8 @@ public class SceneBootstrap : MonoBehaviour
             ccUI.FeatUI = featUI;
 
             SpellDatabase.Init();
+            CraftableItemRegistry.Init();
+
             SpellSelectionUI spellUI = canvas.gameObject.AddComponent<SpellSelectionUI>();
             spellUI.BuildUI(canvas);
             ccUI.SpellUI = spellUI;

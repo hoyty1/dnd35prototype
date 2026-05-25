@@ -66,9 +66,17 @@ public class WizardClass : ICharacterClass
     // SELECTIONS handled by the character creation UI / level-up system.
     public void InitFeats(CharacterStats stats)
     {
-        // No automatic feats for Wizard — Scribe Scroll and bonus feat selections
-        // are handled by the character creation UI / level-up system.
-        Debug.Log($"[Wizard] {stats.CharacterName}: Wizard has no automatic feats (Scribe Scroll and bonus feats handled separately)");
+        // D&D 3.5e PHB p.57: Wizards receive Scribe Scroll as a FREE bonus feat at 1st level.
+        // This is a class feature, not a regular feat selection.
+        if (stats != null && !stats.HasFeat("Scribe Scroll"))
+        {
+            stats.AddFeats(new System.Collections.Generic.List<string> { "Scribe Scroll" });
+            Debug.Log($"[Wizard] {stats.CharacterName}: Granted Scribe Scroll as free Wizard class feature (PHB p.57).");
+        }
+        else
+        {
+            Debug.Log($"[Wizard] {stats.CharacterName}: Already has Scribe Scroll, skipping auto-grant.");
+        }
     }
 
     /// <summary>
