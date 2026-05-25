@@ -2289,6 +2289,53 @@ public static class ItemDatabase
         clone.WondrousApparatusPincerAttack = src.WondrousApparatusPincerAttack;
         clone.WondrousApparatusPincerDamage = src.WondrousApparatusPincerDamage;
 
+        // --- Phase 13: Titan Weapons ---
+        clone.WondrousIsMattockOfTitans = src.WondrousIsMattockOfTitans;
+        clone.WondrousIsMaulOfTitans = src.WondrousIsMaulOfTitans;
+        clone.WondrousTitanEnhancement = src.WondrousTitanEnhancement;
+        clone.WondrousTitanDamageDice = src.WondrousTitanDamageDice;
+        clone.WondrousTitanWeightLbs = src.WondrousTitanWeightLbs;
+        clone.WondrousTitanSize = src.WondrousTitanSize;
+        clone.WondrousTitanMaterial = src.WondrousTitanMaterial;
+        clone.WondrousTitanIgnoreHardness = src.WondrousTitanIgnoreHardness;
+        clone.WondrousTitanAutoBreakDC = src.WondrousTitanAutoBreakDC;
+        clone.WondrousTitanSunderBonus = src.WondrousTitanSunderBonus;
+        clone.WondrousTitanSunderNoAoO = src.WondrousTitanSunderNoAoO;
+        clone.WondrousTitanOversizePenalty = src.WondrousTitanOversizePenalty;
+
+        // --- Phase 13: Lyre of Building ---
+        clone.WondrousIsLyreOfBuilding = src.WondrousIsLyreOfBuilding;
+        clone.WondrousLyreUsesPerWeek = src.WondrousLyreUsesPerWeek;
+        clone.WondrousLyreUsesThisWeek = 0; // Reset on clone
+        clone.WondrousLyrePerformDC = src.WondrousLyrePerformDC;
+        clone.WondrousLyreWorkerHoursPerUse = src.WondrousLyreWorkerHoursPerUse;
+
+        // --- Phase 13: Horn of Valhalla ---
+        clone.WondrousIsHornOfValhalla = src.WondrousIsHornOfValhalla;
+        clone.WondrousHornType = src.WondrousHornType;
+        clone.WondrousHornBarbarianCount = src.WondrousHornBarbarianCount;
+        clone.WondrousHornBarbarianLevel = src.WondrousHornBarbarianLevel;
+        clone.WondrousHornBarbarianHP = src.WondrousHornBarbarianHP;
+        clone.WondrousHornBarbarianAC = src.WondrousHornBarbarianAC;
+        clone.WondrousHornBarbarianAttack = src.WondrousHornBarbarianAttack;
+        clone.WondrousHornBarbarianDamage = src.WondrousHornBarbarianDamage;
+        clone.WondrousHornServiceMinutes = src.WondrousHornServiceMinutes;
+        clone.WondrousHornUsesPerWeek = src.WondrousHornUsesPerWeek;
+        clone.WondrousHornUsesThisWeek = 0; // Reset on clone
+
+        // --- Phase 13: Robe of Stars (enhanced) ---
+        clone.WondrousIsRobeOfStars = src.WondrousIsRobeOfStars;
+        clone.WondrousRobeStarsLuckSaveBonus = src.WondrousRobeStarsLuckSaveBonus;
+        clone.WondrousRobeStarsArmorBonus = src.WondrousRobeStarsArmorBonus;
+        clone.WondrousRobeFireballStars = src.WondrousRobeFireballStarsMax;       // Full stars on clone
+        clone.WondrousRobeFireballStarsMax = src.WondrousRobeFireballStarsMax;
+        clone.WondrousRobeMagicMissileStars = src.WondrousRobeMagicMissileStarsMax;
+        clone.WondrousRobeMagicMissileStarsMax = src.WondrousRobeMagicMissileStarsMax;
+        clone.WondrousRobeLightStars = src.WondrousRobeLightStarsMax;
+        clone.WondrousRobeLightStarsMax = src.WondrousRobeLightStarsMax;
+        clone.WondrousRobeStarsRegenPerMonth = src.WondrousRobeStarsRegenPerMonth;
+        clone.WondrousRobeGrantsAstralShift = src.WondrousRobeGrantsAstralShift;
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

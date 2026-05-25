@@ -1344,15 +1344,31 @@ public static class WondrousItemFactory
     {
         var item = CreateBaseWondrous(WondrousItemNames.ROBE_OF_STARS,
             "Robe of Stars",
-            "This dark blue or black robe has tiny stars sewn into it. It grants +1d6 armor bonus to AC (rolled when donned), 6 star-shaped patches each usable as Magic Missile (CL 5), and Dimension Door 1/day.",
+            "This deep blue robe is adorned with gold stars. Grants +1 luck bonus to ALL saves, "
+            + "+5 armor bonus to AC. Detachable stars: 6 large (Fireball 5d6, DC 15), "
+            + "20 small (Magic Missile 1d4+1 each), 30 tiny (Light, 1 hr, 20 ft radius). "
+            + "Stars regenerate 1/month. Command word: Plane Shift to Astral Plane.",
             EquipSlot.Torso, 58000, 15, 1f, TorsoIcon, TorsoColor);
         item.WondrousItemType = "armor";
         item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
         item.WondrousHasActivation = true;
+        // Legacy patch fields (kept for compatibility)
         item.WondrousPatchesRemaining = 6;
         item.WondrousPatchesMax = 6;
-        item.WondrousPatchDescription = "Magic Missile (CL 5) stars";
-        item.WondrousUsesPerDay = 1; // Dimension Door
+        item.WondrousPatchDescription = "Fireball (5d6, DC 15) stars";
+        item.WondrousUsesPerDay = -1; // Unlimited (Plane Shift is command word)
+        // Enhanced Robe of Stars fields
+        item.WondrousIsRobeOfStars = true;
+        item.WondrousRobeStarsLuckSaveBonus = 1;
+        item.WondrousRobeStarsArmorBonus = 5;
+        item.WondrousRobeFireballStars = 6;
+        item.WondrousRobeFireballStarsMax = 6;
+        item.WondrousRobeMagicMissileStars = 20;
+        item.WondrousRobeMagicMissileStarsMax = 20;
+        item.WondrousRobeLightStars = 30;
+        item.WondrousRobeLightStarsMax = 30;
+        item.WondrousRobeStarsRegenPerMonth = 1;
+        item.WondrousRobeGrantsAstralShift = true;
         return item;
     }
 
@@ -2152,6 +2168,132 @@ public static class WondrousItemFactory
         item.WondrousApparatusLevers = new bool[10]; // All off initially
         item.WondrousApparatusPincerAttack = 10;
         item.WondrousApparatusPincerDamage = "2d6";
+        return item;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PHASE 13: LEGENDARY TOOLS (DMG pp. 259–265)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Mattock of the Titans — Huge adamantine mattock +3.
+    /// DMG p.262. 23,348 gp, CL 15, Weight 120 lbs.
+    /// 4d6+3 damage. Destroys stone structures, auto-breaks DC ≤ 40 objects.
+    /// Ignores hardness up to 20 (adamantine). Medium wielders take -4 penalty.
+    /// </summary>
+    public static ItemData CreateMattockOfTheTitans()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.MATTOCK_OF_THE_TITANS,
+            "Mattock of the Titans",
+            "This Huge adamantine mattock is sized for a titan but can be wielded (clumsily) by a Medium "
+            + "creature at a -4 penalty. +3 enhancement bonus, 4d6+3 damage. As adamantine, it ignores "
+            + "hardness up to 20 and automatically breaks objects with a Break DC of 40 or less. "
+            + "Particularly effective against stone structures, dealing double damage to stone.",
+            EquipSlot.Slotless, 23348, 15, 120f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "weapon";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        // Titan weapon stats
+        item.WondrousIsMattockOfTitans = true;
+        item.WondrousTitanEnhancement = 3;
+        item.WondrousTitanDamageDice = "4d6";
+        item.WondrousTitanWeightLbs = 120;
+        item.WondrousTitanSize = "Huge";
+        item.WondrousTitanMaterial = "Adamantine";
+        item.WondrousTitanIgnoreHardness = 20;
+        item.WondrousTitanAutoBreakDC = 40;
+        item.WondrousTitanOversizePenalty = -4;
+        return item;
+    }
+
+    /// <summary>
+    /// Maul of the Titans — Huge adamantine maul +3 with superior sunder.
+    /// DMG p.262. 25,305 gp, CL 15, Weight 160 lbs.
+    /// 4d6+3 damage. +4 sunder bonus, sunder does not provoke AoO.
+    /// Can sunder any item (even artifacts). Medium wielders take -4 penalty.
+    /// </summary>
+    public static ItemData CreateMaulOfTheTitans()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.MAUL_OF_THE_TITANS,
+            "Maul of the Titans",
+            "This Huge adamantine maul is the ultimate sundering weapon. +3 enhancement bonus, 4d6+3 damage. "
+            + "Grants a +4 bonus on sunder attempts and sundering does NOT provoke attacks of opportunity. "
+            + "Can attempt to sunder any item, even artifacts (though artifacts may resist). "
+            + "Ignores hardness up to 20. Medium wielders take -4 penalty for oversized weapon.",
+            EquipSlot.Slotless, 25305, 15, 160f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "weapon";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        // Titan weapon stats
+        item.WondrousIsMaulOfTitans = true;
+        item.WondrousTitanEnhancement = 3;
+        item.WondrousTitanDamageDice = "4d6";
+        item.WondrousTitanWeightLbs = 160;
+        item.WondrousTitanSize = "Huge";
+        item.WondrousTitanMaterial = "Adamantine";
+        item.WondrousTitanIgnoreHardness = 20;
+        item.WondrousTitanAutoBreakDC = 0; // Maul uses sunder, not auto-break
+        item.WondrousTitanSunderBonus = 4;
+        item.WondrousTitanSunderNoAoO = true;
+        item.WondrousTitanOversizePenalty = -4;
+        return item;
+    }
+
+    /// <summary>
+    /// Lyre of Building — magical instrument that accelerates construction.
+    /// DMG p.262. 13,000 gp, CL 6, Weight 5 lbs.
+    /// 1 hour playing = 800 worker-hours. Perform DC 15. 3 uses/week.
+    /// </summary>
+    public static ItemData CreateLyreOfBuilding()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.LYRE_OF_BUILDING,
+            "Lyre of Building",
+            "This magical stringed instrument accelerates construction projects when played. One hour of "
+            + "playing accomplishes as much work as 100 workers laboring for 8 hours (800 worker-hours). "
+            + "Requires a Perform (string instruments) check DC 15 to activate the magic. Usable 3 times "
+            + "per week. Can construct buildings, fortifications, ships, and other large projects.",
+            EquipSlot.Slotless, 13000, 6, 5f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "utility";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        // Lyre fields
+        item.WondrousIsLyreOfBuilding = true;
+        item.WondrousLyreUsesPerWeek = 3;
+        item.WondrousLyreUsesThisWeek = 0;
+        item.WondrousLyrePerformDC = 15;
+        item.WondrousLyreWorkerHoursPerUse = 800;
+        return item;
+    }
+
+    /// <summary>
+    /// Horn of Valhalla (Iron) — summons 20 barbarian warriors.
+    /// DMG p.259. 50,000 gp, CL 13, Weight 2 lbs.
+    /// Summons 20× 2nd-level barbarians for 1 hour. Once per week.
+    /// </summary>
+    public static ItemData CreateHornOfValhallaIron()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.HORN_OF_VALHALLA_IRON,
+            "Horn of Valhalla (Iron)",
+            "This great iron war horn summons a host of warriors from Valhalla when blown. 20 barbarian "
+            + "warriors (2nd level each) appear and fight for the horn blower for 1 hour. Each barbarian "
+            + "has 19 HP, AC 14, attacks at +4 with a greataxe (1d12+3), and possesses Rage, Power Attack, "
+            + "and Cleave. They follow commands and fight to the death. Usable once per week.",
+            EquipSlot.Slotless, 50000, 13, 2f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "summoning";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        // Horn fields
+        item.WondrousIsHornOfValhalla = true;
+        item.WondrousHornType = "Iron";
+        item.WondrousHornBarbarianCount = 20;
+        item.WondrousHornBarbarianLevel = 2;
+        item.WondrousHornBarbarianHP = 19;
+        item.WondrousHornBarbarianAC = 14;
+        item.WondrousHornBarbarianAttack = 4;
+        item.WondrousHornBarbarianDamage = "1d12+3";
+        item.WondrousHornServiceMinutes = 60f;
+        item.WondrousHornUsesPerWeek = 1;
+        item.WondrousHornUsesThisWeek = 0;
         return item;
     }
 }

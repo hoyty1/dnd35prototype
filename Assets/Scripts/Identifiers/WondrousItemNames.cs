@@ -260,6 +260,12 @@ namespace DND35e.Identifiers
         // --- Phase 12: Vehicle ---
         public const string APPARATUS_OF_KWALISH = "apparatus_of_kwalish";
 
+        // --- Phase 13: Legendary Tools ---
+        public const string MATTOCK_OF_THE_TITANS = "mattock_of_the_titans";
+        public const string MAUL_OF_THE_TITANS = "maul_of_the_titans";
+        public const string LYRE_OF_BUILDING = "lyre_of_building";
+        public const string HORN_OF_VALHALLA_IRON = "horn_of_valhalla_iron";
+
         // --- Test/Placeholder Items ---
         public const string TEST_HEAD_ITEM = "test_wondrous_head";
         public const string TEST_FACE_ITEM = "test_wondrous_face";

@@ -901,6 +901,94 @@ public class ItemData
     /// <summary>Pincer damage dice (e.g. "2d6").</summary>
     public string WondrousApparatusPincerDamage;
 
+    // ── Phase 13: Legendary Tools ──
+
+    // --- Titan Weapons (Mattock & Maul) ---
+    /// <summary>True if this is a Mattock of the Titans.</summary>
+    public bool WondrousIsMattockOfTitans;
+    /// <summary>True if this is a Maul of the Titans.</summary>
+    public bool WondrousIsMaulOfTitans;
+    /// <summary>Enhancement bonus for titan weapons.</summary>
+    public int WondrousTitanEnhancement;
+    /// <summary>Damage dice string (e.g. "4d6").</summary>
+    public string WondrousTitanDamageDice;
+    /// <summary>Weapon weight in lbs.</summary>
+    public int WondrousTitanWeightLbs;
+    /// <summary>Weapon size category (Huge).</summary>
+    public string WondrousTitanSize;
+    /// <summary>Material (Adamantine).</summary>
+    public string WondrousTitanMaterial;
+    /// <summary>Maximum hardness ignored (adamantine = 20).</summary>
+    public int WondrousTitanIgnoreHardness;
+    /// <summary>Highest Break DC auto-destroyed by the weapon.</summary>
+    public int WondrousTitanAutoBreakDC;
+    /// <summary>Sunder bonus (Maul only, +4).</summary>
+    public int WondrousTitanSunderBonus;
+    /// <summary>True if sunder does not provoke AoO (Maul).</summary>
+    public bool WondrousTitanSunderNoAoO;
+    /// <summary>Penalty for Medium creature wielding (typically -4).</summary>
+    public int WondrousTitanOversizePenalty;
+
+    // --- Lyre of Building ---
+    /// <summary>True if this is a Lyre of Building.</summary>
+    public bool WondrousIsLyreOfBuilding;
+    /// <summary>Uses per week.</summary>
+    public int WondrousLyreUsesPerWeek;
+    /// <summary>Uses this week.</summary>
+    public int WondrousLyreUsesThisWeek;
+    /// <summary>Perform DC required.</summary>
+    public int WondrousLyrePerformDC;
+    /// <summary>Worker-hours per use (800).</summary>
+    public int WondrousLyreWorkerHoursPerUse;
+
+    // --- Horn of Valhalla ---
+    /// <summary>True if this is a Horn of Valhalla.</summary>
+    public bool WondrousIsHornOfValhalla;
+    /// <summary>Horn type (Iron, Bronze, etc.).</summary>
+    public string WondrousHornType;
+    /// <summary>Number of barbarians summoned.</summary>
+    public int WondrousHornBarbarianCount;
+    /// <summary>Level of summoned barbarians.</summary>
+    public int WondrousHornBarbarianLevel;
+    /// <summary>Average HP per barbarian.</summary>
+    public int WondrousHornBarbarianHP;
+    /// <summary>AC of summoned barbarians.</summary>
+    public int WondrousHornBarbarianAC;
+    /// <summary>Attack bonus of barbarians.</summary>
+    public int WondrousHornBarbarianAttack;
+    /// <summary>Damage dice of barbarians (e.g. "1d12+3").</summary>
+    public string WondrousHornBarbarianDamage;
+    /// <summary>Service duration in minutes (60).</summary>
+    public float WondrousHornServiceMinutes;
+    /// <summary>Uses per week.</summary>
+    public int WondrousHornUsesPerWeek;
+    /// <summary>Uses this week.</summary>
+    public int WondrousHornUsesThisWeek;
+
+    // --- Robe of Stars (enhanced) ---
+    /// <summary>True if this is a Robe of Stars.</summary>
+    public bool WondrousIsRobeOfStars;
+    /// <summary>Luck bonus to all saves.</summary>
+    public int WondrousRobeStarsLuckSaveBonus;
+    /// <summary>Armor bonus to AC.</summary>
+    public int WondrousRobeStarsArmorBonus;
+    /// <summary>Fireball stars remaining (max 6).</summary>
+    public int WondrousRobeFireballStars;
+    /// <summary>Fireball stars max.</summary>
+    public int WondrousRobeFireballStarsMax;
+    /// <summary>Magic Missile stars remaining (max 20).</summary>
+    public int WondrousRobeMagicMissileStars;
+    /// <summary>Magic Missile stars max.</summary>
+    public int WondrousRobeMagicMissileStarsMax;
+    /// <summary>Light stars remaining (max 30).</summary>
+    public int WondrousRobeLightStars;
+    /// <summary>Light stars max.</summary>
+    public int WondrousRobeLightStarsMax;
+    /// <summary>Stars regenerated per month (1).</summary>
+    public int WondrousRobeStarsRegenPerMonth;
+    /// <summary>True if Robe grants Plane Shift to Astral.</summary>
+    public bool WondrousRobeGrantsAstralShift;
+
     /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
     public bool HasActiveRingAbility => IsRing && (
         (RingAbilities != null && RingAbilities.Count > 0) ||
@@ -2437,6 +2525,64 @@ public class ItemData
                 }
                 if (WondrousApparatusPincerAttack > 0)
                     stats += $"\n  Pincer: +{WondrousApparatusPincerAttack}, {WondrousApparatusPincerDamage} damage";
+            }
+
+            // ── Titan Weapons ──
+            if (WondrousIsMattockOfTitans || WondrousIsMaulOfTitans)
+            {
+                string name = WondrousIsMattockOfTitans ? "Mattock of the Titans" : "Maul of the Titans";
+                stats += $"\n\n⚒ {name} ({WondrousTitanSize} {WondrousTitanMaterial})";
+                stats += $"\n  +{WondrousTitanEnhancement} enhancement, {WondrousTitanDamageDice}+{WondrousTitanEnhancement} damage";
+                stats += $"\n  Weight: {WondrousTitanWeightLbs} lbs";
+                if (WondrousTitanOversizePenalty != 0)
+                    stats += $"\n  ⚠ Oversize penalty: {WondrousTitanOversizePenalty} (Medium wielder)";
+                if (WondrousTitanIgnoreHardness > 0)
+                    stats += $"\n  Ignores hardness up to {WondrousTitanIgnoreHardness} (adamantine)";
+                if (WondrousTitanAutoBreakDC > 0)
+                    stats += $"\n  Auto-breaks objects DC ≤ {WondrousTitanAutoBreakDC}";
+                if (WondrousTitanSunderBonus > 0)
+                    stats += $"\n  +{WondrousTitanSunderBonus} bonus on sunder attempts";
+                if (WondrousTitanSunderNoAoO)
+                    stats += "\n  Sunder does NOT provoke AoO";
+            }
+
+            // ── Lyre of Building ──
+            if (WondrousIsLyreOfBuilding)
+            {
+                int remaining = WondrousLyreUsesPerWeek - WondrousLyreUsesThisWeek;
+                stats += "\n\n🎵 Lyre of Building";
+                stats += $"\n  Uses this week: {WondrousLyreUsesThisWeek}/{WondrousLyreUsesPerWeek} ({remaining} remaining)";
+                stats += $"\n  Perform DC {WondrousLyrePerformDC} (string instruments)";
+                stats += $"\n  1 hour playing = {WondrousLyreWorkerHoursPerUse} worker-hours";
+                stats += "\n  Can construct buildings, fortifications, ships";
+            }
+
+            // ── Horn of Valhalla ──
+            if (WondrousIsHornOfValhalla)
+            {
+                int hRemaining = WondrousHornUsesPerWeek - WondrousHornUsesThisWeek;
+                stats += $"\n\n📯 Horn of Valhalla ({WondrousHornType})";
+                stats += $"\n  Uses this week: {WondrousHornUsesThisWeek}/{WondrousHornUsesPerWeek} ({hRemaining} remaining)";
+                stats += $"\n  Summons {WondrousHornBarbarianCount}× Lv{WondrousHornBarbarianLevel} barbarians";
+                stats += $"\n  Each: {WondrousHornBarbarianHP} HP, AC {WondrousHornBarbarianAC}, +{WondrousHornBarbarianAttack} atk, {WondrousHornBarbarianDamage}";
+                stats += "\n  Feats: Rage, Power Attack, Cleave";
+                stats += $"\n  Serve for {WondrousHornServiceMinutes:0} minutes, fight to the death";
+            }
+
+            // ── Robe of Stars (enhanced) ──
+            if (WondrousIsRobeOfStars)
+            {
+                stats += "\n\n⭐ Robe of Stars";
+                if (WondrousRobeStarsLuckSaveBonus > 0)
+                    stats += $"\n  +{WondrousRobeStarsLuckSaveBonus} luck bonus to ALL saves";
+                if (WondrousRobeStarsArmorBonus > 0)
+                    stats += $"\n  +{WondrousRobeStarsArmorBonus} armor bonus to AC";
+                stats += $"\n  Fireball stars: {WondrousRobeFireballStars}/{WondrousRobeFireballStarsMax} (5d6 fire, DC 15)";
+                stats += $"\n  Magic Missile stars: {WondrousRobeMagicMissileStars}/{WondrousRobeMagicMissileStarsMax} (1d4+1 force)";
+                stats += $"\n  Light stars: {WondrousRobeLightStars}/{WondrousRobeLightStarsMax} (1 hr, 20 ft radius)";
+                stats += $"\n  Stars regenerate: {WondrousRobeStarsRegenPerMonth}/month";
+                if (WondrousRobeGrantsAstralShift)
+                    stats += "\n  Command word: Plane Shift to Astral Plane";
             }
 
             // Alignment restriction

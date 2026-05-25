@@ -255,6 +255,14 @@ public static class WondrousItemDatabase
         Register(WondrousItemFactory.CreateApparatusOfKwalish());                // 90,000 gp, Slotless
 
         // ════════════════════════════════════════════════════════════
+        //  PHASE 13: LEGENDARY TOOLS
+        // ════════════════════════════════════════════════════════════
+        Register(WondrousItemFactory.CreateMattockOfTheTitans());                // 23,348 gp, Slotless
+        Register(WondrousItemFactory.CreateMaulOfTheTitans());                   // 25,305 gp, Slotless
+        Register(WondrousItemFactory.CreateLyreOfBuilding());                    // 13,000 gp, Slotless
+        Register(WondrousItemFactory.CreateHornOfValhallaIron());                // 50,000 gp, Slotless
+
+        // ════════════════════════════════════════════════════════════
         //  TEST ITEMS — One per slot for verification
         // ════════════════════════════════════════════════════════════
         Register(WondrousItemFactory.CreateTestItem(EquipSlot.Head, "Head"));
@@ -268,7 +276,7 @@ public static class WondrousItemDatabase
         Register(WondrousItemFactory.CreateTestItem(EquipSlot.Feet, "Feet"));
         Register(WondrousItemFactory.CreateTestSlotlessItem());
 
-        Debug.Log($"[WondrousItemDatabase] Initialized: {_items.Count} wondrous items registered (Phases 1–10).");
+        Debug.Log($"[WondrousItemDatabase] Initialized: {_items.Count} wondrous items registered (Phases 1–14, Major Wondrous Items COMPLETE).");
     }
 
     /// <summary>Register a test slotless item (delegates to factory).</summary>
