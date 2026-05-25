@@ -2179,6 +2179,55 @@ public static class ItemDatabase
         clone.WondrousPlaneShiftMaxTravelers = src.WondrousPlaneShiftMaxTravelers;
         clone.WondrousGrantsPlaneShift = src.WondrousGrantsPlaneShift;
 
+        // --- Phase 6/7/8: Creature Trapping ---
+        clone.WondrousMaxTrappedCreatures = src.WondrousMaxTrappedCreatures;
+        clone.WondrousTrapSaveDC = src.WondrousTrapSaveDC;
+        clone.WondrousTrapSaveType = src.WondrousTrapSaveType;
+        clone.WondrousTrapRangeFeet = src.WondrousTrapRangeFeet;
+        clone.WondrousTrapAnyType = src.WondrousTrapAnyType;
+        clone.WondrousTrapAllowedTypes = src.WondrousTrapAllowedTypes;
+        clone.WondrousTrapServiceMinutes = src.WondrousTrapServiceMinutes;
+        clone.WondrousTrapHasDefaultCreature = src.WondrousTrapHasDefaultCreature;
+        clone.WondrousTrapDefaultCreatureType = src.WondrousTrapDefaultCreatureType;
+        clone.WondrousTrapControlRangeFeet = src.WondrousTrapControlRangeFeet;
+        clone.WondrousTrapControlSaveDC = src.WondrousTrapControlSaveDC;
+        clone.WondrousControlsEarthElementals = src.WondrousControlsEarthElementals;
+        // Deep copy trapped creatures list
+        if (src.WondrousTrappedCreatures != null)
+        {
+            clone.WondrousTrappedCreatures = new System.Collections.Generic.List<TrappedCreature>();
+            foreach (var tc in src.WondrousTrappedCreatures)
+            {
+                var copy = new TrappedCreature();
+                copy.CreatureName = tc.CreatureName;
+                copy.CreatureID = tc.CreatureID;
+                copy.Level = tc.Level;
+                copy.CreatureType = tc.CreatureType;
+                copy.CurrentHP = tc.CurrentHP;
+                copy.MaxHP = tc.MaxHP;
+                copy.ArmorClass = tc.ArmorClass;
+                copy.STR = tc.STR;
+                copy.DEX = tc.DEX;
+                copy.CON = tc.CON;
+                copy.INT = tc.INT;
+                copy.WIS = tc.WIS;
+                copy.CHA = tc.CHA;
+                copy.FortSave = tc.FortSave;
+                copy.RefSave = tc.RefSave;
+                copy.WillSave = tc.WillSave;
+                copy.SpellResistance = tc.SpellResistance;
+                copy.ChallengeRating = tc.ChallengeRating;
+                copy.Size = tc.Size;
+                copy.BaseAttackBonus = tc.BaseAttackBonus;
+                copy.ActiveEffects = tc.ActiveEffects != null
+                    ? new System.Collections.Generic.List<string>(tc.ActiveEffects) : null;
+                copy.IsServingOwner = tc.IsServingOwner;
+                copy.ServiceTimeRemainingMinutes = tc.ServiceTimeRemainingMinutes;
+                copy.AttitudeToOwner = tc.AttitudeToOwner;
+                clone.WondrousTrappedCreatures.Add(copy);
+            }
+        }
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

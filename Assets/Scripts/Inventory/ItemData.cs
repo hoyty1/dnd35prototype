@@ -763,6 +763,35 @@ public class ItemData
     /// <summary>True if this item grants at-will plane shifting.</summary>
     public bool WondrousGrantsPlaneShift;
 
+    // --- Phase 6–8: Creature Trapping Items ---
+
+    /// <summary>List of creatures currently trapped in this item. Null if not a trapping item.</summary>
+    public System.Collections.Generic.List<TrappedCreature> WondrousTrappedCreatures;
+    /// <summary>Maximum number of creatures this item can hold (1 for Flask/Bottle, 15 for Mirror).</summary>
+    public int WondrousMaxTrappedCreatures;
+    /// <summary>Save DC to resist trapping (19 for Flask/Bottle, 23 for Mirror).</summary>
+    public int WondrousTrapSaveDC;
+    /// <summary>Save type for trapping ("Will" or "Reflex").</summary>
+    public string WondrousTrapSaveType;
+    /// <summary>Range of trapping effect in feet (60 for Flask, 50 for Mirror).</summary>
+    public int WondrousTrapRangeFeet;
+    /// <summary>True if this item can trap any creature type (Iron Flask).</summary>
+    public bool WondrousTrapAnyType;
+    /// <summary>Comma-separated allowed creature types for trapping (e.g., "Outsider").</summary>
+    public string WondrousTrapAllowedTypes;
+    /// <summary>Service duration in minutes when creature is released friendly (default 60).</summary>
+    public float WondrousTrapServiceMinutes = 60f;
+    /// <summary>True if this item starts with a pre-loaded creature (Efreeti Bottle).</summary>
+    public bool WondrousTrapHasDefaultCreature;
+    /// <summary>Type of default creature ("Efreeti", "ElderEarthElemental").</summary>
+    public string WondrousTrapDefaultCreatureType;
+    /// <summary>Control range for area control abilities (Stone of Controlling Earth Elementals).</summary>
+    public int WondrousTrapControlRangeFeet;
+    /// <summary>Control save DC for area control.</summary>
+    public int WondrousTrapControlSaveDC;
+    /// <summary>True if this item can summon/control earth elementals (Stone).</summary>
+    public bool WondrousControlsEarthElementals;
+
     /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
     public bool HasActiveRingAbility => IsRing && (
         (RingAbilities != null && RingAbilities.Count > 0) ||
@@ -2182,6 +2211,51 @@ public class ItemData
                 stats += $"\nCarries up to {WondrousCarpetCapacityLbs} lbs";
                 stats += $"\nSize: {WondrousCarpetSizeFeet}×{WondrousCarpetSizeFeet} ft";
                 if (WondrousCarpetIsFlying) stats += "\n  ★ Currently flying";
+            }
+            // Creature Trapping (Phase 6–8)
+            if (WondrousMaxTrappedCreatures > 0)
+            {
+                int trapped = WondrousTrappedCreatures != null ? WondrousTrappedCreatures.Count : 0;
+                stats += $"\n⚔ Creature Trapping ({trapped}/{WondrousMaxTrappedCreatures})";
+                if (WondrousTrapSaveDC > 0)
+                    stats += $"\n  {WondrousTrapSaveType ?? "Will"} save DC {WondrousTrapSaveDC} to resist";
+                if (WondrousTrapRangeFeet > 0)
+                    stats += $"\n  Range: {WondrousTrapRangeFeet} ft";
+                if (WondrousTrapAnyType)
+                    stats += "\n  Can trap ANY creature type";
+                else if (!string.IsNullOrEmpty(WondrousTrapAllowedTypes))
+                    stats += $"\n  Allowed types: {WondrousTrapAllowedTypes}";
+                if (WondrousTrapServiceMinutes > 0)
+                    stats += $"\n  Service: {WondrousTrapServiceMinutes:0} minutes when released friendly";
+                // List trapped creatures
+                if (trapped > 0)
+                {
+                    stats += "\n  ── Trapped Creatures ──";
+                    for (int i = 0; i < WondrousTrappedCreatures.Count; i++)
+                    {
+                        var tc = WondrousTrappedCreatures[i];
+                        stats += $"\n  {i + 1}. {tc.GetSummary()}";
+                    }
+                }
+                else
+                {
+                    stats += "\n  (empty)";
+                }
+            }
+            if (WondrousControlsEarthElementals)
+            {
+                stats += "\n⚔ Controls earth elementals";
+                if (WondrousTrapControlRangeFeet > 0)
+                    stats += $" within {WondrousTrapControlRangeFeet} ft";
+                if (WondrousTrapControlSaveDC > 0)
+                    stats += $" (Will DC {WondrousTrapControlSaveDC})";
+            }
+            if (WondrousTrapHasDefaultCreature && !string.IsNullOrEmpty(WondrousTrapDefaultCreatureType))
+            {
+                string defName = WondrousTrapDefaultCreatureType == "Efreeti" ? "an Efreeti" :
+                    WondrousTrapDefaultCreatureType == "ElderEarthElemental" ? "an Elder Earth Elemental" :
+                    WondrousTrapDefaultCreatureType;
+                stats += $"\nSummons {defName} (1 hour service)";
             }
             // Alignment restriction
             if (!string.IsNullOrEmpty(WondrousRequiredAlignment))

@@ -1767,4 +1767,130 @@ public static class WondrousItemFactory
         item.WondrousFlightManeuverability = "average";
         return item;
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PHASE 6/7/8: CREATURE TRAPPING ITEMS (DMG pp. 254–265)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Iron Flask — captures any extraplanar creature (Will DC 19).
+    /// DMG p.261. 170,000 gp, CL 20, Weight 1 lb.
+    /// Can trap one creature at a time; released creature serves for 1 hour.
+    /// </summary>
+    public static ItemData CreateIronFlask()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.IRON_FLASK,
+            "Iron Flask",
+            "This iron bottle can capture any extraplanar creature within 60 ft (Will DC 19 negates). "
+            + "The creature is held inside until released by the owner. A released creature serves the opener "
+            + "faithfully for 1 hour before becoming free. The flask can hold only one creature at a time. "
+            + "Opening the flask to release its prisoner is a standard action.",
+            EquipSlot.Slotless, 170000, 20, 1f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "trapping";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        // Trapping fields
+        item.WondrousMaxTrappedCreatures = 1;
+        item.WondrousTrapSaveDC = 19;
+        item.WondrousTrapSaveType = "Will";
+        item.WondrousTrapRangeFeet = 60;
+        item.WondrousTrapAnyType = true; // Any extraplanar creature
+        item.WondrousTrapServiceMinutes = 60f; // 1 hour
+        item.WondrousTrappedCreatures = new System.Collections.Generic.List<TrappedCreature>();
+        return item;
+    }
+
+    /// <summary>
+    /// Efreeti Bottle — contains an efreeti that grants wishes or serves.
+    /// DMG p.254. 145,000 gp, CL 14, Weight 1 lb.
+    /// Comes pre-loaded with an efreeti. 1/day activation.
+    /// </summary>
+    public static ItemData CreateEfreetiBottle()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.EFREETI_BOTTLE,
+            "Efreeti Bottle",
+            "This heavy brass bottle contains a bound efreeti. Opening it (1/day) releases the efreeti, "
+            + "which serves the opener for up to 10 minutes per day. The efreeti can grant up to 3 wishes "
+            + "total (each counts as a day's service). There is a 10% chance the efreeti is hostile on release. "
+            + "If slain, the efreeti reforms in the bottle in 24 hours.",
+            EquipSlot.Slotless, 145000, 14, 1f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "trapping";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousUsesPerDay = 1;
+        // Trapping fields
+        item.WondrousMaxTrappedCreatures = 1;
+        item.WondrousTrapSaveDC = 19;
+        item.WondrousTrapSaveType = "Will";
+        item.WondrousTrapRangeFeet = 0; // Not used for capture
+        item.WondrousTrapAllowedTypes = "Outsider";
+        item.WondrousTrapServiceMinutes = 10f; // 10 minutes per day
+        item.WondrousTrapHasDefaultCreature = true;
+        item.WondrousTrapDefaultCreatureType = "Efreeti";
+        // Pre-load with efreeti
+        item.WondrousTrappedCreatures = new System.Collections.Generic.List<TrappedCreature>();
+        item.WondrousTrappedCreatures.Add(CreatureTrapSystem.CreateEfreetiData());
+        return item;
+    }
+
+    /// <summary>
+    /// Stone of Controlling Earth Elementals — summon Elder Earth Elemental 1/day + control earth elementals.
+    /// DMG p.264. 100,000 gp, CL 16, Weight 5 lbs.
+    /// </summary>
+    public static ItemData CreateStoneOfControllingEarthElementals()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.STONE_OF_CONTROLLING_EARTH_ELEMENTALS,
+            "Stone of Controlling Earth Elementals",
+            "This stone appears to be a naturally shaped and polished chunk ofite. The bearer can summon "
+            + "an elder earth elemental once per day (standard action). The elemental serves for 1 hour or "
+            + "until dismissed. Additionally, while holding the stone, the bearer can attempt to control any "
+            + "earth elemental within 60 ft (Will DC 18 negates). Controlled elementals serve for 1 hour.",
+            EquipSlot.Slotless, 100000, 16, 5f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "trapping";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = 1;
+        // Trapping fields for summoned elemental
+        item.WondrousMaxTrappedCreatures = 1;
+        item.WondrousTrapServiceMinutes = 60f; // 1 hour service
+        item.WondrousTrapHasDefaultCreature = true;
+        item.WondrousTrapDefaultCreatureType = "ElderEarthElemental";
+        // Earth elemental control ability
+        item.WondrousControlsEarthElementals = true;
+        item.WondrousTrapControlRangeFeet = 60;
+        item.WondrousTrapControlSaveDC = 18;
+        item.WondrousTrappedCreatures = new System.Collections.Generic.List<TrappedCreature>();
+        return item;
+    }
+
+    /// <summary>
+    /// Mirror of Life Trapping — captures up to 15 creatures (Will DC 23).
+    /// DMG p.263. 200,000 gp, CL 17, Weight 50 lbs.
+    /// Creatures are trapped when they gaze into the mirror within 30 ft.
+    /// Owner can release one or all at a time.
+    /// </summary>
+    public static ItemData CreateMirrorOfLifeTrapping()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.MIRROR_OF_LIFE_TRAPPING,
+            "Mirror of Life Trapping",
+            "This 4-foot-by-6-foot crystal mirror traps creatures that gaze into it (Will DC 23 negates). "
+            + "It can hold up to 15 creatures. The mirror's owner can speak a command word to call forth any "
+            + "trapped creature, which appears before the mirror and must serve the owner for 1 hour before "
+            + "becoming free. Breaking the mirror frees all trapped creatures at once. "
+            + "Range 30 ft for trapping effect. Can trap ANY creature type.",
+            EquipSlot.Slotless, 200000, 17, 50f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "trapping";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = -1; // Unlimited trapping
+        // Trapping fields
+        item.WondrousMaxTrappedCreatures = 15;
+        item.WondrousTrapSaveDC = 23;
+        item.WondrousTrapSaveType = "Will";
+        item.WondrousTrapRangeFeet = 30;
+        item.WondrousTrapAnyType = true; // Can trap any creature type
+        item.WondrousTrapServiceMinutes = 60f; // 1 hour service
+        item.WondrousTrappedCreatures = new System.Collections.Generic.List<TrappedCreature>();
+        return item;
+    }
 }

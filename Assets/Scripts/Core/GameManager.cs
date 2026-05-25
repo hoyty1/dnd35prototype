@@ -622,6 +622,13 @@ public partial class GameManager : MonoBehaviour
             PlanarTravelSystem.InitializePlaneDatabase();
         }
 
+        // Initialize creature trap system (Phase 6-8)
+        if (CreatureTrapSystem.Instance == null)
+        {
+            var trapGO = new GameObject("CreatureTrapSystem");
+            trapGO.AddComponent<CreatureTrapSystem>();
+        }
+
         // Check if character creation UI exists
         if (CharacterCreationUI != null)
         {

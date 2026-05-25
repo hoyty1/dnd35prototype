@@ -241,6 +241,12 @@ namespace DND35e.Identifiers
         public const string WELL_OF_MANY_WORLDS = "well_of_many_worlds";
         public const string CARPET_OF_FLYING_10X10 = "carpet_of_flying_10x10";
 
+        // --- Phase 6/7/8: Creature Trapping Items ---
+        public const string IRON_FLASK = "iron_flask";
+        public const string EFREETI_BOTTLE = "efreeti_bottle";
+        public const string STONE_OF_CONTROLLING_EARTH_ELEMENTALS = "stone_of_controlling_earth_elementals";
+        public const string MIRROR_OF_LIFE_TRAPPING = "mirror_of_life_trapping";
+
         // --- Test/Placeholder Items ---
         public const string TEST_HEAD_ITEM = "test_wondrous_head";
         public const string TEST_FACE_ITEM = "test_wondrous_face";

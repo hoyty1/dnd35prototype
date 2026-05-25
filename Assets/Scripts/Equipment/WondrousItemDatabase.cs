@@ -228,6 +228,14 @@ public static class WondrousItemDatabase
         // Scarab of Protection already registered in Phase 10 (Neck slot)
 
         // ════════════════════════════════════════════════════════════
+        //  PHASE 6/7/8: CREATURE TRAPPING ITEMS
+        // ════════════════════════════════════════════════════════════
+        Register(WondrousItemFactory.CreateIronFlask());                         // 170,000 gp, Slotless
+        Register(WondrousItemFactory.CreateEfreetiBottle());                     // 145,000 gp, Slotless
+        Register(WondrousItemFactory.CreateStoneOfControllingEarthElementals()); // 100,000 gp, Slotless
+        Register(WondrousItemFactory.CreateMirrorOfLifeTrapping());              // 200,000 gp, Slotless
+
+        // ════════════════════════════════════════════════════════════
         //  TEST ITEMS — One per slot for verification
         // ════════════════════════════════════════════════════════════
         Register(WondrousItemFactory.CreateTestItem(EquipSlot.Head, "Head"));
