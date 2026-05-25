@@ -1745,6 +1745,9 @@ public class CharacterStats
     /// <summary>The character's race data (Dwarf, Elf, Human, etc.).</summary>
     public RaceData Race;
 
+    /// <summary>Racial darkvision range in feet (from Race.DarkvisionRange). 0 if none.</summary>
+    public int RacialDarkvisionRange => (Race != null && Race.Vision == RaceData.VisionType.Darkvision) ? Race.DarkvisionRange : 0;
+
     /// <summary>Base size (normally from race, but can be overridden for monsters/templates).</summary>
     public global::SizeCategory BaseSizeCategory;
 
@@ -2517,6 +2520,25 @@ public class CharacterStats
     public int WondrousEnhancementWIS;
     /// <summary>Enhancement bonus to Charisma from Cloak of Charisma.</summary>
     public int WondrousEnhancementCHA;
+
+    // ── Wondrous Item Darkvision (Phase 5: Stealth/Detection) ──
+    /// <summary>Whether the character has darkvision from a wondrous item (e.g., Goggles of Night).</summary>
+    public bool WondrousHasDarkvision;
+    /// <summary>Darkvision range in feet from wondrous items. Uses highest if multiple sources.</summary>
+    public int WondrousDarkvisionRange;
+
+    /// <summary>Combined darkvision: true if racial OR wondrous darkvision is present.</summary>
+    public bool HasDarkvision => RacialDarkvisionRange > 0 || WondrousHasDarkvision;
+    /// <summary>Effective darkvision range in feet (best of racial + wondrous). 0 if none.</summary>
+    public int DarkvisionRange => Mathf.Max(RacialDarkvisionRange, WondrousDarkvisionRange);
+
+    // ── Wondrous Item Skill Bonuses (Phase 5: Stealth/Detection) ──
+    /// <summary>
+    /// Skill bonuses from equipped wondrous items, keyed by skill name.
+    /// For each skill, stores the highest applicable bonus (same bonus type doesn't stack).
+    /// Applied in GetSkillBonus() alongside feat/condition/spell modifiers.
+    /// </summary>
+    public Dictionary<string, int> WondrousSkillBonuses = new Dictionary<string, int>();
 
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
     public int TempHP;
@@ -5385,7 +5407,19 @@ public class CharacterStats
         int conditionModifier = GetConditionSkillModifier(skillName);
         int spellModifier = GetSpellSkillModifier(skillName);
         int familiarModifier = GetFamiliarSkillModifier(skillName);
-        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier + familiarModifier;
+        int wondrousBonus = GetWondrousSkillModifier(skillName);
+        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier + familiarModifier + wondrousBonus;
+    }
+
+    /// <summary>
+    /// Get the wondrous item skill bonus for a skill.
+    /// These are competence/enhancement bonuses from equipped wondrous items
+    /// (e.g., Boots of Elvenkind +5 Move Silently, Cloak of Elvenkind +5 Hide).
+    /// </summary>
+    private int GetWondrousSkillModifier(string skillName)
+    {
+        if (WondrousSkillBonuses == null || string.IsNullOrEmpty(skillName)) return 0;
+        return WondrousSkillBonuses.TryGetValue(skillName, out int bonus) ? bonus : 0;
     }
 
     /// <summary>
@@ -5450,13 +5484,15 @@ public class CharacterStats
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
         int conditionModifier = GetConditionSkillModifier(skillName);
         int spellModifier = GetSpellSkillModifier(skillName);
-        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier + spellModifier;
+        int wondrousBonus = GetWondrousSkillModifier(skillName);
+        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier + spellModifier + wondrousBonus;
 
         string featStr = featBonus > 0 ? $" + {featBonus}(feat)" : "";
         string acpStr = acpPenalty < 0 ? $" {acpPenalty}(ACP)" : "";
         string conditionStr = conditionModifier != 0 ? $" {conditionModifier}(condition)" : "";
         string spellStr = spellModifier != 0 ? $" + {spellModifier}(spell)" : "";
-        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr}{spellStr} = {total}");
+        string wondrousStr = wondrousBonus != 0 ? $" + {wondrousBonus}(wondrous)" : "";
+        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr}{spellStr}{wondrousStr} = {total}");
 
         return total;
     }

@@ -660,7 +660,9 @@ public class Inventory
                 if (item != null)
                 {
                     // Extradimensional containers use apparent weight, not actual weight
-                    float weight = (item.IsWondrous && item.WondrousIsExtradimensional && item.WondrousApparentWeight > 0)
+                    // (Bag of Holding = 15-60 lbs, Handy Haversack = 5 lbs, Efficient Quiver = 2 lbs,
+                    //  Portable Hole = 0 lbs when folded)
+                    float weight = (item.IsWondrous && item.WondrousIsExtradimensional)
                         ? item.WondrousApparentWeight
                         : Mathf.Max(0f, item.EffectiveWeightLbs);
                     total += weight;
@@ -672,7 +674,13 @@ public class Inventory
         {
             ItemData item = GeneralSlots[i];
             if (item != null)
-                total += Mathf.Max(0f, item.EffectiveWeightLbs); // D&D 3.5e: material weight modifiers
+            {
+                // Extradimensional containers in general inventory also use apparent weight
+                float weight = (item.IsWondrous && item.WondrousIsExtradimensional)
+                    ? item.WondrousApparentWeight
+                    : Mathf.Max(0f, item.EffectiveWeightLbs); // D&D 3.5e: material weight modifiers
+                total += weight;
+            }
         }
 
         return total;
@@ -1053,6 +1061,16 @@ public class Inventory
         OwnerStats.WondrousEnhancementWIS = 0;
         OwnerStats.WondrousEnhancementCHA = 0;
 
+        // Reset wondrous darkvision (Phase 5: Stealth/Detection)
+        OwnerStats.WondrousHasDarkvision = false;
+        OwnerStats.WondrousDarkvisionRange = 0;
+
+        // Reset wondrous skill bonuses (Phase 5: Stealth/Detection)
+        if (OwnerStats.WondrousSkillBonuses == null)
+            OwnerStats.WondrousSkillBonuses = new System.Collections.Generic.Dictionary<string, int>();
+        else
+            OwnerStats.WondrousSkillBonuses.Clear();
+
         // Check all equipment slots for wondrous items
         foreach (EquipSlot slot in AllEquipmentSlots)
         {
@@ -1158,6 +1176,38 @@ public class Inventory
         // --- Cold Endurance ---
         if (item.WondrousGrantsColdEndurance)
             OwnerStats.WondrousEndureCold = true;
+
+        // --- Darkvision (Phase 5: Goggles of Night, etc.) ---
+        if (item.WondrousDarkvisionRange > 0)
+        {
+            OwnerStats.WondrousHasDarkvision = true;
+            OwnerStats.WondrousDarkvisionRange = Mathf.Max(OwnerStats.WondrousDarkvisionRange, item.WondrousDarkvisionRange);
+        }
+
+        // --- Skill Bonuses (Phase 5: Boots of Elvenkind, Cloak of Elvenkind, Eyes of the Eagle, etc.) ---
+        // Same bonus type to same skill doesn't stack; use highest.
+        if (item.WondrousSkillBonus > 0 && !string.IsNullOrEmpty(item.WondrousSkillName))
+        {
+            if (OwnerStats.WondrousSkillBonuses == null)
+                OwnerStats.WondrousSkillBonuses = new System.Collections.Generic.Dictionary<string, int>();
+
+            string skill1 = item.WondrousSkillName;
+            if (!OwnerStats.WondrousSkillBonuses.ContainsKey(skill1))
+                OwnerStats.WondrousSkillBonuses[skill1] = item.WondrousSkillBonus;
+            else
+                OwnerStats.WondrousSkillBonuses[skill1] = Mathf.Max(OwnerStats.WondrousSkillBonuses[skill1], item.WondrousSkillBonus);
+        }
+        if (item.WondrousSkillBonus2 > 0 && !string.IsNullOrEmpty(item.WondrousSkillName2))
+        {
+            if (OwnerStats.WondrousSkillBonuses == null)
+                OwnerStats.WondrousSkillBonuses = new System.Collections.Generic.Dictionary<string, int>();
+
+            string skill2 = item.WondrousSkillName2;
+            if (!OwnerStats.WondrousSkillBonuses.ContainsKey(skill2))
+                OwnerStats.WondrousSkillBonuses[skill2] = item.WondrousSkillBonus2;
+            else
+                OwnerStats.WondrousSkillBonuses[skill2] = Mathf.Max(OwnerStats.WondrousSkillBonuses[skill2], item.WondrousSkillBonus2);
+        }
 
         // --- Ability Score Enhancement Bonuses (Big Six items) ---
         // Enhancement bonuses to the same ability score don't stack; use highest.

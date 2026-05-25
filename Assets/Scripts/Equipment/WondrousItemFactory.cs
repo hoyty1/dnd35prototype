@@ -648,7 +648,63 @@ public static class WondrousItemFactory
         item.WondrousVolumeCapacity = 12f;
         item.WondrousIsExtradimensional = true;
         item.WondrousApparentWeight = 5f;
+        item.WondrousQuickRetrievalEnabled = true; // Move action to retrieve desired item
         item.WondrousActivationType = WondrousItemActivation.PASSIVE;
+        return item;
+    }
+
+    /// <summary>Efficient Quiver (Quiver of Ehlonna). DMG p.255.
+    /// Three extradimensional compartments: 60 arrows/bolts, 18 javelins/similar, 6 bows/staffs/similar.
+    /// Always weighs 2 lbs regardless of contents. Quick retrieval as a move action.</summary>
+    public static ItemData CreateEfficientQuiver()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.EFFICIENT_QUIVER,
+            "Efficient Quiver",
+            "This quiver has three extradimensional compartments. The first holds up to 60 arrows, bolts, or similar objects. The second holds up to 18 javelins, or similar objects. The third holds up to 6 bows, staffs, or similar long objects. The quiver always weighs only 2 lbs.",
+            EquipSlot.Slotless, 1800, 9, 2f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "storage";
+        item.WondrousWeightCapacity = 300f; // Combined effective capacity across all 3 compartments
+        item.WondrousVolumeCapacity = 8f;   // Extradimensional
+        item.WondrousIsExtradimensional = true;
+        item.WondrousApparentWeight = 2f;
+        item.WondrousQuickRetrievalEnabled = true; // Move action to retrieve instead of standard
+        item.WondrousActivationType = WondrousItemActivation.PASSIVE;
+        return item;
+    }
+
+    /// <summary>Rope of Climbing (60 ft silk rope, animate on command). DMG p.265.
+    /// +5 competence bonus to Use Rope. Can animate to tie/untie itself, climb on command.
+    /// AC 22, 12 HP, break DC 23. Weight: 3 lbs.</summary>
+    public static ItemData CreateRopeOfClimbing()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.ROPE_OF_CLIMBING,
+            "Rope of Climbing",
+            "This 60-foot-long silk rope can animate on command, fastening itself and unfastening on command. It can also snake up to 60 feet to a point designated by the user. It grants +5 to Use Rope checks. AC 22, 12 HP, break DC 23.",
+            EquipSlot.Slotless, 3000, 3, 3f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "utility";
+        item.WondrousSkillBonus = 5;
+        item.WondrousSkillName = "Use Rope";
+        item.WondrousSkillBonusType = "competence";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        return item;
+    }
+
+    /// <summary>Portable Hole (6-ft cloth that unfolds into 10×10×10 ft extradimensional pit). DMG p.264.
+    /// Holds up to 10,000 lbs. Breathable air for 10 minutes. Weight: negligible (cloth).</summary>
+    public static ItemData CreatePortableHole()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.PORTABLE_HOLE,
+            "Portable Hole",
+            "This 6-foot-diameter circle of cloth unfolds into a 10-foot-deep extradimensional pit. It can hold up to 10,000 lbs. Living creatures inside have air for 10 minutes. Folding the cloth closes the pit. WARNING: Placing inside a Bag of Holding or vice versa opens a rift to the Astral Plane!",
+            EquipSlot.Slotless, 20000, 12, 0f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "storage";
+        item.WondrousWeightCapacity = 10000f;
+        item.WondrousVolumeCapacity = 1000f; // 10 × 10 × 10 ft
+        item.WondrousIsExtradimensional = true;
+        item.WondrousApparentWeight = 0f; // Negligible weight when folded
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
         return item;
     }
 

@@ -2073,6 +2073,7 @@ public static class ItemDatabase
         clone.WondrousVolumeCapacity = src.WondrousVolumeCapacity;
         clone.WondrousIsExtradimensional = src.WondrousIsExtradimensional;
         clone.WondrousApparentWeight = src.WondrousApparentWeight;
+        clone.WondrousQuickRetrievalEnabled = src.WondrousQuickRetrievalEnabled;
         clone.IsIounStone = src.IsIounStone;
         clone.IounStoneType = src.IounStoneType;
         clone.WondrousCasterLevel = src.WondrousCasterLevel;

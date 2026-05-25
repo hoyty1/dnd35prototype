@@ -553,6 +553,9 @@ public class ItemData
     public bool WondrousIsExtradimensional;
     /// <summary>Apparent weight (5 lbs for Bag of Holding, 5 lbs for Handy Haversack).</summary>
     public float WondrousApparentWeight;
+    /// <summary>Whether this container allows quick retrieval (move action instead of standard).
+    /// Applies to Handy Haversack and Efficient Quiver.</summary>
+    public bool WondrousQuickRetrievalEnabled;
 
     // --- Ioun Stone Properties ---
     /// <summary>Whether this is an Ioun Stone (orbits head, targetable AC 24, 10 HP).</summary>
@@ -1788,6 +1791,10 @@ public class ItemData
             {
                 stats += $"\nCapacity: {WondrousWeightCapacity:0} lbs / {WondrousVolumeCapacity:0} cu ft";
                 if (WondrousIsExtradimensional) stats += " (extradimensional)";
+                if (WondrousApparentWeight >= 0 && WondrousIsExtradimensional)
+                    stats += $"\nApparent weight: {WondrousApparentWeight:0.#} lbs";
+                if (WondrousQuickRetrievalEnabled)
+                    stats += "\nQuick retrieval (move action)";
             }
             if (WondrousHasActivation && !string.IsNullOrEmpty(WondrousActivationType))
             {

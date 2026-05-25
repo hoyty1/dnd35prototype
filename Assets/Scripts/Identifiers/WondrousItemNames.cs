@@ -146,6 +146,8 @@ namespace DND35e.Identifiers
         public const string BAG_OF_HOLDING_IV = "bag_of_holding_4";
         public const string HANDY_HAVERSACK = "handy_haversack";
         public const string PORTABLE_HOLE = "portable_hole";
+        public const string EFFICIENT_QUIVER = "efficient_quiver";
+        public const string ROPE_OF_CLIMBING = "rope_of_climbing";
         public const string DUST_OF_APPEARANCE = "dust_of_appearance";
         public const string DUST_OF_DISAPPEARANCE = "dust_of_disappearance";
         public const string STONE_OF_GOOD_LUCK = "stone_of_good_luck";

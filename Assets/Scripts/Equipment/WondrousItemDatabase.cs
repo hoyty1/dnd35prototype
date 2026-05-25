@@ -114,6 +114,9 @@ public static class WondrousItemDatabase
         for (int type = 1; type <= 4; type++)
             Register(WondrousItemFactory.CreateBagOfHolding(type));
         Register(WondrousItemFactory.CreateHandyHaversack());
+        Register(WondrousItemFactory.CreateEfficientQuiver());
+        Register(WondrousItemFactory.CreateRopeOfClimbing());
+        Register(WondrousItemFactory.CreatePortableHole());
         for (int level = 1; level <= 9; level++)
             Register(WondrousItemFactory.CreatePearlOfPower(level));
         Register(WondrousItemFactory.CreateStoneOfGoodLuck());
