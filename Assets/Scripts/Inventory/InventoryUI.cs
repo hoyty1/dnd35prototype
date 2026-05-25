@@ -731,6 +731,9 @@ public class InventoryUI : MonoBehaviour
             }
         }
 
+        // Refresh slotless items display
+        RefreshSlotlessDisplay(inv);
+
         for (int i = 0; i < Inventory.GeneralSlotCount; i++)
             RefreshGeneralSlot(i, inv.GeneralSlots[i]);
 
@@ -965,5 +968,42 @@ public class InventoryUI : MonoBehaviour
         t.horizontalOverflow = HorizontalWrapMode.Overflow;
         t.verticalOverflow = VerticalWrapMode.Overflow;
         return t;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Slotless Items Display
+    // ════════════════════════════════════════════════════════════
+
+    private Text _slotlessHeaderText;
+    private Text _slotlessItemsText;
+
+    /// <summary>Refresh the slotless items display showing all equipped slotless wondrous items.</summary>
+    private void RefreshSlotlessDisplay(Inventory inv)
+    {
+        if (inv == null) return;
+
+        // Build slotless items text
+        string slotlessText = "";
+        if (inv.SlotlessItems != null && inv.SlotlessItems.Count > 0)
+        {
+            for (int i = 0; i < inv.SlotlessItems.Count; i++)
+            {
+                var item = inv.SlotlessItems[i];
+                if (item == null) continue;
+                string icon = string.IsNullOrEmpty(item.IconChar) ? "✨" : item.IconChar;
+                slotlessText += $"  {icon} {item.Name}";
+                if (i < inv.SlotlessItems.Count - 1) slotlessText += "\n";
+            }
+        }
+        else
+        {
+            slotlessText = "  (none)";
+        }
+
+        // Update or create the slotless display text
+        if (_slotlessItemsText != null)
+        {
+            _slotlessItemsText.text = slotlessText;
+        }
     }
 }

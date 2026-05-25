@@ -1034,6 +1034,9 @@ public class SceneBootstrap : MonoBehaviour
             // Ring system initialization (D&D 3.5e DMG pp. 229–233 — core rules only)
             RingDatabase.Init();
 
+            // Wondrous item system initialization (D&D 3.5e DMG pp. 248–271)
+            WondrousItemDatabase.Init();
+
             // Staff system initialization (D&D 3.5e DMG p.243 — core rules only, no recharging)
             StaffDatabase.Init();
             StaffSpellSelectionPanel staffPanel = canvas.gameObject.AddComponent<StaffSpellSelectionPanel>();
@@ -1051,6 +1054,7 @@ public class SceneBootstrap : MonoBehaviour
             RaceDatabase.Init();
             ItemDatabase.Init();
             RingDatabase.RegisterAllRingsInItemDatabase();
+            WondrousItemDatabase.RegisterAllInItemDatabase();
             FeatDefinitions.Init();
 
             CharacterCreationUI ccUI = canvas.gameObject.AddComponent<CharacterCreationUI>();

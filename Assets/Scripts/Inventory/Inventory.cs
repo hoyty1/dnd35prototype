@@ -34,6 +34,11 @@ public class Inventory
     public ItemData LeftHandSlot;
     public ItemData RightHandSlot;
 
+    // Slotless wondrous items (Ioun Stones, Bags of Holding, etc.)
+    // Multiple slotless items can be equipped simultaneously.
+    public System.Collections.Generic.List<ItemData> SlotlessItems = new System.Collections.Generic.List<ItemData>();
+    public const int MaxSlotlessItems = 10; // Reasonable cap for slotless items
+
     /// <summary>
     /// Legacy alias used across older systems/tests.
     /// Kept to avoid breaking callers while internally using ArmorRobeSlot.
@@ -290,9 +295,91 @@ public class Inventory
     public void DirectEquip(ItemData item, EquipSlot slot)
     {
         if (item == null) return;
+        if (slot == EquipSlot.Slotless)
+        {
+            EquipSlotless(item);
+            return;
+        }
         if (!item.CanEquipIn(slot)) return;
         SetEquipSlot(slot, item);
         if (!_isRecalculating) RecalculateStats();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Slotless Item Management
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Equip a slotless wondrous item. Multiple slotless items can be equipped.
+    /// Returns true on success.
+    /// </summary>
+    public bool EquipSlotless(ItemData item)
+    {
+        if (item == null) return false;
+        if (item.Slot != EquipSlot.Slotless && !item.IsSlotless) return false;
+        if (SlotlessItems.Count >= MaxSlotlessItems)
+        {
+            Debug.LogWarning($"[Inventory] Cannot equip slotless item '{item.Name}' — maximum of {MaxSlotlessItems} reached.");
+            return false;
+        }
+
+        item.EnsureDurabilityInitialized();
+        SlotlessItems.Add(item);
+
+        if (item.IsWondrous && OwnerCharacter != null)
+            WondrousItemActivation.OnWondrousEquipped(OwnerCharacter, item);
+
+        if (!_isRecalculating) RecalculateStats();
+        return true;
+    }
+
+    /// <summary>
+    /// Unequip a slotless item by index, moving it to general inventory.
+    /// Returns true on success.
+    /// </summary>
+    public bool UnequipSlotless(int index)
+    {
+        if (index < 0 || index >= SlotlessItems.Count) return false;
+
+        ItemData item = SlotlessItems[index];
+        int emptyIndex = FindFirstEmptyGeneralSlotIndex();
+        if (emptyIndex < 0)
+        {
+            EnsureGeneralSlotCapacity(UnityEngine.Mathf.Max(GeneralSlots.Length + GeneralSlotGrowthStep, GeneralSlots.Length + 1));
+            emptyIndex = FindFirstEmptyGeneralSlotIndex();
+        }
+        if (emptyIndex < 0) return false;
+
+        GeneralSlots[emptyIndex] = item;
+        SlotlessItems.RemoveAt(index);
+
+        if (item.IsWondrous && OwnerCharacter != null)
+            WondrousItemActivation.OnWondrousUnequipped(OwnerCharacter, item);
+
+        RecalculateStats();
+        return true;
+    }
+
+    /// <summary>
+    /// Equip a slotless item from general inventory.
+    /// Returns true on success.
+    /// </summary>
+    public bool EquipSlotlessFromInventory(int generalIndex)
+    {
+        if (generalIndex < 0 || generalIndex >= GeneralSlots.Length) return false;
+        var item = GeneralSlots[generalIndex];
+        if (item == null) return false;
+        if (item.Slot != EquipSlot.Slotless && !item.IsSlotless) return false;
+        if (SlotlessItems.Count >= MaxSlotlessItems) return false;
+
+        GeneralSlots[generalIndex] = null;
+        return EquipSlotless(item);
+    }
+
+    /// <summary>Get all currently equipped slotless items.</summary>
+    public System.Collections.Generic.List<ItemData> GetEquippedSlotlessItems()
+    {
+        return SlotlessItems;
     }
 
     private void SetEquipSlot(EquipSlot slot, ItemData item)
@@ -333,6 +420,24 @@ public class Inventory
         if ((slot == EquipSlot.LeftRing || slot == EquipSlot.RightRing) && item != null && item.HasActiveRingAbility && OwnerCharacter != null)
         {
             RingActivationManager.OnRingEquipped(OwnerCharacter, item);
+        }
+
+        // --- Wondrous item equip/unequip hooks ---
+        if (slot != EquipSlot.LeftRing && slot != EquipSlot.RightRing &&
+            slot != EquipSlot.LeftHand && slot != EquipSlot.RightHand)
+        {
+            // Check if previous item was wondrous
+            ItemData previousItem = null;
+            switch (slot)
+            {
+                case EquipSlot.Head: previousItem = (item != HeadSlot) ? null : previousItem; break;
+                // Previous was already replaced above; hook fires on the old item from caller context
+            }
+            // Notify new wondrous item of equip
+            if (item != null && item.IsWondrous && OwnerCharacter != null)
+            {
+                WondrousItemActivation.OnWondrousEquipped(OwnerCharacter, item);
+            }
         }
     }
 
@@ -442,6 +547,10 @@ public class Inventory
                 OwnerStats.ShieldBonus = Mathf.Max(OwnerStats.ShieldBonus, OwnerStats.RingForceShieldBonus);
             }
 
+            // --- Wondrous Item Bonuses (D&D 3.5e DMG pp. 248–271) ---
+            // Apply bonuses from all equipped wondrous items in body slots and slotless items.
+            ApplyAllWondrousItemBonuses();
+
             // --- Weapon Stats ---
             // Primary weapon from right hand, then left hand.
             // If neither hand has a weapon, allow spiked gauntlet in Hands slot as primary attack option.
@@ -541,6 +650,22 @@ public class Inventory
             ItemData equipped = GetEquipped(slot);
             if (equipped != null)
                 total += Mathf.Max(0f, equipped.EffectiveWeightLbs); // D&D 3.5e: mithral/darkwood halves weight
+        }
+
+        // Slotless wondrous items weight
+        if (SlotlessItems != null)
+        {
+            foreach (var item in SlotlessItems)
+            {
+                if (item != null)
+                {
+                    // Extradimensional containers use apparent weight, not actual weight
+                    float weight = (item.IsWondrous && item.WondrousIsExtradimensional && item.WondrousApparentWeight > 0)
+                        ? item.WondrousApparentWeight
+                        : Mathf.Max(0f, item.EffectiveWeightLbs);
+                    total += weight;
+                }
+            }
         }
 
         for (int i = 0; i < GeneralSlots.Length; i++)
@@ -888,6 +1013,87 @@ public class Inventory
             case "fire": return ResistEnergyType.Fire;
             case "sonic": return ResistEnergyType.Sonic;
             default: return ResistEnergyType.Fire;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Wondrous Item Bonus Application (D&D 3.5e DMG pp. 248–271)
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Apply bonuses from all equipped wondrous items.
+    /// Uses D&D 3.5e bonus stacking rules (same type doesn't stack, use highest).
+    /// </summary>
+    private void ApplyAllWondrousItemBonuses()
+    {
+        if (OwnerStats == null) return;
+
+        // Reset wondrous-derived stats
+        OwnerStats.WondrousNaturalArmorBonus = 0;
+        OwnerStats.WondrousBracersArmorBonus = 0;
+        OwnerStats.WondrousSaveAllBonus = 0;
+
+        // Check all equipment slots for wondrous items
+        foreach (EquipSlot slot in AllEquipmentSlots)
+        {
+            ItemData item = GetEquipped(slot);
+            if (item != null && item.IsWondrous)
+                ApplyWondrousItemBonuses(item);
+        }
+
+        // Check slotless items
+        if (SlotlessItems != null)
+        {
+            foreach (var item in SlotlessItems)
+            {
+                if (item != null && item.IsWondrous)
+                    ApplyWondrousItemBonuses(item);
+            }
+        }
+
+        // Apply highest-wins stacking for Bracers of Armor vs physical armor
+        // Bracers provide an armor bonus that doesn't stack with physical armor
+        if (OwnerStats.WondrousBracersArmorBonus > 0)
+        {
+            // Only apply if it's higher than current armor bonus (doesn't stack)
+            if (OwnerStats.WondrousBracersArmorBonus > OwnerStats.ArmorBonus)
+                OwnerStats.ArmorBonus = OwnerStats.WondrousBracersArmorBonus;
+        }
+    }
+
+    /// <summary>Apply bonuses from a single wondrous item to OwnerStats.</summary>
+    private void ApplyWondrousItemBonuses(ItemData item)
+    {
+        if (item == null || !item.IsWondrous) return;
+
+        // --- AC Bonuses ---
+        if (item.WondrousACBonus > 0 && !string.IsNullOrEmpty(item.WondrousACBonusType))
+        {
+            switch (item.WondrousACBonusType.ToLower())
+            {
+                case "natural":
+                    // Enhancement to natural armor (Amulet of Natural Armor) — highest wins
+                    OwnerStats.WondrousNaturalArmorBonus = Mathf.Max(OwnerStats.WondrousNaturalArmorBonus, item.WondrousACBonus);
+                    break;
+                case "armor":
+                    // Armor bonus (Bracers of Armor) — doesn't stack with physical armor, handled in ApplyAllWondrousItemBonuses
+                    OwnerStats.WondrousBracersArmorBonus = Mathf.Max(OwnerStats.WondrousBracersArmorBonus, item.WondrousACBonus);
+                    break;
+            }
+        }
+
+        // --- Saving Throw Bonuses ---
+        if (item.WondrousSaveBonus > 0 && !string.IsNullOrEmpty(item.WondrousSaveType))
+        {
+            if (item.WondrousSaveType == "all")
+                OwnerStats.WondrousSaveAllBonus = Mathf.Max(OwnerStats.WondrousSaveAllBonus, item.WondrousSaveBonus);
+        }
+
+        // --- Speed Bonus ---
+        if (item.WondrousSpeedBonus > 0)
+        {
+            // Enhancement bonuses to speed don't stack; use highest
+            OwnerStats.WondrousSpeedBonus = Mathf.Max(OwnerStats.WondrousSpeedBonus, item.WondrousSpeedBonus);
         }
     }
 }

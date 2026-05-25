@@ -1012,6 +1012,9 @@ public partial class GameManager : MonoBehaviour
         // ── Sprint 2: Ring daily/weekly/charge reset ──
         RingActivationManager.OnRest(PCs);
 
+        // ── Wondrous item daily use reset ──
+        WondrousItemActivation.OnRest(PCs);
+
         CombatUI?.SetTurnIndicator("Party Rested and Restored!");
         CombatUI?.ShowCombatLog("✅ Party Rested and Restored!");
         CombatUI?.ShowCombatLog("💖 HP and abilities fully recovered.");
@@ -5430,6 +5433,15 @@ public partial class GameManager : MonoBehaviour
                     if (!RingActivationManager.TryActivateRing(actor, currentItem, out resultMessage))
                         return false;
                     // Ring activation handled by RingActivationManager
+                    return true;
+                }
+
+                // ── Wondrous item activation (D&D 3.5e DMG pp. 248–271) ──
+                if (currentItem.IsWondrous && currentItem.HasActiveWondrousAbility)
+                {
+                    if (!WondrousItemActivation.TryActivate(actor, currentItem, out resultMessage))
+                        return false;
+                    CombatUI?.ShowCombatLog(resultMessage);
                     return true;
                 }
 

@@ -2033,6 +2033,46 @@ public static class ItemDatabase
         clone.RingWizardryLevel = src.RingWizardryLevel;
         clone.RingHasRegeneration = src.RingHasRegeneration;
 
+        // Wondrous item properties
+        clone.IsWondrous = src.IsWondrous;
+        clone.WondrousId = src.WondrousId;
+        clone.WondrousInstanceId = src.IsWondrous ? System.Guid.NewGuid().ToString("N").Substring(0, 8) : src.WondrousInstanceId;
+        clone.WondrousItemType = src.WondrousItemType;
+        clone.WondrousRequiredSlot = src.WondrousRequiredSlot;
+        clone.IsSlotless = src.IsSlotless;
+        clone.WondrousAbilityBonus = src.WondrousAbilityBonus;
+        clone.WondrousAbilityType = src.WondrousAbilityType;
+        clone.WondrousACBonus = src.WondrousACBonus;
+        clone.WondrousACBonusType = src.WondrousACBonusType;
+        clone.WondrousSaveBonus = src.WondrousSaveBonus;
+        clone.WondrousSaveType = src.WondrousSaveType;
+        clone.WondrousSkillBonus = src.WondrousSkillBonus;
+        clone.WondrousSkillName = src.WondrousSkillName;
+        clone.WondrousSkillBonus2 = src.WondrousSkillBonus2;
+        clone.WondrousSkillName2 = src.WondrousSkillName2;
+        clone.WondrousSkillBonusType = src.WondrousSkillBonusType;
+        clone.WondrousGrantsMovement = src.WondrousGrantsMovement;
+        clone.WondrousMovementMode = src.WondrousMovementMode;
+        clone.WondrousMovementSpeed = src.WondrousMovementSpeed;
+        clone.WondrousHasActivation = src.WondrousHasActivation;
+        clone.WondrousActivationType = src.WondrousActivationType;
+        clone.WondrousUsesPerDay = src.WondrousUsesPerDay;
+        clone.WondrousUsesToday = 0; // Reset uses on clone
+        clone.WondrousWeightCapacity = src.WondrousWeightCapacity;
+        clone.WondrousVolumeCapacity = src.WondrousVolumeCapacity;
+        clone.WondrousIsExtradimensional = src.WondrousIsExtradimensional;
+        clone.WondrousApparentWeight = src.WondrousApparentWeight;
+        clone.IsIounStone = src.IsIounStone;
+        clone.IounStoneType = src.IounStoneType;
+        clone.WondrousCasterLevel = src.WondrousCasterLevel;
+        clone.WondrousCurrentCharges = src.WondrousCurrentCharges;
+        clone.WondrousMaxCharges = src.WondrousMaxCharges;
+        clone.WondrousMightyFistsBonus = src.WondrousMightyFistsBonus;
+        clone.WondrousSpeedBonus = src.WondrousSpeedBonus;
+        clone.WondrousDarkvisionRange = src.WondrousDarkvisionRange;
+        clone.WondrousSpellResistanceBonus = src.WondrousSpellResistanceBonus;
+        clone.WondrousGrantsSR = src.WondrousGrantsSR;
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

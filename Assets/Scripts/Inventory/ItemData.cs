@@ -14,7 +14,8 @@ public enum ItemType
     Consumable,
     Misc,
     Ammunition,
-    Ring
+    Ring,
+    Wondrous
 }
 
 /// <summary>
@@ -54,7 +55,8 @@ public enum EquipSlot
     LeftRing = 14,
     RightRing = 15,
     EitherRing = 16,
-    Feet = 17
+    Feet = 17,
+    Slotless = 18   // Wondrous items that don't occupy a body slot (Ioun Stones, bags, etc.)
 }
 
 /// <summary>
@@ -459,6 +461,105 @@ public class ItemData
     /// <summary>Ring of Regeneration: Whether regeneration is active on this ring.</summary>
     public bool RingHasRegeneration;
 
+    // ── Wondrous Item Fields (D&D 3.5e DMG pp. 248–271) ──
+
+    /// <summary>True if this item is a wondrous item. Gates wondrous-specific UI/mechanics.</summary>
+    public bool IsWondrous;
+    /// <summary>Key into WondrousItemDatabase, e.g. "headband_of_intellect_2". Null/empty if not wondrous.</summary>
+    public string WondrousId;
+    /// <summary>Unique instance ID for this specific wondrous item (for use tracking). Auto-generated if empty.</summary>
+    public string WondrousInstanceId;
+    /// <summary>Category of wondrous item (ability, armor, movement, storage, skill, save, ac, utility).</summary>
+    public string WondrousItemType;
+    /// <summary>Which slot this wondrous item occupies (matching EquipSlot). Slotless for no-slot items.</summary>
+    public EquipSlot WondrousRequiredSlot;
+    /// <summary>True if this item does not occupy a body slot (Ioun Stones, bags, consumables).</summary>
+    public bool IsSlotless;
+
+    // --- Ability Score Enhancement ---
+    /// <summary>Enhancement bonus to an ability score (+2/+4/+6 for stat items). 0 if not applicable.</summary>
+    public int WondrousAbilityBonus;
+    /// <summary>Which ability score is enhanced ("Str", "Dex", "Con", "Int", "Wis", "Cha"). Null if N/A.</summary>
+    public string WondrousAbilityType;
+
+    // --- AC Bonuses ---
+    /// <summary>Armor class bonus from wondrous item (Bracers of Armor, Amulet of Natural Armor).</summary>
+    public int WondrousACBonus;
+    /// <summary>Type of AC bonus: "armor" (Bracers), "natural" (Amulet), "deflection", "shield".</summary>
+    public string WondrousACBonusType;
+
+    // --- Saving Throw Bonuses ---
+    /// <summary>Bonus to saving throws (Cloak of Resistance). 0 if not applicable.</summary>
+    public int WondrousSaveBonus;
+    /// <summary>Which saves: "all", "fort", "ref", "will". Null if N/A.</summary>
+    public string WondrousSaveType;
+
+    // --- Skill Bonuses ---
+    /// <summary>Competence/enhancement bonus to a skill. 0 if not applicable.</summary>
+    public int WondrousSkillBonus;
+    /// <summary>Name of the skill boosted ("Hide", "Move Silently", "Spot", etc.). Null if N/A.</summary>
+    public string WondrousSkillName;
+    /// <summary>Secondary skill bonus (for items boosting two skills like Gloves of Swimming and Climbing).</summary>
+    public int WondrousSkillBonus2;
+    /// <summary>Secondary skill name. Null if N/A.</summary>
+    public string WondrousSkillName2;
+    /// <summary>Type of skill bonus: "competence", "enhancement", "circumstance", "insight". Default: "competence".</summary>
+    public string WondrousSkillBonusType;
+
+    // --- Movement ---
+    /// <summary>Whether this item grants a special movement mode (fly, spider climb, etc.).</summary>
+    public bool WondrousGrantsMovement;
+    /// <summary>Movement mode granted: "fly", "spider_climb", "water_walk", "teleport", "levitate".</summary>
+    public string WondrousMovementMode;
+    /// <summary>Movement speed in feet (30 for spider climb, 60 for fly, etc.). 0 if no speed.</summary>
+    public int WondrousMovementSpeed;
+
+    // --- Activation ---
+    /// <summary>Whether this item requires activation (command word, use-activated).</summary>
+    public bool WondrousHasActivation;
+    /// <summary>Activation type: "passive", "command_word", "use_activated", "continuous".</summary>
+    public string WondrousActivationType;
+    /// <summary>Number of uses per day (0 = unlimited/continuous). -1 = single use (consumable).</summary>
+    public int WondrousUsesPerDay;
+    /// <summary>Uses expended today (runtime tracking, resets on rest).</summary>
+    public int WondrousUsesToday;
+
+    // --- Container Properties (Bags of Holding, Handy Haversack, Portable Hole) ---
+    /// <summary>Maximum weight capacity in lbs for container items (250/500/1000/1500 for Bags of Holding).</summary>
+    public float WondrousWeightCapacity;
+    /// <summary>Maximum volume capacity in cubic feet (30/70/150/250 for Bags of Holding).</summary>
+    public float WondrousVolumeCapacity;
+    /// <summary>Whether this is an extradimensional space (Bag of Holding, Portable Hole). Nesting = disaster.</summary>
+    public bool WondrousIsExtradimensional;
+    /// <summary>Apparent weight (5 lbs for Bag of Holding, 5 lbs for Handy Haversack).</summary>
+    public float WondrousApparentWeight;
+
+    // --- Ioun Stone Properties ---
+    /// <summary>Whether this is an Ioun Stone (orbits head, targetable AC 24, 10 HP).</summary>
+    public bool IsIounStone;
+    /// <summary>Ioun Stone sub-type for specific effects (e.g., "dusty_rose_prism").</summary>
+    public string IounStoneType;
+
+    // --- Caster Level & Charges ---
+    /// <summary>Caster level of the wondrous item's magical effect. Used for dispel checks.</summary>
+    public int WondrousCasterLevel;
+    /// <summary>Current charges for charge-based items (Scarab of Protection: 12). 0 if not charge-based.</summary>
+    public int WondrousCurrentCharges;
+    /// <summary>Maximum charge capacity. 0 if not charge-based.</summary>
+    public int WondrousMaxCharges;
+
+    // --- Misc Flags ---
+    /// <summary>Bonus to attack rolls for unarmed/natural attacks (Amulet of Mighty Fists).</summary>
+    public int WondrousMightyFistsBonus;
+    /// <summary>Speed bonus in feet (Boots of Striding: +10 base land speed). 0 if N/A.</summary>
+    public int WondrousSpeedBonus;
+    /// <summary>Grants darkvision (Goggles of Night). Range in feet (60). 0 if N/A.</summary>
+    public int WondrousDarkvisionRange;
+    /// <summary>Bonus to caster level checks to overcome spell resistance (Robe of the Archmagi).</summary>
+    public int WondrousSpellResistanceBonus;
+    /// <summary>Spell Resistance granted by this item (0 = none).</summary>
+    public int WondrousGrantsSR;
+
     /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
     public bool HasActiveRingAbility => IsRing && (
         (RingAbilities != null && RingAbilities.Count > 0) ||
@@ -507,6 +608,15 @@ public class ItemData
         // Magic rings always show as magical quality
         if (IsRing && Type == ItemType.Ring)
             return new Color(0.3f, 0.5f, 1f); // Blue - Rare (magic ring)
+
+        // Wondrous items always show as magical quality
+        if (IsWondrous && Type == ItemType.Wondrous)
+        {
+            if (BasePriceGp >= 100000) return new Color(1f, 0.5f, 0f);    // Orange - Legendary
+            if (BasePriceGp >= 25000) return new Color(0.7f, 0.5f, 1f);   // Purple - Epic
+            if (BasePriceGp >= 4000) return new Color(0.3f, 0.5f, 1f);    // Blue - Rare
+            return new Color(0.2f, 0.8f, 0.2f);                           // Green - Uncommon
+        }
 
         return Color.white; // Standard
     }
@@ -585,6 +695,11 @@ public class ItemData
     public bool IsShield => Type == ItemType.Shield;
     public bool IsConsumable => Type == ItemType.Consumable;
     public bool IsRingItem => Type == ItemType.Ring;
+    public bool IsWondrousItem => Type == ItemType.Wondrous;
+
+    /// <summary>True if this wondrous item has activatable abilities (command word, use-activated).</summary>
+    public bool HasActiveWondrousAbility => IsWondrous && WondrousHasActivation &&
+        !string.IsNullOrEmpty(WondrousActivationType) && WondrousActivationType != "passive" && WondrousActivationType != "continuous";
 
     public bool IsSunderable => IsWeapon || IsArmor || IsShield;
 
@@ -1227,7 +1342,37 @@ public class ItemData
         if (Slot == EquipSlot.EitherRing && (targetSlot == EquipSlot.LeftRing || targetSlot == EquipSlot.RightRing))
             return true;
 
+        // Slotless items can be equipped in the Slotless pseudo-slot.
+        if (Slot == EquipSlot.Slotless && targetSlot == EquipSlot.Slotless)
+            return true;
+
         return false;
+    }
+
+    /// <summary>Get a human-readable display name for an equipment slot.</summary>
+    public static string GetSlotDisplayName(EquipSlot slot)
+    {
+        switch (slot)
+        {
+            case EquipSlot.Head: return "Head";
+            case EquipSlot.FaceEyes: return "Face/Eyes";
+            case EquipSlot.Neck: return "Throat";
+            case EquipSlot.Torso: return "Body";
+            case EquipSlot.ArmorRobe: return "Armor/Robe";
+            case EquipSlot.Armor: return "Armor/Robe";
+            case EquipSlot.Waist: return "Waist";
+            case EquipSlot.Back: return "Shoulders";
+            case EquipSlot.Wrists: return "Arms/Wrists";
+            case EquipSlot.Hands: return "Hands";
+            case EquipSlot.LeftRing: return "Left Ring";
+            case EquipSlot.RightRing: return "Right Ring";
+            case EquipSlot.EitherRing: return "Ring";
+            case EquipSlot.Feet: return "Feet";
+            case EquipSlot.LeftHand: return "Left Hand";
+            case EquipSlot.RightHand: return "Right Hand";
+            case EquipSlot.Slotless: return "Slotless";
+            default: return slot.ToString();
+        }
     }
 
     /// <summary>
@@ -1555,6 +1700,71 @@ public class ItemData
                     stats += $"\n{label}{details} ({eff.GetDurationDisplayString()}, {eff.EnchantedAmmoRemaining} enchanted)";
                 }
             }
+        }
+
+        // --- Wondrous Item Tooltip ---
+        if (Type == ItemType.Wondrous && IsWondrous)
+        {
+            string slotLabel = IsSlotless ? "Slotless" : GetSlotDisplayName(WondrousRequiredSlot);
+            stats = $"Wondrous Item ({slotLabel})";
+
+            if (WondrousAbilityBonus > 0 && !string.IsNullOrEmpty(WondrousAbilityType))
+                stats += $"\n+{WondrousAbilityBonus} enhancement bonus to {WondrousAbilityType}";
+            if (WondrousACBonus > 0 && !string.IsNullOrEmpty(WondrousACBonusType))
+                stats += $"\n+{WondrousACBonus} {WondrousACBonusType} bonus to AC";
+            if (WondrousSaveBonus > 0)
+            {
+                string saveLabel = WondrousSaveType == "all" ? "all saving throws" :
+                    WondrousSaveType == "fort" ? "Fortitude saves" :
+                    WondrousSaveType == "ref" ? "Reflex saves" :
+                    WondrousSaveType == "will" ? "Will saves" : "saves";
+                stats += $"\n+{WondrousSaveBonus} resistance bonus to {saveLabel}";
+            }
+            if (WondrousSkillBonus > 0 && !string.IsNullOrEmpty(WondrousSkillName))
+            {
+                string bonusType = string.IsNullOrEmpty(WondrousSkillBonusType) ? "competence" : WondrousSkillBonusType;
+                stats += $"\n+{WondrousSkillBonus} {bonusType} bonus to {WondrousSkillName}";
+            }
+            if (WondrousSkillBonus2 > 0 && !string.IsNullOrEmpty(WondrousSkillName2))
+                stats += $"\n+{WondrousSkillBonus2} bonus to {WondrousSkillName2}";
+            if (WondrousMightyFistsBonus > 0)
+                stats += $"\n+{WondrousMightyFistsBonus} enhancement bonus to unarmed/natural attacks";
+            if (WondrousSpeedBonus > 0)
+                stats += $"\n+{WondrousSpeedBonus} ft enhancement bonus to land speed";
+            if (WondrousDarkvisionRange > 0)
+                stats += $"\nDarkvision {WondrousDarkvisionRange} ft";
+            if (WondrousGrantsMovement && !string.IsNullOrEmpty(WondrousMovementMode))
+            {
+                string moveLabel = WondrousMovementMode.Replace("_", " ");
+                stats += WondrousMovementSpeed > 0
+                    ? $"\nGrants {moveLabel} {WondrousMovementSpeed} ft"
+                    : $"\nGrants {moveLabel}";
+            }
+            if (WondrousGrantsSR > 0)
+                stats += $"\nSpell Resistance {WondrousGrantsSR}";
+            if (WondrousWeightCapacity > 0)
+            {
+                stats += $"\nCapacity: {WondrousWeightCapacity:0} lbs / {WondrousVolumeCapacity:0} cu ft";
+                if (WondrousIsExtradimensional) stats += " (extradimensional)";
+            }
+            if (WondrousHasActivation && !string.IsNullOrEmpty(WondrousActivationType))
+            {
+                string actLabel = WondrousActivationType.Replace("_", " ");
+                stats += $"\nActivation: {actLabel}";
+                if (WondrousUsesPerDay > 0)
+                {
+                    int remaining = WondrousUsesPerDay - WondrousUsesToday;
+                    stats += $" ({remaining}/{WondrousUsesPerDay} uses/day)";
+                }
+                else if (WondrousUsesPerDay == -1)
+                    stats += " (single use)";
+            }
+            if (WondrousMaxCharges > 0)
+                stats += $"\nCharges: {WondrousCurrentCharges}/{WondrousMaxCharges}";
+            if (IsIounStone)
+                stats += "\n✦ Ioun Stone (orbits head, AC 24, HP 10)";
+            if (WondrousCasterLevel > 0)
+                stats += $"\nCaster Level: {WondrousCasterLevel}";
         }
 
         // --- Ring Tooltip ---

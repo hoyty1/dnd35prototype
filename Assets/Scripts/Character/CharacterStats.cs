@@ -2448,6 +2448,16 @@ public class CharacterStats
     /// <summary>Shield bonus from ring (Ring of Force Shield: +2). Stacks are handled via max with physical shield.</summary>
     public int RingForceShieldBonus;
 
+    // ── Wondrous Item Derived Stats (D&D 3.5e DMG pp. 248–271) ──
+    /// <summary>Enhancement bonus to natural armor from Amulet of Natural Armor (+1 to +5). Highest wins.</summary>
+    public int WondrousNaturalArmorBonus;
+    /// <summary>Armor bonus from Bracers of Armor (+1 to +8). Doesn't stack with physical armor; use highest.</summary>
+    public int WondrousBracersArmorBonus;
+    /// <summary>Resistance bonus to all saves from Cloak of Resistance (+1 to +5). Highest wins with ring resistance.</summary>
+    public int WondrousSaveAllBonus;
+    /// <summary>Enhancement bonus to base land speed from Boots of Striding (+10 ft). Highest wins.</summary>
+    public int WondrousSpeedBonus;
+
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
     public int TempHP;
 
