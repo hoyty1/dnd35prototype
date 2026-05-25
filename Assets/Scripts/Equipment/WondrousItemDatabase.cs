@@ -103,6 +103,10 @@ public static class WondrousItemDatabase
         Register(WondrousItemFactory.CreateBootsOfElvenkind());
         Register(WondrousItemFactory.CreateBootsOfStridingAndSpringing());
         Register(WondrousItemFactory.CreateSlippersOfSpiderClimbing());
+        Register(WondrousItemFactory.CreateBootsOfLevitation());
+        Register(WondrousItemFactory.CreateWingedBoots());
+        Register(WondrousItemFactory.CreateBootsOfTheWinterlands());
+        Register(WondrousItemFactory.CreateBootsOfTeleportation());
 
         // ════════════════════════════════════════════════════════════
         //  SLOTLESS — Bags, pearls, stones

@@ -2054,6 +2054,17 @@ public static class ItemDatabase
         clone.WondrousGrantsMovement = src.WondrousGrantsMovement;
         clone.WondrousMovementMode = src.WondrousMovementMode;
         clone.WondrousMovementSpeed = src.WondrousMovementSpeed;
+        clone.WondrousFlightManeuverability = src.WondrousFlightManeuverability;
+        clone.WondrousGrantsHaste = src.WondrousGrantsHaste;
+        clone.WondrousHasteMaxRounds = src.WondrousHasteMaxRounds;
+        // WondrousHasteRoundsUsedToday: reset on clone (fresh item)
+        clone.WondrousHasteRoundsUsedToday = 0;
+        clone.WondrousHasteCurrentlyActive = false;
+        clone.WondrousFlightDurationRounds = src.WondrousFlightDurationRounds;
+        clone.WondrousFlightRoundsRemaining = 0; // reset on clone
+        clone.WondrousGrantsColdEndurance = src.WondrousGrantsColdEndurance;
+        clone.WondrousColdSurvivalBonus = src.WondrousColdSurvivalBonus;
+        clone.WondrousTeleportWeightLimit = src.WondrousTeleportWeightLimit;
         clone.WondrousHasActivation = src.WondrousHasActivation;
         clone.WondrousActivationType = src.WondrousActivationType;
         clone.WondrousUsesPerDay = src.WondrousUsesPerDay;

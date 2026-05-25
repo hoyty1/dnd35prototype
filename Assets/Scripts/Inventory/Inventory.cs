@@ -1033,6 +1033,16 @@ public class Inventory
         OwnerStats.WondrousBracersArmorBonus = 0;
         OwnerStats.WondrousSaveAllBonus = 0;
         OwnerStats.WondrousSpeedBonus = 0;
+
+        // Reset wondrous movement modes
+        OwnerStats.WondrousHasFlight = false;
+        OwnerStats.WondrousFlightSpeed = 0;
+        OwnerStats.WondrousFlightManeuverability = null;
+        OwnerStats.WondrousHasSpiderClimb = false;
+        OwnerStats.WondrousSpiderClimbSpeed = 0;
+        OwnerStats.WondrousHasLevitation = false;
+        OwnerStats.WondrousLevitationSpeed = 0;
+        OwnerStats.WondrousEndureCold = false;
         OwnerStats.DisplacementMissChance = 0;
 
         // Reset wondrous ability score enhancement bonuses (Big Six)
@@ -1113,6 +1123,42 @@ public class Inventory
             OwnerStats.DisplacementMissChance = Mathf.Max(OwnerStats.DisplacementMissChance, item.WondrousDisplacementMissChance);
         }
 
+        // --- Movement Mode Bonuses ---
+        if (item.WondrousGrantsMovement && !string.IsNullOrEmpty(item.WondrousMovementMode))
+        {
+            switch (item.WondrousMovementMode)
+            {
+                case "fly":
+                    // Take best flight speed; upgrade maneuverability if tied
+                    if (item.WondrousMovementSpeed > OwnerStats.WondrousFlightSpeed)
+                    {
+                        OwnerStats.WondrousHasFlight = true;
+                        OwnerStats.WondrousFlightSpeed = item.WondrousMovementSpeed;
+                        OwnerStats.WondrousFlightManeuverability = item.WondrousFlightManeuverability ?? "average";
+                    }
+                    else if (item.WondrousMovementSpeed == OwnerStats.WondrousFlightSpeed)
+                    {
+                        OwnerStats.WondrousHasFlight = true;
+                        // Keep better maneuverability
+                        if (GetManeuverabilityRank(item.WondrousFlightManeuverability) > GetManeuverabilityRank(OwnerStats.WondrousFlightManeuverability))
+                            OwnerStats.WondrousFlightManeuverability = item.WondrousFlightManeuverability;
+                    }
+                    break;
+                case "spider_climb":
+                    OwnerStats.WondrousHasSpiderClimb = true;
+                    OwnerStats.WondrousSpiderClimbSpeed = Mathf.Max(OwnerStats.WondrousSpiderClimbSpeed, item.WondrousMovementSpeed);
+                    break;
+                case "levitate":
+                    OwnerStats.WondrousHasLevitation = true;
+                    OwnerStats.WondrousLevitationSpeed = Mathf.Max(OwnerStats.WondrousLevitationSpeed, item.WondrousMovementSpeed);
+                    break;
+            }
+        }
+
+        // --- Cold Endurance ---
+        if (item.WondrousGrantsColdEndurance)
+            OwnerStats.WondrousEndureCold = true;
+
         // --- Ability Score Enhancement Bonuses (Big Six items) ---
         // Enhancement bonuses to the same ability score don't stack; use highest.
         // D&D 3.5e DMG: Belt of Giant Strength, Gloves of Dexterity, Amulet of Health,
@@ -1140,6 +1186,21 @@ public class Inventory
                     OwnerStats.WondrousEnhancementCHA = Mathf.Max(OwnerStats.WondrousEnhancementCHA, item.WondrousAbilityBonus);
                     break;
             }
+        }
+    }
+
+    /// <summary>Get numeric rank for flight maneuverability comparison (higher = better).</summary>
+    private static int GetManeuverabilityRank(string maneuverability)
+    {
+        if (string.IsNullOrEmpty(maneuverability)) return 2; // default average
+        switch (maneuverability.ToLower())
+        {
+            case "clumsy": return 0;
+            case "poor": return 1;
+            case "average": return 2;
+            case "good": return 3;
+            case "perfect": return 4;
+            default: return 2;
         }
     }
 }

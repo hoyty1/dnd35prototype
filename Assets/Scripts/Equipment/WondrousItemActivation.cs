@@ -53,6 +53,9 @@ public static class WondrousItemActivation
                 return TryCommandWordActivation(user, item, out resultMessage);
 
             case USE_ACTIVATED:
+                // Boots of Speed: route to haste activation
+                if (item.WondrousGrantsHaste)
+                    return TryActivateHaste(user, item, out resultMessage);
                 return TryUseActivation(user, item, out resultMessage);
 
             default:
@@ -164,6 +167,10 @@ public static class WondrousItemActivation
             var inv = pc.GetComponent<InventoryComponent>();
             if (inv == null) continue;
 
+            // Reset haste state on character stats
+            pc.Stats.WondrousHasteActive = false;
+            pc.Stats.WondrousHasteRoundsRemaining = 0;
+
             resetCount += ResetDailyUsesForInventory(inv.CharacterInventory);
         }
 
@@ -182,11 +189,8 @@ public static class WondrousItemActivation
         foreach (EquipSlot slot in Inventory.AllEquipmentSlots)
         {
             ItemData item = inventory.GetEquipped(slot);
-            if (item != null && item.IsWondrous && item.WondrousUsesToday > 0)
-            {
-                item.WondrousUsesToday = 0;
-                count++;
-            }
+            if (item != null && item.IsWondrous)
+                count += ResetSingleItem(item);
         }
 
         // Check slotless items
@@ -194,11 +198,8 @@ public static class WondrousItemActivation
         {
             foreach (var item in inventory.SlotlessItems)
             {
-                if (item != null && item.IsWondrous && item.WondrousUsesToday > 0)
-                {
-                    item.WondrousUsesToday = 0;
-                    count++;
-                }
+                if (item != null && item.IsWondrous)
+                    count += ResetSingleItem(item);
             }
         }
 
@@ -207,15 +208,136 @@ public static class WondrousItemActivation
         {
             foreach (var item in inventory.GeneralSlots)
             {
-                if (item != null && item.IsWondrous && item.WondrousUsesToday > 0)
-                {
-                    item.WondrousUsesToday = 0;
-                    count++;
-                }
+                if (item != null && item.IsWondrous)
+                    count += ResetSingleItem(item);
             }
         }
 
         return count;
+    }
+
+    /// <summary>Reset daily uses, haste rounds, and flight uses for a single wondrous item.</summary>
+    private static int ResetSingleItem(ItemData item)
+    {
+        int resets = 0;
+
+        // Reset standard daily uses
+        if (item.WondrousUsesToday > 0)
+        {
+            item.WondrousUsesToday = 0;
+            resets++;
+        }
+
+        // Reset haste tracking (Boots of Speed)
+        if (item.WondrousGrantsHaste)
+        {
+            item.WondrousHasteRoundsUsedToday = 0;
+            item.WondrousHasteCurrentlyActive = false;
+            resets++;
+        }
+
+        // Reset flight duration tracking (Winged Boots)
+        if (item.WondrousFlightRoundsRemaining > 0)
+        {
+            item.WondrousFlightRoundsRemaining = 0;
+            resets++;
+        }
+
+        return resets;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Haste Effect (Boots of Speed) — D&D 3.5e PHB p.239
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Activate Boots of Speed haste effect.
+    /// Haste: +1 dodge AC, +1 attack, +30 ft speed, extra attack at full BAB.
+    /// Duration: up to 10 rounds per day, need not be consecutive.
+    /// Activation: Free action (click boot heels together).
+    /// </summary>
+    public static bool TryActivateHaste(CharacterController user, ItemData item, out string resultMessage)
+    {
+        resultMessage = "";
+
+        if (item == null || !item.WondrousGrantsHaste)
+        {
+            resultMessage = "This item does not grant haste.";
+            return false;
+        }
+
+        // Already active — toggle off
+        if (item.WondrousHasteCurrentlyActive)
+        {
+            DeactivateHaste(user, item);
+            resultMessage = $"⏹ {user.Stats.CharacterName} deactivates {item.Name}. Haste ends.";
+            return true;
+        }
+
+        // Check rounds remaining
+        int remaining = item.WondrousHasteMaxRounds - item.WondrousHasteRoundsUsedToday;
+        if (remaining <= 0)
+        {
+            resultMessage = $"{item.Name} has no haste rounds remaining today (0/{item.WondrousHasteMaxRounds}).";
+            return false;
+        }
+
+        // Activate haste
+        item.WondrousHasteCurrentlyActive = true;
+        user.Stats.WondrousHasteActive = true;
+        user.Stats.WondrousHasteRoundsRemaining = remaining;
+
+        resultMessage = $"⚡ {user.Stats.CharacterName} clicks the heels of the {item.Name}! Haste active ({remaining} rounds remaining).\n+1 dodge AC, +1 attack, +30 ft speed, extra attack at full BAB.";
+        Debug.Log($"[WondrousActivation] Haste activated: {user.Stats.CharacterName}, {remaining} rounds remaining.");
+        return true;
+    }
+
+    /// <summary>Deactivate haste effect from Boots of Speed.</summary>
+    public static void DeactivateHaste(CharacterController user, ItemData item)
+    {
+        if (item != null)
+            item.WondrousHasteCurrentlyActive = false;
+        if (user != null)
+        {
+            user.Stats.WondrousHasteActive = false;
+            user.Stats.WondrousHasteRoundsRemaining = 0;
+        }
+    }
+
+    /// <summary>
+    /// Called at the start of a character's turn to tick down haste rounds.
+    /// Returns true if haste is still active, false if it expired.
+    /// </summary>
+    public static bool TickHasteRound(CharacterController user, ItemData bootsOfSpeed)
+    {
+        if (user == null || bootsOfSpeed == null || !bootsOfSpeed.WondrousHasteCurrentlyActive)
+            return false;
+
+        bootsOfSpeed.WondrousHasteRoundsUsedToday++;
+        user.Stats.WondrousHasteRoundsRemaining--;
+
+        if (user.Stats.WondrousHasteRoundsRemaining <= 0 ||
+            bootsOfSpeed.WondrousHasteRoundsUsedToday >= bootsOfSpeed.WondrousHasteMaxRounds)
+        {
+            DeactivateHaste(user, bootsOfSpeed);
+            Debug.Log($"[WondrousActivation] Haste expired for {user.Stats.CharacterName} (Boots of Speed).");
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>Find the Boots of Speed item equipped by a character (if any).</summary>
+    public static ItemData FindEquippedBootsOfSpeed(CharacterController character)
+    {
+        if (character == null) return null;
+        var inv = character.GetComponent<InventoryComponent>();
+        if (inv == null || inv.CharacterInventory == null) return null;
+
+        ItemData feetItem = inv.CharacterInventory.GetEquipped(EquipSlot.Feet);
+        if (feetItem != null && feetItem.WondrousGrantsHaste)
+            return feetItem;
+        return null;
     }
 
     // ════════════════════════════════════════════════════════════

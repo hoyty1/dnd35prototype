@@ -513,6 +513,26 @@ public class ItemData
     public string WondrousMovementMode;
     /// <summary>Movement speed in feet (30 for spider climb, 60 for fly, etc.). 0 if no speed.</summary>
     public int WondrousMovementSpeed;
+    /// <summary>Flight maneuverability: "clumsy", "poor", "average", "good", "perfect". Only for fly mode.</summary>
+    public string WondrousFlightManeuverability;
+    /// <summary>Whether this item grants haste effect (Boots of Speed). Tracks rounds per day.</summary>
+    public bool WondrousGrantsHaste;
+    /// <summary>Max rounds of haste per day (Boots of Speed = 10). 0 if N/A.</summary>
+    public int WondrousHasteMaxRounds;
+    /// <summary>Haste rounds used today (runtime tracking, resets on rest).</summary>
+    public int WondrousHasteRoundsUsedToday;
+    /// <summary>Whether haste is currently active on this item.</summary>
+    public bool WondrousHasteCurrentlyActive;
+    /// <summary>Duration of each flight use in rounds (Winged Boots = 50). 0 = unlimited.</summary>
+    public int WondrousFlightDurationRounds;
+    /// <summary>Flight rounds remaining for current activation. 0 if not active or unlimited.</summary>
+    public int WondrousFlightRoundsRemaining;
+    /// <summary>Whether this item grants cold endurance (Boots of the Winterlands).</summary>
+    public bool WondrousGrantsColdEndurance;
+    /// <summary>Survival bonus in cold environments (Boots of the Winterlands: +10).</summary>
+    public int WondrousColdSurvivalBonus;
+    /// <summary>Teleport weight limit per use in lbs (Boots of Teleportation: 300). 0 if N/A.</summary>
+    public int WondrousTeleportWeightLimit;
 
     // --- Activation ---
     /// <summary>Whether this item requires activation (command word, use-activated).</summary>
@@ -1740,10 +1760,28 @@ public class ItemData
             if (WondrousGrantsMovement && !string.IsNullOrEmpty(WondrousMovementMode))
             {
                 string moveLabel = WondrousMovementMode.Replace("_", " ");
-                stats += WondrousMovementSpeed > 0
-                    ? $"\nGrants {moveLabel} {WondrousMovementSpeed} ft"
-                    : $"\nGrants {moveLabel}";
+                if (WondrousMovementMode == "fly" && !string.IsNullOrEmpty(WondrousFlightManeuverability))
+                    stats += $"\nGrants fly {WondrousMovementSpeed} ft ({WondrousFlightManeuverability} maneuverability)";
+                else if (WondrousMovementSpeed > 0)
+                    stats += $"\nGrants {moveLabel} {WondrousMovementSpeed} ft";
+                else
+                    stats += $"\nGrants {moveLabel}";
+                if (WondrousFlightDurationRounds > 0)
+                    stats += $" ({WondrousFlightDurationRounds} rounds per use)";
             }
+            if (WondrousGrantsHaste)
+            {
+                int remaining = WondrousHasteMaxRounds - WondrousHasteRoundsUsedToday;
+                stats += $"\nHaste effect ({remaining}/{WondrousHasteMaxRounds} rounds/day)";
+                if (WondrousHasteCurrentlyActive)
+                    stats += " [ACTIVE]";
+            }
+            if (WondrousGrantsColdEndurance)
+                stats += "\nEndure Elements (cold)";
+            if (WondrousColdSurvivalBonus > 0)
+                stats += $"\n+{WondrousColdSurvivalBonus} Survival in cold environments";
+            if (WondrousTeleportWeightLimit > 0)
+                stats += $"\nTeleport (up to {WondrousTeleportWeightLimit} lbs)";
             if (WondrousGrantsSR > 0)
                 stats += $"\nSpell Resistance {WondrousGrantsSR}";
             if (WondrousWeightCapacity > 0)

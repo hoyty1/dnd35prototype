@@ -2480,6 +2480,28 @@ public class CharacterStats
     /// <summary>Displacement miss chance from Cloak of Displacement (20=minor, 50=major). Highest wins. Does not stack with concealment; uses best.</summary>
     public int DisplacementMissChance;
 
+    // ── Wondrous Item Movement Modes (D&D 3.5e DMG) ──
+    /// <summary>Whether a wondrous item grants flight (Wings of Flying, Winged Boots).</summary>
+    public bool WondrousHasFlight;
+    /// <summary>Flight speed in feet granted by wondrous item. 0 if no flight.</summary>
+    public int WondrousFlightSpeed;
+    /// <summary>Flight maneuverability: "clumsy", "poor", "average", "good", "perfect".</summary>
+    public string WondrousFlightManeuverability;
+    /// <summary>Whether a wondrous item grants spider climb (Slippers of Spider Climbing).</summary>
+    public bool WondrousHasSpiderClimb;
+    /// <summary>Spider climb speed in feet. 0 if no spider climb.</summary>
+    public int WondrousSpiderClimbSpeed;
+    /// <summary>Whether a wondrous item grants levitation (Boots of Levitation).</summary>
+    public bool WondrousHasLevitation;
+    /// <summary>Levitation speed in feet per round (vertical movement). 0 if no levitation.</summary>
+    public int WondrousLevitationSpeed;
+    /// <summary>Whether haste effect is currently active from Boots of Speed.</summary>
+    public bool WondrousHasteActive;
+    /// <summary>Remaining rounds of haste from Boots of Speed (max 10/day).</summary>
+    public int WondrousHasteRoundsRemaining;
+    /// <summary>Cold endurance from Boots of the Winterlands (endure elements cold).</summary>
+    public bool WondrousEndureCold;
+
     // ── Wondrous Item Ability Score Enhancement Bonuses (Big Six) ──
     // Enhancement bonuses to ability scores from wondrous items. Highest wins per ability.
     // These are applied via Inventory.ApplyWondrousItemBonuses on equip/recalculate.
@@ -2735,7 +2757,8 @@ public class CharacterStats
 
             int baseFeet = (Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5)
                            + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5
-                           + Mathf.Max(0, LandSpeedEnhancementBonusFeet);
+                           + Mathf.Max(0, LandSpeedEnhancementBonusFeet)
+                           + Mathf.Max(0, WondrousSpeedBonus);
 
             float speed = baseFeet;
             if (!SpeedNotReducedByArmor)

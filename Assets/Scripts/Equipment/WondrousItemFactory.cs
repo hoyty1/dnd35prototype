@@ -298,17 +298,19 @@ public static class WondrousItemFactory
         return item;
     }
 
-    /// <summary>Wings of Flying (fly 60 ft good maneuverability). DMG p.271.</summary>
+    /// <summary>Wings of Flying (fly 60 ft average maneuverability, unlimited). DMG p.271.</summary>
     public static ItemData CreateWingsOfFlying()
     {
         var item = CreateBaseWondrous(WondrousItemNames.WINGS_OF_FLYING,
             "Wings of Flying",
-            "These wings appear to be a cloak made from silk. When the command word is spoken, the cloak turns into a pair of bat wings or bird wings, granting fly 60 ft (good maneuverability).",
+            "These wings appear to be a cloak made from silk. When the command word is spoken, the cloak turns into a pair of bat wings or bird wings, granting fly 60 ft (average maneuverability). Can fly as much as desired but must rest 1 hour per 12 hours of flight.",
             EquipSlot.Back, 54000, 10, 2f, BackIcon, BackColor);
         item.WondrousItemType = "movement";
         item.WondrousGrantsMovement = true;
         item.WondrousMovementMode = "fly";
         item.WondrousMovementSpeed = 60;
+        item.WondrousFlightManeuverability = "average";
+        item.WondrousFlightDurationRounds = 0; // unlimited duration
         item.WondrousHasActivation = true;
         item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
         return item;
@@ -478,13 +480,16 @@ public static class WondrousItemFactory
     {
         var item = CreateBaseWondrous(WondrousItemNames.BOOTS_OF_SPEED,
             "Boots of Speed",
-            "As a free action, the wearer can click her boot heels together to gain the effect of haste for up to 10 rounds each day.",
+            "As a free action, the wearer can click her boot heels together to gain the effect of haste for up to 10 rounds each day. Haste grants +1 dodge bonus to AC, +1 attack, +30 ft speed, and an extra attack at full BAB.",
             EquipSlot.Feet, 12000, 10, 1f, FeetIcon, FeetColor);
         item.WondrousItemType = "movement";
         item.WondrousHasActivation = true;
         item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
-        item.WondrousUsesPerDay = 10;
-        item.WondrousSpeedBonus = 30; // Haste grants +30 ft
+        // Haste effect: tracked via WondrousGrantsHaste fields, not UsesPerDay
+        item.WondrousGrantsHaste = true;
+        item.WondrousHasteMaxRounds = 10;
+        item.WondrousHasteRoundsUsedToday = 0;
+        item.WondrousHasteCurrentlyActive = false;
         return item;
     }
 
@@ -531,6 +536,77 @@ public static class WondrousItemFactory
         item.WondrousMovementMode = "spider_climb";
         item.WondrousMovementSpeed = 20;
         item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        return item;
+    }
+
+    /// <summary>Boots of Levitation (levitate at will, 20 ft/round vertical). DMG p.250.</summary>
+    public static ItemData CreateBootsOfLevitation()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.BOOTS_OF_LEVITATION,
+            "Boots of Levitation",
+            "These leather boots allow the wearer to levitate as if she had cast levitate on herself. She may move up or down 20 feet per round at will, as a move action.",
+            EquipSlot.Feet, 7500, 3, 1f, FeetIcon, FeetColor);
+        item.WondrousItemType = "movement";
+        item.WondrousGrantsMovement = true;
+        item.WondrousMovementMode = "levitate";
+        item.WondrousMovementSpeed = 20;
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = 0; // Unlimited (at will)
+        return item;
+    }
+
+    /// <summary>Winged Boots (fly 60 ft good, 5 min/use, 3 uses/day). DMG p.271.</summary>
+    public static ItemData CreateWingedBoots()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.WINGED_BOOTS,
+            "Winged Boots",
+            "These boots appear to be ordinary footwear. On command, the boots sprout wings, allowing the wearer to fly 60 ft (good maneuverability) for up to 5 minutes, three times per day.",
+            EquipSlot.Feet, 16000, 8, 1f, FeetIcon, FeetColor);
+        item.WondrousItemType = "movement";
+        item.WondrousGrantsMovement = true;
+        item.WondrousMovementMode = "fly";
+        item.WondrousMovementSpeed = 60;
+        item.WondrousFlightManeuverability = "good";
+        item.WondrousFlightDurationRounds = 50; // 5 minutes = 50 rounds
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = 3;
+        return item;
+    }
+
+    /// <summary>Boots of the Winterlands (endure cold, +5 ice walking, +10 Survival cold). DMG p.250.</summary>
+    public static ItemData CreateBootsOfTheWinterlands()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.BOOTS_OF_THE_WINTERLANDS,
+            "Boots of the Winterlands",
+            "These furred boots keep the wearer warm in the coldest weather (as endure elements, cold only). The wearer can walk on ice and snow without penalty and gains a +10 competence bonus on Survival checks in cold environments.",
+            EquipSlot.Feet, 2500, 5, 1f, FeetIcon, FeetColor);
+        item.WondrousItemType = "movement";
+        item.WondrousGrantsColdEndurance = true;
+        item.WondrousColdSurvivalBonus = 10;
+        item.WondrousSkillBonus = 10;
+        item.WondrousSkillName = "Survival (cold)";
+        item.WondrousSkillBonusType = "competence";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        return item;
+    }
+
+    /// <summary>Boots of Teleportation (teleport 3/day, 300 lbs). DMG p.250.</summary>
+    public static ItemData CreateBootsOfTeleportation()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.BOOTS_OF_TELEPORTATION,
+            "Boots of Teleportation",
+            "Any character wearing these boots may teleport three times per day, exactly as if she had cast the teleport spell on herself. The boots can carry up to 300 lbs each use.",
+            EquipSlot.Feet, 49000, 9, 3f, FeetIcon, FeetColor);
+        item.WondrousItemType = "movement";
+        item.WondrousGrantsMovement = true;
+        item.WondrousMovementMode = "teleport";
+        item.WondrousMovementSpeed = 0; // N/A for teleport
+        item.WondrousTeleportWeightLimit = 300;
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = 3;
         return item;
     }
 
