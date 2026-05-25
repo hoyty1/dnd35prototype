@@ -1005,10 +1005,35 @@ public static class FeatDefinitions
         Add(augSummon);
 
         // --- Natural Spell ---
-        // (Not adding - druid specific and requires Wild Shape class feature)
+        // PHB p.97: Cast spells while in wild shape form.
+        var naturalSpell = new FeatDefinition("Natural Spell",
+            "You can complete the verbal and somatic components of spells while in a wild shape. You substitute various noises and gestures for the normal verbal and somatic components of a spell.",
+            FeatType.General);
+        naturalSpell.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.AbilityScore, "WIS", 13));
+        // Note: also requires Wild Shape class feature (checked at runtime)
+        naturalSpell.Benefit.GrantsNaturalSpell = true;
+        naturalSpell.Benefit.Description = "Cast spells while in wild shape form";
+        Add(naturalSpell);
 
         // --- Extra Turning ---
-        // (Not adding - cleric specific)
+        // PHB p.94: You can turn or rebuke undead four more times per day than normal.
+        var extraTurning = new FeatDefinition("Extra Turning",
+            "Each time you take this feat, you can use your ability to turn or rebuke creatures four more times per day than normal.",
+            FeatType.General);
+        // Prerequisite: ability to turn or rebuke undead (checked at runtime)
+        extraTurning.Benefit.GrantsExtraTurning = true;
+        extraTurning.Benefit.Description = "+4 turn/rebuke undead uses per day";
+        Add(extraTurning);
+
+        // --- Improved Turning ---
+        // PHB p.96: Your turning checks gain a +1 bonus to effective cleric level.
+        var improvedTurning = new FeatDefinition("Improved Turning",
+            "Your turning check result is treated as if you were one level higher than your actual cleric level for purposes of determining the maximum Hit Dice of undead you can turn.",
+            FeatType.General);
+        // Prerequisite: ability to turn or rebuke undead (checked at runtime)
+        improvedTurning.Benefit.GrantsImprovedTurning = true;
+        improvedTurning.Benefit.Description = "+1 effective cleric level for turning checks and turning damage";
+        Add(improvedTurning);
 
         // --- Spell Focus / Greater Spell Focus ---
         var spellFocus = new FeatDefinition("Spell Focus",

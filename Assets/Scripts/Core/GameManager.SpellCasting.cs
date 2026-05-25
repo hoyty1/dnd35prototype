@@ -301,6 +301,13 @@ public partial class GameManager
             {
                 summon.Stats.CharacterAlignment = Alignment.TrueNeutral;
             }
+
+            // Augment Summoning (PHB p.89): summoned creatures gain +4 STR, +4 CON
+            if (caster != null && caster.Stats != null && FeatManager.HasAugmentSummoning(caster.Stats))
+            {
+                FeatManager.ApplyAugmentSummoningBonuses(summon.Stats);
+                Debug.Log($"[Summon] Augment Summoning applied to {summon.Stats.CharacterName}: +4 STR, +4 CON");
+            }
         }
 
         NPCs.Add(summon);

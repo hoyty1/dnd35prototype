@@ -6679,9 +6679,46 @@ public class CharacterController : MonoBehaviour
                 result.BaseDamageRoll = 0;
                 result.RawTotalDamage = 0;
                 result.FinalDamageDealt = 0;
-                string deflectNote = "Deflect Arrows: ranged attack deflected!";
-                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                    ? deflectNote : $"{result.SpecialAttackNote} {deflectNote}";
+
+                // Snatch Arrows: if target has Snatch Arrows feat AND deflected, they catch the projectile
+                // and may throw it back as an immediate ranged attack (PHB p.101).
+                bool snatched = FeatManager.ShouldSnatchAfterDeflect(target);
+                if (snatched)
+                {
+                    string snatchNote = "Snatch Arrows: caught deflected projectile and throws it back!";
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? snatchNote : $"{result.SpecialAttackNote} {snatchNote}";
+
+                    // Immediate counter-attack: target throws the caught projectile back at the attacker.
+                    // Uses target's BAB + DEX mod as the attack roll (improvised thrown weapon, no penalty per RAW).
+                    if (target.Stats != null && this.Stats != null && !this.Stats.IsDead)
+                    {
+                        int counterAttackRoll = UnityEngine.Random.Range(1, 21);
+                        int counterAttackBonus = target.Stats.BAB + target.Stats.DEXMod;
+                        int counterTotal = counterAttackRoll + counterAttackBonus;
+                        int targetAC = this.Stats.AC;
+
+                        if (counterAttackRoll == 20 || (counterAttackRoll != 1 && counterTotal >= targetAC))
+                        {
+                            // Hit: deal 1d4 + STR damage (thrown projectile)
+                            int snatchDamage = UnityEngine.Random.Range(1, 5) + target.Stats.STRMod;
+                            snatchDamage = Mathf.Max(1, snatchDamage);
+                            this.Stats.TakeDamage(snatchDamage);
+                            result.SpecialAttackNote += $" Counter-attack hits for {snatchDamage} damage! (roll {counterAttackRoll}+{counterAttackBonus}={counterTotal} vs AC {targetAC})";
+                        }
+                        else
+                        {
+                            result.SpecialAttackNote += $" Counter-attack misses. (roll {counterAttackRoll}+{counterAttackBonus}={counterTotal} vs AC {targetAC})";
+                        }
+                    }
+                }
+                else
+                {
+                    string deflectNote = "Deflect Arrows: ranged attack deflected!";
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? deflectNote : $"{result.SpecialAttackNote} {deflectNote}";
+                }
+
                 return result;
             }
 

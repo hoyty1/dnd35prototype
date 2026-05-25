@@ -212,6 +212,9 @@ public class FeatBenefit
     public bool GrantsCombatCasting;     // Combat Casting
     public bool GrantsAugmentSummoning;  // Augment Summoning
     public bool AllowsStunningFist;      // Stunning Fist
+    public bool GrantsNaturalSpell;      // Natural Spell (cast while wild shaped)
+    public bool GrantsExtraTurning;      // Extra Turning (+4 turn undead uses/day)
+    public bool GrantsImprovedTurning;   // Improved Turning (+1 effective turning level)
 
     // Metamagic feats
     public bool IsMetamagic;            // True for all metamagic feats

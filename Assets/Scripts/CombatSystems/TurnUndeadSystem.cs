@@ -420,14 +420,17 @@ public partial class GameManager
         if (turner == null || turner.Stats == null)
             return 0;
 
+        int effectiveLevel = 0;
+
         if (turner.Stats.IsCleric)
-            return Mathf.Max(1, turner.Stats.Level);
+            effectiveLevel = Mathf.Max(1, turner.Stats.Level);
+        else if (turner.Stats.IsPaladin)
+            effectiveLevel = Mathf.Max(0, turner.Stats.Level - 3);  // D&D 3.5e: Paladin turns as cleric 3 levels lower
 
-        // D&D 3.5e: Paladin turns undead as a cleric three levels lower.
-        if (turner.Stats.IsPaladin)
-            return Mathf.Max(0, turner.Stats.Level - 3);
+        // Improved Turning feat (PHB p.96): +1 effective cleric level for turning
+        effectiveLevel += FeatManager.GetImprovedTurningLevelBonus(turner.Stats);
 
-        return 0;
+        return effectiveLevel;
     }
 
     private static int ComputeTurnUndeadMaxHitDice(int turningCheckTotal, int clericLevel)

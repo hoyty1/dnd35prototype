@@ -238,7 +238,16 @@ public class CombatFlowService : MonoBehaviour
         if (isRangedAttack && weapon != null && weapon.RangeIncrement > 0)
         {
             bool isThrownWeapon = usingThrownAttack || (weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
-            return RangeCalculator.GetRangeInfo(sqDist, weapon.RangeIncrement, isThrownWeapon);
+
+            // Far Shot feat: multiply effective range increment (×1.5 projectile, ×2 thrown)
+            int effectiveRangeIncrement = weapon.RangeIncrement;
+            if (attacker != null && attacker.Stats != null && FeatManager.HasFarShot(attacker.Stats))
+            {
+                float multiplier = FeatManager.GetFarShotRangeMultiplier(attacker.Stats, isThrownWeapon);
+                effectiveRangeIncrement = Mathf.RoundToInt(weapon.RangeIncrement * multiplier);
+            }
+
+            return RangeCalculator.GetRangeInfo(sqDist, effectiveRangeIncrement, isThrownWeapon);
         }
 
         return RangeCalculator.GetRangeInfo(sqDist, 0, false);

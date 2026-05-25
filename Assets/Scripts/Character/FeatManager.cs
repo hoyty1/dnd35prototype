@@ -774,6 +774,153 @@ public static class FeatManager
     }
 
     // ========================================================================
+    // PHASE 2: SPECIALIZED TACTICS FEATS
+    // ========================================================================
+
+    // ── FAR SHOT (D&D 3.5 PHB p.94) ──
+
+    /// <summary>Does this character have Far Shot?</summary>
+    public static bool HasFarShot(CharacterStats stats) => stats != null && stats.HasFeat("Far Shot");
+
+    /// <summary>
+    /// Get the range increment multiplier for Far Shot.
+    /// Projectile weapons: ×1.5. Thrown weapons: ×2.0. No Far Shot: ×1.0.
+    /// </summary>
+    public static float GetFarShotRangeMultiplier(CharacterStats stats, bool isThrownWeapon)
+    {
+        if (!HasFarShot(stats)) return 1.0f;
+        return isThrownWeapon ? 2.0f : 1.5f;
+    }
+
+    // ── RAPID RELOAD (D&D 3.5 PHB p.99) ──
+    // NOTE: Rapid Reload runtime mechanics are already fully implemented in
+    // CharacterEquipment.HasRapidReloadForWeapon() and ItemData.GetEffectiveReloadAction().
+
+    /// <summary>Does this character have any Rapid Reload variant?</summary>
+    public static bool HasAnyRapidReload(CharacterStats stats)
+    {
+        if (stats == null) return false;
+        return stats.HasFeat("Rapid Reload (Light Crossbow)")
+            || stats.HasFeat("Rapid Reload (Heavy Crossbow)")
+            || stats.HasFeat("Rapid Reload (Hand Crossbow)")
+            || stats.HasFeat("Rapid Reload (Repeating Crossbow)");
+    }
+
+    // ── SNATCH ARROWS (D&D 3.5 PHB p.100) ──
+    // Extends Deflect Arrows: catch the projectile and throw it back.
+
+    // NOTE: HasSnatchArrows() already exists in the feat-query section above.
+
+    /// <summary>
+    /// Can this character use Snatch Arrows? Requires Deflect Arrows, Improved Unarmed Strike, DEX 15+.
+    /// </summary>
+    public static bool CanUseSnatchArrows(CharacterStats stats)
+    {
+        if (!HasSnatchArrows(stats)) return false;
+        if (!stats.HasFeat("Deflect Arrows")) return false;
+        if (!stats.HasFeat("Improved Unarmed Strike")) return false;
+        if (stats.DEXMod < 2) return false; // DEX 15 → mod +2
+        return true;
+    }
+
+    /// <summary>
+    /// After deflecting a ranged attack, attempt to snatch the arrow and throw it back.
+    /// Returns true if the character has Snatch Arrows (the throw-back is handled by the caller).
+    /// </summary>
+    public static bool ShouldSnatchAfterDeflect(CharacterController target)
+    {
+        if (target == null || target.Stats == null) return false;
+        return CanUseSnatchArrows(target.Stats) && HasFreeHandForDeflection(target);
+    }
+
+    // ── IMPROVED COMBAT MANEUVERS ──
+    // NOTE: Improved Bull Rush, Improved Overrun, Improved Sunder, and Improved Grapple
+    // are already fully implemented with +4 bonuses and AoO suppression in:
+    //   - CharacterController.RollBullRushAttackerCheck() (+4 from Improved Bull Rush)
+    //   - CharacterCombatStats.GetGrappleModifier() (+4 from Improved Grapple)
+    //   - CharacterController.ResolveSunder() (+4 from Improved Sunder)
+    //   - OverrunSystem.ResolveOverrunOpposedCheck() (+4 from Improved Overrun)
+    //   - GameManager.CombatActions (AoO suppression via attackerIgnoresAoO flags)
+
+    /// <summary>Does this character have Improved Bull Rush?</summary>
+    public static bool HasImprovedBullRush(CharacterStats stats) => stats != null && stats.HasFeat("Improved Bull Rush");
+
+    /// <summary>Does this character have Improved Overrun?</summary>
+    public static bool HasImprovedOverrun(CharacterStats stats) => stats != null && stats.HasFeat("Improved Overrun");
+
+    /// <summary>Does this character have Improved Sunder?</summary>
+    public static bool HasImprovedSunder(CharacterStats stats) => stats != null && stats.HasFeat("Improved Sunder");
+
+    /// <summary>Does this character have Improved Grapple?</summary>
+    public static bool HasImprovedGrapple(CharacterStats stats) => stats != null && stats.HasFeat("Improved Grapple");
+
+    // ── AUGMENT SUMMONING (D&D 3.5 PHB p.89) ──
+
+    /// <summary>Does this character have Augment Summoning?</summary>
+    public static bool HasAugmentSummoning(CharacterStats stats) => stats != null && stats.HasFeat("Augment Summoning");
+
+    /// <summary>
+    /// Apply Augment Summoning bonuses to a summoned creature's stats.
+    /// +4 enhancement bonus to STR and CON.
+    /// </summary>
+    public static void ApplyAugmentSummoningBonuses(CharacterStats summonStats)
+    {
+        if (summonStats == null) return;
+        summonStats.BaseSTR += 4;
+        summonStats.BaseCON += 4;
+        // Recalculate HP for CON increase: +2 HP per hit die (from +4 CON = +2 mod)
+        int conHPBonus = 2 * Mathf.Max(1, summonStats.HitDice);
+        summonStats.MaxHP += conHPBonus;
+        summonStats.CurrentHP += conHPBonus;
+        Debug.Log($"[AugmentSummoning] {summonStats.CharacterName} gains +4 STR (now {summonStats.BaseSTR}), +4 CON (now {summonStats.BaseCON}), +{conHPBonus} HP");
+    }
+
+    // ── NATURAL SPELL (D&D 3.5 PHB p.97) ──
+
+    /// <summary>Does this character have Natural Spell?</summary>
+    public static bool HasNaturalSpell(CharacterStats stats) => stats != null && stats.HasFeat("Natural Spell");
+
+    /// <summary>
+    /// Can this character cast spells while in wild shape?
+    /// Requires Natural Spell feat + Wild Shape class feature.
+    /// </summary>
+    public static bool CanCastInWildShape(CharacterStats stats)
+    {
+        if (!HasNaturalSpell(stats)) return false;
+        return stats.HasWildShape;
+    }
+
+    // ── EXTRA TURNING (D&D 3.5 PHB p.94) ──
+
+    /// <summary>Does this character have Extra Turning?</summary>
+    public static bool HasExtraTurning(CharacterStats stats) => stats != null && stats.HasFeat("Extra Turning");
+
+    /// <summary>
+    /// Get the bonus turning attempts from Extra Turning feat.
+    /// Each instance of the feat grants +4 attempts per day.
+    /// </summary>
+    public static int GetExtraTurningUses(CharacterStats stats)
+    {
+        if (!HasExtraTurning(stats)) return 0;
+        return 4; // +4 per feat instance
+    }
+
+    // ── IMPROVED TURNING (D&D 3.5 PHB p.96) ──
+
+    /// <summary>Does this character have Improved Turning?</summary>
+    public static bool HasImprovedTurning(CharacterStats stats) => stats != null && stats.HasFeat("Improved Turning");
+
+    /// <summary>
+    /// Get the effective turning level bonus from Improved Turning.
+    /// +1 to effective cleric level for turning checks and turning damage.
+    /// </summary>
+    public static int GetImprovedTurningLevelBonus(CharacterStats stats)
+    {
+        if (!HasImprovedTurning(stats)) return 0;
+        return 1;
+    }
+
+    // ========================================================================
     // FEAT SUMMARY FOR DISPLAY
     // ========================================================================
 
@@ -844,6 +991,18 @@ public static class FeatManager
         if (stats.HasFeat("Snatch Arrows")) lines.Add("Snatch Arrows: Catch deflected arrows");
         if (stats.HasFeat("Manyshot")) lines.Add("Manyshot: Fire 2 arrows at -4 (standard action, ≤30ft)");
         if (stats.HasFeat("Improved Precise Shot")) lines.Add("Improved Precise Shot: Ignore cover/concealment (except total)");
+
+        // Phase 2 Specialized Tactics feats
+        if (HasFarShot(stats)) lines.Add("Far Shot: Range increment ×1.5 (projectile) or ×2 (thrown)");
+        if (HasAnyRapidReload(stats)) lines.Add("Rapid Reload: Reduce crossbow reload time by one step");
+        if (HasImprovedBullRush(stats)) lines.Add("Improved Bull Rush: +4 bonus, no AoO on bull rush");
+        if (HasImprovedOverrun(stats)) lines.Add("Improved Overrun: +4 bonus, no AoO on overrun");
+        if (HasImprovedSunder(stats)) lines.Add("Improved Sunder: +4 bonus, no AoO on sunder");
+        if (HasImprovedGrapple(stats)) lines.Add("Improved Grapple: +4 bonus, no AoO on grapple");
+        if (HasAugmentSummoning(stats)) lines.Add("Augment Summoning: Summoned creatures gain +4 STR/CON");
+        if (HasNaturalSpell(stats)) lines.Add("Natural Spell: Cast spells while in wild shape");
+        if (HasExtraTurning(stats)) lines.Add($"Extra Turning: +{GetExtraTurningUses(stats)} turn undead uses/day");
+        if (HasImprovedTurning(stats)) lines.Add($"Improved Turning: +{GetImprovedTurningLevelBonus(stats)} effective cleric level for turning");
 
         // Metamagic feats
         foreach (var mmId in MetamagicData.AllMetamagicFeats)

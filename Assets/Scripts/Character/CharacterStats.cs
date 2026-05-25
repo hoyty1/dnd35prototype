@@ -947,13 +947,21 @@ public class CharacterStats
     {
         get
         {
+            int baseUses = 0;
+
             if (IsCleric)
-                return Mathf.Max(1, 3 + CHAMod);
+                baseUses = Mathf.Max(1, 3 + CHAMod);
+            else if (IsPaladin && GetClassLevel("Paladin") >= 4)
+                baseUses = Mathf.Max(1, 3 + CHAMod);
 
-            if (IsPaladin && GetClassLevel("Paladin") >= 4)
-                return Mathf.Max(1, 3 + CHAMod);
+            if (baseUses <= 0)
+                return 0;
 
-            return 0;
+            // Extra Turning feat (PHB p.94): +4 turn undead uses per day
+            if (FeatManager.HasExtraTurning(this))
+                baseUses += FeatManager.GetExtraTurningUses(this);
+
+            return baseUses;
         }
     }
 
