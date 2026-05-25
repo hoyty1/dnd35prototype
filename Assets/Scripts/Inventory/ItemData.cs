@@ -553,6 +553,8 @@ public class ItemData
     public int WondrousMightyFistsBonus;
     /// <summary>Speed bonus in feet (Boots of Striding: +10 base land speed). 0 if N/A.</summary>
     public int WondrousSpeedBonus;
+    /// <summary>Displacement miss chance percentage (Cloak of Displacement: 20 minor, 50 major). 0 if N/A.</summary>
+    public int WondrousDisplacementMissChance;
     /// <summary>Grants darkvision (Goggles of Night). Range in feet (60). 0 if N/A.</summary>
     public int WondrousDarkvisionRange;
     /// <summary>Bonus to caster level checks to overcome spell resistance (Robe of the Archmagi).</summary>
@@ -1731,6 +1733,8 @@ public class ItemData
                 stats += $"\n+{WondrousMightyFistsBonus} enhancement bonus to unarmed/natural attacks";
             if (WondrousSpeedBonus > 0)
                 stats += $"\n+{WondrousSpeedBonus} ft enhancement bonus to land speed";
+            if (WondrousDisplacementMissChance > 0)
+                stats += $"\n{WondrousDisplacementMissChance}% miss chance (displacement)";
             if (WondrousDarkvisionRange > 0)
                 stats += $"\nDarkvision {WondrousDarkvisionRange} ft";
             if (WondrousGrantsMovement && !string.IsNullOrEmpty(WondrousMovementMode))

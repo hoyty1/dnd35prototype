@@ -62,6 +62,8 @@ public static class WondrousItemDatabase
         for (int bonus = 2; bonus <= 6; bonus += 2)
             Register(WondrousItemFactory.CreateCloakOfCharisma(bonus));
         Register(WondrousItemFactory.CreateCloakOfElvenkind());
+        Register(WondrousItemFactory.CreateCloakOfDisplacement(false)); // Minor: 20% miss chance
+        Register(WondrousItemFactory.CreateCloakOfDisplacement(true));  // Major: 50% miss chance
         Register(WondrousItemFactory.CreateWingsOfFlying());
 
         // ════════════════════════════════════════════════════════════

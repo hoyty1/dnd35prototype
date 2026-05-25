@@ -275,6 +275,29 @@ public static class WondrousItemFactory
         return item;
     }
 
+    /// <summary>
+    /// Cloak of Displacement (Minor: 20% miss chance; Major: 50% miss chance). DMG p.253.
+    /// Emits a shimmering displacement aura making the wearer appear to be slightly elsewhere.
+    /// Attacks have a miss chance as if the wearer had concealment. True seeing negates.
+    /// </summary>
+    public static ItemData CreateCloakOfDisplacement(bool major)
+    {
+        string id = major ? WondrousItemNames.CLOAK_OF_DISPLACEMENT_MAJOR : WondrousItemNames.CLOAK_OF_DISPLACEMENT_MINOR;
+        string tier = major ? "Major" : "Minor";
+        int missChance = major ? 50 : 20;
+        int price = major ? 50000 : 24000;
+        int cl = major ? 15 : 3;
+        var item = CreateBaseWondrous(id, $"Cloak of Displacement, {tier}",
+            major
+                ? "This item appears to be a normal cloak, but when worn its magical properties distort and warp light waves. This displacement works similar to the displacement spell (50% miss chance). It functions continually."
+                : "This item appears to be a normal cloak, but when worn its magical properties distort and warp light waves. This lesser displacement works similar to the blur spell (20% miss chance). It functions continually.",
+            EquipSlot.Back, price, cl, 1f, BackIcon, BackColor);
+        item.WondrousItemType = "ac";
+        item.WondrousDisplacementMissChance = missChance;
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        return item;
+    }
+
     /// <summary>Wings of Flying (fly 60 ft good maneuverability). DMG p.271.</summary>
     public static ItemData CreateWingsOfFlying()
     {

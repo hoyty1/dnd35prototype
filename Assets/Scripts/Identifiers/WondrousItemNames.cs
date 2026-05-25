@@ -68,8 +68,8 @@ namespace DND35e.Identifiers
         public const string CLOAK_OF_CHARISMA_4 = "cloak_of_charisma_4";
         public const string CLOAK_OF_CHARISMA_6 = "cloak_of_charisma_6";
         public const string CLOAK_OF_ELVENKIND = "cloak_of_elvenkind";
-        public const string CLOAK_OF_DISPLACEMENT_MINOR = "cloak_of_displacement_minor";
-        public const string CLOAK_OF_DISPLACEMENT_MAJOR = "cloak_of_displacement_major";
+        public const string CLOAK_OF_DISPLACEMENT_MINOR = "cloak_of_displacement_minor";  // 20% miss chance, 24,000 gp
+        public const string CLOAK_OF_DISPLACEMENT_MAJOR = "cloak_of_displacement_major";  // 50% miss chance, 50,000 gp
         public const string CLOAK_OF_ETHEREALNESS = "cloak_of_etherealness";
         public const string CLOAK_OF_ARACHNIDA = "cloak_of_arachnida";
         public const string CLOAK_OF_THE_BAT = "cloak_of_the_bat";

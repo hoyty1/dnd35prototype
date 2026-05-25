@@ -8488,6 +8488,11 @@ public class CharacterController : MonoBehaviour
             bestMissChance = Mathf.Max(bestMissChance, 50);
         }
 
+        // Cloak of Displacement: wondrous item-based miss chance (DMG p.253).
+        // Minor = 20%, Major = 50%. Does not stack with concealment; uses highest.
+        if (Stats != null && Stats.DisplacementMissChance > 0)
+            bestMissChance = Mathf.Max(bestMissChance, Stats.DisplacementMissChance);
+
         return bestMissChance;
     }
 
@@ -8614,6 +8619,13 @@ public class CharacterController : MonoBehaviour
         // D&D 3.5e Entropic Shield: identify as concealment source for ranged attacks
         if (incomingIsRangedAttack && Stats != null && Stats.EntropicShieldActive && sourceEffect == null && missChance == 20)
             return "Entropic Shield (20% miss chance vs ranged attacks)";
+
+        // Cloak of Displacement: identify as miss chance source (DMG p.253)
+        if (Stats != null && Stats.DisplacementMissChance > 0 && sourceEffect == null && missChance == Stats.DisplacementMissChance)
+        {
+            string tier = Stats.DisplacementMissChance >= 50 ? "Major" : "Minor";
+            return $"Cloak of Displacement, {tier} ({Stats.DisplacementMissChance}% miss chance)";
+        }
 
         string sourceName = sourceEffect != null && !string.IsNullOrWhiteSpace(sourceEffect.ConcealmentSource)
             ? sourceEffect.ConcealmentSource

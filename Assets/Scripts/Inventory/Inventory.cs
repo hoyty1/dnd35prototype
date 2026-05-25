@@ -1033,6 +1033,7 @@ public class Inventory
         OwnerStats.WondrousBracersArmorBonus = 0;
         OwnerStats.WondrousSaveAllBonus = 0;
         OwnerStats.WondrousSpeedBonus = 0;
+        OwnerStats.DisplacementMissChance = 0;
 
         // Reset wondrous ability score enhancement bonuses (Big Six)
         OwnerStats.WondrousEnhancementSTR = 0;
@@ -1103,6 +1104,13 @@ public class Inventory
         {
             // Enhancement bonuses to speed don't stack; use highest
             OwnerStats.WondrousSpeedBonus = Mathf.Max(OwnerStats.WondrousSpeedBonus, item.WondrousSpeedBonus);
+        }
+
+        // --- Displacement Miss Chance (Cloak of Displacement) ---
+        if (item.WondrousDisplacementMissChance > 0)
+        {
+            // Displacement miss chances don't stack; use highest
+            OwnerStats.DisplacementMissChance = Mathf.Max(OwnerStats.DisplacementMissChance, item.WondrousDisplacementMissChance);
         }
 
         // --- Ability Score Enhancement Bonuses (Big Six items) ---

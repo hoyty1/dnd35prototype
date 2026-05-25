@@ -2069,6 +2069,7 @@ public static class ItemDatabase
         clone.WondrousMaxCharges = src.WondrousMaxCharges;
         clone.WondrousMightyFistsBonus = src.WondrousMightyFistsBonus;
         clone.WondrousSpeedBonus = src.WondrousSpeedBonus;
+        clone.WondrousDisplacementMissChance = src.WondrousDisplacementMissChance;
         clone.WondrousDarkvisionRange = src.WondrousDarkvisionRange;
         clone.WondrousSpellResistanceBonus = src.WondrousSpellResistanceBonus;
         clone.WondrousGrantsSR = src.WondrousGrantsSR;

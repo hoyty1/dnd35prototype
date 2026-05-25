@@ -1448,14 +1448,20 @@ public class CharacterStats
         }
     }
 
-    /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
-    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + LuckSaveBonus + RingResistanceSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
+    /// <summary>
+    /// Effective resistance bonus to all saves = max(Ring of Resistance, Cloak of Resistance).
+    /// D&D 3.5e: resistance bonuses do NOT stack; use highest from any source.
+    /// </summary>
+    public int EffectiveResistanceSaveBonus => Mathf.Max(RingResistanceSaveBonus, WondrousSaveAllBonus);
 
-    /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
-    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + LuckSaveBonus + RingResistanceSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
+    /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus + resistance (best of ring/wondrous) + condition modifiers.</summary>
+    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + LuckSaveBonus + EffectiveResistanceSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
 
-    /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus + condition modifiers.</summary>
-    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + LuckSaveBonus + RingResistanceSaveBonus + ConditionWillModifier;
+    /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus + resistance (best of ring/wondrous) + condition modifiers.</summary>
+    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + LuckSaveBonus + EffectiveResistanceSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
+
+    /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus + resistance (best of ring/wondrous) + condition modifiers.</summary>
+    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + LuckSaveBonus + EffectiveResistanceSaveBonus + ConditionWillModifier;
 
     // ========== FEATS (D&D 3.5) ==========
     /// <summary>Set of feats this character has.</summary>
@@ -2471,6 +2477,8 @@ public class CharacterStats
     public int WondrousSaveAllBonus;
     /// <summary>Enhancement bonus to base land speed from Boots of Striding (+10 ft). Highest wins.</summary>
     public int WondrousSpeedBonus;
+    /// <summary>Displacement miss chance from Cloak of Displacement (20=minor, 50=major). Highest wins. Does not stack with concealment; uses best.</summary>
+    public int DisplacementMissChance;
 
     // ── Wondrous Item Ability Score Enhancement Bonuses (Big Six) ──
     // Enhancement bonuses to ability scores from wondrous items. Highest wins per ability.
@@ -2647,7 +2655,7 @@ public class CharacterStats
             // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
             // Magic Vestment adds enhancement bonus to armor (stacks with base armor, not with other armor enhancements).
             int effectiveArmorBonus = Mathf.Max(ArmorBonus + MagicVestmentACBonus, SpellACBonus);
-            return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + SizeModifier
+            return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + WondrousNaturalArmorBonus + SizeModifier
                    + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty
                    + HasteACBonus + SlowACPenalty;
         }
