@@ -76,6 +76,7 @@ public static class QuickSpawnSystem
 
     /// <summary>
     /// Create an NPCDefinition from a template.
+    /// Configures AI behavior, spellcasting, and consumable awareness automatically.
     /// </summary>
     public static NPCDefinition CreateFromTemplate(NPCTemplate template)
     {
@@ -113,19 +114,11 @@ public static class QuickSpawnSystem
         if (template.ClassFeatures != null)
             def.SpecialAbilities = new List<string>(template.ClassFeatures);
 
-        // Set spellcasting if applicable
-        if (template.Spellcasting != null)
-        {
-            def.AIBehavior = NPCAIBehavior.RangedKiter;
-            if (template.Spellcasting.SpellsPrepared != null)
-            {
-                foreach (var kvp in template.Spellcasting.SpellsPrepared)
-                {
-                    foreach (string spell in kvp.Value)
-                        def.PreparedSpellSlotIds.Add(spell);
-                }
-            }
-        }
+        // Track source template for auto-updates
+        def.SourceTemplateId = $"{template.ClassName}_{template.Level}";
+
+        // Configure AI behavior, spellcasting, and consumables from template
+        NPCTemplateAIConfigurator.ConfigureDefinition(def, template);
 
         Debug.Log($"[QuickSpawn] Created {npcName}: CR {template.ChallengeRating}, HP {template.HitPoints}, " +
                   $"AC {template.ArmorClass}, BAB +{template.BaseAttackBonus}");

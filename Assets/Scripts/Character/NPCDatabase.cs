@@ -414,6 +414,14 @@ public class NPCDefinition
     // Runtime template descriptors.
     public List<string> AppliedTemplateIds = new List<string>();
 
+    /// <summary>
+    /// Source template identifier (e.g., "Fighter_10") for spell auto-update system.
+    /// Set by QuickSpawnSystem.CreateFromTemplate() to track which DMG template
+    /// was used to create this NPC. Used by TemplateSpellUpdater to re-validate
+    /// spells when new ones are implemented in SpellDatabase.
+    /// </summary>
+    public string SourceTemplateId;
+
     // Equipment
     public List<EquipmentSlotPair> EquipmentIds = new List<EquipmentSlotPair>();
     public List<string> BackpackItemIds = new List<string>();
@@ -511,6 +519,7 @@ public class NPCDefinition
         clone.AppliedTemplateIds = AppliedTemplateIds != null
             ? new List<string>(AppliedTemplateIds)
             : new List<string>();
+        clone.SourceTemplateId = SourceTemplateId;
 
         clone.EquipmentIds = new List<EquipmentSlotPair>();
         if (EquipmentIds != null)
