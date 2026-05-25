@@ -38,6 +38,13 @@ public static class ClassRegistry
         Register(new BardClass());
         Register(new DruidClass());
 
+        // NPC Classes (DMG p.107-110)
+        Register(new AdeptClass());
+        Register(new AristocratClass());
+        Register(new CommonerClass());
+        Register(new ExpertClass());
+        Register(new WarriorClass());
+
         ClassNames = new string[_classList.Count];
         for (int i = 0; i < _classList.Count; i++)
             ClassNames[i] = _classList[i].ClassName;

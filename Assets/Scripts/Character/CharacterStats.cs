@@ -503,6 +503,31 @@ public class CharacterStats
     /// <summary>Whether this character is a Druid.</summary>
     public bool IsDruid => HasClass("Druid");
 
+    // ── NPC Class Checks ──
+    /// <summary>Whether this character is an Adept.</summary>
+    public bool IsAdept => HasClass("Adept");
+    /// <summary>Whether this character is an Aristocrat.</summary>
+    public bool IsAristocrat => HasClass("Aristocrat");
+    /// <summary>Whether this character is a Commoner.</summary>
+    public bool IsCommoner => HasClass("Commoner");
+    /// <summary>Whether this character is an Expert.</summary>
+    public bool IsExpert => HasClass("Expert");
+    /// <summary>Whether this character is a Warrior.</summary>
+    public bool IsWarrior => HasClass("Warrior");
+
+    /// <summary>Whether this character has any NPC class (Adept, Aristocrat, Commoner, Expert, Warrior).</summary>
+    public bool HasNPCClass => IsAdept || IsAristocrat || IsCommoner || IsExpert || IsWarrior;
+
+    // ── ECL Tracking ──
+    /// <summary>ECL tracker for creatures with racial HD and/or level adjustment.</summary>
+    public ECLTracker ECL;
+
+    /// <summary>Level adjustment (e.g., Drow +2). 0 for standard races.</summary>
+    public int LevelAdjustment;
+
+    /// <summary>Effective Character Level accounting for racial HD and level adjustment.</summary>
+    public int EffectiveCharacterLevel => ECL != null ? ECL.ECL : Level;
+
     // ─────────────────────────────────────────────
     // Bard Class Features (PHB p.26-29)
     // ─────────────────────────────────────────────
