@@ -90,11 +90,30 @@ public class MetamagicData
 
     /// <summary>
     /// Get the effective spell level (base + metamagic adjustments).
-    /// This is the slot level consumed.
+    /// This is the slot level consumed. Capped at 9th level maximum.
     /// </summary>
     public int GetEffectiveSpellLevel(int baseSpellLevel)
     {
+        int raw = baseSpellLevel + GetTotalLevelAdjustment(baseSpellLevel);
+        return Mathf.Min(raw, 9); // D&D 3.5e: maximum 9th-level spell slot
+    }
+
+    /// <summary>
+    /// Get the raw effective spell level without capping.
+    /// Used for validation to detect when metamagic exceeds 9th level.
+    /// </summary>
+    public int GetRawEffectiveSpellLevel(int baseSpellLevel)
+    {
         return baseSpellLevel + GetTotalLevelAdjustment(baseSpellLevel);
+    }
+
+    /// <summary>
+    /// Check if the current metamagic combination exceeds the 9th-level cap.
+    /// Returns true if the effective level would be > 9.
+    /// </summary>
+    public bool ExceedsMaxSpellLevel(int baseSpellLevel)
+    {
+        return GetRawEffectiveSpellLevel(baseSpellLevel) > 9;
     }
 
     /// <summary>
@@ -258,5 +277,87 @@ public class MetamagicData
     public static string GetFeatName(MetamagicFeatId id)
     {
         return GetDisplayName(id); // They're the same
+    }
+
+    /// <summary>
+    /// Get the standard level adjustment for a metamagic feat type (static, no instance state).
+    /// For Heighten, returns 0 since it's variable.
+    /// </summary>
+    public static int GetStandardLevelAdjustment(MetamagicFeatId feat)
+    {
+        switch (feat)
+        {
+            case MetamagicFeatId.EmpowerSpell:  return 2;
+            case MetamagicFeatId.EnlargeSpell:  return 1;
+            case MetamagicFeatId.ExtendSpell:   return 1;
+            case MetamagicFeatId.HeightenSpell: return 0; // Variable - caller must compute
+            case MetamagicFeatId.MaximizeSpell:  return 3;
+            case MetamagicFeatId.QuickenSpell:   return 4;
+            case MetamagicFeatId.SilentSpell:    return 1;
+            case MetamagicFeatId.StillSpell:     return 1;
+            case MetamagicFeatId.WidenSpell:     return 3;
+            default: return 0;
+        }
+    }
+
+    // ========================================================================
+    // ROD TRACKING
+    // ========================================================================
+
+    /// <summary>
+    /// Set of metamagic feats that were applied by rods (not character feats).
+    /// Rod-applied metamagics bypass slot level increases.
+    /// </summary>
+    public HashSet<MetamagicFeatId> RodAppliedMetamagic = new HashSet<MetamagicFeatId>();
+
+    /// <summary>Whether any metamagic was applied by a rod.</summary>
+    public bool HasRodMetamagic => RodAppliedMetamagic.Count > 0;
+
+    /// <summary>Check if a specific metamagic was applied by a rod.</summary>
+    public bool IsFromRod(MetamagicFeatId feat) => RodAppliedMetamagic.Contains(feat);
+
+    /// <summary>
+    /// Apply a metamagic from a rod (marks it as rod-sourced and adds to applied set).
+    /// </summary>
+    public void ApplyFromRod(MetamagicFeatId feat)
+    {
+        AppliedMetamagic.Add(feat);
+        RodAppliedMetamagic.Add(feat);
+    }
+
+    /// <summary>
+    /// Calculate the total level adjustment excluding rod-applied metamagics.
+    /// This is the actual slot increase the caster must pay.
+    /// </summary>
+    public int GetFeatOnlyLevelAdjustment(int baseSpellLevel)
+    {
+        int adj = 0;
+        foreach (var mm in AppliedMetamagic)
+        {
+            if (!RodAppliedMetamagic.Contains(mm))
+                adj += GetLevelAdjustment(mm, baseSpellLevel);
+        }
+        return adj;
+    }
+
+    /// <summary>
+    /// Get the effective spell level counting only feat-based metamagic (rod metamagics free).
+    /// </summary>
+    public int GetEffectiveSpellLevelWithRods(int baseSpellLevel)
+    {
+        int raw = baseSpellLevel + GetFeatOnlyLevelAdjustment(baseSpellLevel);
+        return Mathf.Min(raw, 9);
+    }
+
+    /// <summary>
+    /// Deep clone this MetamagicData instance.
+    /// </summary>
+    public MetamagicData Clone()
+    {
+        var clone = new MetamagicData();
+        clone.AppliedMetamagic = new HashSet<MetamagicFeatId>(AppliedMetamagic);
+        clone.RodAppliedMetamagic = new HashSet<MetamagicFeatId>(RodAppliedMetamagic);
+        clone.HeightenToLevel = HeightenToLevel;
+        return clone;
     }
 }

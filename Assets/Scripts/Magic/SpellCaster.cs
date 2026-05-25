@@ -763,27 +763,48 @@ public static class SpellCaster
         }
 
         // Extend Spell: double duration
+        // D&D 3.5e PHB p.91: Does NOT affect instantaneous, concentration, or permanent durations.
         if (metamagic.Has(MetamagicFeatId.ExtendSpell))
         {
-            // New duration system: double the DurationValue
-            if (spell.DurationValue > 0)
+            bool canExtend = spell.DurationType != DurationType.Instantaneous &&
+                             spell.DurationType != DurationType.Permanent &&
+                             spell.DurationType != DurationType.Concentration;
+
+            if (canExtend)
             {
-                spell.DurationValue *= 2;
-                Debug.Log($"[Metamagic] Extend Spell: duration value doubled to {spell.DurationValue}");
+                // New duration system: double the DurationValue
+                if (spell.DurationValue > 0)
+                {
+                    spell.DurationValue *= 2;
+                    Debug.Log($"[Metamagic] Extend Spell: duration value doubled to {spell.DurationValue}");
+                }
+                // Legacy: also double BuffDurationRounds
+                if (spell.BuffDurationRounds > 0)
+                {
+                    spell.BuffDurationRounds *= 2;
+                    Debug.Log($"[Metamagic] Extend Spell: legacy duration doubled to {spell.BuffDurationRounds} rounds");
+                }
             }
-            // Legacy: also double BuffDurationRounds
-            if (spell.BuffDurationRounds > 0)
+            else
             {
-                spell.BuffDurationRounds *= 2;
-                Debug.Log($"[Metamagic] Extend Spell: legacy duration doubled to {spell.BuffDurationRounds} rounds");
+                Debug.Log($"[Metamagic] Extend Spell: skipped (duration type: {spell.DurationType})");
             }
         }
 
-        // Widen Spell: double area radius
-        if (metamagic.Has(MetamagicFeatId.WidenSpell) && spell.AreaRadius > 0)
+        // Widen Spell: double all area dimensions
+        // D&D 3.5e PHB p.92: "Any numeric measurements of the spell's area increase by 100%."
+        if (metamagic.Has(MetamagicFeatId.WidenSpell))
         {
-            spell.AreaRadius *= 2;
-            Debug.Log($"[Metamagic] Widen Spell: area doubled to {spell.AreaRadius} sq radius");
+            if (spell.AreaRadius > 0)
+            {
+                spell.AreaRadius *= 2;
+                Debug.Log($"[Metamagic] Widen Spell: AreaRadius doubled to {spell.AreaRadius} sq");
+            }
+            if (spell.AoESizeSquares > 0)
+            {
+                spell.AoESizeSquares *= 2;
+                Debug.Log($"[Metamagic] Widen Spell: AoESizeSquares doubled to {spell.AoESizeSquares} sq");
+            }
         }
 
         // Quicken Spell: change action type to free

@@ -2803,4 +2803,119 @@ public class SpellcastingComponent : MonoBehaviour
         if (metamagic == null || !metamagic.HasAnyMetamagic) return spell.SpellLevel;
         return metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
     }
+
+    // ========================================================================
+    // METAMAGIC VALIDATION & SPONTANEOUS CASTER SUPPORT
+    // ========================================================================
+
+    /// <summary>
+    /// Check if this caster is a spontaneous caster (Sorcerer/Bard).
+    /// Spontaneous casters suffer a casting time penalty when using metamagic.
+    /// </summary>
+    public bool IsSpontaneousCaster()
+    {
+        return MetamagicSystem.IsSpontaneousCaster(Stats);
+    }
+
+    /// <summary>
+    /// Check if this caster is a prepared caster (Wizard/Cleric/Druid/Paladin/Ranger).
+    /// Prepared casters apply metamagic during preparation with no casting time change.
+    /// </summary>
+    public bool IsPreparedCaster()
+    {
+        return MetamagicSystem.IsPreparedCaster(Stats);
+    }
+
+    /// <summary>
+    /// Get the casting action type for a metamagic spell, considering this caster's type.
+    /// D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action.
+    /// </summary>
+    public SpellActionType GetMetamagicCastingAction(SpellData spell, MetamagicData metamagic)
+    {
+        return MetamagicSystem.GetMetamagicCastingAction(spell, metamagic, Stats);
+    }
+
+    /// <summary>
+    /// Full validation of whether this caster can apply metamagic to a spell.
+    /// Checks: has feat(s), spell compatibility, slot availability, 9th-level cap.
+    /// Returns null if valid, or error message string.
+    /// </summary>
+    public string ValidateMetamagicCast(SpellData spell, MetamagicData metamagic)
+    {
+        if (spell == null) return "Spell is null.";
+        if (metamagic == null || !metamagic.HasAnyMetamagic) return null;
+
+        // Basic validation (feat ownership, spell compatibility, level cap)
+        string error = MetamagicSystem.ValidateMetamagicApplication(spell, metamagic, Stats);
+        if (error != null) return error;
+
+        // Check slot availability at effective level
+        int effectiveLevel = metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
+        if (SlotsRemaining == null || effectiveLevel >= SlotsRemaining.Length)
+            return $"No spell slot capacity at level {effectiveLevel}.";
+        if (SlotsRemaining[effectiveLevel] <= 0)
+            return $"No available spell slots at level {effectiveLevel}.";
+
+        // Check quicken limit (one quickened spell per round)
+        if (metamagic.Has(MetamagicFeatId.QuickenSpell) && !CanUseQuickenSpell())
+            return "Already cast a quickened spell this round.";
+
+        return null; // Valid
+    }
+
+    /// <summary>
+    /// Get available metamagic feats this caster can apply to a specific spell.
+    /// Considers: feat ownership, spell compatibility, slot availability, 9th-level cap.
+    /// </summary>
+    public List<MetamagicFeatId> GetAvailableMetamagicsForSpell(SpellData spell, MetamagicData currentMetamagic = null)
+    {
+        return MetamagicSystem.GetAvailableMetamagics(spell, Stats, currentMetamagic);
+    }
+
+    /// <summary>
+    /// Cast a spell with metamagic through the full MetamagicSystem pipeline.
+    /// Handles both prepared and spontaneous casters.
+    /// Returns the modified spell ready for SpellCaster.Cast(), or null if failed.
+    /// </summary>
+    public SpellData PrepareAndConsumeMetamagicSpell(SpellData spell, MetamagicData metamagic)
+    {
+        if (spell == null) return null;
+        if (metamagic == null || !metamagic.HasAnyMetamagic)
+        {
+            // No metamagic - just cast normally
+            return spell.Clone();
+        }
+
+        // Validate
+        string error = ValidateMetamagicCast(spell, metamagic);
+        if (error != null)
+        {
+            Debug.LogWarning($"[Spellcasting] Metamagic validation failed for {spell.Name}: {error}");
+            return null;
+        }
+
+        // Prepare through MetamagicSystem pipeline
+        var result = MetamagicSystem.PrepareMetamagicSpell(spell, metamagic);
+        if (!result.IsSuccess)
+        {
+            Debug.LogWarning($"[Spellcasting] Metamagic preparation failed: {result.ErrorMessage}");
+            return null;
+        }
+
+        // Consume the spell slot at the effective level
+        bool consumed = CastWizardSpellWithMetamagic(spell, metamagic);
+        if (!consumed)
+        {
+            Debug.LogWarning($"[Spellcasting] Failed to consume slot for metamagic {spell.Name}");
+            return null;
+        }
+
+        // Track quickened spell usage
+        if (metamagic.Has(MetamagicFeatId.QuickenSpell))
+        {
+            MarkQuickenedSpellCast();
+        }
+
+        return result.ModifiedSpell;
+    }
 }

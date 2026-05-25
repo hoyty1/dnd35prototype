@@ -448,6 +448,44 @@ public class SpellData
     public DamageBypassTag BuffDamageReductionBypass = DamageBypassTag.None;
     /// <summary>If true, granted DR applies only against ranged weapon attacks.</summary>
     public bool BuffDamageReductionRangedOnly;
+    // ========== METAMAGIC TRACKING ==========
+    /// <summary>
+    /// Original spell level before metamagic adjustments.
+    /// Set by MetamagicSystem when preparing a metamagic spell.
+    /// </summary>
+    public int BaseSpellLevel;
+
+    /// <summary>
+    /// Effective spell level after metamagic adjustments (capped at 9).
+    /// This is the slot level consumed. Set by MetamagicSystem.
+    /// </summary>
+    public int EffectiveSpellLevel;
+
+    /// <summary>
+    /// List of metamagic feats applied to this spell instance.
+    /// Empty for unmodified spells.
+    /// </summary>
+    public List<MetamagicFeatId> AppliedMetamagics = new List<MetamagicFeatId>();
+
+    /// <summary>Whether any metamagic was applied by a rod.</summary>
+    public bool HasRodMetamagic;
+
+    /// <summary>
+    /// Reference to the MetamagicData used for this casting (for SpellCaster resolution).
+    /// Set by MetamagicSystem during preparation.
+    /// </summary>
+    [NonSerialized]
+    public MetamagicData MetamagicDataRef;
+
+    /// <summary>Whether this spell has any metamagic applied.</summary>
+    public bool HasMetamagic => AppliedMetamagics != null && AppliedMetamagics.Count > 0;
+
+    /// <summary>Check if a specific metamagic was applied to this spell.</summary>
+    public bool HasMetamagicType(MetamagicFeatId type)
+    {
+        return AppliedMetamagics != null && AppliedMetamagics.Contains(type);
+    }
+
     /// <summary>Clone this spell data for independent modification.</summary>
     public SpellData Clone()
     {
@@ -458,6 +496,11 @@ public class SpellData
                 .Select(a => new SpellAvailability(a.ClassName, a.Level, a.Domain))
                 .ToList()
             : new List<SpellAvailability>();
+        // Deep clone metamagic tracking
+        clone.AppliedMetamagics = AppliedMetamagics != null
+            ? new List<MetamagicFeatId>(AppliedMetamagics)
+            : new List<MetamagicFeatId>();
+        clone.MetamagicDataRef = null; // Don't share mutable reference
         return clone;
     }
 
