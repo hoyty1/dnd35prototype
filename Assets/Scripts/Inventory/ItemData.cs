@@ -461,6 +461,187 @@ public class ItemData
     /// <summary>Ring of Regeneration: Whether regeneration is active on this ring.</summary>
     public bool RingHasRegeneration;
 
+    // ════════════════════════════════════════════════════════════
+    //  ROD FIELDS (D&D 3.5e DMG pp. 224–228)
+    //  All 36 DMG rods: 21 metamagic + 7 combat + 5 utility + 3 legendary
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>True if this item is a rod. Gates rod-specific UI/mechanics.</summary>
+    public bool IsRod;
+    /// <summary>Key into RodDatabase, e.g. "rod_empower_lesser". Null/empty if not a rod.</summary>
+    public string RodId;
+    /// <summary>Rod category: Metamagic, Combat, Utility, Legendary.</summary>
+    public RodCategory RodCategory;
+    /// <summary>Caster level for the rod's abilities. Most rods: CL 17th.</summary>
+    public int RodCasterLevel;
+    /// <summary>True for legendary rods (Alertness, Lordly Might, Security).</summary>
+    public bool IsLegendary;
+
+    // ── Metamagic Rod Fields ──────────────────────────────────
+    /// <summary>True for all 21 metamagic rods.</summary>
+    public bool RodIsMetamagic;
+    /// <summary>Which metamagic feat this rod applies (e.g., EmpowerSpell).</summary>
+    public MetamagicFeatId RodMetamagicType;
+    /// <summary>Power level: Lesser (≤3rd), Normal (≤6th), Greater (≤9th).</summary>
+    public RodPowerLevel RodPower;
+    /// <summary>Maximum base spell level this rod can affect (3, 6, or 9).</summary>
+    public int RodMaxSpellLevel;
+    /// <summary>The slot level increase this metamagic normally costs (for display).</summary>
+    public int RodSlotLevelIncrease;
+    /// <summary>Daily uses (standard: 3/day for metamagic rods).</summary>
+    public int RodUsesPerDay;
+    /// <summary>Uses consumed today. Reset at dawn.</summary>
+    public int RodUsesToday;
+
+    // ── Rod of Absorption Fields ──────────────────────────────
+    /// <summary>True for Rod of Absorption.</summary>
+    public bool RodCanAbsorbSpells;
+    /// <summary>Current absorbed spell levels (0–50).</summary>
+    public int RodAbsorbedLevels;
+    /// <summary>Maximum absorbed spell levels (default 50).</summary>
+    public int RodMaxAbsorbedLevels = 50;
+
+    // ── Rod of Cancellation Fields ────────────────────────────
+    /// <summary>True for Rod of Cancellation.</summary>
+    public bool RodCanCancelMagic;
+    /// <summary>True after Rod of Cancellation has been used (becomes nonmagical).</summary>
+    public bool RodIsExpended;
+
+    // ── Rod of Flailing Fields ────────────────────────────────
+    /// <summary>True for Rod of Flailing.</summary>
+    public bool RodIsFlail;
+    /// <summary>Weapon enhancement bonus for combat rods.</summary>
+    public int RodWeaponEnhancement;
+    /// <summary>Weapon damage dice string (e.g., "1d8").</summary>
+    public string RodWeaponDamageDice;
+    /// <summary>Current weapon mode string for display.</summary>
+    public string RodWeaponMode;
+    /// <summary>Deflection bonus when Rod of Flailing is in dire flail mode.</summary>
+    public int RodFlailDeflectionBonus;
+
+    // ── Immovable Rod Fields ──────────────────────────────────
+    /// <summary>True for Immovable Rod.</summary>
+    public bool RodIsImmovable;
+    /// <summary>Whether the Immovable Rod button is pressed (locked in place).</summary>
+    public bool RodIsActivated;
+    /// <summary>Maximum weight the rod can hold (default 8,000 lbs).</summary>
+    public int RodHoldWeightLbs = 8000;
+    /// <summary>DC of Strength check to move the activated rod.</summary>
+    public int RodMoveDC = 30;
+
+    // ── Rod of Lordly Might Fields ────────────────────────────
+    /// <summary>True for Rod of Lordly Might.</summary>
+    public bool RodIsLordlyMight;
+    /// <summary>Current weapon mode (cast to LordlyMightWeaponMode).</summary>
+    public int RodLordlyMightMode;
+    /// <summary>Fear cone save DC (default 16).</summary>
+    public int RodFearConeDC = 16;
+    /// <summary>Fear cone range in feet (default 30).</summary>
+    public int RodFearConeRangeFt = 30;
+    /// <summary>Fear cone uses per day (default 2).</summary>
+    public int RodFearUsesPerDay;
+    /// <summary>Fear cone uses consumed today.</summary>
+    public int RodFearUsesToday;
+
+    // ── Rod of Metal/Mineral Detection and Enemy Detection ────
+    /// <summary>True for Rod of Metal and Mineral Detection.</summary>
+    public bool RodCanDetectMetals;
+    /// <summary>True for Rod of Enemy Detection.</summary>
+    public bool RodCanDetectEnemies;
+    /// <summary>Detection radius in feet.</summary>
+    public float RodDetectionRadiusFt;
+    /// <summary>How far detection penetrates stone (feet).</summary>
+    public float RodPenetratesStoneFt;
+
+    // ── Rod of Splendor Fields ────────────────────────────────
+    /// <summary>True for Rod of Splendor.</summary>
+    public bool RodIsSplendor;
+    /// <summary>Tent uses per week (default 1).</summary>
+    public int RodSplendorTentUsesPerWeek;
+    /// <summary>Tent uses consumed this week.</summary>
+    public int RodSplendorTentUsesThisWeek;
+    /// <summary>Clothes per week (default 7).</summary>
+    public int RodSplendorClothesPerWeek;
+    /// <summary>Clothes consumed this week.</summary>
+    public int RodSplendorClothesThisWeek;
+    /// <summary>Feast uses per day (default 1).</summary>
+    public int RodSplendorFeastUsesPerDay;
+    /// <summary>Feast uses consumed today.</summary>
+    public int RodSplendorFeastUsesToday;
+    /// <summary>Enhancement bonus to Charisma while holding rod (default +4).</summary>
+    public int RodSplendorCharismaBonus;
+
+    // ── Rod of Alertness Fields ───────────────────────────────
+    /// <summary>True for Rod of Alertness.</summary>
+    public bool RodIsAlertness;
+    /// <summary>Insight bonus to Initiative.</summary>
+    public int RodInsightBonusInit;
+    /// <summary>Insight bonus to Listen checks.</summary>
+    public int RodInsightBonusListen;
+    /// <summary>Grants See Invisible at will.</summary>
+    public bool RodGrantsSeeInvisible;
+    /// <summary>Grants Detect Evil at will.</summary>
+    public bool RodGrantsDetectEvil;
+    /// <summary>Grants Detect Magic at will.</summary>
+    public bool RodGrantsDetectMagic;
+    /// <summary>Grants Light at will.</summary>
+    public bool RodGrantsLight;
+    /// <summary>Animate Objects uses per day (default 1).</summary>
+    public int RodAnimateUsesPerDay;
+    /// <summary>Animate Objects uses consumed today.</summary>
+    public int RodAnimateUsesToday;
+    /// <summary>Prayer uses per day (default 1).</summary>
+    public int RodPrayerUsesPerDay;
+    /// <summary>Prayer uses consumed today.</summary>
+    public int RodPrayerUsesToday;
+
+    // ── Rod of Negation Fields ────────────────────────────────
+    /// <summary>True for Rod of Negation.</summary>
+    public bool RodIsNegation;
+    /// <summary>Caster level for dispel checks (default 15).</summary>
+    public int RodDispelCL;
+    /// <summary>Greater Dispel Magic uses per day (default 2).</summary>
+    public int RodGreaterDispelUsesPerDay;
+    /// <summary>Greater Dispel Magic uses consumed today.</summary>
+    public int RodGreaterDispelUsesToday;
+
+    // ── Rod of Python Fields ──────────────────────────────────
+    /// <summary>True for Rod of Python.</summary>
+    public bool RodCanTransformToSnake;
+    /// <summary>Whether the rod is currently in snake form.</summary>
+    public bool RodIsInSnakeForm;
+    /// <summary>Snake form current HP.</summary>
+    public int RodSnakeHP;
+    /// <summary>Snake form maximum HP.</summary>
+    public int RodSnakeMaxHP;
+    /// <summary>Snake form AC.</summary>
+    public int RodSnakeAC;
+    /// <summary>Snake form attack bonus.</summary>
+    public int RodSnakeAttackBonus;
+    /// <summary>Snake form damage dice string.</summary>
+    public string RodSnakeDamage;
+    /// <summary>Snake has constrict ability.</summary>
+    public bool RodSnakeHasConstrict;
+    /// <summary>Snake constrict damage dice string.</summary>
+    public string RodSnakeConstrictDamage;
+
+    // ── Rod of Security Fields ────────────────────────────────
+    /// <summary>True for Rod of Security.</summary>
+    public bool RodCanCreateDemiplane;
+    /// <summary>Maximum capacity of demiplane (people).</summary>
+    public int RodDemiplaneCapacity;
+    /// <summary>Total person-days available in demiplane.</summary>
+    public int RodDemiplanePersonDays;
+    /// <summary>Whether the demiplane provides healing.</summary>
+    public bool RodDemiplaneHeals;
+    /// <summary>Demiplane uses per week (default 1).</summary>
+    public int RodDemiplaneUsesPerWeek;
+    /// <summary>Demiplane uses consumed this week.</summary>
+    public int RodDemiplaneUsesThisWeek;
+
+    /// <summary>Helper: True if this is a rod item.</summary>
+    public bool IsRodItem => IsRod;
+
     // ── Wondrous Item Fields (D&D 3.5e DMG pp. 248–271) ──
 
     /// <summary>True if this item is a wondrous item. Gates wondrous-specific UI/mechanics.</summary>
@@ -2131,8 +2312,125 @@ public class ItemData
             }
         }
 
-        // --- Wondrous Item Tooltip ---
-        if (Type == ItemType.Wondrous && IsWondrous)
+        // --- Rod Tooltip ---
+        if (IsRod)
+        {
+            string catLabel = RodCategory.ToString();
+            if (IsLegendary) catLabel = "Legendary";
+            stats = $"Rod ({catLabel})";
+
+            if (RodCasterLevel > 0)
+                stats += $"\nCaster Level: {RodCasterLevel}th";
+
+            if (RodIsMetamagic)
+            {
+                string metamagicName = MetamagicData.GetDisplayName(RodMetamagicType);
+                string powerLabel = RodPower == RodPowerLevel.Lesser ? "Lesser" :
+                                    RodPower == RodPowerLevel.Normal ? "Normal" : "Greater";
+                stats += $"\nMetamagic: {metamagicName} (+{RodSlotLevelIncrease} slot, FREE with rod)";
+                stats += $"\nPower: {powerLabel} (spells up to level {RodMaxSpellLevel})";
+                stats += $"\nUses: {RodUsesToday}/{RodUsesPerDay} per day";
+            }
+
+            if (RodCanAbsorbSpells)
+            {
+                stats += $"\n🛡 Absorbs targeted spells";
+                stats += $"\nStored: {RodAbsorbedLevels}/{RodMaxAbsorbedLevels} spell levels";
+            }
+
+            if (RodCanCancelMagic)
+            {
+                if (RodIsExpended)
+                    stats += "\n⚠ EXPENDED — nonmagical";
+                else
+                    stats += "\n⚡ Touch to destroy 1 magic item (single use)";
+            }
+
+            if (RodIsFlail)
+            {
+                stats += $"\n⚔ Weapon: +{RodWeaponEnhancement} {RodWeaponMode} ({RodWeaponDamageDice}+{RodWeaponEnhancement})";
+                if (RodFlailDeflectionBonus > 0)
+                    stats += $"\nDire Flail mode: +{RodFlailDeflectionBonus} deflection to AC";
+            }
+
+            if (RodIsImmovable)
+            {
+                stats += RodIsActivated
+                    ? $"\n🔒 LOCKED — holds {RodHoldWeightLbs:N0} lbs, DC {RodMoveDC} to move"
+                    : "\n🔓 Normal (press button to lock)";
+            }
+
+            if (RodIsLordlyMight)
+            {
+                var mode = (LordlyMightWeaponMode)RodLordlyMightMode;
+                stats += $"\n⚔ Current Form: {RodWeaponMode}";
+                if (!string.IsNullOrEmpty(RodWeaponDamageDice))
+                    stats += $" (+{RodWeaponEnhancement}, {RodWeaponDamageDice}+{RodWeaponEnhancement})";
+                stats += $"\nFear Cone: {RodFearUsesToday}/{RodFearUsesPerDay}/day (DC {RodFearConeDC}, {RodFearConeRangeFt} ft)";
+                stats += "\nModes: Mace, Flaming Sword, Battleaxe, Spear, Longsword, Climbing Pole";
+            }
+
+            if (RodCanDetectMetals)
+            {
+                stats += $"\n🔍 Detect metals/minerals: {RodDetectionRadiusFt} ft (through {RodPenetratesStoneFt} ft stone)";
+            }
+
+            if (RodCanDetectEnemies)
+            {
+                stats += $"\n🔍 Detect enemies: {RodDetectionRadiusFt} ft (through {RodPenetratesStoneFt} ft stone)";
+                stats += $"\nUses: {RodUsesToday}/{RodUsesPerDay} per day";
+            }
+
+            if (RodIsSplendor)
+            {
+                stats += $"\n✨ Charisma: +{RodSplendorCharismaBonus} enhancement while held";
+                stats += $"\nFeast: {RodSplendorFeastUsesToday}/{RodSplendorFeastUsesPerDay}/day (12 people)";
+                stats += $"\nClothes: {RodSplendorClothesThisWeek}/{RodSplendorClothesPerWeek}/week";
+                stats += $"\nTent: {RodSplendorTentUsesThisWeek}/{RodSplendorTentUsesPerWeek}/week (100 people)";
+            }
+
+            if (RodIsAlertness)
+            {
+                stats += $"\n+{RodInsightBonusInit} insight to Initiative, +{RodInsightBonusListen} insight to Listen";
+                stats += "\nAt will: Light, Detect Evil, Detect Magic, See Invisible";
+                stats += $"\nAnimate Objects: {RodAnimateUsesToday}/{RodAnimateUsesPerDay}/day";
+                stats += $"\nPrayer: {RodPrayerUsesToday}/{RodPrayerUsesPerDay}/day (30 ft)";
+            }
+
+            if (RodIsNegation)
+            {
+                stats += $"\n✨ Dispel Magic at will (CL {RodDispelCL})";
+                stats += $"\nGreater Dispel: {RodGreaterDispelUsesToday}/{RodGreaterDispelUsesPerDay}/day";
+            }
+
+            if (RodCanTransformToSnake)
+            {
+                if (RodIsInSnakeForm)
+                {
+                    stats += $"\n🐍 SNAKE FORM — HP: {RodSnakeHP}/{RodSnakeMaxHP}, AC: {RodSnakeAC}";
+                    stats += $"\nAttack: +{RodSnakeAttackBonus}, Damage: {RodSnakeDamage}";
+                    if (RodSnakeHasConstrict)
+                        stats += $"\nConstrict: {RodSnakeConstrictDamage}";
+                }
+                else
+                {
+                    stats += "\n🐍 Command: Transform to giant constrictor snake";
+                }
+            }
+
+            if (RodCanCreateDemiplane)
+            {
+                stats += $"\n🌟 Paradise Demiplane: {RodDemiplaneCapacity} people, {RodDemiplanePersonDays} person-days";
+                if (RodDemiplaneHeals) stats += " (full healing)";
+                stats += $"\nUses: {RodDemiplaneUsesThisWeek}/{RodDemiplaneUsesPerWeek}/week";
+            }
+
+            if (BasePriceGp > 0)
+                stats += $"\nValue: {BasePriceGp:N0} gp";
+        }
+
+        // --- Wondrous Item Tooltip (skip rods — they have their own tooltip above) ---
+        if (Type == ItemType.Wondrous && IsWondrous && !IsRod)
         {
             string slotLabel = IsSlotless ? "Slotless" : GetSlotDisplayName(WondrousRequiredSlot);
             stats = $"Wondrous Item ({slotLabel})";

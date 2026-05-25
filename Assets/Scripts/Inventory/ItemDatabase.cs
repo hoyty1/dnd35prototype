@@ -2033,6 +2033,106 @@ public static class ItemDatabase
         clone.RingWizardryLevel = src.RingWizardryLevel;
         clone.RingHasRegeneration = src.RingHasRegeneration;
 
+        // ── Rod properties (D&D 3.5e DMG pp. 224–228) ──
+        clone.IsRod = src.IsRod;
+        clone.RodId = src.RodId;
+        clone.RodCategory = src.RodCategory;
+        clone.RodCasterLevel = src.RodCasterLevel;
+        clone.IsLegendary = src.IsLegendary;
+
+        // Metamagic rod
+        clone.RodIsMetamagic = src.RodIsMetamagic;
+        clone.RodMetamagicType = src.RodMetamagicType;
+        clone.RodPower = src.RodPower;
+        clone.RodMaxSpellLevel = src.RodMaxSpellLevel;
+        clone.RodSlotLevelIncrease = src.RodSlotLevelIncrease;
+        clone.RodUsesPerDay = src.RodUsesPerDay;
+        clone.RodUsesToday = 0; // Reset daily uses on clone
+
+        // Rod of Absorption
+        clone.RodCanAbsorbSpells = src.RodCanAbsorbSpells;
+        clone.RodAbsorbedLevels = 0; // Start empty on clone
+        clone.RodMaxAbsorbedLevels = src.RodMaxAbsorbedLevels;
+
+        // Rod of Cancellation
+        clone.RodCanCancelMagic = src.RodCanCancelMagic;
+        clone.RodIsExpended = false; // Fresh rod on clone
+
+        // Rod of Flailing
+        clone.RodIsFlail = src.RodIsFlail;
+        clone.RodWeaponEnhancement = src.RodWeaponEnhancement;
+        clone.RodWeaponDamageDice = src.RodWeaponDamageDice;
+        clone.RodWeaponMode = src.RodWeaponMode;
+        clone.RodFlailDeflectionBonus = src.RodFlailDeflectionBonus;
+
+        // Immovable Rod
+        clone.RodIsImmovable = src.RodIsImmovable;
+        clone.RodIsActivated = false; // Deactivated on clone
+        clone.RodHoldWeightLbs = src.RodHoldWeightLbs;
+        clone.RodMoveDC = src.RodMoveDC;
+
+        // Rod of Lordly Might
+        clone.RodIsLordlyMight = src.RodIsLordlyMight;
+        clone.RodLordlyMightMode = src.RodLordlyMightMode;
+        clone.RodFearConeDC = src.RodFearConeDC;
+        clone.RodFearConeRangeFt = src.RodFearConeRangeFt;
+        clone.RodFearUsesPerDay = src.RodFearUsesPerDay;
+        clone.RodFearUsesToday = 0; // Reset on clone
+
+        // Detection rods
+        clone.RodCanDetectMetals = src.RodCanDetectMetals;
+        clone.RodCanDetectEnemies = src.RodCanDetectEnemies;
+        clone.RodDetectionRadiusFt = src.RodDetectionRadiusFt;
+        clone.RodPenetratesStoneFt = src.RodPenetratesStoneFt;
+
+        // Rod of Splendor
+        clone.RodIsSplendor = src.RodIsSplendor;
+        clone.RodSplendorTentUsesPerWeek = src.RodSplendorTentUsesPerWeek;
+        clone.RodSplendorTentUsesThisWeek = 0;
+        clone.RodSplendorClothesPerWeek = src.RodSplendorClothesPerWeek;
+        clone.RodSplendorClothesThisWeek = 0;
+        clone.RodSplendorFeastUsesPerDay = src.RodSplendorFeastUsesPerDay;
+        clone.RodSplendorFeastUsesToday = 0;
+        clone.RodSplendorCharismaBonus = src.RodSplendorCharismaBonus;
+
+        // Rod of Alertness
+        clone.RodIsAlertness = src.RodIsAlertness;
+        clone.RodInsightBonusInit = src.RodInsightBonusInit;
+        clone.RodInsightBonusListen = src.RodInsightBonusListen;
+        clone.RodGrantsSeeInvisible = src.RodGrantsSeeInvisible;
+        clone.RodGrantsDetectEvil = src.RodGrantsDetectEvil;
+        clone.RodGrantsDetectMagic = src.RodGrantsDetectMagic;
+        clone.RodGrantsLight = src.RodGrantsLight;
+        clone.RodAnimateUsesPerDay = src.RodAnimateUsesPerDay;
+        clone.RodAnimateUsesToday = 0;
+        clone.RodPrayerUsesPerDay = src.RodPrayerUsesPerDay;
+        clone.RodPrayerUsesToday = 0;
+
+        // Rod of Negation
+        clone.RodIsNegation = src.RodIsNegation;
+        clone.RodDispelCL = src.RodDispelCL;
+        clone.RodGreaterDispelUsesPerDay = src.RodGreaterDispelUsesPerDay;
+        clone.RodGreaterDispelUsesToday = 0;
+
+        // Rod of Python
+        clone.RodCanTransformToSnake = src.RodCanTransformToSnake;
+        clone.RodIsInSnakeForm = false; // Rod form on clone
+        clone.RodSnakeHP = src.RodSnakeMaxHP; // Full HP on clone
+        clone.RodSnakeMaxHP = src.RodSnakeMaxHP;
+        clone.RodSnakeAC = src.RodSnakeAC;
+        clone.RodSnakeAttackBonus = src.RodSnakeAttackBonus;
+        clone.RodSnakeDamage = src.RodSnakeDamage;
+        clone.RodSnakeHasConstrict = src.RodSnakeHasConstrict;
+        clone.RodSnakeConstrictDamage = src.RodSnakeConstrictDamage;
+
+        // Rod of Security
+        clone.RodCanCreateDemiplane = src.RodCanCreateDemiplane;
+        clone.RodDemiplaneCapacity = src.RodDemiplaneCapacity;
+        clone.RodDemiplanePersonDays = src.RodDemiplanePersonDays;
+        clone.RodDemiplaneHeals = src.RodDemiplaneHeals;
+        clone.RodDemiplaneUsesPerWeek = src.RodDemiplaneUsesPerWeek;
+        clone.RodDemiplaneUsesThisWeek = 0;
+
         // Wondrous item properties
         clone.IsWondrous = src.IsWondrous;
         clone.WondrousId = src.WondrousId;

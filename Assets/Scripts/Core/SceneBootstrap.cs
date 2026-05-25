@@ -1037,6 +1037,9 @@ public class SceneBootstrap : MonoBehaviour
             // Wondrous item system initialization (D&D 3.5e DMG pp. 248–271)
             WondrousItemDatabase.Init();
 
+            // Rod system initialization (D&D 3.5e DMG pp. 224–228 — all 36 DMG rods)
+            RodDatabase.Init();
+
             // Staff system initialization (D&D 3.5e DMG p.243 — core rules only, no recharging)
             StaffDatabase.Init();
             StaffSpellSelectionPanel staffPanel = canvas.gameObject.AddComponent<StaffSpellSelectionPanel>();
@@ -1055,6 +1058,7 @@ public class SceneBootstrap : MonoBehaviour
             ItemDatabase.Init();
             RingDatabase.RegisterAllRingsInItemDatabase();
             WondrousItemDatabase.RegisterAllInItemDatabase();
+            RodDatabase.RegisterAllInItemDatabase();
             FeatDefinitions.Init();
 
             CharacterCreationUI ccUI = canvas.gameObject.AddComponent<CharacterCreationUI>();
