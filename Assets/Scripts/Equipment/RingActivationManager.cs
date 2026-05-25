@@ -852,6 +852,26 @@ public static class RingActivationManager
         {
             ring.RingDjinniSummoned = false;
         }
+
+        // Ring of Regeneration: apply hourly healing (simulated 8 hours of rest = 8× heal)
+        if (ring.RingHasRegeneration)
+        {
+            var regenEffect = wearer.GetComponent<RegenerationEffect>();
+            if (regenEffect != null)
+            {
+                // Rest = 8 hours, so apply 8 hourly heals
+                int totalHealed = 0;
+                for (int hour = 0; hour < 8; hour++)
+                {
+                    totalHealed += regenEffect.ApplyHourlyRegeneration();
+                }
+                if (totalHealed > 0 && GameManager.Instance != null)
+                {
+                    GameManager.Instance.CombatUI?.ShowCombatLog(
+                        $"<color=#00FF88>💍 {wearer.Stats?.CharacterName}'s Ring of Regeneration heals {totalHealed} HP during rest.</color>");
+                }
+            }
+        }
     }
 
     // ════════════════════════════════════════════════════
@@ -863,28 +883,58 @@ public static class RingActivationManager
     /// </summary>
     public static void OnRingEquipped(CharacterController wearer, ItemData ring)
     {
-        if (ring == null || !ring.IsRing || ring.RingAbilities == null) return;
+        if (ring == null || !ring.IsRing) return;
 
         string ringInstanceId = GetRingInstanceId(ring);
 
         // Register abilities for use tracking
-        foreach (var ability in ring.RingAbilities)
+        if (ring.RingAbilities != null)
         {
-            switch (ability.Frequency)
+            foreach (var ability in ring.RingAbilities)
             {
-                case RingUseFrequency.PerDay:
-                    RingUseTracker.Instance.RegisterDailyAbility(ringInstanceId, ability.AbilityId, ability.MaxUsesPerPeriod);
-                    break;
-                case RingUseFrequency.PerWeek:
-                    RingUseTracker.Instance.RegisterWeeklyAbility(ringInstanceId, ability.AbilityId, ability.MaxUsesPerPeriod);
-                    break;
+                switch (ability.Frequency)
+                {
+                    case RingUseFrequency.PerDay:
+                        RingUseTracker.Instance.RegisterDailyAbility(ringInstanceId, ability.AbilityId, ability.MaxUsesPerPeriod);
+                        break;
+                    case RingUseFrequency.PerWeek:
+                        RingUseTracker.Instance.RegisterWeeklyAbility(ringInstanceId, ability.AbilityId, ability.MaxUsesPerPeriod);
+                        break;
+                }
             }
         }
 
-        // Apply automatic effects
+        // Apply automatic effects — Sprint 2
         if (ring.RingId == RingNames.RING_OF_SPELL_TURNING)
         {
             ApplySpellTurningOnEquip(wearer, ring);
+        }
+
+        // Sprint 3: Ring of Regeneration — add MonoBehaviour component
+        if (ring.RingHasRegeneration)
+        {
+            var existing = wearer.GetComponent<RegenerationEffect>();
+            if (existing == null)
+            {
+                var regen = wearer.gameObject.AddComponent<RegenerationEffect>();
+                regen.IsActive = true;
+            }
+            else
+            {
+                existing.IsActive = true;
+            }
+            Debug.Log($"[RingActivation] Regeneration effect applied to {wearer.Stats?.CharacterName}");
+        }
+
+        // Sprint 3: Ring of Wizardry — refresh spell slots to pick up doubled slots
+        if (ring.RingWizardryLevel > 0)
+        {
+            var spellComp = wearer.GetComponent<SpellcastingComponent>();
+            if (spellComp != null)
+            {
+                spellComp.RefreshSpellSlots();
+                Debug.Log($"[RingActivation] Spell slots refreshed for Ring of Wizardry {ring.RingWizardryLevel}");
+            }
         }
 
         Debug.Log($"[RingActivation] Ring equipped: {ring.Name} (instance: {ringInstanceId})");
@@ -899,10 +949,33 @@ public static class RingActivationManager
 
         string ringInstanceId = GetRingInstanceId(ring);
 
-        // Remove automatic effects
+        // Remove automatic effects — Sprint 2
         if (ring.RingId == RingNames.RING_OF_SPELL_TURNING)
         {
             RemoveSpellTurningOnUnequip(wearer);
+        }
+
+        // Sprint 3: Ring of Regeneration — disable regeneration
+        if (ring.RingHasRegeneration)
+        {
+            var regen = wearer.GetComponent<RegenerationEffect>();
+            if (regen != null)
+            {
+                regen.IsActive = false;
+                Object.Destroy(regen);
+            }
+            Debug.Log($"[RingActivation] Regeneration effect removed from {wearer.Stats?.CharacterName}");
+        }
+
+        // Sprint 3: Ring of Wizardry — refresh spell slots to remove doubled slots
+        if (ring.RingWizardryLevel > 0)
+        {
+            var spellComp = wearer.GetComponent<SpellcastingComponent>();
+            if (spellComp != null)
+            {
+                spellComp.RefreshSpellSlots();
+                Debug.Log($"[RingActivation] Spell slots refreshed after removing Ring of Wizardry {ring.RingWizardryLevel}");
+            }
         }
 
         // Unregister from use tracker

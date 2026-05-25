@@ -1983,6 +1983,29 @@ public partial class GameManager
                 // If counterspell attempted but failed (Dispel Magic miss), spell proceeds normally
             }
 
+            // ── RING OF COUNTERSPELLS CHECK (DMG p.230) ──
+            // Automatic counter: if target wears Ring of Counterspells loaded with this exact spell,
+            // the ring counters it with no action required. Ring becomes empty after use.
+            if (target != null && _pendingSpell != null && CounterspellManager.TryRingCounterspell(target, _pendingSpell))
+            {
+                Debug.Log($"[RingCounterspell] {_pendingSpell.Name} countered by Ring of Counterspells on {target.Stats?.CharacterName}!");
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingMetamagic = null;
+                _pendingAnimateRopeItem = null;
+                _pendingResistEnergyType = null;
+                _pendingFireShieldIsWarm = null;
+                _pendingProtectionFromEnergyType = null;
+                _pendingDisguiseSelfRace = null;
+                ResetPendingGreaseCastMode();
+
+                StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                return;
+            }
+
             // Resolve the spell with metamagic.
             // D&D 3.5e: willing friendly targets for melee touch delivery should auto-succeed.
             BreakInvisibilityOnHostileSpellCast(caster, _pendingSpell, target, null);

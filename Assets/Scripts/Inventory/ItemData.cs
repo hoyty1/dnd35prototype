@@ -439,8 +439,32 @@ public class ItemData
     /// <summary>Whether the Djinni is currently summoned (Ring of Djinni Calling).</summary>
     public bool RingDjinniSummoned;
 
+    // ── Sprint 3: Complex Mechanics Ring Fields (Tier 3) ──
+
+    /// <summary>Ring of Counterspells: SpellId of the stored counterspell (empty = no spell stored).</summary>
+    public string RingCounterspellStored = "";
+    /// <summary>Ring of Counterspells: Display name of the stored counterspell.</summary>
+    public string RingCounterspellStoredName = "";
+    /// <summary>Ring of Counterspells: Level of the stored counterspell.</summary>
+    public int RingCounterspellStoredLevel;
+
+    /// <summary>Ring of Spell Storing: List of spells currently stored in the ring.</summary>
+    public List<StoredSpell> StoredSpells;
+    /// <summary>Ring of Spell Storing: Maximum total spell levels that can be stored (3 = Minor, 5 = Major).</summary>
+    public int MaxStoredSpellLevels;
+
+    /// <summary>Ring of Wizardry: Which arcane spell level this ring doubles (1–4, 0 = none).</summary>
+    public int RingWizardryLevel;
+
+    /// <summary>Ring of Regeneration: Whether regeneration is active on this ring.</summary>
+    public bool RingHasRegeneration;
+
     /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
-    public bool HasActiveRingAbility => IsRing && RingAbilities != null && RingAbilities.Count > 0;
+    public bool HasActiveRingAbility => IsRing && (
+        (RingAbilities != null && RingAbilities.Count > 0) ||
+        MaxStoredSpellLevels > 0 ||
+        RingId == RingNames.RING_OF_COUNTERSPELLS
+    );
 
     // --- Stackability ---
     /// <summary>Whether this item can stack with identical items in inventory (e.g., scrolls, potions).</summary>
@@ -1573,6 +1597,27 @@ public class ItemData
                 stats += $"\nSpell Turning Pool: {RingSpellTurningPool} levels";
             if (RingDjinniSlain)
                 stats += "\n⚠ INERT — Bound Djinni was slain";
+
+            // Sprint 3: Complex ring info
+            if (RingId == RingNames.RING_OF_COUNTERSPELLS)
+            {
+                stats += "\n── Counterspell ──";
+                stats += $"\n  {CounterspellManager.GetStoredCounterspellDisplay(this)}";
+            }
+            if (MaxStoredSpellLevels > 0)
+            {
+                stats += $"\n── Spell Storage ──";
+                stats += $"\n  {SpellStorageManager.GetStorageDisplayString(this)}";
+            }
+            if (RingWizardryLevel > 0)
+            {
+                string ordinal = RingWizardryLevel == 1 ? "1st" : RingWizardryLevel == 2 ? "2nd" : RingWizardryLevel == 3 ? "3rd" : "4th";
+                stats += $"\n  Doubles {ordinal}-level arcane spell slots";
+            }
+            if (RingHasRegeneration)
+            {
+                stats += "\n  ♻ Regeneration: heal 1 HP/level per hour, prevents HP death";
+            }
         }
 
         if (IsSunderable)

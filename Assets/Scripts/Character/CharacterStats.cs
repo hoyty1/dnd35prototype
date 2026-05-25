@@ -4070,6 +4070,15 @@ public class CharacterStats
         }
 
         CurrentHP = Mathf.Max(-10, CurrentHP - amount);
+
+        // ── Ring of Regeneration death prevention (DMG p.232) ──
+        // If wearer has regeneration, they cannot die from HP damage alone.
+        // Clamp HP to -9 (one above the -10 death threshold).
+        if (CurrentHP <= -10 && OwnerCharacter != null)
+        {
+            RegenerationEffect.CheckDeathPrevention(OwnerCharacter);
+        }
+
         Debug.Log($"[DeathFlow][TakeDamage] EXIT | target={ownerName} | hpBefore={hpBefore} | hpAfter={CurrentHP} | finalApplied={Mathf.Max(0, hpBefore - CurrentHP)} | isDeadAfter={IsDead}");
     }
 

@@ -2019,6 +2019,20 @@ public static class ItemDatabase
         clone.RingDjinniSlain = src.RingDjinniSlain;
         clone.RingDjinniSummoned = src.RingDjinniSummoned;
 
+        // Sprint 3: Complex ring fields
+        clone.RingCounterspellStored = src.RingCounterspellStored ?? "";
+        clone.RingCounterspellStoredName = src.RingCounterspellStoredName ?? "";
+        clone.RingCounterspellStoredLevel = src.RingCounterspellStoredLevel;
+        clone.MaxStoredSpellLevels = src.MaxStoredSpellLevels;
+        if (src.StoredSpells != null)
+        {
+            clone.StoredSpells = new System.Collections.Generic.List<StoredSpell>();
+            foreach (var spell in src.StoredSpells)
+                clone.StoredSpells.Add(spell.Clone());
+        }
+        clone.RingWizardryLevel = src.RingWizardryLevel;
+        clone.RingHasRegeneration = src.RingHasRegeneration;
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

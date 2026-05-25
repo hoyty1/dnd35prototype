@@ -788,6 +788,18 @@ public class SpellcastingComponent : MonoBehaviour
             }
         }
 
+        // ── Ring of Wizardry bonus (DMG p.233) ──
+        // Doubles arcane (regular) spell slots at the specified level.
+        // Only affects levels the wizard can already cast (baseSlots > 0).
+        // Does NOT double specialist/domain bonus slots.
+        int wizardryBonusLevel = GetEquippedWizardryRingLevel();
+        if (wizardryBonusLevel > 0 && wizardryBonusLevel < _regularSlotsMax.Length && _regularSlotsMax[wizardryBonusLevel] > 0)
+        {
+            int bonusSlots = _regularSlotsMax[wizardryBonusLevel]; // Double = add same amount again
+            _regularSlotsMax[wizardryBonusLevel] += bonusSlots;
+            Debug.Log($"[Spellcasting] Ring of Wizardry {wizardryBonusLevel}: doubled level-{wizardryBonusLevel} slots ({bonusSlots} → {_regularSlotsMax[wizardryBonusLevel]})");
+        }
+
         int[] totalSlots = new int[_regularSlotsMax.Length];
         for (int i = 0; i < totalSlots.Length; i++)
             totalSlots[i] = _regularSlotsMax[i] + _domainSlotsMax[i];
@@ -799,6 +811,38 @@ public class SpellcastingComponent : MonoBehaviour
         }
 
         return totalSlots;
+    }
+
+    /// <summary>
+    /// Check if the owner has a Ring of Wizardry equipped and return the doubled spell level (1-4), or 0 if none.
+    /// D&D 3.5e DMG p.233: Only affects arcane casters (Wizard, Sorcerer, Bard).
+    /// Two rings of the same type don't stack (use highest).
+    /// </summary>
+    private int GetEquippedWizardryRingLevel()
+    {
+        if (Stats == null) return 0;
+
+        // Only arcane casters benefit
+        bool isArcane = Stats.HasClass("Wizard") || Stats.HasClass("Sorcerer") || Stats.HasClass("Bard");
+        if (!isArcane) return 0;
+
+        var owner = GetComponent<CharacterController>();
+        if (owner == null) return 0;
+
+        var invComp = owner.Inventory;
+        if (invComp == null) return 0;
+        var inv = invComp.CharacterInventory;
+        if (inv == null) return 0;
+
+        int highestLevel = 0;
+
+        // Check both ring slots for highest wizardry level
+        if (inv.LeftRingSlot != null && inv.LeftRingSlot.IsRing && inv.LeftRingSlot.RingWizardryLevel > 0)
+            highestLevel = Mathf.Max(highestLevel, inv.LeftRingSlot.RingWizardryLevel);
+        if (inv.RightRingSlot != null && inv.RightRingSlot.IsRing && inv.RightRingSlot.RingWizardryLevel > 0)
+            highestLevel = Mathf.Max(highestLevel, inv.RightRingSlot.RingWizardryLevel);
+
+        return highestLevel;
     }
 
     private int[] GetClericSlotsForLevel(int level)

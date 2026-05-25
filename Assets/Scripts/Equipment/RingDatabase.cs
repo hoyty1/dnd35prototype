@@ -81,7 +81,21 @@ public static class RingDatabase
         Register(RingFactory.CreateSpellTurningRing());
         Register(RingFactory.CreateDjinniCallingRing());
 
-        Debug.Log($"[RingDatabase] Initialized: {_rings.Count} rings registered (Sprint 1 passive + Sprint 2 active).");
+        // ════════════════════════════════════════════════════════════
+        //  TIER 3: Complex Mechanics Rings (Sprint 3) — 8 rings
+        //  Spell storage, counterspells, spell slot doubling, regeneration
+        // ════════════════════════════════════════════════════════════
+
+        Register(RingFactory.CreateCounterspellsRing());
+        Register(RingFactory.CreateSpellStoringMinorRing());
+        Register(RingFactory.CreateSpellStoringMajorRing());
+        Register(RingFactory.CreateWizardryRingI());
+        Register(RingFactory.CreateWizardryRingII());
+        Register(RingFactory.CreateWizardryRingIII());
+        Register(RingFactory.CreateWizardryRingIV());
+        Register(RingFactory.CreateRegenerationRing());
+
+        Debug.Log($"[RingDatabase] Initialized: {_rings.Count} rings registered (Sprint 1 passive + Sprint 2 active + Sprint 3 complex).");
     }
 
     /// <summary>Register a ring in the database. Validates for duplicates.</summary>

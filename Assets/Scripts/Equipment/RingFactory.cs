@@ -899,4 +899,202 @@ public static class RingFactory
             }
         };
     }
+
+    // ════════════════════════════════════════════════════════════
+    //  SPRINT 3 — Complex Mechanics Rings (Tier 3)
+    //  DMG pp. 229–233
+    // ════════════════════════════════════════════════════════════
+
+    // ── Ring of Counterspells (DMG p.230) ──
+    // Store one spell (max 6th level) to automatically counter it.
+    // Price: 4,000 gp, CL 11
+    public static ItemData CreateCounterspellsRing()
+    {
+        return new ItemData
+        {
+            Id = RingNames.RING_OF_COUNTERSPELLS,
+            Name = "Ring of Counterspells",
+            Description = "Store one spell (max 6th level). When that exact spell is cast on the wearer, " +
+                          "it is automatically countered and the stored spell is consumed. " +
+                          "A spellcaster must cast the spell into the ring to load it.",
+            Type = ItemType.Ring,
+            Slot = EquipSlot.EitherRing,
+            IsRing = true,
+            RingId = RingNames.RING_OF_COUNTERSPELLS,
+            RingCasterLevel = 11,
+            BasePriceGp = 4000,
+            WeightLbs = 0f,
+            CountsAsMagicForBypass = true,
+            IconChar = RingIcon,
+            IconColor = new Color(0.7f, 0.5f, 1f), // Purple
+            RingCounterspellStored = "",
+            RingCounterspellStoredName = "",
+            RingCounterspellStoredLevel = 0,
+            RingAbilities = new List<RingAbility>
+            {
+                new RingAbility
+                {
+                    AbilityId = "store_counterspell",
+                    DisplayName = "Store Counterspell",
+                    Description = "Cast a spell (max 6th level) into the ring. It will auto-counter that spell when cast on wearer.",
+                    Frequency = RingUseFrequency.AtWill,
+                    ActionType = RingActionType.Standard,
+                    RequiresTarget = false,
+                    CasterLevel = 11
+                }
+            }
+        };
+    }
+
+    // ── Ring of Spell Storing, Minor (DMG p.232) ──
+    // Stores up to 3 spell levels. Anyone can cast stored spells.
+    // Price: 18,000 gp, CL 5
+    public static ItemData CreateSpellStoringMinorRing()
+    {
+        return new ItemData
+        {
+            Id = RingNames.RING_OF_SPELL_STORING_MINOR,
+            Name = "Ring of Spell Storing, Minor",
+            Description = "Stores up to 3 spell levels. Any spellcaster can store spells (consuming their slot). " +
+                          "Anyone wearing the ring can cast stored spells using the original caster's CL and DC.",
+            Type = ItemType.Ring,
+            Slot = EquipSlot.EitherRing,
+            IsRing = true,
+            RingId = RingNames.RING_OF_SPELL_STORING_MINOR,
+            RingCasterLevel = 5,
+            BasePriceGp = 18000,
+            WeightLbs = 0f,
+            CountsAsMagicForBypass = true,
+            IconChar = RingIcon,
+            IconColor = new Color(0.4f, 0.7f, 1f), // Light blue
+            MaxStoredSpellLevels = 3,
+            StoredSpells = new List<StoredSpell>(),
+            RingAbilities = new List<RingAbility>
+            {
+                new RingAbility
+                {
+                    AbilityId = "manage_spell_storage",
+                    DisplayName = "Manage Stored Spells",
+                    Description = "View, cast, or store spells in the ring (3 levels max).",
+                    Frequency = RingUseFrequency.AtWill,
+                    ActionType = RingActionType.Standard,
+                    RequiresTarget = false,
+                    CasterLevel = 5
+                }
+            }
+        };
+    }
+
+    // ── Ring of Spell Storing, Major (DMG p.232) ──
+    // Stores up to 5 spell levels. Anyone can cast stored spells.
+    // Price: 200,000 gp, CL 9
+    public static ItemData CreateSpellStoringMajorRing()
+    {
+        return new ItemData
+        {
+            Id = RingNames.RING_OF_SPELL_STORING_MAJOR,
+            Name = "Ring of Spell Storing, Major",
+            Description = "Stores up to 5 spell levels. Any spellcaster can store spells (consuming their slot). " +
+                          "Anyone wearing the ring can cast stored spells using the original caster's CL and DC.",
+            Type = ItemType.Ring,
+            Slot = EquipSlot.EitherRing,
+            IsRing = true,
+            RingId = RingNames.RING_OF_SPELL_STORING_MAJOR,
+            RingCasterLevel = 9,
+            BasePriceGp = 200000,
+            WeightLbs = 0f,
+            CountsAsMagicForBypass = true,
+            IconChar = RingIcon,
+            IconColor = new Color(0.3f, 0.5f, 1f), // Deep blue
+            MaxStoredSpellLevels = 5,
+            StoredSpells = new List<StoredSpell>(),
+            RingAbilities = new List<RingAbility>
+            {
+                new RingAbility
+                {
+                    AbilityId = "manage_spell_storage",
+                    DisplayName = "Manage Stored Spells",
+                    Description = "View, cast, or store spells in the ring (5 levels max).",
+                    Frequency = RingUseFrequency.AtWill,
+                    ActionType = RingActionType.Standard,
+                    RequiresTarget = false,
+                    CasterLevel = 9
+                }
+            }
+        };
+    }
+
+    // ── Ring of Wizardry I–IV (DMG p.233) ──
+    // Doubles arcane spell slots for a specific level (1st–4th).
+    // Arcane casters only (Wizard/Sorcerer/Bard).
+    // Prices: I = 20,000 gp, II = 40,000 gp, III = 70,000 gp, IV = 100,000 gp
+
+    private static readonly int[] WizardryPrices = { 20000, 40000, 70000, 100000 };
+    private static readonly string[] WizardryRomanNumerals = { "I", "II", "III", "IV" };
+    private static readonly string[] WizardryOrdinals = { "1st", "2nd", "3rd", "4th" };
+    private static readonly string[] WizardryRingIds = {
+        RingNames.RING_OF_WIZARDRY_I,
+        RingNames.RING_OF_WIZARDRY_II,
+        RingNames.RING_OF_WIZARDRY_III,
+        RingNames.RING_OF_WIZARDRY_IV
+    };
+
+    private static ItemData CreateWizardryRingInternal(int level)
+    {
+        int idx = level - 1;
+        string suffix = WizardryRomanNumerals[idx];
+        string ordinal = WizardryOrdinals[idx];
+        int price = WizardryPrices[idx];
+        string ringId = WizardryRingIds[idx];
+
+        return new ItemData
+        {
+            Id = ringId,
+            Name = $"Ring of Wizardry {suffix}",
+            Description = $"Doubles the number of {ordinal}-level arcane spell slots available to the wearer. " +
+                          "Only benefits arcane casters (Wizard, Sorcerer, Bard).",
+            Type = ItemType.Ring,
+            Slot = EquipSlot.EitherRing,
+            IsRing = true,
+            RingId = ringId,
+            RingCasterLevel = 11,
+            BasePriceGp = price,
+            WeightLbs = 0f,
+            CountsAsMagicForBypass = true,
+            IconChar = RingIcon,
+            IconColor = new Color(1f, 0.85f, 0.3f), // Gold
+            RingWizardryLevel = level
+        };
+    }
+
+    public static ItemData CreateWizardryRingI() => CreateWizardryRingInternal(1);
+    public static ItemData CreateWizardryRingII() => CreateWizardryRingInternal(2);
+    public static ItemData CreateWizardryRingIII() => CreateWizardryRingInternal(3);
+    public static ItemData CreateWizardryRingIV() => CreateWizardryRingInternal(4);
+
+    // ── Ring of Regeneration (DMG p.232) ──
+    // Heal 1 HP/level per hour. Cannot die from HP damage. Restore limbs.
+    // Price: 90,000 gp, CL 15
+    public static ItemData CreateRegenerationRing()
+    {
+        return new ItemData
+        {
+            Id = RingNames.RING_OF_REGENERATION,
+            Name = "Ring of Regeneration",
+            Description = "Continually heals 1 HP per character level per hour. " +
+                          "Prevents death from HP damage (stabilizes at negative HP). " +
+                          "Restores lost limbs in 1d7 days. Living wearers only.",
+            Type = ItemType.Ring,
+            Slot = EquipSlot.EitherRing,
+            IsRing = true,
+            RingId = RingNames.RING_OF_REGENERATION,
+            RingCasterLevel = 15,
+            BasePriceGp = 90000,
+            WeightLbs = 0f,
+            CountsAsMagicForBypass = true,
+            IconChar = RingIcon,
+            IconColor = new Color(0.2f, 1f, 0.4f), // Bright green
+            RingHasRegeneration = true
+        };
+    }
 }
