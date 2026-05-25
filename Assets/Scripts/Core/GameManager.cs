@@ -1009,6 +1009,9 @@ public partial class GameManager : MonoBehaviour
             pc.StartNewTurn();
         }
 
+        // ── Sprint 2: Ring daily/weekly/charge reset ──
+        RingActivationManager.OnRest(PCs);
+
         CombatUI?.SetTurnIndicator("Party Rested and Restored!");
         CombatUI?.ShowCombatLog("✅ Party Rested and Restored!");
         CombatUI?.ShowCombatLog("💖 HP and abilities fully recovered.");
@@ -5418,6 +5421,15 @@ public partial class GameManager : MonoBehaviour
                     if (!TryUseStaff(actor, currentItem, out resultMessage))
                         return false;
                     // TryUseStaff opens spell selection panel; casting handled via callback
+                    return true;
+                }
+
+                // ── Ring activation (D&D 3.5e DMG pp. 229–233 — Sprint 2) ──
+                if (currentItem.IsRing && currentItem.HasActiveRingAbility)
+                {
+                    if (!RingActivationManager.TryActivateRing(actor, currentItem, out resultMessage))
+                        return false;
+                    // Ring activation handled by RingActivationManager
                     return true;
                 }
 

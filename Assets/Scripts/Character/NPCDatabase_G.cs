@@ -17,6 +17,79 @@ public static partial class NPCDatabase
         RegisterGiantOwl();
         RegisterGiantWasp();
         RegisterGiantPrayingMantis();
+        RegisterNobleDjinni();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Noble Djinni — MM p.114–115
+    //  Outsider (Air, Extraplanar), Large, CR 5
+    //  Used by Ring of Djinni Calling (DMG p.232, Sprint 2)
+    //  7d8+14 HD (45 HP), AC 16 (-1 size, +3 Dex, +4 natural)
+    //  2 slams +10 melee (1d8+6), Fly 60 ft (perfect)
+    //  Str 18, Dex 17, Con 14, Int 14, Wis 15, Cha 15
+    //  Fort +7, Ref +8, Will +7
+    //  Immune: Acid. Telepathy 100 ft. Plane Shift at will.
+    // ════════════════════════════════════════════════════════════
+    private static void RegisterNobleDjinni()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "noble_djinni",
+            Name = "Noble Djinni",
+            ChallengeRating = "5",
+            Level = 7,
+            CharacterClass = "Outsider",
+            CreatureType = "Outsider",
+            HitDice = 7,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 18, DEX = 17, CON = 14, WIS = 15, INT = 14, CHA = 15,
+            NaturalArmorBonus = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Slam",
+                    DamageDice = 8,
+                    DamageCount = 1,
+                    Count = 2, // Two slams in full attack
+                    BonusDamageSource = DamageBonusSource.StrengthFull,
+                    Range = 2, // 10 ft reach for Large
+                    IsPrimary = true
+                }
+            },
+            BaseSpeed = 4, // 20 ft (fly 60 ft tracked via tag)
+            BaseHitDieHP = 45,
+            BAB = 7,
+            SpellResistance = 0,
+            CreatureTags = new List<string> { "Outsider", "Air", "Extraplanar", "Summoned", "Fly60", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Combat Casting", "Combat Reflexes", "Dodge", "Improved Initiative" },
+            SpecialAbilities = new List<string>
+            {
+                "Air Mastery: +1 attack/damage vs airborne, -4 vs grounded",
+                "Whirlwind (Su): 10-70 ft high, 2d6+4 damage, Ref DC 18",
+                "Telepathy 100 ft",
+                "Plane Shift (Sp): At will, self + passengers",
+                "Invisibility (Sp): At will, self only",
+                "Create Food and Water (Sp): 1/day",
+                "Major Creation (Sp): 1/day, vegetable matter permanent",
+                "Persistent Image (Sp): 1/day, DC 17",
+                "Wind Walk (Sp): 1/day",
+                "Gaseous Form (Sp): 1/day, up to 1 hour",
+                "Immunity: Acid",
+                "Darkvision 60 ft",
+                "Fort +7, Ref +8, Will +7"
+            },
+            DamageImmunities = new List<DamageType> { DamageType.Acid },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.6f, 0.8f, 1.0f, 1f), // Airy blue
+            PanelColor = new Color(0.15f, 0.2f, 0.35f, 0.85f),
+            NameColor = new Color(0.8f, 0.9f, 1.0f),
+            Description = "A Noble Djinni (MM p.114), an air genie summoned by the Ring of Djinni Calling. Large outsider with 7 HD, powerful melee slams, whirlwind ability, and various spell-like abilities. AC 16 (-1 size, +3 Dex, +4 natural). Fort +7, Ref +8, Will +7."
+        });
     }
 
     /// <summary>

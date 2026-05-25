@@ -1985,6 +1985,40 @@ public static class ItemDatabase
         clone.RingGrantsColdEndurance = src.RingGrantsColdEndurance;
         clone.RingCasterLevel = src.RingCasterLevel;
 
+        // Sprint 2: Active ring fields
+        if (src.RingAbilities != null && src.RingAbilities.Count > 0)
+        {
+            clone.RingAbilities = new System.Collections.Generic.List<RingAbility>(src.RingAbilities.Count);
+            foreach (var ability in src.RingAbilities)
+            {
+                clone.RingAbilities.Add(new RingAbility
+                {
+                    AbilityId = ability.AbilityId,
+                    DisplayName = ability.DisplayName,
+                    Description = ability.Description,
+                    Frequency = ability.Frequency,
+                    MaxUsesPerPeriod = ability.MaxUsesPerPeriod,
+                    ChargeCost = ability.ChargeCost,
+                    MaxChargeCost = ability.MaxChargeCost,
+                    ActionType = ability.ActionType,
+                    RequiresTarget = ability.RequiresTarget,
+                    RangeFeet = ability.RangeFeet,
+                    CasterLevel = ability.CasterLevel,
+                    SaveDC = ability.SaveDC,
+                    SaveType = ability.SaveType,
+                    Restriction = ability.Restriction,
+                    RequiresOutdoorsNight = ability.RequiresOutdoorsNight
+                });
+            }
+        }
+        clone.RingInstanceId = System.Guid.NewGuid().ToString("N").Substring(0, 8); // Unique per clone
+        clone.RingCurrentCharges = src.RingCurrentCharges;
+        clone.RingMaxCharges = src.RingMaxCharges;
+        clone.RingChargesPerDay = src.RingChargesPerDay;
+        clone.RingSpellTurningPool = src.RingSpellTurningPool;
+        clone.RingDjinniSlain = src.RingDjinniSlain;
+        clone.RingDjinniSummoned = src.RingDjinniSummoned;
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

@@ -421,6 +421,27 @@ public class ItemData
     /// <summary>Caster level of the ring's magical effect. Used for dispel checks.</summary>
     public int RingCasterLevel;
 
+    // --- Sprint 2: Active Ring Abilities (D&D 3.5e DMG pp. 229–233) ---
+    /// <summary>List of activatable abilities on this ring. Null/empty for passive-only rings.</summary>
+    public System.Collections.Generic.List<RingAbility> RingAbilities;
+    /// <summary>Unique instance ID for this specific ring item (for use tracking). Auto-generated if empty.</summary>
+    public string RingInstanceId;
+    /// <summary>Current charge count for charge-based rings (Ring of the Ram). 0 if not charge-based.</summary>
+    public int RingCurrentCharges;
+    /// <summary>Maximum charge capacity (Ring of the Ram: 50). 0 if not charge-based.</summary>
+    public int RingMaxCharges;
+    /// <summary>Charges regenerated per day on rest (Ring of the Ram: 10 → rolls 1d10). 0 if no regen.</summary>
+    public int RingChargesPerDay;
+    /// <summary>Remaining Spell Turning reflection pool (Ring of Spell Turning: 1d4+6 = 7–10).</summary>
+    public int RingSpellTurningPool;
+    /// <summary>Whether the bound Djinni has been slain (Ring of Djinni Calling becomes permanently inert).</summary>
+    public bool RingDjinniSlain;
+    /// <summary>Whether the Djinni is currently summoned (Ring of Djinni Calling).</summary>
+    public bool RingDjinniSummoned;
+
+    /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
+    public bool HasActiveRingAbility => IsRing && RingAbilities != null && RingAbilities.Count > 0;
+
     // --- Stackability ---
     /// <summary>Whether this item can stack with identical items in inventory (e.g., scrolls, potions).</summary>
     public bool IsStackable;
@@ -1531,6 +1552,27 @@ public class ItemData
             if (RingGrantsMindShielding) stats += "\nImmune to detect thoughts, discern lies, alignment detection";
             if (RingGrantsColdEndurance) stats += "\nResist cold environments (endure elements vs cold)";
             if (RingCasterLevel > 0) stats += $"\nCaster Level: {RingCasterLevel}";
+
+            // Sprint 2: Active ability info
+            if (RingAbilities != null && RingAbilities.Count > 0)
+            {
+                stats += "\n── Active Abilities ──";
+                string ringInstId = RingActivationManager.GetRingInstanceId(this);
+                var tracker = RingUseTracker.Instance;
+                foreach (var ability in RingAbilities)
+                {
+                    string usesStr = ability.GetUsesDisplayString(tracker, ringInstId);
+                    stats += $"\n  {ability.DisplayName} ({usesStr})";
+                    if (!string.IsNullOrEmpty(ability.Description))
+                        stats += $"\n    {ability.Description}";
+                }
+            }
+            if (RingMaxCharges > 0)
+                stats += $"\nCharges: {RingCurrentCharges}/{RingMaxCharges}";
+            if (RingSpellTurningPool > 0)
+                stats += $"\nSpell Turning Pool: {RingSpellTurningPool} levels";
+            if (RingDjinniSlain)
+                stats += "\n⚠ INERT — Bound Djinni was slain";
         }
 
         if (IsSunderable)

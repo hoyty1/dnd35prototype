@@ -300,6 +300,16 @@ public class Inventory
         if (item != null)
             item.EnsureDurabilityInitialized();
 
+        // --- Sprint 2: Ring equip/unequip hooks for active ring abilities ---
+        if (slot == EquipSlot.LeftRing || slot == EquipSlot.RightRing)
+        {
+            ItemData previousRing = (slot == EquipSlot.LeftRing) ? LeftRingSlot : RightRingSlot;
+            if (previousRing != null && previousRing.HasActiveRingAbility && OwnerCharacter != null)
+            {
+                RingActivationManager.OnRingUnequipped(OwnerCharacter, previousRing);
+            }
+        }
+
         switch (slot)
         {
             case EquipSlot.Head: HeadSlot = item; break;
@@ -317,6 +327,12 @@ public class Inventory
             case EquipSlot.Feet: FeetSlot = item; break;
             case EquipSlot.LeftHand: LeftHandSlot = item; break;
             case EquipSlot.RightHand: RightHandSlot = item; break;
+        }
+
+        // --- Sprint 2: Notify new ring of equip (e.g. Ring of Spell Turning auto-applies) ---
+        if ((slot == EquipSlot.LeftRing || slot == EquipSlot.RightRing) && item != null && item.HasActiveRingAbility && OwnerCharacter != null)
+        {
+            RingActivationManager.OnRingEquipped(OwnerCharacter, item);
         }
     }
 

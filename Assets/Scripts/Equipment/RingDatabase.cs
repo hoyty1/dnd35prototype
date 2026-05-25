@@ -66,7 +66,22 @@ public static class RingDatabase
         Register(RingFactory.CreateWarmthRing());
         Register(RingFactory.CreateChameleonPowerRing());
 
-        Debug.Log($"[RingDatabase] Initialized: {_rings.Count} rings registered (Sprint 1 — Tier 1 passive rings).");
+        // ════════════════════════════════════════════════════════════
+        //  TIER 2: Active Ability Rings (Sprint 2) — 9 rings
+        //  Command word activation, daily/weekly tracking, charges
+        // ════════════════════════════════════════════════════════════
+
+        Register(RingFactory.CreateInvisibilityRing());
+        Register(RingFactory.CreateBlinkingRing());
+        Register(RingFactory.CreateAnimalFriendshipRing());
+        Register(RingFactory.CreateRamRing());
+        Register(RingFactory.CreateTelekinesisRing());
+        Register(RingFactory.CreateXRayVisionRing());
+        Register(RingFactory.CreateShootingStarsRing());
+        Register(RingFactory.CreateSpellTurningRing());
+        Register(RingFactory.CreateDjinniCallingRing());
+
+        Debug.Log($"[RingDatabase] Initialized: {_rings.Count} rings registered (Sprint 1 passive + Sprint 2 active).");
     }
 
     /// <summary>Register a ring in the database. Validates for duplicates.</summary>
