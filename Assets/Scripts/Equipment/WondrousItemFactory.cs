@@ -1135,4 +1135,498 @@ public static class WondrousItemFactory
             default: return $"{num}th";
         }
     }
+
+    // ════════════════════════════════════════════════════════════
+    //  PHASE 9: IOUN STONES (DMG pp. 260–261) — All Slotless
+    // ════════════════════════════════════════════════════════════
+
+    private static ItemData CreateBaseIounStone(string id, string name, string desc, int price, int cl)
+    {
+        var item = CreateBaseWondrous(id, name, desc, EquipSlot.Slotless, price, cl, 0f, SlotlessIcon, SlotlessColor);
+        item.IsIounStone = true;
+        item.WondrousItemType = "ioun_stone";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        return item;
+    }
+
+    /// <summary>Ioun Stone: Ability Score enhancement (+2). DMG p.260.</summary>
+    public static ItemData CreateIounStoneAbility(string abilityShort, string abilityFull, string stoneName, string stoneId)
+    {
+        var item = CreateBaseIounStone(stoneId, stoneName,
+            $"This stone grants a +2 enhancement bonus to {abilityFull}.",
+            8000, 12);
+        item.WondrousAbilityBonus = 2;
+        item.WondrousAbilityType = abilityShort;
+        return item;
+    }
+
+    /// <summary>Deep Red Sphere (+2 Dex). DMG p.260.</summary>
+    public static ItemData CreateIounStoneDeepRedSphere()
+    {
+        return CreateIounStoneAbility("Dex", "Dexterity", "Ioun Stone (Deep Red Sphere)", WondrousItemNames.IOUN_STONE_DEEP_RED_SPHERE);
+    }
+
+    /// <summary>Incandescent Blue Sphere (+2 Wis). DMG p.260.</summary>
+    public static ItemData CreateIounStoneIncandescentBlueSphere()
+    {
+        return CreateIounStoneAbility("Wis", "Wisdom", "Ioun Stone (Incandescent Blue Sphere)", WondrousItemNames.IOUN_STONE_INCANDESCENT_BLUE_SPHERE);
+    }
+
+    /// <summary>Pale Blue Rhomboid (+2 Str). DMG p.260.</summary>
+    public static ItemData CreateIounStonePaleBlueRhomboid()
+    {
+        return CreateIounStoneAbility("Str", "Strength", "Ioun Stone (Pale Blue Rhomboid)", WondrousItemNames.IOUN_STONE_PALE_BLUE_RHOMBOID);
+    }
+
+    /// <summary>Pink Rhomboid (+2 Con). DMG p.260.</summary>
+    public static ItemData CreateIounStonePinkRhomboid()
+    {
+        return CreateIounStoneAbility("Con", "Constitution", "Ioun Stone (Pink Rhomboid)", WondrousItemNames.IOUN_STONE_PINK_RHOMBOID);
+    }
+
+    /// <summary>Pink and Green Sphere (+2 Cha). DMG p.260.</summary>
+    public static ItemData CreateIounStonePinkAndGreenSphere()
+    {
+        return CreateIounStoneAbility("Cha", "Charisma", "Ioun Stone (Pink and Green Sphere)", WondrousItemNames.IOUN_STONE_PINK_AND_GREEN_SPHERE);
+    }
+
+    /// <summary>Scarlet and Blue Sphere (+2 Int). DMG p.260.</summary>
+    public static ItemData CreateIounStoneScarletAndBlueSphere()
+    {
+        return CreateIounStoneAbility("Int", "Intelligence", "Ioun Stone (Scarlet and Blue Sphere)", WondrousItemNames.IOUN_STONE_SCARLET_AND_BLUE_SPHERE);
+    }
+
+    /// <summary>Clear Spindle (Sustains without food/water). DMG p.260.</summary>
+    public static ItemData CreateIounStoneClearSpindle()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_CLEAR_SPINDLE,
+            "Ioun Stone (Clear Spindle)",
+            "This stone sustains the user without food or water.",
+            4000, 12);
+        item.WondrousSustainsWithoutFood = true;
+        return item;
+    }
+
+    /// <summary>Dusty Rose Prism (+1 insight AC). DMG p.260.</summary>
+    public static ItemData CreateIounStoneDustyRosePrism()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_DUSTY_ROSE_PRISM,
+            "Ioun Stone (Dusty Rose Prism)",
+            "This stone grants a +1 insight bonus to AC.",
+            5000, 12);
+        item.WondrousInsightACBonus = 1;
+        return item;
+    }
+
+    /// <summary>Dark Blue Rhomboid (grants Alertness feat). DMG p.260.</summary>
+    public static ItemData CreateIounStoneDarkBlueRhomboid()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_DARK_BLUE_RHOMBOID,
+            "Ioun Stone (Dark Blue Rhomboid)",
+            "This stone grants the Alertness feat (+2 to Listen and Spot).",
+            10000, 12);
+        item.WondrousGrantsFeatName = "Alertness";
+        return item;
+    }
+
+    /// <summary>Vibrant Purple Prism (stores 3 spell levels). DMG p.260.</summary>
+    public static ItemData CreateIounStoneVibrantPurplePrism()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_VIBRANT_PURPLE_PRISM,
+            "Ioun Stone (Vibrant Purple Prism)",
+            "This stone can store up to 3 spell levels worth of spells (as a ring of spell storing, but with a maximum of 3 levels).",
+            36000, 12);
+        item.WondrousSpellStorageLevels = 3;
+        return item;
+    }
+
+    /// <summary>Iridescent Spindle (sustains without air). DMG p.260.</summary>
+    public static ItemData CreateIounStoneIridescentSpindle()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_IRIDESCENT_SPINDLE,
+            "Ioun Stone (Iridescent Spindle)",
+            "This stone sustains the user without air.",
+            18000, 12);
+        item.WondrousSustainsWithoutAir = true;
+        return item;
+    }
+
+    /// <summary>Pale Lavender Ellipsoid (absorb spells ≤4th level, 20 charges). DMG p.260.</summary>
+    public static ItemData CreateIounStonePaleLavenderEllipsoid()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_PALE_LAVENDER_ELLIPSOID,
+            "Ioun Stone (Pale Lavender Ellipsoid)",
+            "This stone absorbs spells of 4th level or lower. After absorbing 20 spell levels, it burns out and turns to dull gray.",
+            20000, 12);
+        item.WondrousSpellAbsorptionMaxLevel = 4;
+        item.WondrousSpellAbsorptionCharges = 20;
+        item.WondrousSpellAbsorptionMaxCharges = 20;
+        return item;
+    }
+
+    /// <summary>Pearly White Spindle (regenerate 1 HP/hour). DMG p.260.</summary>
+    public static ItemData CreateIounStonePearlyWhiteSpindle()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_PEARLY_WHITE_SPINDLE,
+            "Ioun Stone (Pearly White Spindle)",
+            "This stone regenerates 1 hit point per hour of damage the wearer has taken.",
+            20000, 12);
+        item.WondrousRegenPerHour = 1;
+        return item;
+    }
+
+    /// <summary>Orange Prism (+1 caster level). DMG p.260.</summary>
+    public static ItemData CreateIounStoneOrangePrism()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_ORANGE_PRISM,
+            "Ioun Stone (Orange Prism)",
+            "This stone grants a +1 caster level bonus to all spells.",
+            30000, 12);
+        item.WondrousCasterLevelBonus = 1;
+        return item;
+    }
+
+    /// <summary>Pale Green Prism (+1 competence bonus to all saves). DMG p.260.</summary>
+    public static ItemData CreateIounStonePaleGreenPrism()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_PALE_GREEN_PRISM,
+            "Ioun Stone (Pale Green Prism)",
+            "This stone grants a +1 competence bonus to attack rolls, saves, skill checks, and ability checks.",
+            30000, 12);
+        item.WondrousCompetenceSaveBonus = 1;
+        return item;
+    }
+
+    /// <summary>Lavender and Green Ellipsoid (absorb spells ≤8th level, 50 charges). DMG p.260.</summary>
+    public static ItemData CreateIounStoneLavenderAndGreenEllipsoid()
+    {
+        var item = CreateBaseIounStone(WondrousItemNames.IOUN_STONE_LAVENDER_AND_GREEN_ELLIPSOID,
+            "Ioun Stone (Lavender and Green Ellipsoid)",
+            "This stone absorbs spells of 8th level or lower. After absorbing 50 spell levels, it burns out.",
+            40000, 12);
+        item.WondrousSpellAbsorptionMaxLevel = 8;
+        item.WondrousSpellAbsorptionCharges = 50;
+        item.WondrousSpellAbsorptionMaxCharges = 50;
+        return item;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  PHASE 10: COMPLEX MULTI-ABILITY ITEMS
+    // ════════════════════════════════════════════════════════════
+
+    // --- ROBES ---
+
+    /// <summary>Robe of the Archmagi (+5 AC, SR 18, +4 saves, +2 CL). DMG p.266. Alignment variants.</summary>
+    public static ItemData CreateRobeOfTheArchmagi(string alignment)
+    {
+        string suffix = alignment.ToLower();
+        string id = $"robe_of_the_archmagi_{suffix}";
+        string alignLabel = suffix == "good" ? "White" : suffix == "evil" ? "Black" : "Gray";
+        var item = CreateBaseWondrous(id,
+            $"Robe of the Archmagi ({alignLabel})",
+            $"This {alignLabel.ToLower()} robe grants +5 armor bonus to AC, Spell Resistance 18, +4 resistance bonus to all saves, and +2 caster level for arcane spells. Worn by wrong alignment: -4 AC, -2 saves, -2 caster level.",
+            EquipSlot.Torso, 75000, 14, 1f, TorsoIcon, TorsoColor);
+        item.WondrousItemType = "armor";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        item.WondrousACBonus = 5;
+        item.WondrousACBonusType = "armor";
+        item.WondrousGrantsSR = 18;
+        item.WondrousResistanceSaveBonus = 4;
+        item.WondrousCasterLevelBonus = 2;
+        item.WondrousRequiredAlignment = suffix;
+        item.WondrousWrongAlignmentACPenalty = 4;
+        item.WondrousWrongAlignmentSavePenalty = 2;
+        return item;
+    }
+
+    /// <summary>Robe of Stars (+1d6 AC, 6 Magic Missile patches, Dimension Door 1/day). DMG p.266.</summary>
+    public static ItemData CreateRobeOfStars()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.ROBE_OF_STARS,
+            "Robe of Stars",
+            "This dark blue or black robe has tiny stars sewn into it. It grants +1d6 armor bonus to AC (rolled when donned), 6 star-shaped patches each usable as Magic Missile (CL 5), and Dimension Door 1/day.",
+            EquipSlot.Torso, 58000, 15, 1f, TorsoIcon, TorsoColor);
+        item.WondrousItemType = "armor";
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousHasActivation = true;
+        item.WondrousPatchesRemaining = 6;
+        item.WondrousPatchesMax = 6;
+        item.WondrousPatchDescription = "Magic Missile (CL 5) stars";
+        item.WondrousUsesPerDay = 1; // Dimension Door
+        return item;
+    }
+
+    /// <summary>Robe of Scintillating Colors (Hypnotic Pattern 3/day, Will DC 16). DMG p.266.</summary>
+    public static ItemData CreateRobeOfScintillatingColors()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.ROBE_OF_SCINTILLATING_COLORS,
+            "Robe of Scintillating Colors",
+            "This robe produces a dazzling display of color. The wearer can use Hypnotic Pattern (Will DC 16, 10 ft radius) as a standard action, 3 times per day.",
+            EquipSlot.Torso, 27000, 11, 1f, TorsoIcon, TorsoColor);
+        item.WondrousItemType = "activated";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = 3;
+        return item;
+    }
+
+    /// <summary>Robe of Eyes (all-around vision, See Invisible, +10 Search/Spot, can't be flanked). DMG p.265.</summary>
+    public static ItemData CreateRobeOfEyes()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.ROBE_OF_EYES,
+            "Robe of Eyes",
+            "Thousands of tiny eyes cover this robe. The wearer sees in all directions, gains See Invisible, +10 to Search and Spot, cannot be surprised or flanked. Vulnerability: Light/gaze attacks.",
+            EquipSlot.Torso, 120000, 11, 1f, TorsoIcon, TorsoColor);
+        item.WondrousItemType = "skill";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        item.WondrousGrantsSeeInvisible = true;
+        item.WondrousPreventsFlanking = true;
+        item.WondrousSearchBonus = 10;
+        item.WondrousSpotBonus = 10;
+        return item;
+    }
+
+    /// <summary>Robe of Blending (Disguise Self at will, +10 Disguise). DMG p.265.</summary>
+    public static ItemData CreateRobeOfBlending()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.ROBE_OF_BLENDING,
+            "Robe of Blending",
+            "This robe enables the wearer to assume the form and appearance of another creature. Disguise Self at will, +10 bonus to Disguise checks.",
+            EquipSlot.Torso, 8400, 10, 1f, TorsoIcon, TorsoColor);
+        item.WondrousItemType = "utility";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = 0; // At will
+        item.WondrousDisguiseBonus = 10;
+        return item;
+    }
+
+    /// <summary>Robe of Bones (undead patches). DMG p.265.</summary>
+    public static ItemData CreateRobeOfBones()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.ROBE_OF_BONES,
+            "Robe of Bones",
+            "This robe has small embroidered undead figures on it. The wearer can detach a figure to create an undead creature that serves the wearer. The robe starts with 2 skeletons and 2 zombies.",
+            EquipSlot.Torso, 2400, 6, 1f, TorsoIcon, TorsoColor);
+        item.WondrousItemType = "summoning";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousPatchesRemaining = 4;
+        item.WondrousPatchesMax = 4;
+        item.WondrousPatchDescription = "2 skeletons, 2 zombies";
+        item.WondrousCanSummon = true;
+        item.WondrousSummonDescription = "Undead servant (skeleton or zombie)";
+        return item;
+    }
+
+    /// <summary>Robe of Useful Items (item patches). DMG p.266.</summary>
+    public static ItemData CreateRobeOfUsefulItems()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.ROBE_OF_USEFUL_ITEMS,
+            "Robe of Useful Items",
+            "This robe has cloth patches that can be detached to become actual items. Standard patches: 2 daggers, 2 lanterns, 2 mirrors, 2 poles, 2 ropes (50 ft), 2 sacks. Additional patches vary.",
+            EquipSlot.Torso, 7000, 9, 1f, TorsoIcon, TorsoColor);
+        item.WondrousItemType = "utility";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousPatchesRemaining = 12;
+        item.WondrousPatchesMax = 12;
+        item.WondrousPatchDescription = "daggers, lanterns, mirrors, poles, ropes, sacks";
+        return item;
+    }
+
+    /// <summary>Vestment of Faith (+3 Wisdom checks divine). DMG p.267.</summary>
+    public static ItemData CreateVestmentOfFaith()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.VESTMENT_OF_FAITH,
+            "Vestment of Faith",
+            "This simple vestment confers a damage reduction of 5/evil on the wearer. The wearer also gains a +3 sacred bonus to AC.",
+            EquipSlot.Torso, 2500, 1, 1f, TorsoIcon, TorsoColor);
+        item.WondrousItemType = "armor";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        return item;
+    }
+
+    // --- CLOAKS ---
+
+    /// <summary>Cloak of Arachnida (Spider Climb, web/poison immunity, +2 Fort vs poison). DMG p.253.</summary>
+    public static ItemData CreateCloakOfArachnida()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.CLOAK_OF_ARACHNIDA,
+            "Cloak of Arachnida",
+            "This black garment gives the wearer Spider Climb at will, immunity to entrapment by web (magical and mundane), +2 luck bonus on Fortitude saves vs poison, and immunity to spider poison.",
+            EquipSlot.Back, 14000, 6, 1f, BackIcon, BackColor);
+        item.WondrousItemType = "movement";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        item.WondrousGrantsSpiderClimb = true;
+        item.WondrousGrantsWebImmunity = true;
+        item.WondrousLuckFortSaveBonus = 2;
+        item.WondrousGrantsMovement = true;
+        item.WondrousMovementMode = "spider_climb";
+        item.WondrousMovementSpeed = 20;
+        return item;
+    }
+
+    /// <summary>Cloak of the Bat (+5 Hide, Fly or bat form 2/day). DMG p.253.</summary>
+    public static ItemData CreateCloakOfTheBat()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.CLOAK_OF_THE_BAT,
+            "Cloak of the Bat",
+            "This dark cloak grants +5 competence bonus on Hide checks. On command, the wearer can fly (60 ft, average maneuverability) or polymorph into a bat, 2 times per day total.",
+            EquipSlot.Back, 26000, 7, 1f, BackIcon, BackColor);
+        item.WondrousItemType = "movement";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = 2;
+        item.WondrousSkillBonus = 5;
+        item.WondrousSkillName = "Hide";
+        item.WondrousSkillBonusType = "competence";
+        item.WondrousGrantsMovement = true;
+        item.WondrousMovementMode = "fly";
+        item.WondrousMovementSpeed = 60;
+        item.WondrousFlightManeuverability = "average";
+        return item;
+    }
+
+    // --- HELMS ---
+
+    /// <summary>Helm of Telepathy (Detect Thoughts at will, Suggestion 1/day). DMG p.258.</summary>
+    public static ItemData CreateHelmOfTelepathy()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.HELM_OF_TELEPATHY,
+            "Helm of Telepathy",
+            "This helm enables the wearer to use Detect Thoughts at will (Will DC 13) and Suggestion once per day (Will DC 14).",
+            EquipSlot.Head, 27000, 5, 0f, HeadIcon, HeadColor);
+        item.WondrousItemType = "activated";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousDetectThoughtsDC = 13;
+        item.WondrousSuggestionDC = 14;
+        item.WondrousUsesPerDay = 1; // Suggestion
+        return item;
+    }
+
+    /// <summary>Helm of Teleportation (Teleport 3/day, CL 9). DMG p.258.</summary>
+    public static ItemData CreateHelmOfTeleportation()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.HELM_OF_TELEPORTATION,
+            "Helm of Teleportation",
+            "This helm allows the wearer to Teleport (as the spell, CL 9th) three times per day.",
+            EquipSlot.Head, 73500, 9, 0f, HeadIcon, HeadColor);
+        item.WondrousItemType = "activated";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = 3;
+        item.WondrousTeleportWeightLimit = 500;
+        return item;
+    }
+
+    /// <summary>Helm of Underwater Action (see/move underwater freely). DMG p.258.</summary>
+    public static ItemData CreateHelmOfUnderwaterAction()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.HELM_OF_UNDERWATER_ACTION,
+            "Helm of Underwater Action",
+            "This helm enables the wearer to see underwater (60 ft clear vision) and grants freedom of movement in water.",
+            EquipSlot.Head, 24000, 5, 0f, HeadIcon, HeadColor);
+        item.WondrousItemType = "utility";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        item.WondrousUnderwaterVisionRange = 60;
+        item.WondrousWaterFreedomOfMovement = true;
+        return item;
+    }
+
+    /// <summary>Helm of Brilliance (gem-powered spell-like abilities). DMG p.258.</summary>
+    public static ItemData CreateHelmOfBrilliance()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.HELM_OF_BRILLIANCE,
+            "Helm of Brilliance",
+            "This helm has 10 diamonds (Prismatic Spray), 20 rubies (Wall of Fire), 30 fire opals (Fireball), 40 opals (Daylight). Gems power spell-like abilities. Also grants fire immunity, Light at will, and SR 13.",
+            EquipSlot.Head, 125000, 13, 0f, HeadIcon, HeadColor);
+        item.WondrousItemType = "activated";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousGrantsSR = 13;
+        item.WondrousPatchesRemaining = 100;
+        item.WondrousPatchesMax = 100;
+        item.WondrousPatchDescription = "10 diamonds, 20 rubies, 30 fire opals, 40 opals";
+        return item;
+    }
+
+    // --- PERIAPTS & SCARABS ---
+
+    /// <summary>Periapt of Proof Against Poison (immune to all poison). DMG p.263.</summary>
+    public static ItemData CreatePeriaptOfProofAgainstPoison()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.PERIAPT_OF_PROOF_AGAINST_POISON,
+            "Periapt of Proof Against Poison",
+            "This item is a brilliant-cut gem on a delicate gold chain. The wearer is immune to all poisons.",
+            EquipSlot.Neck, 27000, 5, 0f, NeckIcon, NeckColor);
+        item.WondrousItemType = "protection";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        item.WondrousGrantsPoisonImmunity = true;
+        return item;
+    }
+
+    /// <summary>Periapt of Health (immune to disease). DMG p.263.</summary>
+    public static ItemData CreatePeriaptOfHealth()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.PERIAPT_OF_HEALTH,
+            "Periapt of Health",
+            "This gem on a gold chain grants the wearer immunity to all diseases, including supernatural and magical diseases.",
+            EquipSlot.Neck, 7400, 5, 0f, NeckIcon, NeckColor);
+        item.WondrousItemType = "protection";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        item.WondrousGrantsDiseaseImmunity = true;
+        return item;
+    }
+
+    /// <summary>Scarab of Protection (absorbs death/drain effects, 12 charges). DMG p.266.</summary>
+    public static ItemData CreateScarabOfProtection()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.SCARAB_OF_PROTECTION,
+            "Scarab of Protection",
+            "This device appears as a gold medallion in the shape of a scarab beetle. It provides +3 resistance bonus to all saves and absorbs energy drain, death effects, and negative energy effects (12 charges).",
+            EquipSlot.Neck, 38000, 18, 0f, NeckIcon, NeckColor);
+        item.WondrousItemType = "protection";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        item.WondrousCurrentCharges = 12;
+        item.WondrousMaxCharges = 12;
+        item.WondrousSaveBonus = 3;
+        item.WondrousSaveType = "all";
+        return item;
+    }
+
+    // --- MONK'S BELT (update existing with bonus fields) ---
+
+    /// <summary>Monk's Belt (+2 Wis, monk +5 levels). DMG p.248.</summary>
+    public static ItemData CreateMonksBeltPhase10()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.MONKS_BELT,
+            "Monk's Belt",
+            "This belt grants the wearer the AC bonus, unarmed damage, and speed of a monk 5 levels higher if already a monk, or as a 5th-level monk if not. Also grants a +1 insight bonus to AC.",
+            EquipSlot.Torso, 13000, 10, 1f, TorsoIcon, TorsoColor);
+        item.WondrousItemType = "utility";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        item.WondrousMonkLevelBonus = 5;
+        item.WondrousInsightACBonus = 1;
+        return item;
+    }
+
+    // --- CUBE OF FORCE ---
+
+    /// <summary>Cube of Force (36 charges, 6 modes). DMG p.253.</summary>
+    public static ItemData CreateCubeOfForce()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.CUBE_OF_FORCE,
+            "Cube of Force",
+            "This small cube creates a 10-ft force cube around the bearer. Six buttons activate different modes: keep out gases, living matter, nonliving matter, magic missiles, all spell effects, everything. 36 charges; modes consume 1-6 charges per round.",
+            EquipSlot.Slotless, 62000, 10, 0.5f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "protection";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousCurrentCharges = 36;
+        item.WondrousMaxCharges = 36;
+        return item;
+    }
 }

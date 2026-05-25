@@ -2546,6 +2546,32 @@ public class CharacterStats
     /// <summary>Competence bonus to bow damage rolls from Bracers of Archery (Greater). Highest wins.</summary>
     public int WondrousBowDamageBonus;
 
+    // ── Wondrous Item Phase 9/10 Bonuses ──
+    /// <summary>Insight bonus to AC from wondrous items (Dusty Rose Prism: +1). Highest wins.</summary>
+    public int WondrousInsightACBonus;
+    /// <summary>Competence bonus to all saves from wondrous items (Pale Green Prism: +1). Highest wins.</summary>
+    public int WondrousCompetenceSaveBonus;
+    /// <summary>Resistance bonus to all saves from wondrous items (Robe of Archmagi: +4). Highest wins with CloakOfResistance.</summary>
+    public int WondrousResistanceSaveBonusItem;
+    /// <summary>Caster level bonus from wondrous items (Orange Prism: +1). Stacks.</summary>
+    public int WondrousCasterLevelBonus;
+    /// <summary>HP regeneration per hour from wondrous items (Pearly White Spindle: 1).</summary>
+    public int WondrousRegenPerHour;
+    /// <summary>SR granted by wondrous items (Robe of Archmagi: 18). Highest wins.</summary>
+    public int WondrousGrantedSR;
+    /// <summary>Wondrous item grants poison immunity.</summary>
+    public bool WondrousPoisonImmunity;
+    /// <summary>Wondrous item grants disease immunity.</summary>
+    public bool WondrousDiseaseImmunity;
+    /// <summary>Wondrous item grants web immunity.</summary>
+    public bool WondrousWebImmunity;
+    /// <summary>Wondrous item grants See Invisible.</summary>
+    public bool WondrousSeeInvisible;
+    /// <summary>Wondrous item prevents flanking.</summary>
+    public bool WondrousPreventsFlanking;
+    /// <summary>Luck bonus to Fort saves vs poison from wondrous items.</summary>
+    public int WondrousLuckFortSaveBonus;
+
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
     public int TempHP;
 
@@ -2707,7 +2733,7 @@ public class CharacterStats
             int effectiveArmorBonus = Mathf.Max(ArmorBonus + MagicVestmentACBonus, SpellACBonus);
             return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + WondrousNaturalArmorBonus + SizeModifier
                    + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty
-                   + HasteACBonus + SlowACPenalty;
+                   + HasteACBonus + SlowACPenalty + WondrousInsightACBonus;
         }
     }
 
@@ -3452,6 +3478,8 @@ public class CharacterStats
     {
         if (Immunities != null && Immunities.immuneToPoison)
             return true;
+        if (WondrousPoisonImmunity)
+            return true;
 
         string creatureType = string.IsNullOrWhiteSpace(CreatureType)
             ? string.Empty
@@ -3467,6 +3495,8 @@ public class CharacterStats
     public bool IsImmuneToDisease()
     {
         if (Immunities != null && Immunities.immuneToDisease)
+            return true;
+        if (WondrousDiseaseImmunity)
             return true;
 
         string creatureType = string.IsNullOrWhiteSpace(CreatureType)

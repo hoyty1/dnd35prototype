@@ -1069,6 +1069,20 @@ public class Inventory
         OwnerStats.WondrousBowAttackBonus = 0;
         OwnerStats.WondrousBowDamageBonus = 0;
 
+        // Reset Phase 9 & 10 bonuses (Ioun Stones, Complex Items)
+        OwnerStats.WondrousInsightACBonus = 0;
+        OwnerStats.WondrousCompetenceSaveBonus = 0;
+        OwnerStats.WondrousResistanceSaveBonusItem = 0;
+        OwnerStats.WondrousCasterLevelBonus = 0;
+        OwnerStats.WondrousRegenPerHour = 0;
+        OwnerStats.WondrousGrantedSR = 0;
+        OwnerStats.WondrousPoisonImmunity = false;
+        OwnerStats.WondrousDiseaseImmunity = false;
+        OwnerStats.WondrousWebImmunity = false;
+        OwnerStats.WondrousSeeInvisible = false;
+        OwnerStats.WondrousPreventsFlanking = false;
+        OwnerStats.WondrousLuckFortSaveBonus = 0;
+
         // Reset wondrous skill bonuses (Phase 5: Stealth/Detection)
         if (OwnerStats.WondrousSkillBonuses == null)
             OwnerStats.WondrousSkillBonuses = new System.Collections.Generic.Dictionary<string, int>();
@@ -1248,6 +1262,51 @@ public class Inventory
                     break;
             }
         }
+
+        // --- Phase 9 & 10: Insight AC Bonus (Dusty Rose Prism, Monk's Belt) ---
+        if (item.WondrousInsightACBonus > 0)
+            OwnerStats.WondrousInsightACBonus = Mathf.Max(OwnerStats.WondrousInsightACBonus, item.WondrousInsightACBonus);
+
+        // --- Competence Save Bonus (Pale Green Prism — +1 competence to saves) ---
+        if (item.WondrousCompetenceSaveBonus > 0)
+            OwnerStats.WondrousCompetenceSaveBonus = Mathf.Max(OwnerStats.WondrousCompetenceSaveBonus, item.WondrousCompetenceSaveBonus);
+
+        // --- Resistance Save Bonus from specific items (Robe of Archmagi, Scarab, etc.) ---
+        // Resistance bonuses don't stack; highest wins vs WondrousSaveAllBonus (Cloak of Resistance)
+        if (item.WondrousResistanceSaveBonus > 0)
+            OwnerStats.WondrousResistanceSaveBonusItem = Mathf.Max(OwnerStats.WondrousResistanceSaveBonusItem, item.WondrousResistanceSaveBonus);
+
+        // --- Caster Level Bonus (Orange Prism — stacks from multiple sources) ---
+        if (item.WondrousCasterLevelBonus > 0)
+            OwnerStats.WondrousCasterLevelBonus += item.WondrousCasterLevelBonus;
+
+        // --- Regeneration (Pearly White Spindle — 1 HP/hour, best source wins) ---
+        if (item.WondrousRegenPerHour > 0)
+            OwnerStats.WondrousRegenPerHour = Mathf.Max(OwnerStats.WondrousRegenPerHour, item.WondrousRegenPerHour);
+
+        // --- Spell Resistance (Robe of Archmagi, Scarab — highest wins) ---
+        if (item.WondrousGrantsSR > 0)
+            OwnerStats.WondrousGrantedSR = Mathf.Max(OwnerStats.WondrousGrantedSR, item.WondrousGrantsSR);
+
+        // --- Immunity Flags (any item granting = active) ---
+        if (item.WondrousGrantsPoisonImmunity)
+            OwnerStats.WondrousPoisonImmunity = true;
+        if (item.WondrousGrantsDiseaseImmunity)
+            OwnerStats.WondrousDiseaseImmunity = true;
+        if (item.WondrousGrantsWebImmunity)
+            OwnerStats.WondrousWebImmunity = true;
+
+        // --- See Invisible (Robe of Eyes — boolean flag) ---
+        if (item.WondrousGrantsSeeInvisible)
+            OwnerStats.WondrousSeeInvisible = true;
+
+        // --- Prevents Flanking (Robe of Eyes — boolean flag) ---
+        if (item.WondrousPreventsFlanking)
+            OwnerStats.WondrousPreventsFlanking = true;
+
+        // --- Luck Bonus to Fortitude Saves (Stone of Good Luck already handled; this is specific fort) ---
+        if (item.WondrousLuckFortSaveBonus > 0)
+            OwnerStats.WondrousLuckFortSaveBonus = Mathf.Max(OwnerStats.WondrousLuckFortSaveBonus, item.WondrousLuckFortSaveBonus);
     }
 
     /// <summary>Get numeric rank for flight maneuverability comparison (higher = better).</summary>

@@ -637,6 +637,78 @@ public class ItemData
     /// <summary>Duration of entrapment in rounds (Beads of Force: 100 = 10 min). 0 = until broken.</summary>
     public int WondrousEntrapmentDurationRounds;
 
+    // --- Ioun Stone / Phase 9 Properties ---
+    /// <summary>Insight bonus to AC from wondrous item (Dusty Rose Prism: +1). 0 if N/A.</summary>
+    public int WondrousInsightACBonus;
+    /// <summary>Competence bonus to all saving throws (Pale Green Prism: +1). 0 if N/A.</summary>
+    public int WondrousCompetenceSaveBonus;
+    /// <summary>Caster level bonus from wondrous item (Orange Prism: +1, Robe of Archmagi: +2). 0 if N/A.</summary>
+    public int WondrousCasterLevelBonus;
+    /// <summary>HP regeneration per hour (Pearly White Spindle: 1). 0 if N/A.</summary>
+    public int WondrousRegenPerHour;
+    /// <summary>Feat name granted by this item (Dark Blue Rhomboid: "Alertness"). Null if N/A.</summary>
+    public string WondrousGrantsFeatName;
+    /// <summary>Whether this item sustains without food/water (Clear Spindle).</summary>
+    public bool WondrousSustainsWithoutFood;
+    /// <summary>Whether this item sustains without air (Iridescent Spindle).</summary>
+    public bool WondrousSustainsWithoutAir;
+    /// <summary>Max spell levels this item can store (Vibrant Purple Prism: 3). 0 if N/A.</summary>
+    public int WondrousSpellStorageLevels;
+    /// <summary>Max spell level this item can absorb (Pale Lavender: 4, Lavender & Green: 8). 0 if N/A.</summary>
+    public int WondrousSpellAbsorptionMaxLevel;
+    /// <summary>Charges remaining for spell absorption. 0 = not applicable or exhausted.</summary>
+    public int WondrousSpellAbsorptionCharges;
+    /// <summary>Max charges for spell absorption (default: starts at 20 or 50).</summary>
+    public int WondrousSpellAbsorptionMaxCharges;
+
+    // --- Phase 10: Complex Multi-Ability Properties ---
+    /// <summary>Whether this item grants poison immunity (Periapt of Proof Against Poison, Cloak of Arachnida).</summary>
+    public bool WondrousGrantsPoisonImmunity;
+    /// <summary>Whether this item grants disease immunity (Periapt of Health).</summary>
+    public bool WondrousGrantsDiseaseImmunity;
+    /// <summary>Whether this item grants web immunity (Cloak of Arachnida).</summary>
+    public bool WondrousGrantsWebImmunity;
+    /// <summary>Luck bonus to Fort saves vs poison (Cloak of Arachnida: +2). 0 if N/A.</summary>
+    public int WondrousLuckFortSaveBonus;
+    /// <summary>Resistance bonus to all saves from wondrous item (Robe of Archmagi: +4). 0 if N/A.</summary>
+    public int WondrousResistanceSaveBonus;
+    /// <summary>Required alignment for this item ("good", "neutral", "evil"). Null = no restriction.</summary>
+    public string WondrousRequiredAlignment;
+    /// <summary>Penalty to AC if worn by wrong alignment (Robe of Archmagi: -4). 0 if N/A.</summary>
+    public int WondrousWrongAlignmentACPenalty;
+    /// <summary>Penalty to saves if worn by wrong alignment (Robe of Archmagi: -2). 0 if N/A.</summary>
+    public int WondrousWrongAlignmentSavePenalty;
+    /// <summary>Number of consumable patches remaining (Robe of Bones, Robe of Useful Items, Robe of Stars).</summary>
+    public int WondrousPatchesRemaining;
+    /// <summary>Maximum patches this item had when new.</summary>
+    public int WondrousPatchesMax;
+    /// <summary>Description of patch contents for tooltips.</summary>
+    public string WondrousPatchDescription;
+    /// <summary>Whether this item grants spider climb (Cloak of Arachnida).</summary>
+    public bool WondrousGrantsSpiderClimb;
+    /// <summary>Whether this item grants See Invisible (Robe of Eyes).</summary>
+    public bool WondrousGrantsSeeInvisible;
+    /// <summary>Whether wearer cannot be flanked (Robe of Eyes).</summary>
+    public bool WondrousPreventsFlanking;
+    /// <summary>Bonus to Search checks (Robe of Eyes: +10). 0 if N/A.</summary>
+    public int WondrousSearchBonus;
+    /// <summary>Bonus to Spot checks (Robe of Eyes: +10). 0 if N/A.</summary>
+    public int WondrousSpotBonus;
+    /// <summary>Bonus to Disguise checks (Robe of Blending: +10). 0 if N/A.</summary>
+    public int WondrousDisguiseBonus;
+    /// <summary>Detect Thoughts save DC (Helm of Telepathy: 13). 0 if N/A.</summary>
+    public int WondrousDetectThoughtsDC;
+    /// <summary>Suggestion save DC (Helm of Telepathy: 14). 0 if N/A.</summary>
+    public int WondrousSuggestionDC;
+    /// <summary>Ability bonus granted to Wisdom for monks (Monk's Belt: +2 to AC). Uses WondrousAbilityBonus for WIS.</summary>
+    public int WondrousMonkLevelBonus;
+    /// <summary>Rolled AC bonus (Robe of Stars: 1d6 rolled on equip). 0 until equipped.</summary>
+    public int WondrousRolledACBonus;
+    /// <summary>Whether underwater vision is granted (Helm of Underwater Action). Range in ft.</summary>
+    public int WondrousUnderwaterVisionRange;
+    /// <summary>Whether freedom of movement in water is granted.</summary>
+    public bool WondrousWaterFreedomOfMovement;
+
     /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
     public bool HasActiveRingAbility => IsRing && (
         (RingAbilities != null && RingAbilities.Count > 0) ||
@@ -1837,8 +1909,6 @@ public class ItemData
                 stats += $"\n+{WondrousColdSurvivalBonus} Survival in cold environments";
             if (WondrousTeleportWeightLimit > 0)
                 stats += $"\nTeleport (up to {WondrousTeleportWeightLimit} lbs)";
-            if (WondrousGrantsSR > 0)
-                stats += $"\nSpell Resistance {WondrousGrantsSR}";
             if (WondrousWeightCapacity > 0)
             {
                 stats += $"\nCapacity: {WondrousWeightCapacity:0} lbs / {WondrousVolumeCapacity:0} cu ft";
@@ -1908,6 +1978,91 @@ public class ItemData
                 if (WondrousEntrapmentBreakDC > 0)
                     stats += $", Str/Escape Artist DC {WondrousEntrapmentBreakDC} to break free";
             }
+            // Insight AC bonus (Dusty Rose Prism)
+            if (WondrousInsightACBonus > 0)
+                stats += $"\n+{WondrousInsightACBonus} insight bonus to AC";
+            // Competence save bonus (Pale Green Prism)
+            if (WondrousCompetenceSaveBonus > 0)
+                stats += $"\n+{WondrousCompetenceSaveBonus} competence bonus to all saves";
+            // Resistance save bonus (Robe of Archmagi)
+            if (WondrousResistanceSaveBonus > 0)
+                stats += $"\n+{WondrousResistanceSaveBonus} resistance bonus to all saves";
+            // Caster level bonus (Orange Prism, Robe of Archmagi)
+            if (WondrousCasterLevelBonus > 0)
+                stats += $"\n+{WondrousCasterLevelBonus} caster level";
+            // Regen (Pearly White Spindle)
+            if (WondrousRegenPerHour > 0)
+                stats += $"\nRegenerates {WondrousRegenPerHour} HP/hour";
+            // Feat grants (Dark Blue Rhomboid)
+            if (!string.IsNullOrEmpty(WondrousGrantsFeatName))
+                stats += $"\nGrants feat: {WondrousGrantsFeatName}";
+            // Sustenance (Clear Spindle, Iridescent Spindle)
+            if (WondrousSustainsWithoutFood)
+                stats += "\nSustains without food or water";
+            if (WondrousSustainsWithoutAir)
+                stats += "\nSustains without air";
+            // Spell storage (Vibrant Purple Prism)
+            if (WondrousSpellStorageLevels > 0)
+                stats += $"\nStores up to {WondrousSpellStorageLevels} spell levels";
+            // Spell absorption (Pale Lavender, Lavender & Green)
+            if (WondrousSpellAbsorptionMaxLevel > 0)
+            {
+                stats += $"\nAbsorbs spells ≤{WondrousSpellAbsorptionMaxLevel}th level";
+                if (WondrousSpellAbsorptionMaxCharges > 0)
+                    stats += $" ({WondrousSpellAbsorptionCharges}/{WondrousSpellAbsorptionMaxCharges} charges)";
+            }
+            // Immunities
+            if (WondrousGrantsPoisonImmunity)
+                stats += "\n🛡 Immune to poison";
+            if (WondrousGrantsDiseaseImmunity)
+                stats += "\n🛡 Immune to disease";
+            if (WondrousGrantsWebImmunity)
+                stats += "\n🛡 Immune to webs";
+            if (WondrousLuckFortSaveBonus > 0)
+                stats += $"\n+{WondrousLuckFortSaveBonus} luck bonus to Fort saves vs poison";
+            // Spider Climb (Cloak of Arachnida)
+            if (WondrousGrantsSpiderClimb)
+                stats += "\nSpider Climb at will";
+            // See Invisible / Anti-flanking (Robe of Eyes)
+            if (WondrousGrantsSeeInvisible)
+                stats += "\nSee Invisible continuously";
+            if (WondrousPreventsFlanking)
+                stats += "\nCannot be flanked or surprised";
+            if (WondrousSearchBonus > 0)
+                stats += $"\n+{WondrousSearchBonus} to Search";
+            if (WondrousSpotBonus > 0)
+                stats += $"\n+{WondrousSpotBonus} to Spot";
+            if (WondrousDisguiseBonus > 0)
+                stats += $"\n+{WondrousDisguiseBonus} to Disguise";
+            // Spell-like abilities (Helm of Telepathy)
+            if (WondrousDetectThoughtsDC > 0)
+                stats += $"\nDetect Thoughts at will (Will DC {WondrousDetectThoughtsDC})";
+            if (WondrousSuggestionDC > 0)
+                stats += $"\nSuggestion 1/day (Will DC {WondrousSuggestionDC})";
+            // Patches (Robe of Bones, Robe of Useful Items, Robe of Stars)
+            if (WondrousPatchesMax > 0)
+            {
+                stats += $"\nPatches: {WondrousPatchesRemaining}/{WondrousPatchesMax}";
+                if (!string.IsNullOrEmpty(WondrousPatchDescription))
+                    stats += $" ({WondrousPatchDescription})";
+            }
+            // Monk bonus (Monk's Belt)
+            if (WondrousMonkLevelBonus > 0)
+                stats += $"\nMonk abilities function as +{WondrousMonkLevelBonus} levels";
+            // Rolled AC (Robe of Stars)
+            if (WondrousRolledACBonus > 0)
+                stats += $"\n+{WondrousRolledACBonus} armor bonus to AC (rolled)";
+            // Underwater (Helm of Underwater Action)
+            if (WondrousUnderwaterVisionRange > 0)
+                stats += $"\nUnderwater vision {WondrousUnderwaterVisionRange} ft";
+            if (WondrousWaterFreedomOfMovement)
+                stats += "\nFreedom of movement in water";
+            // SR (Robe of Archmagi)
+            if (WondrousGrantsSR > 0)
+                stats += $"\nSpell Resistance {WondrousGrantsSR}";
+            // Alignment restriction
+            if (!string.IsNullOrEmpty(WondrousRequiredAlignment))
+                stats += $"\n⚠ Alignment: {WondrousRequiredAlignment}";
             if (IsIounStone)
                 stats += "\n✦ Ioun Stone (orbits head, AC 24, HP 10)";
             if (WondrousCasterLevel > 0)

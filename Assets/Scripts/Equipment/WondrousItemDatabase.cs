@@ -70,7 +70,7 @@ public static class WondrousItemDatabase
         //  TORSO/BODY SLOT — Vests, robes, shirts
         // ════════════════════════════════════════════════════════════
         Register(WondrousItemFactory.CreateVestOfEscape());
-        Register(WondrousItemFactory.CreateMonksBelt());
+        Register(WondrousItemFactory.CreateMonksBeltPhase10());
 
         // ════════════════════════════════════════════════════════════
         //  WAIST SLOT — Belts
@@ -149,6 +149,61 @@ public static class WondrousItemDatabase
         Register(WondrousItemFactory.CreateFigurineOfWondrousPower("obsidian_steed"));
 
         // ════════════════════════════════════════════════════════════
+        //  PHASE 9: IOUN STONES — All 16 standard Ioun Stones (DMG pp. 260–261)
+        // ════════════════════════════════════════════════════════════
+        // Ability score stones (+2 enhancement)
+        Register(WondrousItemFactory.CreateIounStoneDeepRedSphere());         // +2 Dex
+        Register(WondrousItemFactory.CreateIounStoneIncandescentBlueSphere()); // +2 Wis
+        Register(WondrousItemFactory.CreateIounStonePaleBlueRhomboid());      // +2 Str
+        Register(WondrousItemFactory.CreateIounStonePinkRhomboid());          // +2 Con
+        Register(WondrousItemFactory.CreateIounStonePinkAndGreenSphere());    // +2 Cha
+        Register(WondrousItemFactory.CreateIounStoneScarletAndBlueSphere());  // +2 Int
+        // Utility stones
+        Register(WondrousItemFactory.CreateIounStoneClearSpindle());          // Sustains without food/water
+        Register(WondrousItemFactory.CreateIounStoneDustyRosePrism());        // +1 insight AC
+        Register(WondrousItemFactory.CreateIounStoneDarkBlueRhomboid());      // Alertness (feat)
+        Register(WondrousItemFactory.CreateIounStoneVibrantPurplePrism());    // Stores 3 spell levels
+        Register(WondrousItemFactory.CreateIounStoneIridescentSpindle());     // Sustains without air
+        Register(WondrousItemFactory.CreateIounStonePaleLavenderEllipsoid()); // Absorbs spells ≤4th
+        Register(WondrousItemFactory.CreateIounStonePearlyWhiteSpindle());    // Regenerate 1 HP/hour
+        Register(WondrousItemFactory.CreateIounStoneOrangePrism());           // +1 caster level
+        Register(WondrousItemFactory.CreateIounStonePaleGreenPrism());        // +1 competence to attacks/saves/checks
+        Register(WondrousItemFactory.CreateIounStoneLavenderAndGreenEllipsoid()); // Absorbs spells ≤8th
+
+        // ════════════════════════════════════════════════════════════
+        //  PHASE 10: COMPLEX MULTI-ABILITY ITEMS (DMG pp. 248–271)
+        // ════════════════════════════════════════════════════════════
+        // Robes (Torso slot)
+        Register(WondrousItemFactory.CreateRobeOfTheArchmagi("good"));
+        Register(WondrousItemFactory.CreateRobeOfTheArchmagi("neutral"));
+        Register(WondrousItemFactory.CreateRobeOfTheArchmagi("evil"));
+        Register(WondrousItemFactory.CreateRobeOfStars());
+        Register(WondrousItemFactory.CreateRobeOfScintillatingColors());
+        Register(WondrousItemFactory.CreateRobeOfEyes());
+        Register(WondrousItemFactory.CreateRobeOfBlending());
+        Register(WondrousItemFactory.CreateRobeOfBones());
+        Register(WondrousItemFactory.CreateRobeOfUsefulItems());
+        Register(WondrousItemFactory.CreateVestmentOfFaith());
+
+        // Cloaks (Back/Shoulders slot)
+        Register(WondrousItemFactory.CreateCloakOfArachnida());
+        Register(WondrousItemFactory.CreateCloakOfTheBat());
+
+        // Helms (Head slot)
+        Register(WondrousItemFactory.CreateHelmOfTelepathy());
+        Register(WondrousItemFactory.CreateHelmOfTeleportation());
+        Register(WondrousItemFactory.CreateHelmOfUnderwaterAction());
+        Register(WondrousItemFactory.CreateHelmOfBrilliance());
+
+        // Periapts & Scarab (Neck slot)
+        Register(WondrousItemFactory.CreatePeriaptOfProofAgainstPoison());
+        Register(WondrousItemFactory.CreatePeriaptOfHealth());
+        Register(WondrousItemFactory.CreateScarabOfProtection());
+
+        // Slotless complex items
+        Register(WondrousItemFactory.CreateCubeOfForce());
+
+        // ════════════════════════════════════════════════════════════
         //  TEST ITEMS — One per slot for verification
         // ════════════════════════════════════════════════════════════
         Register(WondrousItemFactory.CreateTestItem(EquipSlot.Head, "Head"));
@@ -162,7 +217,7 @@ public static class WondrousItemDatabase
         Register(WondrousItemFactory.CreateTestItem(EquipSlot.Feet, "Feet"));
         Register(WondrousItemFactory.CreateTestSlotlessItem());
 
-        Debug.Log($"[WondrousItemDatabase] Initialized: {_items.Count} wondrous items registered (Phase 1 Foundation).");
+        Debug.Log($"[WondrousItemDatabase] Initialized: {_items.Count} wondrous items registered (Phases 1–10).");
     }
 
     /// <summary>Register a test slotless item (delegates to factory).</summary>

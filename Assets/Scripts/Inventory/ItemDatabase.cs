@@ -2115,6 +2115,42 @@ public static class ItemDatabase
         clone.WondrousSpellResistanceBonus = src.WondrousSpellResistanceBonus;
         clone.WondrousGrantsSR = src.WondrousGrantsSR;
 
+        // Phase 9 & 10: Ioun Stones and Complex Multi-Ability Items
+        clone.WondrousInsightACBonus = src.WondrousInsightACBonus;
+        clone.WondrousCompetenceSaveBonus = src.WondrousCompetenceSaveBonus;
+        clone.WondrousCasterLevelBonus = src.WondrousCasterLevelBonus;
+        clone.WondrousRegenPerHour = src.WondrousRegenPerHour;
+        clone.WondrousGrantsFeatName = src.WondrousGrantsFeatName;
+        clone.WondrousSustainsWithoutFood = src.WondrousSustainsWithoutFood;
+        clone.WondrousSustainsWithoutAir = src.WondrousSustainsWithoutAir;
+        clone.WondrousSpellStorageLevels = src.WondrousSpellStorageLevels;
+        clone.WondrousSpellAbsorptionMaxLevel = src.WondrousSpellAbsorptionMaxLevel;
+        clone.WondrousSpellAbsorptionCharges = src.WondrousSpellAbsorptionCharges;
+        clone.WondrousSpellAbsorptionMaxCharges = src.WondrousSpellAbsorptionMaxCharges;
+        clone.WondrousGrantsPoisonImmunity = src.WondrousGrantsPoisonImmunity;
+        clone.WondrousGrantsDiseaseImmunity = src.WondrousGrantsDiseaseImmunity;
+        clone.WondrousGrantsWebImmunity = src.WondrousGrantsWebImmunity;
+        clone.WondrousLuckFortSaveBonus = src.WondrousLuckFortSaveBonus;
+        clone.WondrousResistanceSaveBonus = src.WondrousResistanceSaveBonus;
+        clone.WondrousRequiredAlignment = src.WondrousRequiredAlignment;
+        clone.WondrousWrongAlignmentACPenalty = src.WondrousWrongAlignmentACPenalty;
+        clone.WondrousWrongAlignmentSavePenalty = src.WondrousWrongAlignmentSavePenalty;
+        clone.WondrousPatchesRemaining = src.WondrousPatchesRemaining;
+        clone.WondrousPatchesMax = src.WondrousPatchesMax;
+        clone.WondrousPatchDescription = src.WondrousPatchDescription;
+        clone.WondrousGrantsSpiderClimb = src.WondrousGrantsSpiderClimb;
+        clone.WondrousGrantsSeeInvisible = src.WondrousGrantsSeeInvisible;
+        clone.WondrousPreventsFlanking = src.WondrousPreventsFlanking;
+        clone.WondrousSearchBonus = src.WondrousSearchBonus;
+        clone.WondrousSpotBonus = src.WondrousSpotBonus;
+        clone.WondrousDisguiseBonus = src.WondrousDisguiseBonus;
+        clone.WondrousDetectThoughtsDC = src.WondrousDetectThoughtsDC;
+        clone.WondrousSuggestionDC = src.WondrousSuggestionDC;
+        clone.WondrousMonkLevelBonus = src.WondrousMonkLevelBonus;
+        clone.WondrousRolledACBonus = src.WondrousRolledACBonus;
+        clone.WondrousUnderwaterVisionRange = src.WondrousUnderwaterVisionRange;
+        clone.WondrousWaterFreedomOfMovement = src.WondrousWaterFreedomOfMovement;
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

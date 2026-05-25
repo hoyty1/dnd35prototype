@@ -187,7 +187,29 @@ namespace DND35e.Identifiers
         public const string FIGURINE_OF_WONDROUS_POWER_SERPENTINE_OWL = "figurine_serpentine_owl";
         public const string FIGURINE_OF_WONDROUS_POWER_SILVER_RAVEN = "figurine_silver_raven";
 
-        // --- Ioun Stones (slotless, orbit head) ---
+        // --- Phase 10: Additional Head slot items ---
+        public const string HELM_OF_UNDERWATER_ACTION = "helm_of_underwater_action";
+        public const string HELM_OF_TELEPORTATION = "helm_of_teleportation";
+
+        // --- Phase 10: Additional Neck slot items ---
+        public const string PERIAPT_OF_HEALTH = "periapt_of_health";
+
+        // --- Phase 10: Robe items ---
+        public const string ROBE_OF_THE_ARCHMAGI_GOOD = "robe_of_the_archmagi_good";
+        public const string ROBE_OF_THE_ARCHMAGI_NEUTRAL = "robe_of_the_archmagi_neutral";
+        public const string ROBE_OF_THE_ARCHMAGI_EVIL = "robe_of_the_archmagi_evil";
+        public const string ROBE_OF_STARS = "robe_of_stars";
+        public const string ROBE_OF_SCINTILLATING_COLORS = "robe_of_scintillating_colors";
+        public const string VESTMENT_OF_FAITH = "vestment_of_faith";
+
+        // --- Phase 10: Additional Slotless items ---
+        public const string CUBE_OF_FORCE = "cube_of_force";
+
+        // --- Phase 10: Ioun Stone additions ---
+        public const string IOUN_STONE_IRIDESCENT_SPINDLE = "ioun_stone_iridescent_spindle";
+        public const string IOUN_STONE_PALE_LAVENDER_ELLIPSOID = "ioun_stone_pale_lavender_ellipsoid";
+
+    // --- Ioun Stones (slotless, orbit head) ---
         public const string IOUN_STONE_CLEAR_SPINDLE = "ioun_stone_clear_spindle";
         public const string IOUN_STONE_DUSTY_ROSE_PRISM = "ioun_stone_dusty_rose_prism";
         public const string IOUN_STONE_DEEP_RED_SPHERE = "ioun_stone_deep_red_sphere";
