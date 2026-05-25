@@ -1585,7 +1585,7 @@ public static class WondrousItemFactory
     {
         var item = CreateBaseWondrous(WondrousItemNames.SCARAB_OF_PROTECTION,
             "Scarab of Protection",
-            "This device appears as a gold medallion in the shape of a scarab beetle. It provides +3 resistance bonus to all saves and absorbs energy drain, death effects, and negative energy effects (12 charges).",
+            "This device appears as a gold medallion in the shape of a scarab beetle. It provides +3 resistance bonus to all saves and absorbs energy drain, death effects, and negative energy effects (12 charges). Becomes non-magical when all charges are consumed.",
             EquipSlot.Neck, 38000, 18, 0f, NeckIcon, NeckColor);
         item.WondrousItemType = "protection";
         item.WondrousHasActivation = true;
@@ -1594,6 +1594,60 @@ public static class WondrousItemFactory
         item.WondrousMaxCharges = 12;
         item.WondrousSaveBonus = 3;
         item.WondrousSaveType = "all";
+        item.WondrousScarabAbsorbsDeath = true;
+        item.WondrousScarabAbsorbsDrain = true;
+        item.WondrousScarabAbsorbsNegativeEnergy = true;
+        return item;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PHASE 2: MANTLE OF SPELL RESISTANCE (DMG p.263)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>Mantle of Spell Resistance. Grants continuous SR. DMG p.263.</summary>
+    public static ItemData CreateMantleOfSpellResistance(int srLevel)
+    {
+        int price;
+        switch (srLevel)
+        {
+            case 13: price = 90000; break;
+            case 15: price = 121000; break;
+            case 17: price = 157000; break;
+            case 19: price = 198000; break;
+            case 21: price = 250000; break;
+            default: price = 90000; srLevel = 13; break;
+        }
+        string id = $"mantle_of_spell_resistance_{srLevel}";
+        var item = CreateBaseWondrous(id,
+            $"Mantle of Spell Resistance (SR {srLevel})",
+            $"This fine garment, woven of undyed wool, radiates strong abjuration magic. When worn, it grants the wearer spell resistance {srLevel}.",
+            EquipSlot.Back, price, 9, 1f, BackIcon, BackColor);
+        item.WondrousItemType = "protection";
+        item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
+        item.WondrousGrantsSR = srLevel;
+        return item;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PHASE 3: LEGENDARY PROTECTION ITEMS
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>Mantle of Faith (+5 resistance saves, 4 spell-like abilities 1/day). DMG p.263.</summary>
+    public static ItemData CreateMantleOfFaith()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.MANTLE_OF_FAITH,
+            "Mantle of Faith",
+            "This shimmering mantle of golden cloth is adorned with holy symbols. It grants a +5 resistance bonus to all saving throws and allows the wearer to cast Bless, Detect Evil, Remove Fear, and Aid each once per day (CL 5).",
+            EquipSlot.Back, 76000, 5, 1f, BackIcon, BackColor);
+        item.WondrousItemType = "protection";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousSaveBonus = 5;
+        item.WondrousSaveType = "all";
+        item.WondrousSpellLikeAbilities = "Bless,Detect Evil,Remove Fear,Aid";
+        item.WondrousSpellLikeCasterLevel = 5;
+        item.WondrousSpellLikeUsesPerDay = 1;
+        item.WondrousSpellLikeUsesToday = "0,0,0,0"; // 0 uses consumed today
         return item;
     }
 

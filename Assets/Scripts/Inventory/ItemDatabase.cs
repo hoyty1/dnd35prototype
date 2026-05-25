@@ -2151,6 +2151,15 @@ public static class ItemDatabase
         clone.WondrousUnderwaterVisionRange = src.WondrousUnderwaterVisionRange;
         clone.WondrousWaterFreedomOfMovement = src.WondrousWaterFreedomOfMovement;
 
+        // Phase 2/3: Spell-like abilities and Scarab charge tracking
+        clone.WondrousSpellLikeAbilities = src.WondrousSpellLikeAbilities;
+        clone.WondrousSpellLikeCasterLevel = src.WondrousSpellLikeCasterLevel;
+        clone.WondrousSpellLikeUsesPerDay = src.WondrousSpellLikeUsesPerDay;
+        clone.WondrousSpellLikeUsesToday = src.WondrousSpellLikeUsesToday;
+        clone.WondrousScarabAbsorbsDeath = src.WondrousScarabAbsorbsDeath;
+        clone.WondrousScarabAbsorbsDrain = src.WondrousScarabAbsorbsDrain;
+        clone.WondrousScarabAbsorbsNegativeEnergy = src.WondrousScarabAbsorbsNegativeEnergy;
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

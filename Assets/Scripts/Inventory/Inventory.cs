@@ -1115,6 +1115,13 @@ public class Inventory
             if (OwnerStats.WondrousBracersArmorBonus > OwnerStats.ArmorBonus)
                 OwnerStats.ArmorBonus = OwnerStats.WondrousBracersArmorBonus;
         }
+
+        // Apply spell resistance from wondrous items — highest wins vs base SR
+        // Sources: Mantle of Spell Resistance, Robe of the Archmagi, etc.
+        if (OwnerStats.WondrousGrantedSR > 0)
+        {
+            OwnerStats.SpellResistance = Mathf.Max(OwnerStats.SpellResistance, OwnerStats.WondrousGrantedSR);
+        }
     }
 
     /// <summary>Apply bonuses from a single wondrous item to OwnerStats.</summary>

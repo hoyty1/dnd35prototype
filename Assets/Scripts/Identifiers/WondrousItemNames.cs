@@ -225,6 +225,16 @@ namespace DND35e.Identifiers
         public const string IOUN_STONE_ORANGE_PRISM = "ioun_stone_orange_prism";
         public const string IOUN_STONE_PALE_GREEN_PRISM = "ioun_stone_pale_green_prism";
 
+        // --- Phase 2: Mantle of Spell Resistance ---
+        public const string MANTLE_OF_SPELL_RESISTANCE_13 = "mantle_of_spell_resistance_13";
+        public const string MANTLE_OF_SPELL_RESISTANCE_15 = "mantle_of_spell_resistance_15";
+        public const string MANTLE_OF_SPELL_RESISTANCE_17 = "mantle_of_spell_resistance_17";
+        public const string MANTLE_OF_SPELL_RESISTANCE_19 = "mantle_of_spell_resistance_19";
+        public const string MANTLE_OF_SPELL_RESISTANCE_21 = "mantle_of_spell_resistance_21";
+
+        // --- Phase 3: Legendary Protection Items ---
+        public const string MANTLE_OF_FAITH = "mantle_of_faith";
+
         // --- Test/Placeholder Items ---
         public const string TEST_HEAD_ITEM = "test_wondrous_head";
         public const string TEST_FACE_ITEM = "test_wondrous_face";

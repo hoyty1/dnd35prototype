@@ -204,6 +204,22 @@ public static class WondrousItemDatabase
         Register(WondrousItemFactory.CreateCubeOfForce());
 
         // ════════════════════════════════════════════════════════════
+        //  PHASE 2: SPELL RESISTANCE — Mantle of Spell Resistance
+        // ════════════════════════════════════════════════════════════
+        Register(WondrousItemFactory.CreateMantleOfSpellResistance(13)); // SR 13, 90,000 gp
+        Register(WondrousItemFactory.CreateMantleOfSpellResistance(15)); // SR 15, 121,000 gp
+        Register(WondrousItemFactory.CreateMantleOfSpellResistance(17)); // SR 17, 157,000 gp
+        Register(WondrousItemFactory.CreateMantleOfSpellResistance(19)); // SR 19, 198,000 gp
+        Register(WondrousItemFactory.CreateMantleOfSpellResistance(21)); // SR 21, 250,000 gp
+
+        // ════════════════════════════════════════════════════════════
+        //  PHASE 3: LEGENDARY PROTECTION ITEMS
+        // ════════════════════════════════════════════════════════════
+        Register(WondrousItemFactory.CreateMantleOfFaith());              // +5 saves, 4 SLAs 1/day
+        // Periapt of Proof Against Poison already registered in Phase 10 (Neck slot)
+        // Scarab of Protection already registered in Phase 10 (Neck slot)
+
+        // ════════════════════════════════════════════════════════════
         //  TEST ITEMS — One per slot for verification
         // ════════════════════════════════════════════════════════════
         Register(WondrousItemFactory.CreateTestItem(EquipSlot.Head, "Head"));

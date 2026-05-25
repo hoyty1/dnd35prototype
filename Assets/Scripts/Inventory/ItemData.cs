@@ -709,6 +709,24 @@ public class ItemData
     /// <summary>Whether freedom of movement in water is granted.</summary>
     public bool WondrousWaterFreedomOfMovement;
 
+    // --- Phase 2/3: Spell-like abilities and Scarab charge tracking ---
+
+    /// <summary>Names of spell-like abilities this item grants (e.g., "Bless,Detect Evil,Remove Fear,Aid").</summary>
+    public string WondrousSpellLikeAbilities;
+    /// <summary>Caster level for spell-like abilities.</summary>
+    public int WondrousSpellLikeCasterLevel;
+    /// <summary>Uses per day for each spell-like ability (typically 1).</summary>
+    public int WondrousSpellLikeUsesPerDay;
+    /// <summary>Comma-separated list of today's remaining uses per spell-like ability.</summary>
+    public string WondrousSpellLikeUsesToday;
+
+    /// <summary>True if this Scarab absorbs death effects.</summary>
+    public bool WondrousScarabAbsorbsDeath;
+    /// <summary>True if this Scarab absorbs energy drain.</summary>
+    public bool WondrousScarabAbsorbsDrain;
+    /// <summary>True if this Scarab absorbs negative energy.</summary>
+    public bool WondrousScarabAbsorbsNegativeEnergy;
+
     /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
     public bool HasActiveRingAbility => IsRing && (
         (RingAbilities != null && RingAbilities.Count > 0) ||
@@ -2057,9 +2075,42 @@ public class ItemData
                 stats += $"\nUnderwater vision {WondrousUnderwaterVisionRange} ft";
             if (WondrousWaterFreedomOfMovement)
                 stats += "\nFreedom of movement in water";
-            // SR (Robe of Archmagi)
+            // SR (Robe of Archmagi, Mantle of Spell Resistance)
             if (WondrousGrantsSR > 0)
                 stats += $"\nSpell Resistance {WondrousGrantsSR}";
+            // Spell-like abilities (Mantle of Faith, etc.)
+            if (!string.IsNullOrEmpty(WondrousSpellLikeAbilities))
+            {
+                string[] spells = WondrousSpellLikeAbilities.Split(',');
+                int usesPerDay = WondrousSpellLikeUsesPerDay > 0 ? WondrousSpellLikeUsesPerDay : 1;
+                stats += $"\nSpell-like abilities ({usesPerDay}/day each, CL {WondrousSpellLikeCasterLevel}):";
+                // Show remaining uses if tracking
+                string[] usesToday = !string.IsNullOrEmpty(WondrousSpellLikeUsesToday)
+                    ? WondrousSpellLikeUsesToday.Split(',') : null;
+                for (int i = 0; i < spells.Length; i++)
+                {
+                    int remaining = usesPerDay;
+                    if (usesToday != null && i < usesToday.Length)
+                    {
+                        int.TryParse(usesToday[i].Trim(), out int used);
+                        remaining = Mathf.Max(0, usesPerDay - used);
+                    }
+                    stats += $"\n  • {spells[i].Trim()} ({remaining}/{usesPerDay})";
+                }
+            }
+            // Scarab absorption (death/drain/negative energy)
+            if (WondrousScarabAbsorbsDeath || WondrousScarabAbsorbsDrain || WondrousScarabAbsorbsNegativeEnergy)
+            {
+                stats += "\nAbsorbs:";
+                if (WondrousScarabAbsorbsDeath) stats += " death effects (1 charge),";
+                if (WondrousScarabAbsorbsDrain) stats += " energy drain (2 charges/level),";
+                if (WondrousScarabAbsorbsNegativeEnergy) stats += " negative energy (1 charge/die),";
+                stats = stats.TrimEnd(',');
+                if (WondrousCurrentCharges >= 0 && WondrousMaxCharges > 0)
+                    stats += $"\n  Charges: {WondrousCurrentCharges}/{WondrousMaxCharges}";
+                if (WondrousCurrentCharges <= 0 && WondrousMaxCharges > 0)
+                    stats += "\n  ⚠ Depleted — non-magical";
+            }
             // Alignment restriction
             if (!string.IsNullOrEmpty(WondrousRequiredAlignment))
                 stats += $"\n⚠ Alignment: {WondrousRequiredAlignment}";

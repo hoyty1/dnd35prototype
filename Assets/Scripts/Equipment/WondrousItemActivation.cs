@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -274,6 +275,18 @@ public static class WondrousItemActivation
         {
             item.WondrousFlightRoundsRemaining = 0;
             resets++;
+        }
+
+        // Reset spell-like ability daily uses (Mantle of Faith, etc.)
+        if (!string.IsNullOrEmpty(item.WondrousSpellLikeAbilities) && !string.IsNullOrEmpty(item.WondrousSpellLikeUsesToday))
+        {
+            string[] spells = item.WondrousSpellLikeAbilities.Split(',');
+            string zeros = string.Join(",", new string[spells.Length].Select(s => "0"));
+            if (item.WondrousSpellLikeUsesToday != zeros)
+            {
+                item.WondrousSpellLikeUsesToday = zeros;
+                resets++;
+            }
         }
 
         return resets;
