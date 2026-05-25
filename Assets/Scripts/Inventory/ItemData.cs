@@ -585,6 +585,58 @@ public class ItemData
     /// <summary>Spell Resistance granted by this item (0 = none).</summary>
     public int WondrousGrantsSR;
 
+    // --- Bow Attack Bonuses (Bracers of Archery) ---
+    /// <summary>Competence bonus to attack rolls with bows only (Bracers of Archery). 0 if N/A.</summary>
+    public int WondrousBowAttackBonus;
+    /// <summary>Competence bonus to damage rolls with bows only (Greater Bracers of Archery). 0 if N/A.</summary>
+    public int WondrousBowDamageBonus;
+
+    // --- Consumable Bead/Ball Tracking (Necklace of Fireballs, Beads of Force) ---
+    /// <summary>List of remaining bead damage dice (e.g., [5,5,5] for Necklace Type I with three 5d6 beads).
+    /// Each entry is the number of d6 dice for that bead. Remove entry when used. Null if not bead-tracked.</summary>
+    public List<int> WondrousBeadDamageDice;
+    /// <summary>Reflex save DC for bead effects (Necklace of Fireballs: 14-17, Beads of Force: 16).</summary>
+    public int WondrousBeadSaveDC;
+    /// <summary>Damage type for bead attacks ("fire" for necklace, "force" for beads of force).</summary>
+    public string WondrousBeadDamageType;
+    /// <summary>Radius of bead effect in feet (20 for necklace fireballs, 10 for beads of force).</summary>
+    public int WondrousBeadRadius;
+
+    // --- Weekly/Monthly Use Tracking ---
+    /// <summary>Maximum uses per week (Bag of Tricks: 3, Figurines: 1-3). 0 = not weekly-tracked.</summary>
+    public int WondrousUsesPerWeek;
+    /// <summary>Uses expended this week (runtime tracking). Resets on weekly rest cycle.</summary>
+    public int WondrousUsesThisWeek;
+    /// <summary>Maximum uses per month (Marble Elephant: 4). 0 = not monthly-tracked.</summary>
+    public int WondrousUsesPerMonth;
+    /// <summary>Uses expended this month (runtime tracking).</summary>
+    public int WondrousUsesThisMonth;
+
+    // --- Summoning Properties (Bag of Tricks, Figurines, Elemental Gems) ---
+    /// <summary>Whether this item can summon a creature.</summary>
+    public bool WondrousCanSummon;
+    /// <summary>List of possible creature IDs to summon (random selection for Bag of Tricks).
+    /// For figurines, single-entry list. For Bag of Tricks, 5 possible creatures.</summary>
+    public List<string> WondrousSummonCreatureIds;
+    /// <summary>Duration of summoned creature in rounds (10 min = 100, 1 hr = 600, etc.). 0 = permanent until dismissed.</summary>
+    public int WondrousSummonDurationRounds;
+    /// <summary>Whether summoned creature is a mount (can be ridden).</summary>
+    public bool WondrousSummonIsMountable;
+    /// <summary>Descriptive label for the summoned creature (for tooltips).</summary>
+    public string WondrousSummonDescription;
+
+    // --- Entrapment (Beads of Force, Iron Bands of Binding) ---
+    /// <summary>Whether this item creates an entrapment effect on use.</summary>
+    public bool WondrousCreatesEntrapment;
+    /// <summary>Save DC for entrapment (Fort for Beads of Force, Reflex for Iron Bands).</summary>
+    public int WondrousEntrapmentSaveDC;
+    /// <summary>Save type for entrapment: "fort", "reflex", "will".</summary>
+    public string WondrousEntrapmentSaveType;
+    /// <summary>Strength DC to break free of entrapment (Iron Bands: 30, Beads of Force: N/A uses Disintegrate).</summary>
+    public int WondrousEntrapmentBreakDC;
+    /// <summary>Duration of entrapment in rounds (Beads of Force: 100 = 10 min). 0 = until broken.</summary>
+    public int WondrousEntrapmentDurationRounds;
+
     /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
     public bool HasActiveRingAbility => IsRing && (
         (RingAbilities != null && RingAbilities.Count > 0) ||
@@ -1810,6 +1862,52 @@ public class ItemData
             }
             if (WondrousMaxCharges > 0)
                 stats += $"\nCharges: {WondrousCurrentCharges}/{WondrousMaxCharges}";
+            // Bow attack/damage bonuses (Bracers of Archery)
+            if (WondrousBowAttackBonus > 0)
+                stats += $"\n+{WondrousBowAttackBonus} competence bonus to bow attack rolls";
+            if (WondrousBowDamageBonus > 0)
+                stats += $"\n+{WondrousBowDamageBonus} competence bonus to bow damage rolls";
+            // Bead tracking (Necklace of Fireballs, Beads of Force)
+            if (WondrousBeadDamageDice != null && WondrousBeadDamageDice.Count > 0)
+            {
+                string beadList = string.Join(", ", WondrousBeadDamageDice.ConvertAll(d => $"{d}d6"));
+                stats += $"\nBeads remaining: {WondrousBeadDamageDice.Count} ({beadList} {WondrousBeadDamageType ?? "fire"})";
+                if (WondrousBeadRadius > 0)
+                    stats += $"\n{WondrousBeadRadius} ft radius, Reflex DC {WondrousBeadSaveDC} for half";
+            }
+            // Weekly/monthly use tracking
+            if (WondrousUsesPerWeek > 0)
+            {
+                int weekRemaining = WondrousUsesPerWeek - WondrousUsesThisWeek;
+                stats += $"\n{weekRemaining}/{WondrousUsesPerWeek} uses/week";
+            }
+            if (WondrousUsesPerMonth > 0)
+            {
+                int monthRemaining = WondrousUsesPerMonth - WondrousUsesThisMonth;
+                stats += $"\n{monthRemaining}/{WondrousUsesPerMonth} uses/month";
+            }
+            // Summoning properties
+            if (WondrousCanSummon && !string.IsNullOrEmpty(WondrousSummonDescription))
+            {
+                stats += $"\nSummons: {WondrousSummonDescription}";
+                if (WondrousSummonDurationRounds > 0)
+                {
+                    if (WondrousSummonDurationRounds >= 600)
+                        stats += $" ({WondrousSummonDurationRounds / 600} hr)";
+                    else if (WondrousSummonDurationRounds >= 10)
+                        stats += $" ({WondrousSummonDurationRounds / 10} min)";
+                    else
+                        stats += $" ({WondrousSummonDurationRounds} rounds)";
+                }
+                if (WondrousSummonIsMountable) stats += " [mountable]";
+            }
+            // Entrapment
+            if (WondrousCreatesEntrapment)
+            {
+                stats += $"\nEntrapment: {WondrousEntrapmentSaveType ?? "Reflex"} DC {WondrousEntrapmentSaveDC}";
+                if (WondrousEntrapmentBreakDC > 0)
+                    stats += $", Str/Escape Artist DC {WondrousEntrapmentBreakDC} to break free";
+            }
             if (IsIounStone)
                 stats += "\n✦ Ioun Stone (orbits head, AC 24, HP 10)";
             if (WondrousCasterLevel > 0)

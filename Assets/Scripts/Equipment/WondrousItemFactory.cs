@@ -403,20 +403,22 @@ public static class WondrousItemFactory
         return item;
     }
 
-    /// <summary>Bracers of Archery (Lesser: +1 competence; Greater: +2 competence to bow attacks). DMG p.250.</summary>
+    /// <summary>Bracers of Archery (Lesser: +1 attack; Greater: +2 attack, +1 damage with bows). DMG p.250.</summary>
     public static ItemData CreateBracersOfArchery(bool greater)
     {
         string id = greater ? WondrousItemNames.BRACERS_OF_ARCHERY_GREATER : WondrousItemNames.BRACERS_OF_ARCHERY_LESSER;
         string tier = greater ? "Greater" : "Lesser";
-        int bonus = greater ? 2 : 1;
+        int attackBonus = greater ? 2 : 1;
+        int damageBonus = greater ? 1 : 0;
         int price = greater ? 25000 : 5000;
-        var item = CreateBaseWondrous(id, $"Bracers of Archery, {tier}",
-            $"These wristbands grant a +{bonus} competence bonus on attack rolls made with bows.",
+        string desc = greater
+            ? "These wristbands grant a +2 competence bonus on attack rolls and +1 competence bonus on damage rolls made with bows. The wearer must have proficiency with the longbow or shortbow."
+            : "These wristbands grant a +1 competence bonus on attack rolls made with bows.";
+        var item = CreateBaseWondrous(id, $"Bracers of Archery, {tier}", desc,
             EquipSlot.Wrists, price, 4, 1f, WristsIcon, WristsColor);
         item.WondrousItemType = "attack";
-        item.WondrousSkillBonus = bonus;
-        item.WondrousSkillName = "Bow Attack";
-        item.WondrousSkillBonusType = "competence";
+        item.WondrousBowAttackBonus = attackBonus;
+        item.WondrousBowDamageBonus = damageBonus;
         item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
         return item;
     }
@@ -708,6 +710,319 @@ public static class WondrousItemFactory
         return item;
     }
 
+    // ════════════════════════════════════════════════════════════
+    //  PHASE 7: COMBAT ITEMS — Necklaces, beads, bands
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>Necklace of Fireballs (Type I–VII). DMG p.263.
+    /// Consumable beads that detonate as Fireball, 20 ft radius, Reflex for half.</summary>
+    public static ItemData CreateNecklaceOfFireballs(int type)
+    {
+        // DMG-accurate bead configurations per type
+        int[][] beadConfigs = {
+            null,                           // index 0 unused
+            new[] { 5, 5, 5 },              // Type I:   3 beads of 5d6 (1,650 gp)
+            new[] { 5, 5, 7, 7 },           // Type II:  2×5d6 + 2×7d6 (2,700 gp)
+            new[] { 5, 7, 7, 9 },           // Type III: 1×5d6 + 2×7d6 + 1×9d6 (4,350 gp)
+            new[] { 7, 9, 9 },              // Type IV:  1×7d6 + 2×9d6 (5,400 gp)
+            new[] { 9, 11, 11 },            // Type V:   1×9d6 + 2×11d6 (5,850 gp)
+            new[] { 11, 11, 11 },           // Type VI:  3×11d6 (8,100 gp)
+            new[] { 9, 11, 13 }             // Type VII: 1×9d6 + 1×11d6 + 1×13d6 (8,700 gp)
+        };
+        int[] prices = { 0, 1650, 2700, 4350, 5400, 5850, 8100, 8700 };
+        int[] saveDCs = { 0, 14, 15, 15, 15, 16, 16, 17 };
+
+        string id = $"necklace_of_fireballs_{type}";
+        int[] beads = beadConfigs[type];
+        string beadDesc = string.Join(", ", System.Array.ConvertAll(beads, d => $"{d}d6"));
+
+        var item = CreateBaseWondrous(id, $"Necklace of Fireballs (Type {ToRoman(type)})",
+            $"This necklace has {beads.Length} spheres that detach and hurl as Fireballs. Beads: {beadDesc} fire damage. 20 ft radius burst, Reflex DC {saveDCs[type]} for half.",
+            EquipSlot.Neck, prices[type], 10, 1f, NeckIcon, NeckColor);
+        item.WondrousItemType = "combat";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousUsesPerDay = -1; // Consumable (uses tracked via beads)
+        item.WondrousBeadDamageDice = new System.Collections.Generic.List<int>(beads);
+        item.WondrousBeadSaveDC = saveDCs[type];
+        item.WondrousBeadDamageType = "fire";
+        item.WondrousBeadRadius = 20;
+        return item;
+    }
+
+    /// <summary>Beads of Force (5 beads, 5d6 force + entrapment sphere). DMG p.248.</summary>
+    public static ItemData CreateBeadsOfForce()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.BEADS_OF_FORCE,
+            "Beads of Force",
+            "A set of 5 iron spheres. Throw as ranged attack (10 ft range increment). On impact: 5d6 force damage, 10 ft radius. Target must save Fort DC 16 or be trapped in an immobile sphere for 10 minutes (only Disintegrate can destroy it).",
+            EquipSlot.Slotless, 3000, 10, 0f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "combat";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousBeadDamageDice = new System.Collections.Generic.List<int> { 5, 5, 5, 5, 5 };
+        item.WondrousBeadSaveDC = 16;
+        item.WondrousBeadDamageType = "force";
+        item.WondrousBeadRadius = 10;
+        item.WondrousCreatesEntrapment = true;
+        item.WondrousEntrapmentSaveDC = 16;
+        item.WondrousEntrapmentSaveType = "fort";
+        item.WondrousEntrapmentDurationRounds = 100; // 10 minutes
+        return item;
+    }
+
+    /// <summary>Iron Bands of Binding (entangle target, DC 30 to break). DMG p.260.</summary>
+    public static ItemData CreateIronBandsOfBinding()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.IRON_BANDS_OF_BINDING,
+            "Iron Bands of Binding",
+            "Three rusty iron bands. Throw at target as ranged touch attack (10 ft range increment). On hit, bands expand and entangle target (Reflex DC 20 negates). Trapped creature must make DC 30 Strength check or DC 30 Escape Artist to break free. Single use.",
+            EquipSlot.Slotless, 26000, 13, 1f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "combat";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousUsesPerDay = -1; // Single use
+        item.WondrousCreatesEntrapment = true;
+        item.WondrousEntrapmentSaveDC = 20;
+        item.WondrousEntrapmentSaveType = "reflex";
+        item.WondrousEntrapmentBreakDC = 30;
+        item.WondrousEntrapmentDurationRounds = 0; // Until broken
+        return item;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  PHASE 8: SUMMONING ITEMS — Bags of Tricks, Gems, Figurines
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>Bag of Tricks (Gray/Rust/Tan). DMG p.248.
+    /// Pull fuzzy ball as standard action, summon random animal for 10 min. 3/week.</summary>
+    public static ItemData CreateBagOfTricks(string color)
+    {
+        string id, name;
+        int price, cl;
+        System.Collections.Generic.List<string> creatures;
+        string creatureDesc;
+
+        switch (color.ToLower())
+        {
+            case "gray":
+                id = WondrousItemNames.BAG_OF_TRICKS_GRAY;
+                name = "Bag of Tricks (Gray)";
+                price = 900; cl = 3;
+                creatures = new System.Collections.Generic.List<string> { "bat", "weasel", "badger", "wolverine", "wolf" };
+                creatureDesc = "bat, weasel, badger, wolverine, or wolf";
+                break;
+            case "rust":
+                id = WondrousItemNames.BAG_OF_TRICKS_RUST;
+                name = "Bag of Tricks (Rust)";
+                price = 3000; cl = 5;
+                creatures = new System.Collections.Generic.List<string> { "rat", "owl", "dog", "cheetah", "boar" };
+                creatureDesc = "rat, owl, dog, cheetah, or boar";
+                break;
+            case "tan":
+                id = WondrousItemNames.BAG_OF_TRICKS_TAN;
+                name = "Bag of Tricks (Tan)";
+                price = 16000; cl = 9;
+                creatures = new System.Collections.Generic.List<string> { "dire_weasel", "dire_wolverine", "ape", "black_bear", "brown_bear" };
+                creatureDesc = "dire weasel, dire wolverine, ape, black bear, or brown bear";
+                break;
+            default:
+                id = "bag_of_tricks_unknown";
+                name = "Bag of Tricks";
+                price = 900; cl = 3;
+                creatures = new System.Collections.Generic.List<string>();
+                creatureDesc = "unknown creature";
+                break;
+        }
+
+        var item = CreateBaseWondrous(id, name,
+            $"Pull a fuzzy ball from this bag as a standard action. It transforms into a random animal ({creatureDesc}) that serves the owner for 10 minutes. 3 uses per week.",
+            EquipSlot.Slotless, price, cl, 1f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "summoning";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousUsesPerWeek = 3;
+        item.WondrousCanSummon = true;
+        item.WondrousSummonCreatureIds = creatures;
+        item.WondrousSummonDurationRounds = 100; // 10 minutes
+        item.WondrousSummonDescription = creatureDesc;
+        return item;
+    }
+
+    /// <summary>Elemental Gem (summon Large Elemental for 1 hour, single use). DMG p.255.</summary>
+    public static ItemData CreateElementalGem(string element)
+    {
+        string id, name, desc;
+        string creatureId;
+        switch (element.ToLower())
+        {
+            case "air":
+                id = WondrousItemNames.ELEMENTAL_GEM_AIR;
+                name = "Elemental Gem (Air)";
+                creatureId = "large_air_elemental";
+                desc = "This blue sapphire, when crushed, summons a Large Air Elemental (11 HD) that serves for 1 hour. Single use.";
+                break;
+            case "earth":
+                id = WondrousItemNames.ELEMENTAL_GEM_EARTH;
+                name = "Elemental Gem (Earth)";
+                creatureId = "large_earth_elemental";
+                desc = "This brown topaz, when crushed, summons a Large Earth Elemental (11 HD) that serves for 1 hour. Single use.";
+                break;
+            case "fire":
+                id = WondrousItemNames.ELEMENTAL_GEM_FIRE;
+                name = "Elemental Gem (Fire)";
+                creatureId = "large_fire_elemental";
+                desc = "This red garnet, when crushed, summons a Large Fire Elemental (11 HD) that serves for 1 hour. Single use.";
+                break;
+            case "water":
+                id = WondrousItemNames.ELEMENTAL_GEM_WATER;
+                name = "Elemental Gem (Water)";
+                creatureId = "large_water_elemental";
+                desc = "This blue-green aquamarine, when crushed, summons a Large Water Elemental (11 HD) that serves for 1 hour. Single use.";
+                break;
+            default:
+                id = $"elemental_gem_{element}";
+                name = $"Elemental Gem ({element})";
+                creatureId = $"large_{element}_elemental";
+                desc = $"Summons a Large {element} Elemental.";
+                break;
+        }
+
+        var item = CreateBaseWondrous(id, name, desc,
+            EquipSlot.Slotless, 2250, 11, 0f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "summoning";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousUsesPerDay = -1; // Single use (consumable)
+        item.WondrousCanSummon = true;
+        item.WondrousSummonCreatureIds = new System.Collections.Generic.List<string> { creatureId };
+        item.WondrousSummonDurationRounds = 600; // 1 hour
+        item.WondrousSummonDescription = $"Large {char.ToUpper(element[0]) + element.Substring(1)} Elemental (11 HD)";
+        return item;
+    }
+
+    /// <summary>Figurine of Wondrous Power (8 types). DMG p.256.</summary>
+    public static ItemData CreateFigurineOfWondrousPower(string figurineType)
+    {
+        string id, name, desc, creatureId, summonDesc;
+        int price, cl, durationRounds, usesPerWeek = 0, usesPerMonth = 0, usesPerDay = 0;
+        bool mountable = false;
+
+        switch (figurineType.ToLower())
+        {
+            case "silver_raven":
+                id = WondrousItemNames.FIGURINE_OF_WONDROUS_POWER_SILVER_RAVEN;
+                name = "Figurine of Wondrous Power (Silver Raven)";
+                price = 3800; cl = 6;
+                creatureId = "raven";
+                desc = "This tiny silver raven figurine transforms into a raven for up to 12 hours. Can act as a messenger. Usable once per week.";
+                summonDesc = "Raven (12 hr, messenger)";
+                durationRounds = 7200; // 12 hours
+                usesPerWeek = 1;
+                break;
+            case "serpentine_owl":
+                id = WondrousItemNames.FIGURINE_OF_WONDROUS_POWER_SERPENTINE_OWL;
+                name = "Figurine of Wondrous Power (Serpentine Owl)";
+                price = 9100; cl = 11;
+                creatureId = "giant_owl";
+                desc = "This serpentine stone owl figurine transforms into a giant owl for up to 8 hours. Can be ridden. Usable 3 times per week.";
+                summonDesc = "Giant Owl (8 hr)";
+                durationRounds = 4800; // 8 hours
+                usesPerWeek = 3;
+                mountable = true;
+                break;
+            case "bronze_griffon":
+                id = WondrousItemNames.FIGURINE_OF_WONDROUS_POWER_BRONZE_GRIFFON;
+                name = "Figurine of Wondrous Power (Bronze Griffon)";
+                price = 10000; cl = 11;
+                creatureId = "griffon";
+                desc = "This bronze griffon figurine transforms into a griffon for up to 6 hours. Can be ridden and will fight. Usable twice per week.";
+                summonDesc = "Griffon (6 hr)";
+                durationRounds = 3600; // 6 hours
+                usesPerWeek = 2;
+                mountable = true;
+                break;
+            case "ebony_fly":
+                id = WondrousItemNames.FIGURINE_OF_WONDROUS_POWER_EBONY_FLY;
+                name = "Figurine of Wondrous Power (Ebony Fly)";
+                price = 10000; cl = 11;
+                creatureId = "giant_fly";
+                desc = "This ebony fly figurine transforms into a giant fly mount for up to 12 hours. Can carry 500 lbs. Usable 3 times per week.";
+                summonDesc = "Giant Fly (12 hr, 500 lbs)";
+                durationRounds = 7200; // 12 hours
+                usesPerWeek = 3;
+                mountable = true;
+                break;
+            case "onyx_dog":
+                id = WondrousItemNames.FIGURINE_OF_WONDROUS_POWER_ONYX_DOG;
+                name = "Figurine of Wondrous Power (Onyx Dog)";
+                price = 15500; cl = 11;
+                creatureId = "riding_dog";
+                desc = "This onyx dog figurine transforms into a riding dog for up to 6 hours. Has exceptional tracking ability (+8 Survival). Usable once per week.";
+                summonDesc = "Riding Dog (6 hr, tracker)";
+                durationRounds = 3600; // 6 hours
+                usesPerWeek = 1;
+                break;
+            case "golden_lions":
+                id = WondrousItemNames.FIGURINE_OF_WONDROUS_POWER_GOLDEN_LIONS;
+                name = "Figurine of Wondrous Power (Golden Lions)";
+                price = 16500; cl = 11;
+                creatureId = "lion";
+                desc = "This pair of gold lion figurines transforms into 2 lions for up to 1 hour. They fight on your behalf. Usable once per day.";
+                summonDesc = "2 Lions (1 hr)";
+                durationRounds = 600; // 1 hour
+                usesPerDay = 1;
+                break;
+            case "marble_elephant":
+                id = WondrousItemNames.FIGURINE_OF_WONDROUS_POWER_MARBLE_ELEPHANT;
+                name = "Figurine of Wondrous Power (Marble Elephant)";
+                price = 17000; cl = 11;
+                creatureId = "elephant";
+                desc = "This marble elephant figurine transforms into an elephant for up to 24 hours. Can fight or carry 2,000 lbs. Usable 4 times per month.";
+                summonDesc = "Elephant (24 hr, 2,000 lbs)";
+                durationRounds = 14400; // 24 hours
+                usesPerMonth = 4;
+                mountable = true;
+                break;
+            case "obsidian_steed":
+                id = WondrousItemNames.FIGURINE_OF_WONDROUS_POWER_OBSIDIAN_STEED;
+                name = "Figurine of Wondrous Power (Obsidian Steed)";
+                price = 28500; cl = 15;
+                creatureId = "nightmare";
+                desc = "This obsidian horse figurine transforms into a nightmare for up to 24 hours. Can fly and plane shift. Usable once per week.";
+                summonDesc = "Nightmare (24 hr, fly, plane shift)";
+                durationRounds = 14400; // 24 hours
+                usesPerWeek = 1;
+                mountable = true;
+                break;
+            default:
+                id = $"figurine_{figurineType}";
+                name = $"Figurine of Wondrous Power ({figurineType})";
+                price = 10000; cl = 11;
+                creatureId = figurineType;
+                desc = "A magical figurine.";
+                summonDesc = figurineType;
+                durationRounds = 600;
+                usesPerWeek = 1;
+                break;
+        }
+
+        var item = CreateBaseWondrous(id, name, desc,
+            EquipSlot.Slotless, price, cl, 1f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "summoning";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousCanSummon = true;
+        item.WondrousSummonCreatureIds = new System.Collections.Generic.List<string> { creatureId };
+        item.WondrousSummonDurationRounds = durationRounds;
+        item.WondrousSummonIsMountable = mountable;
+        item.WondrousSummonDescription = summonDesc;
+        if (usesPerWeek > 0) item.WondrousUsesPerWeek = usesPerWeek;
+        if (usesPerMonth > 0) item.WondrousUsesPerMonth = usesPerMonth;
+        if (usesPerDay > 0) item.WondrousUsesPerDay = usesPerDay;
+        return item;
+    }
+
     /// <summary>Pearl of Power (1st–9th: recover one spell slot of given level). DMG p.263.</summary>
     public static ItemData CreatePearlOfPower(int spellLevel)
     {
@@ -800,6 +1115,12 @@ public static class WondrousItemFactory
             case 2: return "II";
             case 3: return "III";
             case 4: return "IV";
+            case 5: return "V";
+            case 6: return "VI";
+            case 7: return "VII";
+            case 8: return "VIII";
+            case 9: return "IX";
+            case 10: return "X";
             default: return num.ToString();
         }
     }

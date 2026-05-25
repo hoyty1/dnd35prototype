@@ -70,21 +70,12 @@ public static class WondrousItemActivation
 
     private static bool TryCommandWordActivation(CharacterController user, ItemData item, out string resultMessage)
     {
-        // Check daily use limit
-        if (!CheckDailyUses(item, out resultMessage))
+        // Check all use limits (daily, weekly, monthly, charges)
+        if (!CheckAllUseLimits(item, out resultMessage))
             return false;
 
-        // Check charge-based items
-        if (!CheckCharges(item, out resultMessage))
-            return false;
-
-        // Consume a daily use
-        if (item.WondrousUsesPerDay > 0)
-            item.WondrousUsesToday++;
-
-        // Consume a charge
-        if (item.WondrousMaxCharges > 0)
-            item.WondrousCurrentCharges--;
+        // Consume uses
+        ConsumeUse(item);
 
         resultMessage = $"✨ {user.Stats.CharacterName} speaks the command word to activate {item.Name}!";
         Debug.Log($"[WondrousActivation] {user.Stats.CharacterName} activated {item.Name} (command word).");
@@ -97,21 +88,12 @@ public static class WondrousItemActivation
 
     private static bool TryUseActivation(CharacterController user, ItemData item, out string resultMessage)
     {
-        // Check daily use limit
-        if (!CheckDailyUses(item, out resultMessage))
+        // Check all use limits (daily, weekly, monthly, charges)
+        if (!CheckAllUseLimits(item, out resultMessage))
             return false;
 
-        // Check charge-based items
-        if (!CheckCharges(item, out resultMessage))
-            return false;
-
-        // Consume a daily use
-        if (item.WondrousUsesPerDay > 0)
-            item.WondrousUsesToday++;
-
-        // Consume a charge
-        if (item.WondrousMaxCharges > 0)
-            item.WondrousCurrentCharges--;
+        // Consume uses
+        ConsumeUse(item);
 
         resultMessage = $"✨ {user.Stats.CharacterName} activates {item.Name}!";
         Debug.Log($"[WondrousActivation] {user.Stats.CharacterName} activated {item.Name} (use-activated).");
@@ -119,7 +101,7 @@ public static class WondrousItemActivation
     }
 
     // ════════════════════════════════════════════════════════════
-    //  Daily Use Tracking
+    //  Daily / Weekly / Monthly Use Tracking
     // ════════════════════════════════════════════════════════════
 
     private static bool CheckDailyUses(ItemData item, out string message)
@@ -130,6 +112,34 @@ public static class WondrousItemActivation
         if (item.WondrousUsesToday >= item.WondrousUsesPerDay)
         {
             message = $"{item.Name} has no uses remaining today ({item.WondrousUsesToday}/{item.WondrousUsesPerDay}).";
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>Check if item has weekly uses remaining (Phase 7/8: Figurines, etc.).</summary>
+    private static bool CheckWeeklyUses(ItemData item, out string message)
+    {
+        message = "";
+        if (item.WondrousUsesPerWeek <= 0) return true; // Not weekly-tracked
+
+        if (item.WondrousUsesThisWeek >= item.WondrousUsesPerWeek)
+        {
+            message = $"{item.Name} has no uses remaining this week ({item.WondrousUsesThisWeek}/{item.WondrousUsesPerWeek}).";
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>Check if item has monthly uses remaining (Phase 8: Marble Elephant, etc.).</summary>
+    private static bool CheckMonthlyUses(ItemData item, out string message)
+    {
+        message = "";
+        if (item.WondrousUsesPerMonth <= 0) return true; // Not monthly-tracked
+
+        if (item.WondrousUsesThisMonth >= item.WondrousUsesPerMonth)
+        {
+            message = $"{item.Name} has no uses remaining this month ({item.WondrousUsesThisMonth}/{item.WondrousUsesPerMonth}).";
             return false;
         }
         return true;
@@ -146,6 +156,29 @@ public static class WondrousItemActivation
             return false;
         }
         return true;
+    }
+
+    /// <summary>Check all use limits (daily, weekly, monthly, charges) in order. Returns false if any limit is hit.</summary>
+    private static bool CheckAllUseLimits(ItemData item, out string message)
+    {
+        if (!CheckDailyUses(item, out message)) return false;
+        if (!CheckWeeklyUses(item, out message)) return false;
+        if (!CheckMonthlyUses(item, out message)) return false;
+        if (!CheckCharges(item, out message)) return false;
+        return true;
+    }
+
+    /// <summary>Consume one use from the appropriate tracking pool (daily, weekly, monthly, charges).</summary>
+    private static void ConsumeUse(ItemData item)
+    {
+        if (item.WondrousUsesPerDay > 0)
+            item.WondrousUsesToday++;
+        if (item.WondrousUsesPerWeek > 0)
+            item.WondrousUsesThisWeek++;
+        if (item.WondrousUsesPerMonth > 0)
+            item.WondrousUsesThisMonth++;
+        if (item.WondrousMaxCharges > 0)
+            item.WondrousCurrentCharges--;
     }
 
     // ════════════════════════════════════════════════════════════
@@ -244,6 +277,111 @@ public static class WondrousItemActivation
         }
 
         return resets;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Weekly/Monthly Rest Resets
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Reset weekly uses for all wondrous items. Called when a full week of in-game time passes
+    /// (typically tracked by the game calendar or after 7 rests).
+    /// </summary>
+    public static void OnWeeklyReset(List<CharacterController> partyMembers)
+    {
+        if (partyMembers == null) return;
+
+        int resetCount = 0;
+        foreach (var pc in partyMembers)
+        {
+            if (pc == null) continue;
+            var inv = pc.GetComponent<InventoryComponent>();
+            if (inv == null) continue;
+            resetCount += ResetWeeklyUsesForInventory(inv.CharacterInventory);
+        }
+
+        if (resetCount > 0)
+            Debug.Log($"[WondrousActivation] Reset weekly uses for {resetCount} wondrous items.");
+    }
+
+    /// <summary>
+    /// Reset monthly uses for all wondrous items. Called when a full month of in-game time passes.
+    /// </summary>
+    public static void OnMonthlyReset(List<CharacterController> partyMembers)
+    {
+        if (partyMembers == null) return;
+
+        int resetCount = 0;
+        foreach (var pc in partyMembers)
+        {
+            if (pc == null) continue;
+            var inv = pc.GetComponent<InventoryComponent>();
+            if (inv == null) continue;
+            resetCount += ResetMonthlyUsesForInventory(inv.CharacterInventory);
+        }
+
+        if (resetCount > 0)
+            Debug.Log($"[WondrousActivation] Reset monthly uses for {resetCount} wondrous items.");
+    }
+
+    private static int ResetWeeklyUsesForInventory(Inventory inventory)
+    {
+        if (inventory == null) return 0;
+        int count = 0;
+        foreach (EquipSlot slot in Inventory.AllEquipmentSlots)
+        {
+            ItemData item = inventory.GetEquipped(slot);
+            if (item != null && item.IsWondrous && item.WondrousUsesThisWeek > 0)
+            {
+                item.WondrousUsesThisWeek = 0;
+                count++;
+            }
+        }
+        if (inventory.SlotlessItems != null)
+            foreach (var item in inventory.SlotlessItems)
+                if (item != null && item.IsWondrous && item.WondrousUsesThisWeek > 0)
+                {
+                    item.WondrousUsesThisWeek = 0;
+                    count++;
+                }
+        if (inventory.GeneralSlots != null)
+            foreach (var item in inventory.GeneralSlots)
+                if (item != null && item.IsWondrous && item.WondrousUsesThisWeek > 0)
+                {
+                    item.WondrousUsesThisWeek = 0;
+                    count++;
+                }
+        return count;
+    }
+
+    private static int ResetMonthlyUsesForInventory(Inventory inventory)
+    {
+        if (inventory == null) return 0;
+        int count = 0;
+        foreach (EquipSlot slot in Inventory.AllEquipmentSlots)
+        {
+            ItemData item = inventory.GetEquipped(slot);
+            if (item != null && item.IsWondrous && item.WondrousUsesThisMonth > 0)
+            {
+                item.WondrousUsesThisMonth = 0;
+                count++;
+            }
+        }
+        if (inventory.SlotlessItems != null)
+            foreach (var item in inventory.SlotlessItems)
+                if (item != null && item.IsWondrous && item.WondrousUsesThisMonth > 0)
+                {
+                    item.WondrousUsesThisMonth = 0;
+                    count++;
+                }
+        if (inventory.GeneralSlots != null)
+            foreach (var item in inventory.GeneralSlots)
+                if (item != null && item.IsWondrous && item.WondrousUsesThisMonth > 0)
+                {
+                    item.WondrousUsesThisMonth = 0;
+                    count++;
+                }
+        return count;
     }
 
     // ════════════════════════════════════════════════════════════
@@ -377,18 +515,46 @@ public static class WondrousItemActivation
         return item.WondrousInstanceId;
     }
 
-    /// <summary>Check if a wondrous item has remaining daily uses.</summary>
+    /// <summary>Check if a wondrous item has remaining uses (daily, weekly, monthly, or charges).</summary>
     public static bool HasUsesRemaining(ItemData item)
     {
         if (item == null || !item.IsWondrous) return false;
-        if (item.WondrousUsesPerDay <= 0) return true; // Unlimited
-        return item.WondrousUsesToday < item.WondrousUsesPerDay;
+        if (item.WondrousUsesPerDay > 0 && item.WondrousUsesToday >= item.WondrousUsesPerDay) return false;
+        if (item.WondrousUsesPerWeek > 0 && item.WondrousUsesThisWeek >= item.WondrousUsesPerWeek) return false;
+        if (item.WondrousUsesPerMonth > 0 && item.WondrousUsesThisMonth >= item.WondrousUsesPerMonth) return false;
+        if (item.WondrousMaxCharges > 0 && item.WondrousCurrentCharges <= 0) return false;
+        return true;
     }
 
-    /// <summary>Get remaining uses for display.</summary>
+    /// <summary>Get remaining uses for display (most restrictive limit).</summary>
     public static int GetRemainingUses(ItemData item)
     {
-        if (item == null || !item.IsWondrous || item.WondrousUsesPerDay <= 0) return -1; // -1 = unlimited
-        return Mathf.Max(0, item.WondrousUsesPerDay - item.WondrousUsesToday);
+        if (item == null || !item.IsWondrous) return -1;
+
+        int remaining = int.MaxValue;
+        bool hasAnyLimit = false;
+
+        if (item.WondrousUsesPerDay > 0)
+        {
+            remaining = Mathf.Min(remaining, Mathf.Max(0, item.WondrousUsesPerDay - item.WondrousUsesToday));
+            hasAnyLimit = true;
+        }
+        if (item.WondrousUsesPerWeek > 0)
+        {
+            remaining = Mathf.Min(remaining, Mathf.Max(0, item.WondrousUsesPerWeek - item.WondrousUsesThisWeek));
+            hasAnyLimit = true;
+        }
+        if (item.WondrousUsesPerMonth > 0)
+        {
+            remaining = Mathf.Min(remaining, Mathf.Max(0, item.WondrousUsesPerMonth - item.WondrousUsesThisMonth));
+            hasAnyLimit = true;
+        }
+        if (item.WondrousMaxCharges > 0)
+        {
+            remaining = Mathf.Min(remaining, Mathf.Max(0, item.WondrousCurrentCharges));
+            hasAnyLimit = true;
+        }
+
+        return hasAnyLimit ? remaining : -1; // -1 = unlimited
     }
 }

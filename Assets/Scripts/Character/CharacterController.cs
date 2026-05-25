@@ -4742,18 +4742,24 @@ public class CharacterController : MonoBehaviour
 
         int baseAttackBonusUsed = baseAttackBonusOverride ?? Stats.BaseAttackBonus;
 
+        // Bracers of Archery: competence bonus to bow attack/damage (Phase 7)
+        // Bows use RequiresAmmoType == Arrow; crossbows use Bolt, slings use SlingBullet
+        bool isBowWeapon = isRanged && equippedWeapon != null && equippedWeapon.RequiresAmmoType == AmmunitionType.Arrow;
+        int wondrousBowAtkBonus = isBowWeapon ? Stats.WondrousBowAttackBonus : 0;
+        int wondrousBowDmgBonus = isBowWeapon ? Stats.WondrousBowDamageBonus : 0;
+
         int totalAtkMod = baseAttackBonusUsed + abilityMod + Stats.SizeModifier
                           + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                           + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                           + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                           + weaponNonProfPenalty + armorNonProfPenalty + moraleAttackBonus + conditionAttackPenalty
                           + aidAnotherAttackBonus + damageModeProfile.AttackPenalty + additionalAttackModifier
-                          + solidFogAtkPenalty;
+                          + solidFogAtkPenalty + wondrousBowAtkBonus;
 
         int critThreatMin = featMods.CritThreatMin;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
-        int totalFeatDmgBonus = featMods.TotalFeatDamageBonus + solidFogDmgPenalty;
+        int totalFeatDmgBonus = featMods.TotalFeatDamageBonus + solidFogDmgPenalty + wondrousBowDmgBonus;
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
         // D&D 3.5e Magic Stone: when firing a sling with active Magic Stone charges,
@@ -4994,7 +5000,12 @@ public class CharacterController : MonoBehaviour
         bool preciseShotNegated = false;
         int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
 
-        int totalFeatDmgBonus = fullAtkFeatMods.TotalFeatDamageBonus + solidFogDmgPenalty;
+        // Bracers of Archery: competence bonus to bow attack/damage (Phase 7)
+        bool fullAtkIsBow = isRanged && equippedWeapon != null && equippedWeapon.RequiresAmmoType == AmmunitionType.Arrow;
+        int fullAtkBowAtkBonus = fullAtkIsBow ? Stats.WondrousBowAttackBonus : 0;
+        int fullAtkBowDmgBonus = fullAtkIsBow ? Stats.WondrousBowDamageBonus : 0;
+
+        int totalFeatDmgBonus = fullAtkFeatMods.TotalFeatDamageBonus + solidFogDmgPenalty + fullAtkBowDmgBonus;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
@@ -5140,7 +5151,7 @@ public class CharacterController : MonoBehaviour
                          + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                          + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty
                          + aidAnotherAttackBonus + damageModeProfile.AttackPenalty
-                         + solidFogAtkPenalty;
+                         + solidFogAtkPenalty + fullAtkBowAtkBonus;
 
             // The base bonus from GetIterativeAttackBonuses already includes STRMod + SizeModifier.
             if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))

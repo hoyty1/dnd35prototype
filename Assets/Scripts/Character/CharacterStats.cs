@@ -2540,6 +2540,12 @@ public class CharacterStats
     /// </summary>
     public Dictionary<string, int> WondrousSkillBonuses = new Dictionary<string, int>();
 
+    // ── Wondrous Item Bow Bonuses (Phase 7: Bracers of Archery) ──
+    /// <summary>Competence bonus to bow attack rolls from Bracers of Archery. Highest wins.</summary>
+    public int WondrousBowAttackBonus;
+    /// <summary>Competence bonus to bow damage rolls from Bracers of Archery (Greater). Highest wins.</summary>
+    public int WondrousBowDamageBonus;
+
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
     public int TempHP;
 

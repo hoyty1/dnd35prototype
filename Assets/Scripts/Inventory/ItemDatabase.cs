@@ -2074,6 +2074,35 @@ public static class ItemDatabase
         clone.WondrousIsExtradimensional = src.WondrousIsExtradimensional;
         clone.WondrousApparentWeight = src.WondrousApparentWeight;
         clone.WondrousQuickRetrievalEnabled = src.WondrousQuickRetrievalEnabled;
+        // Bow attack bonuses (Bracers of Archery)
+        clone.WondrousBowAttackBonus = src.WondrousBowAttackBonus;
+        clone.WondrousBowDamageBonus = src.WondrousBowDamageBonus;
+        // Bead/ball tracking (Necklace of Fireballs, Beads of Force)
+        clone.WondrousBeadDamageDice = src.WondrousBeadDamageDice != null
+            ? new System.Collections.Generic.List<int>(src.WondrousBeadDamageDice)
+            : null;
+        clone.WondrousBeadSaveDC = src.WondrousBeadSaveDC;
+        clone.WondrousBeadDamageType = src.WondrousBeadDamageType;
+        clone.WondrousBeadRadius = src.WondrousBeadRadius;
+        // Weekly/monthly use tracking
+        clone.WondrousUsesPerWeek = src.WondrousUsesPerWeek;
+        clone.WondrousUsesThisWeek = 0; // Reset on clone
+        clone.WondrousUsesPerMonth = src.WondrousUsesPerMonth;
+        clone.WondrousUsesThisMonth = 0; // Reset on clone
+        // Summoning properties
+        clone.WondrousCanSummon = src.WondrousCanSummon;
+        clone.WondrousSummonCreatureIds = src.WondrousSummonCreatureIds != null
+            ? new System.Collections.Generic.List<string>(src.WondrousSummonCreatureIds)
+            : null;
+        clone.WondrousSummonDurationRounds = src.WondrousSummonDurationRounds;
+        clone.WondrousSummonIsMountable = src.WondrousSummonIsMountable;
+        clone.WondrousSummonDescription = src.WondrousSummonDescription;
+        // Entrapment
+        clone.WondrousCreatesEntrapment = src.WondrousCreatesEntrapment;
+        clone.WondrousEntrapmentSaveDC = src.WondrousEntrapmentSaveDC;
+        clone.WondrousEntrapmentSaveType = src.WondrousEntrapmentSaveType;
+        clone.WondrousEntrapmentBreakDC = src.WondrousEntrapmentBreakDC;
+        clone.WondrousEntrapmentDurationRounds = src.WondrousEntrapmentDurationRounds;
         clone.IsIounStone = src.IsIounStone;
         clone.IounStoneType = src.IounStoneType;
         clone.WondrousCasterLevel = src.WondrousCasterLevel;

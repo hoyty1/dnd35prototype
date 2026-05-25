@@ -122,6 +122,33 @@ public static class WondrousItemDatabase
         Register(WondrousItemFactory.CreateStoneOfGoodLuck());
 
         // ════════════════════════════════════════════════════════════
+        //  PHASE 7: COMBAT ITEMS — Necklaces, beads, bands
+        // ════════════════════════════════════════════════════════════
+        for (int type = 1; type <= 7; type++)
+            Register(WondrousItemFactory.CreateNecklaceOfFireballs(type));
+        Register(WondrousItemFactory.CreateBeadsOfForce());
+        Register(WondrousItemFactory.CreateIronBandsOfBinding());
+
+        // ════════════════════════════════════════════════════════════
+        //  PHASE 8: SUMMONING ITEMS — Bags of Tricks, Gems, Figurines
+        // ════════════════════════════════════════════════════════════
+        Register(WondrousItemFactory.CreateBagOfTricks("gray"));
+        Register(WondrousItemFactory.CreateBagOfTricks("rust"));
+        Register(WondrousItemFactory.CreateBagOfTricks("tan"));
+        Register(WondrousItemFactory.CreateElementalGem("air"));
+        Register(WondrousItemFactory.CreateElementalGem("earth"));
+        Register(WondrousItemFactory.CreateElementalGem("fire"));
+        Register(WondrousItemFactory.CreateElementalGem("water"));
+        Register(WondrousItemFactory.CreateFigurineOfWondrousPower("silver_raven"));
+        Register(WondrousItemFactory.CreateFigurineOfWondrousPower("serpentine_owl"));
+        Register(WondrousItemFactory.CreateFigurineOfWondrousPower("bronze_griffon"));
+        Register(WondrousItemFactory.CreateFigurineOfWondrousPower("ebony_fly"));
+        Register(WondrousItemFactory.CreateFigurineOfWondrousPower("onyx_dog"));
+        Register(WondrousItemFactory.CreateFigurineOfWondrousPower("golden_lions"));
+        Register(WondrousItemFactory.CreateFigurineOfWondrousPower("marble_elephant"));
+        Register(WondrousItemFactory.CreateFigurineOfWondrousPower("obsidian_steed"));
+
+        // ════════════════════════════════════════════════════════════
         //  TEST ITEMS — One per slot for verification
         // ════════════════════════════════════════════════════════════
         Register(WondrousItemFactory.CreateTestItem(EquipSlot.Head, "Head"));

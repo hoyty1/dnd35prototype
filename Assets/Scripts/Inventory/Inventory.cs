@@ -1065,6 +1065,10 @@ public class Inventory
         OwnerStats.WondrousHasDarkvision = false;
         OwnerStats.WondrousDarkvisionRange = 0;
 
+        // Reset wondrous bow bonuses (Phase 7: Bracers of Archery)
+        OwnerStats.WondrousBowAttackBonus = 0;
+        OwnerStats.WondrousBowDamageBonus = 0;
+
         // Reset wondrous skill bonuses (Phase 5: Stealth/Detection)
         if (OwnerStats.WondrousSkillBonuses == null)
             OwnerStats.WondrousSkillBonuses = new System.Collections.Generic.Dictionary<string, int>();
@@ -1183,6 +1187,13 @@ public class Inventory
             OwnerStats.WondrousHasDarkvision = true;
             OwnerStats.WondrousDarkvisionRange = Mathf.Max(OwnerStats.WondrousDarkvisionRange, item.WondrousDarkvisionRange);
         }
+
+        // --- Bow Attack/Damage Bonuses (Phase 7: Bracers of Archery) ---
+        // Competence bonuses to bow attacks don't stack; use highest.
+        if (item.WondrousBowAttackBonus > 0)
+            OwnerStats.WondrousBowAttackBonus = Mathf.Max(OwnerStats.WondrousBowAttackBonus, item.WondrousBowAttackBonus);
+        if (item.WondrousBowDamageBonus > 0)
+            OwnerStats.WondrousBowDamageBonus = Mathf.Max(OwnerStats.WondrousBowDamageBonus, item.WondrousBowDamageBonus);
 
         // --- Skill Bonuses (Phase 5: Boots of Elvenkind, Cloak of Elvenkind, Eyes of the Eagle, etc.) ---
         // Same bonus type to same skill doesn't stack; use highest.
