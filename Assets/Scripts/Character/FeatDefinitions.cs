@@ -760,6 +760,19 @@ public static class FeatDefinitions
         trample.Benefit.AllowsTrample = true;
         trample.Benefit.Description = "Target can't avoid mounted overrun, mount gets hoof attack";
         Add(trample);
+
+        // --- Mounted Archery (PHB p.98) ---
+        var mountedArchery = new FeatDefinition("Mounted Archery",
+            "The penalty you take when using a ranged weapon while mounted is halved: -2 instead of -4 if your mount is taking a double move, and -4 instead of -8 if your mount is running.",
+            FeatType.MountedCombat)
+        {
+            IsFighterBonus = true
+        };
+        mountedArchery.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.SkillRanks, "Ride", 1));
+        mountedArchery.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Feat, "Mounted Combat", 0));
+        mountedArchery.Benefit.AllowsMountedArchery = true;
+        mountedArchery.Benefit.Description = "Halve ranged attack penalty while mounted (-2 instead of -4)";
+        Add(mountedArchery);
     }
 
     // ========================================================================

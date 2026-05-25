@@ -2115,6 +2115,10 @@ public class CharacterStats
     /// <summary>Whether Deflect Arrows has been used this round.</summary>
     public bool DeflectArrowsUsedThisRound;
 
+    // ── Mounted Combat tracking ──
+    /// <summary>Whether Mounted Combat feat has been used this round (once per round).</summary>
+    public bool HasUsedMountedCombatThisRound;
+
     // ── Spring Attack / Shot on the Run tracking ──
     /// <summary>
     /// When using Spring Attack or Shot on the Run, stores the target that was attacked

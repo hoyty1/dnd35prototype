@@ -35,6 +35,8 @@ public static class ClassSkillDefinitions
         ("Swim",                AbilityType.STR, false),
         ("Tumble",              AbilityType.DEX, true),
         ("Use Magic Device",    AbilityType.CHA, true),
+        ("Ride",                AbilityType.DEX, false),
+        ("Handle Animal",       AbilityType.CHA, true),
         // Knowledge skills (INT-based, trained only) — used by Knowledge domain, Bards, Wizards
         ("Knowledge (Arcana)",       AbilityType.INT, true),
         ("Knowledge (Religion)",     AbilityType.INT, true),

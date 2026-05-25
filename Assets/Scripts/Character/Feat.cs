@@ -208,6 +208,7 @@ public class FeatBenefit
     public bool AllowsRideByAttack;      // Ride-By Attack
     public bool AllowsSpiritedCharge;    // Spirited Charge
     public bool AllowsTrample;           // Trample
+    public bool AllowsMountedArchery;    // Mounted Archery
     public bool GrantsWeaponFinesse;     // Weapon Finesse
     public bool GrantsCombatCasting;     // Combat Casting
     public bool GrantsAugmentSummoning;  // Augment Summoning

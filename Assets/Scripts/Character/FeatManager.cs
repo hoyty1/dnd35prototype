@@ -920,6 +920,54 @@ public static class FeatManager
         return 1;
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // PHASE 3: MOUNTED COMBAT FEATS (D&D 3.5 PHB p.98-101, 157-158)
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── MOUNTED COMBAT (PHB p.98) ──
+
+    /// <summary>Does this character have Mounted Combat?</summary>
+    public static bool HasMountedCombat(CharacterStats stats) => stats != null && stats.HasFeat("Mounted Combat");
+
+    // ── RIDE-BY ATTACK (PHB p.99) ──
+
+    /// <summary>Does this character have Ride-By Attack?</summary>
+    public static bool HasRideByAttack(CharacterStats stats) => stats != null && stats.HasFeat("Ride-By Attack");
+
+    // ── SPIRITED CHARGE (PHB p.100) ──
+
+    /// <summary>Does this character have Spirited Charge?</summary>
+    public static bool HasSpiritedCharge(CharacterStats stats) => stats != null && stats.HasFeat("Spirited Charge");
+
+    // ── TRAMPLE (PHB p.101) ──
+
+    /// <summary>Does this character have Trample?</summary>
+    public static bool HasTrample(CharacterStats stats) => stats != null && stats.HasFeat("Trample");
+
+    // ── MOUNTED ARCHERY (PHB p.98) ──
+
+    /// <summary>Does this character have Mounted Archery?</summary>
+    public static bool HasMountedArchery(CharacterStats stats) => stats != null && stats.HasFeat("Mounted Archery");
+
+    /// <summary>
+    /// Get the ranged penalty while mounted. Delegates to MountedCombatSystem.
+    /// Returns 0 if not mounted.
+    /// </summary>
+    public static int GetMountedRangedPenalty(CharacterController rider, bool mountIsRunning = false)
+    {
+        return MountedCombatSystem.GetMountedRangedPenalty(rider, mountIsRunning);
+    }
+
+    /// <summary>
+    /// Check if a character has any mounted combat feat.
+    /// </summary>
+    public static bool HasAnyMountedFeat(CharacterStats stats)
+    {
+        if (stats == null) return false;
+        return HasMountedCombat(stats) || HasRideByAttack(stats) ||
+               HasSpiritedCharge(stats) || HasTrample(stats) || HasMountedArchery(stats);
+    }
+
     // ========================================================================
     // FEAT SUMMARY FOR DISPLAY
     // ========================================================================
@@ -1003,6 +1051,13 @@ public static class FeatManager
         if (HasNaturalSpell(stats)) lines.Add("Natural Spell: Cast spells while in wild shape");
         if (HasExtraTurning(stats)) lines.Add($"Extra Turning: +{GetExtraTurningUses(stats)} turn undead uses/day");
         if (HasImprovedTurning(stats)) lines.Add($"Improved Turning: +{GetImprovedTurningLevelBonus(stats)} effective cleric level for turning");
+
+        // Phase 3 Mounted Combat feats
+        if (HasMountedCombat(stats)) lines.Add("Mounted Combat: Ride check to negate hit on mount (1/round)");
+        if (HasRideByAttack(stats)) lines.Add("Ride-By Attack: Attack during mounted charge, continue moving");
+        if (HasSpiritedCharge(stats)) lines.Add("Spirited Charge: ×2 damage on mounted charge (×3 with lance)");
+        if (HasTrample(stats)) lines.Add("Trample: Target can't avoid mounted overrun, mount gets hoof attack");
+        if (HasMountedArchery(stats)) lines.Add("Mounted Archery: Halve ranged penalty while mounted (-2 instead of -4)");
 
         // Metamagic feats
         foreach (var mmId in MetamagicData.AllMetamagicFeats)

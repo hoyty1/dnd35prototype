@@ -1670,6 +1670,23 @@ public partial class GameManager
 
                 if (result != null)
                 {
+                    // Spirited Charge: multiply damage if mounted (×2 melee, ×3 lance)
+                    if (result.Hit && result.TotalDamage > 0 && MountSystem.IsMounted(charger))
+                    {
+                        int originalDamage = result.TotalDamage;
+                        int multipliedDamage = MountedCombatSystem.ProcessMountedChargeDamage(charger, originalDamage, result.WeaponName);
+                        if (multipliedDamage > originalDamage)
+                        {
+                            int extraDamage = multipliedDamage - originalDamage;
+                            if (target.Stats != null)
+                                target.Stats.TakeDamage(extraDamage);
+                            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                                ? $"Spirited Charge: {multipliedDamage} total damage!"
+                                : $"{result.SpecialAttackNote} Spirited Charge: {multipliedDamage} total damage!";
+                            Debug.Log($"[Charge] Spirited Charge bonus damage: {originalDamage} → {multipliedDamage} (+{extraDamage})");
+                        }
+                    }
+
                     RangeInfo chargeRangeInfo = CalculateRangeInfo(charger, target);
                     TryResolveFreeTripOnHit(charger, target, result, chargeRangeInfo);
 

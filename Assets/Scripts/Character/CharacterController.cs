@@ -4637,6 +4637,15 @@ public class CharacterController : MonoBehaviour
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
         int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
 
+        // Mounted ranged penalty: -4 (or -2 with Mounted Archery feat)
+        int mountedRangedPenalty = 0;
+        if (isRangedAttack && MountSystem.IsMounted(this))
+        {
+            mountedRangedPenalty = MountedCombatSystem.GetMountedRangedPenalty(this);
+            if (mountedRangedPenalty != 0)
+                Debug.Log($"[Combat] {Stats.CharacterName} mounted ranged penalty: {mountedRangedPenalty}");
+        }
+
         // Get equipped weapon for damage modifier and feat calculations
         ItemData equippedWeapon = attackWeaponOverride ?? GetEquippedMainWeapon();
         if (!CanAttackWithWeapon(equippedWeapon, out string cannotAttackReason))
@@ -4754,7 +4763,7 @@ public class CharacterController : MonoBehaviour
                           + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                           + weaponNonProfPenalty + armorNonProfPenalty + moraleAttackBonus + conditionAttackPenalty
                           + aidAnotherAttackBonus + damageModeProfile.AttackPenalty + additionalAttackModifier
-                          + solidFogAtkPenalty + wondrousBowAtkBonus;
+                          + solidFogAtkPenalty + wondrousBowAtkBonus + mountedRangedPenalty;
 
         int critThreatMin = featMods.CritThreatMin;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
@@ -5831,6 +5840,11 @@ public class CharacterController : MonoBehaviour
 
         if (target.IsFightingDefensively)
             targetAC += 2; // Dodge bonus
+
+        // Mounted AC bonus: +1 vs opponents on foot (higher ground, PHB p.157)
+        int mountedACBonus = MountSystem.GetMountedACBonus(target, attacker);
+        if (mountedACBonus > 0)
+            targetAC += mountedACBonus;
 
         return targetAC;
     }
@@ -10232,6 +10246,7 @@ public class CharacterController : MonoBehaviour
         if (Stats != null)
         {
             Stats.DeflectArrowsUsedThisRound = false;
+            Stats.HasUsedMountedCombatThisRound = false;
             Stats.SpringAttackTarget = null;
             Stats.IsUsingSpringAttackMovement = false;
         }
