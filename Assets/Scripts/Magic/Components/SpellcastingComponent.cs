@@ -87,7 +87,16 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>Whether this character is currently holding a melee touch spell charge.</summary>
     public bool HasHeldTouchCharge => HeldTouchSpell != null;
     /// <summary>Whether this character has any supported spellcasting ability.</summary>
-    public bool CanCastSpells => UsesPreparedSlotSystem;
+    public bool CanCastSpells => UsesPreparedSlotSystem || IsSpontaneousCaster;
+
+    /// <summary>
+    /// Spontaneous casting data for Sorcerer (and future Bard).
+    /// Null for prepared casters (Wizard/Cleric/Druid).
+    /// </summary>
+    public SpontaneousCastingData SpontaneousData { get; private set; }
+
+    /// <summary>Whether this character uses the spontaneous casting system (Sorcerer, Bard).</summary>
+    public bool IsSpontaneousCaster => SpontaneousData != null && SpontaneousData.IsInitialized;
 
     private static bool IsDruidClass(CharacterStats stats)
     {
@@ -390,6 +399,14 @@ public class SpellcastingComponent : MonoBehaviour
         _domainSlotsMaxByClass.Clear();
         _preparedCasterClasses.Clear();
 
+        // ── Spontaneous caster initialization (Sorcerer, Bard) ──
+        // Must be done before prepared casters so SpontaneousData is available
+        SpontaneousData = null;
+        if (SpontaneousCastingData.IsSpontaneousCasterClass(stats))
+        {
+            InitSpontaneousCaster(stats);
+        }
+
         string[] classOrder = { "Wizard", "Cleric", "Druid" };
         for (int i = 0; i < classOrder.Length; i++)
         {
@@ -433,10 +450,15 @@ public class SpellcastingComponent : MonoBehaviour
         SyncPrimaryClassLegacyView();
 
         string classSummary = _preparedCasterClasses.Count > 0 ? string.Join("/", _preparedCasterClasses) : "None";
+        if (IsSpontaneousCaster)
+            classSummary = (classSummary == "None" ? "" : classSummary + "/") + SpontaneousData.ClassName;
         Debug.Log($"[Spellcasting] {stats.CharacterName} ({classSummary}): {KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
 
         if (_preparedCasterClasses.Count > 0)
             Debug.Log($"[Spellcasting] {stats.CharacterName} slot details: {GetSlotDetails()}");
+
+        if (IsSpontaneousCaster)
+            Debug.Log($"[Spellcasting] {stats.CharacterName} spontaneous: {SpontaneousData.GetDebugSummary()}");
     }
 
     private void InitializePreparedCasterClass(string className, int level)
@@ -453,6 +475,63 @@ public class SpellcastingComponent : MonoBehaviour
             InitCleric(level, className);
         else if (string.Equals(className, "Druid", System.StringComparison.OrdinalIgnoreCase))
             InitDruid(level, className);
+    }
+
+    /// <summary>
+    /// Initialize spontaneous casting for Sorcerer (or Bard).
+    /// Loads known spells from SelectedSpellIds and sets up slot tables.
+    /// </summary>
+    private void InitSpontaneousCaster(CharacterStats stats)
+    {
+        if (stats == null) return;
+
+        string className = null;
+        int classLevel = 0;
+
+        if (stats.HasClass("Sorcerer"))
+        {
+            className = "Sorcerer";
+            classLevel = stats.GetClassLevel("Sorcerer");
+        }
+        else if (stats.HasClass("Bard"))
+        {
+            className = "Bard";
+            classLevel = stats.GetClassLevel("Bard");
+        }
+
+        if (className == null || classLevel <= 0) return;
+
+        int castingMod = stats.GetPrimaryCastingModifier();
+        SpontaneousData = new SpontaneousCastingData();
+        SpontaneousData.Initialize(className, classLevel, castingMod);
+
+        // Load known spells from character creation data (SelectedSpellIds)
+        // These are stored in the SpellcastingComponent's public SelectedSpellIds field
+        // which is set by CharacterCreationData before Init() is called.
+        if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
+        {
+            foreach (string spellId in SelectedSpellIds)
+            {
+                SpellData spell = SpellDatabase.GetSpell(spellId);
+                if (spell == null) continue;
+
+                // Only learn spells that are on this class's spell list
+                int spellLevelForClass = spell.GetSpellLevelFor(className);
+                if (spellLevelForClass < 0) continue;
+
+                SpontaneousData.LearnSpell(spellId, spellLevelForClass);
+
+                // Also add to the shared KnownSpells list for UI compatibility
+                if (!KnownSpells.Any(s => s != null && s.SpellId == spellId))
+                    KnownSpells.Add(spell);
+            }
+
+            Debug.Log($"[Spellcasting] {stats.CharacterName}: Loaded {SpontaneousData.GetAllKnownSpellIds().Count} known spells for {className} spontaneous casting.");
+        }
+
+        // Set up legacy SlotsMax/SlotsRemaining arrays for UI compatibility
+        SlotsMax = SpontaneousData.GetSlotsMaxArray();
+        SlotsRemaining = SpontaneousData.GetSlotsRemainingArray();
     }
 
     private void SyncPrimaryClassLegacyView()
@@ -1388,12 +1467,27 @@ public class SpellcastingComponent : MonoBehaviour
         Debug.Log("[Spellcasting] Getting all known spells");
 
         var allSpells = new List<string>();
+
+        // Include spontaneous known spells (Sorcerer/Bard)
+        if (IsSpontaneousCaster && SpontaneousData != null)
+        {
+            var spontaneousKnown = SpontaneousData.GetAllKnownSpellIds();
+            allSpells.AddRange(spontaneousKnown);
+            Debug.Log($"[Spellcasting] Spontaneous known: {spontaneousKnown.Count} spells");
+        }
+
+        // Include prepared caster known spells (Wizard spellbook, Cleric/Druid full lists)
         for (int level = 0; level <= 9; level++)
         {
             List<string> spellsAtLevel = GetKnownSpellsAtLevel(level);
             if (spellsAtLevel.Count > 0)
             {
-                allSpells.AddRange(spellsAtLevel);
+                // Avoid duplicates if a spell is in both systems (multiclass edge case)
+                foreach (string sid in spellsAtLevel)
+                {
+                    if (!allSpells.Contains(sid))
+                        allSpells.Add(sid);
+                }
                 Debug.Log($"[Spellcasting] Level {level}: {spellsAtLevel.Count} spells");
             }
         }
@@ -1819,6 +1913,32 @@ public class SpellcastingComponent : MonoBehaviour
     {
         if (spell == null) return false;
 
+        // ── Spontaneous caster: spend a slot at the spell's level ──
+        if (IsSpontaneousCaster && SpontaneousData != null)
+        {
+            if (!SpontaneousData.CanCast(spell.SpellId, spell.SpellLevel))
+            {
+                Debug.LogWarning($"[Spellcasting] {Stats.CharacterName} cannot cast {spell.Name} — no slots or not known!");
+                return false;
+            }
+
+            // Cantrips are unlimited for spontaneous casters too
+            if (spell.SpellLevel == 0)
+            {
+                Debug.Log($"[Spellcasting] {Stats.CharacterName} cast cantrip {spell.Name} (spontaneous, unlimited)");
+                return true;
+            }
+
+            SpontaneousData.SpendSlot(spell.SpellLevel);
+            // Sync legacy arrays
+            SlotsRemaining = SpontaneousData.GetSlotsRemainingArray();
+
+            Debug.Log($"[Spellcasting] {Stats.CharacterName} cast {spell.Name} (spontaneous Lv{spell.SpellLevel}). " +
+                      $"Remaining at Lv{spell.SpellLevel}: {SpontaneousData.GetSlotsRemaining(spell.SpellLevel)}/{SpontaneousData.GetSlotsMax(spell.SpellLevel)}");
+            return true;
+        }
+
+        // ── Prepared caster: original slot-based logic ──
         string preferredClass = GetPreferredCastingClassForSpell(spell);
 
         // Cantrips are unlimited — just check if prepared, don't consume
@@ -2257,9 +2377,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public bool CanCastSpell(SpellData spell)
     {
-        if (spell == null || SlotsRemaining == null) return false;
-        int level = spell.SpellLevel;
-        if (level >= SlotsRemaining.Length) return false;
+        if (spell == null) return false;
 
         // ── Silence check (PHB p.279) ──
         // A silenced character cannot cast spells with verbal components.
@@ -2273,6 +2391,17 @@ public class SpellcastingComponent : MonoBehaviour
                 return false;
             }
         }
+
+        // ── Spontaneous caster check (Sorcerer/Bard) ──
+        if (IsSpontaneousCaster && SpontaneousData != null)
+        {
+            return SpontaneousData.CanCast(spell.SpellId, spell.SpellLevel);
+        }
+
+        // ── Prepared caster check (Wizard/Cleric/Druid) ──
+        if (SlotsRemaining == null) return false;
+        int level = spell.SpellLevel;
+        if (level >= SlotsRemaining.Length) return false;
 
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
@@ -2291,6 +2420,20 @@ public class SpellcastingComponent : MonoBehaviour
     {
         var castable = new List<SpellData>();
 
+        // ── Spontaneous caster: return all known spells that have available slots ──
+        if (IsSpontaneousCaster && SpontaneousData != null)
+        {
+            var knownIds = SpontaneousData.GetAllKnownSpellIds();
+            foreach (string spellId in knownIds)
+            {
+                SpellData spell = SpellDatabase.GetSpell(spellId);
+                if (spell != null && SpontaneousData.CanCast(spellId, spell.SpellLevel))
+                    castable.Add(spell);
+            }
+            return castable;
+        }
+
+        // ── Prepared caster: check slot system ──
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             var seen = new HashSet<string>();

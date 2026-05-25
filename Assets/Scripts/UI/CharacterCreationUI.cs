@@ -2643,7 +2643,8 @@ public class CharacterCreationUI : MonoBehaviour
             { "Cleric", ClericClass.GetQuickStartCharacter() },
             { "Wizard", WizardClass.GetQuickStartCharacter() },
             { "Monk", MonkClass.GetQuickStartCharacter() },
-            { "Barbarian", BarbarianClass.GetQuickStartCharacter() }
+            { "Barbarian", BarbarianClass.GetQuickStartCharacter() },
+            { "Sorcerer", SorcererClass.GetQuickStartCharacter() }
         };
         Debug.Log($"[QuickStart] Initialized {_qsAvailableCharacters.Count} quick start characters");
     }

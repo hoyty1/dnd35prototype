@@ -488,6 +488,45 @@ public class CharacterStats
     /// <summary>Whether this character is a Paladin.</summary>
     public bool IsPaladin => HasClass("Paladin");
 
+    /// <summary>Whether this character is a Sorcerer.</summary>
+    public bool IsSorcerer => HasClass("Sorcerer");
+
+    /// <summary>Whether this character is a Fighter.</summary>
+    public bool IsFighter => HasClass("Fighter");
+
+    /// <summary>
+    /// Number of Fighter bonus combat feats available at current level (D&D 3.5e PHB p.37).
+    /// Bonus feat at levels 1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20 (11 total by L20).
+    /// Formula: 1 + FighterLevel / 2 (integer division).
+    /// </summary>
+    public int FighterBonusFeatCount
+    {
+        get
+        {
+            if (!IsFighter) return 0;
+            int fighterLevel = GetClassLevel("Fighter");
+            if (fighterLevel <= 0) return 0;
+            return 1 + fighterLevel / 2;
+        }
+    }
+
+    /// <summary>Number of fighter bonus feats already granted/selected.</summary>
+    public int FighterBonusFeatsGranted;
+
+    /// <summary>Number of pending fighter bonus feats that haven't been selected yet.</summary>
+    public int PendingFighterBonusFeats => Mathf.Max(0, FighterBonusFeatCount - FighterBonusFeatsGranted);
+
+    /// <summary>
+    /// Whether a given Fighter level grants a bonus combat feat (D&D 3.5e PHB p.37).
+    /// Bonus feats at levels 1, 2, and every even level after (4, 6, 8, ..., 20).
+    /// </summary>
+    public static bool IsFighterBonusFeatLevel(int fighterLevel)
+    {
+        if (fighterLevel <= 0) return false;
+        if (fighterLevel <= 2) return true; // Levels 1 and 2
+        return fighterLevel % 2 == 0;       // Even levels 4, 6, 8, 10, 12, 14, 16, 18, 20
+    }
+
     /// <summary>Returns the ability modifier used for the character's primary spellcasting ability.</summary>
     public int GetPrimaryCastingModifier()
     {
@@ -657,8 +696,20 @@ public class CharacterStats
     /// <summary>Number of times rage has been used today.</summary>
     public int RagesUsedToday;
 
-    /// <summary>Maximum rages per day. Level 1-3: 1/day.</summary>
-    public int MaxRagesPerDay => IsBarbarian ? 1 : 0;
+    /// <summary>
+    /// Maximum rages per day (D&D 3.5e PHB p.25).
+    /// 1/day at level 1, +1 per 4 levels: 1 at L1, 2 at L4, 3 at L8, 4 at L12, 5 at L16, 6 at L20.
+    /// </summary>
+    public int MaxRagesPerDay
+    {
+        get
+        {
+            if (!IsBarbarian) return 0;
+            int barbLevel = GetClassLevel("Barbarian");
+            if (barbLevel <= 0) return 0;
+            return 1 + barbLevel / 4;
+        }
+    }
 
     /// <summary>Turn Undead attempts consumed today.</summary>
     public int TurnUndeadAttemptsUsedToday;
@@ -933,8 +984,73 @@ public class CharacterStats
     public int TrapSenseBonus => (IsBarbarian && GetClassLevel("Barbarian") >= 3) ? 1 + (GetClassLevel("Barbarian") - 3) / 3 : 0;
 
     /// <summary>
-    /// Activate Barbarian Rage. Lasts 3 + CON modifier rounds.
-    /// +4 STR, +4 CON, +2 Will saves, -2 AC. Fatigued after rage ends.
+    /// Returns the current rage tier based on Barbarian level (D&D 3.5e PHB p.25-26).
+    /// 0 = Normal Rage (L1-10): +4 STR/CON, +2 Will, -2 AC
+    /// 1 = Greater Rage (L11-19): +6 STR/CON, +3 Will, -2 AC
+    /// 2 = Mighty Rage (L20): +8 STR/CON, +4 Will, -2 AC
+    /// </summary>
+    public int RageTier
+    {
+        get
+        {
+            if (!IsBarbarian) return 0;
+            int barbLevel = GetClassLevel("Barbarian");
+            if (barbLevel >= 20) return 2; // Mighty Rage
+            if (barbLevel >= 11) return 1; // Greater Rage
+            return 0; // Normal Rage
+        }
+    }
+
+    /// <summary>STR/CON bonus from current rage tier: 4/6/8 for Normal/Greater/Mighty.</summary>
+    public int RageAbilityBonus => 4 + RageTier * 2;
+
+    /// <summary>
+    /// Whether this Barbarian has Tireless Rage (level 17+, PHB p.26).
+    /// At L17+, Barbarian is no longer fatigued at the end of rage.
+    /// </summary>
+    public bool HasTirelessRage => IsBarbarian && GetClassLevel("Barbarian") >= 17;
+
+    /// <summary>
+    /// Damage Reduction for Barbarian (PHB p.26).
+    /// 1/— at level 7, +1 per 3 levels: 1 at L7, 2 at L10, 3 at L13, 4 at L16, 5 at L19.
+    /// </summary>
+    public int BarbarianDamageReduction
+    {
+        get
+        {
+            if (!IsBarbarian) return 0;
+            int barbLevel = GetClassLevel("Barbarian");
+            if (barbLevel < 7) return 0;
+            return 1 + (barbLevel - 7) / 3;
+        }
+    }
+
+    /// <summary>
+    /// Improved Uncanny Dodge (PHB p.26): Cannot be flanked.
+    /// Barbarian L5+, or Rogue L8+.
+    /// </summary>
+    public bool HasImprovedUncannyDodge
+    {
+        get
+        {
+            if (IsBarbarian && GetClassLevel("Barbarian") >= 5) return true;
+            if (HasClass("Rogue") && GetClassLevel("Rogue") >= 8) return true;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Indomitable Will (PHB p.26): +4 bonus on Will saves vs enchantment while raging.
+    /// Available at Barbarian L14+.
+    /// </summary>
+    public int IndomitableWillBonus => (IsBarbarian && GetClassLevel("Barbarian") >= 14 && IsRaging) ? 4 : 0;
+
+    /// <summary>
+    /// Activate Barbarian Rage. Duration: 3 + CON modifier rounds.
+    /// Normal Rage (L1-10): +4 STR/CON, +2 Will, -2 AC
+    /// Greater Rage (L11-19): +6 STR/CON, +3 Will, -2 AC
+    /// Mighty Rage (L20): +8 STR/CON, +4 Will, -2 AC
+    /// Fatigued after rage ends (unless Tireless Rage at L17+).
     /// </summary>
     public bool ActivateRage()
     {
@@ -950,19 +1066,21 @@ public class CharacterStats
         RageRoundsRemaining = 3 + Mathf.Max(0, CONMod); // Use current CON mod before rage
         RagesUsedToday++;
 
-        // Apply rage bonuses: +4 STR, +4 CON
-        STR += 4;
-        CON += 4;
+        int bonus = RageAbilityBonus; // 4/6/8 based on rage tier
 
-        // Recalculate HP from CON increase (+2 CON mod × level = +2 HP per level at level 3 = +6 HP)
-        int hpGain = Level * 1; // +2 CON mod means +1 HP/level extra (since CON mod goes up by 2)
-        // Actually +4 CON = +2 to CON mod = +2 HP per level
-        hpGain = Level * 2;
+        // Apply rage bonuses
+        STR += bonus;
+        CON += bonus;
+
+        // HP gain from CON increase: bonus/2 = CON mod increase, × level
+        int conModIncrease = bonus / 2;
+        int hpGain = Level * conModIncrease;
         MaxHP += hpGain;
         CurrentHP += hpGain;
 
-        Debug.Log($"[Barbarian] {CharacterName}: RAGE ACTIVATED! STR {STR}, CON {CON}, " +
-                  $"+{hpGain} HP (now {CurrentHP}/{MaxHP}), " +
+        string rageName = RageTier == 2 ? "MIGHTY RAGE" : (RageTier == 1 ? "GREATER RAGE" : "RAGE");
+        Debug.Log($"[Barbarian] {CharacterName}: {rageName} ACTIVATED! +{bonus} STR/CON, " +
+                  $"STR {STR}, CON {CON}, +{hpGain} HP (now {CurrentHP}/{MaxHP}), " +
                   $"Duration: {RageRoundsRemaining} rounds, -2 AC penalty");
         return true;
     }
@@ -970,6 +1088,7 @@ public class CharacterStats
     /// <summary>
     /// End Barbarian Rage. Remove rage bonuses and apply fatigued state.
     /// Fatigue penalties are applied dynamically via condition-aware ability modifiers.
+    /// At L17+ (Tireless Rage), no fatigue after rage ends.
     /// </summary>
     public void DeactivateRage()
     {
@@ -977,21 +1096,31 @@ public class CharacterStats
 
         IsRaging = false;
 
-        // Remove rage bonuses: -4 STR, -4 CON
-        STR -= 4;
-        CON -= 4;
+        int bonus = RageAbilityBonus; // 4/6/8 based on rage tier
+
+        // Remove rage bonuses
+        STR -= bonus;
+        CON -= bonus;
 
         // Remove HP from CON decrease
-        int hpLoss = Level * 2;
+        int conModDecrease = bonus / 2;
+        int hpLoss = Level * conModDecrease;
         MaxHP -= hpLoss;
         if (CurrentHP > MaxHP) CurrentHP = MaxHP;
         if (CurrentHP < -10) CurrentHP = -10;
 
-        // Apply fatigue state (penalties handled by StrengthConditionPenalty / DexterityConditionPenalty).
-        IsFatigued = true;
-
-        Debug.Log($"[Barbarian] {CharacterName}: Rage ended! Now FATIGUED. " +
-                  $"STR {STR}, DEX {DEX}, CON {CON}, HP {CurrentHP}/{MaxHP}");
+        // Apply fatigue state unless Tireless Rage (L17+)
+        if (!HasTirelessRage)
+        {
+            IsFatigued = true;
+            Debug.Log($"[Barbarian] {CharacterName}: Rage ended! Now FATIGUED. " +
+                      $"STR {STR}, DEX {DEX}, CON {CON}, HP {CurrentHP}/{MaxHP}");
+        }
+        else
+        {
+            Debug.Log($"[Barbarian] {CharacterName}: Rage ended! TIRELESS RAGE — not fatigued. " +
+                      $"STR {STR}, DEX {DEX}, CON {CON}, HP {CurrentHP}/{MaxHP}");
+        }
     }
 
     // ========== CONDITION MANAGEMENT ==========
@@ -1352,8 +1481,11 @@ public class CharacterStats
     // Use ResilientSphereAreaEffect.IsCharacterInAnySphere(character) to check.
     // Use ResilientSphereAreaEffect.DoesSphereBlockInteraction(source, target) for blocking.
 
-    /// <summary>Rage Will save bonus (+2 while raging).</summary>
-    public int RageWillBonus => IsRaging ? 2 : 0;
+    /// <summary>
+    /// Rage Will save bonus (D&D 3.5e PHB p.25-26).
+    /// +2 Normal Rage (L1-10), +3 Greater Rage (L11-19), +4 Mighty Rage (L20).
+    /// </summary>
+    public int RageWillBonus => IsRaging ? (2 + RageTier) : 0;
 
     private int GetEffectiveProgressionLevel()
     {
