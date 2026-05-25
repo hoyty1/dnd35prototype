@@ -497,6 +497,77 @@ public class CharacterStats
     /// <summary>Whether this character is a Ranger.</summary>
     public bool IsRanger => HasClass("Ranger");
 
+    /// <summary>Whether this character is a Bard.</summary>
+    public bool IsBard => HasClass("Bard");
+
+    /// <summary>Whether this character is a Druid.</summary>
+    public bool IsDruid => HasClass("Druid");
+
+    // ─────────────────────────────────────────────
+    // Bard Class Features (PHB p.26-29)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Bard's bardic music tracking data. Initialized during character creation.</summary>
+    public BardicMusicData BardBardicMusic;
+
+    /// <summary>Bard's bardic knowledge tracking data.</summary>
+    public BardicKnowledgeData BardBardicKnowledge;
+
+    /// <summary>Bardic Music uses per day = bard level (PHB p.29).</summary>
+    public int BardicMusicUsesPerDay => IsBard ? BardClass.BardicMusicUsesPerDay(GetClassLevel("Bard")) : 0;
+
+    /// <summary>Inspire Courage morale bonus at current bard level (PHB p.29).</summary>
+    public int InspireCourageBonus => IsBard ? BardClass.InspireCourageBonus(GetClassLevel("Bard")) : 0;
+
+    /// <summary>Bardic Music DC = 10 + half bard level + CHA mod (PHB p.29).</summary>
+    public int BardicMusicDC => IsBard ? BardClass.BardicMusicDC(GetClassLevel("Bard"), CHAMod) : 0;
+
+    /// <summary>Bardic Knowledge modifier = bard level + INT modifier (PHB p.28).</summary>
+    public int BardicKnowledgeModifier => IsBard ? BardClass.BardicKnowledgeModifier(GetClassLevel("Bard"), INTMod) : 0;
+
+    /// <summary>Maximum Fascinate targets at current bard level (PHB p.29).</summary>
+    public int FascinateTargets => IsBard ? BardClass.FascinateTargets(GetClassLevel("Bard")) : 0;
+
+    // ─────────────────────────────────────────────
+    // Druid Class Features (PHB p.33-37)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Druid's wild shape tracking data. Initialized when wild shape is gained at level 5.</summary>
+    public WildShapeData DruidWildShape;
+
+    /// <summary>Druid's animal companion data. Uses FULL druid level (not level - 3 like Ranger).</summary>
+    public AnimalCompanionData DruidAnimalCompanion;
+
+    /// <summary>Nature Sense (L1): +2 Knowledge (Nature) and Survival (PHB p.35).</summary>
+    public int DruidNatureSenseBonus => IsDruid ? DruidClass.NatureSenseBonus : 0;
+
+    /// <summary>Whether this druid has Wild Shape (L5+, PHB p.37).</summary>
+    public bool HasWildShape => IsDruid && DruidClass.HasWildShape(GetClassLevel("Druid"));
+
+    /// <summary>Wild Shape uses per day at current druid level.</summary>
+    public int WildShapeUsesPerDay => IsDruid ? DruidClass.WildShapeUsesPerDay(GetClassLevel("Druid")) : 0;
+
+    /// <summary>Trackless Step at level 3 (PHB p.36): leaves no trail in natural surroundings.</summary>
+    public bool HasTracklessStep => IsDruid && DruidClass.HasTracklessStep(GetClassLevel("Druid"));
+
+    /// <summary>Resist Nature's Lure at level 4 (PHB p.36): +4 save vs fey/plant spell-like abilities.</summary>
+    public bool HasResistNaturesLure => IsDruid && DruidClass.HasResistNaturesLure(GetClassLevel("Druid"));
+
+    /// <summary>Resist Nature's Lure save bonus (+4, PHB p.36).</summary>
+    public int ResistNaturesLureBonus => HasResistNaturesLure ? DruidClass.ResistNaturesLureBonus : 0;
+
+    /// <summary>Venom Immunity at level 9 (PHB p.37): immune to all poisons.</summary>
+    public bool HasVenomImmunity => IsDruid && DruidClass.HasVenomImmunity(GetClassLevel("Druid"));
+
+    /// <summary>A Thousand Faces at level 13 (PHB p.37): alter self at will.</summary>
+    public bool HasAThousandFaces => IsDruid && DruidClass.HasAThousandFaces(GetClassLevel("Druid"));
+
+    /// <summary>Timeless Body at level 15 (PHB p.37): no aging penalties.</summary>
+    public bool HasTimelessBody => IsDruid && DruidClass.HasTimelessBody(GetClassLevel("Druid"));
+
+    /// <summary>Druid's effective level for animal companion = full druid level.</summary>
+    public int DruidEffectiveLevel => IsDruid ? DruidClass.GetEffectiveDruidLevel(GetClassLevel("Druid")) : 0;
+
     // ─────────────────────────────────────────────
     // Ranger Class Features (PHB p.46-48)
     // ─────────────────────────────────────────────
