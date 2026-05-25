@@ -792,6 +792,115 @@ public class ItemData
     /// <summary>True if this item can summon/control earth elementals (Stone).</summary>
     public bool WondrousControlsEarthElementals;
 
+    // ── Phase 9: Mirror of Opposition ──
+    /// <summary>True if this is a Mirror of Opposition.</summary>
+    public bool WondrousIsMirrorOfOpposition;
+    /// <summary>True if an evil duplicate is currently active.</summary>
+    public bool WondrousMirrorDuplicateActive;
+    /// <summary>Unique ID of the active duplicate character (if any).</summary>
+    public string WondrousMirrorDuplicateID;
+    /// <summary>Rounds of delay before duplicate appears (rolled 1d4 on activation).</summary>
+    public int WondrousMirrorDelayRounds;
+
+    // ── Phase 10: Mirror of Mental Prowess ──
+    /// <summary>True if this is a Mirror of Mental Prowess.</summary>
+    public bool WondrousIsMirrorOfMentalProwess;
+    /// <summary>Enhancement bonus to Int/Wis/Cha for creatures within aura range.</summary>
+    public int WondrousMirrorMentalBonus;
+    /// <summary>Range (ft) of the mental stat aura.</summary>
+    public int WondrousMirrorMentalBonusRange;
+    /// <summary>Scrying uses remaining today.</summary>
+    public int WondrousMirrorScryingUsesToday;
+    /// <summary>Detect Thoughts uses remaining today.</summary>
+    public int WondrousMirrorDetectThoughtsUsesToday;
+    /// <summary>Suggestion uses remaining today.</summary>
+    public int WondrousMirrorSuggestionUsesToday;
+    /// <summary>Telepathy uses remaining today.</summary>
+    public int WondrousMirrorTelepathyUsesToday;
+    /// <summary>Will DC for scrying ability.</summary>
+    public int WondrousMirrorScryingDC;
+    /// <summary>Will DC for detect thoughts ability.</summary>
+    public int WondrousMirrorDetectThoughtsDC;
+    /// <summary>Will DC for suggestion ability.</summary>
+    public int WondrousMirrorSuggestionDC;
+    /// <summary>Range (ft) for detect thoughts and telepathy.</summary>
+    public int WondrousMirrorTelepathyRange;
+
+    // ── Phase 11: Construct Guardians ──
+    /// <summary>True if this is an Iron Cobra construct guardian.</summary>
+    public bool WondrousIsIronCobra;
+    /// <summary>Iron Cobra current HP.</summary>
+    public int WondrousIronCobraCurrentHP;
+    /// <summary>Iron Cobra max HP.</summary>
+    public int WondrousIronCobraMaxHP;
+    /// <summary>Iron Cobra AC.</summary>
+    public int WondrousIronCobraAC;
+    /// <summary>Iron Cobra attack bonus.</summary>
+    public int WondrousIronCobraAttackBonus;
+    /// <summary>Iron Cobra damage dice (e.g. "1d3").</summary>
+    public string WondrousIronCobraDamageDice;
+    /// <summary>Iron Cobra fast healing per round.</summary>
+    public int WondrousIronCobraFastHealing;
+    /// <summary>Iron Cobra poison Fort save DC.</summary>
+    public int WondrousIronCobraPoisonDC;
+    /// <summary>Iron Cobra poison damage dice (e.g. "1d6 Con").</summary>
+    public string WondrousIronCobraPoisonDamage;
+    /// <summary>Iron Cobra guard radius in feet.</summary>
+    public int WondrousIronCobraGuardRadius;
+    /// <summary>True if Iron Cobra is currently active/deployed.</summary>
+    public bool WondrousIronCobraIsActive;
+
+    /// <summary>True if this is a Stone Horse.</summary>
+    public bool WondrousIsStoneHorse;
+    /// <summary>Stone Horse variant: "Courser", "Destrier", or "Griffon".</summary>
+    public string WondrousStoneHorseType;
+    /// <summary>Stone Horse land speed (ft).</summary>
+    public int WondrousStoneHorseSpeed;
+    /// <summary>Stone Horse fly speed (0 if cannot fly).</summary>
+    public int WondrousStoneHorseFlySpeed;
+    /// <summary>Stone Horse flight maneuverability (if applicable).</summary>
+    public string WondrousStoneHorseManeuverability;
+    /// <summary>Stone Horse AC.</summary>
+    public int WondrousStoneHorseAC;
+    /// <summary>Stone Horse max HP.</summary>
+    public int WondrousStoneHorseMaxHP;
+    /// <summary>Stone Horse current HP.</summary>
+    public int WondrousStoneHorseCurrentHP;
+    /// <summary>Stone Horse Strength score.</summary>
+    public int WondrousStoneHorseSTR;
+    /// <summary>Stone Horse Dexterity score.</summary>
+    public int WondrousStoneHorseDEX;
+    /// <summary>Stone Horse Constitution score.</summary>
+    public int WondrousStoneHorseCON;
+    /// <summary>True if the Stone Horse is currently active (not stone form).</summary>
+    public bool WondrousStoneHorseIsActive;
+
+    // ── Phase 12: Apparatus of Kwalish ──
+    /// <summary>True if this is the Apparatus of Kwalish.</summary>
+    public bool WondrousIsApparatusOfKwalish;
+    /// <summary>Apparatus AC.</summary>
+    public int WondrousApparatusAC;
+    /// <summary>Apparatus max HP.</summary>
+    public int WondrousApparatusMaxHP;
+    /// <summary>Apparatus current HP.</summary>
+    public int WondrousApparatusCurrentHP;
+    /// <summary>Apparatus hardness (damage reduction).</summary>
+    public int WondrousApparatusHardness;
+    /// <summary>Max occupants (2 Medium creatures).</summary>
+    public int WondrousApparatusMaxOccupants;
+    /// <summary>Air supply remaining in hours (10 max).</summary>
+    public float WondrousApparatusAirHours = 10f;
+    /// <summary>Current movement speed (0, 30, or 200 ft/round).</summary>
+    public int WondrousApparatusCurrentSpeed;
+    /// <summary>Current facing angle in degrees (0-359).</summary>
+    public int WondrousApparatusFacing;
+    /// <summary>States of the 10 levers (true = activated/extended/open).</summary>
+    public bool[] WondrousApparatusLevers;
+    /// <summary>Pincer attack bonus.</summary>
+    public int WondrousApparatusPincerAttack;
+    /// <summary>Pincer damage dice (e.g. "2d6").</summary>
+    public string WondrousApparatusPincerDamage;
+
     /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
     public bool HasActiveRingAbility => IsRing && (
         (RingAbilities != null && RingAbilities.Count > 0) ||
@@ -2257,6 +2366,79 @@ public class ItemData
                     WondrousTrapDefaultCreatureType;
                 stats += $"\nSummons {defName} (1 hour service)";
             }
+
+            // ── Mirror of Opposition ──
+            if (WondrousIsMirrorOfOpposition)
+            {
+                stats += "\n\n🪞 Mirror of Opposition";
+                if (WondrousMirrorDuplicateActive)
+                    stats += $"\n  ⚠ DUPLICATE ACTIVE (ID: {WondrousMirrorDuplicateID ?? "unknown"})";
+                else
+                    stats += "\n  Ready — gazing creates evil duplicate";
+                stats += "\n  Duplicate: opposite alignment, full HP, exact stats";
+                stats += "\n  Delay: 1d4 rounds after viewing";
+                stats += "\n  Mirror unusable until duplicate defeated";
+            }
+
+            // ── Mirror of Mental Prowess ──
+            if (WondrousIsMirrorOfMentalProwess)
+            {
+                stats += $"\n\n🧠 Mirror of Mental Prowess";
+                if (WondrousMirrorMentalBonus > 0)
+                    stats += $"\n  +{WondrousMirrorMentalBonus} Int/Wis/Cha (within {WondrousMirrorMentalBonusRange} ft)";
+                stats += "\n  Daily Abilities:";
+                stats += $"\n    Scrying (Will DC {WondrousMirrorScryingDC}) — {(WondrousMirrorScryingUsesToday > 0 ? "USED" : "available")}";
+                stats += $"\n    Detect Thoughts (Will DC {WondrousMirrorDetectThoughtsDC}, {WondrousMirrorTelepathyRange} ft) — {(WondrousMirrorDetectThoughtsUsesToday > 0 ? "USED" : "available")}";
+                stats += $"\n    Suggestion (Will DC {WondrousMirrorSuggestionDC}) — {(WondrousMirrorSuggestionUsesToday > 0 ? "USED" : "available")}";
+                stats += $"\n    Telepathy ({WondrousMirrorTelepathyRange} ft) — {(WondrousMirrorTelepathyUsesToday > 0 ? "USED" : "available")}";
+            }
+
+            // ── Iron Cobra ──
+            if (WondrousIsIronCobra)
+            {
+                stats += "\n\n🐍 Iron Cobra (Tiny Construct)";
+                stats += $"\n  HP: {WondrousIronCobraCurrentHP}/{WondrousIronCobraMaxHP}  AC: {WondrousIronCobraAC}";
+                stats += $"\n  Attack: +{WondrousIronCobraAttackBonus}, {WondrousIronCobraDamageDice} + poison";
+                stats += $"\n  Poison: Fort DC {WondrousIronCobraPoisonDC}, {WondrousIronCobraPoisonDamage} (initial & secondary)";
+                stats += $"\n  Fast Healing {WondrousIronCobraFastHealing}";
+                stats += $"\n  Guard radius: {WondrousIronCobraGuardRadius} ft";
+                stats += $"\n  Status: {(WondrousIronCobraIsActive ? "ACTIVE (patrolling)" : "Inactive")}";
+            }
+
+            // ── Stone Horse ──
+            if (WondrousIsStoneHorse)
+            {
+                stats += $"\n\n🐴 Stone Horse ({WondrousStoneHorseType ?? "Unknown"})";
+                stats += $"\n  HP: {WondrousStoneHorseCurrentHP}/{WondrousStoneHorseMaxHP}  AC: {WondrousStoneHorseAC}";
+                stats += $"\n  Str {WondrousStoneHorseSTR} Dex {WondrousStoneHorseDEX} Con {WondrousStoneHorseCON}";
+                if (WondrousStoneHorseSpeed > 0)
+                    stats += $"\n  Land speed: {WondrousStoneHorseSpeed} ft";
+                if (WondrousStoneHorseFlySpeed > 0)
+                    stats += $"\n  Fly speed: {WondrousStoneHorseFlySpeed} ft ({WondrousStoneHorseManeuverability ?? "average"})";
+                stats += "\n  Construct: does not eat, sleep, or tire";
+                stats += $"\n  Status: {(WondrousStoneHorseIsActive ? "ACTIVE (animate)" : "Stone form (inactive)")}";
+            }
+
+            // ── Apparatus of Kwalish ──
+            if (WondrousIsApparatusOfKwalish)
+            {
+                stats += "\n\n🦞 Apparatus of Kwalish (Large Vehicle)";
+                stats += $"\n  HP: {WondrousApparatusCurrentHP}/{WondrousApparatusMaxHP}  AC: {WondrousApparatusAC}  Hardness: {WondrousApparatusHardness}";
+                stats += $"\n  Occupants: max {WondrousApparatusMaxOccupants} Medium creatures";
+                stats += $"\n  Air supply: {WondrousApparatusAirHours:0.#} hours (sealed)";
+                stats += $"\n  Speed: {WondrousApparatusCurrentSpeed} ft/round  Facing: {WondrousApparatusFacing}°";
+                if (WondrousApparatusLevers != null && WondrousApparatusLevers.Length >= 10)
+                {
+                    string[] leverNames = {"Fast swim", "Slow swim", "Turn left", "Turn right",
+                        "Hatch", "Fwd window", "Side windows", "Legs", "Pincers", "Antenna/light"};
+                    stats += "\n  Levers:";
+                    for (int lv = 0; lv < 10; lv++)
+                        stats += $"\n    {lv + 1}. {leverNames[lv]}: {(WondrousApparatusLevers[lv] ? "ON" : "off")}";
+                }
+                if (WondrousApparatusPincerAttack > 0)
+                    stats += $"\n  Pincer: +{WondrousApparatusPincerAttack}, {WondrousApparatusPincerDamage} damage";
+            }
+
             // Alignment restriction
             if (!string.IsNullOrEmpty(WondrousRequiredAlignment))
                 stats += $"\n⚠ Alignment: {WondrousRequiredAlignment}";

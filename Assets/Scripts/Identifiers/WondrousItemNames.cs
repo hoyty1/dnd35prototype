@@ -247,6 +247,19 @@ namespace DND35e.Identifiers
         public const string STONE_OF_CONTROLLING_EARTH_ELEMENTALS = "stone_of_controlling_earth_elementals";
         public const string MIRROR_OF_LIFE_TRAPPING = "mirror_of_life_trapping";
 
+        // --- Phase 9/10: Mirror Items ---
+        public const string MIRROR_OF_OPPOSITION = "mirror_of_opposition";
+        public const string MIRROR_OF_MENTAL_PROWESS = "mirror_of_mental_prowess";
+
+        // --- Phase 11: Construct Guardians ---
+        public const string IRON_COBRA = "iron_cobra";
+        public const string STONE_HORSE_COURSER = "stone_horse_courser";
+        public const string STONE_HORSE_DESTRIER = "stone_horse_destrier";
+        public const string STONE_HORSE_GRIFFON = "stone_horse_griffon";
+
+        // --- Phase 12: Vehicle ---
+        public const string APPARATUS_OF_KWALISH = "apparatus_of_kwalish";
+
         // --- Test/Placeholder Items ---
         public const string TEST_HEAD_ITEM = "test_wondrous_head";
         public const string TEST_FACE_ITEM = "test_wondrous_face";

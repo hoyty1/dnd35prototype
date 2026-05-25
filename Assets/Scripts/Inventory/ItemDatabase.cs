@@ -2228,6 +2228,67 @@ public static class ItemDatabase
             }
         }
 
+        // --- Phase 9: Mirror of Opposition ---
+        clone.WondrousIsMirrorOfOpposition = src.WondrousIsMirrorOfOpposition;
+        clone.WondrousMirrorDuplicateActive = false; // Reset on clone
+        clone.WondrousMirrorDuplicateID = null;      // Reset on clone
+        clone.WondrousMirrorDelayRounds = 0;
+
+        // --- Phase 10: Mirror of Mental Prowess ---
+        clone.WondrousIsMirrorOfMentalProwess = src.WondrousIsMirrorOfMentalProwess;
+        clone.WondrousMirrorMentalBonus = src.WondrousMirrorMentalBonus;
+        clone.WondrousMirrorMentalBonusRange = src.WondrousMirrorMentalBonusRange;
+        clone.WondrousMirrorScryingDC = src.WondrousMirrorScryingDC;
+        clone.WondrousMirrorDetectThoughtsDC = src.WondrousMirrorDetectThoughtsDC;
+        clone.WondrousMirrorSuggestionDC = src.WondrousMirrorSuggestionDC;
+        clone.WondrousMirrorTelepathyRange = src.WondrousMirrorTelepathyRange;
+        clone.WondrousMirrorScryingUsesToday = 0;         // Reset daily uses on clone
+        clone.WondrousMirrorDetectThoughtsUsesToday = 0;
+        clone.WondrousMirrorSuggestionUsesToday = 0;
+        clone.WondrousMirrorTelepathyUsesToday = 0;
+
+        // --- Phase 11: Iron Cobra ---
+        clone.WondrousIsIronCobra = src.WondrousIsIronCobra;
+        clone.WondrousIronCobraMaxHP = src.WondrousIronCobraMaxHP;
+        clone.WondrousIronCobraCurrentHP = src.WondrousIronCobraMaxHP; // Full HP on clone
+        clone.WondrousIronCobraAC = src.WondrousIronCobraAC;
+        clone.WondrousIronCobraAttackBonus = src.WondrousIronCobraAttackBonus;
+        clone.WondrousIronCobraDamageDice = src.WondrousIronCobraDamageDice;
+        clone.WondrousIronCobraFastHealing = src.WondrousIronCobraFastHealing;
+        clone.WondrousIronCobraPoisonDC = src.WondrousIronCobraPoisonDC;
+        clone.WondrousIronCobraPoisonDamage = src.WondrousIronCobraPoisonDamage;
+        clone.WondrousIronCobraGuardRadius = src.WondrousIronCobraGuardRadius;
+        clone.WondrousIronCobraIsActive = false; // Reset on clone
+
+        // --- Phase 11: Stone Horse ---
+        clone.WondrousIsStoneHorse = src.WondrousIsStoneHorse;
+        clone.WondrousStoneHorseType = src.WondrousStoneHorseType;
+        clone.WondrousStoneHorseSpeed = src.WondrousStoneHorseSpeed;
+        clone.WondrousStoneHorseFlySpeed = src.WondrousStoneHorseFlySpeed;
+        clone.WondrousStoneHorseManeuverability = src.WondrousStoneHorseManeuverability;
+        clone.WondrousStoneHorseAC = src.WondrousStoneHorseAC;
+        clone.WondrousStoneHorseMaxHP = src.WondrousStoneHorseMaxHP;
+        clone.WondrousStoneHorseCurrentHP = src.WondrousStoneHorseMaxHP; // Full HP on clone
+        clone.WondrousStoneHorseSTR = src.WondrousStoneHorseSTR;
+        clone.WondrousStoneHorseDEX = src.WondrousStoneHorseDEX;
+        clone.WondrousStoneHorseCON = src.WondrousStoneHorseCON;
+        clone.WondrousStoneHorseIsActive = false; // Reset on clone
+
+        // --- Phase 12: Apparatus of Kwalish ---
+        clone.WondrousIsApparatusOfKwalish = src.WondrousIsApparatusOfKwalish;
+        clone.WondrousApparatusAC = src.WondrousApparatusAC;
+        clone.WondrousApparatusMaxHP = src.WondrousApparatusMaxHP;
+        clone.WondrousApparatusCurrentHP = src.WondrousApparatusMaxHP; // Full HP on clone
+        clone.WondrousApparatusHardness = src.WondrousApparatusHardness;
+        clone.WondrousApparatusMaxOccupants = src.WondrousApparatusMaxOccupants;
+        clone.WondrousApparatusAirHours = 10f; // Full air on clone
+        clone.WondrousApparatusCurrentSpeed = 0; // Reset on clone
+        clone.WondrousApparatusFacing = 0;
+        clone.WondrousApparatusLevers = src.WondrousApparatusLevers != null
+            ? new bool[src.WondrousApparatusLevers.Length] : null; // All off on clone
+        clone.WondrousApparatusPincerAttack = src.WondrousApparatusPincerAttack;
+        clone.WondrousApparatusPincerDamage = src.WondrousApparatusPincerDamage;
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

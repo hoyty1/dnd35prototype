@@ -1893,4 +1893,265 @@ public static class WondrousItemFactory
         item.WondrousTrappedCreatures = new System.Collections.Generic.List<TrappedCreature>();
         return item;
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PHASE 9: MIRROR OF OPPOSITION (DMG p.263)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Mirror of Opposition — creates evil duplicate of viewer.
+    /// DMG p.263. 92,000 gp, CL 15, Weight 45 lbs.
+    /// Large mirror (4×8 ft). Duplicate appears 1d4 rounds after viewing,
+    /// has opposite alignment, full HP, exact stats/equipment/spells/feats.
+    /// Duplicate attacks original until one is destroyed. Cannot reuse until duplicate defeated.
+    /// </summary>
+    public static ItemData CreateMirrorOfOpposition()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.MIRROR_OF_OPPOSITION,
+            "Mirror of Opposition",
+            "This large mirror (4×8 ft) creates an evil duplicate of anyone who gazes into it. "
+            + "The duplicate appears 1d4 rounds later with opposite alignment, full hit points, "
+            + "and exact copies of all stats, equipment, spells, and feats. Its sole goal is to "
+            + "kill the original and take their place. The duplicate disappears when defeated. "
+            + "The mirror cannot be used again until the current duplicate is destroyed.",
+            EquipSlot.Slotless, 92000, 15, 45f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "mirror";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        // Mirror of Opposition fields
+        item.WondrousIsMirrorOfOpposition = true;
+        item.WondrousMirrorDuplicateActive = false;
+        item.WondrousMirrorDuplicateID = null;
+        item.WondrousMirrorDelayRounds = 0;
+        return item;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PHASE 10: MIRROR OF MENTAL PROWESS (DMG p.263)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Mirror of Mental Prowess — +2 Int/Wis/Cha aura + 4 daily mental abilities.
+    /// DMG p.263. 175,000 gp, CL 17, Weight 40 lbs.
+    /// Constant +2 enhancement bonus to Int, Wis, Cha for anyone within 30 ft.
+    /// 4 command-word abilities (1/day each): Scrying (Will DC 19), Detect Thoughts
+    /// (Will DC 15, 60 ft), Suggestion (Will DC 17), Telepathy (60 ft).
+    /// </summary>
+    public static ItemData CreateMirrorOfMentalProwess()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.MIRROR_OF_MENTAL_PROWESS,
+            "Mirror of Mental Prowess",
+            "This ornate mirror (5×10 ft) grants a +2 enhancement bonus to Intelligence, Wisdom, "
+            + "and Charisma to anyone within 30 ft (bonus lost when leaving range). Four command-word "
+            + "abilities (1/day each): Scrying (Will DC 19) to see remote locations, Detect Thoughts "
+            + "(Will DC 15, 60 ft) to read minds, Suggestion (Will DC 17) to plant commands, and "
+            + "Telepathy (60 ft) for mental communication.",
+            EquipSlot.Slotless, 175000, 17, 40f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "mirror";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = -1; // Multiple abilities tracked individually
+        // Mental prowess aura
+        item.WondrousIsMirrorOfMentalProwess = true;
+        item.WondrousMirrorMentalBonus = 2;
+        item.WondrousMirrorMentalBonusRange = 30;
+        // Daily ability DCs and tracking
+        item.WondrousMirrorScryingDC = 19;
+        item.WondrousMirrorDetectThoughtsDC = 15;
+        item.WondrousMirrorSuggestionDC = 17;
+        item.WondrousMirrorTelepathyRange = 60;
+        // Daily uses (0 = available, incremented when used)
+        item.WondrousMirrorScryingUsesToday = 0;
+        item.WondrousMirrorDetectThoughtsUsesToday = 0;
+        item.WondrousMirrorSuggestionUsesToday = 0;
+        item.WondrousMirrorTelepathyUsesToday = 0;
+        return item;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PHASE 11: CONSTRUCT GUARDIANS (DMG pp. 259–264)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Iron Cobra — Tiny construct guardian with poison bite.
+    /// DMG p.261. 80,000 gp, CL 15, Weight 3 lbs.
+    /// AC 20, HP 30, Fast Healing 3. Attack +10, 1d3 + poison (Fort DC 16, 1d6 Con).
+    /// Autonomous AI: patrol, detect, attack within 30 ft guard radius.
+    /// </summary>
+    public static ItemData CreateIronCobra()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.IRON_COBRA,
+            "Iron Cobra",
+            "This Tiny iron cobra construct follows its owner's commands. It can guard an area (30 ft radius), "
+            + "patrol, detect hidden enemies, and attack intruders. Bite attack +10 for 1d3 damage plus "
+            + "poison (Fort DC 16, 1d6 Con damage initial and secondary 1 minute later). AC 20, HP 30, "
+            + "Fast Healing 3. Understands Common but cannot speak. Construct immunities apply.",
+            EquipSlot.Slotless, 80000, 15, 3f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "construct";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = -1; // Always active when deployed
+        // Iron Cobra stats
+        item.WondrousIsIronCobra = true;
+        item.WondrousIronCobraMaxHP = 30;
+        item.WondrousIronCobraCurrentHP = 30;
+        item.WondrousIronCobraAC = 20;
+        item.WondrousIronCobraAttackBonus = 10;
+        item.WondrousIronCobraDamageDice = "1d3";
+        item.WondrousIronCobraFastHealing = 3;
+        item.WondrousIronCobraPoisonDC = 16;
+        item.WondrousIronCobraPoisonDamage = "1d6 Con";
+        item.WondrousIronCobraGuardRadius = 30;
+        item.WondrousIronCobraIsActive = false;
+        return item;
+    }
+
+    /// <summary>
+    /// Stone Horse (Courser) — fast light warhorse construct mount.
+    /// DMG p.264. 10,000 gp, CL 14, Weight 6,000 lbs (stone), 600 lbs (active).
+    /// Speed 50 ft, AC 14, HP 30. Light warhorse stats.
+    /// </summary>
+    public static ItemData CreateStoneHorseCourser()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.STONE_HORSE_COURSER,
+            "Stone Horse (Courser)",
+            "This finely crafted stone statuette transforms into a living light warhorse on command. "
+            + "Speed 50 ft, AC 14, HP 30. Str 16, Dex 13, Con 15. Does not eat, sleep, or tire "
+            + "(construct). Grants mount speed to rider. Reverts to stone form on command or when reduced to 0 HP.",
+            EquipSlot.Slotless, 10000, 14, 1f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "construct";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        // Stone Horse stats - Courser
+        item.WondrousIsStoneHorse = true;
+        item.WondrousStoneHorseType = "Courser";
+        item.WondrousStoneHorseSpeed = 50;
+        item.WondrousStoneHorseFlySpeed = 0;
+        item.WondrousStoneHorseAC = 14;
+        item.WondrousStoneHorseMaxHP = 30;
+        item.WondrousStoneHorseCurrentHP = 30;
+        item.WondrousStoneHorseSTR = 16;
+        item.WondrousStoneHorseDEX = 13;
+        item.WondrousStoneHorseCON = 15;
+        item.WondrousStoneHorseIsActive = false;
+        // Also grant mount movement
+        item.WondrousGrantsMovement = true;
+        item.WondrousMovementMode = "mount";
+        item.WondrousMovementSpeed = 50;
+        return item;
+    }
+
+    /// <summary>
+    /// Stone Horse (Destrier) — heavy warhorse construct mount, better combat.
+    /// DMG p.264. 14,800 gp, CL 14, Weight 6,000 lbs (stone), 900 lbs (active).
+    /// Speed 40 ft, AC 16, HP 45. Heavy warhorse stats with better Str.
+    /// </summary>
+    public static ItemData CreateStoneHorseDestrier()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.STONE_HORSE_DESTRIER,
+            "Stone Horse (Destrier)",
+            "This stone statuette transforms into a heavy warhorse on command. Slower but tougher than "
+            + "the courser. Speed 40 ft, AC 16, HP 45. Str 20, Dex 11, Con 17. Does not eat, sleep, "
+            + "or tire (construct). Better suited for combat with higher Str and HP. "
+            + "Reverts to stone form on command or when reduced to 0 HP.",
+            EquipSlot.Slotless, 14800, 14, 1f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "construct";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        // Stone Horse stats - Destrier
+        item.WondrousIsStoneHorse = true;
+        item.WondrousStoneHorseType = "Destrier";
+        item.WondrousStoneHorseSpeed = 40;
+        item.WondrousStoneHorseFlySpeed = 0;
+        item.WondrousStoneHorseAC = 16;
+        item.WondrousStoneHorseMaxHP = 45;
+        item.WondrousStoneHorseCurrentHP = 45;
+        item.WondrousStoneHorseSTR = 20;
+        item.WondrousStoneHorseDEX = 11;
+        item.WondrousStoneHorseCON = 17;
+        item.WondrousStoneHorseIsActive = false;
+        item.WondrousGrantsMovement = true;
+        item.WondrousMovementMode = "mount";
+        item.WondrousMovementSpeed = 40;
+        return item;
+    }
+
+    /// <summary>
+    /// Stone Horse (Griffon) — flying construct mount.
+    /// DMG p.264. 28,500 gp, CL 14, Weight 6,000 lbs (stone), 500 lbs (active).
+    /// Fly 100 ft (perfect), land 30 ft, AC 17, HP 60. Grants flight to rider.
+    /// </summary>
+    public static ItemData CreateStoneHorseGriffon()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.STONE_HORSE_GRIFFON,
+            "Stone Horse (Griffon)",
+            "This stone statuette transforms into a griffon-like construct mount on command. "
+            + "Fly speed 100 ft (perfect maneuverability), land speed 30 ft. AC 17, HP 60. "
+            + "Str 18, Dex 15, Con 16. Does not eat, sleep, or tire (construct). "
+            + "Grants flight to rider! Reverts to stone form on command or when reduced to 0 HP.",
+            EquipSlot.Slotless, 28500, 14, 1f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "construct";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        // Stone Horse stats - Griffon
+        item.WondrousIsStoneHorse = true;
+        item.WondrousStoneHorseType = "Griffon";
+        item.WondrousStoneHorseSpeed = 30;
+        item.WondrousStoneHorseFlySpeed = 100;
+        item.WondrousStoneHorseManeuverability = "perfect";
+        item.WondrousStoneHorseAC = 17;
+        item.WondrousStoneHorseMaxHP = 60;
+        item.WondrousStoneHorseCurrentHP = 60;
+        item.WondrousStoneHorseSTR = 18;
+        item.WondrousStoneHorseDEX = 15;
+        item.WondrousStoneHorseCON = 16;
+        item.WondrousStoneHorseIsActive = false;
+        // Grant flight via mount
+        item.WondrousGrantsMovement = true;
+        item.WondrousMovementMode = "fly";
+        item.WondrousMovementSpeed = 100;
+        item.WondrousFlightManeuverability = "perfect";
+        return item;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PHASE 12: APPARATUS OF KWALISH (DMG p.247)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Apparatus of Kwalish — Large iron lobster vehicle.
+    /// DMG p.247. 90,000 gp, CL 19, Weight 500 lbs.
+    /// Holds 2 Medium creatures. AC 20, HP 200, Hardness 10.
+    /// 10 levers control movement, hatches, pincers, etc. Air supply 10 hours sealed.
+    /// Can walk (10 ft/round) or swim (30-200 ft/round). Pincer attack +10, 2d6.
+    /// </summary>
+    public static ItemData CreateApparatusOfKwalish()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.APPARATUS_OF_KWALISH,
+            "Apparatus of Kwalish",
+            "This iron barrel resembles a large lobster when its 10 levers are operated. It holds 2 Medium "
+            + "creatures. AC 20, HP 200, Hardness 10. 10 levers control: (1) fast swim 200 ft/rnd, "
+            + "(2) slow swim 30 ft/rnd, (3-4) turn left/right 90°, (5) hatch, (6) forward window, "
+            + "(7) side windows, (8) extend legs (walk 10 ft/rnd), (9) pincers (+10, 2d6), "
+            + "(10) antenna (30 ft light). Air supply: 10 hours when sealed. Can walk or swim. "
+            + "Immune to most spells while sealed.",
+            EquipSlot.Slotless, 90000, 19, 500f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "vehicle";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        // Apparatus stats
+        item.WondrousIsApparatusOfKwalish = true;
+        item.WondrousApparatusAC = 20;
+        item.WondrousApparatusMaxHP = 200;
+        item.WondrousApparatusCurrentHP = 200;
+        item.WondrousApparatusHardness = 10;
+        item.WondrousApparatusMaxOccupants = 2;
+        item.WondrousApparatusAirHours = 10f;
+        item.WondrousApparatusCurrentSpeed = 0;
+        item.WondrousApparatusFacing = 0;
+        item.WondrousApparatusLevers = new bool[10]; // All off initially
+        item.WondrousApparatusPincerAttack = 10;
+        item.WondrousApparatusPincerDamage = "2d6";
+        return item;
+    }
 }

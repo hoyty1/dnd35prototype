@@ -236,6 +236,25 @@ public static class WondrousItemDatabase
         Register(WondrousItemFactory.CreateMirrorOfLifeTrapping());              // 200,000 gp, Slotless
 
         // ════════════════════════════════════════════════════════════
+        //  PHASE 9/10: MIRROR ITEMS
+        // ════════════════════════════════════════════════════════════
+        Register(WondrousItemFactory.CreateMirrorOfOpposition());                // 92,000 gp, Slotless
+        Register(WondrousItemFactory.CreateMirrorOfMentalProwess());             // 175,000 gp, Slotless
+
+        // ════════════════════════════════════════════════════════════
+        //  PHASE 11: CONSTRUCT GUARDIANS
+        // ════════════════════════════════════════════════════════════
+        Register(WondrousItemFactory.CreateIronCobra());                         // 80,000 gp, Slotless
+        Register(WondrousItemFactory.CreateStoneHorseCourser());                 // 10,000 gp, Slotless
+        Register(WondrousItemFactory.CreateStoneHorseDestrier());                // 14,800 gp, Slotless
+        Register(WondrousItemFactory.CreateStoneHorseGriffon());                 // 28,500 gp, Slotless
+
+        // ════════════════════════════════════════════════════════════
+        //  PHASE 12: VEHICLE
+        // ════════════════════════════════════════════════════════════
+        Register(WondrousItemFactory.CreateApparatusOfKwalish());                // 90,000 gp, Slotless
+
+        // ════════════════════════════════════════════════════════════
         //  TEST ITEMS — One per slot for verification
         // ════════════════════════════════════════════════════════════
         Register(WondrousItemFactory.CreateTestItem(EquipSlot.Head, "Head"));
