@@ -155,6 +155,14 @@ public class CombatUI : MonoBehaviour
     public Button AttackDefensivelyButton;    // Single attack (standard) while fighting defensively
     public Button FullAttackDefensivelyButton; // Full attack while fighting defensively
 
+    [Header("Phase 1 Combat Feat Controls")]
+    public GameObject StunningFistPanel;     // Panel containing Stunning Fist toggle
+    public Button StunningFistToggle;        // Toggle button for Stunning Fist
+    public Text StunningFistLabel;           // Shows "Stunning Fist: ON/OFF (X/Y uses)"
+    public GameObject ManyshotPanel;         // Panel containing Manyshot toggle
+    public Button ManyshotToggle;            // Toggle button for Manyshot
+    public Text ManyshotLabel;               // Shows "Manyshot: ON/OFF"
+
     [Header("Layout Panels")]
     public GameObject PartyPanelGO;          // Left-side party panel container
     public GameObject CombatDataPanelGO;     // Bottom combat data panel container
@@ -807,6 +815,37 @@ public class CombatUI : MonoBehaviour
         {
             RapidShotPanel.SetActive(hasRapidShot);
             if (hasRapidShot) UpdateRapidShotLabel(pc);
+        }
+
+        // ── Phase 1 Combat Feat Toggles ──
+        // Stunning Fist toggle: when ON, next unarmed attack attempts to stun
+        if (StunningFistPanel != null)
+        {
+            bool hasStunFist = FeatManager.HasStunningFist(pc.Stats);
+            StunningFistPanel.SetActive(hasStunFist);
+            if (hasStunFist && StunningFistLabel != null)
+            {
+                bool active = pc.Stats.StunningFistActive;
+                int remaining = pc.Stats.StunningFistUsesRemaining < 0
+                    ? pc.Stats.StunningFistUsesPerDay
+                    : pc.Stats.StunningFistUsesRemaining;
+                StunningFistLabel.text = active
+                    ? $"Stunning Fist: ON ({remaining}/{pc.Stats.StunningFistUsesPerDay} uses)"
+                    : $"Stunning Fist: OFF ({remaining}/{pc.Stats.StunningFistUsesPerDay} uses)";
+            }
+        }
+
+        // Manyshot toggle: when ON, next ranged attack fires 2 arrows at -4
+        if (ManyshotPanel != null)
+        {
+            bool hasManyshot = FeatManager.HasManyshot(pc.Stats);
+            ManyshotPanel.SetActive(hasManyshot);
+            if (hasManyshot && ManyshotLabel != null)
+            {
+                ManyshotLabel.text = pc.Stats.ManyshotActive
+                    ? "Manyshot: ON (2 arrows, -4 atk)"
+                    : "Manyshot: OFF";
+            }
         }
     }
 

@@ -211,6 +211,7 @@ public class FeatBenefit
     public bool GrantsWeaponFinesse;     // Weapon Finesse
     public bool GrantsCombatCasting;     // Combat Casting
     public bool GrantsAugmentSummoning;  // Augment Summoning
+    public bool AllowsStunningFist;      // Stunning Fist
 
     // Metamagic feats
     public bool IsMetamagic;            // True for all metamagic feats

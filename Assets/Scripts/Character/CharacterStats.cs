@@ -2081,6 +2081,47 @@ public class CharacterStats
     /// <summary>Monster special: successful natural-attack hit can start a grapple as a free action.</summary>
     public bool HasImprovedGrab;
 
+    // ── Stunning Fist tracking ──
+    /// <summary>Uses per day = max(1, characterLevel / 4). Monks use monk level.</summary>
+    public int StunningFistUsesPerDay
+    {
+        get
+        {
+            if (!HasFeat("Stunning Fist")) return 0;
+            int lvl = Level;
+            return Mathf.Max(1, lvl / 4);
+        }
+    }
+    public int StunningFistUsesRemaining = -1; // -1 means not yet initialized
+
+    /// <summary>Initialize or reset daily Stunning Fist uses.</summary>
+    public void ResetStunningFistUses()
+    {
+        StunningFistUsesRemaining = StunningFistUsesPerDay;
+    }
+
+    /// <summary>Whether Stunning Fist is currently toggled on for next attack.</summary>
+    public bool StunningFistActive;
+
+    // ── Deflect Arrows tracking ──
+    /// <summary>Whether Deflect Arrows has been used this round.</summary>
+    public bool DeflectArrowsUsedThisRound;
+
+    // ── Spring Attack / Shot on the Run tracking ──
+    /// <summary>
+    /// When using Spring Attack or Shot on the Run, stores the target that was attacked
+    /// this turn. The attacked target does not get an AoO against the mover.
+    /// Reset at end of turn.
+    /// </summary>
+    [System.NonSerialized] public CharacterController SpringAttackTarget;
+
+    /// <summary>Whether this character is currently executing a Spring Attack / Shot on the Run move.</summary>
+    public bool IsUsingSpringAttackMovement;
+
+    // ── Manyshot tracking ──
+    /// <summary>Toggle: next standard ranged attack will use Manyshot (2 arrows, -4 penalty).</summary>
+    public bool ManyshotActive;
+
     /// <summary>
     /// Optional attack-name filter for Improved Grab triggers (e.g., "Bite", "Claw").
     /// If empty, Improved Grab defaults to claw-based triggers.

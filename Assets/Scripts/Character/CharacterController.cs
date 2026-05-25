@@ -6558,6 +6558,18 @@ public class CharacterController : MonoBehaviour
                     : $"{result.SpecialAttackNote} {note}";
             }
 
+            // ── Improved Precise Shot: ignore less-than-total concealment on ranged attacks ──
+            // D&D 3.5e PHB p.96: Improved Precise Shot lets you ignore the miss chance
+            // from concealment (but not total concealment, i.e. 50%+) on ranged attacks.
+            if (isRangedAttack && targetMissChance > 0 && targetMissChance < 50
+                && FeatManager.HasImprovedPreciseShot(Stats))
+            {
+                string ipsNote = $"Improved Precise Shot: ignoring {targetMissChance}% concealment miss chance.";
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? ipsNote : $"{result.SpecialAttackNote} {ipsNote}";
+                missChance = blindedAttackerMissChance; // only keep attacker-side miss chance if any
+            }
+
             if (missChance > 0)
             {
                 result.ConcealmentMissChance = missChance;
@@ -6654,6 +6666,23 @@ public class CharacterController : MonoBehaviour
                         ? blinkNote
                         : $"{result.SpecialAttackNote} {blinkNote}";
                 }
+            }
+
+            // ── Deflect Arrows: target may negate one ranged hit per round ──
+            // D&D 3.5e PHB p.93: Once per round, a character with Deflect Arrows who
+            // is aware of the attack and has a free hand can deflect one ranged weapon
+            // attack that would otherwise hit them.
+            if (isRangedAttack && target != null && FeatManager.TryDeflectArrow(target, this))
+            {
+                result.Hit = false;
+                result.Damage = 0;
+                result.BaseDamageRoll = 0;
+                result.RawTotalDamage = 0;
+                result.FinalDamageDealt = 0;
+                string deflectNote = "Deflect Arrows: ranged attack deflected!";
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? deflectNote : $"{result.SpecialAttackNote} {deflectNote}";
+                return result;
             }
 
             bool whipArmorBlocked = IsTargetImmuneToWhipDamage(target, weapon);
@@ -7018,6 +7047,43 @@ public class CharacterController : MonoBehaviour
             {
                 target.OnDeath();
                 result.TargetKilled = true;
+            }
+
+            // ================================================================
+            // STUNNING FIST (D&D 3.5 PHB p.101)
+            // ================================================================
+            // Stunning Fist must be declared before the attack roll (toggle), and
+            // applies on a successful unarmed hit. The target must make a Fort save
+            // or be stunned for 1 round. Uses are consumed even on miss (handled
+            // by the toggle being reset after each attack attempt).
+            if (!result.TargetKilled && Stats != null && Stats.StunningFistActive
+                && FeatManager.HasStunningFist(Stats)
+                && !isRangedAttack)
+            {
+                // Check if this is an unarmed attack (no weapon, or IUS)
+                bool isUnarmedAttack = weapon == null || (weapon.Name ?? "").ToLowerInvariant().Contains("unarmed");
+                if (isUnarmedAttack || FeatManager.HasImprovedUnarmedStrike(Stats))
+                {
+                    bool stunned = FeatManager.TryApplyStunningFist(Stats, target);
+                    int dc = FeatManager.GetStunningFistDC(Stats);
+                    if (stunned)
+                    {
+                        string stunNote = $"💫 STUNNING FIST: {target.Stats.CharacterName} is STUNNED for 1 round! (DC {dc})";
+                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                            ? stunNote : $"{result.SpecialAttackNote} {stunNote}";
+                    }
+                    else
+                    {
+                        string resistNote = $"Stunning Fist: {target.Stats.CharacterName} resists (DC {dc})";
+                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                            ? resistNote : $"{result.SpecialAttackNote} {resistNote}";
+                    }
+                }
+                else
+                {
+                    // Not an unarmed attack — Stunning Fist wasted
+                    Stats.StunningFistActive = false;
+                }
             }
 
             // ================================================================
@@ -10124,6 +10190,14 @@ public class CharacterController : MonoBehaviour
 
         // Reset AoO counters for the new round
         ThreatSystem.ResetAoOForTurn(this);
+
+        // Reset per-round Phase 1 combat feat trackers
+        if (Stats != null)
+        {
+            Stats.DeflectArrowsUsedThisRound = false;
+            Stats.SpringAttackTarget = null;
+            Stats.IsUsingSpringAttackMovement = false;
+        }
     }
 
     // ========== SPECIAL ATTACK MANEUVERS ==========

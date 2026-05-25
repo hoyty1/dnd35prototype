@@ -822,6 +822,7 @@ public static class FeatDefinitions
         stunFist.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.AbilityScore, "WIS", 13));
         stunFist.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Feat, "Improved Unarmed Strike", 0));
         stunFist.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.BAB, "", 8));
+        stunFist.Benefit.AllowsStunningFist = true;
         stunFist.Benefit.Description = "Stun opponent with unarmed strike (Fort save DC 10 + level/2 + WIS mod)";
         Add(stunFist);
     }

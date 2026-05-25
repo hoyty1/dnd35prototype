@@ -512,6 +512,16 @@ public static class ThreatSystem
             return null;
         }
 
+        // ── Spring Attack / Shot on the Run: suppress AoO from the attacked target ──
+        // D&D 3.5e PHB p.100: When using Spring Attack, the target of the attack
+        // does not get an attack of opportunity against the moving character.
+        if (isFromMovement && target.Stats != null && target.Stats.IsUsingSpringAttackMovement
+            && target.Stats.SpringAttackTarget == threatener)
+        {
+            Debug.Log($"[ThreatSystem] Spring Attack/Shot on the Run: {threatener.Stats.CharacterName}'s AoO suppressed (was the attack target).");
+            return null;
+        }
+
         Debug.Log($"[ThreatSystem] === ATTACK OF OPPORTUNITY ===");
         Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} makes AoO against {target.Stats.CharacterName}!");
 

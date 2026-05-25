@@ -1261,4 +1261,200 @@ public class CombatFlowService : MonoBehaviour
                 $"👻 {name} makes an attack — Hide from Undead ends!");
         }
     }
+
+    // ========================================================================
+    // WHIRLWIND ATTACK (D&D 3.5 PHB p.102)
+    // Full-round action: one melee attack at full BAB against each adjacent enemy.
+    // ========================================================================
+
+    /// <summary>
+    /// Find all alive enemies adjacent to the attacker.
+    /// </summary>
+    private List<CharacterController> FindAllAdjacentEnemies(CharacterController attacker)
+    {
+        var result = new List<CharacterController>();
+        if (_gameManager == null || attacker == null) return result;
+
+        var allChars = _gameManager.Combat_GetAllCharacters();
+        if (allChars == null) return result;
+
+        foreach (var candidate in allChars)
+        {
+            if (candidate == null || candidate == attacker) continue;
+            if (candidate.Stats == null || candidate.Stats.IsDead) continue;
+            if (candidate.Team == attacker.Team) continue;
+            if (!SquareGridUtils.IsAdjacent(attacker.GridPosition, candidate.GridPosition)) continue;
+            result.Add(candidate);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Execute a Whirlwind Attack: full-round action, one melee attack at full BAB
+    /// against every adjacent enemy. Requires Spring Attack, Dodge, Mobility, Combat Expertise, BAB +4.
+    /// </summary>
+    public void PerformWhirlwindAttack(CharacterController attacker)
+    {
+        if (_gameManager == null || attacker == null || attacker.Stats == null) return;
+
+        if (!FeatManager.CanUseWhirlwindAttack(attacker.Stats))
+        {
+            _gameManager.CombatUI?.ShowCombatLog($"❌ {attacker.Stats.CharacterName} cannot use Whirlwind Attack.");
+            return;
+        }
+
+        attacker.Actions.UseFullRoundAction();
+
+        List<CharacterController> adjacentEnemies = FindAllAdjacentEnemies(attacker);
+        if (adjacentEnemies.Count == 0)
+        {
+            _gameManager.CombatUI?.ShowCombatLog($"🌀 {attacker.Stats.CharacterName} uses Whirlwind Attack but has no adjacent enemies!");
+            _gameManager.Combat_StartDelayedEndActivePCTurn(1.5f);
+            return;
+        }
+
+        var logLines = new System.Text.StringBuilder();
+        logLines.AppendLine($"🌀 <b>{attacker.Stats.CharacterName}</b> uses <color=#FFD700>Whirlwind Attack</color>! ({adjacentEnemies.Count} adjacent target{(adjacentEnemies.Count > 1 ? "s" : "")})");
+
+        int totalDamage = 0;
+        bool anyKilled = false;
+
+        foreach (var enemy in adjacentEnemies)
+        {
+            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead) continue;
+
+            // Single melee attack at full BAB (no flanking for Whirlwind Attack)
+            CombatResult result = attacker.Attack(enemy, false, 0, null, null, null, null, 0, false);
+            string line = $"  vs {enemy.Stats.CharacterName}: ";
+
+            if (result.Hit)
+            {
+                string critStr = result.CritConfirmed ? " <color=#FF4444>CRITICAL!</color>" : "";
+                line += $"HIT ({result.DieRoll}+{result.TotalRoll - result.DieRoll}={result.TotalRoll} vs AC {result.TargetAC}){critStr} — {result.TotalDamage} damage";
+                totalDamage += result.TotalDamage;
+
+                if (result.TotalDamage > 0)
+                    _gameManager.Combat_CheckConcentrationOnDamage(enemy, result.TotalDamage);
+
+                if (!result.IsRangedAttack)
+                    MeleeReactionService.TriggerReactions(attacker, enemy, result);
+
+                if (result.TargetKilled)
+                {
+                    line += " ☠️ SLAIN!";
+                    anyKilled = true;
+                    LogDeathPoint("WhirlwindAttack:TargetKilled", attacker, enemy);
+                    _gameManager.Combat_HandleSummonDeathCleanup(enemy);
+                }
+            }
+            else
+            {
+                line += $"MISS ({result.DieRoll}+{result.TotalRoll - result.DieRoll}={result.TotalRoll} vs AC {result.TargetAC})";
+            }
+
+            logLines.AppendLine(line);
+        }
+
+        logLines.AppendLine($"  Total damage: {totalDamage}");
+
+        string log = logLines.ToString();
+        _gameManager.Combat_SetLastCombatLog(log);
+        _gameManager.CombatUI?.ShowCombatLog(log);
+        _gameManager.Combat_UpdateAllStatsUI();
+        _gameManager.Combat_ClearHighlights();
+
+        if (anyKilled)
+        {
+            if (TryHandleVictoryAfterEnemyDeath("WhirlwindAttack", attacker, null))
+                return;
+        }
+
+        _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
+    }
+
+    // ========================================================================
+    // MANYSHOT (D&D 3.5 PHB p.97)
+    // Standard action: fire 2 arrows with a single attack roll at -4 penalty.
+    // Target must be within 30 feet. Each arrow rolls damage separately.
+    // ========================================================================
+
+    /// <summary>
+    /// Execute a Manyshot attack: single attack roll at -4, fire 2 arrows.
+    /// If it hits, roll damage twice (one per arrow). Standard action.
+    /// </summary>
+    public void PerformManyshotAttack(CharacterController attacker, CharacterController target,
+        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
+    {
+        if (_gameManager == null || attacker == null || target == null) return;
+
+        if (!FeatManager.CanUseManyshot(attacker.Stats))
+        {
+            _gameManager.CombatUI?.ShowCombatLog($"❌ {attacker.Stats.CharacterName} cannot use Manyshot.");
+            return;
+        }
+
+        // Manyshot is a standard action
+        attacker.Actions.UseStandardAction();
+        attacker.Stats.ManyshotActive = false; // consume the toggle
+
+        int manyshotPenalty = FeatManager.GetManyshotAttackPenalty(); // -4
+
+        // First arrow: single attack roll at -4
+        CombatResult firstArrow = attacker.Attack(target, isFlanking, flankBonus, partnerName, null, rangeInfo, null, manyshotPenalty, false);
+
+        var logLines = new System.Text.StringBuilder();
+        logLines.AppendLine($"🏹 <b>{attacker.Stats.CharacterName}</b> uses <color=#FFD700>Manyshot</color>! (2 arrows, -4 penalty)");
+
+        int totalDamage = 0;
+
+        if (firstArrow.Hit)
+        {
+            string critStr1 = firstArrow.CritConfirmed ? " CRITICAL!" : "";
+            logLines.AppendLine($"  Arrow 1: HIT ({firstArrow.DieRoll}+{firstArrow.TotalRoll - firstArrow.DieRoll}={firstArrow.TotalRoll} vs AC {firstArrow.TargetAC}){critStr1} — {firstArrow.TotalDamage} damage");
+            totalDamage += firstArrow.TotalDamage;
+
+            // Second arrow uses the same attack roll (same hit determination).
+            // Roll damage separately for the second arrow.
+            if (target != null && target.Stats != null && !target.Stats.IsDead)
+            {
+                CombatResult secondArrow = attacker.Attack(target, isFlanking, flankBonus, partnerName, null, rangeInfo, null, manyshotPenalty, false);
+                // The second arrow uses the same attack roll result, so it auto-hits if the first did.
+                // We simulate this by just using the damage from a second attack.
+                string critStr2 = secondArrow.CritConfirmed ? " CRITICAL!" : "";
+                logLines.AppendLine($"  Arrow 2: HIT{critStr2} — {secondArrow.TotalDamage} damage");
+                totalDamage += secondArrow.TotalDamage;
+
+                if (secondArrow.TotalDamage > 0)
+                    _gameManager.Combat_CheckConcentrationOnDamage(target, secondArrow.TotalDamage);
+            }
+
+            if (firstArrow.TotalDamage > 0)
+                _gameManager.Combat_CheckConcentrationOnDamage(target, firstArrow.TotalDamage);
+        }
+        else
+        {
+            logLines.AppendLine($"  Both arrows: MISS ({firstArrow.DieRoll}+{firstArrow.TotalRoll - firstArrow.DieRoll}={firstArrow.TotalRoll} vs AC {firstArrow.TargetAC})");
+        }
+
+        logLines.AppendLine($"  Total damage: {totalDamage}");
+
+        string log = logLines.ToString();
+        _gameManager.Combat_SetLastCombatLog(log);
+        _gameManager.CombatUI?.ShowCombatLog(log);
+        _gameManager.Combat_UpdateAllStatsUI();
+        _gameManager.Combat_ClearHighlights();
+
+        if (firstArrow.TargetKilled || (target != null && target.Stats != null && target.Stats.IsDead))
+        {
+            LogDeathPoint("Manyshot:TargetKilled", attacker, target);
+            _gameManager.Combat_HandleSummonDeathCleanup(target);
+            if (target.Team == CharacterTeam.Enemy)
+            {
+                if (TryHandleVictoryAfterEnemyDeath("Manyshot", attacker, target))
+                    return;
+            }
+        }
+
+        _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
+    }
 }

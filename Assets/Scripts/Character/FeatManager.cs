@@ -492,6 +492,288 @@ public static class FeatManager
     public static bool HasRun(CharacterStats stats) => stats != null && stats.HasFeat("Run");
 
     // ========================================================================
+    // STUNNING FIST (D&D 3.5 PHB p.101)
+    // ========================================================================
+
+    /// <summary>Does this character have Stunning Fist?</summary>
+    public static bool HasStunningFist(CharacterStats stats) => stats != null && stats.HasFeat("Stunning Fist");
+
+    /// <summary>Can this character use Stunning Fist right now?</summary>
+    public static bool CanUseStunningFist(CharacterStats stats)
+    {
+        if (!HasStunningFist(stats)) return false;
+        // Lazy-initialize remaining uses if not yet set
+        if (stats.StunningFistUsesRemaining < 0)
+            stats.ResetStunningFistUses();
+        return stats.StunningFistUsesRemaining > 0;
+    }
+
+    /// <summary>
+    /// Calculate Stunning Fist DC = 10 + 1/2 character level + WIS modifier.
+    /// </summary>
+    public static int GetStunningFistDC(CharacterStats stats)
+    {
+        if (stats == null) return 10;
+        int wisMod = stats.WISMod;
+        int level = stats.Level;
+        return 10 + (level / 2) + wisMod;
+    }
+
+    /// <summary>
+    /// Attempt to apply Stunning Fist after a successful unarmed hit.
+    /// Returns true if the target is stunned.
+    /// Must be called AFTER the attack hits and damage is applied.
+    /// </summary>
+    public static bool TryApplyStunningFist(CharacterStats attackerStats, CharacterController target)
+    {
+        if (attackerStats == null || target == null || target.Stats == null) return false;
+        if (!CanUseStunningFist(attackerStats)) return false;
+
+        // Consume a use
+        attackerStats.StunningFistUsesRemaining--;
+        attackerStats.StunningFistActive = false; // Reset toggle
+
+        int dc = GetStunningFistDC(attackerStats);
+        int fortSave = DiceService.D20("Stunning Fist Fort save") + target.Stats.FortitudeSave;
+
+        string attackerName = attackerStats.CharacterName ?? "Attacker";
+        string targetName = target.Stats.CharacterName ?? "Target";
+
+        if (fortSave < dc)
+        {
+            // Target is stunned for 1 round
+            target.ApplyCondition(CombatConditionType.Stunned, 1, "Stunning Fist");
+            Debug.Log($"[Stunning Fist] {targetName} STUNNED by {attackerName}! (Fort {fortSave} < DC {dc}) [{attackerStats.StunningFistUsesRemaining} uses remaining]");
+            return true;
+        }
+        else
+        {
+            Debug.Log($"[Stunning Fist] {targetName} resists {attackerName}'s Stunning Fist (Fort {fortSave} >= DC {dc}) [{attackerStats.StunningFistUsesRemaining} uses remaining]");
+            return false;
+        }
+    }
+
+    // ========================================================================
+    // DEFLECT ARROWS (D&D 3.5 PHB p.93)
+    // ========================================================================
+
+    /// <summary>Does this character have Deflect Arrows?</summary>
+    public static bool HasDeflectArrows(CharacterStats stats) => stats != null && stats.HasFeat("Deflect Arrows");
+
+    /// <summary>Does this character have Snatch Arrows?</summary>
+    public static bool HasSnatchArrows(CharacterStats stats) => stats != null && stats.HasFeat("Snatch Arrows");
+
+    /// <summary>
+    /// Check if a character can deflect an incoming ranged attack this round.
+    /// Requirements: Deflect Arrows feat, at least one free hand, not flat-footed,
+    /// not already used this round, must be aware of the attack.
+    /// </summary>
+    public static bool CanDeflectArrow(CharacterController defender)
+    {
+        if (defender == null || defender.Stats == null) return false;
+        if (!HasDeflectArrows(defender.Stats)) return false;
+        if (defender.Stats.DeflectArrowsUsedThisRound) return false;
+
+        // Must not be flat-footed, stunned, or otherwise unable to act
+        if (defender.HasCondition(CombatConditionType.Stunned)) return false;
+        if (defender.HasCondition(CombatConditionType.Paralyzed)) return false;
+        if (defender.HasCondition(CombatConditionType.Helpless)) return false;
+        if (defender.HasCondition(CombatConditionType.FlatFooted)) return false;
+
+        // Must have at least one free hand (check if wielding two-handed or dual-wielding)
+        if (!HasFreeHandForDeflection(defender)) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Attempt to deflect a ranged attack. Returns true if deflected (attack negated).
+    /// </summary>
+    public static bool TryDeflectArrow(CharacterController defender, CharacterController attacker)
+    {
+        if (!CanDeflectArrow(defender)) return false;
+
+        // Mark as used this round
+        defender.Stats.DeflectArrowsUsedThisRound = true;
+
+        string defName = defender.Stats.CharacterName ?? "Defender";
+        string atkName = attacker?.Stats?.CharacterName ?? "Attacker";
+
+        bool snatched = HasSnatchArrows(defender.Stats);
+        if (snatched)
+        {
+            Debug.Log($"[Snatch Arrows] {defName} CATCHES {atkName}'s ranged attack!");
+        }
+        else
+        {
+            Debug.Log($"[Deflect Arrows] {defName} DEFLECTS {atkName}'s ranged attack!");
+        }
+
+        return true;
+    }
+
+    /// <summary>Check if the character has at least one hand free for deflection.</summary>
+    private static bool HasFreeHandForDeflection(CharacterController character)
+    {
+        if (character == null) return false;
+        Inventory inv = character.GetInventoryData();
+        if (inv == null) return true; // No inventory → assume free hands
+
+        ItemData rightHand = inv.RightHandSlot;
+        ItemData leftHand = inv.LeftHandSlot;
+        ItemData twoHand = inv.TwoHandSlot;
+
+        // Two-handed weapon → no free hand
+        if (twoHand != null) return false;
+
+        // Both hands occupied → no free hand
+        if (rightHand != null && leftHand != null) return false;
+
+        return true;
+    }
+
+    // ========================================================================
+    // MANYSHOT (D&D 3.5 PHB p.97)
+    // ========================================================================
+
+    /// <summary>Does this character have Manyshot?</summary>
+    public static bool HasManyshot(CharacterStats stats) => stats != null && stats.HasFeat("Manyshot");
+
+    /// <summary>
+    /// Quick prerequisite check: does this character meet all Manyshot feat prerequisites?
+    /// Does not check weapon or distance — use the overload for combat-time validation.
+    /// Prereqs: Manyshot feat, Point Blank Shot, Rapid Shot, DEX 17+, BAB +6.
+    /// </summary>
+    public static bool CanUseManyshot(CharacterStats stats)
+    {
+        if (!HasManyshot(stats)) return false;
+        if (!stats.HasFeat("Point Blank Shot")) return false;
+        if (!stats.HasFeat("Rapid Shot")) return false;
+        if (stats.DEXMod < 3) return false; // DEX 17 means modifier >= +3
+        if (stats.BaseAttackBonus < 6) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Full combat-time check: can use Manyshot with this specific weapon at this distance?
+    /// </summary>
+    public static bool CanUseManyshot(CharacterStats stats, ItemData weapon, float distanceFeet)
+    {
+        if (!CanUseManyshot(stats)) return false;
+        if (weapon == null) return false;
+
+        // Must be using a bow (not crossbow, not thrown)
+        string wName = (weapon.Name ?? "").ToLowerInvariant();
+        bool isBow = wName.Contains("bow") && !wName.Contains("crossbow");
+        if (!isBow) return false;
+
+        // Must be within 30 feet
+        if (distanceFeet > 30f) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Get the Manyshot attack penalty (-4 per PHB).
+    /// </summary>
+    public static int GetManyshotAttackPenalty() => -4;
+
+    /// <summary>
+    /// Get how many arrows Manyshot fires (2 for standard, could be more at higher BAB in variants).
+    /// D&D 3.5 PHB: always 2 arrows as a standard action.
+    /// </summary>
+    public static int GetManyshotArrowCount() => 2;
+
+    // ========================================================================
+    // IMPROVED PRECISE SHOT (D&D 3.5 PHB p.96)
+    // ========================================================================
+
+    /// <summary>Does this character have Improved Precise Shot?</summary>
+    public static bool HasImprovedPreciseShot(CharacterStats stats) => stats != null && stats.HasFeat("Improved Precise Shot");
+
+    /// <summary>
+    /// Should concealment miss chance be ignored for this ranged attack?
+    /// Improved Precise Shot ignores anything less than total concealment (50%).
+    /// Total concealment still applies its full miss chance.
+    /// </summary>
+    public static bool ShouldIgnoreConcealment(CharacterStats attackerStats, int missChancePercent)
+    {
+        if (!HasImprovedPreciseShot(attackerStats)) return false;
+        // Ignore partial concealment (20%) but not total concealment (50%)
+        return missChancePercent < 50;
+    }
+
+    /// <summary>
+    /// Should cover AC bonus be ignored for this ranged attack?
+    /// Improved Precise Shot ignores anything less than total cover.
+    /// </summary>
+    public static bool ShouldIgnoreCover(CharacterStats attackerStats)
+    {
+        return HasImprovedPreciseShot(attackerStats);
+    }
+
+    // ========================================================================
+    // SPRING ATTACK (D&D 3.5 PHB p.100)
+    // ========================================================================
+
+    // NOTE: HasSpringAttack() is defined above at the feat-query section (line ~428)
+
+    /// <summary>
+    /// Can this character use Spring Attack? Requires Dodge, Mobility, BAB +4.
+    /// Spring Attack: move, make single melee attack, continue moving.
+    /// The attack target does not get an AoO against the character.
+    /// </summary>
+    public static bool CanUseSpringAttack(CharacterStats stats)
+    {
+        if (!HasSpringAttack(stats)) return false;
+        if (!stats.HasFeat("Dodge")) return false;
+        if (!stats.HasFeat("Mobility")) return false;
+        if (stats.BaseAttackBonus < 4) return false;
+        return true;
+    }
+
+    // ========================================================================
+    // SHOT ON THE RUN (D&D 3.5 PHB p.100)
+    // ========================================================================
+
+    // NOTE: HasShotOnTheRun() is defined above at the feat-query section (line ~431)
+
+    /// <summary>
+    /// Can this character use Shot on the Run? Ranged version of Spring Attack.
+    /// </summary>
+    public static bool CanUseShotOnTheRun(CharacterStats stats)
+    {
+        if (!HasShotOnTheRun(stats)) return false;
+        if (!stats.HasFeat("Dodge")) return false;
+        if (!stats.HasFeat("Mobility")) return false;
+        if (!stats.HasFeat("Point Blank Shot")) return false;
+        if (stats.BaseAttackBonus < 4) return false;
+        return true;
+    }
+
+    // ========================================================================
+    // WHIRLWIND ATTACK (D&D 3.5 PHB p.102)
+    // ========================================================================
+
+    /// <summary>Does this character have Whirlwind Attack?</summary>
+    public static bool HasWhirlwindAttack(CharacterStats stats) => stats != null && stats.HasFeat("Whirlwind Attack");
+
+    /// <summary>
+    /// Can this character use Whirlwind Attack?
+    /// Full-round action: make one melee attack at full BAB against each adjacent enemy.
+    /// </summary>
+    public static bool CanUseWhirlwindAttack(CharacterStats stats)
+    {
+        if (!HasWhirlwindAttack(stats)) return false;
+        if (!stats.HasFeat("Combat Expertise")) return false;
+        if (!stats.HasFeat("Dodge")) return false;
+        if (!stats.HasFeat("Mobility")) return false;
+        if (!stats.HasFeat("Spring Attack")) return false;
+        if (stats.BaseAttackBonus < 4) return false;
+        return true;
+    }
+
+    // ========================================================================
     // FEAT SUMMARY FOR DISPLAY
     // ========================================================================
 
@@ -554,6 +836,14 @@ public static class FeatManager
         if (stats.HasFeat("Diehard")) lines.Add("Diehard: Conscious at negative HP");
         if (stats.HasFeat("Run")) lines.Add("Run: 5× speed");
         if (stats.HasFeat("Quick Draw")) lines.Add("Quick Draw: Draw weapon as free action");
+        if (stats.HasFeat("Spring Attack")) lines.Add("Spring Attack: Move before/after melee, no AoO from target");
+        if (stats.HasFeat("Shot on the Run")) lines.Add("Shot on the Run: Move before/after ranged attack");
+        if (stats.HasFeat("Whirlwind Attack")) lines.Add("Whirlwind Attack: Attack all adjacent enemies (full-round)");
+        if (HasStunningFist(stats)) lines.Add($"Stunning Fist: DC {GetStunningFistDC(stats)}, {stats.StunningFistUsesPerDay}/day");
+        if (stats.HasFeat("Deflect Arrows")) lines.Add("Deflect Arrows: Deflect 1 ranged/round (free hand required)");
+        if (stats.HasFeat("Snatch Arrows")) lines.Add("Snatch Arrows: Catch deflected arrows");
+        if (stats.HasFeat("Manyshot")) lines.Add("Manyshot: Fire 2 arrows at -4 (standard action, ≤30ft)");
+        if (stats.HasFeat("Improved Precise Shot")) lines.Add("Improved Precise Shot: Ignore cover/concealment (except total)");
 
         // Metamagic feats
         foreach (var mmId in MetamagicData.AllMetamagicFeats)
