@@ -235,6 +235,12 @@ namespace DND35e.Identifiers
         // --- Phase 3: Legendary Protection Items ---
         public const string MANTLE_OF_FAITH = "mantle_of_faith";
 
+        // --- Phase 4/5: Planar Travel Items ---
+        public const string AMULET_OF_THE_PLANES = "amulet_of_the_planes";
+        public const string CUBIC_GATE = "cubic_gate";
+        public const string WELL_OF_MANY_WORLDS = "well_of_many_worlds";
+        public const string CARPET_OF_FLYING_10X10 = "carpet_of_flying_10x10";
+
         // --- Test/Placeholder Items ---
         public const string TEST_HEAD_ITEM = "test_wondrous_head";
         public const string TEST_FACE_ITEM = "test_wondrous_face";

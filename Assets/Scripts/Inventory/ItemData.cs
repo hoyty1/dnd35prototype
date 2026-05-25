@@ -727,6 +727,42 @@ public class ItemData
     /// <summary>True if this Scarab absorbs negative energy.</summary>
     public bool WondrousScarabAbsorbsNegativeEnergy;
 
+    // --- Phase 4/5: Planar Travel Items ---
+
+    /// <summary>Plane destinations for Cubic Gate sides (6 elements). Stored as int[] (Plane enum cast).</summary>
+    public int[] WondrousCubicGateSides;
+    /// <summary>Uses this week per Cubic Gate side (6 elements). Each side gets 3/week.</summary>
+    public int[] WondrousCubicGateUsesThisWeek;
+    /// <summary>Max uses per week per side (typically 3).</summary>
+    public int WondrousCubicGateMaxUsesPerSide = 3;
+
+    /// <summary>True if this is a Well of Many Worlds.</summary>
+    public bool WondrousIsWellOfManyWorlds;
+    /// <summary>True if the Well is currently open (portal active).</summary>
+    public bool WondrousWellIsOpen;
+    /// <summary>Current destination plane for the open Well (Plane enum cast to int). -1 = none.</summary>
+    public int WondrousWellCurrentDestination = -1;
+
+    /// <summary>True if this is a Carpet of Flying.</summary>
+    public bool WondrousIsCarpetOfFlying;
+    /// <summary>Carpet size in feet (e.g., 5, 10).</summary>
+    public int WondrousCarpetSizeFeet;
+    /// <summary>Max weight capacity in lbs.</summary>
+    public int WondrousCarpetCapacityLbs;
+    /// <summary>Carpet fly speed in feet.</summary>
+    public int WondrousCarpetFlySpeed;
+    /// <summary>Carpet flight maneuverability (e.g., "average").</summary>
+    public string WondrousCarpetManeuverability;
+    /// <summary>True if carpet is currently flying.</summary>
+    public bool WondrousCarpetIsFlying;
+
+    /// <summary>Plane shift mishap chance in percent (e.g., 5 for Amulet of the Planes).</summary>
+    public int WondrousPlaneShiftMishapPercent;
+    /// <summary>Max travelers for plane shift (e.g., 8 for Amulet of the Planes).</summary>
+    public int WondrousPlaneShiftMaxTravelers;
+    /// <summary>True if this item grants at-will plane shifting.</summary>
+    public bool WondrousGrantsPlaneShift;
+
     /// <summary>True if this ring has any activatable abilities (Sprint 2+).</summary>
     public bool HasActiveRingAbility => IsRing && (
         (RingAbilities != null && RingAbilities.Count > 0) ||
@@ -2110,6 +2146,42 @@ public class ItemData
                     stats += $"\n  Charges: {WondrousCurrentCharges}/{WondrousMaxCharges}";
                 if (WondrousCurrentCharges <= 0 && WondrousMaxCharges > 0)
                     stats += "\n  ⚠ Depleted — non-magical";
+            }
+            // Planar items (Phase 4/5)
+            if (WondrousGrantsPlaneShift)
+            {
+                stats += "\nPlane Shift at will";
+                if (WondrousPlaneShiftMaxTravelers > 1)
+                    stats += $" (up to {WondrousPlaneShiftMaxTravelers} creatures)";
+                if (WondrousPlaneShiftMishapPercent > 0)
+                    stats += $"\n  ⚠ {WondrousPlaneShiftMishapPercent}% mishap chance (random plane)";
+            }
+            if (WondrousCubicGateSides != null && WondrousCubicGateSides.Length == 6)
+            {
+                stats += "\nCubic Gate (6 sides):";
+                for (int i = 0; i < 6; i++)
+                {
+                    string planeName = PlanarTravelSystem.GetPlaneName((Plane)WondrousCubicGateSides[i]);
+                    int usesLeft = WondrousCubicGateMaxUsesPerSide;
+                    if (WondrousCubicGateUsesThisWeek != null && i < WondrousCubicGateUsesThisWeek.Length)
+                        usesLeft = WondrousCubicGateMaxUsesPerSide - WondrousCubicGateUsesThisWeek[i];
+                    stats += $"\n  Side {i + 1}: {planeName} ({usesLeft}/{WondrousCubicGateMaxUsesPerSide}/week)";
+                }
+            }
+            if (WondrousIsWellOfManyWorlds)
+            {
+                stats += "\nOpens portal to RANDOM plane";
+                stats += "\nOpen while held, closes on release";
+                stats += "\n⚠ Extradimensional contact → catastrophic!";
+                if (WondrousWellIsOpen && WondrousWellCurrentDestination >= 0)
+                    stats += $"\n  ★ Currently open: {PlanarTravelSystem.GetPlaneName((Plane)WondrousWellCurrentDestination)}";
+            }
+            if (WondrousIsCarpetOfFlying)
+            {
+                stats += $"\nFly speed {WondrousCarpetFlySpeed} ft ({WondrousCarpetManeuverability ?? "average"})";
+                stats += $"\nCarries up to {WondrousCarpetCapacityLbs} lbs";
+                stats += $"\nSize: {WondrousCarpetSizeFeet}×{WondrousCarpetSizeFeet} ft";
+                if (WondrousCarpetIsFlying) stats += "\n  ★ Currently flying";
             }
             // Alignment restriction
             if (!string.IsNullOrEmpty(WondrousRequiredAlignment))

@@ -2160,6 +2160,25 @@ public static class ItemDatabase
         clone.WondrousScarabAbsorbsDrain = src.WondrousScarabAbsorbsDrain;
         clone.WondrousScarabAbsorbsNegativeEnergy = src.WondrousScarabAbsorbsNegativeEnergy;
 
+        // Phase 4/5: Planar Travel Items
+        clone.WondrousCubicGateSides = src.WondrousCubicGateSides != null
+            ? (int[])src.WondrousCubicGateSides.Clone() : null;
+        clone.WondrousCubicGateUsesThisWeek = src.WondrousCubicGateUsesThisWeek != null
+            ? (int[])src.WondrousCubicGateUsesThisWeek.Clone() : null;
+        clone.WondrousCubicGateMaxUsesPerSide = src.WondrousCubicGateMaxUsesPerSide;
+        clone.WondrousIsWellOfManyWorlds = src.WondrousIsWellOfManyWorlds;
+        clone.WondrousWellIsOpen = false; // Reset on clone
+        clone.WondrousWellCurrentDestination = -1; // Reset on clone
+        clone.WondrousIsCarpetOfFlying = src.WondrousIsCarpetOfFlying;
+        clone.WondrousCarpetSizeFeet = src.WondrousCarpetSizeFeet;
+        clone.WondrousCarpetCapacityLbs = src.WondrousCarpetCapacityLbs;
+        clone.WondrousCarpetFlySpeed = src.WondrousCarpetFlySpeed;
+        clone.WondrousCarpetManeuverability = src.WondrousCarpetManeuverability;
+        clone.WondrousCarpetIsFlying = false; // Reset on clone
+        clone.WondrousPlaneShiftMishapPercent = src.WondrousPlaneShiftMishapPercent;
+        clone.WondrousPlaneShiftMaxTravelers = src.WondrousPlaneShiftMaxTravelers;
+        clone.WondrousGrantsPlaneShift = src.WondrousGrantsPlaneShift;
+
         clone.IsStackable = src.IsStackable;
         clone.MaxStackSize = src.MaxStackSize;
         clone.StackCount = src.StackCount;

@@ -204,6 +204,14 @@ public static class WondrousItemDatabase
         Register(WondrousItemFactory.CreateCubeOfForce());
 
         // ════════════════════════════════════════════════════════════
+        //  PHASE 4/5: PLANAR TRAVEL ITEMS (DMG pp. 247–270)
+        // ════════════════════════════════════════════════════════════
+        Register(WondrousItemFactory.CreateAmuletOfThePlanes());   // 120,000 gp, Neck
+        Register(WondrousItemFactory.CreateCubicGate());           // 164,000 gp, Slotless
+        Register(WondrousItemFactory.CreateWellOfManyWorlds());    // 82,000 gp, Slotless
+        Register(WondrousItemFactory.CreateCarpetOfFlying10x10()); // 60,000 gp, Slotless
+
+        // ════════════════════════════════════════════════════════════
         //  PHASE 2: SPELL RESISTANCE — Mantle of Spell Resistance
         // ════════════════════════════════════════════════════════════
         Register(WondrousItemFactory.CreateMantleOfSpellResistance(13)); // SR 13, 90,000 gp

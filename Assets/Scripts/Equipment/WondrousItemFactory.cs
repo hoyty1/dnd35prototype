@@ -1683,4 +1683,88 @@ public static class WondrousItemFactory
         item.WondrousMaxCharges = 36;
         return item;
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PHASE 4/5: PLANAR TRAVEL ITEMS (DMG pp. 248–265)
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>Amulet of the Planes (Plane Shift at will, 5% mishap). DMG p.247.</summary>
+    public static ItemData CreateAmuletOfThePlanes()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.AMULET_OF_THE_PLANES,
+            "Amulet of the Planes",
+            "This amulet is a disk of deep blue sapphire attached to a chain of silver. It allows the wearer to use Plane Shift at will (standard action). Up to 8 willing creatures may be transported. There is a 5% chance of arriving on a random plane instead.",
+            EquipSlot.Neck, 120000, 15, 0f, NeckIcon, NeckColor);
+        item.WondrousItemType = "travel";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousUsesPerDay = -1; // Unlimited
+        item.WondrousGrantsPlaneShift = true;
+        item.WondrousPlaneShiftMaxTravelers = 8;
+        item.WondrousPlaneShiftMishapPercent = 5;
+        return item;
+    }
+
+    /// <summary>Cubic Gate (6 sides, each to different plane, 3 uses/week each). DMG p.253.</summary>
+    public static ItemData CreateCubicGate()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.CUBIC_GATE,
+            "Cubic Gate",
+            "This 3-inch cube has six sides, each attuned to a different plane. Rotate to select a side, then activate to open a 10×10 ft gate to that plane for up to 10 minutes (concentration). Each side is usable 3 times per week. Default planes: Fire, Earth, Air, Water, Astral, Nine Hells.",
+            EquipSlot.Slotless, 164000, 23, 0.5f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "travel";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        // Set up 6 sides with default plane assignments
+        Plane[] defaults = PlanarTravelSystem.GetDefaultCubicGateSides();
+        item.WondrousCubicGateSides = new int[6];
+        for (int i = 0; i < 6; i++)
+            item.WondrousCubicGateSides[i] = (int)defaults[i];
+        item.WondrousCubicGateUsesThisWeek = new int[6]; // All zeros
+        item.WondrousCubicGateMaxUsesPerSide = 3;
+        return item;
+    }
+
+    /// <summary>Well of Many Worlds (random plane portal, extradimensional interaction). DMG p.270.</summary>
+    public static ItemData CreateWellOfManyWorlds()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.WELL_OF_MANY_WORLDS,
+            "Well of Many Worlds",
+            "This strange, shimmering 6-foot-diameter piece of cloth is a portal to another plane. When unfolded and placed on the ground, it opens a two-way gate to a RANDOM plane of existence. The portal remains open as long as the Well is held open. Closing it ends the portal. WARNING: Contact with a Portable Hole or Bag of Holding destroys both items and creates a 10×10 ft rift to the Astral Plane for 1 round.",
+            EquipSlot.Slotless, 82000, 12, 5f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "travel";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.USE_ACTIVATED;
+        item.WondrousUsesPerDay = -1; // Unlimited
+        item.WondrousIsWellOfManyWorlds = true;
+        item.WondrousIsExtradimensional = true; // Critical for Portable Hole interaction
+        item.WondrousWellIsOpen = false;
+        item.WondrousWellCurrentDestination = -1;
+        return item;
+    }
+
+    /// <summary>Carpet of Flying, 10×10 ft (800 lbs, fly 40 ft average). DMG p.252.</summary>
+    public static ItemData CreateCarpetOfFlying10x10()
+    {
+        var item = CreateBaseWondrous(WondrousItemNames.CARPET_OF_FLYING_10X10,
+            "Carpet of Flying (10×10 ft)",
+            "This large carpet, 10 feet by 10 feet, can fly through the air carrying up to 800 lbs. Fly speed 40 ft with average maneuverability. Activated by command word; can hover. Grants flight to all passengers standing on it.",
+            EquipSlot.Slotless, 60000, 10, 25f, SlotlessIcon, SlotlessColor);
+        item.WondrousItemType = "travel";
+        item.WondrousHasActivation = true;
+        item.WondrousActivationType = WondrousItemActivation.COMMAND_WORD;
+        item.WondrousUsesPerDay = -1; // Unlimited
+        item.WondrousIsCarpetOfFlying = true;
+        item.WondrousCarpetSizeFeet = 10;
+        item.WondrousCarpetCapacityLbs = 800;
+        item.WondrousCarpetFlySpeed = 40;
+        item.WondrousCarpetManeuverability = "average";
+        item.WondrousCarpetIsFlying = false;
+        // Also grant flight via standard movement system
+        item.WondrousGrantsMovement = true;
+        item.WondrousMovementMode = "fly";
+        item.WondrousMovementSpeed = 40;
+        item.WondrousFlightManeuverability = "average";
+        return item;
+    }
 }

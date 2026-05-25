@@ -611,6 +611,17 @@ public partial class GameManager : MonoBehaviour
         IconManager.Init();
         CharacterHoverTooltipUI.EnsureInstance();
 
+        // Initialize planar travel system (Phase 4)
+        if (PlanarTravelSystem.Instance == null)
+        {
+            var planarGO = new GameObject("PlanarTravelSystem");
+            planarGO.AddComponent<PlanarTravelSystem>();
+        }
+        else
+        {
+            PlanarTravelSystem.InitializePlaneDatabase();
+        }
+
         // Check if character creation UI exists
         if (CharacterCreationUI != null)
         {

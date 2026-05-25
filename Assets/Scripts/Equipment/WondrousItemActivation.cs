@@ -344,27 +344,43 @@ public static class WondrousItemActivation
         foreach (EquipSlot slot in Inventory.AllEquipmentSlots)
         {
             ItemData item = inventory.GetEquipped(slot);
-            if (item != null && item.IsWondrous && item.WondrousUsesThisWeek > 0)
+            if (item != null && item.IsWondrous)
             {
-                item.WondrousUsesThisWeek = 0;
-                count++;
+                if (item.WondrousUsesThisWeek > 0) { item.WondrousUsesThisWeek = 0; count++; }
+                count += ResetCubicGateWeeklyUses(item);
             }
         }
         if (inventory.SlotlessItems != null)
             foreach (var item in inventory.SlotlessItems)
-                if (item != null && item.IsWondrous && item.WondrousUsesThisWeek > 0)
+                if (item != null && item.IsWondrous)
                 {
-                    item.WondrousUsesThisWeek = 0;
-                    count++;
+                    if (item.WondrousUsesThisWeek > 0) { item.WondrousUsesThisWeek = 0; count++; }
+                    count += ResetCubicGateWeeklyUses(item);
                 }
         if (inventory.GeneralSlots != null)
             foreach (var item in inventory.GeneralSlots)
-                if (item != null && item.IsWondrous && item.WondrousUsesThisWeek > 0)
+                if (item != null && item.IsWondrous)
                 {
-                    item.WondrousUsesThisWeek = 0;
-                    count++;
+                    if (item.WondrousUsesThisWeek > 0) { item.WondrousUsesThisWeek = 0; count++; }
+                    count += ResetCubicGateWeeklyUses(item);
                 }
         return count;
+    }
+
+    /// <summary>Reset Cubic Gate per-side weekly uses. Returns 1 if any side was reset, 0 otherwise.</summary>
+    private static int ResetCubicGateWeeklyUses(ItemData item)
+    {
+        if (item.WondrousCubicGateUsesThisWeek == null) return 0;
+        bool anyUsed = false;
+        for (int i = 0; i < item.WondrousCubicGateUsesThisWeek.Length; i++)
+        {
+            if (item.WondrousCubicGateUsesThisWeek[i] > 0)
+            {
+                item.WondrousCubicGateUsesThisWeek[i] = 0;
+                anyUsed = true;
+            }
+        }
+        return anyUsed ? 1 : 0;
     }
 
     private static int ResetMonthlyUsesForInventory(Inventory inventory)
