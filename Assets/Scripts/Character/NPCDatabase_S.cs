@@ -15,6 +15,15 @@ public static partial class NPCDatabase
         RegisterMonstrousSpiders();
     
         RegisterSummonSmallViper();
+        RegisterShadowMastiff();
+        RegisterShockerLizard();
+        RegisterShrieker();
+        RegisterSkum();
+        RegisterSpectre();
+        RegisterStoneGiant();
+        RegisterSuccubus();
+        RegisterSvirfneblin();
+
     }
 
     /// <summary>
@@ -341,6 +350,339 @@ public static partial class NPCDatabase
             NameColor = new Color(0.84f, 0.94f, 0.8f),
             Description = "Summon Monster baseline Small Viper."
         });
+    
+    private static void RegisterShadowMastiff()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "shadow_mastiff",
+            Name = "Shadow Mastiff",
+            ChallengeRating = "5",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.NeutralEvil,
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 17, DEX = 15, CON = 17, WIS = 12, INT = 4, CHA = 13,
+            NaturalArmorBonus = 2,
+            BaseSpeed = 10, // 50 ft
+            BaseHitDieHP = 30,
+            BAB = 4,
+            HasTripAttack = true,
+            TripAttackCheckBonus = 3,
+            HasScent = true,
+            AuraAbility = new AuraAbilityDefinition
+            {
+                Name = "Bay",
+                SaveDC = 13,
+                IsWillSave = true,
+                RangeFeet = 300,
+                Effect = AuraEffectType.Frightened,
+                DurationRounds = 6
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Outsider", "Extraplanar", "ShadowBlend", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Dodge", "Improved Initiative" },
+            SpecialAbilities = new List<string> { "Bay (Su): howl, 300 ft., Will DC 13 or panicked 2d4 rounds", "Trip (Ex): free trip on bite hit", "Shadow Blend (Su): total concealment in dim light except when near light", "Scent", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.2f, 0.2f, 0.25f, 1f),
+            PanelColor = new Color(0.05f, 0.05f, 0.08f, 0.85f),
+            NameColor = new Color(0.38f, 0.38f, 0.48f),
+            Description = "Shadow Mastiff (CR 5). Extraplanar shadow hound with frightening bay and trip. MM 3.5e p.222."
+        });
     }
+
+    private static void RegisterShockerLizard()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "shocker_lizard",
+            Name = "Shocker Lizard",
+            ChallengeRating = "2",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 2,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 10, DEX = 15, CON = 13, WIS = 12, INT = 2, CHA = 6,
+            NaturalArmorBonus = 3,
+            BaseSpeed = 8, // 40 ft, climb 20 ft, swim 20 ft
+            BaseHitDieHP = 13,
+            BAB = 2,
+            Immunities = new CreatureImmunities { immuneToElectricity = true },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Stunning Shock (Su): 5 ft., 1d8 nonlethal + Ref DC 12 or stunned 1 round", "Lethal Shock (Su): 3+ lizards within 20 ft., 2d8 elec/lizard, Ref DC 12 half", "Electricity Sense: 100 ft. range", "Immune to electricity", "Darkvision 60 ft., Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.4f, 0.55f, 0.65f, 1f),
+            PanelColor = new Color(0.12f, 0.2f, 0.25f, 0.85f),
+            NameColor = new Color(0.6f, 0.8f, 0.9f),
+            Description = "Shocker Lizard (CR 2). Small lizard that deals electrical damage; lethal in groups. MM 3.5e p.224."
+        });
+    }
+
+    private static void RegisterShrieker()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "shrieker",
+            Name = "Shrieker",
+            ChallengeRating = "1",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Plant",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 1, DEX = 1, CON = 13, WIS = 2, INT = 0, CHA = 1,
+            NaturalArmorBonus = 3,
+            IsMindless = true,
+            BaseSpeed = 0, // Immobile
+            BaseHitDieHP = 11,
+            BAB = 1,
+            CanMakeAttacksOfOpportunity = false,
+            Immunities = new CreatureImmunities
+            {
+                immuneToMindAffecting = true,
+                immuneToPoison = true,
+                immuneToCriticalHits = true,
+                immuneToSneakAttack = true
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Plant", "Immobile", "MM35" },
+            Feats = new List<string>(),
+            SpecialAbilities = new List<string> { "Shriek (Ex): piercing sound for 1d3 rounds when movement within 10 ft., draws creatures", "Immobile: cannot move or attack", "Plant traits" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.DefensiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
+            SpriteColor = new Color(0.55f, 0.45f, 0.3f, 1f),
+            PanelColor = new Color(0.2f, 0.15f, 0.08f, 0.85f),
+            NameColor = new Color(0.8f, 0.68f, 0.48f),
+            Description = "Shrieker (CR 1). Fungus that shrieks to alert nearby creatures. MM 3.5e p.112."
+        });
+    }
+
+    private static void RegisterSkum()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "skum",
+            Name = "Skum",
+            ChallengeRating = "2",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 19, DEX = 13, CON = 15, WIS = 10, INT = 10, CHA = 6,
+            NaturalArmorBonus = 2,
+            BaseSpeed = 4, // 20 ft, swim 40 ft
+            BaseHitDieHP = 13,
+            BAB = 2,
+            HasRake = true,
+            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = false },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Aberration", "Aquatic", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness" },
+            SpecialAbilities = new List<string> { "Rake 1d6+2 (when grappling)", "Swim 40 ft.", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.35f, 0.45f, 0.4f, 1f),
+            PanelColor = new Color(0.1f, 0.16f, 0.12f, 0.85f),
+            NameColor = new Color(0.55f, 0.72f, 0.65f),
+            Description = "Skum (CR 2). Aquatic aberration servant of aboleths. MM 3.5e p.228."
+        });
+    }
+
+    private static void RegisterSpectre()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "spectre",
+            Name = "Spectre",
+            ChallengeRating = "7",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 0, DEX = 16, CON = 0, WIS = 14, INT = 14, CHA = 15,
+            NaturalArmorBonus = 0,
+            IsIncorporeal = true,
+            BaseSpeed = 8, // Fly 40 ft (perfect)
+            BaseHitDieHP = 45,
+            BAB = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Incorporeal Touch", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true, EnergyDrainOnHit = 2, EnergyDrainRemovalDC = 15 }
+            },
+            CreatureTags = new List<string> { "Undead", "Incorporeal", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Blind-Fight", "Improved Initiative" },
+            SpecialAbilities = new List<string> { "Energy Drain (Su): 2 negative levels per touch, DC 15 Fort", "Create Spawn: humanoids slain become spectres in 1d4 rounds", "Incorporeal", "Sunlight Powerlessness", "Unnatural Aura: 30 ft., animals panicked", "+2 turn resistance", "Darkvision 60 ft.", "Fly 40 ft. (perfect)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.3f, 0.35f, 0.5f, 0.5f),
+            PanelColor = new Color(0.08f, 0.1f, 0.2f, 0.85f),
+            NameColor = new Color(0.5f, 0.6f, 0.85f),
+            Description = "Spectre (CR 7). Powerful incorporeal undead with double energy drain. MM 3.5e p.232."
+        });
+    }
+
+    private static void RegisterStoneGiant()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "stone_giant",
+            Name = "Stone Giant",
+            ChallengeRating = "8",
+            Level = 14,
+            CharacterClass = "Warrior",
+            CreatureType = "Giant",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 14,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 27, DEX = 15, CON = 19, WIS = 12, INT = 10, CHA = 11,
+            NaturalArmorBonus = 11,
+            BaseSpeed = 6, // 30 ft (40 ft -10 armor)
+            BaseHitDieHP = 119,
+            BAB = 10,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Giant", "RockThrowing", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Combat Reflexes", "Iron Will", "Point Blank Shot", "Power Attack", "Precise Shot" },
+            SpecialAbilities = new List<string> { "Rock Throwing (Ex): 180 ft., 2d8+12", "Rock Catching (Ex): Ref DC 22", "Darkvision 60 ft.", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("greatclub", EquipSlot.MainHand),
+                new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.6f, 0.58f, 0.55f, 1f),
+            PanelColor = new Color(0.22f, 0.2f, 0.18f, 0.85f),
+            NameColor = new Color(0.82f, 0.78f, 0.72f),
+            Description = "Stone Giant (CR 8). Skilled rock thrower with impressive natural armor. MM 3.5e p.124."
+        });
+    }
+
+    private static void RegisterSuccubus()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "succubus",
+            Name = "Succubus",
+            ChallengeRating = "7",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 6,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 13, DEX = 13, CON = 13, WIS = 14, INT = 16, CHA = 26,
+            NaturalArmorBonus = 9,
+            DamageReductionAmount = 10,
+            DamageReductionBypass = DamageBypassTag.ColdIron | DamageBypassTag.Good,
+            SpellResistance = 18,
+            BaseSpeed = 6, // 30 ft, fly 50 ft (average)
+            BaseHitDieHP = 33,
+            BAB = 6,
+            Immunities = new CreatureImmunities { immuneToElectricity = true, immuneToPoison = true },
+            DamageResistances = new List<DamageResistanceEntry>
+            {
+                new DamageResistanceEntry { Type = DamageType.Acid, Amount = 10 },
+                new DamageResistanceEntry { Type = DamageType.Cold, Amount = 10 },
+                new DamageResistanceEntry { Type = DamageType.Fire, Amount = 10 }
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Outsider", "Chaotic", "Evil", "Extraplanar", "Tanarri", "Fly50", "Telepathy100", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Dodge", "Mobility", "Persuasive" },
+            SpecialAbilities = new List<string> { "Energy Drain (Su): kiss, 1 negative level, Will DC 21 to resist", "Charm Monster (Sp): at will, DC 22", "Detect Good/Evil/Thoughts (Sp): at will", "Ethereal Jaunt (Sp): at will", "Suggestion (Sp): at will, DC 21", "Greater Teleport (Sp): at will, self + 50 lb.", "Polymorph (Sp): at will, humanoid form", "Tongues (Su): constant", "DR 10/cold iron or good", "SR 18", "Immune to electricity/poison", "Resist acid 10, cold 10, fire 10", "Darkvision 60 ft.", "Fly 50 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.6f, 0.3f, 0.4f, 1f),
+            PanelColor = new Color(0.25f, 0.08f, 0.12f, 0.85f),
+            NameColor = new Color(0.9f, 0.48f, 0.6f),
+            Description = "Succubus (CR 7). Seductive demon with energy draining kiss and charm. MM 3.5e p.47."
+        });
+    }
+
+    private static void RegisterSvirfneblin()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "svirfneblin",
+            Name = "Svirfneblin",
+            ChallengeRating = "1",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = true,
+            STR = 11, DEX = 17, CON = 12, WIS = 11, INT = 10, CHA = 4,
+            NaturalArmorBonus = 0,
+            SpellResistance = 12,
+            BaseSpeed = 4,
+            BaseHitDieHP = 5,
+            BAB = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Gnome", "Svirfneblin", "MM35" },
+            Feats = new List<string> { "Toughness" },
+            SpecialAbilities = new List<string> { "Darkvision 120 ft.", "SR 12", "Nondetection (constant)", "Stonecunning", "+2 saves vs. illusions", "Blindsight 60 ft. (via exceptional hearing)", "Blur (Sp) 1/day", "Disguise Self (Sp) 1/day" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("heavy_pick", EquipSlot.MainHand),
+                new EquipmentSlotPair("light_crossbow", EquipSlot.Ranged),
+                new EquipmentSlotPair("chain_shirt", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.DefensiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.55f, 0.52f, 0.58f, 1f),
+            PanelColor = new Color(0.18f, 0.16f, 0.22f, 0.85f),
+            NameColor = new Color(0.75f, 0.7f, 0.85f),
+            Description = "Svirfneblin (CR 1). Deep gnome with spell resistance and nondetection. MM 3.5e p.132."
+        });
+    }
+}
 
 }

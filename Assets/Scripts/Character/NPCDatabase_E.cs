@@ -15,6 +15,14 @@ public static partial class NPCDatabase
         RegisterSummonSmallFireElemental();
         RegisterSummonSmallEarthElemental();
         RegisterSummonSmallWaterElemental();
+        RegisterEfreeti();
+        RegisterElfWarrior();
+        RegisterErinyes();
+        RegisterEtherealFilcher();
+        RegisterEtherealMarauder();
+        RegisterEttercap();
+        RegisterEttin();
+
     }
 
     private static void RegisterEagle()
@@ -265,6 +273,281 @@ public static partial class NPCDatabase
             NameColor = new Color(0.72f, 0.88f, 1f),
             Description = "Small Water Elemental. Slam +4 (1d6+3). Water mastery, drench, vortex. MM 3.5e p.100."
         });
+    
+    private static void RegisterEfreeti()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "efreeti",
+            Name = "Efreeti",
+            ChallengeRating = "8",
+            Level = 10,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 10,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 23, DEX = 17, CON = 14, WIS = 15, INT = 12, CHA = 15,
+            NaturalArmorBonus = 6,
+            BaseSpeed = 4, // 20 ft, fly 40 ft (perfect)
+            BaseHitDieHP = 65,
+            BAB = 10,
+            Immunities = new CreatureImmunities { immuneToFire = true },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true, BonusElementalDamageDice = 6, BonusElementalDamageCount = 1, BonusElementalDamageType = DamageType.Fire }
+            },
+            CreatureTags = new List<string> { "Outsider", "Fire", "Extraplanar", "Fly40", "Telepathy100", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Combat Casting", "Combat Reflexes", "Dodge", "Improved Initiative", "Quicken Spell-Like Ability" },
+            SpecialAbilities = new List<string> { "Heat (Ex): +1d6 fire on melee attacks", "Change Size (Sp): 2/day, reduce/enlarge", "Gaseous Form (Sp): at will", "Invisibility (Sp): at will", "Permanent Image (Sp): at will, DC 17", "Polymorph (Sp): 3/day, self, up to 1 hr", "Scorching Ray (Sp): 3/day", "Wall of Fire (Sp): 1/day, DC 16", "Grant up to 3 Wishes (Sp): to non-genies, 1/day", "Plane Shift (Sp): at will", "Immune to fire", "Vulnerable to cold", "Telepathy 100 ft.", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.8f, 0.45f, 0.2f, 1f),
+            PanelColor = new Color(0.3f, 0.15f, 0.05f, 0.85f),
+            NameColor = new Color(0.95f, 0.65f, 0.3f),
+            Description = "Efreeti (CR 8). Fire genie with heat attacks and wish-granting. MM 3.5e p.115."
+        });
     }
+
+    private static void RegisterElfWarrior()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "elf_warrior",
+            Name = "Elf Warrior",
+            ChallengeRating = "1/2",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.ChaoticGood,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 13, DEX = 15, CON = 10, WIS = 9, INT = 10, CHA = 8,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 6, // 30 ft
+            BaseHitDieHP = 4,
+            BAB = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Elf", "MM35" },
+            Feats = new List<string> { "Weapon Focus (longbow)" },
+            SpecialAbilities = new List<string> { "Low-light vision", "Immune to sleep", "+2 saves vs. enchantment", "Elven weapon proficiency" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("longsword", EquipSlot.MainHand),
+                new EquipmentSlotPair("longbow", EquipSlot.Ranged),
+                new EquipmentSlotPair("studded_leather", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Ranged,
+            SpriteColor = new Color(0.7f, 0.85f, 0.65f, 1f),
+            PanelColor = new Color(0.15f, 0.25f, 0.12f, 0.85f),
+            NameColor = new Color(0.8f, 0.95f, 0.7f),
+            Description = "Elf Warrior (CR 1/2). Nimble humanoid with longsword and longbow. MM 3.5e p.101."
+        });
+    }
+
+    private static void RegisterErinyes()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "erinyes",
+            Name = "Erinyes",
+            ChallengeRating = "8",
+            Level = 9,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 9,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 21, DEX = 17, CON = 21, WIS = 18, INT = 14, CHA = 20,
+            NaturalArmorBonus = 10,
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.Good,
+            SpellResistance = 20,
+            BaseSpeed = 6, // 30 ft, fly 50 ft (good)
+            BaseHitDieHP = 85,
+            BAB = 9,
+            Immunities = new CreatureImmunities { immuneToFire = true, immuneToPoison = true },
+            DamageResistances = new List<DamageResistanceEntry>
+            {
+                new DamageResistanceEntry { Type = DamageType.Acid, Amount = 10 },
+                new DamageResistanceEntry { Type = DamageType.Cold, Amount = 10 }
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Outsider", "Evil", "Lawful", "Extraplanar", "Baatezu", "Fly50", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Dodge", "Mobility", "Point Blank Shot", "Rapid Shot", "Shot on the Run" },
+            SpecialAbilities = new List<string> { "True Seeing (Su): constant", "Charm Monster (Sp): at will, DC 19", "Minor Image (Sp): at will", "Unholy Blight (Sp): at will, DC 19", "Teleport Greater (Sp): at will, self + 50 lb.", "DR 5/good", "SR 20", "Immune to fire/poison", "Resist acid 10, cold 10", "See in Darkness (Su)", "Telepathy 100 ft.", "Fly 50 ft. (good)" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("longsword", EquipSlot.MainHand),
+                new EquipmentSlotPair("composite_longbow", EquipSlot.Ranged)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Ranged,
+            SpriteColor = new Color(0.55f, 0.3f, 0.35f, 1f),
+            PanelColor = new Color(0.22f, 0.08f, 0.1f, 0.85f),
+            NameColor = new Color(0.85f, 0.48f, 0.55f),
+            Description = "Erinyes (CR 8). Fallen angel devil with flaming bow and charm monster. MM 3.5e p.54."
+        });
+    }
+
+    private static void RegisterEtherealFilcher()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ethereal_filcher",
+            Name = "Ethereal Filcher",
+            ChallengeRating = "3",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 10, DEX = 14, CON = 11, WIS = 12, INT = 7, CHA = 10,
+            NaturalArmorBonus = 3,
+            BaseSpeed = 8, // 40 ft
+            BaseHitDieHP = 22,
+            BAB = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Aberration", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Dodge", "Improved Initiative" },
+            SpecialAbilities = new List<string> { "Ethereal Jaunt (Su): at will, as ethereal jaunt", "Detect Magic (Su): continuous", "Filch (Ex): can steal items from foes via Sleight of Hand", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.5f, 0.5f, 0.55f, 0.7f),
+            PanelColor = new Color(0.18f, 0.18f, 0.22f, 0.85f),
+            NameColor = new Color(0.75f, 0.75f, 0.82f),
+            Description = "Ethereal Filcher (CR 3). Item-stealing aberration from the Ethereal Plane. MM 3.5e p.104."
+        });
+    }
+
+    private static void RegisterEtherealMarauder()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ethereal_marauder",
+            Name = "Ethereal Marauder",
+            ChallengeRating = "3",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 13, DEX = 15, CON = 13, WIS = 12, INT = 7, CHA = 10,
+            NaturalArmorBonus = 2,
+            BaseSpeed = 8, // 40 ft
+            BaseHitDieHP = 13,
+            BAB = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Magical Beast", "Extraplanar", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Improved Initiative" },
+            SpecialAbilities = new List<string> { "Ethereal Jaunt (Su): at will, shifts to/from Ethereal Plane", "Darkvision 60 ft., Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.45f, 0.5f, 0.55f, 0.7f),
+            PanelColor = new Color(0.14f, 0.18f, 0.22f, 0.85f),
+            NameColor = new Color(0.68f, 0.75f, 0.82f),
+            Description = "Ethereal Marauder (CR 3). Ethereal ambush predator. MM 3.5e p.105."
+        });
+    }
+
+    private static void RegisterEttercap()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ettercap",
+            Name = "Ettercap",
+            ChallengeRating = "3",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.NeutralEvil,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 14, DEX = 15, CON = 13, WIS = 15, INT = 6, CHA = 8,
+            NaturalArmorBonus = 2,
+            BaseSpeed = 6,
+            BaseHitDieHP = 27,
+            BAB = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Aberration", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Great Fortitude", "Multiattack" },
+            SpecialAbilities = new List<string> { "Poison (Ex): bite, DC 15 Fort, 1d6 Dex/1d6 Dex", "Web (Ex): 8/day, entangle (DC 15 Ref to avoid, DC 17 Escape Artist or DC 21 Str to break)", "Low-light vision", "Darkvision 60 ft.", "Climb 30 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.35f, 0.4f, 0.3f, 1f),
+            PanelColor = new Color(0.1f, 0.14f, 0.08f, 0.85f),
+            NameColor = new Color(0.55f, 0.65f, 0.48f),
+            Description = "Ettercap (CR 3). Spider-like aberration with poison bite and web. MM 3.5e p.106."
+        });
+    }
+
+    private static void RegisterEttin()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ettin",
+            Name = "Ettin",
+            ChallengeRating = "6",
+            Level = 10,
+            CharacterClass = "Warrior",
+            CreatureType = "Giant",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 10,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 23, DEX = 8, CON = 15, WIS = 10, INT = 6, CHA = 11,
+            NaturalArmorBonus = 7,
+            BaseSpeed = 8, // 40 ft
+            BaseHitDieHP = 65,
+            BAB = 7,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Giant", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Improved Initiative", "Iron Will", "Power Attack" },
+            SpecialAbilities = new List<string> { "Two heads: cannot be flanked, +2 Spot/Listen/Search", "Superior Two-Weapon Fighting: no off-hand penalty", "Darkvision 60 ft.", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("morningstar", EquipSlot.MainHand),
+                new EquipmentSlotPair("morningstar", EquipSlot.OffHand),
+                new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string> { "javelin" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.55f, 0.48f, 0.38f, 1f),
+            PanelColor = new Color(0.2f, 0.16f, 0.1f, 0.85f),
+            NameColor = new Color(0.8f, 0.7f, 0.55f),
+            Description = "Ettin (CR 6). Two-headed giant with superior two-weapon fighting. MM 3.5e p.106."
+        });
+    }
+}
 
 }

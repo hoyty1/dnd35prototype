@@ -12,6 +12,11 @@ public static partial class NPCDatabase
         RegisterOwl();
     
         RegisterSummonOctopus();
+        RegisterOgre();
+        RegisterOgreMage();
+        RegisterOtyugh();
+        RegisterOwlbear();
+
     }
 
     /// <summary>
@@ -136,6 +141,166 @@ public static partial class NPCDatabase
             NameColor = new Color(0.88f, 0.8f, 0.95f),
             Description = "Summon Monster baseline octopus with improved-grab style control attack."
         });
+    
+    private static void RegisterOgre()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ogre",
+            Name = "Ogre",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Giant",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 4,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 21, DEX = 8, CON = 15, WIS = 10, INT = 6, CHA = 7,
+            NaturalArmorBonus = 5,
+            BaseSpeed = 6, // 30 ft (40 ft base, -10 armor)
+            BaseHitDieHP = 29,
+            BAB = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Giant", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Toughness", "Weapon Focus (greatclub)" },
+            SpecialAbilities = new List<string> { "Darkvision 60 ft.", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("greatclub", EquipSlot.MainHand),
+                new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string> { "javelin" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.6f, 0.5f, 0.35f, 1f),
+            PanelColor = new Color(0.22f, 0.18f, 0.1f, 0.85f),
+            NameColor = new Color(0.85f, 0.7f, 0.5f),
+            Description = "Ogre (CR 3). Large brute with greatclub. MM 3.5e p.198."
+        });
     }
+
+    private static void RegisterOgreMage()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ogre_mage",
+            Name = "Ogre Mage",
+            ChallengeRating = "8",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Giant",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 19, DEX = 12, CON = 17, WIS = 14, INT = 14, CHA = 17,
+            NaturalArmorBonus = 5,
+            SpellResistance = 19,
+            RegenerationAmount = 5,
+            BaseSpeed = 6, // 30 ft (also fly 40 ft)
+            BaseHitDieHP = 37,
+            BAB = 5,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Giant", "Shapechanger", "Fly40", "Darkvision90", "MM35" },
+            Feats = new List<string> { "Combat Expertise", "Improved Initiative" },
+            SpecialAbilities = new List<string> { "Regeneration 5 (fire/acid)", "SR 19", "Flight (Su) 40 ft. (good)", "Darkvision 90 ft.", "Low-light vision", "Darkness (Sp) at will", "Invisibility (Sp) at will", "Charm Person (Sp) 1/day DC 14", "Cone of Cold (Sp) 1/day DC 18", "Gaseous Form (Sp) 1/day", "Polymorph (Sp) 1/day", "Sleep (Sp) 1/day DC 14" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("greatsword", EquipSlot.MainHand),
+                new EquipmentSlotPair("chain_shirt", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.35f, 0.45f, 0.6f, 1f),
+            PanelColor = new Color(0.12f, 0.18f, 0.25f, 0.85f),
+            NameColor = new Color(0.55f, 0.7f, 0.9f),
+            Description = "Ogre Mage (CR 8). Intelligent giant with spell-like abilities, flight, and regeneration. MM 3.5e p.200."
+        });
+    }
+
+    private static void RegisterOtyugh()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "otyugh",
+            Name = "Otyugh",
+            ChallengeRating = "4",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 15, DEX = 10, CON = 13, WIS = 12, INT = 5, CHA = 6,
+            NaturalArmorBonus = 8,
+            BaseSpeed = 4, // 20 ft
+            BaseHitDieHP = 36,
+            BAB = 4,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Tentacle",
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Tentacle", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false, HasDiseaseOnHit = true, DiseaseOnHitType = DiseaseType.FilthFever }
+            },
+            CreatureTags = new List<string> { "Aberration", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Toughness" },
+            SpecialAbilities = new List<string> { "Improved Grab", "Constrict 1d6+2", "Disease (Ex): filth fever, bite, DC 14 Fort", "Scent", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.45f, 0.4f, 0.3f, 1f),
+            PanelColor = new Color(0.15f, 0.12f, 0.06f, 0.85f),
+            NameColor = new Color(0.7f, 0.62f, 0.45f),
+            Description = "Otyugh (CR 4). Trash-dwelling aberration with grabbing tentacles and disease. MM 3.5e p.204."
+        });
+    }
+
+    private static void RegisterOwlbear()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "owlbear",
+            Name = "Owlbear",
+            ChallengeRating = "4",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 21, DEX = 12, CON = 21, WIS = 12, INT = 2, CHA = 10,
+            NaturalArmorBonus = 5,
+            BaseSpeed = 6,
+            BaseHitDieHP = 52,
+            BAB = 5,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Claw",
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Track" },
+            SpecialAbilities = new List<string> { "Improved Grab", "Scent", "Darkvision 60 ft.", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.55f, 0.45f, 0.3f, 1f),
+            PanelColor = new Color(0.2f, 0.15f, 0.08f, 0.85f),
+            NameColor = new Color(0.82f, 0.7f, 0.48f),
+            Description = "Owlbear (CR 4). Ferocious hybrid beast with improved grab. MM 3.5e p.206."
+        });
+    }
+}
 
 }

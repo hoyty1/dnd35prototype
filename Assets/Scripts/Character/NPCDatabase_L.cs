@@ -15,6 +15,9 @@ public static partial class NPCDatabase
     
         RegisterSummonLargeShark();
         RegisterSummonLargeViper();
+        RegisterLizardfolk();
+        RegisterLocustSwarm();
+
     }
 
     /// <summary>
@@ -320,6 +323,87 @@ public static partial class NPCDatabase
             NameColor = new Color(0.88f, 0.94f, 0.72f),
             Description = "Large viper snake. Bite +4 (1d4 + poison Fort DC 11, 1d6 Con/1d6 Con). Weapon Finesse. MM 3.5e p.280."
         });
+    
+    private static void RegisterLizardfolk()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "lizardfolk",
+            Name = "Lizardfolk",
+            ChallengeRating = "1",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 2,
+            BABOverride = BABProgression.Medium,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 13, DEX = 10, CON = 13, WIS = 10, INT = 9, CHA = 10,
+            NaturalArmorBonus = 5,
+            BaseSpeed = 6,
+            BaseHitDieHP = 11,
+            BAB = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Humanoid", "Reptilian", "Aquatic", "MM35" },
+            Feats = new List<string> { "Multiattack" },
+            SpecialAbilities = new List<string> { "Hold Breath (4× Con rounds)", "Swim 30 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("club", EquipSlot.MainHand),
+                new EquipmentSlotPair("heavy_wooden_shield", EquipSlot.OffHand)
+            },
+            BackpackItemIds = new List<string> { "javelin" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.35f, 0.55f, 0.3f, 1f),
+            PanelColor = new Color(0.12f, 0.2f, 0.08f, 0.85f),
+            NameColor = new Color(0.6f, 0.85f, 0.5f),
+            Description = "Lizardfolk (CR 1). Reptilian humanoid with claws and natural armor. MM 3.5e p.169."
+        });
     }
+
+    private static void RegisterLocustSwarm()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "locust_swarm",
+            Name = "Locust Swarm",
+            ChallengeRating = "3",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 6,
+            SizeCategory = SizeCategory.Diminutive,
+            IsTallCreature = false,
+            STR = 1, DEX = 19, CON = 8, WIS = 10, INT = 0, CHA = 2,
+            NaturalArmorBonus = 0,
+            IsMindless = true,
+            IsSwarm = true,
+            BaseSpeed = 2, // 10 ft, fly 30 ft (poor)
+            BaseHitDieHP = 21,
+            BAB = 4,
+            Immunities = new CreatureImmunities { immuneToMindAffecting = true, immuneToWeaponDamage = true },
+            SwarmTraits = new SwarmTraits { SwarmDamage = 6, SwarmDamageCount = 2, SwarmDamageType = DamageType.Piercing, DistractionDC = 12 },
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Vermin", "Swarm", "Fly30", "Darkvision60", "MM35" },
+            Feats = new List<string>(),
+            SpecialAbilities = new List<string> { "Swarm Attack: 2d6 to creatures in space", "Distraction (Ex): DC 12 Fort or nauseated 1 round", "Immune to weapon damage", "Vermin traits (mindless)", "Fly 30 ft.", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.IndiscriminateSwarm,
+            SpriteColor = new Color(0.45f, 0.5f, 0.3f, 1f),
+            PanelColor = new Color(0.15f, 0.18f, 0.06f, 0.85f),
+            NameColor = new Color(0.7f, 0.78f, 0.48f),
+            Description = "Locust Swarm (CR 3). Diminutive vermin swarm with distraction. MM 3.5e p.239."
+        });
+    }
+}
 
 }

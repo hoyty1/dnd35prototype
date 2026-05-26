@@ -13,6 +13,10 @@ public static partial class NPCDatabase
         RegisterViperMedium();
         RegisterViperLarge();
         RegisterViperHuge();
+        RegisterVampireSpawn();
+        RegisterVargouille();
+        RegisterVioletFungus();
+
     }
 
     private static void RegisterViperTiny()
@@ -194,6 +198,141 @@ public static partial class NPCDatabase
             NameColor = new Color(0.76f, 0.86f, 0.7f),
             Description = "Monster Manual huge viper. High-HD giant serpent with potent Constitution poison and long reach."
         });
+    
+    private static void RegisterVampireSpawn()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "vampire_spawn",
+            Name = "Vampire Spawn",
+            ChallengeRating = "4",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 16, DEX = 14, CON = 0, WIS = 13, INT = 13, CHA = 14,
+            NaturalArmorBonus = 3,
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.Silver,
+            BaseSpeed = 6,
+            BaseHitDieHP = 29,
+            BAB = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true, EnergyDrainOnHit = 1, EnergyDrainRemovalDC = 14 }
+            },
+            DamageResistances = new List<DamageResistanceEntry>
+            {
+                new DamageResistanceEntry { Type = DamageType.Cold, Amount = 10 },
+                new DamageResistanceEntry { Type = DamageType.Electricity, Amount = 10 }
+            },
+            CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Improved Initiative", "Lightning Reflexes", "Toughness" },
+            SpecialAbilities = new List<string> { "Energy Drain (Su): 1 negative level on slam, DC 14 Fort", "Dominate (Su): DC 14 Will, as dominate person", "Blood Drain (Ex): Pin + 1d4 CON drain", "Fast Healing 2", "Gaseous Form (Su)", "Spider Climb (Ex)", "DR 5/silver", "Resist cold 10, electricity 10", "+2 turn resistance", "Darkvision 60 ft.", "Undead traits" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.35f, 0.25f, 0.3f, 1f),
+            PanelColor = new Color(0.15f, 0.08f, 0.12f, 0.85f),
+            NameColor = new Color(0.7f, 0.4f, 0.5f),
+            Description = "Vampire Spawn (CR 4). Lesser vampire with energy drain and domination. MM 3.5e p.253."
+        });
     }
+
+    private static void RegisterVargouille()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "vargouille",
+            Name = "Vargouille",
+            ChallengeRating = "2",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.NeutralEvil,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 10, DEX = 13, CON = 12, WIS = 12, INT = 5, CHA = 8,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 6, // Fly 30 ft (good) — no land speed
+            BaseHitDieHP = 5,
+            BAB = 1,
+            AuraAbility = new AuraAbilityDefinition
+            {
+                Name = "Shriek",
+                SaveDC = 12,
+                IsWillSave = false, // Fort save
+                RangeFeet = 60,
+                Effect = AuraEffectType.Frightened, // Actually paralysis but closest approximation
+                DurationRounds = 6
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Outsider", "Evil", "Extraplanar", "Fly30", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Shriek (Su): 60 ft., Fort DC 12 or paralyzed 2d4 rounds", "Kiss (Su): transforms paralyzed victim into vargouille over 1d6 hours (remove disease stops)", "Poison (Ex): bite, DC 12 Fort, 1d2 Str/1d2 Str", "Flight only (no land speed)", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.45f, 0.35f, 0.3f, 1f),
+            PanelColor = new Color(0.15f, 0.1f, 0.08f, 0.85f),
+            NameColor = new Color(0.72f, 0.55f, 0.48f),
+            Description = "Vargouille (CR 2). Flying fiendish head with paralysing shriek and transformative kiss. MM 3.5e p.254."
+        });
+    }
+
+    private static void RegisterVioletFungus()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "violet_fungus",
+            Name = "Violet Fungus",
+            ChallengeRating = "3",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Plant",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 14, DEX = 8, CON = 16, WIS = 11, INT = 0, CHA = 9,
+            NaturalArmorBonus = 4,
+            IsMindless = true,
+            BaseSpeed = 2, // 10 ft
+            BaseHitDieHP = 15,
+            BAB = 1,
+            Immunities = new CreatureImmunities
+            {
+                immuneToMindAffecting = true,
+                immuneToPoison = true,
+                immuneToCriticalHits = true,
+                immuneToSneakAttack = true
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Tentacle", DamageDice = 6, DamageCount = 1, Count = 4, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Plant", "MM35" },
+            Feats = new List<string>(),
+            SpecialAbilities = new List<string> { "Poison (Ex): tentacle, DC 14 Fort, 1d4 Str + 1d4 Con / 1d4 Str + 1d4 Con", "Plant traits (immune to mind-affecting, poison, sleep, paralysis, polymorph, stun, crits)", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
+            SpriteColor = new Color(0.5f, 0.25f, 0.55f, 1f),
+            PanelColor = new Color(0.2f, 0.08f, 0.22f, 0.85f),
+            NameColor = new Color(0.75f, 0.4f, 0.82f),
+            Description = "Violet Fungus (CR 3). Poisonous plant with long tentacles. MM 3.5e p.112."
+        });
+    }
+}
 
 }

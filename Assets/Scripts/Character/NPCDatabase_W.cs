@@ -10,6 +10,9 @@ public static partial class NPCDatabase
     {
         RegisterWraith();
         RegisterSummonWolverine();
+        RegisterWillOWisp();
+        RegisterWorg();
+
     }
 
     /// <summary>
@@ -92,5 +95,83 @@ public static partial class NPCDatabase
             NameColor = new Color(0.9f, 0.82f, 0.7f),
             Description = "Wolverine with rage when wounded (+4 Str/Con, −2 AC). +8 racial Climb. MM 3.5e p.283."
         });
+    private static void RegisterWillOWisp()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "will_o_wisp",
+            Name = "Will-o'-Wisp",
+            ChallengeRating = "6",
+            Level = 9,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 9,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 1, DEX = 29, CON = 10, WIS = 16, INT = 15, CHA = 12,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 10, // Fly 50 ft (perfect)
+            BaseHitDieHP = 40,
+            BAB = 6,
+            Immunities = new CreatureImmunities { immuneToElectricity = true },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Shock", DamageDice = 8, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Aberration", "Air", "NaturalInvisibility", "Fly50", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Blind-Fight", "Dodge", "Improved Initiative", "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Immunity to Magic (Ex): immune to all spells except magic missile, maze, protection from evil", "Natural Invisibility (Ex): can suppress/resume as free action", "Immune to electricity", "Fly 50 ft. (perfect)", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.7f, 0.8f, 0.5f, 0.6f),
+            PanelColor = new Color(0.25f, 0.3f, 0.15f, 0.85f),
+            NameColor = new Color(0.9f, 0.95f, 0.7f),
+            Description = "Will-o'-Wisp (CR 6). Glowing aberration nearly immune to magic. MM 3.5e p.255."
+        });
+    }
+
+    private static void RegisterWorg()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "worg",
+            Name = "Worg",
+            ChallengeRating = "2",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.NeutralEvil,
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 17, DEX = 15, CON = 15, WIS = 14, INT = 6, CHA = 10,
+            NaturalArmorBonus = 2,
+            BaseSpeed = 10, // 50 ft
+            BaseHitDieHP = 30,
+            BAB = 4,
+            HasScent = true,
+            HasTripAttack = true,
+            TripAttackCheckBonus = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Track" },
+            SpecialAbilities = new List<string> { "Trip (Ex): free trip on bite hit", "Scent", "Darkvision 60 ft.", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.3f, 0.3f, 0.35f, 1f),
+            PanelColor = new Color(0.08f, 0.08f, 0.12f, 0.85f),
+            NameColor = new Color(0.5f, 0.5f, 0.6f),
+            Description = "Worg (CR 2). Evil intelligent wolf with trip attack. MM 3.5e p.256."
+        });
+    }
+
     }
 }

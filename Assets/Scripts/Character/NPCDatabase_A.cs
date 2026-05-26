@@ -10,6 +10,9 @@ public static partial class NPCDatabase
     {
         RegisterAllip();
         RegisterSummonApe();
+        RegisterAboleth();
+        RegisterAverageSalamander();
+
     }
 
     /// <summary>
@@ -101,5 +104,85 @@ public static partial class NPCDatabase
             NameColor = new Color(0.95f, 0.84f, 0.75f),
             Description = "Ape. 2 claws +7 (1d6+5), bite +2 (1d6+2). +8 racial Climb. 10 ft. reach. MM 3.5e p.268."
         });
+    private static void RegisterAboleth()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "aboleth",
+            Name = "Aboleth",
+            ChallengeRating = "7",
+            Level = 8,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 8,
+            SizeCategory = SizeCategory.Huge,
+            IsTallCreature = false,
+            STR = 26, DEX = 12, CON = 20, WIS = 17, INT = 15, CHA = 17,
+            NaturalArmorBonus = 7,
+            BaseSpeed = 2, // 10 ft, swim 60 ft
+            BaseHitDieHP = 76,
+            BAB = 6,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Tentacle", DamageDice = 6, DamageCount = 1, Count = 4, BonusDamageSource = DamageBonusSource.Strength, Range = 3, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Aberration", "Aquatic", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Combat Casting", "Iron Will" },
+            SpecialAbilities = new List<string> { "Slime (Ex): tentacle hit, DC 19 Fort or skin transforms in 1d4+1 rounds", "Enslave (Su): 3/day, Will DC 17, as dominate person, unlimited range on same plane", "Mucus Cloud (Ex): 1 ft. cloud in water, DC 19 Fort or breathe water only for 3 hours", "Psionics: Hypnotic Pattern 3/day, Mirage Arcana 3/day, Persistent Image 3/day, Programmed Image 3/day", "Darkvision 60 ft.", "Swim 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.3f, 0.45f, 0.5f, 1f),
+            PanelColor = new Color(0.08f, 0.16f, 0.2f, 0.85f),
+            NameColor = new Color(0.5f, 0.7f, 0.8f),
+            Description = "Aboleth (CR 7). Ancient aquatic aberration with enslave and transformative slime. MM 3.5e p.8."
+        });
+    }
+
+    private static void RegisterAverageSalamander()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "average_salamander",
+            Name = "Average Salamander",
+            ChallengeRating = "6",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.NeutralEvil,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 16, DEX = 13, CON = 14, WIS = 15, INT = 14, CHA = 13,
+            NaturalArmorBonus = 7,
+            Immunities = new CreatureImmunities { immuneToFire = true },
+            DamageReductionAmount = 10,
+            DamageReductionBypass = DamageBypassTag.Magic,
+            BaseSpeed = 4, // 20 ft
+            BaseHitDieHP = 45,
+            BAB = 7,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Tail Slap", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false, BonusElementalDamageDice = 6, BonusElementalDamageCount = 1, BonusElementalDamageType = DamageType.Fire }
+            },
+            CreatureTags = new List<string> { "Outsider", "Fire", "Extraplanar", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Cleave", "Multiattack", "Power Attack" },
+            SpecialAbilities = new List<string> { "Heat (Ex): +1d6 fire on all melee attacks", "Constrict (Ex): 2d6+1 + 1d6 fire", "DR 10/magic", "Immune to fire", "Vulnerable to cold (×1.5 damage)", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("longspear", EquipSlot.MainHand)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.75f, 0.4f, 0.12f, 1f),
+            PanelColor = new Color(0.28f, 0.12f, 0.02f, 0.85f),
+            NameColor = new Color(0.92f, 0.6f, 0.2f),
+            Description = "Average Salamander (CR 6). Fire outsider warrior with DR 10/magic and heat. MM 3.5e p.218."
+        });
+    }
+
     }
 }

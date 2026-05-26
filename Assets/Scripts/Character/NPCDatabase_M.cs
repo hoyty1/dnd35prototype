@@ -14,6 +14,15 @@ public static partial class NPCDatabase
         RegisterSummonMonstrousCentipedeMedium();
         RegisterSummonMonstrousScorpionSmall();
         RegisterSummonMonstrousSpiderSmall();
+        RegisterManticore();
+        RegisterMedusa();
+        RegisterMimic();
+        RegisterMindFlayer();
+        RegisterMinotaur();
+        RegisterMohrg();
+        RegisterMonitorLizard();
+        RegisterMummy();
+
     }
 
     private static void RegisterMonkey()
@@ -446,6 +455,342 @@ public static partial class NPCDatabase
             NameColor = new Color(0.82f, 0.82f, 0.82f),
             Description = "Summon Monster baseline Monstrous Spider (Small)."
         });
+    
+    private static void RegisterManticore()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "manticore",
+            Name = "Manticore",
+            ChallengeRating = "5",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 20, DEX = 15, CON = 19, WIS = 12, INT = 7, CHA = 9,
+            NaturalArmorBonus = 6,
+            BaseSpeed = 6, // 30 ft, fly 50 ft (clumsy)
+            BaseHitDieHP = 57,
+            BAB = 6,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 2, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Magical Beast", "Fly50", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Flyby Attack", "Multiattack", "Track", "Weapon Focus (spikes)" },
+            SpecialAbilities = new List<string> { "Spikes (Ex): 6 spikes, 180 ft. ranged, 1d8+2 each (24 spikes, regrow 1d4/day)", "Flight: 50 ft. (clumsy)", "Scent", "Darkvision 60 ft.", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Ranged,
+            SpriteColor = new Color(0.55f, 0.4f, 0.3f, 1f),
+            PanelColor = new Color(0.2f, 0.12f, 0.08f, 0.85f),
+            NameColor = new Color(0.82f, 0.62f, 0.48f),
+            Description = "Manticore (CR 5). Winged lion-beast that fires tail spikes at range. MM 3.5e p.179."
+        });
     }
+
+    private static void RegisterMedusa()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "medusa",
+            Name = "Medusa",
+            ChallengeRating = "7",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Monstrous Humanoid",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 6,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 10, DEX = 15, CON = 12, WIS = 13, INT = 12, CHA = 15,
+            NaturalArmorBonus = 3,
+            BaseSpeed = 6,
+            BaseHitDieHP = 33,
+            BAB = 6,
+            AuraAbility = new AuraAbilityDefinition
+            {
+                Name = "Petrifying Gaze",
+                SaveDC = 15,
+                IsWillSave = false, // Fort save
+                RangeFeet = 30,
+                Effect = AuraEffectType.Frightened, // Closest to petrification
+                DurationRounds = 999
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Snakes", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Monstrous Humanoid", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Point Blank Shot", "Precise Shot", "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Petrifying Gaze (Su): 30 ft., Fort DC 15 or permanently turned to stone", "Poison (Ex): snakes, DC 14 Fort, 1d6 Str/2d6 Str", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("dagger", EquipSlot.MainHand),
+                new EquipmentSlotPair("shortbow", EquipSlot.Ranged)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Ranged,
+            SpriteColor = new Color(0.4f, 0.5f, 0.35f, 1f),
+            PanelColor = new Color(0.12f, 0.18f, 0.1f, 0.85f),
+            NameColor = new Color(0.62f, 0.78f, 0.55f),
+            Description = "Medusa (CR 7). Snake-haired woman with petrifying gaze and poison. MM 3.5e p.180."
+        });
+    }
+
+    private static void RegisterMimic()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "mimic",
+            Name = "Mimic",
+            ChallengeRating = "4",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 19, DEX = 12, CON = 17, WIS = 13, INT = 10, CHA = 10,
+            NaturalArmorBonus = 5,
+            BaseSpeed = 2, // 10 ft
+            BaseHitDieHP = 52,
+            BAB = 5,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Slam",
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            Immunities = new CreatureImmunities { immuneToAcid = true },
+            CreatureTags = new List<string> { "Aberration", "Shapechanger", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Lightning Reflexes", "Weapon Focus (slam)" },
+            SpecialAbilities = new List<string> { "Adhesive (Ex): auto-grapple on touch; DC 16 Str or dissolvent to release", "Crush (Ex): 1d8+4 per round to grappled creatures", "Mimic Shape (Ex): can assume form of any Medium–Large object", "Immune to acid", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.5f, 0.45f, 0.35f, 1f),
+            PanelColor = new Color(0.18f, 0.14f, 0.08f, 0.85f),
+            NameColor = new Color(0.78f, 0.7f, 0.55f),
+            Description = "Mimic (CR 4). Shapeshifting aberration that disguises as objects and adhesive-grabs prey. MM 3.5e p.186."
+        });
+    }
+
+    private static void RegisterMindFlayer()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "mind_flayer",
+            Name = "Mind Flayer",
+            ChallengeRating = "8",
+            Level = 8,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 8,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 12, DEX = 14, CON = 12, WIS = 17, INT = 19, CHA = 17,
+            NaturalArmorBonus = 3,
+            SpellResistance = 25,
+            BaseSpeed = 6,
+            BaseHitDieHP = 44,
+            BAB = 6,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Tentacle",
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Tentacle", DamageDice = 4, DamageCount = 1, Count = 4, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Aberration", "Telepathy100", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Combat Casting", "Improved Initiative", "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Mind Blast (Sp): 60 ft. cone, Will DC 17 or stunned 3d4 rounds", "Extract Brain (Ex): coup de grace on grappled target, instant death", "Improved Grab: tentacle → grapple → extract brain", "SR 25", "Telepathy 100 ft.", "Psionics: Suggestion 3/day, Charm Monster 3/day, Detect Thoughts (at will), Levitate (at will), Plane Shift (at will)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.5f, 0.35f, 0.55f, 1f),
+            PanelColor = new Color(0.18f, 0.1f, 0.22f, 0.85f),
+            NameColor = new Color(0.75f, 0.55f, 0.85f),
+            Description = "Mind Flayer (CR 8). Psionic aberration with mind blast and brain extraction. MM 3.5e p.186."
+        });
+    }
+
+    private static void RegisterMinotaur()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "minotaur",
+            Name = "Minotaur",
+            ChallengeRating = "4",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Monstrous Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 19, DEX = 10, CON = 15, WIS = 10, INT = 7, CHA = 8,
+            NaturalArmorBonus = 5,
+            BaseSpeed = 6,
+            BaseHitDieHP = 39,
+            BAB = 6,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Gore", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Monstrous Humanoid", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Great Fortitude", "Power Attack", "Track" },
+            SpecialAbilities = new List<string> { "Powerful Charge (Ex): gore 4d6+6 on charge", "Natural Cunning (Ex): immune to maze spells, never gets lost", "Scent", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("greataxe", EquipSlot.MainHand)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.5f, 0.38f, 0.28f, 1f),
+            PanelColor = new Color(0.18f, 0.12f, 0.06f, 0.85f),
+            NameColor = new Color(0.78f, 0.6f, 0.45f),
+            Description = "Minotaur (CR 4). Bull-headed brute with powerful charge. MM 3.5e p.188."
+        });
+    }
+
+    private static void RegisterMohrg()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "mohrg",
+            Name = "Mohrg",
+            ChallengeRating = "8",
+            Level = 14,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 14,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 21, DEX = 19, CON = 0, WIS = 10, INT = 11, CHA = 10,
+            NaturalArmorBonus = 9,
+            BaseSpeed = 6,
+            BaseHitDieHP = 91,
+            BAB = 7,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Tongue", DamageDice = 0, DamageCount = 0, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = false, ParalysisOnHitDC = 17, ParalysisOnHitDurationRounds = 6 }
+            },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Slam",
+            CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Dodge", "Improved Initiative", "Lightning Reflexes", "Mobility" },
+            SpecialAbilities = new List<string> { "Paralyzing Touch (Su): tongue attack, DC 17 Fort or paralyzed 1d4 rounds", "Create Spawn (Su): humanoids killed rise as zombies in 1d4 rounds", "Improved Grab", "Darkvision 60 ft.", "Undead traits" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.5f, 0.35f, 0.3f, 1f),
+            PanelColor = new Color(0.2f, 0.1f, 0.08f, 0.85f),
+            NameColor = new Color(0.8f, 0.55f, 0.45f),
+            Description = "Mohrg (CR 8). Skeletal undead with paralyzing tongue that creates zombie spawn. MM 3.5e p.189."
+        });
+    }
+
+    private static void RegisterMonitorLizard()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "monitor_lizard",
+            Name = "Monitor Lizard",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 17, DEX = 15, CON = 17, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 3,
+            BaseSpeed = 6, // 30 ft, swim 30 ft
+            BaseHitDieHP = 22,
+            BAB = 2,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Alertness", "Great Fortitude" },
+            SpecialAbilities = new List<string> { "Scent", "Low-light vision", "Swim 30 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.45f, 0.5f, 0.35f, 1f),
+            PanelColor = new Color(0.15f, 0.18f, 0.08f, 0.85f),
+            NameColor = new Color(0.68f, 0.75f, 0.55f),
+            Description = "Monitor Lizard (CR 2). Large reptilian predator. MM 3.5e p.275."
+        });
+    }
+
+    private static void RegisterMummy()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "mummy",
+            Name = "Mummy",
+            ChallengeRating = "5",
+            Level = 8,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 8,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 24, DEX = 10, CON = 0, WIS = 14, INT = 6, CHA = 15,
+            NaturalArmorBonus = 10,
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.None, // DR 5/— (overcome by nothing)
+            BaseSpeed = 4, // 20 ft
+            BaseHitDieHP = 55,
+            BAB = 4,
+            AuraAbility = new AuraAbilityDefinition
+            {
+                Name = "Despair",
+                SaveDC = 16,
+                IsWillSave = true,
+                RangeFeet = 30,
+                Effect = AuraEffectType.Frightened,
+                DurationRounds = 4
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true, HasDiseaseOnHit = true, DiseaseOnHitType = DiseaseType.MummyRot }
+            },
+            CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Great Fortitude", "Toughness" },
+            SpecialAbilities = new List<string> { "Despair (Su): 30 ft., Will DC 16 or paralyzed with fear 1d4 rounds", "Mummy Rot (Su): supernatural disease, 1d6 CON", "DR 5/—", "Vulnerable to fire (×1.5 damage)", "Darkvision 60 ft.", "Undead traits" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.6f, 0.55f, 0.4f, 1f),
+            PanelColor = new Color(0.22f, 0.2f, 0.12f, 0.85f),
+            NameColor = new Color(0.85f, 0.78f, 0.55f),
+            Description = "Mummy (CR 5). Bandaged undead with despair aura and mummy rot. MM 3.5e p.190."
+        });
+    }
+}
 
 }

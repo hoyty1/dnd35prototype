@@ -19,6 +19,19 @@ public static partial class NPCDatabase
         RegisterGiantWasp();
         RegisterGiantPrayingMantis();
         RegisterNobleDjinni();
+        RegisterGhast();
+        RegisterGhoul();
+        RegisterGiantConstrictorSnake();
+        RegisterGiantStagBeetle();
+        RegisterGiantWorkerAnt();
+        RegisterGibberingMouther();
+        RegisterGorgon();
+        RegisterGrayOoze();
+        RegisterGreaterShadow();
+        RegisterGreenSlaad();
+        RegisterGrick();
+        RegisterGrimlock();
+
     }
 
     // ════════════════════════════════════════════════════════════
@@ -508,5 +521,513 @@ public static partial class NPCDatabase
             NameColor = new Color(0.8f, 0.95f, 0.72f),
             Description = "Monster Manual giant praying mantis (CR 3). Claws +6 (1d8+4), improved grab, squeeze. Ambush predator with camouflage. MM 3.5e p.285."
         });
+    private static void RegisterGhast()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ghast",
+            Name = "Ghast",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 17, DEX = 15, CON = 0, WIS = 14, INT = 13, CHA = 16,
+            NaturalArmorBonus = 5,
+            BaseSpeed = 6,
+            BaseHitDieHP = 29,
+            BAB = 2,
+            StenchAuraDC = 15,
+            StenchAuraRange = 10,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, ParalysisOnHitDC = 15, ParalysisOnHitDurationRounds = 4 },
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false, ParalysisOnHitDC = 15, ParalysisOnHitDurationRounds = 4 }
+            },
+            CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Multiattack", "Toughness" },
+            SpecialAbilities = new List<string> { "Ghoul Fever", "Paralysis (Su): DC 15 Fort, 1d4+1 rounds (elves NOT immune)", "Stench (Ex): 10 ft., DC 15 Fort or sickened 1d6+4 min", "Darkvision 60 ft.", "Undead traits", "+2 turn resistance" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.4f, 0.48f, 0.38f, 1f),
+            PanelColor = new Color(0.12f, 0.16f, 0.1f, 0.85f),
+            NameColor = new Color(0.65f, 0.78f, 0.6f),
+            Description = "Ghast (CR 3). Advanced ghoul with stench aura, paralysis affects even elves. MM 3.5e p.119."
+        });
+    }
+
+    private static void RegisterGhoul()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ghoul",
+            Name = "Ghoul",
+            ChallengeRating = "1",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 13, DEX = 15, CON = 0, WIS = 14, INT = 13, CHA = 12,
+            NaturalArmorBonus = 2,
+            BaseSpeed = 6,
+            BaseHitDieHP = 13,
+            BAB = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, ParalysisOnHitDC = 14, ParalysisOnHitDurationRounds = 4 },
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false, ParalysisOnHitDC = 14, ParalysisOnHitDurationRounds = 4 }
+            },
+            CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Multiattack" },
+            SpecialAbilities = new List<string> { "Ghoul Fever (disease)", "Paralysis (Su): DC 14 Fort, 1d4+1 rounds, elves immune", "Darkvision 60 ft.", "Undead traits", "+2 turn resistance" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.45f, 0.5f, 0.42f, 1f),
+            PanelColor = new Color(0.15f, 0.18f, 0.12f, 0.85f),
+            NameColor = new Color(0.7f, 0.8f, 0.65f),
+            Description = "Ghoul (CR 1). Undead with paralysing bite and claws. Ghoul fever. MM 3.5e p.118."
+        });
+    }
+
+    private static void RegisterGiantConstrictorSnake()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "giant_constrictor_snake",
+            Name = "Giant Constrictor Snake",
+            ChallengeRating = "5",
+            Level = 11,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 11,
+            SizeCategory = SizeCategory.Huge,
+            IsTallCreature = false,
+            STR = 25, DEX = 17, CON = 13, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 4, // 20 ft, climb 20 ft, swim 20 ft
+            BaseHitDieHP = 60,
+            BAB = 8,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 3, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Alertness", "Endurance", "Skill Focus (Hide)", "Toughness" },
+            SpecialAbilities = new List<string> { "Improved Grab", "Constrict 1d8+10", "Scent", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.4f, 0.45f, 0.3f, 1f),
+            PanelColor = new Color(0.12f, 0.15f, 0.06f, 0.85f),
+            NameColor = new Color(0.62f, 0.7f, 0.48f),
+            Description = "Giant Constrictor Snake (CR 5). Massive snake with constrict. MM 3.5e p.279."
+        });
+    }
+
+    private static void RegisterGiantStagBeetle()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "giant_stag_beetle",
+            Name = "Giant Stag Beetle",
+            ChallengeRating = "4",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 23, DEX = 10, CON = 17, WIS = 10, INT = 0, CHA = 9,
+            NaturalArmorBonus = 10,
+            IsMindless = true,
+            BaseSpeed = 4, // 20 ft
+            BaseHitDieHP = 52,
+            BAB = 5,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 4, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 2, IsPrimary = true }
+            },
+            Immunities = new CreatureImmunities { immuneToMindAffecting = true },
+            CreatureTags = new List<string> { "Vermin", "Darkvision60", "MM35" },
+            Feats = new List<string>(),
+            SpecialAbilities = new List<string> { "Trample (Ex): 2d8+3, Ref DC 19 half", "Vermin traits (mindless)", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.3f, 0.28f, 0.22f, 1f),
+            PanelColor = new Color(0.08f, 0.06f, 0.03f, 0.85f),
+            NameColor = new Color(0.5f, 0.45f, 0.35f),
+            Description = "Giant Stag Beetle (CR 4). Large beetle with crushing mandibles. MM 3.5e p.285."
+        });
+    }
+
+    private static void RegisterGiantWorkerAnt()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "giant_worker_ant",
+            Name = "Giant Worker Ant",
+            ChallengeRating = "1",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 12, DEX = 10, CON = 10, WIS = 11, INT = 0, CHA = 9,
+            NaturalArmorBonus = 7,
+            IsMindless = true,
+            BaseSpeed = 10, // 50 ft, climb 20 ft
+            BaseHitDieHP = 9,
+            BAB = 1,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            Immunities = new CreatureImmunities { immuneToMindAffecting = true },
+            CreatureTags = new List<string> { "Vermin", "Darkvision60", "MM35" },
+            Feats = new List<string>(),
+            SpecialAbilities = new List<string> { "Improved Grab", "Acid Sting: 1d4+1 acid (workers have reduced sting)", "Vermin traits (mindless)", "Scent", "Darkvision 60 ft.", "Climb 20 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.35f, 0.25f, 0.15f, 1f),
+            PanelColor = new Color(0.1f, 0.06f, 0.02f, 0.85f),
+            NameColor = new Color(0.58f, 0.42f, 0.25f),
+            Description = "Giant Worker Ant (CR 1). Hive-dwelling vermin with improved grab. MM 3.5e p.284."
+        });
+    }
+
+    private static void RegisterGibberingMouther()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "gibbering_mouther",
+            Name = "Gibbering Mouther",
+            ChallengeRating = "5",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 10, DEX = 10, CON = 22, WIS = 13, INT = 4, CHA = 13,
+            NaturalArmorBonus = 9,
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.Bludgeoning,
+            BaseSpeed = 2, // 10 ft, swim 20 ft
+            BaseHitDieHP = 42,
+            BAB = 3,
+            AuraAbility = new AuraAbilityDefinition
+            {
+                Name = "Gibbering",
+                SaveDC = 13,
+                IsWillSave = true,
+                RangeFeet = 60,
+                Effect = AuraEffectType.Confused,
+                DurationRounds = 1
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 1, DamageCount = 1, Count = 6, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Aberration", "Amorphous", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Lightning Reflexes" },
+            SpecialAbilities = new List<string> { "Gibbering (Su): 60 ft., Will DC 13 or confused 1 round", "Spittle (Ex): 30 ft. ranged touch, 1d4 acid, blinding 1d4 rounds on crit", "Ground Manipulation (Su): 10 ft. radius becomes bog-like", "Improved Grab", "Blood Drain: 1 CON/round", "Engulf", "DR 5/bludgeoning", "Amorphous (immune to critical hits)", "Darkvision 60 ft." },
+            Immunities = new CreatureImmunities { immuneToCriticalHits = true },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.55f, 0.35f, 0.4f, 1f),
+            PanelColor = new Color(0.2f, 0.1f, 0.12f, 0.85f),
+            NameColor = new Color(0.82f, 0.55f, 0.6f),
+            Description = "Gibbering Mouther (CR 5). Mass of eyes and mouths that confuses and engulfs prey. MM 3.5e p.126."
+        });
+    }
+
+    private static void RegisterGorgon()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "gorgon",
+            Name = "Gorgon",
+            ChallengeRating = "8",
+            Level = 8,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 8,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 21, DEX = 12, CON = 21, WIS = 12, INT = 2, CHA = 9,
+            NaturalArmorBonus = 10,
+            BaseSpeed = 6,
+            BaseHitDieHP = 84,
+            BAB = 8,
+            HasScent = true,
+            BreathWeapon = new BreathWeaponDefinition
+            {
+                Shape = BreathWeaponShape.Cone,
+                RangeFeet = 60,
+                DamageDice = 0, // No damage — petrification
+                DamageCount = 0,
+                DamageType = DamageType.Force, // Closest type for petrification
+                SaveDC = 19,
+                IsReflexSave = false, // Fort save
+                RechargeRounds = 4
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Gore", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 2, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Iron Will", "Power Attack" },
+            SpecialAbilities = new List<string> { "Breath Weapon (Su): 60 ft. cone, Fort DC 19 or petrified (permanent)", "Trample (Ex): 1d8+7, Ref DC 19 to halve", "Scent", "Darkvision 60 ft., Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.4f, 0.42f, 0.45f, 1f),
+            PanelColor = new Color(0.12f, 0.14f, 0.16f, 0.85f),
+            NameColor = new Color(0.65f, 0.68f, 0.72f),
+            Description = "Gorgon (CR 8). Iron-skinned bull with petrifying breath. MM 3.5e p.137."
+        });
+    }
+
+    private static void RegisterGrayOoze()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "gray_ooze",
+            Name = "Gray Ooze",
+            ChallengeRating = "4",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Ooze",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 12, DEX = 1, CON = 21, WIS = 1, INT = 0, CHA = 1,
+            NaturalArmorBonus = 0,
+            IsMindless = true,
+            BaseSpeed = 2, // 10 ft
+            BaseHitDieHP = 31,
+            BAB = 2,
+            Immunities = new CreatureImmunities
+            {
+                immuneToFire = true,
+                immuneToCold = true,
+                immuneToMindAffecting = true,
+                immuneToCriticalHits = true,
+                immuneToSneakAttack = true
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, BonusElementalDamageDice = 6, BonusElementalDamageCount = 1, BonusElementalDamageType = DamageType.Acid }
+            },
+            CreatureTags = new List<string> { "Ooze", "Transparent", "Blindsight60", "MM35" },
+            Feats = new List<string>(),
+            SpecialAbilities = new List<string> { "Acid (Ex): dissolves metal and organic on contact", "Transparent (Ex): DC 15 Spot to notice, surprise on failure", "Improved Grab", "Constrict 1d6+1 + 1d6 acid", "Immune to fire/cold", "Blindsight 60 ft.", "Ooze traits (mindless, immune to crits/sneak/mind-affecting)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
+            SpriteColor = new Color(0.5f, 0.5f, 0.48f, 0.7f),
+            PanelColor = new Color(0.18f, 0.18f, 0.16f, 0.85f),
+            NameColor = new Color(0.75f, 0.75f, 0.7f),
+            Description = "Gray Ooze (CR 4). Transparent acidic ooze that dissolves metal. MM 3.5e p.202."
+        });
+    }
+
+    private static void RegisterGreaterShadow()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "greater_shadow",
+            Name = "Greater Shadow",
+            ChallengeRating = "8",
+            Level = 9,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 9,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 0, DEX = 16, CON = 0, WIS = 12, INT = 6, CHA = 14,
+            NaturalArmorBonus = 0,
+            IsIncorporeal = true,
+            BaseSpeed = 8, // Fly 40 ft (good)
+            BaseHitDieHP = 58,
+            BAB = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Incorporeal Touch", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true, AbilityDrainType = AbilityType.STR, AbilityDrainAmount = 8 }
+            },
+            CreatureTags = new List<string> { "Undead", "Incorporeal", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Dodge", "Improved Initiative", "Mobility", "Spring Attack" },
+            SpecialAbilities = new List<string> { "Strength Damage (Su): 1d8 STR per touch", "Create Spawn (Su): humanoids reduced to 0 STR become shadows", "Incorporeal", "+2 turn resistance", "Darkvision 60 ft.", "Fly 40 ft. (good)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.15f, 0.15f, 0.2f, 0.5f),
+            PanelColor = new Color(0.05f, 0.05f, 0.1f, 0.85f),
+            NameColor = new Color(0.4f, 0.4f, 0.55f),
+            Description = "Greater Shadow (CR 8). Advanced incorporeal undead draining 1d8 STR per touch. MM 3.5e p.221."
+        });
+    }
+
+    private static void RegisterGreenSlaad()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "green_slaad",
+            Name = "Green Slaad",
+            ChallengeRating = "9",
+            Level = 9,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.ChaoticNeutral,
+            HitDice = 9,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 19, DEX = 15, CON = 19, WIS = 10, INT = 10, CHA = 10,
+            NaturalArmorBonus = 8,
+            DamageReductionAmount = 10,
+            DamageReductionBypass = DamageBypassTag.Lawful,
+            SpellResistance = 22,
+            DamageResistances = new List<DamageResistanceEntry>
+            {
+                new DamageResistanceEntry { Type = DamageType.Acid, Amount = 5 },
+                new DamageResistanceEntry { Type = DamageType.Cold, Amount = 5 },
+                new DamageResistanceEntry { Type = DamageType.Electricity, Amount = 5 },
+                new DamageResistanceEntry { Type = DamageType.Fire, Amount = 5 }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 76,
+            BAB = 9,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Outsider", "Chaotic", "Extraplanar", "Shapechanger", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Combat Reflexes", "Multiattack", "Power Attack" },
+            SpecialAbilities = new List<string> { "Change Shape (Su): any humanoid form Small–Large", "Spell-Like: Chaos Hammer (at will, DC 14), Detect Magic (at will), Detect Thoughts (at will, DC 12), Deeper Darkness (3/day), Fear (3/day, DC 14), Fireball (3/day, DC 13), Protection from Law (at will), See Invisibility (constant), Shatter (at will, DC 12), Dispel Law (1/day, DC 15)", "DR 10/lawful", "SR 22", "Fast Healing 5", "Resist acid 5, cold 5, electricity 5, fire 5", "Summon Slaad: 40% chance 1 green slaad", "Darkvision 60 ft.", "Telepathy 100 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.2f, 0.6f, 0.25f, 1f),
+            PanelColor = new Color(0.04f, 0.22f, 0.06f, 0.85f),
+            NameColor = new Color(0.35f, 0.85f, 0.4f),
+            Description = "Green Slaad (CR 9). Intelligent shapeshifting slaad with spell-like abilities. MM 3.5e p.230."
+        });
+    }
+
+    private static void RegisterGrick()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "grick",
+            Name = "Grick",
+            ChallengeRating = "3",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 14, DEX = 14, CON = 13, WIS = 14, INT = 3, CHA = 5,
+            NaturalArmorBonus = 4,
+            DamageReductionAmount = 10,
+            DamageReductionBypass = DamageBypassTag.Magic,
+            BaseSpeed = 6,
+            BaseHitDieHP = 11,
+            BAB = 1,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Tentacle", DamageDice = 4, DamageCount = 1, Count = 4, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Aberration", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Track" },
+            SpecialAbilities = new List<string> { "DR 10/magic", "Scent", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.4f, 0.42f, 0.38f, 1f),
+            PanelColor = new Color(0.12f, 0.14f, 0.1f, 0.85f),
+            NameColor = new Color(0.65f, 0.68f, 0.6f),
+            Description = "Grick (CR 3). Worm-like aberration with DR 10/magic and four tentacles. MM 3.5e p.139."
+        });
+    }
+
+    private static void RegisterGrimlock()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "grimlock",
+            Name = "Grimlock",
+            ChallengeRating = "1",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Monstrous Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 16, DEX = 13, CON = 13, WIS = 8, INT = 10, CHA = 6,
+            NaturalArmorBonus = 3,
+            BaseSpeed = 6,
+            BaseHitDieHP = 11,
+            BAB = 2,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Monstrous Humanoid", "Blindsight40", "MM35" },
+            Feats = new List<string> { "Alertness", "Track" },
+            SpecialAbilities = new List<string> { "Blindsight 40 ft.", "Immune to gaze attacks/visual effects/illusions", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("battleaxe", EquipSlot.MainHand)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Berserk,
+            SpriteColor = new Color(0.55f, 0.52f, 0.5f, 1f),
+            PanelColor = new Color(0.2f, 0.18f, 0.16f, 0.85f),
+            NameColor = new Color(0.8f, 0.75f, 0.7f),
+            Description = "Grimlock (CR 1). Blind monstrous humanoid with blindsight 40 ft. MM 3.5e p.140."
+        });
+    }
+
     }
 }
