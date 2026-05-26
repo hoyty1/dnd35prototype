@@ -635,6 +635,59 @@ public static class DungeonEncounterTableManager
         _creatureNameMap["xorns"] = "average_xorn";
         _creatureNameMap["minor xorn"] = "minor_xorn";
         _creatureNameMap["elder xorns"] = "elder_xorn";
+
+        // ── Phase 5.1: Missing name mappings (2026-05-26) ──────────────
+        // Resolves CSV creature name variations that fail both the explicit
+        // name map and the fallback normalization (lowercase/underscore).
+
+        // Hydra variants not in NPCDatabase — map to closest registered head count
+        // (hydra_5head, hydra_7head, hydra_9head exist; 6/8/12 do not)
+        _creatureNameMap["six-headed hydra"] = "hydra_5head";    // 6-head → nearest 5-head (CR 4)
+        _creatureNameMap["six headed hydra"] = "hydra_5head";
+        _creatureNameMap["hydra, six-headed"] = "hydra_5head";
+        _creatureNameMap["hydra (6 heads)"] = "hydra_5head";
+        _creatureNameMap["eight-headed hydra"] = "hydra_7head";  // 8-head → nearest 7-head (CR 6)
+        _creatureNameMap["eight headed hydra"] = "hydra_7head";
+        _creatureNameMap["hydra, eight-headed"] = "hydra_7head";
+        _creatureNameMap["hydra (8 heads)"] = "hydra_7head";
+
+        // Typo fix: CSV has "duergar dwarves" but old mapping had "duargar dwarves"
+        _creatureNameMap["duergar dwarves"] = "duergar";
+
+        // NPC class entries — map to closest leveled NPC variant in NPCDatabase
+        _creatureNameMap["5th-level human monk npc"] = "human_monk_5";
+        _creatureNameMap["human monk npc"] = "human_monk_5";
+
+        // Dragon age/color variants — dynamically registered IDs
+        _creatureNameMap["young adult black dragon"] = "dragon_black_young_adult";
+        _creatureNameMap["juvenile bronze dragon"] = "dragon_bronze_juvenile";
+
+        // Irregular plurals → singular creature IDs
+        _creatureNameMap["violet fungi"] = "violet_fungus";
+        _creatureNameMap["svirfneblin gnomes"] = "svirfneblin";
+        _creatureNameMap["jann"] = "janni";                      // plural of janni (genie)
+        _creatureNameMap["boars"] = "boar";
+        _creatureNameMap["brown bears"] = "brown_bear";
+
+        // Sized vermin/snake plurals (CSV uses plural forms with size prefix)
+        _creatureNameMap["medium monstrous centipedes"] = "monstrous_centipede_medium";
+        _creatureNameMap["small monstrous scorpions"] = "monstrous_scorpion_small";
+        _creatureNameMap["small monstrous spiders"] = "monstrous_spider_small";
+        _creatureNameMap["large viper snakes"] = "viper_large";
+        _creatureNameMap["small viper snakes"] = "viper_small";
+        _creatureNameMap["medium viper snakes"] = "viper_medium";
+
+        // Sized vermin where exact size variant not in DB — map to closest
+        _creatureNameMap["medium monstrous scorpions"] = "monstrous_scorpion_small";  // no medium variant
+        _creatureNameMap["medium monstrous spiders"] = "monstrous_spider_small";      // no medium variant
+        _creatureNameMap["large monstrous centipedes"] = "monstrous_centipede_medium"; // no large variant
+        _creatureNameMap["large monstrous scorpions"] = "monstrous_scorpion_small";   // no large variant
+        _creatureNameMap["large monstrous spiders"] = "monstrous_spider_small";       // no large variant
+
+        // Compound/template creature names
+        _creatureNameMap["human warrior skeletons"] = "skeleton_warrior";
+        _creatureNameMap["troglodyte zombies"] = "zombie_shambler";   // closest zombie variant
+        _creatureNameMap["hellcat"] = "hellcat";                      // direct ID match
     }
 
     /// <summary>
