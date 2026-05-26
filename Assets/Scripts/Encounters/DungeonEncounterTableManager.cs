@@ -384,17 +384,17 @@ public static class DungeonEncounterTableManager
         _creatureNameMap["lanter archon"] = "lantern_archon";
         _creatureNameMap["doppelganer"] = "doppelganger";
         _creatureNameMap["menticore"] = "manticore";
-        _creatureNameMap["thoqque"] = "thoqqua";       // Not in DB, but map anyway
+        // "thoqqua" removed — not in NPCDatabase
         _creatureNameMap["trogolodyte"] = "troglodyte";
         _creatureNameMap["trogolydyte"] = "troglodyte";
         _creatureNameMap["slaamander"] = "average_salamander";
         _creatureNameMap["flamebrother slaamanders"] = "flamebrother_salamander";
         _creatureNameMap["shieker"] = "shrieker";
         _creatureNameMap["vargouiles"] = "vargouille";
-        _creatureNameMap["mosntrous"] = "monstrous";
+        // "monstrous" removed — truncated ID, not in NPCDatabase
         _creatureNameMap["small mosntrous scorpion"] = "monstrous_scorpion_small";
         _creatureNameMap["huge monsterous centipede"] = "huge_monstrous_centipede";
-        _creatureNameMap["fice headed hydra"] = "five_headed_hydra";
+        // "five_headed_hydra" removed — not in NPCDatabase
         _creatureNameMap["hellswasp swarm"] = "hellwasp_swarm";
         _creatureNameMap["formian taskmater"] = "formian_taskmaster";
 
