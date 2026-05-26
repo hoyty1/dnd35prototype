@@ -251,18 +251,4 @@ Dungeon_Level,Roll_Min,Roll_Max,Encounter
 8,84,86,1d3+1 yuan-ti halfbloods
 8,87,88,1d4+1 giant stag beetles (vermin)
 8,89,90,1d3 5th-level troglodyte cleric NPCs
-8,91,100,Roll on 9th-level table
-9,1,10,Roll on 8th-level table
-9,11,13,1d4+2 greater barghests
-9,14,16,1d4+2 basilisks
-9,17,19,1d4+2 cloakers
-9,20,21,1 delver
-9,22,24,1 vrock (demon)
-9,25,27,1 bone devil
-9,28,30,"1d3 devils, hellcat"
-9,31,33,1d3+1 chain devils
-9,34,36,1d3 dire bears
-9,37,38,1 young adult black dragon
-9,39,39,1 juvenile bronze dragon
-9,40,42,1 drider and 2d4+3 Medium monstrous spiders (vermin)
-9,43,44,1 formian myrmarch and 2d4+1 formian workers
+8,91,100,Roll on 8th-level table

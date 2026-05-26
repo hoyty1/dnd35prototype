@@ -6,18 +6,18 @@ using UnityEngine;
 /// <summary>
 /// Central manager for the DMG 3.5e dungeon encounter table system (Phase 3/5).
 ///
-/// Manages nine encounter tables (dungeon levels 1-9), each with d% entries
+/// Manages eight encounter tables (dungeon levels 1-8), each with d% entries
 /// and cascade logic that redirects extreme rolls to adjacent-level tables.
 ///
 /// Loading Strategy (Phase 5):
 ///   1. Try CSV-first: loads from StreamingAssets/dungeon_encounters.csv
-///      with dice expression support and 9 tables (levels 1-9).
+///      with dice expression support and 8 tables (levels 1-8).
 ///   2. Fallback: if CSV is missing, uses hardcoded Phase 3 tables (levels 1-8).
 ///
 /// Cascade Logic (DMG 3.5e p.82):
 ///   - Roll 01-10 → re-roll on the next easier table (level - 1)
 ///   - Roll 91-100 → re-roll on the next harder table (level + 1)
-///   - At table boundaries (level 1 / level 9), cascades wrap to same table
+///   - At table boundaries (level 1 / level 8), cascades wrap to same table
 ///   - Maximum cascade depth of 3 prevents infinite loops
 ///
 /// Public API:
@@ -38,7 +38,7 @@ public static class DungeonEncounterTableManager
     //  State
     // =========================================================================
 
-    /// <summary>All loaded encounter tables, keyed by dungeon level (1-9).</summary>
+    /// <summary>All loaded encounter tables, keyed by dungeon level (1-8).</summary>
     private static Dictionary<int, DungeonEncounterTable> _tables;
 
     /// <summary>Whether tables have been loaded.</summary>
@@ -51,17 +51,17 @@ public static class DungeonEncounterTableManager
     public const int MinLevel = 1;
 
     /// <summary>
-    /// Maximum table level. 9 when CSV-loaded (Phase 5); hardcoded tables only go to 8.
+    /// Maximum table level. Both CSV and hardcoded tables cover levels 1-8.
     /// Use <see cref="EffectiveMaxLevel"/> for the actual loaded range.
     /// </summary>
-    public const int MaxLevel = 9;
+    public const int MaxLevel = 8;
 
     /// <summary>Maximum level available in the hardcoded fallback tables.</summary>
     public const int HardcodedMaxLevel = 8;
 
     /// <summary>
     /// The actual maximum level available in the currently loaded tables.
-    /// Accounts for CSV tables (1-9) vs hardcoded tables (1-8).
+    /// Accounts for CSV tables (1-8) vs hardcoded tables (1-8).
     /// </summary>
     public static int EffectiveMaxLevel
     {
@@ -95,7 +95,7 @@ public static class DungeonEncounterTableManager
     ///
     /// Loading order:
     ///   1. Try CSV from StreamingAssets/dungeon_encounters.csv
-    ///      → Produces tables 1-9 with dice expression support.
+    ///      → Produces tables 1-8 with dice expression support.
     ///   2. If CSV fails or is missing, fall back to hardcoded tables (1-8).
     ///
     /// Also initializes the creature name map for name resolution.
@@ -291,7 +291,7 @@ public static class DungeonEncounterTableManager
     // =========================================================================
 
     /// <summary>
-    /// Get the encounter table for the specified dungeon level (1-9).
+    /// Get the encounter table for the specified dungeon level (1-8).
     /// Returns null if not loaded or level is out of range.
     /// Level is clamped to [MinLevel, EffectiveMaxLevel].
     /// </summary>
@@ -335,7 +335,7 @@ public static class DungeonEncounterTableManager
     ///
     /// Returns null if tables are not loaded or generation fails.
     /// </summary>
-    /// <param name="dungeonLevel">Dungeon level (1-9, clamped to loaded range).</param>
+    /// <param name="dungeonLevel">Dungeon level (1-8, clamped to loaded range).</param>
     /// <param name="partyLevel">Party level (for logging/future EL adjustment, currently unused).</param>
     public static EncounterDefinition GenerateRandomEncounter(int dungeonLevel, int partyLevel = 0)
     {

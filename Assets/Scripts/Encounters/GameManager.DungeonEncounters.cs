@@ -159,7 +159,7 @@ public partial class GameManager
     /// encounter preview, and combat start integration.
     ///
     /// The UI handles:
-    ///   1. Level selection (1-9)
+    ///   1. Level selection (1-8)
     ///   2. d% rolling with cascade logic via DungeonEncounterTableManager
     ///   3. Encounter preview display
     ///   4. "Start Combat" → calls StartDungeonEncounter() → combat pipeline

@@ -8,7 +8,7 @@ using UnityEngine.UI;
 /// Full-screen UI for the DMG 3.5e dungeon encounter table system (Phase 4).
 ///
 /// Provides:
-///   - Dungeon level selector (1-9) with button row
+///   - Dungeon level selector (1-8) with button row
 ///   - "Generate Random Encounter" button that rolls d% on the selected table
 ///   - Encounter preview panel showing roll result, cascade info, creatures, EL
 ///   - "Re-roll" button to generate a different encounter on the same table
@@ -109,7 +109,7 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
     /// <param name="partyLevel">Average party level (for display and future EL adjustment).</param>
     /// <param name="onStartCombat">Called when user clicks "Start Combat" with the generated EncounterDefinition.</param>
     /// <param name="onBack">Called when user clicks "Back" to return to the previous screen.</param>
-    /// <param name="defaultDungeonLevel">Initial dungeon level selection (1-9).</param>
+    /// <param name="defaultDungeonLevel">Initial dungeon level selection (1-8).</param>
     public void Open(
         int partyLevel,
         Action<EncounterDefinition> onStartCombat,
@@ -131,7 +131,7 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
         _lastTableUsed = 0;
         _cascadeCount = 0;
 
-        // Auto-select dungeon level matching party level (clamped to 1-9)
+        // Auto-select dungeon level matching party level (clamped to 1-8)
         if (defaultDungeonLevel > 0)
             _selectedLevel = Mathf.Clamp(defaultDungeonLevel, 1, DungeonEncounterTableManager.MaxLevel);
         else
@@ -343,7 +343,7 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
     {
         GameObject section = CreateSectionPanel(parent, "LevelSelectorSection",
             new Color(0.11f, 0.13f, 0.22f, 0.98f), 138f);
-        CreateSectionTitle(section.transform, "2) DUNGEON LEVEL (1-9)", 22, TextAnchor.UpperLeft, TitleColor);
+        CreateSectionTitle(section.transform, "2) DUNGEON LEVEL (1-8)", 22, TextAnchor.UpperLeft, TitleColor);
 
         // Button row
         GameObject row = new GameObject("LevelRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -638,7 +638,7 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
     {
         UpdatePreviewText(
             "No encounter generated yet.\n\n" +
-            "Select a dungeon level (1-9) and click <b>ROLL ENCOUNTER</b> to generate\n" +
+            "Select a dungeon level (1-8) and click <b>ROLL ENCOUNTER</b> to generate\n" +
             "a random encounter from the DMG 3.5e encounter tables.\n\n" +
             "• Rolls 01-10 cascade to an easier table\n" +
             "• Rolls 91-100 cascade to a harder table\n" +
