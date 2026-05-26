@@ -1461,7 +1461,8 @@ public partial class GameManager : MonoBehaviour
         PreCombatHubUI?.HideMenu();
 
         var spellComp = crafter.GetComponent<SpellcastingComponent>();
-        var inventory = crafter.GetComponent<Inventory>();
+        var invComp = crafter.GetComponent<InventoryComponent>();
+        var inventory = invComp != null ? invComp.CharacterInventory : null;
 
         _craftingWorkshopUI.Open(
             crafter.Stats,
