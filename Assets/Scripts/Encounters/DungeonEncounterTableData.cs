@@ -191,12 +191,14 @@ public static class DungeonEncounterTableData
             "rust_monster", 1, "1x Rust Monster"));
         t.Entries.Add(DungeonEncounterTableEntry.Basic(78, 81, 3,
             "shadow", 1, "1x Shadow"));
-        t.Entries.Add(DungeonEncounterTableEntry.Basic(82, 85, 3,
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(82, 84, 3,
             "yuan_ti_pureblood", 1, "1x Yuan-ti Pureblood"));
-        t.Entries.Add(DungeonEncounterTableEntry.Basic(86, 88, 3,
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(85, 86, 3,
             "giant_praying_mantis", 1, "1x Giant Praying Mantis"));
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(87, 88, 3,
+            "human_monk_3", 1, "1x Human Monk (3rd level)"));
         t.Entries.Add(DungeonEncounterTableEntry.Basic(89, 90, 3,
-            "viper_medium", 2, "2x Medium Viper Snake"));
+            "human_paladin_3", 1, "1x Human Paladin (3rd level)"));
 
         t.Entries.Add(DungeonEncounterTableEntry.CascadeEntry(91, 100, CascadeDirection.Harder));
 
@@ -305,10 +307,14 @@ public static class DungeonEncounterTableData
             "wraith", 1, "1x Wraith"));
         t.Entries.Add(DungeonEncounterTableEntry.Basic(79, 82, 5,
             "yuan_ti_halfblood", 1, "1x Yuan-ti Halfblood"));
-        t.Entries.Add(DungeonEncounterTableEntry.Basic(83, 86, 5,
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(83, 85, 5,
             "giant_constrictor_snake", 1, "1x Giant Constrictor Snake"));
-        t.Entries.Add(DungeonEncounterTableEntry.Classed(87, 90, 5,
+        t.Entries.Add(DungeonEncounterTableEntry.Classed(86, 87, 5,
             "hobgoblin", "Fighter", 5, 1, "1x Hobgoblin Fighter 5"));
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(88, 89, 5,
+            "human_monk_5", 1, "1x Human Monk (5th level)"));
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(90, 90, 5,
+            "human_paladin_5", 1, "1x Human Paladin (5th level)"));
 
         t.Entries.Add(DungeonEncounterTableEntry.CascadeEntry(91, 100, CascadeDirection.Harder));
 
@@ -417,10 +423,14 @@ public static class DungeonEncounterTableData
             "shadow_mastiff", 3, "3x Shadow Mastiff"));
         t.Entries.Add(DungeonEncounterTableEntry.Basic(79, 82, 7,
             "red_slaad", 1, "1x Red Slaad"));
-        t.Entries.Add(DungeonEncounterTableEntry.Basic(83, 86, 7,
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(83, 85, 7,
             "spectre", 1, "1x Spectre"));
-        t.Entries.Add(DungeonEncounterTableEntry.Basic(87, 90, 7,
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(86, 87, 7,
             "umber_hulk", 1, "1x Umber Hulk"));
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(88, 89, 7,
+            "human_monk_7", 1, "1x Human Monk (7th level)"));
+        t.Entries.Add(DungeonEncounterTableEntry.Basic(90, 90, 7,
+            "human_paladin_7", 1, "1x Human Paladin (7th level)"));
 
         t.Entries.Add(DungeonEncounterTableEntry.CascadeEntry(91, 100, CascadeDirection.Harder));
 

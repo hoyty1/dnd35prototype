@@ -421,6 +421,26 @@ public static class DungeonEncounterTableManager
         _creatureNameMap["couatls"] = "couatl";
         _creatureNameMap["spirit naga"] = "spirit_naga";
         _creatureNameMap["spirit nagas"] = "spirit_naga";
+
+        // Leveled class NPCs — Monk
+        _creatureNameMap["monk"] = "human_monk_3";
+        _creatureNameMap["human monk"] = "human_monk_3";
+        _creatureNameMap["monk 3"] = "human_monk_3";
+        _creatureNameMap["human monk 3"] = "human_monk_3";
+        _creatureNameMap["monk 5"] = "human_monk_5";
+        _creatureNameMap["human monk 5"] = "human_monk_5";
+        _creatureNameMap["monk 7"] = "human_monk_7";
+        _creatureNameMap["human monk 7"] = "human_monk_7";
+
+        // Leveled class NPCs — Paladin
+        _creatureNameMap["paladin"] = "human_paladin_3";
+        _creatureNameMap["human paladin"] = "human_paladin_3";
+        _creatureNameMap["paladin 3"] = "human_paladin_3";
+        _creatureNameMap["human paladin 3"] = "human_paladin_3";
+        _creatureNameMap["paladin 5"] = "human_paladin_5";
+        _creatureNameMap["human paladin 5"] = "human_paladin_5";
+        _creatureNameMap["paladin 7"] = "human_paladin_7";
+        _creatureNameMap["human paladin 7"] = "human_paladin_7";
         _creatureNameMap["hellswasp swarm"] = "hellwasp_swarm";
         _creatureNameMap["formian taskmater"] = "formian_taskmaster";
 

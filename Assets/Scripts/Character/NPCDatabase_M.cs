@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Monster Manual creatures: M
@@ -22,7 +23,9 @@ public static partial class NPCDatabase
         RegisterMohrg();
         RegisterMonitorLizard();
         RegisterMummy();
-
+        RegisterHumanMonk3();
+        RegisterHumanMonk5();
+        RegisterHumanMonk7();
     }
 
     private static void RegisterMonkey()
@@ -789,6 +792,194 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.22f, 0.2f, 0.12f, 0.85f),
             NameColor = new Color(0.85f, 0.78f, 0.55f),
             Description = "Mummy (CR 5). Bandaged undead with despair aura and mummy rot. MM 3.5e p.190."
+        });
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Leveled Human Monk NPCs (PHB 3.5e)
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Human Monk 3 (CR 3) — Medium humanoid (human).
+    /// PHB 3.5e Monk class level 3. Unarmored combatant with Flurry of Blows and Evasion.
+    /// Unarmed strike 1d6. Still Mind. AC bonus from WIS.
+    /// </summary>
+    private static void RegisterHumanMonk3()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_monk_3",
+            Name = "Human Monk",
+            ChallengeRating = "3",
+            Level = 3,
+            CharacterClass = "Monk",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulNeutral,
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            // PHB Monk: high DEX/WIS, decent STR. 25 point buy equivalent.
+            STR = 14, DEX = 16, CON = 12, WIS = 16, INT = 10, CHA = 8,
+            NaturalArmorBonus = 0, // Unarmored — AC from WIS + class bonus
+            BaseSpeed = 8, // 40 ft (Monk speed bonus at 3rd level)
+            BaseHitDieHP = 20, // 3d8+3 average
+            BAB = 2, // Monk 3: +2
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Unarmed Strike", DamageDice = 6, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 1, IsPrimary = true
+                }
+            },
+            CreatureTags = new List<string> { "Humanoid", "Human", "Monk", "Unarmored", "MM35" },
+            Feats = new List<string> { "Improved Unarmed Strike", "Stunning Fist", "Dodge", "Mobility", "Combat Reflexes", "Deflect Arrows" },
+            SpecialAbilities = new List<string>
+            {
+                "Flurry of Blows: extra attack at -2 penalty",
+                "Evasion: no damage on successful Ref save",
+                "Still Mind: +2 vs. enchantment",
+                "AC Bonus (Ex): +3 WIS mod to AC when unarmored",
+                "Unarmed Strike 1d6",
+                "Speed 40 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                // Monks are unarmored — only carried items
+                new EquipmentSlotPair(ItemIDs.SLING, EquipSlot.Ranged)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.POTION_CURE_LIGHT_WOUNDS, ItemIDs.AMMO_SLING_BULLET },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.65f, 0.55f, 0.35f, 1f),
+            PanelColor = new Color(0.2f, 0.15f, 0.08f, 0.85f),
+            NameColor = new Color(0.9f, 0.8f, 0.5f),
+            Description = "Human Monk 3 (CR 3). Disciplined martial artist with Flurry of Blows and Evasion. Unarmed 1d6. PHB 3.5e."
+        });
+    }
+
+    /// <summary>
+    /// Human Monk 5 (CR 5) — Medium humanoid (human).
+    /// PHB 3.5e Monk class level 5. Unarmed strike 1d8. Ki Strike (magic), Purity of Body.
+    /// Slow Fall 20 ft.
+    /// </summary>
+    private static void RegisterHumanMonk5()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_monk_5",
+            Name = "Human Monk",
+            ChallengeRating = "5",
+            Level = 5,
+            CharacterClass = "Monk",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulNeutral,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 14, DEX = 16, CON = 12, WIS = 16, INT = 10, CHA = 8,
+            NaturalArmorBonus = 1, // +1 AC class bonus at 5th
+            BaseSpeed = 8, // 40 ft
+            BaseHitDieHP = 32, // 5d8+5 average
+            BAB = 3, // Monk 5: +3
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Unarmed Strike", DamageDice = 8, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 1, IsPrimary = true
+                }
+            },
+            CreatureTags = new List<string> { "Humanoid", "Human", "Monk", "Unarmored", "KiStrikeMagic", "MM35" },
+            Feats = new List<string> { "Improved Unarmed Strike", "Stunning Fist", "Dodge", "Mobility", "Combat Reflexes", "Deflect Arrows", "Improved Trip" },
+            SpecialAbilities = new List<string>
+            {
+                "Flurry of Blows: extra attack at -1 penalty",
+                "Evasion: no damage on successful Ref save",
+                "Still Mind: +2 vs. enchantment",
+                "Ki Strike (magic): unarmed strikes count as magic weapons",
+                "Purity of Body: immune to all diseases",
+                "Slow Fall 20 ft.",
+                "AC Bonus (Ex): +3 WIS mod + 1 class to AC when unarmored",
+                "Unarmed Strike 1d8",
+                "Speed 40 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.SLING, EquipSlot.Ranged)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.POTION_CURE_LIGHT_WOUNDS, ItemIDs.AMMO_SLING_BULLET },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.65f, 0.55f, 0.35f, 1f),
+            PanelColor = new Color(0.2f, 0.15f, 0.08f, 0.85f),
+            NameColor = new Color(0.9f, 0.8f, 0.5f),
+            Description = "Human Monk 5 (CR 5). Ki-empowered martial artist. Unarmed strikes count as magic. 1d8 damage. PHB 3.5e."
+        });
+    }
+
+    /// <summary>
+    /// Human Monk 7 (CR 7) — Medium humanoid (human).
+    /// PHB 3.5e Monk class level 7. Unarmed strike 1d8. Wholeness of Body, Ki Strike (magic).
+    /// Improved Evasion (7th level Monk ability).
+    /// </summary>
+    private static void RegisterHumanMonk7()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_monk_7",
+            Name = "Human Monk",
+            ChallengeRating = "7",
+            Level = 7,
+            CharacterClass = "Monk",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulNeutral,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            // Level 7: +1 DEX from level 4 ability increase
+            STR = 14, DEX = 17, CON = 12, WIS = 16, INT = 10, CHA = 8,
+            NaturalArmorBonus = 1, // +1 AC class bonus
+            BaseSpeed = 10, // 50 ft (Monk speed at 6th+)
+            BaseHitDieHP = 44, // 7d8+7 average
+            BAB = 5, // Monk 7: +5
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Unarmed Strike", DamageDice = 8, DamageCount = 1, Count = 2,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 1, IsPrimary = true
+                }
+            },
+            CreatureTags = new List<string> { "Humanoid", "Human", "Monk", "Unarmored", "KiStrikeMagic", "MM35" },
+            Feats = new List<string> { "Improved Unarmed Strike", "Stunning Fist", "Dodge", "Mobility", "Combat Reflexes", "Deflect Arrows", "Improved Trip", "Spring Attack" },
+            SpecialAbilities = new List<string>
+            {
+                "Flurry of Blows: two extra attacks at full BAB -2",
+                "Improved Evasion: half damage even on failed Ref save",
+                "Still Mind: +2 vs. enchantment",
+                "Ki Strike (magic): unarmed strikes count as magic weapons",
+                "Purity of Body: immune to all diseases",
+                "Wholeness of Body: heal 14 HP/day as standard action",
+                "Slow Fall 30 ft.",
+                "AC Bonus (Ex): +3 WIS mod + 1 class to AC when unarmored",
+                "Unarmed Strike 1d8 (×2 attacks)",
+                "Speed 50 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.SLING, EquipSlot.Ranged)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.POTION_CURE_LIGHT_WOUNDS, ItemIDs.POTION_CURE_LIGHT_WOUNDS, ItemIDs.AMMO_SLING_BULLET },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.65f, 0.55f, 0.35f, 1f),
+            PanelColor = new Color(0.2f, 0.15f, 0.08f, 0.85f),
+            NameColor = new Color(0.9f, 0.8f, 0.5f),
+            Description = "Human Monk 7 (CR 7). Master martial artist with Improved Evasion and Wholeness of Body. 2× unarmed 1d8. Speed 50 ft. PHB 3.5e."
         });
     }
 }

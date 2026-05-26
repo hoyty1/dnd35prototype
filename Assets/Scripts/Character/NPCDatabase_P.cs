@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class NPCDatabase
 {
@@ -9,6 +10,9 @@ public static partial class NPCDatabase
         RegisterPhaseSpider();
         RegisterPhasm();
         RegisterPurpleWorm();
+        RegisterHumanPaladin3();
+        RegisterHumanPaladin5();
+        RegisterHumanPaladin7();
     }
 
     private static void RegisterPhantomFungus()
@@ -183,6 +187,177 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.2f, 0.05f, 0.22f, 0.85f),
             NameColor = new Color(0.8f, 0.4f, 0.85f),
             Description = "Purple Worm (CR 12). Gargantuan burrower that swallows whole and has poison sting. MM 3.5e p.211."
+        });
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  Leveled Human Paladin NPCs (PHB 3.5e)
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Human Paladin 3 (CR 3) — Medium humanoid (human).
+    /// PHB 3.5e Paladin class level 3. Full plate, longsword, heavy steel shield.
+    /// Divine Grace, Lay on Hands, Smite Evil 1/day, Aura of Courage, Divine Health.
+    /// </summary>
+    private static void RegisterHumanPaladin3()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_paladin_3",
+            Name = "Human Paladin",
+            ChallengeRating = "3",
+            Level = 3,
+            CharacterClass = "Paladin",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulGood,
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            // PHB Paladin: high STR, CHA for divine abilities, decent CON
+            STR = 16, DEX = 10, CON = 14, WIS = 12, INT = 8, CHA = 15,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 4, // 20 ft in full plate
+            BaseHitDieHP = 24, // 3d10+6 average
+            BAB = 3, // Paladin 3: +3 (full BAB)
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Human", "Paladin", "MM35" },
+            Feats = new List<string> { "Weapon Focus (longsword)", "Power Attack", "Cleave" },
+            SpecialAbilities = new List<string>
+            {
+                "Detect Evil (Sp): at will",
+                "Smite Evil 1/day: +2 attack, +3 damage vs. evil",
+                "Divine Grace (Su): +2 CHA bonus to all saves",
+                "Lay on Hands (Su): heal 6 HP/day (Paladin level × CHA mod)",
+                "Aura of Courage (Su): immune to fear, allies within 10 ft. +4 vs. fear",
+                "Divine Health (Ex): immune to all diseases",
+                "Aura of Good"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.MainHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.OffHand),
+                new EquipmentSlotPair(ItemIDs.FULL_PLATE, EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.LANCE, ItemIDs.POTION_CURE_LIGHT_WOUNDS },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.85f, 0.8f, 0.5f, 1f),
+            PanelColor = new Color(0.3f, 0.28f, 0.12f, 0.85f),
+            NameColor = new Color(1f, 0.95f, 0.65f),
+            Description = "Human Paladin 3 (CR 3). Holy warrior in full plate with Smite Evil, Divine Grace, and Aura of Courage. PHB 3.5e."
+        });
+    }
+
+    /// <summary>
+    /// Human Paladin 5 (CR 5) — Medium humanoid (human).
+    /// PHB 3.5e Paladin class level 5. Smite Evil 2/day. 1st-level divine spells.
+    /// Special mount available.
+    /// </summary>
+    private static void RegisterHumanPaladin5()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_paladin_5",
+            Name = "Human Paladin",
+            ChallengeRating = "5",
+            Level = 5,
+            CharacterClass = "Paladin",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulGood,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 16, DEX = 10, CON = 14, WIS = 12, INT = 8, CHA = 15,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 4, // 20 ft in full plate
+            BaseHitDieHP = 40, // 5d10+10 average
+            BAB = 5, // Paladin 5: +5 (full BAB)
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Human", "Paladin", "MM35" },
+            Feats = new List<string> { "Weapon Focus (longsword)", "Power Attack", "Cleave", "Mounted Combat" },
+            SpecialAbilities = new List<string>
+            {
+                "Detect Evil (Sp): at will",
+                "Smite Evil 2/day: +2 attack, +5 damage vs. evil",
+                "Divine Grace (Su): +2 CHA bonus to all saves",
+                "Lay on Hands (Su): heal 10 HP/day",
+                "Aura of Courage (Su): immune to fear, allies +4 vs. fear",
+                "Divine Health (Ex): immune to all diseases",
+                "Turn Undead 5/day (as 2nd-level cleric)",
+                "Remove Disease 1/week",
+                "Spells: 1st-level divine (bless, protection from evil)",
+                "Special Mount available"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.MainHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.OffHand),
+                new EquipmentSlotPair(ItemIDs.FULL_PLATE, EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.LANCE, ItemIDs.POTION_CURE_LIGHT_WOUNDS, ItemIDs.POTION_CURE_LIGHT_WOUNDS },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.85f, 0.8f, 0.5f, 1f),
+            PanelColor = new Color(0.3f, 0.28f, 0.12f, 0.85f),
+            NameColor = new Color(1f, 0.95f, 0.65f),
+            Description = "Human Paladin 5 (CR 5). Holy warrior with Smite Evil 2/day, Turn Undead, and 1st-level divine spells. PHB 3.5e."
+        });
+    }
+
+    /// <summary>
+    /// Human Paladin 7 (CR 7) — Medium humanoid (human).
+    /// PHB 3.5e Paladin class level 7. Smite Evil 2/day. 1st and 2nd-level spells.
+    /// Remove Disease 2/week.
+    /// </summary>
+    private static void RegisterHumanPaladin7()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_paladin_7",
+            Name = "Human Paladin",
+            ChallengeRating = "7",
+            Level = 7,
+            CharacterClass = "Paladin",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulGood,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            // Level 7: +1 STR from level 4 ability increase
+            STR = 17, DEX = 10, CON = 14, WIS = 12, INT = 8, CHA = 15,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 4, // 20 ft in full plate
+            BaseHitDieHP = 56, // 7d10+14 average
+            BAB = 7, // Paladin 7: +7 (full BAB)
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Human", "Paladin", "MM35" },
+            Feats = new List<string> { "Weapon Focus (longsword)", "Power Attack", "Cleave", "Mounted Combat", "Improved Initiative" },
+            SpecialAbilities = new List<string>
+            {
+                "Detect Evil (Sp): at will",
+                "Smite Evil 2/day: +2 attack, +7 damage vs. evil",
+                "Divine Grace (Su): +2 CHA bonus to all saves",
+                "Lay on Hands (Su): heal 14 HP/day",
+                "Aura of Courage (Su): immune to fear, allies +4 vs. fear",
+                "Divine Health (Ex): immune to all diseases",
+                "Turn Undead 5/day (as 4th-level cleric)",
+                "Remove Disease 2/week",
+                "Spells: 1st/2nd-level divine (bless, bull's strength, protection from evil)",
+                "Special Mount"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.MainHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.OffHand),
+                new EquipmentSlotPair(ItemIDs.FULL_PLATE, EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.LANCE, ItemIDs.POTION_CURE_LIGHT_WOUNDS, ItemIDs.POTION_CURE_LIGHT_WOUNDS },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.85f, 0.8f, 0.5f, 1f),
+            PanelColor = new Color(0.3f, 0.28f, 0.12f, 0.85f),
+            NameColor = new Color(1f, 0.95f, 0.65f),
+            Description = "Human Paladin 7 (CR 7). Veteran holy warrior with Smite Evil, Turn Undead, and 2nd-level divine spells. PHB 3.5e."
         });
     }
 }
