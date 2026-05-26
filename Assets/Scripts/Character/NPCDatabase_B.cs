@@ -27,6 +27,8 @@ public static partial class NPCDatabase
         RegisterBodak();
         RegisterBralani();
         RegisterGreaterBarghest();
+        RegisterBeholder();
+        RegisterBulette();
 
     }
 
@@ -825,6 +827,131 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.08f, 0.06f, 0.04f, 0.85f),
             NameColor = new Color(0.55f, 0.45f, 0.35f),
             Description = "Greater Barghest (CR 7). Fully grown fiendish wolf with at-will charm monster. MM 3.5e p.23."
+        });
+    }
+
+    /// <summary>
+    /// Beholder (CR 13) — Large aberration.
+    /// MM 3.5e p.26. 11d8+44 HP (93), bite 2d4, 10 eye rays + central antimagic cone.
+    /// NOTE: Eye rays are complex unique abilities — each is a different spell-like effect.
+    /// The existing AuraAbilityDefinition is used for the central eye's antimagic cone (150 ft).
+    /// Individual eye ray effects (charm, disintegrate, flesh to stone, etc.) are documented
+    /// in SpecialAbilities. Full eye ray targeting would require a dedicated EyeRaySystem.
+    /// The existing gauth entry (NPCDatabase_G.cs) uses a similar pattern for its 6 eye stalks.
+    /// </summary>
+    private static void RegisterBeholder()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "beholder",
+            Name = "Beholder",
+            ChallengeRating = "13",
+            Level = 11,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 11,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 14, DEX = 14, CON = 18, WIS = 15, INT = 17, CHA = 15,
+            NaturalArmorBonus = 14,
+            BaseSpeed = 1, // 5 ft (hover, fly 20 ft good)
+            BaseHitDieHP = 93,
+            BAB = 8,
+            SpellResistance = 28,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 4, DamageCount = 2, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true
+                }
+            },
+            // NOTE: Central eye projects a 150-ft antimagic cone (suppresses all magic).
+            // Eye rays fire up to 3 per round at different targets within 150 ft.
+            AuraAbility = new AuraAbilityDefinition
+            {
+                Name = "Antimagic Cone",
+                SaveDC = 0, // No save — suppresses magic in area
+                IsWillSave = false,
+                RangeFeet = 150,
+                Effect = AuraEffectType.Frightened, // Placeholder — real effect is antimagic
+                DurationRounds = 0
+            },
+            CreatureTags = new List<string> { "Aberration", "AllAroundVision", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Flyby Attack", "Great Fortitude", "Improved Initiative", "Iron Will" },
+            SpecialAbilities = new List<string>
+            {
+                "Antimagic Cone (Su): central eye, 150-ft. cone, suppresses all magic",
+                "Eye Rays (Su): 10 eye stalks, each different effect, 3 rays/round at different targets (150 ft range):",
+                "  1. Charm Monster (Will DC 17)", "  2. Charm Person (Will DC 17)", "  3. Disintegrate (Fort DC 17, 5d6)",
+                "  4. Fear (Will DC 17)", "  5. Finger of Death (Fort DC 17)", "  6. Flesh to Stone (Fort DC 17)",
+                "  7. Inflict Moderate Wounds (DC 17, 2d8+10)", "  8. Sleep (Will DC 17, single target)",
+                "  9. Slow (Will DC 17)", "  10. Telekinesis (Will DC 17, 325 lb)",
+                "All-Around Vision: +4 Search, cannot be flanked",
+                "Fly 20 ft. (good)", "Darkvision 60 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.Ranged,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.5f, 0.3f, 0.5f, 1f),
+            PanelColor = new Color(0.2f, 0.08f, 0.2f, 0.85f),
+            NameColor = new Color(0.9f, 0.5f, 0.9f),
+            Description = "Beholder (CR 13). Iconic aberration with antimagic central eye and 10 eye rays. MM 3.5e p.26."
+        });
+    }
+
+    /// <summary>
+    /// Bulette (CR 7) — Huge magical beast ("land shark").
+    /// MM 3.5e p.30. 9d10+45 HP (94), bite 2d8+8, 2 claws 2d6+4.
+    /// Leap: can jump 10 ft high, land on targets for extra damage.
+    /// Tremorsense 60 ft. Burrows 10 ft.
+    /// </summary>
+    private static void RegisterBulette()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "bulette",
+            Name = "Bulette",
+            ChallengeRating = "7",
+            Level = 9,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.None,
+            HitDice = 9,
+            SizeCategory = SizeCategory.Huge,
+            IsTallCreature = false,
+            STR = 27, DEX = 9, CON = 20, WIS = 13, INT = 2, CHA = 6,
+            NaturalArmorBonus = 12,
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 94,
+            BAB = 9,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Claw", DamageDice = 6, DamageCount = 2, Count = 2,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false
+                }
+            },
+            CreatureTags = new List<string> { "MagicalBeast", "Burrowing", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Iron Will", "Track" },
+            SpecialAbilities = new List<string> { "Leap (Ex): jump up to 10 ft. high, land on targets for 4d6+16 damage (Ref DC 22 to avoid)", "Tremorsense 60 ft.", "Darkvision 60 ft., Low-light vision", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.55f, 0.5f, 0.4f, 1f),
+            PanelColor = new Color(0.2f, 0.18f, 0.12f, 0.85f),
+            NameColor = new Color(0.85f, 0.75f, 0.55f),
+            Description = "Bulette (CR 7). Land shark that burrows and leaps on prey. Tremorsense. MM 3.5e p.30."
         });
     }
 }

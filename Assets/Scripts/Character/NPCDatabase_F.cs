@@ -14,6 +14,8 @@ public static partial class NPCDatabase
         RegisterFleshGolem();
         RegisterFormianTaskmaster();
         RegisterFormianWorker();
+        RegisterFrostGiant();
+        RegisterFireGiant();
 
     }
 
@@ -268,6 +270,94 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.25f, 0.2f, 0.1f, 0.85f),
             NameColor = new Color(0.88f, 0.78f, 0.55f),
             Description = "Formian Worker (CR 1/2). Ant-like outsider laborer with hive mind. MM 3.5e p.108."
+        });
+    }
+
+    /// <summary>
+    /// Frost Giant (CR 9) — Large giant.
+    /// MM 3.5e p.122. 14d8+70 HP (133), greataxe 2d8+13 or rock 2d6+9 (120 ft).
+    /// Rock throwing/catching. Cold immunity, fire vulnerability.
+    /// </summary>
+    private static void RegisterFrostGiant()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "frost_giant",
+            Name = "Frost Giant",
+            ChallengeRating = "9",
+            Level = 14,
+            CharacterClass = "Warrior",
+            CreatureType = "Giant",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 14,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 29, DEX = 9, CON = 21, WIS = 14, INT = 10, CHA = 11,
+            NaturalArmorBonus = 9,
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 133,
+            BAB = 10,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            DamageImmunities = new List<DamageType> { DamageType.Cold },
+            CreatureTags = new List<string> { "Giant", "Cold", "RockThrowing", "MM35" },
+            Feats = new List<string> { "Cleave", "Great Cleave", "Improved Sunder", "Power Attack", "Weapon Focus (greataxe)" },
+            SpecialAbilities = new List<string> { "Rock Throwing (Ex): 120 ft., 2d6+9", "Rock Catching (Ex): Ref DC 25", "Immunity to cold", "Vulnerability to fire (+50% damage)", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("greataxe", EquipSlot.MainHand),
+                new EquipmentSlotPair("chain_shirt", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.65f, 0.75f, 0.85f, 1f),
+            PanelColor = new Color(0.15f, 0.2f, 0.3f, 0.85f),
+            NameColor = new Color(0.7f, 0.85f, 0.95f),
+            Description = "Frost Giant (CR 9). Cold-immune giant with greataxe and rock throwing. MM 3.5e p.122."
+        });
+    }
+
+    /// <summary>
+    /// Fire Giant (CR 10) — Large giant.
+    /// MM 3.5e p.121. 15d8+75 HP (142), greatsword 2d8+10 or rock 2d6+7 (120 ft).
+    /// Rock throwing/catching. Fire immunity, cold vulnerability.
+    /// </summary>
+    private static void RegisterFireGiant()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "fire_giant",
+            Name = "Fire Giant",
+            ChallengeRating = "10",
+            Level = 15,
+            CharacterClass = "Warrior",
+            CreatureType = "Giant",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 15,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 31, DEX = 9, CON = 21, WIS = 14, INT = 10, CHA = 11,
+            NaturalArmorBonus = 8,
+            BaseSpeed = 6, // 30 ft (in armor)
+            BaseHitDieHP = 142,
+            BAB = 11,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            DamageImmunities = new List<DamageType> { DamageType.Fire },
+            CreatureTags = new List<string> { "Giant", "Fire", "RockThrowing", "MM35" },
+            Feats = new List<string> { "Cleave", "Great Cleave", "Improved Sunder", "Iron Will", "Power Attack", "Weapon Focus (greatsword)" },
+            SpecialAbilities = new List<string> { "Rock Throwing (Ex): 120 ft., 2d6+10", "Rock Catching (Ex): Ref DC 25", "Immunity to fire", "Vulnerability to cold (+50% damage)", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("greatsword", EquipSlot.MainHand),
+                new EquipmentSlotPair("half_plate", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.85f, 0.45f, 0.2f, 1f),
+            PanelColor = new Color(0.35f, 0.12f, 0.05f, 0.85f),
+            NameColor = new Color(1f, 0.65f, 0.3f),
+            Description = "Fire Giant (CR 10). Fire-immune giant with greatsword and rock throwing. MM 3.5e p.121."
         });
     }
 }

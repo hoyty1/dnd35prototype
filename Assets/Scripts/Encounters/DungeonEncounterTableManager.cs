@@ -549,6 +549,46 @@ public static class DungeonEncounterTableManager
         // Generic mephit → fire mephit (most common encounter)
         _creatureNameMap["mephits"] = "fire_mephit";
         _creatureNameMap["mephit"] = "fire_mephit";
+
+        // ── Phase 2 name mappings ──────────────────────────────────
+        // New creatures
+        _creatureNameMap["girallon"] = "girallon";
+        _creatureNameMap["girallons"] = "girallon";
+        _creatureNameMap["ankheg"] = "ankheg";
+        _creatureNameMap["ankhegs"] = "ankheg";
+        _creatureNameMap["beholder"] = "beholder";
+        _creatureNameMap["beholders"] = "beholder";
+        _creatureNameMap["bulette"] = "bulette";
+        _creatureNameMap["bulettes"] = "bulette";
+        _creatureNameMap["land shark"] = "bulette";
+        _creatureNameMap["purple worm"] = "purple_worm";
+        _creatureNameMap["purple worms"] = "purple_worm";
+        _creatureNameMap["frost giant"] = "frost_giant";
+        _creatureNameMap["frost giants"] = "frost_giant";
+        _creatureNameMap["fire giant"] = "fire_giant";
+        _creatureNameMap["fire giants"] = "fire_giant";
+        _creatureNameMap["nightmare"] = "nightmare";
+        _creatureNameMap["nightmares"] = "nightmare";
+        _creatureNameMap["elder xorn"] = "elder_xorn";
+        _creatureNameMap["rakshasa"] = "rakshasa";
+        _creatureNameMap["rakshasas"] = "rakshasa";
+
+        // Alias existing warriors by race_warrior pattern
+        _creatureNameMap["drow warrior"] = "drow";
+        _creatureNameMap["drow elf warrior"] = "drow";
+        _creatureNameMap["duergar warrior"] = "duergar";
+        _creatureNameMap["svirfneblin warrior"] = "svirfneblin";
+        _creatureNameMap["deep gnome warrior"] = "svirfneblin";
+
+        // Grey/gray ooze alias
+        _creatureNameMap["grey ooze"] = "gray_ooze";
+        _creatureNameMap["grey oozes"] = "gray_ooze";
+
+        // Xorn generic → average xorn
+        _creatureNameMap["xorn"] = "average_xorn";
+        _creatureNameMap["xorns"] = "average_xorn";
+        _creatureNameMap["minor xorn"] = "minor_xorn";
+        _creatureNameMap["elder xorns"] = "elder_xorn";
     }
 
     /// <summary>

@@ -13,6 +13,7 @@ public static partial class NPCDatabase
         RegisterAboleth();
         RegisterAverageSalamander();
         RegisterAnnis();
+        RegisterAnkheg();
 
     }
 
@@ -230,6 +231,69 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.15f, 0.1f, 0.2f, 0.85f),
             NameColor = new Color(0.7f, 0.55f, 0.8f),
             Description = "Annis (CR 6). Powerful hag with rend, improved grab, and DR. MM 3.5e p.142."
+        });
+    }
+
+    /// <summary>
+    /// Ankheg (CR 3) — Large magical beast (burrowing insect).
+    /// MM 3.5e p.14. 3d10+12 HP (28), bite 2d6+7 + 1d4 acid.
+    /// Spit acid 30-ft line once every 6 hours: 4d4 acid (Ref DC 14 half).
+    /// Improved grab on bite. Burrows 20 ft.
+    /// NOTE: Acid spit uses BreathWeapon system (line shape). Existing AoESystem.GetLineCellsToTarget
+    /// handles line targeting. BreathWeaponDefinition supports Line shape natively.
+    /// </summary>
+    private static void RegisterAnkheg()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ankheg",
+            Name = "Ankheg",
+            ChallengeRating = "3",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.None,
+            HitDice = 3,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 21, DEX = 13, CON = 17, WIS = 13, INT = 1, CHA = 6,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 6, // 30 ft.
+            BaseHitDieHP = 28,
+            BAB = 3,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 2, IsPrimary = true,
+                    BonusElementalDamageDice = 4, BonusElementalDamageCount = 1, BonusElementalDamageType = DamageType.Acid
+                }
+            },
+            BreathWeapon = new BreathWeaponDefinition
+            {
+                Shape = BreathWeaponShape.Line,
+                RangeFeet = 30,
+                DamageDice = 4, DamageCount = 4,
+                DamageType = DamageType.Acid,
+                SaveDC = 14,
+                IsReflexSave = true,
+                RechargeRounds = 999 // Once every 6 hours — effectively once per combat
+            },
+            DamageResistances = new List<DamageResistanceEntry>(),
+            CreatureTags = new List<string> { "MagicalBeast", "Burrowing", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Toughness" },
+            SpecialAbilities = new List<string> { "Improved Grab (bite)", "Spit Acid (Ex): 30-ft. line, 4d4 acid, Ref DC 14 half (once per 6 hours)", "Tremorsense 60 ft.", "Darkvision 60 ft., Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.45f, 0.55f, 0.3f, 1f),
+            PanelColor = new Color(0.15f, 0.2f, 0.08f, 0.85f),
+            NameColor = new Color(0.7f, 0.85f, 0.45f),
+            Description = "Ankheg (CR 3). Burrowing insect with acid spit and improved grab. MM 3.5e p.14."
         });
     }
 

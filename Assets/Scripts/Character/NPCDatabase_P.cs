@@ -8,6 +8,7 @@ public static partial class NPCDatabase
         RegisterPhantomFungus();
         RegisterPhaseSpider();
         RegisterPhasm();
+        RegisterPurpleWorm();
     }
 
     private static void RegisterPhantomFungus()
@@ -126,6 +127,62 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.2f, 0.2f, 0.25f, 0.85f),
             NameColor = new Color(0.78f, 0.78f, 0.88f),
             Description = "Phasm (CR 7). Shapeshifting aberration with at-will alternate form. MM 3.5e p.207."
+        });
+    }
+
+    /// <summary>
+    /// Purple Worm (CR 12) — Gargantuan magical beast.
+    /// MM 3.5e p.211. 16d10+112 HP (200), bite 2d8+12 + swallow whole, sting 2d6+6 + poison.
+    /// Swallow Whole: bite + improved grab → grapple → on next turn, swallows (2d8+12 crushing + 1d8 acid).
+    /// Poison sting: Fort DC 25 or 1d6 Str damage (primary and secondary).
+    /// Tremorsense 60 ft.
+    /// </summary>
+    private static void RegisterPurpleWorm()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "purple_worm",
+            Name = "Purple Worm",
+            ChallengeRating = "12",
+            Level = 16,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.None,
+            HitDice = 16,
+            SizeCategory = SizeCategory.Gargantuan,
+            IsTallCreature = false,
+            STR = 35, DEX = 10, CON = 25, WIS = 8, INT = 1, CHA = 8,
+            NaturalArmorBonus = 11,
+            BaseSpeed = 4, // 20 ft.
+            BaseHitDieHP = 200,
+            BAB = 12,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength, Range = 3, IsPrimary = true
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Sting", DamageDice = 6, DamageCount = 2, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 3, IsPrimary = false,
+                    PoisonOnHitId = "purple_worm_poison"
+                }
+            },
+            CreatureTags = new List<string> { "MagicalBeast", "Burrowing", "MM35" },
+            Feats = new List<string> { "Awesome Blow", "Cleave", "Great Cleave", "Improved Bull Rush", "Power Attack", "Weapon Focus (bite)" },
+            SpecialAbilities = new List<string> { "Improved Grab (bite)", "Swallow Whole: 2d8+12 crushing + 1d8 acid, AC 17 from inside, 25 HP to cut out", "Poison (Ex): sting, Fort DC 25, 1d6 Str/1d6 Str", "Tremorsense 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.5f, 0.2f, 0.55f, 1f),
+            PanelColor = new Color(0.2f, 0.05f, 0.22f, 0.85f),
+            NameColor = new Color(0.8f, 0.4f, 0.85f),
+            Description = "Purple Worm (CR 12). Gargantuan burrower that swallows whole and has poison sting. MM 3.5e p.211."
         });
     }
 }

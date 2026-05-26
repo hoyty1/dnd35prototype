@@ -53,6 +53,7 @@ public static partial class NPCDatabase
         RegisterCreatures_Q();
         RegisterCreatures_U();
         RegisterCreatures_X();
+        RegisterCreatures_N();
 
         // Register summon compatibility aliases (map legacy IDs to existing creature entries).
         RegisterSummonCreatureAliases();

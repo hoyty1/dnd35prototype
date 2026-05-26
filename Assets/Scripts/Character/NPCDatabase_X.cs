@@ -8,6 +8,7 @@ public static partial class NPCDatabase
         RegisterAverageXorn();
         RegisterMinorXorn();
         RegisterXill();
+        RegisterElderXorn();
     }
 
     private static void RegisterAverageXorn()
@@ -144,6 +145,65 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.18f, 0.12f, 0.1f, 0.85f),
             NameColor = new Color(0.78f, 0.62f, 0.55f),
             Description = "Xill (CR 6). Four-armed extraplanar raider that implants eggs. MM 3.5e p.259."
+        });
+    }
+
+    /// <summary>
+    /// Elder Xorn (CR 8) — Large outsider (earth, extraplanar).
+    /// MM 3.5e p.260. 15d8+63 HP (130), bite 4d6+3, 3 claws 1d6+3.
+    /// Earth Glide, All-Around Vision, DR 5/bludgeoning, tremorsense 60 ft.
+    /// Immune to fire/cold, resist electricity 10.
+    /// </summary>
+    private static void RegisterElderXorn()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "elder_xorn",
+            Name = "Elder Xorn",
+            ChallengeRating = "8",
+            Level = 15,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.None,
+            HitDice = 15,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 17, DEX = 10, CON = 17, WIS = 14, INT = 10, CHA = 10,
+            NaturalArmorBonus = 9,
+            BaseSpeed = 4, // 20 ft.
+            BaseHitDieHP = 130,
+            BAB = 15,
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.Bludgeoning,
+            DamageImmunities = new List<DamageType> { DamageType.Fire, DamageType.Cold },
+            DamageResistances = new List<DamageResistanceEntry>
+            {
+                new DamageResistanceEntry { Type = DamageType.Electricity, Amount = 10 }
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 6, DamageCount = 4, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 3,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false
+                }
+            },
+            CreatureTags = new List<string> { "Outsider", "Earth", "Extraplanar", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Cleave", "Great Cleave", "Improved Initiative", "Multiattack", "Power Attack", "Toughness" },
+            SpecialAbilities = new List<string> { "Earth Glide (Su): pass through stone/earth as through water", "All-Around Vision: +4 Search, cannot be flanked", "Tremorsense 60 ft.", "DR 5/bludgeoning", "Immune to fire/cold", "Resist electricity 10", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.55f, 0.5f, 0.4f, 1f),
+            PanelColor = new Color(0.2f, 0.18f, 0.12f, 0.85f),
+            NameColor = new Color(0.78f, 0.7f, 0.55f),
+            Description = "Elder Xorn (CR 8). Large earth outsider that glides through stone. DR 5/bludgeoning. MM 3.5e p.260."
         });
     }
 }

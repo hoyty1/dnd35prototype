@@ -12,6 +12,7 @@ public static partial class NPCDatabase
         RegisterRaven();
         RegisterRedSlaad();
         RegisterRustMonster();
+        RegisterRakshasa();
 
     }
 
@@ -187,6 +188,69 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.25f, 0.15f, 0.06f, 0.85f),
             NameColor = new Color(0.9f, 0.6f, 0.35f),
             Description = "Rust Monster (CR 3). Corrodes metal on contact. MM 3.5e p.216."
+        });
+    }
+
+    /// <summary>
+    /// Rakshasa (CR 10) — Medium outsider (native).
+    /// MM 3.5e p.211. 7d8+21 HP (52), bite 1d6+1, 2 claws 1d4+1.
+    /// Change Shape, Detect Thoughts, SR 27, DR 15/good and piercing.
+    /// Sorcerer spells as 7th-level caster (included in SpecialAbilities).
+    /// NOTE: Spellcasting would require KnownSpellIds integration — documented here for future.
+    /// </summary>
+    private static void RegisterRakshasa()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "rakshasa",
+            Name = "Rakshasa",
+            ChallengeRating = "10",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 12, DEX = 14, CON = 16, WIS = 13, INT = 13, CHA = 17,
+            NaturalArmorBonus = 9,
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 52,
+            BAB = 7,
+            SpellResistance = 27,
+            DamageReductionAmount = 15,
+            DamageReductionBypass = DamageBypassTag.Good, // DR 15/good and piercing
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false
+                }
+            },
+            CreatureTags = new List<string> { "Outsider", "Native", "Shapechanger", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Combat Casting", "Dodge" },
+            SpecialAbilities = new List<string>
+            {
+                "Change Shape (Su): assume humanoid form at will",
+                "Detect Thoughts (Su): continuous, DC 15 Will negates",
+                "DR 15/good and piercing", "SR 27",
+                "Spells as 7th-level Sorcerer (key spells: charm person, suggestion, minor image, invisibility, shield, mage armor, lightning bolt)",
+                "Darkvision 60 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.Ranged,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.55f, 0.35f, 0.2f, 1f),
+            PanelColor = new Color(0.22f, 0.1f, 0.05f, 0.85f),
+            NameColor = new Color(0.85f, 0.55f, 0.3f),
+            Description = "Rakshasa (CR 10). Shapeshifting tiger-headed outsider with sorcerer spells. DR 15/good+piercing, SR 27. MM 3.5e p.211."
         });
     }
 }

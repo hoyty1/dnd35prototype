@@ -34,6 +34,7 @@ public static partial class NPCDatabase
         RegisterGreenHag();
         RegisterGauth();
         RegisterGoblinWarrior();
+        RegisterGirallon();
 
     }
 
@@ -1156,6 +1157,58 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.33f, 0.1f, 0.1f, 0.85f),
             NameColor = new Color(0.95f, 0.45f, 0.45f),
             Description = "Goblin Warrior (CR 1/3). Small goblinoid skirmisher. MM 3.5e p.133."
+        });
+    }
+
+    /// <summary>
+    /// Girallon (CR 6) — Large magical beast. Four-armed ape with rend.
+    /// MM 3.5e p.126. 7d10+20 HP (58), 4 claws 1d4+6, bite 1d8+3.
+    /// Rend: If 2+ claws hit same target, deals 2d4+12 extra damage.
+    /// </summary>
+    private static void RegisterGirallon()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "girallon",
+            Name = "Girallon",
+            ChallengeRating = "6",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.None,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 22, DEX = 15, CON = 14, WIS = 12, INT = 2, CHA = 7,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 58,
+            BAB = 7,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 4,
+                    BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false
+                }
+            },
+            CreatureTags = new List<string> { "MagicalBeast", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Iron Will", "Toughness" },
+            SpecialAbilities = new List<string> { "Rend (Ex): if 2+ claws hit same target, auto 2d4+12 extra damage", "Darkvision 60 ft.", "Low-light vision", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.45f, 0.4f, 0.35f, 1f),
+            PanelColor = new Color(0.2f, 0.15f, 0.12f, 0.85f),
+            NameColor = new Color(0.7f, 0.6f, 0.5f),
+            Description = "Girallon (CR 6). Four-armed ape with rend attack. Darkvision, scent. MM 3.5e p.126."
         });
     }
 
