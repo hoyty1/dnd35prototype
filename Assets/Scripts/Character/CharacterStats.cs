@@ -977,7 +977,7 @@ public class CharacterStats
 
     public int NegativeLevelCount => CountConditionStacks(CombatConditionType.EnergyDrained);
     public int NegativeLevelHpPenalty => Mathf.Max(0, NegativeLevelCount) * 5;
-    public int EffectiveCharacterLevel => Mathf.Max(1, Level - NegativeLevelCount);
+    public int EffectiveLevelAfterDrain => Mathf.Max(1, Level - NegativeLevelCount);
 
     private int CountConditionStacks(CombatConditionType type)
     {

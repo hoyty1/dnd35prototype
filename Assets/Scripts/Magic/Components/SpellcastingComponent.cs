@@ -3004,15 +3004,6 @@ public class SpellcastingComponent : MonoBehaviour
     // ========================================================================
 
     /// <summary>
-    /// Check if this caster is a spontaneous caster (Sorcerer/Bard).
-    /// Spontaneous casters suffer a casting time penalty when using metamagic.
-    /// </summary>
-    public bool IsSpontaneousCaster()
-    {
-        return MetamagicSystem.IsSpontaneousCaster(Stats);
-    }
-
-    /// <summary>
     /// Check if this caster is a prepared caster (Wizard/Cleric/Druid/Paladin/Ranger).
     /// Prepared casters apply metamagic during preparation with no casting time change.
     /// </summary>

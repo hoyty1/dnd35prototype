@@ -201,6 +201,19 @@ public abstract class SpecificItemBehavior
     }
 
     // ========================================================================
+    //  TOOLTIP
+    // ========================================================================
+
+    /// <summary>
+    /// Get tooltip text describing the item's current state and special properties.
+    /// Override in subclasses to provide item-specific tooltip information.
+    /// </summary>
+    public virtual string GetTooltipText()
+    {
+        return "";
+    }
+
+    // ========================================================================
     //  HELPERS
     // ========================================================================
 
