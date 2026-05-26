@@ -204,6 +204,27 @@ public static partial class NPCDatabase
         _npcs[def.Id] = def;
     }
 
+    /// <summary>
+    /// Register an NPCDefinition from external code (e.g., DungeonEncounterSpawner).
+    /// Overwrites any existing entry with the same ID.
+    /// </summary>
+    public static void RegisterExternal(NPCDefinition def)
+    {
+        if (def == null || string.IsNullOrEmpty(def.Id)) return;
+        Init();
+        _npcs[def.Id] = def;
+    }
+
+    /// <summary>
+    /// Remove a temporary spawn entry by ID. Used to clean up dynamically spawned entries.
+    /// </summary>
+    public static void Unregister(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        Init();
+        _npcs.Remove(id);
+    }
+
     private static void RegisterSummonCreatureAliases()
     {
         RegisterSummonAlias("wolf", "wolf_pack_hunter", "Wolf");
