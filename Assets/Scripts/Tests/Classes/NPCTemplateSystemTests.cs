@@ -208,9 +208,9 @@ public static class NPCTemplateSystemTests
 
         Assert(c.HitDie == 6, "Adept d6 hit die");
         Assert(c.BABAtLevel3 == 1, "Adept poor BAB (1 at level 3)");
-        Assert(c.FortSaveIsGood == false, "Adept Fort save poor");
-        Assert(c.RefSaveIsGood == false, "Adept Ref save poor");
-        Assert(c.WillSaveIsGood == true, "Adept Will save good");
+        Assert(c.GoodFortitude == false, "Adept Fort save poor");
+        Assert(c.GoodReflex == false, "Adept Ref save poor");
+        Assert(c.GoodWill == true, "Adept Will save good");
         Assert(c.SkillPointsPerLevel == 2, "Adept 2 skill points per level");
         Assert(c.DefaultArmorBonus == 0, "Adept no default armor");
         Assert(c.DefaultShieldBonus == 0, "Adept no default shield");
@@ -230,9 +230,9 @@ public static class NPCTemplateSystemTests
 
         Assert(c.HitDie == 8, "Aristocrat d8 hit die");
         Assert(c.BABAtLevel3 == 2, "Aristocrat medium BAB (2 at level 3)");
-        Assert(c.FortSaveIsGood == false, "Aristocrat Fort save poor");
-        Assert(c.RefSaveIsGood == false, "Aristocrat Ref save poor");
-        Assert(c.WillSaveIsGood == true, "Aristocrat Will save good");
+        Assert(c.GoodFortitude == false, "Aristocrat Fort save poor");
+        Assert(c.GoodReflex == false, "Aristocrat Ref save poor");
+        Assert(c.GoodWill == true, "Aristocrat Will save good");
         Assert(c.SkillPointsPerLevel == 4, "Aristocrat 4 skill points per level");
     }
 
@@ -250,9 +250,9 @@ public static class NPCTemplateSystemTests
 
         Assert(c.HitDie == 4, "Commoner d4 hit die (weakest)");
         Assert(c.BABAtLevel3 == 1, "Commoner poor BAB (1 at level 3)");
-        Assert(c.FortSaveIsGood == false, "Commoner Fort save poor");
-        Assert(c.RefSaveIsGood == false, "Commoner Ref save poor");
-        Assert(c.WillSaveIsGood == false, "Commoner Will save poor (all saves poor)");
+        Assert(c.GoodFortitude == false, "Commoner Fort save poor");
+        Assert(c.GoodReflex == false, "Commoner Ref save poor");
+        Assert(c.GoodWill == false, "Commoner Will save poor (all saves poor)");
         Assert(c.SkillPointsPerLevel == 2, "Commoner 2 skill points per level");
         Assert(c.DefaultArmorBonus == 0, "Commoner no armor proficiency");
     }
@@ -271,9 +271,9 @@ public static class NPCTemplateSystemTests
 
         Assert(c.HitDie == 6, "Expert d6 hit die");
         Assert(c.BABAtLevel3 == 2, "Expert medium BAB (2 at level 3)");
-        Assert(c.FortSaveIsGood == false, "Expert Fort save poor");
-        Assert(c.RefSaveIsGood == true, "Expert Ref save good");
-        Assert(c.WillSaveIsGood == true, "Expert Will save good");
+        Assert(c.GoodFortitude == false, "Expert Fort save poor");
+        Assert(c.GoodReflex == true, "Expert Ref save good");
+        Assert(c.GoodWill == true, "Expert Will save good");
         Assert(c.SkillPointsPerLevel == 6, "Expert 6 skill points per level (highest NPC class)");
     }
 
@@ -291,9 +291,9 @@ public static class NPCTemplateSystemTests
 
         Assert(c.HitDie == 8, "Warrior d8 hit die");
         Assert(c.BABAtLevel3 == 3, "Warrior good BAB (3 at level 3, full progression)");
-        Assert(c.FortSaveIsGood == true, "Warrior Fort save good");
-        Assert(c.RefSaveIsGood == false, "Warrior Ref save poor");
-        Assert(c.WillSaveIsGood == false, "Warrior Will save poor");
+        Assert(c.GoodFortitude == true, "Warrior Fort save good");
+        Assert(c.GoodReflex == false, "Warrior Ref save poor");
+        Assert(c.GoodWill == false, "Warrior Will save poor");
         Assert(c.SkillPointsPerLevel == 2, "Warrior 2 skill points per level");
     }
 
@@ -720,15 +720,10 @@ public static class NPCTemplateSystemTests
             {"Strength", 14}, {"Dexterity", 12}, {"Constitution", 14},
             {"Intelligence", 10}, {"Wisdom", 12}, {"Charisma", 10}
         };
-        var racialMods = new Dictionary<string, int>
-        {
-            {"Strength", 2}, {"Dexterity", 0}, {"Constitution", -2},
-            {"Intelligence", 0}, {"Wisdom", 0}, {"Charisma", 0}
-        };
-        var result = StatArrayApplier.ApplyRacialModifiers(baseStats, racialMods);
-        Assert(result["Strength"] == 16, "Racial +2 STR: 14 → 16", $"str={result["Strength"]}");
-        Assert(result["Constitution"] == 12, "Racial -2 CON: 14 → 12", $"con={result["Constitution"]}");
-        Assert(result["Dexterity"] == 12, "No racial mod DEX stays 12", $"dex={result["Dexterity"]}");
+        var result = StatArrayApplier.ApplyRacialModifiers(baseStats, strMod: 2, conMod: -2);
+        Assert(result["STR"] == 16, "Racial +2 STR: 14 → 16", $"str={result["STR"]}");
+        Assert(result["CON"] == 12, "Racial -2 CON: 14 → 12", $"con={result["CON"]}");
+        Assert(result["DEX"] == 12, "No racial mod DEX stays 12", $"dex={result["DEX"]}");
     }
 
     private static void TestAbilityIncreasesFromHD()
@@ -750,9 +745,9 @@ public static class NPCTemplateSystemTests
     {
         var items = new List<EquipmentItem>
         {
-            new EquipmentItem { Name = "Longsword", GoldValue = 15 },
-            new EquipmentItem { Name = "Chain Shirt", GoldValue = 100 },
-            new EquipmentItem { Name = "Shield", GoldValue = 9 }
+            new EquipmentItem { ItemName = "Longsword", ValueGP = 15 },
+            new EquipmentItem { ItemName = "Chain Shirt", ValueGP = 100 },
+            new EquipmentItem { ItemName = "Shield", ValueGP = 9 }
         };
         int total = EquipmentAssigner.CalculateEquipmentValue(items);
         Assert(total == 124, "Equipment value: 15+100+9 = 124 gp", $"total={total}");
@@ -775,9 +770,9 @@ public static class NPCTemplateSystemTests
     {
         var items = new List<EquipmentItem>
         {
-            new EquipmentItem { Name = "+1 Longsword", IsMagic = true, GoldValue = 2315 },
-            new EquipmentItem { Name = "Chain Shirt", IsMagic = false, GoldValue = 100 },
-            new EquipmentItem { Name = "Cloak of Resistance +1", IsMagic = true, GoldValue = 1000 }
+            new EquipmentItem { ItemName = "+1 Longsword", IsMagical = true, ValueGP = 2315 },
+            new EquipmentItem { ItemName = "Chain Shirt", IsMagical = false, ValueGP = 100 },
+            new EquipmentItem { ItemName = "Cloak of Resistance +1", IsMagical = true, ValueGP = 1000 }
         };
         int magic = EquipmentAssigner.CountMagicItems(items);
         Assert(magic == 2, "2 magic items in equipment list", $"count={magic}");
@@ -1093,10 +1088,10 @@ public static class NPCTemplateSystemTests
             ChallengeRating = 5,
             Equipment = new List<EquipmentItem>
             {
-                new EquipmentItem { ItemName = "Longsword", GoldValue = 15 },
-                new EquipmentItem { ItemName = "Potion of Cure Light Wounds", GoldValue = 50, IsMagic = true },
-                new EquipmentItem { ItemName = "Potion of Bull's Strength", GoldValue = 300, IsMagic = true },
-                new EquipmentItem { ItemName = "Chain Shirt", GoldValue = 100 }
+                new EquipmentItem { ItemName = "Longsword", ValueGP = 15 },
+                new EquipmentItem { ItemName = "Potion of Cure Light Wounds", ValueGP = 50, IsMagical = true },
+                new EquipmentItem { ItemName = "Potion of Bull's Strength", ValueGP = 300, IsMagical = true },
+                new EquipmentItem { ItemName = "Chain Shirt", ValueGP = 100 }
             },
             Feats = new List<string>(),
             Strength = 16, Dexterity = 13, Constitution = 14,

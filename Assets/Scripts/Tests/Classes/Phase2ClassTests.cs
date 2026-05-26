@@ -190,17 +190,17 @@ public static class Phase2ClassTests
     private static void TestFavoredEnemyLevelProgression()
     {
         // Ranger gains favored enemies at L1, 5, 10, 15, 20
-        Assert(FavoredEnemyData.IsFavoredEnemyLevel(1), "Favored enemy at level 1");
-        Assert(!FavoredEnemyData.IsFavoredEnemyLevel(3), "No favored enemy at level 3");
-        Assert(FavoredEnemyData.IsFavoredEnemyLevel(5), "Favored enemy at level 5");
-        Assert(FavoredEnemyData.IsFavoredEnemyLevel(10), "Favored enemy at level 10");
-        Assert(FavoredEnemyData.IsFavoredEnemyLevel(15), "Favored enemy at level 15");
-        Assert(FavoredEnemyData.IsFavoredEnemyLevel(20), "Favored enemy at level 20");
+        Assert(FavoredEnemyTypes.IsFavoredEnemyLevel(1), "Favored enemy at level 1");
+        Assert(!FavoredEnemyTypes.IsFavoredEnemyLevel(3), "No favored enemy at level 3");
+        Assert(FavoredEnemyTypes.IsFavoredEnemyLevel(5), "Favored enemy at level 5");
+        Assert(FavoredEnemyTypes.IsFavoredEnemyLevel(10), "Favored enemy at level 10");
+        Assert(FavoredEnemyTypes.IsFavoredEnemyLevel(15), "Favored enemy at level 15");
+        Assert(FavoredEnemyTypes.IsFavoredEnemyLevel(20), "Favored enemy at level 20");
 
-        Assert(FavoredEnemyData.GetTotalSelectionsAtLevel(1) == 1, "1 selection at level 1");
-        Assert(FavoredEnemyData.GetTotalSelectionsAtLevel(5) == 2, "2 selections at level 5");
-        Assert(FavoredEnemyData.GetTotalSelectionsAtLevel(10) == 3, "3 selections at level 10");
-        Assert(FavoredEnemyData.GetTotalSelectionsAtLevel(20) == 5, "5 selections at level 20");
+        Assert(FavoredEnemyTypes.GetTotalSelectionsAtLevel(1) == 1, "1 selection at level 1");
+        Assert(FavoredEnemyTypes.GetTotalSelectionsAtLevel(5) == 2, "2 selections at level 5");
+        Assert(FavoredEnemyTypes.GetTotalSelectionsAtLevel(10) == 3, "3 selections at level 10");
+        Assert(FavoredEnemyTypes.GetTotalSelectionsAtLevel(20) == 5, "5 selections at level 20");
     }
 
     private static void TestFavoredEnemySubtypeMatching()

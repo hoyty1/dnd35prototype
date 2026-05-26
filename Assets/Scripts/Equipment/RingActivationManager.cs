@@ -517,7 +517,7 @@ public static class RingActivationManager
             // Apply ability damage
             if (actor.Stats != null)
             {
-                actor.Stats.ApplyAbilityDamage(AbilityType.Constitution, conDamage);
+                actor.Stats.ApplyAbilityDamage(AbilityType.CON, conDamage);
                 sb.AppendLine($"  ⚠ Strain from X-Ray use: {conDamage} Constitution damage! (use #{useCount} this rest)");
             }
         }

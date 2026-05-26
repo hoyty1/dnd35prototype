@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// D&D 3.5e Lycanthrope Template (Monster Manual p.170-178).

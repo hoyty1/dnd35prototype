@@ -90,7 +90,7 @@ public static class CounterspellManager
         // Get target's inventory
         var invComp = target.Inventory;
         if (invComp == null) return false;
-        var inv = invComp.CharacterInventory;
+        var inv = invComp.GetInventory();
         if (inv == null) return false;
 
         // Check both ring slots

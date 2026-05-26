@@ -130,8 +130,8 @@ public static class Phase1ClassTests
 
         sc.Initialize("Sorcerer", 1, 3); // Level 1, CHA mod +3
         Assert(sc.IsInitialized, "SpontaneousCastingData initialized after Init()");
-        Assert(sc.ClassName == "Sorcerer", "ClassName is Sorcerer");
-        Assert(sc.ClassLevel == 1, "ClassLevel is 1");
+        Assert(sc.CasterClassName == "Sorcerer", "ClassName is Sorcerer");
+        Assert(sc.CasterLevel == 1, "ClassLevel is 1");
     }
 
     private static void TestSpontaneousCastingSpellsPerDay()
@@ -140,23 +140,23 @@ public static class Phase1ClassTests
         // Level 1: 5/3
         var sc1 = new SpontaneousCastingData();
         sc1.Initialize("Sorcerer", 1, 0); // No CHA bonus
-        Assert(sc1.GetSlotsMax(0) == 5, "L1 Sorcerer: 5 cantrip slots", $"Actual: {sc1.GetSlotsMax(0)}");
-        Assert(sc1.GetSlotsMax(1) == 3, "L1 Sorcerer: 3 first-level slots", $"Actual: {sc1.GetSlotsMax(1)}");
-        Assert(sc1.GetSlotsMax(2) == 0, "L1 Sorcerer: 0 second-level slots", $"Actual: {sc1.GetSlotsMax(2)}");
+        Assert(sc1.GetMaxSlots(0) == 5, "L1 Sorcerer: 5 cantrip slots", $"Actual: {sc1.GetMaxSlots(0)}");
+        Assert(sc1.GetMaxSlots(1) == 3, "L1 Sorcerer: 3 first-level slots", $"Actual: {sc1.GetMaxSlots(1)}");
+        Assert(sc1.GetMaxSlots(2) == 0, "L1 Sorcerer: 0 second-level slots", $"Actual: {sc1.GetMaxSlots(2)}");
 
         // Level 4: 6/6/3
         var sc4 = new SpontaneousCastingData();
         sc4.Initialize("Sorcerer", 4, 0);
-        Assert(sc4.GetSlotsMax(0) == 6, "L4 Sorcerer: 6 cantrip slots", $"Actual: {sc4.GetSlotsMax(0)}");
-        Assert(sc4.GetSlotsMax(1) == 6, "L4 Sorcerer: 6 first-level slots", $"Actual: {sc4.GetSlotsMax(1)}");
-        Assert(sc4.GetSlotsMax(2) == 3, "L4 Sorcerer: 3 second-level slots", $"Actual: {sc4.GetSlotsMax(2)}");
+        Assert(sc4.GetMaxSlots(0) == 6, "L4 Sorcerer: 6 cantrip slots", $"Actual: {sc4.GetMaxSlots(0)}");
+        Assert(sc4.GetMaxSlots(1) == 6, "L4 Sorcerer: 6 first-level slots", $"Actual: {sc4.GetMaxSlots(1)}");
+        Assert(sc4.GetMaxSlots(2) == 3, "L4 Sorcerer: 3 second-level slots", $"Actual: {sc4.GetMaxSlots(2)}");
 
         // Level 20: 6/6/6/6/6/6/6/6/6/6
         var sc20 = new SpontaneousCastingData();
         sc20.Initialize("Sorcerer", 20, 0);
         for (int i = 0; i <= 9; i++)
         {
-            Assert(sc20.GetSlotsMax(i) == 6, $"L20 Sorcerer: 6 slots at level {i}", $"Actual: {sc20.GetSlotsMax(i)}");
+            Assert(sc20.GetMaxSlots(i) == 6, $"L20 Sorcerer: 6 slots at level {i}", $"Actual: {sc20.GetMaxSlots(i)}");
         }
     }
 
@@ -185,7 +185,7 @@ public static class Phase1ClassTests
         Assert(sc.CanCast("magic_missile", 1), "Can cast known spell with slots");
 
         // Spend all first-level slots
-        int maxSlots = sc.GetSlotsMax(1);
+        int maxSlots = sc.GetMaxSlots(1);
         for (int i = 0; i < maxSlots; i++)
         {
             Assert(sc.SpendSlot(1), $"Spend slot {i + 1}/{maxSlots}");
@@ -205,12 +205,12 @@ public static class Phase1ClassTests
         sc.Initialize("Sorcerer", 4, 3); // Level 4, CHA mod +3
 
         // Base level 1: 6, +1 bonus from CHA = 7
-        Assert(sc.GetSlotsMax(1) == 7, "L4 CHA+3: 7 first-level slots (6 base + 1 bonus)",
-            $"Actual: {sc.GetSlotsMax(1)}");
+        Assert(sc.GetMaxSlots(1) == 7, "L4 CHA+3: 7 first-level slots (6 base + 1 bonus)",
+            $"Actual: {sc.GetMaxSlots(1)}");
 
         // Base level 2: 3, +1 bonus from CHA = 4
-        Assert(sc.GetSlotsMax(2) == 4, "L4 CHA+3: 4 second-level slots (3 base + 1 bonus)",
-            $"Actual: {sc.GetSlotsMax(2)}");
+        Assert(sc.GetMaxSlots(2) == 4, "L4 CHA+3: 4 second-level slots (3 base + 1 bonus)",
+            $"Actual: {sc.GetMaxSlots(2)}");
     }
 
     private static void TestSpontaneousCastingLearnForgetSwap()
@@ -229,7 +229,7 @@ public static class Phase1ClassTests
         known = sc.GetAllKnownSpellIds();
         Assert(known.Count == 1, "1 spell known after forget", $"Actual: {known.Count}");
 
-        Assert(sc.SwapSpell("mage_armor", 1, "shield", 1), "Swap Mage Armor for Shield");
+        Assert(sc.SwapSpell("mage_armor", "shield", 1), "Swap Mage Armor for Shield");
         known = sc.GetAllKnownSpellIds();
         Assert(known.Contains("shield"), "Shield in known after swap");
         Assert(!known.Contains("mage_armor"), "Mage Armor not in known after swap");

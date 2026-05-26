@@ -133,10 +133,10 @@ public class AlignmentDetectionEffectData
     {
         DetectedCreatures.Clear();
 
-        if (Caster == null || Caster.Stats == null || Caster.OccupiedCell == null)
+        if (Caster == null || Caster.Stats == null || Caster == null)
             return;
 
-        Vector2Int casterPos = Caster.OccupiedCell.GridPosition;
+        Vector2Int casterPos = Caster.GridPosition;
         const int detectionRangeSquares = 12; // 60 ft = 12 squares at 5ft/sq
 
         foreach (var creature in allCharacters)
@@ -147,10 +147,10 @@ public class AlignmentDetectionEffectData
             if (creature.Stats.CurrentHP <= 0)
                 continue;
 
-            if (creature.OccupiedCell == null)
+            if (creature == null)
                 continue;
 
-            Vector2Int pos = creature.OccupiedCell.GridPosition;
+            Vector2Int pos = creature.GridPosition;
             int dist = Mathf.Max(Mathf.Abs(pos.x - casterPos.x), Mathf.Abs(pos.y - casterPos.y));
 
             if (dist > detectionRangeSquares)

@@ -176,7 +176,7 @@ public static class MountedCombatSystem
 
         int roll = Random.Range(1, 21);
         int totalAttack = roll + hoof.AttackBonus + 4; // +4 vs prone
-        int targetAC = target.Stats.AC;
+        int targetAC = target.Stats.ArmorClass;
 
         bool hit = (roll == 20) || (roll != 1 && totalAttack >= targetAC);
         int damage = 0;
@@ -259,7 +259,7 @@ public static class MountedCombatSystem
         {
             int roll = Random.Range(1, 21);
             int totalAttack = roll + attack.AttackBonus;
-            int targetAC = target.Stats.AC;
+            int targetAC = target.Stats.ArmorClass;
             bool hit = (roll == 20) || (roll != 1 && totalAttack >= targetAC);
 
             if (hit)

@@ -85,7 +85,7 @@ public partial class GameManager
 
         // BAB = character level (boost the difference)
         int currentBAB = target.Stats.BaseAttackBonus;
-        int characterLevel = target.Stats.CharacterLevel;
+        int characterLevel = target.Stats.Level;
         int babBonus = Mathf.Max(0, characterLevel - currentBAB);
         target.Stats.DivinePowerBABBonus = babBonus;
         target.Stats.BaseAttackBonus += babBonus;
@@ -513,7 +513,7 @@ public partial class GameManager
         CharacterController caster, Vector2Int casterPos, int maxRange,
         int casterSize, SquareGrid grid)
     {
-        bool isPC = caster.Stats != null && !caster.Stats.IsNPC;
+        bool isPC = caster.Stats != null && !!caster.IsPlayerControlled;
 
         if (isPC)
         {
@@ -545,7 +545,7 @@ public partial class GameManager
             foreach (var ch in allChars)
             {
                 if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
-                if (ch.Stats.IsNPC == caster.Stats.IsNPC) continue; // same side
+                if (!ch.IsPlayerControlled == !caster.IsPlayerControlled) continue; // same side
 
                 int dist = SquareGridUtils.ChebyshevDistance(casterPos, ch.GridPosition);
                 if (dist < nearestDist)
@@ -589,7 +589,7 @@ public partial class GameManager
                     foreach (var ch in allChars)
                     {
                         if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
-                        if (ch.Stats.IsNPC == caster.Stats.IsNPC) continue;
+                        if (!ch.IsPlayerControlled == !caster.IsPlayerControlled) continue;
                         if (SquareGridUtils.ChebyshevDistance(candidate, ch.GridPosition) <= 1)
                         {
                             adjacentToEnemy = true;
@@ -627,7 +627,7 @@ public partial class GameManager
             foreach (var ch in allChars)
             {
                 if (ch == null || ch == caster || ch.Stats == null || ch.Stats.IsDead) continue;
-                if (ch.Stats.IsNPC == caster.Stats.IsNPC) continue; // same side
+                if (!ch.IsPlayerControlled == !caster.IsPlayerControlled) continue; // same side
 
                 if (ch.Stats.CurrentHP < lowestHP)
                 {

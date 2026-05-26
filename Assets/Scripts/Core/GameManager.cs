@@ -6071,7 +6071,7 @@ public partial class GameManager : MonoBehaviour
         staffItem.Name = "Expended Staff (Mundane Quarterstaff)";
         staffItem.Description = "This staff has expended all its magical charges and is now just a mundane quarterstaff. " +
                                 "It retains no magical properties and is worthless as a magic item. (Core DMG 3.5e rules)";
-        staffItem.MarketPrice = 0;
+        staffItem.BasePriceGp = 0;
     }
 
     /// <summary>

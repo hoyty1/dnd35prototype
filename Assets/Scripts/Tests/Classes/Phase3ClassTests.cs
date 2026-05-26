@@ -227,14 +227,14 @@ public static class Phase3ClassTests
     {
         var music = new BardicMusicData();
         music.Initialize(5, 3); // L5 bard, CHA mod +3
-        Assert(music.UsesRemaining == 5, "BardicMusic initialized with 5 uses at L5");
+        Assert(music.RemainingUses == 5, "BardicMusic initialized with 5 uses at L5");
         Assert(!music.IsPerforming, "Not performing initially");
 
-        bool started = music.StartPerformance(BardicAbility.InspireCourage, 5);
+        bool started = music.StartPerformance(BardicAbility.InspireCourage);
         Assert(started, "Started Inspire Courage performance");
         Assert(music.IsPerforming, "Is performing after start");
         Assert(music.ActiveAbility == BardicAbility.InspireCourage, "Active ability is Inspire Courage");
-        Assert(music.UsesRemaining == 4, "Uses decreased to 4 after starting");
+        Assert(music.RemainingUses == 4, "Uses decreased to 4 after starting");
 
         music.StopPerformance();
         Assert(!music.IsPerforming, "Not performing after stop");
@@ -245,7 +245,7 @@ public static class Phase3ClassTests
     {
         var music = new BardicMusicData();
         music.Initialize(5, 3);
-        music.StartPerformance(BardicAbility.InspireCourage, 5);
+        music.StartPerformance(BardicAbility.InspireCourage);
         music.StopPerformance();
 
         Assert(music.LingerRoundsRemaining == 5, "Linger starts at 5");

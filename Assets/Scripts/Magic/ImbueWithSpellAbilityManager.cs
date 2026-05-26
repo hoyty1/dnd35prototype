@@ -42,7 +42,7 @@ public static class ImbueWithSpellAbilityManager
             return (false, $"{target.Stats.CharacterName} is already a spellcaster.");
 
         // Target must be willing (ally)
-        if (target.Stats.IsNPC != caster.Stats.IsNPC)
+        if (target.IsPlayerControlled != caster.IsPlayerControlled)
             return (false, $"{target.Stats.CharacterName} is not a willing ally.");
 
         // Target must have INT ≥ 9 and WIS ≥ 9

@@ -19,7 +19,7 @@ public partial class GameManager
     //  Fort save: 5d6 instead. SR: Yes.
     // ================================================================
 
-    private StatusEffect ApplyDisintegrateEffect(
+    private ActiveSpellEffect ApplyDisintegrateEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
@@ -347,7 +347,7 @@ public partial class GameManager
     //  Duration: 10 min/level. Single target (touch).
     // ================================================================
 
-    private StatusEffect ApplyProtectionFromSpellsEffect(
+    private ActiveSpellEffect ApplyProtectionFromSpellsEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
@@ -389,7 +389,7 @@ public partial class GameManager
     //  Duration: until expended or 10 min/level. Self-only.
     // ================================================================
 
-    private StatusEffect ApplySpellTurningEffect(
+    private ActiveSpellEffect ApplySpellTurningEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
@@ -431,7 +431,7 @@ public partial class GameManager
     //  No effect on undead (deals damage to undead). SR: Yes (harmless).
     // ================================================================
 
-    private StatusEffect ApplyHealSpellEffect(
+    private ActiveSpellEffect ApplyHealSpellEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
@@ -527,7 +527,7 @@ public partial class GameManager
     //  Cannot raise undead/constructs/outsiders.
     // ================================================================
 
-    private StatusEffect ApplyResurrectionEffect(
+    private ActiveSpellEffect ApplyResurrectionEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
@@ -598,7 +598,7 @@ public partial class GameManager
     //  120 ft range. Duration: 1 min/level.
     // ================================================================
 
-    private StatusEffect ApplyTrueSeeingEffect(
+    private ActiveSpellEffect ApplyTrueSeeingEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
@@ -641,7 +641,7 @@ public partial class GameManager
     //  Illusory double in place. Duration: 1 round/level (concentration).
     // ================================================================
 
-    private StatusEffect ApplyMisleadEffect(
+    private ActiveSpellEffect ApplyMisleadEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
@@ -688,7 +688,7 @@ public partial class GameManager
     //  Duration: 1 minute. Cantrip (level 0).
     // ================================================================
 
-    private StatusEffect ApplyDancingLightsEffect(
+    private ActiveSpellEffect ApplyDancingLightsEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
@@ -727,7 +727,7 @@ public partial class GameManager
     //  Treated as instant removal for combat purposes. SR: Yes.
     // ================================================================
 
-    private StatusEffect ApplyPlaneShiftEffect(
+    private ActiveSpellEffect ApplyPlaneShiftEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
@@ -796,7 +796,7 @@ public partial class GameManager
     //  +10 Disguise. Duration: 10 min/level (D).
     // ================================================================
 
-    private StatusEffect ApplyAlterSelfEffect(
+    private ActiveSpellEffect ApplyAlterSelfEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,

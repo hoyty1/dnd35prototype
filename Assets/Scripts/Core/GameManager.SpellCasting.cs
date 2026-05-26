@@ -7893,7 +7893,7 @@ public partial class GameManager
             if (expired)
             {
                 CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {detSpellName} expires on {character.Stats.CharacterName}.</color>");
-                ClearDetectionHighlights();
+                ClearDetectionHighlights(character);
             }
         }
     }
@@ -7999,7 +7999,7 @@ public partial class GameManager
                 else if (effect.Spell != null && AlignmentDetectionEffectData.IsDetectionSpell(effect.Spell.SpellId))
                 {
                     character.RemoveAlignmentDetectionEffect();
-                    ClearDetectionHighlights();
+                    ClearDetectionHighlights(character);
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {effect.Spell.Name} expires on {character.Stats.CharacterName}.</color>");
                 }
                 // NOTE: Resilient Sphere expiry is now handled by the area effect system
@@ -8870,17 +8870,17 @@ public partial class GameManager
     private List<CharacterController> GetAllLivingCharacters()
     {
         var result = new List<CharacterController>();
-        if (_playerCharacters != null)
+        if (PCs != null)
         {
-            foreach (var pc in _playerCharacters)
+            foreach (var pc in PCs)
             {
                 if (pc != null && pc.Stats != null && pc.Stats.CurrentHP > 0)
                     result.Add(pc);
             }
         }
-        if (_activeNPCs != null)
+        if (NPCs != null)
         {
-            foreach (var npc in _activeNPCs)
+            foreach (var npc in NPCs)
             {
                 if (npc != null && npc.Stats != null && npc.Stats.CurrentHP > 0)
                     result.Add(npc);
@@ -8921,9 +8921,9 @@ public partial class GameManager
     private void ClearDetectionHighlights(CharacterController detector)
     {
         // Clear all cell highlights (they'll be restored by normal game logic)
-        if (_grid != null)
+        if (Grid != null)
         {
-            foreach (var cell in _grid.AllCells())
+            foreach (var cell in Grid.AllCells())
             {
                 cell.ClearHighlight();
             }

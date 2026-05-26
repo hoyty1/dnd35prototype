@@ -233,7 +233,7 @@ public class LionsShieldBehavior : SpecificItemBehavior
         // Place adjacent to wielder
         Vector2Int wielderPos = Wielder.GridPosition;
         Vector2Int summonPos = FindAdjacentOpenTile(wielderPos);
-        summonObj.transform.position = gm.Grid.GetWorldPosition(summonPos.x, summonPos.y);
+        summonObj.transform.position = gm.Grid.GetWorldPosition(summonPos);
 
         // ── Initialize with core stats via public Init() ──
         // Full InitializeNPCFromDefinition is private on GameManager; we replicate
@@ -318,8 +318,8 @@ public class LionsShieldBehavior : SpecificItemBehavior
         foreach (var offset in offsets)
         {
             Vector2Int candidate = origin + offset;
-            if (gm.Grid != null && gm.Grid.IsWalkable(candidate.x, candidate.y)
-                && !gm.Grid.IsOccupied(candidate.x, candidate.y))
+            var cell = gm.Grid?.GetCell(candidate);
+            if (cell != null && !cell.IsOccupied)
             {
                 return candidate;
             }

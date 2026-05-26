@@ -252,7 +252,7 @@ public partial class GameManager
                 if (target.Stats.SpellRageACPenalty != 0 || target.Stats.RageACPenalty != 0)
                 {
                     target.Stats.SpellRageACPenalty = 0;
-                    target.Stats.RageACPenalty = 0;
+                    // RageACPenalty is computed from IsRaging state
                     sb.AppendLine($"    ☮ Rage suppressed on {target.Stats.CharacterName}!");
                 }
 

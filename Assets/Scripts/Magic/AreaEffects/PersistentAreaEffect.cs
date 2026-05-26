@@ -43,8 +43,8 @@ using UnityEngine;
 public abstract class PersistentAreaEffect : MonoBehaviour
 {
     // Core metadata
-    public string EffectName { get; protected set; } = "Area Effect";
-    public string SpellId { get; protected set; } = string.Empty;
+    public string EffectName { get; set; } = "Area Effect";
+    public string SpellId { get; set; } = string.Empty;
     public CharacterController Caster { get; set; }
     public Vector3 CenterPosition { get; set; }
     public int RoundsRemaining { get; set; }

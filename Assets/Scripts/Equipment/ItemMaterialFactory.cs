@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 // ─────────────────────────────────────────────────────────────
 //  D&D 3.5e Item Material Factory

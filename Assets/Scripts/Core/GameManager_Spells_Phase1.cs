@@ -331,7 +331,7 @@ public partial class GameManager
 
                 // Fort save
                 int fortRoll = UnityEngine.Random.Range(1, 21);
-                int fortMod = target.Stats.FortSave;
+                int fortMod = target.Stats.FortitudeSave;
                 int fortTotal = fortRoll + fortMod;
                 bool saved = fortTotal >= saveDc;
                 sb.AppendLine($"  Fort: d20({fortRoll}) + {fortMod} = {fortTotal} vs DC {saveDc} → {(saved ? "SAVED (negated)" : "FAILED")}");
@@ -719,7 +719,7 @@ public partial class GameManager
 
                 // Fort save vs nausea
                 int fortRoll = UnityEngine.Random.Range(1, 21);
-                int fortMod = target.Stats.FortSave;
+                int fortMod = target.Stats.FortitudeSave;
                 int fortTotal = fortRoll + fortMod;
                 bool saved = fortTotal >= saveDc;
                 sb.AppendLine($"  Fort vs nausea: d20({fortRoll}) + {fortMod} = {fortTotal} vs DC {saveDc} → {(saved ? "SAVED" : "NAUSEATED")}");
@@ -786,13 +786,13 @@ public partial class GameManager
             {
                 if (target == null || target.Stats == null || target.Stats.IsDead) continue;
 
-                int thornDmg = Mathf.Max(1, 25 - target.Stats.AC);
+                int thornDmg = Mathf.Max(1, 25 - target.Stats.ArmorClass);
 
                 int hpBefore = target.Stats.CurrentHP;
                 target.Stats.TakeDamage(thornDmg);
                 int hpAfter = target.Stats.CurrentHP;
 
-                sb.AppendLine($"  🌿 {target.Stats.CharacterName} caught in thorns! 25 - AC({target.Stats.AC}) = {thornDmg} piercing damage.");
+                sb.AppendLine($"  🌿 {target.Stats.CharacterName} caught in thorns! 25 - AC({target.Stats.ArmorClass}) = {thornDmg} piercing damage.");
                 sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
                 CheckConcentrationOnDamage(target, thornDmg);
@@ -962,12 +962,12 @@ public partial class GameManager
         globe.EffectName = "Globe of Invulnerability";
         globe.SpellId = SpellNames.GLOBE_OF_INVULNERABILITY;
         globe.CasterLevel = casterLevel;
-        globe.DurationRounds = durationRounds;
+        globe.RoundsRemaining = durationRounds;
         globe.Caster = caster;
-        globe.GridPosition = caster.GridPosition;
+        globe.CenterPosition = caster.transform.position;
 
-        if (AreaEffectManager.Instance != null)
-            AreaEffectManager.Instance.RegisterEffect(globe);
+        if (AreaEffectManager.HasInstance)
+            AreaEffectManager.Instance.RegisterAreaEffect(globe);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");

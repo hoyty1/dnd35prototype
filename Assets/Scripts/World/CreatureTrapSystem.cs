@@ -317,7 +317,7 @@ public class CreatureTrapSystem : MonoBehaviour
             ServiceTimeRemaining = 0f,
 
             SpellResistance = stats.SpellResistance,
-            Size = stats.Size ?? "Medium",
+            Size = stats.SizeCategoryName ?? "Medium",
         };
 
         // Try to parse CR from stats

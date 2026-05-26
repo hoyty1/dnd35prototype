@@ -237,7 +237,7 @@ public class WishUI : MonoBehaviour
         _selectedOption = null;
         _selectedTarget = null;
         _selectedAbility = AbilityType.STR;
-        _selectedAffliction = WishAfflictionType.Damage;
+        _selectedAffliction = WishAfflictionType.HitPointDamage;
         _selectedSpellId = null;
 
         _titleText.text = $"✨ WISH — {caster.Stats.CharacterName} ✨";
@@ -327,7 +327,7 @@ public class WishUI : MonoBehaviour
 
         switch (option)
         {
-            case WishOption.DuplicateSpell:
+            case WishOption.DuplicateWizSorc8thNonProhibited:
                 ShowSpellSelectionSubPanel();
                 break;
 
@@ -335,11 +335,11 @@ public class WishUI : MonoBehaviour
                 ShowAllySelectionSubPanel("Select ally to remove harmful effects from:");
                 break;
 
-            case WishOption.GrantInherentBonus:
+            case WishOption.GrantInherentAbilityBonus:
                 ShowAbilitySelectionSubPanel();
                 break;
 
-            case WishOption.RemoveAfflictions:
+            case WishOption.RemoveInjuriesAfflictions:
                 ShowAfflictionSelectionSubPanel();
                 break;
 
@@ -347,21 +347,21 @@ public class WishUI : MonoBehaviour
                 ShowDeadAllySelectionSubPanel();
                 break;
 
-            case WishOption.UndoRecentEvent:
+            case WishOption.UndoHarmfulEffects:
                 // Immediate — narrative power, no sub-selection needed
-                ConfirmWish(option, null, AbilityType.STR, WishAfflictionType.Damage, null);
+                ConfirmWish(option, null, AbilityType.STR, WishAfflictionType.HitPointDamage, null);
                 break;
 
             case WishOption.CreateNonmagicalItem:
             case WishOption.CreateMagicItem:
                 // Placeholder — confirm immediately with a log
-                ConfirmWish(option, null, AbilityType.STR, WishAfflictionType.Damage, null);
+                ConfirmWish(option, null, AbilityType.STR, WishAfflictionType.HitPointDamage, null);
                 break;
 
-            case WishOption.TransportAllies:
-            case WishOption.OtherEffect:
+            case WishOption.CreateNonmagicalItem:
+            case WishOption.CreateMagicItem:
                 // DM-arbitrated effects — confirm with log
-                ConfirmWish(option, null, AbilityType.STR, WishAfflictionType.Damage, null);
+                ConfirmWish(option, null, AbilityType.STR, WishAfflictionType.HitPointDamage, null);
                 break;
         }
     }
@@ -404,7 +404,7 @@ public class WishUI : MonoBehaviour
                 ref y, () =>
                 {
                     _selectedTarget = ally;
-                    ConfirmWish(_selectedOption.Value, ally, AbilityType.STR, WishAfflictionType.Damage, null);
+                    ConfirmWish(_selectedOption.Value, ally, AbilityType.STR, WishAfflictionType.HitPointDamage, null);
                 });
         }
 
@@ -423,7 +423,7 @@ public class WishUI : MonoBehaviour
             foreach (var ch in allChars)
             {
                 if (ch == null || ch.Stats == null) continue;
-                if (!ch.Stats.IsPlayerControlled) continue;
+                if (!ch.IsPlayerControlled) continue;
                 if (!ch.HasCondition(CombatConditionType.Dead)) continue;
 
                 AddSubButton(ch.Stats.CharacterName,
@@ -431,7 +431,7 @@ public class WishUI : MonoBehaviour
                     ref y, () =>
                     {
                         _selectedTarget = ch;
-                        ConfirmWish(WishOption.ReviveDead, ch, AbilityType.STR, WishAfflictionType.Damage, null);
+                        ConfirmWish(WishOption.ReviveDead, ch, AbilityType.STR, WishAfflictionType.HitPointDamage, null);
                     });
             }
         }
@@ -485,7 +485,7 @@ public class WishUI : MonoBehaviour
                 AbilityType capturedAbility = ability;
                 AddSubButton(label, $"Grant +1 inherent bonus (→ +{current + 1})", ref y, () =>
                 {
-                    ConfirmWish(WishOption.GrantInherentBonus, target, capturedAbility, WishAfflictionType.Damage, null);
+                    ConfirmWish(WishOption.GrantInherentAbilityBonus, target, capturedAbility, WishAfflictionType.HitPointDamage, null);
                 });
             }
             else
@@ -531,7 +531,7 @@ public class WishUI : MonoBehaviour
             string desc;
             switch (affliction)
             {
-                case WishAfflictionType.Damage: desc = "Restore all HP to maximum"; break;
+                case WishAfflictionType.HitPointDamage: desc = "Restore all HP to maximum"; break;
                 case WishAfflictionType.AbilityDamage: desc = "Heal all ability score damage"; break;
                 case WishAfflictionType.Poison: desc = "Cure poison"; break;
                 case WishAfflictionType.Disease: desc = "Cure disease"; break;
@@ -544,7 +544,7 @@ public class WishUI : MonoBehaviour
             WishAfflictionType capturedAffliction = affliction;
             AddSubButton(affliction.ToString(), desc, ref y, () =>
             {
-                ConfirmWish(WishOption.RemoveAfflictions, target, AbilityType.STR, capturedAffliction, null);
+                ConfirmWish(WishOption.RemoveInjuriesAfflictions, target, AbilityType.STR, capturedAffliction, null);
             });
         }
 
@@ -575,8 +575,8 @@ public class WishUI : MonoBehaviour
                 AddSubButton($"[Lv{spell.SpellLevel}] {spell.Name}",
                     $"Classes: {classes}", ref y, () =>
                     {
-                        ConfirmWish(WishOption.DuplicateSpell, _caster, AbilityType.STR,
-                            WishAfflictionType.Damage, spellId);
+                        ConfirmWish(WishOption.DuplicateWizSorc8thNonProhibited, _caster, AbilityType.STR,
+                            WishAfflictionType.HitPointDamage, spellId);
                     });
             }
         }
@@ -610,7 +610,7 @@ public class WishUI : MonoBehaviour
         foreach (var ch in allChars)
         {
             if (ch == null || ch.Stats == null) continue;
-            if (!ch.Stats.IsPlayerControlled) continue;
+            if (!ch.IsPlayerControlled) continue;
             if (ch.HasCondition(CombatConditionType.Dead)) continue;
             result.Add(ch);
         }

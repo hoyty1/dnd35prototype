@@ -598,7 +598,8 @@ public enum NPCAIProfileArchetype
     UndeadMindless,
     Swarm,
     IndiscriminateSwarm,
-    Dragon
+    Dragon,
+    Brute
 }
 
 /// <summary>

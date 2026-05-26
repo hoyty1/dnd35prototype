@@ -1043,12 +1043,12 @@ public partial class GameManager
     {
         if (caster == null || caster.Stats == null) return;
 
-        Debug.Log($"[Wish] HandleWishSpellCast — caster={caster.Stats.CharacterName}  isPlayer={caster.Stats.IsPlayerControlled}");
+        Debug.Log($"[Wish] HandleWishSpellCast — caster={caster.Stats.CharacterName}  isPlayer={caster.IsPlayerControlled}");
 
         // Consume the spell slot (already handled by the spell casting pipeline before
         // BeginPendingSpellTargeting is called). We just need to handle the Wish effect.
 
-        if (caster.Stats.IsPlayerControlled)
+        if (caster.IsPlayerControlled)
         {
             // Player: open the WishUI selection panel
             if (WishUI == null)
@@ -1116,9 +1116,9 @@ public partial class GameManager
     {
         if (caster == null || caster.Stats == null) return;
 
-        Debug.Log($"[Wish] HandleItemWishCast — caster={caster.Stats.CharacterName}  isPlayer={caster.Stats.IsPlayerControlled}");
+        Debug.Log($"[Wish] HandleItemWishCast — caster={caster.Stats.CharacterName}  isPlayer={caster.IsPlayerControlled}");
 
-        if (caster.Stats.IsPlayerControlled)
+        if (caster.IsPlayerControlled)
         {
             if (WishUI == null)
             {

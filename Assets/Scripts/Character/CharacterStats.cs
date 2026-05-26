@@ -2639,6 +2639,9 @@ public class CharacterStats
     /// <summary>Max HP = Base hit die HP + (CON modifier × level).</summary>
     public int MaxHP { get; private set; }
 
+    /// <summary>Adjust MaxHP by a delta amount. Used by external systems (e.g., Augment Summoning, rage armor).</summary>
+    public void AdjustMaxHP(int delta) { MaxHP += delta; }
+
     /// <summary>Most recent HP gained during level-up (used by UI summary).</summary>
     public int LastLevelUpHPGain { get; private set; }
 
@@ -3226,6 +3229,9 @@ public class CharacterStats
     /// <param name="atkRange">Attack range in squares</param>
     /// <param name="baseHitDieHP">Base HP from hit dice (before CON)</param>
     /// <param name="raceName">Race name (e.g., "Dwarf", "Elf", "Human"). Null for no race.</param>
+    /// <summary>Default parameterless constructor for test/deserialization use.</summary>
+    public CharacterStats() { }
+
     public CharacterStats(string name, int level, string characterClass,
         int str, int dex, int con, int wis, int intelligence, int cha,
         int bab, int armorBonus, int shieldBonus,

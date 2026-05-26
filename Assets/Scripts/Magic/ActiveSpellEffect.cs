@@ -322,6 +322,9 @@ public enum DurationType
     /// <summary>Duration measured in days (1 day = 14400 rounds).</summary>
     Days,
 
+    /// <summary>Duration measured in minutes per caster level.</summary>
+    MinutesPerLevel,
+
     /// <summary>Effect lasts while the caster maintains concentration.</summary>
     Concentration
 }

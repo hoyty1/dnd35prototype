@@ -473,7 +473,7 @@ public class CraftingWorkshopUI : MonoBehaviour
             if (project.SpellcraftDC > 0)
                 spellSourceText += $"\n🎲 Spellcraft DC: {project.SpellcraftDC}";
         }
-        else if (item.RequiredSpells != null && item.RequiredSpells.Count > 0)
+        else if (item.RequiredSpellIds != null && item.RequiredSpellIds.Count > 0)
         {
             // Fallback if SpellSources wasn't populated (shouldn't happen)
             spellSourceText = $"⚠ Missing Spells ({project.MissingSpells.Count}):";
@@ -491,7 +491,7 @@ public class CraftingWorkshopUI : MonoBehaviour
             _previewSpellSourcesText.text = spellSourceText;
 
         // Show/hide scroll toggle based on whether there are spell requirements
-        bool hasSpellReqs = item.RequiredSpells != null && item.RequiredSpells.Count > 0;
+        bool hasSpellReqs = item.RequiredSpellIds != null && item.RequiredSpellIds.Count > 0;
         if (_scrollToggleButton != null)
             _scrollToggleButton.gameObject.SetActive(hasSpellReqs);
 

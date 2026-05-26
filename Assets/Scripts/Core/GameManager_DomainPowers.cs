@@ -224,7 +224,7 @@ public partial class GameManager
         var sb = new StringBuilder();
         sb.AppendLine($"<color=#FFD700>💪 {cleric.Stats.CharacterName} activates Feat of Strength!</color>");
         sb.AppendLine($"   Enhancement bonus to STR: +{enhBonus} for 1 round");
-        sb.AppendLine($"   STR: {cleric.Stats.CurrentSTR} (effective {cleric.Stats.CurrentSTR + enhBonus})");
+        sb.AppendLine($"   STR: {cleric.Stats.STR} (effective {cleric.Stats.STR + enhBonus})");
         CombatUI?.ShowCombatLog(sb.ToString().TrimEnd());
     }
 

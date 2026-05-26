@@ -58,7 +58,7 @@ public class NineLivesStealerBehavior : SpecificItemBehavior
         }
 
         // Creatures immune to critical hits are immune to the death effect
-        if (target.Stats.CreatureImmunities != null && target.Stats.CreatureImmunities.immuneToCriticalHits)
+        if (target.Stats.Immunities != null && target.Stats.Immunities.immuneToCriticalHits)
         {
             logNotes.Add($"☠️ Nine Lives Stealer: {target.Stats.CharacterName} is immune to critical hit effects.");
             return;

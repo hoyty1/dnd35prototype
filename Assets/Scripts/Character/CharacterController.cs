@@ -4639,7 +4639,7 @@ public class CharacterController : MonoBehaviour
 
         // Mounted ranged penalty: -4 (or -2 with Mounted Archery feat)
         int mountedRangedPenalty = 0;
-        if (isRangedAttack && MountSystem.IsMounted(this))
+        if (rangeInfo != null && !rangeInfo.IsMelee && MountSystem.IsMounted(this))
         {
             mountedRangedPenalty = MountedCombatSystem.GetMountedRangedPenalty(this);
             if (mountedRangedPenalty != 0)
@@ -6708,11 +6708,11 @@ public class CharacterController : MonoBehaviour
                     if (target.Stats != null && this.Stats != null && !this.Stats.IsDead)
                     {
                         int counterAttackRoll = UnityEngine.Random.Range(1, 21);
-                        int counterAttackBonus = target.Stats.BAB + target.Stats.DEXMod;
+                        int counterAttackBonus = target.Stats.BaseAttackBonus + target.Stats.DEXMod;
                         int counterTotal = counterAttackRoll + counterAttackBonus;
-                        int targetAC = this.Stats.AC;
+                        int snatchTargetAC = this.Stats.ArmorClass;
 
-                        if (counterAttackRoll == 20 || (counterAttackRoll != 1 && counterTotal >= targetAC))
+                        if (counterAttackRoll == 20 || (counterAttackRoll != 1 && counterTotal >= snatchTargetAC))
                         {
                             // Hit: deal 1d4 + STR damage (thrown projectile)
                             int snatchDamage = UnityEngine.Random.Range(1, 5) + target.Stats.STRMod;

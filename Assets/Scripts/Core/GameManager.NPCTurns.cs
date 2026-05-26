@@ -1587,7 +1587,7 @@ public partial class GameManager
         // Roll damage: DamageCount × d(DamageDice)
         int totalDamage = 0;
         for (int i = 0; i < bw.DamageCount; i++)
-            totalDamage += Random.Range(1, bw.DamageDice + 1);
+            totalDamage += UnityEngine.Random.Range(1, bw.DamageDice + 1);
 
         // Gather targets in the area
         List<CharacterController> allChars = GetAllCharacters();
@@ -1625,7 +1625,7 @@ public partial class GameManager
 
             // Roll saving throw
             int saveBonus = bw.IsReflexSave ? target.Stats.ReflexSave : target.Stats.FortitudeSave;
-            int saveRoll = Random.Range(1, 21);
+            int saveRoll = UnityEngine.Random.Range(1, 21);
             int saveTotal = saveRoll + saveBonus;
             bool saved = saveTotal >= bw.SaveDC;
 
@@ -1734,7 +1734,7 @@ public partial class GameManager
             int targetHD = target.Stats.Level > 0 ? target.Stats.Level : 1;
 
             // Will save
-            int roll = Random.Range(1, 21);
+            int roll = UnityEngine.Random.Range(1, 21);
             int willMod = target.Stats.WillSave;
             int total = roll + willMod;
 
@@ -1747,7 +1747,7 @@ public partial class GameManager
             // Failed save — determine Panicked vs Shaken
             int durationRounds = 0;
             for (int d = 0; d < fp.DurationDice; d++)
-                durationRounds += Random.Range(1, fp.DurationDieSides + 1);
+                durationRounds += UnityEngine.Random.Range(1, fp.DurationDieSides + 1);
 
             if (targetHD <= fp.HDThresholdForPanic)
             {

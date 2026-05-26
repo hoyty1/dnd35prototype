@@ -155,12 +155,12 @@ public class StatusEffectIndicator : MonoBehaviour
         {
             var det = _character.ActiveAlignmentDetectionEffect;
             int rounds = det.DurationRemainingRounds;
-            string summary = det.GetSummaryText();
+            string summary = det.GetDetectionSummary();
             list.Add(new IconData
             {
                 Key = $"Detect_{det.Type}",
                 ShortLabel = det.StatusLabel,
-                Tooltip = $"{det.SpellName}\n{summary}\nConcentrating: round {det.ConcentrationRounds}\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Tooltip = $"{det.SpellDisplayName}\n{summary}\nConcentrating: round {det.ConcentrationRounds}\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
                 Color = det.HighlightColor,
                 Duration = rounds
             });

@@ -157,7 +157,7 @@ public partial class GameManager
 
         // Apply Poisoned condition (for secondary damage tracking)
         if (!target.HasCondition(CombatConditionType.Poisoned))
-            target.AddCondition(CombatConditionType.Poisoned);
+            target.ApplyCondition(CombatConditionType.Poisoned);
 
         CombatUI?.ShowCombatLog($"<color=#CC44CC>☠ Poison! {casterName} poisons {targetName}! {conDamage} CON damage (Fort {saveRoll} vs DC {saveDC}). Secondary: 1d10 CON in 1 minute.</color>");
         Debug.Log($"[Poison] {casterName} -> {targetName}: {conDamage} CON damage, Fort save {saveRoll} vs DC {saveDC}");

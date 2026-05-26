@@ -2301,29 +2301,29 @@ public static class ItemDatabase
                 var copy = new TrappedCreature();
                 copy.CreatureName = tc.CreatureName;
                 copy.CreatureID = tc.CreatureID;
-                copy.Level = tc.Level;
+                copy.CreatureLevel = tc.CreatureLevel;
                 copy.CreatureType = tc.CreatureType;
                 copy.CurrentHP = tc.CurrentHP;
                 copy.MaxHP = tc.MaxHP;
-                copy.ArmorClass = tc.ArmorClass;
-                copy.STR = tc.STR;
-                copy.DEX = tc.DEX;
-                copy.CON = tc.CON;
-                copy.INT = tc.INT;
-                copy.WIS = tc.WIS;
-                copy.CHA = tc.CHA;
-                copy.FortSave = tc.FortSave;
-                copy.RefSave = tc.RefSave;
+                copy.AC = tc.AC;
+                copy.Strength = tc.Strength;
+                copy.Dexterity = tc.Dexterity;
+                copy.Constitution = tc.Constitution;
+                copy.Intelligence = tc.Intelligence;
+                copy.Wisdom = tc.Wisdom;
+                copy.Charisma = tc.Charisma;
+                copy.FortitudeSave = tc.FortitudeSave;
+                copy.ReflexSave = tc.ReflexSave;
                 copy.WillSave = tc.WillSave;
                 copy.SpellResistance = tc.SpellResistance;
                 copy.ChallengeRating = tc.ChallengeRating;
                 copy.Size = tc.Size;
-                copy.BaseAttackBonus = tc.BaseAttackBonus;
+                copy.AttackBonus = tc.AttackBonus;
                 copy.ActiveEffects = tc.ActiveEffects != null
                     ? new System.Collections.Generic.List<string>(tc.ActiveEffects) : null;
                 copy.IsServingOwner = tc.IsServingOwner;
-                copy.ServiceTimeRemainingMinutes = tc.ServiceTimeRemainingMinutes;
-                copy.AttitudeToOwner = tc.AttitudeToOwner;
+                copy.ServiceTimeRemaining = tc.ServiceTimeRemaining;
+                copy.IsHostile = tc.IsHostile;
                 clone.WondrousTrappedCreatures.Add(copy);
             }
         }

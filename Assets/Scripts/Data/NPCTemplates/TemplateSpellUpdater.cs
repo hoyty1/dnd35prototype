@@ -180,7 +180,7 @@ public static class TemplateSpellUpdater
 
         // Use the SourceTemplateId we track on NPCDefinition
         // Convention: "template_{class}_{level}" matches NPCTemplate key
-        string className = character.Stats.CharacterClassName;
+        string className = character.Stats.CharacterClass;
         int level = character.Stats.Level;
 
         if (string.IsNullOrEmpty(className)) return null;

@@ -47,7 +47,7 @@ public class MaceOfSmitingBehavior : SpecificItemBehavior
         if (target.Stats.CreatureType == "Construct")
         {
             // Check if immune to critical hits (some constructs may not be)
-            if (target.Stats.CreatureImmunities != null && target.Stats.CreatureImmunities.immuneToCriticalHits)
+            if (target.Stats.Immunities != null && target.Stats.Immunities.immuneToCriticalHits)
             {
                 // Per SRD, Mace of Smiting bypasses normal crit immunity for constructs
                 // The destruction effect is a special property, not a normal crit

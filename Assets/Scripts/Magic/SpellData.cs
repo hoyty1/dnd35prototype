@@ -396,6 +396,7 @@ public class SpellData
     public bool HasVerbalComponent = true; // Most spells include verbal components unless explicitly overridden.
     public bool HasSomaticComponent = true; // Most spells include somatic components unless explicitly overridden.
     public bool HasMaterialComponent = false; // Whether the spell requires a material component.
+    public bool HasDivineFocus = false; // Whether the spell uses a divine focus component.
     // ========== SPECIAL ==========
     /// <summary>Number of missiles for Magic Missile (1 at CL1, +1 per 2 CL above 1).</summary>
     public int MissileCount;

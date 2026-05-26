@@ -69,7 +69,7 @@ public partial class GameManager
         effect.CenterPosition = centerPosition;
         effect.RoundsRemaining = duration;
         effect.SaveDC = saveDC;
-        effect.CasterLevel = caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1;
+        effect.CasterLevel = caster != null && caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(_pendingSpell) : 1;
 
         Debug.Log($"[GameManager] Entangle area created at {centerPosition}, duration={duration}, DC={saveDC}");
     }

@@ -308,8 +308,8 @@ public static partial class SpellDatabase
                 ClassList  = new[] { "Sorcerer", "Wizard" },
                 AvailableFor = new List<SpellAvailability>
                 {
-                    new SpellAvailability { ClassName = "Sorcerer", Level = 9 },
-                    new SpellAvailability { ClassName = "Wizard",   Level = 9 }
+                    new SpellAvailability("Sorcerer", 9),
+                    new SpellAvailability("Wizard", 9)
                 },
                 Description = "Wish is the mightiest spell a wizard or sorcerer can cast. "
                     + "By simply speaking aloud, you can alter reality to better suit you. "

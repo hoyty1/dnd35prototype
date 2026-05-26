@@ -41,7 +41,7 @@ public static class EnchantmentFactory
         string baneCreatureType = "")
     {
         // Get base item
-        ItemData baseItem = ItemDatabase.GetItem(baseItemId);
+        ItemData baseItem = ItemDatabase.CloneItem(baseItemId);
         if (baseItem == null)
         {
             resultMessage = $"Base item '{baseItemId}' not found in ItemDatabase.";

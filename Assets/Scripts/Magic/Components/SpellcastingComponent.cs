@@ -467,7 +467,7 @@ public class SpellcastingComponent : MonoBehaviour
 
         string classSummary = _preparedCasterClasses.Count > 0 ? string.Join("/", _preparedCasterClasses) : "None";
         if (IsSpontaneousCaster)
-            classSummary = (classSummary == "None" ? "" : classSummary + "/") + SpontaneousData.ClassName;
+            classSummary = (classSummary == "None" ? "" : classSummary + "/") + SpontaneousData.CasterClassName;
         if (IsPartialCaster)
             classSummary = (classSummary == "None" ? "" : classSummary + "/") + PartialData.ClassName + "(partial)";
         Debug.Log($"[Spellcasting] {stats.CharacterName} ({classSummary}): {KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
@@ -962,7 +962,7 @@ public class SpellcastingComponent : MonoBehaviour
 
         var invComp = owner.Inventory;
         if (invComp == null) return 0;
-        var inv = invComp.CharacterInventory;
+        var inv = invComp.GetInventory();
         if (inv == null) return 0;
 
         int highestLevel = 0;
@@ -1986,7 +1986,7 @@ public class SpellcastingComponent : MonoBehaviour
             SlotsRemaining = SpontaneousData.GetSlotsRemainingArray();
 
             Debug.Log($"[Spellcasting] {Stats.CharacterName} cast {spell.Name} (spontaneous Lv{spell.SpellLevel}). " +
-                      $"Remaining at Lv{spell.SpellLevel}: {SpontaneousData.GetSlotsRemaining(spell.SpellLevel)}/{SpontaneousData.GetSlotsMax(spell.SpellLevel)}");
+                      $"Remaining at Lv{spell.SpellLevel}: {SpontaneousData.GetSlotsRemaining(spell.SpellLevel)}/{SpontaneousData.GetMaxSlots(spell.SpellLevel)}");
             return true;
         }
 

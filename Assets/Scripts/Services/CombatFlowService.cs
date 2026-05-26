@@ -1409,7 +1409,7 @@ public class CombatFlowService : MonoBehaviour
         int manyshotPenalty = FeatManager.GetManyshotAttackPenalty(); // -4
 
         // First arrow: single attack roll at -4
-        CombatResult firstArrow = attacker.Attack(target, isFlanking, flankBonus, partnerName, null, rangeInfo, null, manyshotPenalty, false);
+        CombatResult firstArrow = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, null, manyshotPenalty, false);
 
         var logLines = new System.Text.StringBuilder();
         logLines.AppendLine($"🏹 <b>{attacker.Stats.CharacterName}</b> uses <color=#FFD700>Manyshot</color>! (2 arrows, -4 penalty)");
@@ -1426,7 +1426,7 @@ public class CombatFlowService : MonoBehaviour
             // Roll damage separately for the second arrow.
             if (target != null && target.Stats != null && !target.Stats.IsDead)
             {
-                CombatResult secondArrow = attacker.Attack(target, isFlanking, flankBonus, partnerName, null, rangeInfo, null, manyshotPenalty, false);
+                CombatResult secondArrow = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, null, manyshotPenalty, false);
                 // The second arrow uses the same attack roll result, so it auto-hits if the first did.
                 // We simulate this by just using the damage from a second attack.
                 string critStr2 = secondArrow.CritConfirmed ? " CRITICAL!" : "";

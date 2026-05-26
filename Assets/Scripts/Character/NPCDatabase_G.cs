@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Monster Manual creatures: G
@@ -53,7 +54,7 @@ public static partial class NPCDatabase
                     DamageDice = 8,
                     DamageCount = 1,
                     Count = 2, // Two slams in full attack
-                    BonusDamageSource = DamageBonusSource.StrengthFull,
+                    BonusDamageSource = DamageBonusSource.Strength,
                     Range = 2, // 10 ft reach for Large
                     IsPrimary = true
                 }

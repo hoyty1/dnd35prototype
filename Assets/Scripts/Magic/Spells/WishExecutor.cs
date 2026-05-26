@@ -569,8 +569,7 @@ public static class WishExecutor
         string targetName = target.Stats.CharacterName;
 
         // Resurrect: restore to life with full HP
-        target.Stats.IsDead = false;
-        target.Stats.CurrentHP = target.Stats.TotalMaxHP;
+        target.Stats.CurrentHP = target.Stats.TotalMaxHP; // Setting HP > -10 makes IsDead return false
 
         // Remove death-related conditions
         target.Stats.RemoveCondition(CombatConditionType.Dead);
@@ -581,7 +580,7 @@ public static class WishExecutor
         if (target.Stats.Level > 1)
         {
             // Level loss is complex — for now, apply 1 permanent negative level
-            target.Stats.ApplyCondition(CombatConditionType.EnergyDrained, "Resurrection", -1); // -1 = permanent
+            target.Stats.ApplyCondition(CombatConditionType.EnergyDrained, -1, "Resurrection"); // -1 = permanent
             logNotes.Add($"✨ Wish brings {targetName} back to life! (Lost 1 level as resurrection cost)");
         }
         else
