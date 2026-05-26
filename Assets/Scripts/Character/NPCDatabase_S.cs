@@ -87,11 +87,13 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 1,
             SizeCategory = SizeCategory.Tiny,
             IsTallCreature = false,
             STR = 3, DEX = 19, CON = 10, WIS = 12, INT = 1, CHA = 6,
             NaturalArmorBonus = 0,
+            BAB = 0,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
                 new NaturalAttackDefinition
@@ -105,7 +107,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 5,
             HasImprovedGrab = true,
             ImprovedGrabTriggerAttackName = "Touch",
-            CreatureTags = new List<string> { "Magical Beast", "MM35" },
+            CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
             Feats = new List<string> { "Weapon Finesse" },
             SpecialAbilities = new List<string> { "Attach (improved grab)", "Blood drain (1d4 Con/round)", "Darkvision 60 ft.", "Low-light vision", "Fly 40 ft. (average)" },
             EquipmentIds = new List<EquipmentSlotPair>(),

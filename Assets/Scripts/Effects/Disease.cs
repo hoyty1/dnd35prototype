@@ -18,7 +18,8 @@ public enum DiseaseType
     MummyRot,
     DevilChills,
     DemonFever,
-    Lycanthropy
+    Lycanthropy,
+    GhoulFever
 }
 
 /// <summary>

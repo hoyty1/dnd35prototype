@@ -308,7 +308,7 @@ public class EngulfDefinition
     }
 }
 
-public enum AuraEffectType { Sickened, Frightened, Fascinated, Confused, Wisdom_Drain }
+public enum AuraEffectType { Sickened, Frightened, Fascinated, Confused, Wisdom_Drain, Petrified }
 
 /// <summary>
 /// Supernatural aura ability (Allip babble, Cloaker moan, Troglodyte stench).

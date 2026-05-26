@@ -95,11 +95,13 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Warrior",
             CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 5,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,
             STR = 6, DEX = 17, CON = 11, WIS = 13, INT = 2, CHA = 9,
             NaturalArmorBonus = 1,
+            BAB = 5,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
                 new NaturalAttackDefinition
@@ -111,7 +113,7 @@ public static partial class NPCDatabase
             },
             BaseSpeed = 4, // 20 ft, fly 60 ft (poor)
             BaseHitDieHP = 27,
-            CreatureTags = new List<string> { "Magical Beast", "MM35" },
+            CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
             Feats = new List<string> { "Alertness", "Dodge", "Weapon Finesse" },
             SpecialAbilities = new List<string> { "Petrification (DC 12 Fort or turned to stone)", "Darkvision 60 ft.", "Low-light vision", "Fly 60 ft. (poor)" },
             EquipmentIds = new List<EquipmentSlotPair>(),

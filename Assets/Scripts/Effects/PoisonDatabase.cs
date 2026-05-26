@@ -276,6 +276,30 @@ public static class PoisonDatabase
             Description = "Potent venom from wyvern stinger."
         };
 
+        _poisons["phase_spider_poison"] = new PoisonData
+        {
+            Id = "phase_spider_poison",
+            Name = "Phase Spider Venom",
+            Type = PoisonType.Injury,
+            FortitudeDC = 17,
+            InitialDamage = Damage(AbilityType.CON, "1d6"),
+            SecondaryDamage = Damage(AbilityType.CON, "1d6"),
+            PriceInGold = 0,
+            Description = "Potent venom from a phase spider. Fort DC 17, 1d6 Con/1d6 Con."
+        };
+
+        _poisons["medusa_snake_poison"] = new PoisonData
+        {
+            Id = "medusa_snake_poison",
+            Name = "Medusa Snake Venom",
+            Type = PoisonType.Injury,
+            FortitudeDC = 14,
+            InitialDamage = Damage(AbilityType.STR, "1d6"),
+            SecondaryDamage = Damage(AbilityType.STR, "2d6"),
+            PriceInGold = 0,
+            Description = "Venom from a medusa's snake hair. Fort DC 14, 1d6 Str/2d6 Str."
+        };
+
         // ========================================
         // CONTACT POISONS (DMG p. 297)
         // ========================================

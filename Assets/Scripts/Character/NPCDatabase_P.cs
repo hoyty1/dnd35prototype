@@ -76,7 +76,7 @@ public static partial class NPCDatabase
             BAB = 5,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 2, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 2, IsPrimary = true, PoisonOnHitId = "phase_spider_poison" }
             },
             CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
             Feats = new List<string> { "Ability Focus (poison)", "Improved Initiative" },

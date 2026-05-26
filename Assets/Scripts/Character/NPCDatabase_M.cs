@@ -520,12 +520,12 @@ public static partial class NPCDatabase
                 SaveDC = 15,
                 IsWillSave = false, // Fort save
                 RangeFeet = 30,
-                Effect = AuraEffectType.Frightened, // Closest to petrification
+                Effect = AuraEffectType.Petrified,
                 DurationRounds = 999
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Snakes", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = false }
+                new NaturalAttackDefinition { Name = "Snakes", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = false, PoisonOnHitId = "medusa_snake_poison" }
             },
             CreatureTags = new List<string> { "Monstrous Humanoid", "Darkvision60", "MM35" },
             Feats = new List<string> { "Point Blank Shot", "Precise Shot", "Weapon Finesse" },

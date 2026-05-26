@@ -132,6 +132,20 @@ public static class DiseaseDatabase
                     new AbilityDamageEffect { Ability = AbilityType.CON, DamageAmount = "1d6", IsDrain = false }
                 },
                 Description = "Abyssal disease causing burning nightmares and Constitution damage."
+            },
+
+            [DiseaseType.GhoulFever] = new DiseaseData
+            {
+                Name = "Ghoul Fever",
+                Type = DiseaseType.GhoulFever,
+                FortitudeDC = 14,
+                IncubationPeriod = "1",
+                DamageEffects = new List<AbilityDamageEffect>
+                {
+                    new AbilityDamageEffect { Ability = AbilityType.CON, DamageAmount = "1d3", IsDrain = false },
+                    new AbilityDamageEffect { Ability = AbilityType.DEX, DamageAmount = "1d3", IsDrain = false }
+                },
+                Description = "Supernatural disease spread by ghouls and ghasts. Humanoids who die of ghoul fever rise as ghouls."
             }
         };
     }

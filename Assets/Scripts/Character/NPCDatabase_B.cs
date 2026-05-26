@@ -482,7 +482,7 @@ public static partial class NPCDatabase
                 SaveDC = 13,
                 IsWillSave = false, // Fort save
                 RangeFeet = 30,
-                Effect = AuraEffectType.Frightened, // Closest approximation; real effect is petrification
+                Effect = AuraEffectType.Petrified,
                 DurationRounds = 999 // Permanent
             },
             CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },

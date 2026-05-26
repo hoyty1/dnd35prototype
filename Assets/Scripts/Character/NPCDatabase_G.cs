@@ -548,12 +548,12 @@ public static partial class NPCDatabase
             StenchAuraRange = 10,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, ParalysisOnHitDC = 15, ParalysisOnHitDurationRounds = 4 },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, ParalysisOnHitDC = 15, ParalysisOnHitDurationRounds = 4, HasDiseaseOnHit = true, DiseaseOnHitType = DiseaseType.GhoulFever },
                 new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false, ParalysisOnHitDC = 15, ParalysisOnHitDurationRounds = 4 }
             },
             CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
             Feats = new List<string> { "Multiattack", "Toughness" },
-            SpecialAbilities = new List<string> { "Ghoul Fever", "Paralysis (Su): DC 15 Fort, 1d4+1 rounds (elves NOT immune)", "Stench (Ex): 10 ft., DC 15 Fort or sickened 1d6+4 min", "Darkvision 60 ft.", "Undead traits", "+2 turn resistance" },
+            SpecialAbilities = new List<string> { "Ghoul Fever (Su): bite, DC 14 Fort, 1 day incubation, 1d3 Con + 1d3 Dex", "Paralysis (Su): DC 15 Fort, 1d4+1 rounds (elves NOT immune)", "Stench (Ex): 10 ft., DC 15 Fort or sickened 1d6+4 min", "Darkvision 60 ft.", "Undead traits", "+2 turn resistance" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
@@ -586,12 +586,12 @@ public static partial class NPCDatabase
             BAB = 1,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, ParalysisOnHitDC = 14, ParalysisOnHitDurationRounds = 4 },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, ParalysisOnHitDC = 14, ParalysisOnHitDurationRounds = 4, HasDiseaseOnHit = true, DiseaseOnHitType = DiseaseType.GhoulFever },
                 new NaturalAttackDefinition { Name = "Claw", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false, ParalysisOnHitDC = 14, ParalysisOnHitDurationRounds = 4 }
             },
             CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
             Feats = new List<string> { "Multiattack" },
-            SpecialAbilities = new List<string> { "Ghoul Fever (disease)", "Paralysis (Su): DC 14 Fort, 1d4+1 rounds, elves immune", "Darkvision 60 ft.", "Undead traits", "+2 turn resistance" },
+            SpecialAbilities = new List<string> { "Ghoul Fever (Su): bite, DC 14 Fort, 1 day incubation, 1d3 Con + 1d3 Dex", "Paralysis (Su): DC 14 Fort, 1d4+1 rounds, elves immune", "Darkvision 60 ft.", "Undead traits", "+2 turn resistance" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
