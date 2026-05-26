@@ -706,4 +706,38 @@ public static class SkeletonFactory
         skel.Description = "A lanky troll skeleton, its elongated arms ending in razor-sharp bone claws. Unlike its living counterpart, it cannot regenerate.";
         return skel;
     }
+
+    /// <summary>
+    /// Human Archer Skeleton — skeleton_archer.
+    /// Human warrior skeleton equipped with shortbow for ranged encounter tables.
+    /// </summary>
+    public static NPCDefinition HumanArcherSkeleton()
+    {
+        var baseDef = new NPCDefinition
+        {
+            Id = "base_human_archer",
+            Name = "Human Archer",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 13, DEX = 13, CON = 12, WIS = 11, INT = 10, CHA = 8,
+            BAB = 1,
+            BaseSpeed = 6,
+            NaturalArmorBonus = 0,
+            CreatureType = "Humanoid",
+        };
+
+        var skel = SkeletonTemplate.Apply(baseDef, "skeleton_archer", "Skeleton Archer", hasHands: true);
+
+        skel.EquipmentIds = new List<EquipmentSlotPair>
+        {
+            new EquipmentSlotPair(ItemIDs.SHORTBOW, EquipSlot.RightHand),
+            new EquipmentSlotPair(ItemIDs.SHORT_SWORD, EquipSlot.LeftHand)
+        };
+        skel.BackpackItemIds = new List<string>();
+        skel.AIBehavior = NPCAIBehavior.Ranged;
+
+        skel.Description = "Skeleton Archer. Undead human skeleton armed with a shortbow, still loosing arrows with mechanical precision.";
+        return skel;
+    }
 }

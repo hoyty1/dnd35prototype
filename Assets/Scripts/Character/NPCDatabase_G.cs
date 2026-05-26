@@ -31,6 +31,9 @@ public static partial class NPCDatabase
         RegisterGreenSlaad();
         RegisterGrick();
         RegisterGrimlock();
+        RegisterGreenHag();
+        RegisterGauth();
+        RegisterGoblinWarrior();
 
     }
 
@@ -1026,6 +1029,133 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.2f, 0.18f, 0.16f, 0.85f),
             NameColor = new Color(0.8f, 0.75f, 0.7f),
             Description = "Grimlock (CR 1). Blind monstrous humanoid with blindsight 40 ft. MM 3.5e p.140."
+        });
+    }
+
+    /// <summary>
+    /// Green Hag (CR 5) — Medium monstrous humanoid.
+    /// MM 3.5e p.143. Spell-like abilities, weakness aura, mimicry.
+    /// 9d8+9 HP (49), 2 claws 1d4+4.
+    /// </summary>
+    private static void RegisterGreenHag()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "green_hag",
+            Name = "Green Hag",
+            ChallengeRating = "5",
+            Level = 9,
+            CharacterClass = "Warrior",
+            CreatureType = "Monstrous Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 9,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 19, DEX = 12, CON = 12, WIS = 13, INT = 13, CHA = 14,
+            NaturalArmorBonus = 11,
+            BaseSpeed = 6, // 30 ft, swim 30 ft
+            BaseHitDieHP = 49,
+            BAB = 9,
+            SpellResistance = 18,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Monstrous Humanoid", "MM35" },
+            Feats = new List<string> { "Alertness", "Blind-Fight", "Combat Casting", "Great Fortitude" },
+            SpecialAbilities = new List<string> { "Spell-Like Abilities: at will—dancing lights, disguise self, ghost sound, invisibility, pass without trace, tongues, water breathing", "Weakness (Su): 30 ft ray, DC 16 Fort or 2d4 Str damage", "Mimicry (Ex): imitate animal sounds or humanoid voices", "Darkvision 90 ft.", "SR 18" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.35f, 0.55f, 0.3f, 1f),
+            PanelColor = new Color(0.1f, 0.22f, 0.08f, 0.85f),
+            NameColor = new Color(0.5f, 0.8f, 0.45f),
+            Description = "Green Hag (CR 5). Cunning hag with weakness ray and spell-like abilities. MM 3.5e p.143."
+        });
+    }
+
+    /// <summary>
+    /// Gauth (CR 6) — Medium aberration.
+    /// MM 3.5e p.26. Lesser beholder-kin with eye rays.
+    /// 6d8+18 HP (45), bite 1d6.
+    /// </summary>
+    private static void RegisterGauth()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "gauth",
+            Name = "Gauth",
+            ChallengeRating = "6",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Aberration",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 6,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 10, DEX = 14, CON = 16, WIS = 15, INT = 15, CHA = 13,
+            NaturalArmorBonus = 7,
+            BaseSpeed = 1, // 5 ft, fly 20 ft (good)
+            BaseHitDieHP = 45,
+            BAB = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Aberration", "Fly", "MM35" },
+            Feats = new List<string> { "Alertness", "Flyby Attack", "Iron Will" },
+            SpecialAbilities = new List<string> { "Eye Rays (Su): 6 eye stalks—sleep, inflict moderate wounds, dispel magic, scorching ray, paralysis, exhaustion", "Stunning Gaze (Su): 30 ft, DC 16 Will or stunned 1 round", "All-Around Vision: +4 Spot, cannot be flanked", "Fly 20 ft (good)", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.Ranged,
+            AIProfileArchetype = NPCAIProfileArchetype.None,
+            SpriteColor = new Color(0.6f, 0.5f, 0.65f, 1f),
+            PanelColor = new Color(0.2f, 0.15f, 0.25f, 0.85f),
+            NameColor = new Color(0.8f, 0.7f, 0.88f),
+            Description = "Gauth (CR 6). Lesser beholder-kin with six eye rays and stunning gaze. MM 3.5e p.26."
+        });
+    }
+
+    /// <summary>
+    /// Goblin Warrior (CR 1/3) — Small humanoid (goblinoid), Warrior 1.
+    /// MM 3.5e p.133. Alias variant of goblin for encounter table compatibility.
+    /// </summary>
+    private static void RegisterGoblinWarrior()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "goblin_warrior",
+            Name = "Goblin Warrior",
+            ChallengeRating = "1/3",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil,
+            HitDice = 1,
+            BaseAttackBonusOverride = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 11, DEX = 13, CON = 12, WIS = 9, INT = 10, CHA = 6,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 6, // 30 ft
+            BaseHitDieHP = 5,
+            CreatureTags = new List<string> { "Goblinoid", "MM35" },
+            Feats = new List<string> { "Alertness" },
+            SpecialAbilities = new List<string> { "Darkvision 60 ft", "Skills: Hide +5, Listen +2, Move Silently +5, Ride +4, Spot +2" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_LIGHT_WOODEN, EquipSlot.LeftHand)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.56f, 0.78f, 0.28f, 1f),
+            PanelColor = new Color(0.33f, 0.1f, 0.1f, 0.85f),
+            NameColor = new Color(0.95f, 0.45f, 0.45f),
+            Description = "Goblin Warrior (CR 1/3). Small goblinoid skirmisher. MM 3.5e p.133."
         });
     }
 

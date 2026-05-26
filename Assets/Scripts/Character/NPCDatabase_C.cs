@@ -21,6 +21,7 @@ public static partial class NPCDatabase
         RegisterChaosBeast();
         RegisterChoker();
         RegisterChuul();
+        RegisterCheetah();
 
     }
 
@@ -563,6 +564,52 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.1f, 0.18f, 0.15f, 0.85f),
             NameColor = new Color(0.55f, 0.78f, 0.7f),
             Description = "Chuul (CR 7). Lobster-like aberration with paralytic tentacles and constrict. MM 3.5e p.35."
+        });
+    }
+
+    /// <summary>
+    /// Cheetah (CR 2) — Medium animal.
+    /// MM 3.5e p.271. Sprint ability, trip on bite.
+    /// 3d8+6 HP (19), bite 1d6+3, 2 claws 1d2+1.
+    /// </summary>
+    private static void RegisterCheetah()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "cheetah",
+            Name = "Cheetah",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 16, DEX = 19, CON = 15, WIS = 12, INT = 2, CHA = 6,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 10, // 50 ft
+            BaseHitDieHP = 19,
+            BAB = 2,
+            HasTripAttack = true,
+            TripAttackCheckBonus = 2,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 2, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Sprint (Ex): 10x speed 1/hour", "Trip (Ex): free trip on bite", "Scent", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.85f, 0.75f, 0.45f, 1f),
+            PanelColor = new Color(0.3f, 0.25f, 0.1f, 0.85f),
+            NameColor = new Color(0.95f, 0.88f, 0.55f),
+            Description = "Cheetah (CR 2). Fastest land animal with sprint ability and trip attack. MM 3.5e p.271."
         });
     }
 }

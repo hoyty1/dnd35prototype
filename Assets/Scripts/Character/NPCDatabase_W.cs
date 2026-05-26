@@ -12,6 +12,7 @@ public static partial class NPCDatabase
         RegisterSummonWolverine();
         RegisterWillOWisp();
         RegisterWorg();
+        RegisterWight();
 
     }
 
@@ -170,6 +171,50 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.08f, 0.08f, 0.12f, 0.85f),
             NameColor = new Color(0.5f, 0.5f, 0.6f),
             Description = "Worg (CR 2). Evil intelligent wolf with trip attack. MM 3.5e p.256."
+        });
+    }
+
+    /// <summary>
+    /// Wight (CR 3) — Medium undead.
+    /// MM 3.5e p.255. Energy drain (1 negative level) on slam.
+    /// 4d12 HP (26), slam 1d4+1 + energy drain.
+    /// </summary>
+    private static void RegisterWight()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "wight",
+            Name = "Wight",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 12, DEX = 12, CON = 10, WIS = 13, INT = 11, CHA = 15,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 6, // 30 ft
+            BaseHitDieHP = 26,
+            BAB = 2,
+            IsMindless = false,
+            Immunities = new CreatureImmunities { ImmuneToCriticalHits = true, ImmuneToMindAffecting = true, ImmuneToPoison = true },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Undead", "MM35" },
+            Feats = new List<string> { "Alertness", "Blind-Fight" },
+            SpecialAbilities = new List<string> { "Energy Drain (Su): slam bestows 1 negative level, DC 14 Fort to remove", "Create Spawn: humanoid slain rises as wight in 1d4 rounds", "Darkvision 60 ft.", "Undead traits" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Undead,
+            SpriteColor = new Color(0.4f, 0.45f, 0.5f, 1f),
+            PanelColor = new Color(0.12f, 0.14f, 0.18f, 0.85f),
+            NameColor = new Color(0.65f, 0.7f, 0.8f),
+            Description = "Wight (CR 3). Intelligent undead with energy drain. Creates spawn from slain humanoids. MM 3.5e p.255."
         });
     }
 

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Monster Manual creatures: O
@@ -16,6 +17,7 @@ public static partial class NPCDatabase
         RegisterOgreMage();
         RegisterOtyugh();
         RegisterOwlbear();
+        RegisterOrcWarrior();
 
     }
 
@@ -299,6 +301,48 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.2f, 0.15f, 0.08f, 0.85f),
             NameColor = new Color(0.82f, 0.7f, 0.48f),
             Description = "Owlbear (CR 4). Ferocious hybrid beast with improved grab. MM 3.5e p.206."
+        });
+    }
+
+    /// <summary>
+    /// Orc Warrior (CR 1/2) — Medium humanoid (orc), Warrior 1.
+    /// MM 3.5e p.203. Aggressive humanoid with greataxe.
+    /// </summary>
+    private static void RegisterOrcWarrior()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "orc_warrior",
+            Name = "Orc Warrior",
+            ChallengeRating = "1/2",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 17, DEX = 11, CON = 12, WIS = 8, INT = 8, CHA = 6,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 6, // 30 ft
+            BaseHitDieHP = 5,
+            BAB = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Orc", "MM35" },
+            Feats = new List<string> { "Alertness" },
+            SpecialAbilities = new List<string> { "Darkvision 60 ft.", "Light Sensitivity: dazzled in bright sunlight" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.SCALE_MAIL, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.GREATAXE, EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.45f, 0.55f, 0.35f, 1f),
+            PanelColor = new Color(0.18f, 0.22f, 0.1f, 0.85f),
+            NameColor = new Color(0.7f, 0.85f, 0.55f),
+            Description = "Orc Warrior (CR 1/2). Aggressive humanoid with greataxe and light sensitivity. MM 3.5e p.203."
         });
     }
 }

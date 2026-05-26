@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class NPCDatabase
 {
     private static void RegisterCreatures_K()
     {
         RegisterKrenshar();
+        RegisterKoboldWarrior();
     }
 
     private static void RegisterKrenshar()
@@ -53,6 +55,48 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.22f, 0.18f, 0.12f, 0.85f),
             NameColor = new Color(0.85f, 0.75f, 0.6f),
             Description = "Krenshar (CR 1). Feline beast that retracts face skin to frighten prey. MM 3.5e p.163."
+        });
+    }
+
+    /// <summary>
+    /// Kobold Warrior (CR 1/4) — Small humanoid (reptilian), Warrior 1.
+    /// MM 3.5e p.161. Light sensitivity, trap-affinity.
+    /// </summary>
+    private static void RegisterKoboldWarrior()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "kobold_warrior",
+            Name = "Kobold Warrior",
+            ChallengeRating = "1/4",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 9, DEX = 13, CON = 10, WIS = 9, INT = 10, CHA = 8,
+            NaturalArmorBonus = 1,
+            BaseSpeed = 6,
+            BaseHitDieHP = 4,
+            BAB = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Reptilian", "MM35" },
+            Feats = new List<string> { "Alertness" },
+            SpecialAbilities = new List<string> { "Darkvision 60 ft.", "Light Sensitivity: dazzled in bright sunlight", "Natural Armor +1" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.SPEAR, EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.SLING },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.55f, 0.45f, 0.35f, 1f),
+            PanelColor = new Color(0.2f, 0.15f, 0.1f, 0.85f),
+            NameColor = new Color(0.8f, 0.68f, 0.52f),
+            Description = "Kobold Warrior (CR 1/4). Small reptilian humanoid with light sensitivity. MM 3.5e p.161."
         });
     }
 }

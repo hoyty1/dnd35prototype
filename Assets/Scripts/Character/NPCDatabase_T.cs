@@ -10,6 +10,7 @@ public static partial class NPCDatabase
     {
         RegisterTroglodyte();
         RegisterTroll();
+        RegisterThoqqua();
     }
 
     /// <summary>
@@ -95,6 +96,49 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.12f, 0.2f, 0.1f, 0.85f),
             NameColor = new Color(0.6f, 0.85f, 0.55f),
             Description = "Troll (CR 5). Regenerating giant. Claw/claw/bite + rend. Regeneration 5, suppressed by fire or acid. MM 3.5e p.247."
+        });
+    }
+
+    /// <summary>
+    /// Thoqqua (CR 2) — Medium elemental (earth, fire).
+    /// MM 3.5e p.242. Worm-like burrower. Body heat deals fire damage to grapplers/attackers.
+    /// 3d8+3 HP (16), slam 1d6+3 + 2d6 fire.
+    /// </summary>
+    private static void RegisterThoqqua()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "thoqqua",
+            Name = "Thoqqua",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Elemental",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 15, DEX = 13, CON = 13, WIS = 12, INT = 6, CHA = 10,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 6, // 30 ft, burrow 20 ft
+            BaseHitDieHP = 16,
+            BAB = 2,
+            DamageImmunities = new List<DamageType> { DamageType.Fire },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true, BonusDamage = 6 }
+            },
+            CreatureTags = new List<string> { "Elemental", "Earth", "Fire", "MM35" },
+            Feats = new List<string> { "Alertness" },
+            SpecialAbilities = new List<string> { "Heat (Ex): slam deals +2d6 fire", "Body Heat: melee attackers take 1d6 fire", "Burrow 20 ft", "Darkvision 60 ft.", "Tremorsense 60 ft.", "Immune to fire", "Vulnerable to cold" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.None,
+            SpriteColor = new Color(0.9f, 0.4f, 0.15f, 1f),
+            PanelColor = new Color(0.35f, 0.12f, 0.05f, 0.85f),
+            NameColor = new Color(1f, 0.6f, 0.25f),
+            Description = "Thoqqua (CR 2). Fire worm elemental. Body heat burns attackers. MM 3.5e p.242."
         });
     }
 }

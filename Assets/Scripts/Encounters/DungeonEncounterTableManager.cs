@@ -488,10 +488,67 @@ public static class DungeonEncounterTableManager
         _creatureNameMap["average xorn"] = "average_xorn";
         _creatureNameMap["fiendish dire rat"] = "fiendish_dire_rat";
         _creatureNameMap["medium monstrous centipede"] = "monstrous_centipede_medium";
-        _creatureNameMap["medium monstrous scorpion"] = "monstrous_scorpion_small";
+        _creatureNameMap["medium monstrous scorpion"] = "monstrous_scorpion_medium";
         _creatureNameMap["average salamander"] = "average_salamander";
         _creatureNameMap["hellwasp swarm"] = "hellwasp_swarm";
         _creatureNameMap["formian taskmaster"] = "formian_taskmaster";
+
+        // ── Phase 1 additions: plurals, misspellings, DMG CSV name variants ──
+
+        // Plurals → singular creature IDs
+        _creatureNameMap["harpies"] = "harpy";
+        _creatureNameMap["howlers"] = "howler";
+        _creatureNameMap["hyenas"] = "hyena";
+        _creatureNameMap["monitor lizards"] = "monitor_lizard";
+        _creatureNameMap["formian workers"] = "formian_worker";
+        _creatureNameMap["giant worker ants"] = "giant_worker_ant";
+
+        // Size-variant vermin (CSV → normalized IDs)
+        _creatureNameMap["gargantuan monstrous centipede"] = "monstrous_centipede_gargantuan";
+        _creatureNameMap["large monstrous centipede"] = "monstrous_centipede_large";
+        _creatureNameMap["large monstrous scorpion"] = "monstrous_scorpion_large";
+        _creatureNameMap["large monstrous spider"] = "monstrous_spider_large";
+        _creatureNameMap["medium monstrous spider"] = "monstrous_spider_medium";
+        _creatureNameMap["medium monstrous scorpion"] = "monstrous_scorpion_medium";
+
+        // Viper variants
+        _creatureNameMap["tiny viper snakes"] = "viper_tiny";
+        _creatureNameMap["tiny viper snake"] = "viper_tiny";
+        _creatureNameMap["small viper snake"] = "viper_small";
+        _creatureNameMap["medium viper snake"] = "viper_medium";
+        _creatureNameMap["large viper snake"] = "viper_large";
+        _creatureNameMap["huge viper snakes"] = "viper_huge";
+        _creatureNameMap["huge viper snake"] = "viper_huge";
+
+        // Skeleton/zombie template creatures
+        _creatureNameMap["human warrior skeleton"] = "skeleton_human_warrior";
+        _creatureNameMap["human commoner zombies"] = "zombie_human_commoner";
+        _creatureNameMap["human commoner zombie"] = "zombie_human_commoner";
+        _creatureNameMap["minotaur zombie"] = "zombie_minotaur";
+        _creatureNameMap["owlbear skeleton"] = "skeleton_owlbear";
+        _creatureNameMap["troglodyte zombie"] = "zombie_troglodyte";
+        _creatureNameMap["skeleton archer"] = "skeleton_archer";
+
+        // New creatures added in Phase 1
+        _creatureNameMap["thoqque"] = "thoqqua";
+        _creatureNameMap["darkmantle"] = "darkmantle";
+        _creatureNameMap["green hag"] = "green_hag";
+        _creatureNameMap["annis hag"] = "annis";
+        _creatureNameMap["kobold warrior"] = "kobold_warrior";
+        _creatureNameMap["orc warrior"] = "orc_warrior";
+        _creatureNameMap["hobgoblin warrior"] = "hobgoblin_warrior";
+        _creatureNameMap["half-orc warrior"] = "half_orc_warrior";
+        _creatureNameMap["human warrior"] = "human_warrior";
+        _creatureNameMap["human commoner"] = "human_commoner";
+
+        // Dragon aliases (CSV name → dynamic dragon registry IDs)
+        _creatureNameMap["wyrmling brass dragon"] = "dragon_brass_wyrmling";
+        _creatureNameMap["young copper dragon"] = "dragon_copper_young";
+        _creatureNameMap["young white dragon"] = "dragon_white_young";
+
+        // Generic mephit → fire mephit (most common encounter)
+        _creatureNameMap["mephits"] = "fire_mephit";
+        _creatureNameMap["mephit"] = "fire_mephit";
     }
 
     /// <summary>

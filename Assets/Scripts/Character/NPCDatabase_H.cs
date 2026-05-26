@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Monster Manual creatures: H
@@ -22,6 +23,10 @@ public static partial class NPCDatabase
         RegisterHobgoblin();
         RegisterHoundArchon();
         RegisterHyena();
+        RegisterHalfOrcWarrior();
+        RegisterHumanWarrior();
+        RegisterHumanCommoner();
+        RegisterHobgoblinWarrior();
 
     }
 
@@ -575,6 +580,175 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.22f, 0.18f, 0.1f, 0.85f),
             NameColor = new Color(0.85f, 0.75f, 0.55f),
             Description = "Hyena (CR 1). Pack hunter with trip attack. MM 3.5e p.274."
+        });
+    }
+
+    /// <summary>
+    /// Half-Orc Warrior (CR 1/2) — Medium humanoid, Warrior 1.
+    /// Based on SRD half-orc. Darkvision, orc blood.
+    /// </summary>
+    private static void RegisterHalfOrcWarrior()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "half_orc_warrior",
+            Name = "Half-Orc Warrior",
+            ChallengeRating = "1/2",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.ChaoticNeutral,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 15, DEX = 11, CON = 12, WIS = 9, INT = 8, CHA = 6,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 6,
+            BaseHitDieHP = 5,
+            BAB = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Orc", "MM35" },
+            Feats = new List<string> { "Alertness" },
+            SpecialAbilities = new List<string> { "Darkvision 60 ft.", "Orc Blood" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.SCALE_MAIL, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.GREATAXE, EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.48f, 0.52f, 0.38f, 1f),
+            PanelColor = new Color(0.18f, 0.2f, 0.12f, 0.85f),
+            NameColor = new Color(0.72f, 0.8f, 0.58f),
+            Description = "Half-Orc Warrior (CR 1/2). Rugged humanoid fighter with darkvision. SRD."
+        });
+    }
+
+    /// <summary>
+    /// Human Warrior (CR 1/2) — Medium humanoid, Warrior 1.
+    /// SRD. Generic human soldier for encounter tables.
+    /// </summary>
+    private static void RegisterHumanWarrior()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_warrior",
+            Name = "Human Warrior",
+            ChallengeRating = "1/2",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 13, DEX = 11, CON = 12, WIS = 9, INT = 10, CHA = 8,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 6,
+            BaseHitDieHP = 5,
+            BAB = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Human", "MM35" },
+            Feats = new List<string> { "Weapon Focus (longsword)" },
+            SpecialAbilities = new List<string> { "Bonus feat (human)", "Extra skill points (human)" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.CHAIN_SHIRT, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_WOODEN, EquipSlot.LeftHand)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.65f, 0.58f, 0.48f, 1f),
+            PanelColor = new Color(0.22f, 0.18f, 0.14f, 0.85f),
+            NameColor = new Color(0.88f, 0.82f, 0.72f),
+            Description = "Human Warrior (CR 1/2). Generic human soldier. SRD."
+        });
+    }
+
+    /// <summary>
+    /// Human Commoner (CR 1/2) — Medium humanoid, Commoner 1.
+    /// SRD. Unarmed civilian for encounter tables.
+    /// </summary>
+    private static void RegisterHumanCommoner()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_commoner",
+            Name = "Human Commoner",
+            ChallengeRating = "1/2",
+            Level = 1,
+            CharacterClass = "Commoner",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 11, DEX = 10, CON = 11, WIS = 10, INT = 10, CHA = 10,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 6,
+            BaseHitDieHP = 4,
+            BAB = 0,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Humanoid", "Human", "MM35" },
+            Feats = new List<string> { "Toughness" },
+            SpecialAbilities = new List<string> { "NPC class (Commoner)" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.CLUB, EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.6f, 0.55f, 0.5f, 1f),
+            PanelColor = new Color(0.2f, 0.18f, 0.16f, 0.85f),
+            NameColor = new Color(0.82f, 0.78f, 0.72f),
+            Description = "Human Commoner (CR 1/2). Civilian with club. SRD."
+        });
+    }
+
+    /// <summary>
+    /// Hobgoblin Warrior (CR 1/2) — Medium humanoid (goblinoid), Warrior 1.
+    /// MM 3.5e p.153. Disciplined goblinoid soldier.
+    /// </summary>
+    private static void RegisterHobgoblinWarrior()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "hobgoblin_warrior",
+            Name = "Hobgoblin Warrior",
+            ChallengeRating = "1/2",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulEvil,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 13, DEX = 13, CON = 14, WIS = 10, INT = 10, CHA = 8,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 6,
+            BaseHitDieHP = 6,
+            BAB = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>(),
+            CreatureTags = new List<string> { "Goblinoid", "MM35" },
+            Feats = new List<string> { "Alertness" },
+            SpecialAbilities = new List<string> { "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.STUDDED_LEATHER, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_LIGHT_WOODEN, EquipSlot.LeftHand)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.6f, 0.45f, 0.3f, 1f),
+            PanelColor = new Color(0.22f, 0.15f, 0.08f, 0.85f),
+            NameColor = new Color(0.85f, 0.68f, 0.48f),
+            Description = "Hobgoblin Warrior (CR 1/2). Disciplined goblinoid soldier. MM 3.5e p.153."
         });
     }
 }

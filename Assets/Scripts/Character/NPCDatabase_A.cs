@@ -12,6 +12,7 @@ public static partial class NPCDatabase
         RegisterSummonApe();
         RegisterAboleth();
         RegisterAverageSalamander();
+        RegisterAnnis();
 
     }
 
@@ -181,6 +182,54 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.28f, 0.12f, 0.02f, 0.85f),
             NameColor = new Color(0.92f, 0.6f, 0.2f),
             Description = "Average Salamander (CR 6). Fire outsider warrior with DR 10/magic and heat. MM 3.5e p.218."
+        });
+    }
+
+    /// <summary>
+    /// Annis (CR 6) — Large monstrous humanoid.
+    /// MM 3.5e p.142. Powerful hag with rend and improved grab.
+    /// 7d8+14 HP (45), 2 claws 1d6+6, bite 1d6+3.
+    /// </summary>
+    private static void RegisterAnnis()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "annis",
+            Name = "Annis",
+            ChallengeRating = "6",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Monstrous Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 25, DEX = 15, CON = 14, WIS = 13, INT = 13, CHA = 10,
+            NaturalArmorBonus = 10,
+            BaseSpeed = 8, // 40 ft
+            BaseHitDieHP = 45,
+            BAB = 7,
+            DamageReductionAmount = 2,
+            DamageReductionBypass = DamageBypassTag.Bludgeoning,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Claw",
+            SpellResistance = 17,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Monstrous Humanoid", "MM35" },
+            Feats = new List<string> { "Alertness", "Blind-Fight", "Great Fortitude" },
+            SpecialAbilities = new List<string> { "Improved Grab (Ex): claw hit starts grapple", "Rend (Ex): both claws hit → +2d6+10 damage", "Spell-Like Abilities: at will—disguise self, fog cloud; 3/day—alter self", "DR 2/bludgeoning", "SR 17", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.45f, 0.35f, 0.5f, 1f),
+            PanelColor = new Color(0.15f, 0.1f, 0.2f, 0.85f),
+            NameColor = new Color(0.7f, 0.55f, 0.8f),
+            Description = "Annis (CR 6). Powerful hag with rend, improved grab, and DR. MM 3.5e p.142."
         });
     }
 

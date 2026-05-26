@@ -17,6 +17,7 @@ public static partial class NPCDatabase
         RegisterSummonLargeViper();
         RegisterLizardfolk();
         RegisterLocustSwarm();
+        RegisterLeopard();
 
     }
 
@@ -402,6 +403,55 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.15f, 0.18f, 0.06f, 0.85f),
             NameColor = new Color(0.7f, 0.78f, 0.48f),
             Description = "Locust Swarm (CR 3). Diminutive vermin swarm with distraction. MM 3.5e p.239."
+        });
+    }
+
+    /// <summary>
+    /// Leopard (CR 2) — Medium animal.
+    /// MM 3.5e p.274. Stealthy cat with pounce and improved grab.
+    /// 3d8+6 HP (19), bite 1d6+3, 2 claws 1d3+1.
+    /// </summary>
+    private static void RegisterLeopard()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "leopard",
+            Name = "Leopard",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 16, DEX = 19, CON = 15, WIS = 12, INT = 2, CHA = 6,
+            NaturalArmorBonus = 1,
+            BaseSpeed = 8, // 40 ft
+            BaseHitDieHP = 19,
+            BAB = 2,
+            HasPounce = true,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Claw",
+            HasScent = true,
+            HasRake = true,
+            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Pounce (Ex): full attack on charge", "Improved Grab (Ex): claw hit starts grapple", "Rake 1d3+1", "Scent", "Low-light vision", "Skills: Balance +8, Climb +11, Hide +8, Move Silently +8" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.8f, 0.7f, 0.4f, 1f),
+            PanelColor = new Color(0.28f, 0.22f, 0.1f, 0.85f),
+            NameColor = new Color(0.92f, 0.82f, 0.5f),
+            Description = "Leopard (CR 2). Stealthy cat with pounce, improved grab, and rake. MM 3.5e p.274."
         });
     }
 }

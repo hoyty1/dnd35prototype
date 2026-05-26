@@ -28,6 +28,9 @@ public static partial class NPCDatabase
         RegisterDrowElf();
         RegisterDuergar();
         RegisterDwarfWarrior();
+        RegisterDireBoar();
+        RegisterDireWolf();
+        RegisterDarkmantle();
 
     }
 
@@ -791,6 +794,138 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.25f, 0.2f, 0.12f, 0.85f),
             NameColor = new Color(0.9f, 0.8f, 0.6f),
             Description = "Dwarf Warrior (CR 1/2). Stout humanoid fighter with dwarven waraxe. MM 3.5e p.91."
+        });
+    }
+
+    /// <summary>
+    /// Dire Boar (CR 4) — Large animal.
+    /// MM 3.5e p.63. Ferocity: fights on below 0 HP without penalty.
+    /// 7d8+21 HP (52), gore 1d8+12.
+    /// </summary>
+    private static void RegisterDireBoar()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "dire_boar",
+            Name = "Dire Boar",
+            ChallengeRating = "4",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 27, DEX = 10, CON = 17, WIS = 13, INT = 2, CHA = 8,
+            NaturalArmorBonus = 6,
+            BaseSpeed = 8, // 40 ft
+            BaseHitDieHP = 52,
+            BAB = 5,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Gore", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Alertness", "Endurance", "Iron Will" },
+            SpecialAbilities = new List<string> { "Ferocity (Ex): continues fighting below 0 HP", "Scent", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.55f, 0.4f, 0.3f, 1f),
+            PanelColor = new Color(0.2f, 0.14f, 0.1f, 0.85f),
+            NameColor = new Color(0.82f, 0.65f, 0.5f),
+            Description = "Dire Boar (CR 4). Massive boar with ferocity—fights past 0 HP. MM 3.5e p.63."
+        });
+    }
+
+    /// <summary>
+    /// Dire Wolf (CR 3) — Large animal.
+    /// MM 3.5e p.65. Trip attack on bite.
+    /// 6d8+18 HP (45), bite 1d8+10.
+    /// </summary>
+    private static void RegisterDireWolf()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "dire_wolf",
+            Name = "Dire Wolf",
+            ChallengeRating = "3",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 25, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 10,
+            NaturalArmorBonus = 3,
+            BaseSpeed = 10, // 50 ft
+            BaseHitDieHP = 45,
+            BAB = 4,
+            HasTripAttack = true,
+            TripAttackCheckBonus = 11,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Alertness", "Run", "Weapon Focus (bite)" },
+            SpecialAbilities = new List<string> { "Trip (Ex): free trip on bite (+11 check)", "Scent", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.5f, 0.48f, 0.42f, 1f),
+            PanelColor = new Color(0.18f, 0.16f, 0.14f, 0.85f),
+            NameColor = new Color(0.78f, 0.75f, 0.68f),
+            Description = "Dire Wolf (CR 3). Pack predator with devastating trip attack. MM 3.5e p.65."
+        });
+    }
+
+    /// <summary>
+    /// Darkmantle (CR 1) — Small magical beast.
+    /// MM 3.5e p.38. Stalactite-mimic that drops onto prey. Darkness aura, improved grab, constrict.
+    /// 1d10+1 HP (6), slam 1d4+4.
+    /// </summary>
+    private static void RegisterDarkmantle()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "darkmantle",
+            Name = "Darkmantle",
+            ChallengeRating = "1",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 16, DEX = 12, CON = 13, WIS = 10, INT = 2, CHA = 10,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 4, // 20 ft, fly 30 ft
+            BaseHitDieHP = 6,
+            BAB = 1,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Slam",
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Magical Beast", "Fly", "MM35" },
+            Feats = new List<string> { "Improved Initiative" },
+            SpecialAbilities = new List<string> { "Darkness (Su): 60 ft radius, 10 min/day", "Improved Grab", "Constrict 1d4+4", "Blindsight 90 ft", "Fly 30 ft (poor)" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.25f, 0.22f, 0.3f, 1f),
+            PanelColor = new Color(0.1f, 0.08f, 0.15f, 0.85f),
+            NameColor = new Color(0.55f, 0.5f, 0.65f),
+            Description = "Darkmantle (CR 1). Stalactite mimic with darkness aura and constrict. MM 3.5e p.38."
         });
     }
 }

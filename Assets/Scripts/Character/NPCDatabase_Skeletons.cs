@@ -20,8 +20,9 @@ public static partial class NPCDatabase
         Register(SkeletonFactory.MegaraptorSkeleton());
         Register(SkeletonFactory.HorseSkeleton());
         Register(SkeletonFactory.TrollSkeleton());
+        Register(SkeletonFactory.HumanArcherSkeleton());
 
-        Debug.Log("[NPCDatabase] Registered 7 skeleton template variants.");
+        Debug.Log("[NPCDatabase] Registered 8 skeleton template variants.");
     }
 
     /// <summary>
