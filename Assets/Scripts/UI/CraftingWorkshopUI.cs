@@ -125,6 +125,14 @@ public class CraftingWorkshopUI : MonoBehaviour
         Debug.Log($"[CraftingWorkshop] Opened for {crafter?.CharacterName ?? "NULL"}, CL {CraftingValidator.GetCrafterCasterLevel(crafter)}");
     }
 
+    private void Update()
+    {
+        if (_isOpen && Input.GetKeyDown(KeyCode.Escape))
+        {
+            Close();
+        }
+    }
+
     public void Close()
     {
         if (_root != null)
@@ -169,11 +177,6 @@ public class CraftingWorkshopUI : MonoBehaviour
             new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, 16, FontStyle.Normal,
             TextColor, TextAnchor.MiddleCenter);
-
-        // Close button
-        CreateButtonAt(_root.transform, "CloseButton", "← Back to Hub", CloseButtonColor,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -310f), new Vector2(260f, 44f), () => Close());
 
         // ---- LEFT: Feat category tabs ----
         var leftPanel = CreatePanel(_root.transform, "FeatTabsPanel",
@@ -277,6 +280,14 @@ public class CraftingWorkshopUI : MonoBehaviour
 
         // Confirmation dialog (hidden by default)
         BuildConfirmationDialog();
+
+        // Close buttons — created LAST so they render on top of all panels
+        CreateButtonAt(_root.transform, "CloseButton", "✕ Close", CloseButtonColor,
+            new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
+            new Vector2(-10f, -8f), new Vector2(120f, 40f), () => Close());
+        CreateButtonAt(_root.transform, "BackButton", "← Back to Hub", CloseButtonColor,
+            new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+            new Vector2(10f, -8f), new Vector2(200f, 40f), () => Close());
 
         _root.SetActive(false);
     }
