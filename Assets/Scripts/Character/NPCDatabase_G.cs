@@ -35,7 +35,7 @@ public static partial class NPCDatabase
         RegisterGauth();
         RegisterGoblinWarrior();
         RegisterGirallon();
-
+        RegisterGhost();
     }
 
     // ════════════════════════════════════════════════════════════
@@ -1209,6 +1209,65 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.2f, 0.15f, 0.12f, 0.85f),
             NameColor = new Color(0.7f, 0.6f, 0.5f),
             Description = "Girallon (CR 6). Four-armed ape with rend attack. Darkvision, scent. MM 3.5e p.126."
+        });
+    }
+
+    /// <summary>
+    /// Ghost (CR 7) — Medium undead (incorporeal). Template applied to 5th-level human warrior.
+    /// MM 3.5e p.117. Incorporeal touch with manifestation and frightful moan.
+    /// </summary>
+    private static void RegisterGhost()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ghost",
+            Name = "Ghost",
+            ChallengeRating = "7",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 0, DEX = 14, CON = 0, WIS = 14, INT = 12, CHA = 16,
+            NaturalArmorBonus = 0,
+            BaseSpeed = 6, // Fly 30 ft (perfect)
+            BaseHitDieHP = 32,
+            BAB = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Incorporeal Touch", DamageDice = 6, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.None,
+                    Range = 1, IsPrimary = true,
+                    AbilityDrainType = AbilityType.None,
+                    EnergyDrainOnHit = 1, EnergyDrainRemovalDC = 16
+                }
+            },
+            IsIncorporeal = true,
+            CreatureTags = new List<string> { "Undead", "Incorporeal", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Dodge", "Improved Initiative" },
+            SpecialAbilities = new List<string>
+            {
+                "Incorporeal: 50% miss chance from corporeal attacks",
+                "Manifestation (Su): can appear as visible but still incorporeal",
+                "Frightful Moan (Su): 30 ft radius, Will DC 16 or panicked 2d4 rounds",
+                "Corrupting Touch (Su): 1d6 damage ignoring armor",
+                "Draining Touch (Su): 1d4 ability damage to any score",
+                "Rejuvenation (Su): reforms in 2d4 days unless quest resolved",
+                "Turn Resistance +4",
+                "Darkvision 60 ft., Fly 30 ft. (perfect)"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.5f, 0.5f, 0.6f, 0.4f),
+            PanelColor = new Color(0.1f, 0.1f, 0.2f, 0.85f),
+            NameColor = new Color(0.7f, 0.7f, 0.9f),
+            Description = "Ghost (CR 7). Incorporeal undead. Touch drains energy. Frightful moan panics foes. Rejuvenates unless laid to rest. MM 3.5e p.117."
         });
     }
 

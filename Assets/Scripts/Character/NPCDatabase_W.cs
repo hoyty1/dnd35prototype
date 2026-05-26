@@ -13,7 +13,7 @@ public static partial class NPCDatabase
         RegisterWillOWisp();
         RegisterWorg();
         RegisterWight();
-
+        RegisterWyvern();
     }
 
     /// <summary>
@@ -215,6 +215,80 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.12f, 0.14f, 0.18f, 0.85f),
             NameColor = new Color(0.65f, 0.7f, 0.8f),
             Description = "Wight (CR 3). Intelligent undead with energy drain. Creates spawn from slain humanoids. MM 3.5e p.255."
+        });
+    }
+
+    /// <summary>
+    /// Wyvern (CR 6) — Large dragon.
+    /// MM 3.5e p.259. Two-legged dragon with venomous tail stinger.
+    /// </summary>
+    private static void RegisterWyvern()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "wyvern",
+            Name = "Wyvern",
+            ChallengeRating = "6",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Dragon",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 19, DEX = 12, CON = 15, WIS = 12, INT = 6, CHA = 9,
+            NaturalArmorBonus = 5,
+            BaseSpeed = 4, // 20 ft (fly 60 ft poor)
+            BaseHitDieHP = 59,
+            BAB = 7,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Sting", DamageDice = 6, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 1, IsPrimary = true,
+                    PoisonOnHitId = "wyvern_poison"
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf,
+                    Range = 1, IsPrimary = false
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Wing", DamageDice = 4, DamageCount = 1, Count = 2,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf,
+                    Range = 1, IsPrimary = false
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Talon", DamageDice = 6, DamageCount = 2, Count = 2,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf,
+                    Range = 1, IsPrimary = false
+                }
+            },
+            HasImprovedGrab = true,
+            CreatureTags = new List<string> { "Dragon", "Darkvision60", "LowLightVision", "HasScent", "MM35" },
+            Feats = new List<string> { "Alertness", "Flyby Attack", "Multiattack" },
+            HasScent = true,
+            SpecialAbilities = new List<string>
+            {
+                "Poison (Ex): sting, Fort DC 17, 2d6 Con/2d6 Con",
+                "Improved Grab (Ex): talon attack, can carry off Medium or smaller",
+                "Fly 60 ft. (poor)",
+                "Darkvision 60 ft., Low-light vision, Scent",
+                "Immunity to sleep and paralysis"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.35f, 0.3f, 0.25f, 1f),
+            PanelColor = new Color(0.15f, 0.12f, 0.08f, 0.85f),
+            NameColor = new Color(0.6f, 0.5f, 0.4f),
+            Description = "Wyvern (CR 6). Two-legged dragon with venomous tail stinger. Fort DC 17 poison deals 2d6 Con. Flies and carries off prey. MM 3.5e p.259."
         });
     }
 

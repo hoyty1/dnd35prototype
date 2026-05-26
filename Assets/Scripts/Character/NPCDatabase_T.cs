@@ -11,6 +11,7 @@ public static partial class NPCDatabase
         RegisterTroglodyte();
         RegisterTroll();
         RegisterThoqqua();
+        RegisterTreant();
     }
 
     /// <summary>
@@ -139,6 +140,62 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.35f, 0.12f, 0.05f, 0.85f),
             NameColor = new Color(1f, 0.6f, 0.25f),
             Description = "Thoqqua (CR 2). Fire worm elemental. Body heat burns attackers. MM 3.5e p.242."
+        });
+    }
+
+    /// <summary>
+    /// Treant (CR 8) — Huge plant creature.
+    /// MM 3.5e p.244. Animated tree with trample and double damage vs. objects.
+    /// </summary>
+    private static void RegisterTreant()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "treant",
+            Name = "Treant",
+            ChallengeRating = "8",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Plant",
+            CharacterAlignment = Alignment.NeutralGood,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Huge,
+            IsTallCreature = true,
+            STR = 29, DEX = 8, CON = 21, WIS = 16, INT = 12, CHA = 12,
+            NaturalArmorBonus = 13,
+            BaseSpeed = 6, // 30 ft
+            BaseHitDieHP = 66,
+            BAB = 5,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Slam", DamageDice = 6, DamageCount = 2, Count = 2,
+                    BonusDamageSource = DamageBonusSource.StrengthOneAndHalf,
+                    Range = 2, IsPrimary = true
+                }
+            },
+            HasTrample = true,
+            CreatureTags = new List<string> { "Plant", "LowLightVision", "MM35" },
+            Feats = new List<string> { "Improved Sunder", "Iron Will", "Power Attack" },
+            SpecialAbilities = new List<string>
+            {
+                "Animate Trees (Sp): can animate 2 trees within 180 ft. as treants (standard action)",
+                "Double Damage Against Objects: full-power blows deal double melee damage to objects",
+                "Trample (Ex): 2d6+13 damage, Ref DC 22 half",
+                "Damage Reduction 10/slashing",
+                "Vulnerability to fire",
+                "Low-light vision",
+                "Plant traits: immune to mind-affecting, poison, sleep, paralysis, polymorph, stunning, critical hits"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.35f, 0.5f, 0.25f, 1f),
+            PanelColor = new Color(0.12f, 0.22f, 0.08f, 0.85f),
+            NameColor = new Color(0.55f, 0.8f, 0.4f),
+            Description = "Treant (CR 8). Huge animated tree. Double damage to objects. Can animate nearby trees. Vulnerable to fire. MM 3.5e p.244."
         });
     }
 }

@@ -394,7 +394,33 @@ public static class DungeonEncounterTableManager
         // "monstrous" removed — truncated ID, not in NPCDatabase
         _creatureNameMap["small mosntrous scorpion"] = "monstrous_scorpion_small";
         _creatureNameMap["huge monsterous centipede"] = "huge_monstrous_centipede";
-        // "five_headed_hydra" removed — not in NPCDatabase
+        // Hydra variants (now registered)
+        _creatureNameMap["five-headed hydra"] = "hydra_5head";
+        _creatureNameMap["five headed hydra"] = "hydra_5head";
+        _creatureNameMap["hydra, five-headed"] = "hydra_5head";
+        _creatureNameMap["hydra (5 heads)"] = "hydra_5head";
+        _creatureNameMap["seven-headed hydra"] = "hydra_7head";
+        _creatureNameMap["seven headed hydra"] = "hydra_7head";
+        _creatureNameMap["hydra, seven-headed"] = "hydra_7head";
+        _creatureNameMap["hydra (7 heads)"] = "hydra_7head";
+        _creatureNameMap["nine-headed hydra"] = "hydra_9head";
+        _creatureNameMap["nine headed hydra"] = "hydra_9head";
+        _creatureNameMap["hydra, nine-headed"] = "hydra_9head";
+        _creatureNameMap["hydra (9 heads)"] = "hydra_9head";
+
+        // Classic monsters — new in Phase 4
+        _creatureNameMap["ghost"] = "ghost";
+        _creatureNameMap["ghosts"] = "ghost";
+        _creatureNameMap["treant"] = "treant";
+        _creatureNameMap["treants"] = "treant";
+        _creatureNameMap["chimera"] = "chimera";
+        _creatureNameMap["chimeras"] = "chimera";
+        _creatureNameMap["wyvern"] = "wyvern";
+        _creatureNameMap["wyverns"] = "wyvern";
+        _creatureNameMap["couatl"] = "couatl";
+        _creatureNameMap["couatls"] = "couatl";
+        _creatureNameMap["spirit naga"] = "spirit_naga";
+        _creatureNameMap["spirit nagas"] = "spirit_naga";
         _creatureNameMap["hellswasp swarm"] = "hellwasp_swarm";
         _creatureNameMap["formian taskmater"] = "formian_taskmaster";
 

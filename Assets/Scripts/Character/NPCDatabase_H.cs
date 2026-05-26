@@ -27,7 +27,9 @@ public static partial class NPCDatabase
         RegisterHumanWarrior();
         RegisterHumanCommoner();
         RegisterHobgoblinWarrior();
-
+        RegisterHydra5Head();
+        RegisterHydra7Head();
+        RegisterHydra9Head();
     }
 
     private static void RegisterHawk()
@@ -749,6 +751,171 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.22f, 0.15f, 0.08f, 0.85f),
             NameColor = new Color(0.85f, 0.68f, 0.48f),
             Description = "Hobgoblin Warrior (CR 1/2). Disciplined goblinoid soldier. MM 3.5e p.153."
+        });
+    }
+
+    /// <summary>
+    /// Five-Headed Hydra (CR 4) — Huge magical beast.
+    /// MM 3.5e p.155. Multiple bite attacks. Heads regrow.
+    /// </summary>
+    private static void RegisterHydra5Head()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "hydra_5head",
+            Name = "Five-Headed Hydra",
+            ChallengeRating = "4",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "MagicalBeast",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Huge,
+            IsTallCreature = true,
+            STR = 17, DEX = 12, CON = 20, WIS = 10, INT = 2, CHA = 9,
+            NaturalArmorBonus = 5,
+            BaseSpeed = 4, // 20 ft
+            BaseHitDieHP = 52,
+            BAB = 5,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 10, DamageCount = 1, Count = 5,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 2, IsPrimary = true
+                }
+            },
+            CreatureTags = new List<string> { "MagicalBeast", "Darkvision60", "LowLightVision", "HasScent", "MM35" },
+            Feats = new List<string> { "Combat Reflexes", "Iron Will", "Toughness", "Weapon Focus (bite)" },
+            HasScent = true,
+            SpecialAbilities = new List<string>
+            {
+                "5 heads: 5 bite attacks per round",
+                "Fast Healing 15 (regrows severed heads)",
+                "Can only be killed by fire or acid to neck stumps",
+                "Combat Reflexes: can make 5 AoO per round (one per head)",
+                "Darkvision 60 ft., Low-light vision, Scent",
+                "Swim 20 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.35f, 0.45f, 0.30f, 1f),
+            PanelColor = new Color(0.12f, 0.18f, 0.08f, 0.85f),
+            NameColor = new Color(0.55f, 0.75f, 0.45f),
+            Description = "Five-Headed Hydra (CR 4). Huge reptilian beast with 5 biting heads. Regrows severed heads unless cauterized. MM 3.5e p.155."
+        });
+    }
+
+    /// <summary>
+    /// Seven-Headed Hydra (CR 6) — Huge magical beast.
+    /// MM 3.5e p.155. More heads = more bite attacks.
+    /// </summary>
+    private static void RegisterHydra7Head()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "hydra_7head",
+            Name = "Seven-Headed Hydra",
+            ChallengeRating = "6",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "MagicalBeast",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Huge,
+            IsTallCreature = true,
+            STR = 19, DEX = 12, CON = 20, WIS = 10, INT = 2, CHA = 9,
+            NaturalArmorBonus = 7,
+            BaseSpeed = 4,
+            BaseHitDieHP = 73,
+            BAB = 7,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 10, DamageCount = 1, Count = 7,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 2, IsPrimary = true
+                }
+            },
+            CreatureTags = new List<string> { "MagicalBeast", "Darkvision60", "LowLightVision", "HasScent", "MM35" },
+            Feats = new List<string> { "Combat Reflexes", "Iron Will", "Toughness", "Weapon Focus (bite)" },
+            HasScent = true,
+            SpecialAbilities = new List<string>
+            {
+                "7 heads: 7 bite attacks per round",
+                "Fast Healing 17 (regrows severed heads)",
+                "Can only be killed by fire or acid to neck stumps",
+                "Combat Reflexes: can make 7 AoO per round (one per head)",
+                "Darkvision 60 ft., Low-light vision, Scent",
+                "Swim 20 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.35f, 0.45f, 0.30f, 1f),
+            PanelColor = new Color(0.12f, 0.18f, 0.08f, 0.85f),
+            NameColor = new Color(0.55f, 0.75f, 0.45f),
+            Description = "Seven-Headed Hydra (CR 6). Huge reptilian beast with 7 biting heads. More heads means more attacks. MM 3.5e p.155."
+        });
+    }
+
+    /// <summary>
+    /// Nine-Headed Hydra (CR 8) — Huge magical beast.
+    /// MM 3.5e p.155. Maximum standard hydra variant.
+    /// </summary>
+    private static void RegisterHydra9Head()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "hydra_9head",
+            Name = "Nine-Headed Hydra",
+            ChallengeRating = "8",
+            Level = 9,
+            CharacterClass = "Warrior",
+            CreatureType = "MagicalBeast",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 9,
+            SizeCategory = SizeCategory.Huge,
+            IsTallCreature = true,
+            STR = 21, DEX = 12, CON = 20, WIS = 10, INT = 2, CHA = 9,
+            NaturalArmorBonus = 9,
+            BaseSpeed = 4,
+            BaseHitDieHP = 94,
+            BAB = 9,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 10, DamageCount = 1, Count = 9,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 2, IsPrimary = true
+                }
+            },
+            CreatureTags = new List<string> { "MagicalBeast", "Darkvision60", "LowLightVision", "HasScent", "MM35" },
+            Feats = new List<string> { "Blind-Fight", "Combat Reflexes", "Iron Will", "Toughness", "Weapon Focus (bite)" },
+            HasScent = true,
+            SpecialAbilities = new List<string>
+            {
+                "9 heads: 9 bite attacks per round",
+                "Fast Healing 19 (regrows severed heads)",
+                "Can only be killed by fire or acid to neck stumps",
+                "Combat Reflexes: can make 9 AoO per round (one per head)",
+                "Darkvision 60 ft., Low-light vision, Scent",
+                "Swim 20 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.35f, 0.45f, 0.30f, 1f),
+            PanelColor = new Color(0.12f, 0.18f, 0.08f, 0.85f),
+            NameColor = new Color(0.55f, 0.75f, 0.45f),
+            Description = "Nine-Headed Hydra (CR 8). Huge reptilian beast with 9 biting heads. Most dangerous standard hydra. MM 3.5e p.155."
         });
     }
 }

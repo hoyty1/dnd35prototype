@@ -300,6 +300,18 @@ public static class PoisonDatabase
             Description = "Venom from a medusa's snake hair. Fort DC 14, 1d6 Str/2d6 Str."
         };
 
+        _poisons["wyvern_poison"] = new PoisonData
+        {
+            Id = "wyvern_poison",
+            Name = "Wyvern Poison",
+            Type = PoisonType.Injury,
+            FortitudeDC = 17,
+            InitialDamage = Damage(AbilityType.CON, "2d6"),
+            SecondaryDamage = Damage(AbilityType.CON, "2d6"),
+            PriceInGold = 3000,
+            Description = "Potent venom from a wyvern's tail stinger. Fort DC 17, 2d6 Con/2d6 Con."
+        };
+
         // ========================================
         // CONTACT POISONS (DMG p. 297)
         // ========================================

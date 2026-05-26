@@ -22,7 +22,8 @@ public static partial class NPCDatabase
         RegisterChoker();
         RegisterChuul();
         RegisterCheetah();
-
+        RegisterChimera();
+        RegisterCouatl();
     }
 
     /// <summary>
@@ -612,6 +613,140 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.3f, 0.25f, 0.1f, 0.85f),
             NameColor = new Color(0.95f, 0.88f, 0.55f),
             Description = "Cheetah (CR 2). Fastest land animal with sprint ability and trip attack. MM 3.5e p.271."
+        });
+    }
+
+    /// <summary>
+    /// Chimera (CR 7) — Large magical beast.
+    /// MM 3.5e p.34. Three-headed monster: lion, dragon, goat. Breath weapon + melee.
+    /// </summary>
+    private static void RegisterChimera()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "chimera",
+            Name = "Chimera",
+            ChallengeRating = "7",
+            Level = 9,
+            CharacterClass = "Warrior",
+            CreatureType = "MagicalBeast",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 9,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 19, DEX = 13, CON = 17, WIS = 13, INT = 4, CHA = 10,
+            NaturalArmorBonus = 6,
+            BaseSpeed = 6, // 30 ft (also fly 50 ft poor)
+            BaseHitDieHP = 76,
+            BAB = 9,
+            BreathWeapon = new BreathWeaponDefinition
+            {
+                Shape = BreathWeaponShape.Cone,
+                RangeFeet = 20,
+                DamageDice = 8, DamageCount = 3,
+                DamageType = DamageType.Fire,
+                SaveDC = 17,
+                IsReflexSave = true,
+                RechargeRounds = 3
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite (lion)", DamageDice = 8, DamageCount = 2, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 1, IsPrimary = true
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite (dragon)", DamageDice = 8, DamageCount = 2, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf,
+                    Range = 1, IsPrimary = false
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Gore (goat)", DamageDice = 8, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf,
+                    Range = 1, IsPrimary = false
+                }
+            },
+            CreatureTags = new List<string> { "MagicalBeast", "Darkvision60", "LowLightVision", "HasScent", "MM35" },
+            Feats = new List<string> { "Alertness", "Hover", "Iron Will", "Multiattack" },
+            HasScent = true,
+            SpecialAbilities = new List<string>
+            {
+                "Breath Weapon (Su): 20 ft. cone of fire, 3d8, Ref DC 17 half, 1d4 round recharge",
+                "Three heads: bite (lion), bite (dragon), gore (goat)",
+                "Fly 50 ft. (poor)",
+                "Darkvision 60 ft., Low-light vision, Scent"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.65f, 0.35f, 0.2f, 1f),
+            PanelColor = new Color(0.25f, 0.1f, 0.05f, 0.85f),
+            NameColor = new Color(0.9f, 0.5f, 0.3f),
+            Description = "Chimera (CR 7). Three-headed monster (lion/dragon/goat) with fire breath and flight. MM 3.5e p.34."
+        });
+    }
+
+    /// <summary>
+    /// Couatl (CR 10) — Large outsider (native).
+    /// MM 3.5e p.37. Winged serpent with constriction, poison, and divine spells.
+    /// </summary>
+    private static void RegisterCouatl()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "couatl",
+            Name = "Couatl",
+            ChallengeRating = "10",
+            Level = 9,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.LawfulGood,
+            HitDice = 9,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false, // serpentine
+            STR = 16, DEX = 16, CON = 17, WIS = 17, INT = 17, CHA = 17,
+            NaturalArmorBonus = 7,
+            BaseSpeed = 4, // 20 ft (fly 60 ft good)
+            BaseHitDieHP = 58,
+            BAB = 9,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Bite", DamageDice = 3, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 1, IsPrimary = true,
+                    PoisonOnHitId = "wyvern_poison" // reuse similar venom; couatl poison is DC 16, 2d4 Str
+                }
+            },
+            HasImprovedGrab = true,
+            CreatureTags = new List<string> { "Outsider", "Native", "Darkvision60", "Constrict", "MM35" },
+            Feats = new List<string> { "Dodge", "Empower Spell", "Eschew Materials", "Hover" },
+            SpecialAbilities = new List<string>
+            {
+                "Constrict (Ex): 2d8+3 damage with successful grapple",
+                "Improved Grab (Ex): bite triggers grapple, then constrict",
+                "Poison (Ex): bite, Fort DC 16, 2d4 Str/4d4 Str",
+                "Spells: casts as 9th-level sorcerer",
+                "Spell-Like: detect chaos/evil/good/law, detect thoughts, invisibility, plane shift",
+                "Telepathy 90 ft.",
+                "Ethereal Jaunt (Su): at will, as spell",
+                "Fly 60 ft. (good)",
+                "Darkvision 60 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Caster,
+            SpriteColor = new Color(0.3f, 0.7f, 0.9f, 1f),
+            PanelColor = new Color(0.08f, 0.25f, 0.4f, 0.85f),
+            NameColor = new Color(0.5f, 0.9f, 1f),
+            Description = "Couatl (CR 10). Winged serpent outsider. Constricts, poisons, and casts divine spells. Telepathic. MM 3.5e p.37."
         });
     }
 }
