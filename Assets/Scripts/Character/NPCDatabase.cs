@@ -47,6 +47,17 @@ public static partial class NPCDatabase
         RegisterCreatures_Zombies();
         RegisterCreatures_Lycanthropes();
 
+        // Register dungeon encounter creatures by type.
+        RegisterCreatures_Humanoids();
+        RegisterCreatures_Giants();
+        RegisterCreatures_Undead2();
+        RegisterCreatures_Aberrations();
+        RegisterCreatures_MagicalBeasts();
+        RegisterCreatures_Outsiders();
+        RegisterCreatures_OozesPlants();
+        RegisterCreatures_Misc();
+        RegisterCreatures_Animals2();
+
         // Register summon compatibility aliases (map legacy IDs to existing creature entries).
         RegisterSummonCreatureAliases();
 
