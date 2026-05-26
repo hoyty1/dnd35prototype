@@ -345,8 +345,7 @@ public partial class GameManager
 
                 // Killed — deduct HD from pool
                 remainingHd -= targetHd;
-                target.Stats.CurrentHP = 0;
-                target.Stats.IsDead = true;
+                target.Stats.CurrentHP = -11;
                 target.OnDeath();
                 HandleSummonDeathCleanup(target);
                 sb.AppendLine($"  ☠ {target.Stats.CharacterName} is slain by Circle of Death! (HD pool remaining: {remainingHd})");

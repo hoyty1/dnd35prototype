@@ -6157,7 +6157,7 @@ public partial class GameManager
 
     private static int CalculateRayOfEnfeeblementPenalty(CharacterController caster)
     {
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
         int levelBonus = Mathf.Min(5, 1 + ((casterLevel - 1) / 2));
         int d6 = DiceService.D6("Enervation damage");
         return d6 + levelBonus;
@@ -7888,7 +7888,7 @@ public partial class GameManager
             UpdateAlignmentDetectionForRound(character);
 
             // Tick duration down; remove if expired
-            string detSpellName = character.ActiveAlignmentDetectionEffect?.SpellName ?? "Detection";
+            string detSpellName = character.ActiveAlignmentDetectionEffect?.SpellDisplayName ?? "Detection";
             bool expired = character.TickAlignmentDetectionDuration();
             if (expired)
             {
@@ -8906,11 +8906,12 @@ public partial class GameManager
 
         foreach (var detected in detection.DetectedCreatures)
         {
-            if (detected.Creature == null || detected.Creature.OccupiedCell == null)
+            if (detected.Creature == null || Grid == null)
                 continue;
 
             // Apply a subtle colored highlight on the creature's cell
-            var cell = detected.Creature.OccupiedCell;
+            var cell = Grid.GetCell(detected.Creature.GridPosition);
+            if (cell == null) continue;
             cell.SetHighlight(detection.HighlightColor);
         }
     }
@@ -8923,7 +8924,7 @@ public partial class GameManager
         // Clear all cell highlights (they'll be restored by normal game logic)
         if (Grid != null)
         {
-            foreach (var cell in Grid.AllCells())
+            foreach (var cell in Grid.Cells.Values)
             {
                 cell.ClearHighlight();
             }

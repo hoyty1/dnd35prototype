@@ -14,6 +14,7 @@
 // ============================================================================
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using DND35e.Identifiers;
 
@@ -141,7 +142,7 @@ public partial class GameManager
         int durationRounds = Mathf.Max(1, casterLevel);
 
         // Compute center and direction from AoE cells
-        Vector2Int centerCell = aoeCells.Count > 0 ? aoeCells[aoeCells.Count / 2] : Vector2Int.zero;
+        Vector2Int centerCell = aoeCells.Count > 0 ? aoeCells.ElementAt(aoeCells.Count / 2) : Vector2Int.zero;
         Vector2Int direction = new Vector2Int(1, 0);
 
         if (_pendingWallOfForceLineStart.HasValue)

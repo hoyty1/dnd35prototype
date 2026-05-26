@@ -347,17 +347,6 @@ public class WishUI : MonoBehaviour
                 ShowDeadAllySelectionSubPanel();
                 break;
 
-            case WishOption.UndoHarmfulEffects:
-                // Immediate — narrative power, no sub-selection needed
-                ConfirmWish(option, null, AbilityType.STR, WishAfflictionType.HitPointDamage, null);
-                break;
-
-            case WishOption.CreateNonmagicalItem:
-            case WishOption.CreateMagicItem:
-                // Placeholder — confirm immediately with a log
-                ConfirmWish(option, null, AbilityType.STR, WishAfflictionType.HitPointDamage, null);
-                break;
-
             case WishOption.CreateNonmagicalItem:
             case WishOption.CreateMagicItem:
                 // DM-arbitrated effects — confirm with log

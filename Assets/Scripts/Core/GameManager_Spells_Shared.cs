@@ -79,7 +79,7 @@ public partial class GameManager
             "Chaos Hammer", "chaotic", "⚡🌀",
             a => AlignmentHelper.IsLawful(a),
             a => AlignmentHelper.IsNeutralLC(a),
-            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Staggered); }, // Slowed = Staggered for simplicity
+            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Staggered, rounds, "Slow"); }, // Slowed = Staggered for simplicity
             () => Random.Range(1, 7) // 1d6 rounds
         );
     }
@@ -93,7 +93,7 @@ public partial class GameManager
             "Holy Smite", "good", "⚡✨",
             a => AlignmentHelper.IsEvil(a),
             a => AlignmentHelper.IsNeutralGE(a),
-            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Blinded); },
+            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Blinded, rounds, "Blindness"); },
             () => 1 // 1 round blindness
         );
     }
@@ -107,7 +107,7 @@ public partial class GameManager
             "Order's Wrath", "lawful", "⚡⚖",
             a => AlignmentHelper.IsChaotic(a),
             a => AlignmentHelper.IsNeutralLC(a),
-            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Dazed); },
+            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Dazed, rounds, "Daze"); },
             () => 1 // 1 round daze
         );
     }
@@ -121,7 +121,7 @@ public partial class GameManager
             "Unholy Blight", "evil", "⚡💀",
             a => AlignmentHelper.IsGood(a),
             a => AlignmentHelper.IsNeutralGE(a),
-            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Sickened); },
+            (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Sickened, rounds, "Sicken"); },
             () => Random.Range(1, 5) // 1d4 rounds
         );
     }
