@@ -23,6 +23,7 @@ public class EncounterSelectionUI : MonoBehaviour
     private string _selectedPresetId;
 
     private RandomEncounterGeneratorUI _randomEncounterGeneratorUI;
+    private DungeonEncounterGeneratorUI _dungeonEncounterGeneratorUI;
 
     private readonly Dictionary<string, Image> _cardImages = new Dictionary<string, Image>();
     private readonly Dictionary<string, Outline> _cardOutlines = new Dictionary<string, Outline>();
@@ -88,6 +89,7 @@ public class EncounterSelectionUI : MonoBehaviour
             _panel.SetActive(false);
 
         _randomEncounterGeneratorUI?.Close();
+        _dungeonEncounterGeneratorUI?.Close();
     }
 
     private void EnsureBuilt()
@@ -290,6 +292,7 @@ public class EncounterSelectionUI : MonoBehaviour
 
         CreateFooterButton(footer.transform, "Cancel", new Color(0.45f, 0.2f, 0.2f, 1f), OnCancelPressed, out _);
         CreateFooterButton(footer.transform, "Random Encounter", new Color(0.3f, 0.38f, 0.62f, 1f), OnRandomEncounterPressed, out _randomEncounterButton);
+        CreateFooterButton(footer.transform, "DMG Tables", new Color(0.42f, 0.28f, 0.58f, 1f), OnDMGTablesPressed, out _);
         CreateFooterButton(footer.transform, "Select", new Color(0.2f, 0.45f, 0.28f, 1f), OnConfirmPressed, out _confirmButton);
         _confirmButton.interactable = false;
     }
@@ -638,6 +641,61 @@ public class EncounterSelectionUI : MonoBehaviour
         _randomEncounterGeneratorUI = gameObject.GetComponent<RandomEncounterGeneratorUI>();
         if (_randomEncounterGeneratorUI == null)
             _randomEncounterGeneratorUI = gameObject.AddComponent<RandomEncounterGeneratorUI>();
+    }
+
+    /// <summary>
+    /// Open the DMG 3.5e dungeon encounter table generator (Phase 4).
+    /// Hides the encounter selection panel and shows the DMG table UI.
+    /// </summary>
+    private void OnDMGTablesPressed()
+    {
+        EnsureDungeonEncounterGeneratorUI();
+        if (_dungeonEncounterGeneratorUI == null)
+            return;
+
+        if (_panel != null)
+            _panel.SetActive(false);
+
+        int partyLevel = ChallengeRatingUtils.CalculateAPL(_partyLevels, _partySize);
+
+        _dungeonEncounterGeneratorUI.Open(
+            partyLevel: partyLevel,
+            onStartCombat: (encounter) =>
+            {
+                // When user starts combat from DMG tables, feed through the
+                // existing random encounter pipeline for consistency
+                Close();
+                if (encounter != null)
+                {
+                    DungeonEncounterSpawner.SpawnResult result = DungeonEncounterSpawner.PrepareEncounter(encounter);
+                    if (result != null && result.IsValid)
+                    {
+                        _onStartRandomEncounter?.Invoke(
+                            new List<string>(result.EnemyIds), null);
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[EncounterSelectionUI] DMG encounter preparation failed.");
+                        if (_panel != null) _panel.SetActive(true);
+                    }
+                }
+            },
+            onBack: () =>
+            {
+                _dungeonEncounterGeneratorUI.Close();
+                if (_panel != null)
+                    _panel.SetActive(true);
+            });
+    }
+
+    private void EnsureDungeonEncounterGeneratorUI()
+    {
+        if (_dungeonEncounterGeneratorUI != null)
+            return;
+
+        _dungeonEncounterGeneratorUI = gameObject.GetComponent<DungeonEncounterGeneratorUI>();
+        if (_dungeonEncounterGeneratorUI == null)
+            _dungeonEncounterGeneratorUI = gameObject.AddComponent<DungeonEncounterGeneratorUI>();
     }
 
     private void OnCancelPressed()
