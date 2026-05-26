@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using DND35e.Treasure;
 
 public partial class GameManager
 {
@@ -35,6 +36,32 @@ public partial class GameManager
         }
 
         _postCombatLootCollectionTriggered = true;
+
+        // === D&D 3.5e Treasure Generation ===
+        // Generate random treasure based on encounter level before opening loot window.
+        TreasureResult generatedTreasure = GeneratePostCombatTreasure();
+        if (generatedTreasure != null && !generatedTreasure.IsEmpty)
+        {
+            Debug.Log($"[LootFlow] Treasure generated: {generatedTreasure.TotalGPValue:N0} gp total");
+            string coinSummary = GetTreasureCoinSummary();
+            int itemCount = generatedTreasure.Gems.Count + generatedTreasure.ArtObjects.Count +
+                            generatedTreasure.MundaneItems.Count + generatedTreasure.MagicItems.Count;
+            CombatUI?.ShowCombatLog($"💎 Treasure found! {coinSummary}" +
+                (itemCount > 0 ? $" + {itemCount} item(s) worth {generatedTreasure.TotalGPValue:N0} gp" : ""));
+
+            // Show treasure UI; when closed, proceed to normal loot collection
+            ShowTreasureUI(generatedTreasure, () =>
+            {
+                Debug.Log("[LootFlow] Treasure UI closed, proceeding to equipment loot collection.");
+                ContinueToLootCollection();
+            });
+            return;
+        }
+        else
+        {
+            Debug.Log("[LootFlow] No random treasure generated; proceeding directly to loot collection.");
+        }
+        // === End Treasure Generation ===
 
         EnsurePartyStashInitialized();
         PartyStash?.Unlock();
@@ -76,6 +103,53 @@ public partial class GameManager
                     CombatUI?.ShowCombatLog("📦 Loot window closed. Party stash unlocked.");
 
                 Debug.Log($"[LootFlow] Transitioning from loot to XP flow | lootedCount={lootedCount} | waitingLoot={WaitingForLootCollection} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
+                ShowPostCombatXPFlow(lootedCount);
+            },
+            onExitLoop: ExitCombatLoopToMenu);
+    }
+
+    /// <summary>
+    /// Continue to the standard loot collection flow (called after treasure UI is closed).
+    /// Extracts the same logic as the second half of BeginPostCombatLootCollection.
+    /// </summary>
+    private void ContinueToLootCollection()
+    {
+        EnsurePartyStashInitialized();
+        PartyStash?.Unlock();
+
+        EnsureLootCollectionUIInitialized();
+        if (LootCollectionUI == null)
+        {
+            WaitingForLootCollection = false;
+            Debug.LogError("[LootFlow] LootCollectionUI is null. Cannot open loot window after treasure.");
+            CombatUI?.ShowCombatLog("⚠ Loot window unavailable. Stash unlocked.");
+            return;
+        }
+
+        List<LootCollectionUI.LootStackEntry> lootEntries = GatherPostCombatLootEntries();
+        int totalItems = CountTotalItems(lootEntries);
+        Debug.Log($"[LootFlow] Post-treasure gather complete | stacks={lootEntries.Count} | totalItems={totalItems}");
+
+        WaitingForLootCollection = true;
+        if (totalItems > 0)
+            CombatUI?.ShowCombatLog($"💰 Equipment loot: {totalItems} item(s). Collect loot before continuing.");
+        else
+            CombatUI?.ShowCombatLog("📭 No equipment loot. Close loot window to continue.");
+
+        LootCollectionUI.Open(
+            lootEntries,
+            onLootSingle: TryTransferLootItemInstanceToStash,
+            onClosed: lootedCount =>
+            {
+                WaitingForLootCollection = false;
+                PartyStash?.Unlock();
+                Debug.Log($"[LootFlow] Loot window closed (post-treasure) | lootedCount={lootedCount}");
+
+                if (lootedCount > 0)
+                    CombatUI?.ShowCombatLog($"📦 {lootedCount} item(s) looted to party stash.");
+                else
+                    CombatUI?.ShowCombatLog("📦 Loot window closed. Party stash unlocked.");
+
                 ShowPostCombatXPFlow(lootedCount);
             },
             onExitLoop: ExitCombatLoopToMenu);
