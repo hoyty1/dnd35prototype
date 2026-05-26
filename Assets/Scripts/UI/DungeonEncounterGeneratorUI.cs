@@ -8,7 +8,7 @@ using UnityEngine.UI;
 /// Full-screen UI for the DMG 3.5e dungeon encounter table system (Phase 4).
 ///
 /// Provides:
-///   - Dungeon level selector (1-8) with button row
+///   - Dungeon level selector (1-9) with button row
 ///   - "Generate Random Encounter" button that rolls d% on the selected table
 ///   - Encounter preview panel showing roll result, cascade info, creatures, EL
 ///   - "Re-roll" button to generate a different encounter on the same table
@@ -66,8 +66,8 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
     private RectTransform _mainContentRect;
 
     // Level selector
-    private readonly Button[] _levelButtons = new Button[8];
-    private readonly Text[] _levelLabels = new Text[8];
+    private readonly Button[] _levelButtons = new Button[DungeonEncounterTableManager.MaxLevel];
+    private readonly Text[] _levelLabels = new Text[DungeonEncounterTableManager.MaxLevel];
     private int _selectedLevel = 1;
 
     // Party info
@@ -109,7 +109,7 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
     /// <param name="partyLevel">Average party level (for display and future EL adjustment).</param>
     /// <param name="onStartCombat">Called when user clicks "Start Combat" with the generated EncounterDefinition.</param>
     /// <param name="onBack">Called when user clicks "Back" to return to the previous screen.</param>
-    /// <param name="defaultDungeonLevel">Initial dungeon level selection (1-8).</param>
+    /// <param name="defaultDungeonLevel">Initial dungeon level selection (1-9).</param>
     public void Open(
         int partyLevel,
         Action<EncounterDefinition> onStartCombat,
@@ -131,11 +131,11 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
         _lastTableUsed = 0;
         _cascadeCount = 0;
 
-        // Auto-select dungeon level matching party level (clamped to 1-8)
+        // Auto-select dungeon level matching party level (clamped to 1-9)
         if (defaultDungeonLevel > 0)
-            _selectedLevel = Mathf.Clamp(defaultDungeonLevel, 1, 8);
+            _selectedLevel = Mathf.Clamp(defaultDungeonLevel, 1, DungeonEncounterTableManager.MaxLevel);
         else
-            _selectedLevel = Mathf.Clamp(_partyLevel, 1, 8);
+            _selectedLevel = Mathf.Clamp(_partyLevel, 1, DungeonEncounterTableManager.MaxLevel);
 
         // Ensure tables are loaded
         if (!DungeonEncounterTableManager.IsLoaded)
@@ -343,7 +343,7 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
     {
         GameObject section = CreateSectionPanel(parent, "LevelSelectorSection",
             new Color(0.11f, 0.13f, 0.22f, 0.98f), 138f);
-        CreateSectionTitle(section.transform, "2) DUNGEON LEVEL (1-8)", 22, TextAnchor.UpperLeft, TitleColor);
+        CreateSectionTitle(section.transform, "2) DUNGEON LEVEL (1-9)", 22, TextAnchor.UpperLeft, TitleColor);
 
         // Button row
         GameObject row = new GameObject("LevelRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -362,7 +362,7 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
         rowLayout.childForceExpandWidth = true;
         rowLayout.childForceExpandHeight = true;
 
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < DungeonEncounterTableManager.MaxLevel; i++)
         {
             int level = i + 1; // Capture for closure
             CreateLevelButton(row.transform, level, out _levelButtons[i], out _levelLabels[i]);
@@ -460,7 +460,7 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
 
     private void OnLevelSelected(int level)
     {
-        _selectedLevel = Mathf.Clamp(level, 1, 8);
+        _selectedLevel = Mathf.Clamp(level, 1, DungeonEncounterTableManager.MaxLevel);
         RefreshLevelButtons();
         Debug.Log($"[DungeonEncounterGeneratorUI] Level {_selectedLevel} selected.");
     }
@@ -606,12 +606,12 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
     private void RefreshPartyInfo()
     {
         if (_partyInfoText == null) return;
-        _partyInfoText.text = $"Party Level: <b>{_partyLevel}</b>\nRecommended Dungeon Level: {Mathf.Clamp(_partyLevel, 1, 8)}";
+        _partyInfoText.text = $"Party Level: <b>{_partyLevel}</b>\nRecommended Dungeon Level: {Mathf.Clamp(_partyLevel, 1, DungeonEncounterTableManager.MaxLevel)}";
     }
 
     private void RefreshLevelButtons()
     {
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < DungeonEncounterTableManager.MaxLevel; i++)
         {
             int level = i + 1;
             bool selected = level == _selectedLevel;
@@ -638,7 +638,7 @@ public class DungeonEncounterGeneratorUI : MonoBehaviour
     {
         UpdatePreviewText(
             "No encounter generated yet.\n\n" +
-            "Select a dungeon level (1-8) and click <b>ROLL ENCOUNTER</b> to generate\n" +
+            "Select a dungeon level (1-9) and click <b>ROLL ENCOUNTER</b> to generate\n" +
             "a random encounter from the DMG 3.5e encounter tables.\n\n" +
             "• Rolls 01-10 cascade to an easier table\n" +
             "• Rolls 91-100 cascade to a harder table\n" +

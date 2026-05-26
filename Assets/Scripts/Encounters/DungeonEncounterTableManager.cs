@@ -4,20 +4,25 @@ using System.IO;
 using UnityEngine;
 
 /// <summary>
-/// Central manager for the DMG 3.5e dungeon encounter table system (Phase 3).
+/// Central manager for the DMG 3.5e dungeon encounter table system (Phase 3/5).
 ///
-/// Manages eight encounter tables (dungeon levels 1-8), each with d% entries
+/// Manages nine encounter tables (dungeon levels 1-9), each with d% entries
 /// and cascade logic that redirects extreme rolls to adjacent-level tables.
+///
+/// Loading Strategy (Phase 5):
+///   1. Try CSV-first: loads from StreamingAssets/dungeon_encounters.csv
+///      with dice expression support and 9 tables (levels 1-9).
+///   2. Fallback: if CSV is missing, uses hardcoded Phase 3 tables (levels 1-8).
 ///
 /// Cascade Logic (DMG 3.5e p.82):
 ///   - Roll 01-10 → re-roll on the next easier table (level - 1)
 ///   - Roll 91-100 → re-roll on the next harder table (level + 1)
-///   - At table boundaries (level 1 / level 8), cascades wrap to same table
+///   - At table boundaries (level 1 / level 9), cascades wrap to same table
 ///   - Maximum cascade depth of 3 prevents infinite loops
 ///
 /// Public API:
-///   LoadTables()                         — Build tables from hardcoded DMG data
-///   LoadFromCSV(string path)             — Load creature list from CSV (name mapping)
+///   LoadTables()                         — Build tables (CSV-first, hardcoded fallback)
+///   LoadFromCSV(string path)             — Load creature name mappings from CSV
 ///   GetTable(int level)                  — Get a specific table
 ///   GenerateRandomEncounter(dungeonLevel) — Roll d%, handle cascades, return EncounterDefinition
 ///
@@ -25,7 +30,7 @@ using UnityEngine;
 ///   Returns EncounterDefinition objects compatible with Phase 2's
 ///   DungeonEncounterSpawner.PrepareEncounter() pipeline.
 ///
-/// Phase 3: DMG Encounter Tables.
+/// Phase 3: DMG Encounter Tables / Phase 5: CSV-driven encounter generation.
 /// </summary>
 public static class DungeonEncounterTableManager
 {
@@ -33,24 +38,51 @@ public static class DungeonEncounterTableManager
     //  State
     // =========================================================================
 
-    /// <summary>All loaded encounter tables, keyed by dungeon level (1-8).</summary>
+    /// <summary>All loaded encounter tables, keyed by dungeon level (1-9).</summary>
     private static Dictionary<int, DungeonEncounterTable> _tables;
 
     /// <summary>Whether tables have been loaded.</summary>
     public static bool IsLoaded => _tables != null && _tables.Count > 0;
 
+    /// <summary>Whether the current tables were loaded from CSV (true) or hardcoded (false).</summary>
+    public static bool IsCSVLoaded { get; private set; }
+
     /// <summary>Minimum table level.</summary>
     public const int MinLevel = 1;
 
-    /// <summary>Maximum table level.</summary>
-    public const int MaxLevel = 8;
+    /// <summary>
+    /// Maximum table level. 9 when CSV-loaded (Phase 5); hardcoded tables only go to 8.
+    /// Use <see cref="EffectiveMaxLevel"/> for the actual loaded range.
+    /// </summary>
+    public const int MaxLevel = 9;
+
+    /// <summary>Maximum level available in the hardcoded fallback tables.</summary>
+    public const int HardcodedMaxLevel = 8;
+
+    /// <summary>
+    /// The actual maximum level available in the currently loaded tables.
+    /// Accounts for CSV tables (1-9) vs hardcoded tables (1-8).
+    /// </summary>
+    public static int EffectiveMaxLevel
+    {
+        get
+        {
+            if (_tables == null || _tables.Count == 0) return MaxLevel;
+            int max = MinLevel;
+            foreach (int key in _tables.Keys)
+            {
+                if (key > max) max = key;
+            }
+            return max;
+        }
+    }
 
     /// <summary>Maximum cascade depth to prevent infinite loops.</summary>
     public const int MaxCascadeDepth = 3;
 
     /// <summary>
     /// CSV creature name → NPCDatabase ID mapping for typo correction and
-    /// normalization. Built during LoadFromCSV.
+    /// normalization. Built during LoadFromCSV or LoadTables (CSV-first path).
     /// </summary>
     private static Dictionary<string, string> _creatureNameMap;
 
@@ -59,16 +91,101 @@ public static class DungeonEncounterTableManager
     // =========================================================================
 
     /// <summary>
-    /// Load encounter tables from the hardcoded DMG data.
+    /// Load encounter tables using CSV-first strategy (Phase 5).
+    ///
+    /// Loading order:
+    ///   1. Try CSV from StreamingAssets/dungeon_encounters.csv
+    ///      → Produces tables 1-9 with dice expression support.
+    ///   2. If CSV fails or is missing, fall back to hardcoded tables (1-8).
+    ///
+    /// Also initializes the creature name map for name resolution.
     /// This is the primary loading method — call this to initialize the system.
     /// </summary>
     public static void LoadTables()
     {
-        _tables = DungeonEncounterTableData.BuildAllTables();
+        // Ensure the creature name map is initialized for CSV name resolution
+        if (_creatureNameMap == null)
+        {
+            _creatureNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            InitializeTypoCorrections();
+        }
 
-        // Validate all tables
+        // ── Phase 5: Try CSV-first loading ──
+        bool csvLoaded = false;
+        string csvPath = Path.Combine(Application.streamingAssetsPath, "dungeon_encounters.csv");
+
+        if (File.Exists(csvPath))
+        {
+            try
+            {
+                _tables = DungeonEncounterTableData.BuildFromCSV(csvPath, _creatureNameMap);
+
+                if (_tables != null && _tables.Count > 0)
+                {
+                    csvLoaded = true;
+                    Debug.Log($"[EncounterTableManager] CSV-first load SUCCESS: " +
+                              $"{_tables.Count} tables from '{csvPath}'");
+                }
+                else
+                {
+                    Debug.LogWarning("[EncounterTableManager] CSV produced no tables. " +
+                                     "Falling back to hardcoded tables.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[EncounterTableManager] CSV load failed: {ex.Message}. " +
+                               "Falling back to hardcoded tables.");
+                _tables = null;
+            }
+        }
+        else
+        {
+            Debug.Log($"[EncounterTableManager] CSV not found at '{csvPath}'. " +
+                      "Using hardcoded tables.");
+        }
+
+        // ── Fallback: hardcoded Phase 3 tables ──
+        if (!csvLoaded)
+        {
+            _tables = DungeonEncounterTableData.BuildAllTables();
+            Debug.Log("[EncounterTableManager] Loaded hardcoded tables (Phase 3 fallback).");
+        }
+
+        IsCSVLoaded = csvLoaded;
+
+        // ── Validate loaded tables ──
+        ValidateLoadedTables();
+    }
+
+    /// <summary>
+    /// Force loading from hardcoded tables only, bypassing CSV.
+    /// Useful for testing or when CSV data is known to be problematic.
+    /// </summary>
+    public static void LoadTablesHardcodedOnly()
+    {
+        if (_creatureNameMap == null)
+        {
+            _creatureNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            InitializeTypoCorrections();
+        }
+
+        _tables = DungeonEncounterTableData.BuildAllTables();
+        IsCSVLoaded = false;
+
+        Debug.Log("[EncounterTableManager] Loaded hardcoded tables (forced).");
+        ValidateLoadedTables();
+    }
+
+    /// <summary>
+    /// Validate all loaded tables and log any issues.
+    /// </summary>
+    private static void ValidateLoadedTables()
+    {
         int totalIssues = 0;
-        for (int level = MinLevel; level <= MaxLevel; level++)
+        int effectiveMax = EffectiveMaxLevel;
+
+        for (int level = MinLevel; level <= effectiveMax; level++)
         {
             if (!_tables.ContainsKey(level))
             {
@@ -85,14 +202,16 @@ public static class DungeonEncounterTableManager
         }
 
         int totalEntries = 0;
-        for (int level = MinLevel; level <= MaxLevel; level++)
+        for (int level = MinLevel; level <= effectiveMax; level++)
         {
             if (_tables.ContainsKey(level))
                 totalEntries += _tables[level].TotalEntryCount;
         }
 
-        Debug.Log($"[EncounterTableManager] Loaded {_tables.Count} tables with " +
-                  $"{totalEntries} total entries. {totalIssues} validation issues.");
+        string source = IsCSVLoaded ? "CSV" : "hardcoded";
+        Debug.Log($"[EncounterTableManager] Loaded {_tables.Count} tables ({source}) with " +
+                  $"{totalEntries} total entries, levels {MinLevel}-{effectiveMax}. " +
+                  $"{totalIssues} validation issues.");
     }
 
     /// <summary>
@@ -172,8 +291,9 @@ public static class DungeonEncounterTableManager
     // =========================================================================
 
     /// <summary>
-    /// Get the encounter table for the specified dungeon level (1-8).
+    /// Get the encounter table for the specified dungeon level (1-9).
     /// Returns null if not loaded or level is out of range.
+    /// Level is clamped to [MinLevel, EffectiveMaxLevel].
     /// </summary>
     public static DungeonEncounterTable GetTable(int level)
     {
@@ -183,7 +303,7 @@ public static class DungeonEncounterTableManager
             return null;
         }
 
-        level = Mathf.Clamp(level, MinLevel, MaxLevel);
+        level = Mathf.Clamp(level, MinLevel, EffectiveMaxLevel);
 
         DungeonEncounterTable table;
         if (_tables.TryGetValue(level, out table))
@@ -210,9 +330,12 @@ public static class DungeonEncounterTableManager
     /// adjacent tables, and returns an EncounterDefinition ready for
     /// Phase 2's DungeonEncounterSpawner.
     ///
+    /// If tables were loaded from CSV (Phase 5), dice expressions in creature
+    /// counts are rolled at this time, producing variable results per call.
+    ///
     /// Returns null if tables are not loaded or generation fails.
     /// </summary>
-    /// <param name="dungeonLevel">Dungeon level (1-8, clamped).</param>
+    /// <param name="dungeonLevel">Dungeon level (1-9, clamped to loaded range).</param>
     /// <param name="partyLevel">Party level (for logging/future EL adjustment, currently unused).</param>
     public static EncounterDefinition GenerateRandomEncounter(int dungeonLevel, int partyLevel = 0)
     {
@@ -222,7 +345,7 @@ public static class DungeonEncounterTableManager
             return null;
         }
 
-        dungeonLevel = Mathf.Clamp(dungeonLevel, MinLevel, MaxLevel);
+        dungeonLevel = Mathf.Clamp(dungeonLevel, MinLevel, EffectiveMaxLevel);
 
         Debug.Log($"[EncounterTableManager] Generating encounter for dungeon level {dungeonLevel}" +
                   (partyLevel > 0 ? $" (party level {partyLevel})" : ""));
@@ -270,7 +393,7 @@ public static class DungeonEncounterTableManager
     {
         if (!IsLoaded) LoadTables();
 
-        dungeonLevel = Mathf.Clamp(dungeonLevel, MinLevel, MaxLevel);
+        dungeonLevel = Mathf.Clamp(dungeonLevel, MinLevel, EffectiveMaxLevel);
         roll = Mathf.Clamp(roll, 1, 100);
 
         Debug.Log($"[EncounterTableManager] Looking up roll {roll} on level {dungeonLevel} table.");
@@ -287,6 +410,7 @@ public static class DungeonEncounterTableManager
 
     /// <summary>
     /// Roll d% on the specified table and handle cascades recursively.
+    /// Cascade boundaries use EffectiveMaxLevel to respect loaded table range.
     /// </summary>
     private static DungeonEncounterTableEntry RollWithCascade(int level, int depth)
     {
@@ -306,7 +430,8 @@ public static class DungeonEncounterTableManager
         if (!entry.IsCascade)
             return entry;
 
-        // Handle cascade
+        // Handle cascade — clamp to effective loaded range
+        int maxLvl = EffectiveMaxLevel;
         int targetLevel = level;
         if (entry.Cascade == CascadeDirection.Easier)
         {
@@ -316,7 +441,7 @@ public static class DungeonEncounterTableManager
         }
         else if (entry.Cascade == CascadeDirection.Harder)
         {
-            targetLevel = Mathf.Min(MaxLevel, level + 1);
+            targetLevel = Mathf.Min(maxLvl, level + 1);
             Debug.Log($"[EncounterTableManager] Cascade HARDER: level {level} → level {targetLevel} " +
                       $"(depth {depth + 1})");
         }
@@ -342,11 +467,12 @@ public static class DungeonEncounterTableManager
         if (!entry.IsCascade)
             return entry;
 
+        int maxLvl = EffectiveMaxLevel;
         int targetLevel = level;
         if (entry.Cascade == CascadeDirection.Easier)
             targetLevel = Mathf.Max(MinLevel, level - 1);
         else if (entry.Cascade == CascadeDirection.Harder)
-            targetLevel = Mathf.Min(MaxLevel, level + 1);
+            targetLevel = Mathf.Min(maxLvl, level + 1);
 
         // Re-roll on target table (random, since original roll was a cascade)
         return RollWithCascade(targetLevel, depth + 1);
@@ -734,7 +860,8 @@ public static class DungeonEncounterTableManager
             return;
         }
 
-        for (int level = MinLevel; level <= MaxLevel; level++)
+        int maxLvl = EffectiveMaxLevel;
+        for (int level = MinLevel; level <= maxLvl; level++)
         {
             DungeonEncounterTable table;
             if (_tables.TryGetValue(level, out table))
@@ -751,6 +878,8 @@ public static class DungeonEncounterTableManager
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"=== Test Batch: {count} encounters for dungeon level {dungeonLevel} ===");
+        sb.AppendLine($"  Source: {(IsCSVLoaded ? "CSV" : "Hardcoded")} | " +
+                      $"Max Level: {EffectiveMaxLevel}");
 
         for (int i = 0; i < count; i++)
         {
@@ -767,11 +896,89 @@ public static class DungeonEncounterTableManager
     }
 
     /// <summary>
+    /// Run a comprehensive integration test across all dungeon levels.
+    /// Generates multiple encounters per level and reports results.
+    /// Phase 5: Integration test for CSV-loaded tables.
+    /// </summary>
+    /// <param name="encountersPerLevel">Number of encounters to generate per level.</param>
+    /// <returns>Summary string with test results.</returns>
+    public static string RunIntegrationTest(int encountersPerLevel = 10)
+    {
+        if (!IsLoaded) LoadTables();
+
+        var sb = new System.Text.StringBuilder();
+        int maxLvl = EffectiveMaxLevel;
+        sb.AppendLine($"=== Encounter Generator Integration Test ===");
+        sb.AppendLine($"  Source: {(IsCSVLoaded ? "CSV" : "Hardcoded")}");
+        sb.AppendLine($"  Tables: {_tables.Count} (levels {MinLevel}-{maxLvl})");
+        sb.AppendLine($"  Encounters per level: {encountersPerLevel}");
+        sb.AppendLine();
+
+        int totalGenerated = 0;
+        int totalFailed = 0;
+        int totalCreatures = 0;
+        var diceVariance = new Dictionary<int, HashSet<int>>(); // level → distinct creature counts
+
+        for (int level = MinLevel; level <= maxLvl; level++)
+        {
+            int levelFailed = 0;
+            int levelCreatures = 0;
+            var countSet = new HashSet<int>();
+
+            for (int i = 0; i < encountersPerLevel; i++)
+            {
+                var enc = GenerateRandomEncounter(level);
+                if (enc != null)
+                {
+                    totalGenerated++;
+                    int creatureCount = enc.TotalCreatureCount;
+                    levelCreatures += creatureCount;
+                    countSet.Add(creatureCount);
+                }
+                else
+                {
+                    totalFailed++;
+                    levelFailed++;
+                }
+            }
+
+            totalCreatures += levelCreatures;
+            diceVariance[level] = countSet;
+
+            sb.AppendLine($"  Level {level}: {encountersPerLevel - levelFailed}/{encountersPerLevel} OK, " +
+                          $"avg {(levelCreatures / (float)Mathf.Max(1, encountersPerLevel - levelFailed)):F1} creatures, " +
+                          $"{countSet.Count} distinct counts" +
+                          (levelFailed > 0 ? $" ({levelFailed} FAILED)" : ""));
+        }
+
+        sb.AppendLine();
+        sb.AppendLine($"  TOTAL: {totalGenerated} generated, {totalFailed} failed");
+        sb.AppendLine($"  Total creatures spawned: {totalCreatures}");
+
+        // Check dice variance — if CSV loaded, we expect variable counts
+        if (IsCSVLoaded)
+        {
+            int levelsWithVariance = 0;
+            foreach (var kvp in diceVariance)
+            {
+                if (kvp.Value.Count > 1) levelsWithVariance++;
+            }
+            sb.AppendLine($"  Dice variance: {levelsWithVariance}/{maxLvl} levels show " +
+                          "variable creature counts (expected for dice-based entries)");
+        }
+
+        string result = sb.ToString();
+        Debug.Log(result);
+        return result;
+    }
+
+    /// <summary>
     /// Reset the manager state (for testing or hot-reload).
     /// </summary>
     public static void Reset()
     {
         _tables = null;
         _creatureNameMap = null;
+        IsCSVLoaded = false;
     }
 }
