@@ -1,15 +1,21 @@
+using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 /// <summary>
-/// Hardcoded DMG 3.5e dungeon encounter table data for levels 1-8.
-/// Built from the CSV creature list organized by Challenge Rating into
-/// eight dungeon level tables, each with d% ranges and cascade entries.
+/// Hardcoded DMG 3.5e dungeon encounter table data for levels 1-8,
+/// plus CSV-based table builder for levels 1-9 (Phase 5).
+///
+/// Two loading paths:
+///   <see cref="BuildAllTables"/> — Original hardcoded tables (Phase 3)
+///   <see cref="BuildFromCSV"/>   — CSV-driven tables with dice expressions (Phase 5)
 ///
 /// Creature IDs reference NPCDatabase entries. Creatures from the CSV that
 /// do not exist in NPCDatabase are noted in comments but omitted from tables
 /// to avoid runtime errors.
 ///
 /// Phase 3: DMG Encounter Tables.
+/// Phase 5: CSV-based encounter table loading.
 /// </summary>
 public static class DungeonEncounterTableData
 {
@@ -32,6 +38,437 @@ public static class DungeonEncounterTableData
         tables[7] = BuildTable7();
         tables[8] = BuildTable8();
         return tables;
+    }
+
+    // =========================================================================
+    //  Phase 5: CSV-Based Table Builder
+    // =========================================================================
+
+    /// <summary>
+    /// Build encounter tables from a CSV file. Parses encounter descriptions
+    /// using <see cref="EncounterDescriptionParser"/>, supports dice expressions
+    /// for variable creature counts, and handles compound/NPC entries.
+    ///
+    /// Tables are built for all dungeon levels present in the CSV (typically 1-9).
+    /// Each table's d% coverage is validated after construction.
+    /// </summary>
+    /// <param name="csvPath">Absolute path to dungeon_encounters.csv.</param>
+    /// <param name="creatureNameMap">
+    /// Name resolution map (CSV creature name → NPCDatabase ID).
+    /// May be null; fallback normalization will be used.
+    /// </param>
+    /// <returns>
+    /// Dictionary of tables keyed by dungeon level.
+    /// Empty if CSV loading fails entirely.
+    /// </returns>
+    public static Dictionary<int, DungeonEncounterTable> BuildFromCSV(
+        string csvPath,
+        Dictionary<string, string> creatureNameMap)
+    {
+        var tables = new Dictionary<int, DungeonEncounterTable>();
+
+        // ── Step 1: Parse CSV into raw rows ──
+        List<RawEncounterRow> rows = EncounterCSVParser.ParseCSV(csvPath);
+        if (rows.Count == 0)
+        {
+            Debug.LogError("[EncounterTableData] CSV produced no rows. " +
+                           "Falling back to hardcoded tables.");
+            return BuildAllTables();
+        }
+
+        Debug.Log(EncounterCSVParser.GetSummary(rows));
+
+        // ── Step 2: Group rows by dungeon level ──
+        Dictionary<int, List<RawEncounterRow>> grouped =
+            EncounterCSVParser.GroupByLevel(rows);
+
+        // ── Step 3: Build a table for each level ──
+        int totalEntries = 0;
+        int totalWarnings = 0;
+        int unresolvedCreatures = 0;
+
+        var levels = new List<int>(grouped.Keys);
+        levels.Sort();
+
+        for (int i = 0; i < levels.Count; i++)
+        {
+            int level = levels[i];
+            List<RawEncounterRow> levelRows = grouped[level];
+
+            var table = new DungeonEncounterTable(level);
+
+            for (int j = 0; j < levelRows.Count; j++)
+            {
+                RawEncounterRow row = levelRows[j];
+
+                // Parse the encounter description
+                ParsedEncounterDescription parsed =
+                    EncounterDescriptionParser.Parse(row.Encounter);
+
+                if (parsed.HasWarnings)
+                {
+                    for (int w = 0; w < parsed.Warnings.Count; w++)
+                    {
+                        Debug.LogWarning($"[EncounterTableData] L{level} " +
+                            $"[{row.RollMin}-{row.RollMax}]: {parsed.Warnings[w]}");
+                    }
+                    totalWarnings += parsed.Warnings.Count;
+                }
+
+                // Build the table entry from parsed data
+                DungeonEncounterTableEntry entry = BuildEntryFromParsed(
+                    row.RollMin, row.RollMax, level, parsed, creatureNameMap,
+                    out int entryUnresolved);
+
+                unresolvedCreatures += entryUnresolved;
+
+                if (entry != null)
+                {
+                    table.Entries.Add(entry);
+                    totalEntries++;
+                }
+                else
+                {
+                    Debug.LogWarning($"[EncounterTableData] L{level} " +
+                        $"[{row.RollMin}-{row.RollMax}]: Failed to build entry " +
+                        $"from '{row.Encounter}'");
+                }
+            }
+
+            // Validate the table
+            List<string> issues = table.Validate();
+            for (int v = 0; v < issues.Count; v++)
+            {
+                Debug.LogWarning($"[EncounterTableData] Validation: {issues[v]}");
+            }
+
+            tables[level] = table;
+        }
+
+        Debug.Log($"[EncounterTableData] Built {tables.Count} tables from CSV: " +
+                  $"{totalEntries} entries, {totalWarnings} parse warnings, " +
+                  $"{unresolvedCreatures} unresolved creature names.");
+
+        return tables;
+    }
+
+    // =========================================================================
+    //  Entry Builder — converts ParsedEncounterDescription to table entry
+    // =========================================================================
+
+    /// <summary>
+    /// Convert a parsed CSV row into a <see cref="DungeonEncounterTableEntry"/>.
+    /// Handles cascade entries, single creatures, compound groups, and NPC entries.
+    /// </summary>
+    /// <param name="rollMin">Minimum d% roll (inclusive).</param>
+    /// <param name="rollMax">Maximum d% roll (inclusive).</param>
+    /// <param name="dungeonLevel">Dungeon level for EL estimation.</param>
+    /// <param name="parsed">Parsed encounter description.</param>
+    /// <param name="nameMap">Creature name resolution map (may be null).</param>
+    /// <param name="unresolvedCount">Output: number of creature names that could not be resolved.</param>
+    /// <returns>Built entry, or null if completely unparseable.</returns>
+    private static DungeonEncounterTableEntry BuildEntryFromParsed(
+        int rollMin, int rollMax, int dungeonLevel,
+        ParsedEncounterDescription parsed,
+        Dictionary<string, string> nameMap,
+        out int unresolvedCount)
+    {
+        unresolvedCount = 0;
+
+        // ── Cascade entry ──
+        if (parsed.IsCascade)
+        {
+            CascadeDirection dir = parsed.CascadeTargetLevel < dungeonLevel
+                ? CascadeDirection.Easier
+                : CascadeDirection.Harder;
+            return DungeonEncounterTableEntry.CascadeEntry(rollMin, rollMax, dir);
+        }
+
+        // ── Normal encounter entry ──
+        if (parsed.Groups.Count == 0)
+        {
+            // No groups parsed — create a description-only entry
+            Debug.LogWarning($"[EncounterTableData] No creature groups parsed from: " +
+                             $"'{parsed.RawDescription}'");
+            return null;
+        }
+
+        var entry = new DungeonEncounterTableEntry
+        {
+            MinRoll = rollMin,
+            MaxRoll = rollMax,
+            EL = EstimateEL(dungeonLevel, parsed),
+            Description = parsed.RawDescription
+        };
+
+        // Build creature entries for each parsed group
+        for (int i = 0; i < parsed.Groups.Count; i++)
+        {
+            ParsedCreatureGroup group = parsed.Groups[i];
+            EncounterCreatureEntry creature = BuildCreatureFromGroup(
+                group, nameMap, out bool unresolved);
+
+            if (unresolved) unresolvedCount++;
+
+            if (creature != null)
+            {
+                entry.Creatures.Add(creature);
+            }
+        }
+
+        // If no creatures could be built, still return the entry with description
+        // (spawner will handle empty creature lists gracefully)
+        if (entry.Creatures.Count == 0)
+        {
+            Debug.LogWarning($"[EncounterTableData] Entry [{rollMin}-{rollMax}] has no " +
+                             $"resolvable creatures: '{parsed.RawDescription}'");
+        }
+
+        return entry;
+    }
+
+    /// <summary>
+    /// Build a single <see cref="EncounterCreatureEntry"/> from a parsed creature group.
+    /// </summary>
+    /// <param name="group">Parsed creature group.</param>
+    /// <param name="nameMap">Creature name resolution map (may be null).</param>
+    /// <param name="unresolved">Output: true if creature name could not be resolved.</param>
+    /// <returns>Creature entry, or null if completely unusable.</returns>
+    private static EncounterCreatureEntry BuildCreatureFromGroup(
+        ParsedCreatureGroup group,
+        Dictionary<string, string> nameMap,
+        out bool unresolved)
+    {
+        unresolved = false;
+
+        var creature = new EncounterCreatureEntry();
+
+        if (group.IsNpc)
+        {
+            // NPC with class levels — resolve race as creature ID
+            string raceId = ResolveCreatureName(group.NpcRace, nameMap);
+            if (raceId == null)
+            {
+                // Try the full NPC description as a name map key
+                raceId = ResolveCreatureName(group.RawText, nameMap);
+            }
+            if (raceId == null)
+            {
+                // Last resort: use race as ID directly
+                raceId = group.NpcRace != null
+                    ? group.NpcRace.ToLower().Replace(" ", "_")
+                    : "human";
+                unresolved = true;
+            }
+
+            creature.BaseCreatureId = raceId;
+            creature.TemplateClass = CapitalizeFirst(group.NpcClass);
+            creature.TemplateLevel = group.NpcLevel;
+        }
+        else
+        {
+            // Standard creature — resolve name to NPCDatabase ID
+            string creatureId = ResolveCreatureName(group.CreatureName, nameMap);
+            if (creatureId == null)
+            {
+                // Fallback: normalize the creature name to ID format
+                creatureId = NormalizeName(group.CreatureName);
+                unresolved = true;
+            }
+            creature.BaseCreatureId = creatureId;
+        }
+
+        // Set dice expression for count (resolved at encounter generation time)
+        if (group.CountExpression != null)
+        {
+            creature.CountExpression = group.CountExpression;
+            // Set Count to the minimum as a safe default
+            creature.Count = Math.Max(1, group.CountExpression.Minimum);
+        }
+        else
+        {
+            creature.Count = 1;
+        }
+
+        // Apply creature templates
+        if (group.HasTemplates)
+        {
+            creature.CreatureTemplateIds = new List<string>(group.TemplateIds);
+        }
+
+        return creature;
+    }
+
+    // =========================================================================
+    //  Name Resolution Helpers
+    // =========================================================================
+
+    /// <summary>
+    /// Resolve a CSV creature name to an NPCDatabase ID using the name map
+    /// and fallback normalization.
+    /// </summary>
+    /// <param name="csvName">Creature name from the CSV.</param>
+    /// <param name="nameMap">Name resolution map (may be null).</param>
+    /// <returns>Resolved ID, or null if unresolvable.</returns>
+    private static string ResolveCreatureName(
+        string csvName, Dictionary<string, string> nameMap)
+    {
+        if (string.IsNullOrWhiteSpace(csvName)) return null;
+        csvName = csvName.Trim();
+
+        // Check name map (case-insensitive)
+        if (nameMap != null)
+        {
+            string mapped;
+            if (nameMap.TryGetValue(csvName, out mapped))
+                return mapped;
+
+            // Try lowercase
+            string lower = csvName.ToLowerInvariant();
+            if (nameMap.TryGetValue(lower, out mapped))
+                return mapped;
+
+            // Try singular (strip trailing 's')
+            if (lower.EndsWith("s") && !lower.EndsWith("ss"))
+            {
+                string singular = lower.Substring(0, lower.Length - 1);
+                if (nameMap.TryGetValue(singular, out mapped))
+                    return mapped;
+            }
+        }
+
+        // Fallback: normalize to ID format
+        string normalized = NormalizeName(csvName);
+
+        // Return normalized form — it will be validated against NPCDatabase at spawn time
+        return normalized;
+    }
+
+    /// <summary>
+    /// Normalize a creature name to NPCDatabase ID format:
+    /// lowercase, spaces to underscores, strip hyphens and apostrophes.
+    /// </summary>
+    private static string NormalizeName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "unknown";
+        return name.Trim()
+            .ToLowerInvariant()
+            .Replace(" ", "_")
+            .Replace("-", "_")
+            .Replace("'", "");
+    }
+
+    /// <summary>
+    /// Capitalize the first letter of a string (for class names).
+    /// </summary>
+    private static string CapitalizeFirst(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        if (s.Length == 1) return s.ToUpperInvariant();
+        return char.ToUpperInvariant(s[0]) + s.Substring(1).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Estimate the Encounter Level for a table entry.
+    /// Default strategy: use the dungeon level. A more accurate approach
+    /// would look up creature CRs and compute EL from the party formula,
+    /// but that requires a CR database (future enhancement).
+    /// </summary>
+    private static int EstimateEL(int dungeonLevel, ParsedEncounterDescription parsed)
+    {
+        // Simple heuristic: EL ≈ dungeon level
+        // Compound entries with many creatures might be higher,
+        // but this is adequate for display purposes.
+        return dungeonLevel;
+    }
+
+    /// <summary>
+    /// Run a diagnostic on the CSV-built tables and return a report string.
+    /// Useful for testing the CSV loading pipeline.
+    /// </summary>
+    /// <param name="tables">Tables to diagnose.</param>
+    /// <returns>Multi-line diagnostic report.</returns>
+    public static string DiagnoseCSVTables(Dictionary<int, DungeonEncounterTable> tables)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("=== CSV Table Diagnostic ===");
+
+        var levels = new List<int>(tables.Keys);
+        levels.Sort();
+
+        int totalEntries = 0;
+        int totalCreatures = 0;
+        int totalDiceEntries = 0;
+        int totalCascades = 0;
+
+        for (int i = 0; i < levels.Count; i++)
+        {
+            int level = levels[i];
+            DungeonEncounterTable table = tables[level];
+
+            int entries = table.TotalEntryCount;
+            int encounters = table.EncounterEntryCount;
+            int cascades = entries - encounters;
+            int creaturesInLevel = 0;
+            int diceInLevel = 0;
+
+            for (int j = 0; j < table.Entries.Count; j++)
+            {
+                var entry = table.Entries[j];
+                if (!entry.IsCascade)
+                {
+                    creaturesInLevel += entry.Creatures.Count;
+                    for (int k = 0; k < entry.Creatures.Count; k++)
+                    {
+                        if (entry.Creatures[k].CountExpression != null &&
+                            !entry.Creatures[k].CountExpression.IsFixed)
+                        {
+                            diceInLevel++;
+                        }
+                    }
+                }
+            }
+
+            List<string> issues = table.Validate();
+            string status = issues.Count == 0 ? "✓" : $"⚠ {issues.Count} issues";
+
+            sb.AppendLine($"  Level {level}: {entries} entries " +
+                $"({encounters} encounters + {cascades} cascades), " +
+                $"{creaturesInLevel} creature groups ({diceInLevel} dice-based) " +
+                $"[{status}]");
+
+            // Print first 3 encounter entries as samples
+            int sampleCount = 0;
+            for (int j = 0; j < table.Entries.Count && sampleCount < 3; j++)
+            {
+                var entry = table.Entries[j];
+                if (!entry.IsCascade)
+                {
+                    sb.AppendLine($"    Sample: {entry}");
+                    for (int k = 0; k < entry.Creatures.Count; k++)
+                    {
+                        var c = entry.Creatures[k];
+                        string countStr = c.CountExpression != null
+                            ? c.CountExpression.ToString() : $"{c.Count}";
+                        string classStr = c.HasClassLevels
+                            ? $" {c.TemplateClass} {c.TemplateLevel}" : "";
+                        sb.AppendLine($"      → {countStr}x {c.BaseCreatureId}{classStr}");
+                    }
+                    sampleCount++;
+                }
+            }
+
+            totalEntries += entries;
+            totalCreatures += creaturesInLevel;
+            totalDiceEntries += diceInLevel;
+            totalCascades += cascades;
+        }
+
+        sb.AppendLine($"  ────────────────────────────────");
+        sb.AppendLine($"  Total: {totalEntries} entries, {totalCreatures} creature groups, " +
+            $"{totalDiceEntries} dice-based, {totalCascades} cascades");
+
+        return sb.ToString();
     }
 
     // =========================================================================

@@ -37,8 +37,38 @@ public class EncounterCreatureEntry
 
     /// <summary>
     /// Number of this creature to spawn. Defaults to 1.
+    /// For entries loaded from CSV with dice expressions, this value is set
+    /// when <see cref="ResolveCount"/> is called (typically during
+    /// <see cref="DungeonEncounterTableEntry.ToEncounterDefinition"/>).
     /// </summary>
     public int Count = 1;
+
+    /// <summary>
+    /// Optional dice expression for variable creature counts (e.g., "1d3+1").
+    /// When set, <see cref="ResolveCount"/> rolls the dice and updates
+    /// <see cref="Count"/>. Null for entries with fixed counts.
+    /// Phase 5: Dice-based encounter counts.
+    /// </summary>
+    public DiceExpression CountExpression;
+
+    /// <summary>
+    /// Roll the dice expression (if any) and set <see cref="Count"/> to the result.
+    /// If no dice expression is set, <see cref="Count"/> remains unchanged.
+    /// Called during encounter generation to produce a concrete spawn count.
+    /// </summary>
+    /// <returns>The resolved count value.</returns>
+    public int ResolveCount()
+    {
+        if (CountExpression != null && !CountExpression.IsFixed)
+        {
+            Count = CountExpression.Roll();
+        }
+        else if (CountExpression != null && CountExpression.IsFixed)
+        {
+            Count = CountExpression.Modifier;
+        }
+        return Count;
+    }
 
     /// <summary>Whether this entry specifies class levels.</summary>
     public bool HasClassLevels => !string.IsNullOrEmpty(TemplateClass) && TemplateLevel > 0;

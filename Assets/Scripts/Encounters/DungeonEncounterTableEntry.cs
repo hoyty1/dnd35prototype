@@ -65,6 +65,8 @@ public class DungeonEncounterTableEntry
     /// <summary>
     /// Convert this entry into an EncounterDefinition compatible with
     /// the Phase 2 DungeonEncounterSpawner.
+    /// If creature entries have dice expressions (Phase 5 CSV-loaded),
+    /// the dice are rolled here to produce concrete integer counts.
     /// </summary>
     public EncounterDefinition ToEncounterDefinition()
     {
@@ -82,9 +84,14 @@ public class DungeonEncounterTableEntry
                 TemplateClass = src.TemplateClass,
                 TemplateLevel = src.TemplateLevel,
                 Count = src.Count,
+                CountExpression = src.CountExpression, // Phase 5: carry over dice expression
                 CreatureTemplateIds = src.CreatureTemplateIds != null
                     ? new List<string>(src.CreatureTemplateIds) : null
             };
+
+            // Phase 5: resolve dice expression to concrete count
+            clone.ResolveCount();
+
             def.Entries.Add(clone);
         }
 
