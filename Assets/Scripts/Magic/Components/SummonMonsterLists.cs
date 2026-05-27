@@ -560,10 +560,10 @@ public static class SummonMonsterLists
             // MISSING: Dire Ape — needs NPCDatabase entry (Animal, CR 3, Large)
             new SummonMonsterOption { DisplayName = "Dire Boar", NpcDefinitionId = "dire_boar" },
             // MISSING: Dire Wolverine — needs NPCDatabase entry (Animal, CR 4, Large)
-            // MISSING: Elemental, Medium Air — needs NPCDatabase entry (Elemental, CR 3)
-            // MISSING: Elemental, Medium Earth — needs NPCDatabase entry (Elemental, CR 3)
-            // MISSING: Elemental, Medium Fire — needs NPCDatabase entry (Elemental, CR 3)
-            // MISSING: Elemental, Medium Water — needs NPCDatabase entry (Elemental, CR 3)
+            new SummonMonsterOption { DisplayName = "Elemental, Medium Air", NpcDefinitionId = "medium_air_elemental" },
+            new SummonMonsterOption { DisplayName = "Elemental, Medium Earth", NpcDefinitionId = "medium_earth_elemental" },
+            new SummonMonsterOption { DisplayName = "Elemental, Medium Fire", NpcDefinitionId = "medium_fire_elemental" },
+            new SummonMonsterOption { DisplayName = "Elemental, Medium Water", NpcDefinitionId = "medium_water_elemental" },
             new SummonMonsterOption { DisplayName = "Salamander, Flamebrother", NpcDefinitionId = "flamebrother_salamander" },
             // MISSING: Sea Cat — needs NPCDatabase entry (Magical Beast [Aquatic], CR 4)
             // MISSING: Shark, Huge — needs NPCDatabase entry (Animal [Aquatic], CR 4)

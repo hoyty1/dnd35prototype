@@ -15,6 +15,12 @@ public static partial class NPCDatabase
         RegisterSummonSmallFireElemental();
         RegisterSummonSmallEarthElemental();
         RegisterSummonSmallWaterElemental();
+
+        RegisterSummonMediumAirElemental();
+        RegisterSummonMediumEarthElemental();
+        RegisterSummonMediumFireElemental();
+        RegisterSummonMediumWaterElemental();
+
         RegisterEfreeti();
         RegisterElfWarrior();
         RegisterErinyes();
@@ -273,7 +279,208 @@ public static partial class NPCDatabase
             NameColor = new Color(0.72f, 0.88f, 1f),
             Description = "Small Water Elemental. Slam +4 (1d6+3). Water mastery, drench, vortex. MM 3.5e p.100."
         });
-    
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  MEDIUM ELEMENTALS (SNA IV — PHB p.289, MM pp.96-100)
+    //  CR 3, 4 HD each. Scaled up from Small variants.
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Medium Air Elemental (CR 3) — MM 3.5e p.96.
+    /// 4d8+8 hp (26), AC 18 (+4 Dex, +4 natural), Fly 100 ft. (perfect).
+    /// Slam +8 melee (1d6+1). Air mastery, whirlwind (DC 14).
+    /// Feats: Dodge, Improved Initiative (B), Weapon Finesse (B), Flyby Attack.
+    /// </summary>
+    private static void RegisterSummonMediumAirElemental()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "medium_air_elemental",
+            Name = "Medium Air Elemental",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Elemental",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 12, DEX = 21, CON = 14, WIS = 11, INT = 4, CHA = 11,
+            NaturalArmorBonus = 3, // MM lists +4 natural but AC 18 (touch 14); DEX 21=+5 mod → nat 3 gives correct published AC 18
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                // Slam +8 melee (1d6+1): BAB 3 + Dex 5 (Weapon Finesse) = +8; dmg 1d6 + Str 1
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 20, // Fly 100 ft. (perfect) = 20 squares
+            BaseHitDieHP = 26, // 4d8+8
+            Immunities = new CreatureImmunities
+            {
+                immuneToPoison = true,
+                immuneToCriticalHits = true,
+                immuneToSneakAttack = true
+            },
+            CreatureTags = new List<string> { "Elemental", "Air", "Extraplanar", "SummonBase" },
+            Feats = new List<string> { "Dodge", "Flyby Attack", "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Elemental traits", "Air mastery (+1 atk/dmg vs airborne foes; –4 to grounded foes)", "Whirlwind (DC 14, 1d6 dmg, 10–30 ft. height)", "Fly 100 ft. (perfect)", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.68f, 0.86f, 1f, 1f),
+            PanelColor = new Color(0.14f, 0.19f, 0.26f, 0.85f),
+            NameColor = new Color(0.85f, 0.95f, 1f),
+            Description = "Medium Air Elemental (CR 3). Whirling column of air. Immune to poison, critical hits, sneak attacks. Air mastery and whirlwind. MM 3.5e p.96."
+        });
+    }
+
+    /// <summary>
+    /// Medium Earth Elemental (CR 3) — MM 3.5e p.97.
+    /// 4d8+12 hp (30), AC 18 (–1 Dex, +9 natural), Speed 20 ft.
+    /// Slam +8 melee (1d8+7). Earth mastery, push, earth glide.
+    /// Feats: Cleave, Power Attack.
+    /// </summary>
+    private static void RegisterSummonMediumEarthElemental()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "medium_earth_elemental",
+            Name = "Medium Earth Elemental",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Elemental",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 21, DEX = 8, CON = 17, WIS = 11, INT = 4, CHA = 11,
+            NaturalArmorBonus = 9,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                // Slam +8 melee (1d8+7): BAB 3 + Str 5 = +8; dmg 1d8 + Str 5 × 1.5 = +7
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 4, // 20 ft. = 4 squares
+            BaseHitDieHP = 30, // 4d8+12
+            Immunities = new CreatureImmunities
+            {
+                immuneToPoison = true,
+                immuneToCriticalHits = true,
+                immuneToSneakAttack = true
+            },
+            CreatureTags = new List<string> { "Elemental", "Earth", "Extraplanar", "SummonBase" },
+            Feats = new List<string> { "Cleave", "Power Attack" },
+            SpecialAbilities = new List<string> { "Elemental traits", "Earth mastery (+1 atk/dmg when grounded; –4 vs airborne/waterborne)", "Push (bull rush, no AoO)", "Earth glide (move through earth/stone)", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.58f, 0.48f, 0.32f, 1f),
+            PanelColor = new Color(0.24f, 0.18f, 0.1f, 0.85f),
+            NameColor = new Color(0.92f, 0.84f, 0.68f),
+            Description = "Medium Earth Elemental (CR 3). Walking mass of rock and earth. Immune to poison, critical hits, sneak attacks. Earth mastery, push, earth glide. MM 3.5e p.97."
+        });
+    }
+
+    /// <summary>
+    /// Medium Fire Elemental (CR 3) — MM 3.5e p.98-99.
+    /// 4d8+8 hp (26), AC 16 (+3 Dex, +3 natural), Speed 50 ft.
+    /// Slam +6 melee (1d6+1 plus 1d6 fire). Burn (DC 14).
+    /// Immune to fire, vulnerable to cold.
+    /// Feats: Dodge, Improved Initiative (B), Mobility, Weapon Finesse (B).
+    /// </summary>
+    private static void RegisterSummonMediumFireElemental()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "medium_fire_elemental",
+            Name = "Medium Fire Elemental",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Elemental",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 12, DEX = 17, CON = 14, WIS = 11, INT = 4, CHA = 11,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                // Slam +6 melee (1d6+1 plus 1d6 fire): BAB 3 + Dex 3 (Weapon Finesse) = +6; dmg 1d6 + Str 1 + 1d6 fire
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 10, // 50 ft. = 10 squares
+            BaseHitDieHP = 26, // 4d8+8
+            Immunities = new CreatureImmunities
+            {
+                immuneToPoison = true,
+                immuneToFire = true,
+                immuneToCriticalHits = true,
+                immuneToSneakAttack = true
+            },
+            DamageImmunities = new List<DamageType> { DamageType.Fire },
+            CreatureTags = new List<string> { "Elemental", "Fire", "Extraplanar", "SummonBase" },
+            Feats = new List<string> { "Dodge", "Mobility", "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Elemental traits", "Burn (DC 14 Reflex, +1d6 fire on slam, catch fire 1d4 rounds)", "Immunity to fire", "Vulnerability to cold (+50% damage)", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(1f, 0.55f, 0.22f, 1f),
+            PanelColor = new Color(0.28f, 0.1f, 0.08f, 0.85f),
+            NameColor = new Color(1f, 0.86f, 0.72f),
+            Description = "Medium Fire Elemental (CR 3). Living flame. Slam deals +1d6 fire (Burn, DC 14). Immune to fire, vulnerable to cold. MM 3.5e p.98."
+        });
+    }
+
+    /// <summary>
+    /// Medium Water Elemental (CR 3) — MM 3.5e p.100.
+    /// 4d8+12 hp (30), AC 19 (+1 Dex, +8 natural), Speed 20 ft., swim 90 ft.
+    /// Slam +6 melee (1d8+4). Water mastery, drench, vortex (DC 15).
+    /// Feats: Cleave, Power Attack.
+    /// </summary>
+    private static void RegisterSummonMediumWaterElemental()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "medium_water_elemental",
+            Name = "Medium Water Elemental",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Elemental",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 16, DEX = 12, CON = 17, WIS = 11, INT = 4, CHA = 11,
+            NaturalArmorBonus = 8,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                // Slam +6 melee (1d8+4): BAB 3 + Str 3 = +6; dmg 1d8 + Str 3 × 1.5 = +4 (floor)
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 4, // 20 ft. = 4 squares; swim 90 ft. = 18 squares
+            BaseHitDieHP = 30, // 4d8+12
+            Immunities = new CreatureImmunities
+            {
+                immuneToPoison = true,
+                immuneToCriticalHits = true,
+                immuneToSneakAttack = true
+            },
+            CreatureTags = new List<string> { "Elemental", "Water", "Extraplanar", "SummonBase" },
+            Feats = new List<string> { "Cleave", "Power Attack" },
+            SpecialAbilities = new List<string> { "Elemental traits", "Water mastery (+1 atk/dmg in water; –4 on land)", "Drench (extinguish fires)", "Vortex (DC 15, 1d6 dmg, 10–30 ft. height)", "Swim 90 ft.", "Darkvision 60 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.32f, 0.55f, 0.78f, 1f),
+            PanelColor = new Color(0.1f, 0.2f, 0.32f, 0.85f),
+            NameColor = new Color(0.72f, 0.88f, 1f),
+            Description = "Medium Water Elemental (CR 3). Living vortex of water. Immune to poison, critical hits, sneak attacks. Water mastery, drench, vortex. MM 3.5e p.100."
+        });
+    }
+
     private static void RegisterEfreeti()
     {
         Register(new NPCDefinition
@@ -548,6 +755,4 @@ public static partial class NPCDatabase
             Description = "Ettin (CR 6). Two-headed giant with superior two-weapon fighting. MM 3.5e p.106."
         });
     }
-}
-
 }
