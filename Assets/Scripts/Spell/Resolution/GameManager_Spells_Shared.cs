@@ -17,47 +17,9 @@ public partial class GameManager
     //  ROUND TICK / CLEANUP — 3rd-level Cleric spell durations
     // ================================================================
 
-    /// <summary>
-    /// Called at the start of each combat round to tick 3rd-level cleric spell durations.
-    /// Should be called from the main round-tick loop alongside TickClericSpell2Durations.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.TickClericSpell3Durations"/>.</summary>
     public void TickClericSpell3Durations(CharacterController character)
-    {
-        if (character?.Stats == null) return;
-
-        // ── Prayer tick ──
-        if (character.Stats.PrayerActive)
-        {
-            if (character.Stats.PrayerRoundsRemaining > 0)
-            {
-                character.Stats.PrayerRoundsRemaining--;
-                if (character.Stats.PrayerRoundsRemaining <= 0)
-                {
-                    // Bonuses are reversed by StatusEffectManager when the
-                    // ActiveSpellEffect expires, but we clean up the flag here.
-                    character.Stats.PrayerActive = false;
-
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🙏", character.Stats.CharacterName, "Prayer effect"));
-                    Debug.Log($"[Prayer] Expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-
-        // ── Invisibility Purge tick ──
-        if (character.Stats.InvisibilityPurgeActive)
-        {
-            if (character.Stats.InvisibilityPurgeRoundsRemaining > 0)
-            {
-                character.Stats.InvisibilityPurgeRoundsRemaining--;
-                if (character.Stats.InvisibilityPurgeRoundsRemaining <= 0)
-                {
-                    character.Stats.InvisibilityPurgeActive = false;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("👁", character.Stats.CharacterName, "Invisibility Purge"));
-                    Debug.Log($"[InvisibilityPurge] Expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-    }
+        => EffectService.TickClericSpell3Durations(character, msg => CombatUI?.ShowCombatLog(msg));
 
     // ================================================================
     //  ALIGNMENT BURST SPELLS — shared helper
@@ -202,118 +164,9 @@ public partial class GameManager
         return true;
     }
 
-    // ================================================================
-    //  ROUND TICK / CLEANUP — 4th-level Cleric spell durations
-    // ================================================================
-
-    /// <summary>
-    /// Called at the start of each combat round to tick 4th-level cleric spell durations.
-    /// Should be called from TickCharacterSpellDurations alongside TickClericSpell3Durations.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.TickClericSpell4Durations"/>.</summary>
     public void TickClericSpell4Durations(CharacterController character)
-    {
-        if (character?.Stats == null) return;
-
-        // ── Death Ward ──
-        if (character.Stats.DeathWardActive)
-        {
-            if (character.Stats.DeathWardRoundsRemaining > 0)
-            {
-                character.Stats.DeathWardRoundsRemaining--;
-                if (character.Stats.DeathWardRoundsRemaining <= 0)
-                {
-                    character.Stats.DeathWardActive = false;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🛡", character.Stats.CharacterName, "Death Ward"));
-                    Debug.Log($"[DeathWard] Expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-
-        // ── Divine Power ──
-        if (character.Stats.DivinePowerActive)
-        {
-            if (character.Stats.DivinePowerRoundsRemaining > 0)
-            {
-                character.Stats.DivinePowerRoundsRemaining--;
-                if (character.Stats.DivinePowerRoundsRemaining <= 0)
-                {
-                    // Reverse bonuses
-                    character.Stats.STR -= character.Stats.DivinePowerStrBonus;
-                    character.Stats.TempHP = Mathf.Max(0, character.Stats.TempHP - character.Stats.DivinePowerTempHP);
-                    character.Stats.BaseAttackBonus -= character.Stats.DivinePowerBABBonus;
-
-                    character.Stats.DivinePowerActive = false;
-                    character.Stats.DivinePowerStrBonus = 0;
-                    character.Stats.DivinePowerTempHP = 0;
-                    character.Stats.DivinePowerBABBonus = 0;
-
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("⚔", character.Stats.CharacterName, "Divine Power"));
-                    Debug.Log($"[DivinePower] Expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-
-        // ── Freedom of Movement ──
-        if (character.Stats.FreedomOfMovementActive)
-        {
-            if (character.Stats.FreedomOfMovementRoundsRemaining > 0)
-            {
-                character.Stats.FreedomOfMovementRoundsRemaining--;
-                if (character.Stats.FreedomOfMovementRoundsRemaining <= 0)
-                {
-                    character.Stats.FreedomOfMovementActive = false;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🦅", character.Stats.CharacterName, "Freedom of Movement"));
-                    Debug.Log($"[FreedomOfMovement] Expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-
-        // ── Spell Immunity ──
-        if (character.Stats.SpellImmunityActive)
-        {
-            if (character.Stats.SpellImmunityRoundsRemaining > 0)
-            {
-                character.Stats.SpellImmunityRoundsRemaining--;
-                if (character.Stats.SpellImmunityRoundsRemaining <= 0)
-                {
-                    character.Stats.SpellImmunityActive = false;
-                    character.Stats.SpellImmunitySpellId = null;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🛡🔮", character.Stats.CharacterName, "Spell Immunity"));
-                    Debug.Log($"[SpellImmunity] Expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-
-        // ── Repel Vermin ──
-        if (character.Stats.RepelVerminActive)
-        {
-            if (character.Stats.RepelVerminRoundsRemaining > 0)
-            {
-                character.Stats.RepelVerminRoundsRemaining--;
-                if (character.Stats.RepelVerminRoundsRemaining <= 0)
-                {
-                    character.Stats.RepelVerminActive = false;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🐛", character.Stats.CharacterName, "Repel Vermin"));
-                    Debug.Log($"[RepelVermin] Expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-
-        // ── Neutralize Poison Immunity ──
-        if (character.Stats.NeutralizePoisonImmunityActive)
-        {
-            if (character.Stats.NeutralizePoisonImmunityRoundsRemaining > 0)
-            {
-                character.Stats.NeutralizePoisonImmunityRoundsRemaining--;
-                if (character.Stats.NeutralizePoisonImmunityRoundsRemaining <= 0)
-                {
-                    character.Stats.NeutralizePoisonImmunityActive = false;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🌿", character.Stats.CharacterName, "poison immunity"));
-                    Debug.Log($"[NeutralizePoison] Immunity expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-    }
+        => EffectService.TickClericSpell4Durations(character, msg => CombatUI?.ShowCombatLog(msg));
 
     // ================================================================
     //  LIGHTNING BOLT & FIREBALL — Scalable AoE Damage Resolution
@@ -477,69 +330,8 @@ public partial class GameManager
         return true;
     }
 
-    // ================================================================
-    //  ROUND TICK / CLEANUP — 2nd-level Cleric spell durations
-    // ================================================================
-
-    /// <summary>
-    /// Called at the start of each combat round to tick 2nd-level cleric spell durations.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.TickClericSpell2Durations"/>.</summary>
     public void TickClericSpell2Durations(CharacterController character)
-    {
-        if (character?.Stats == null) return;
-
-        // ── Death Knell tick ──
-        if (character.Stats.DeathKnellActive)
-        {
-            if (character.Stats.DeathKnellRoundsRemaining > 0)
-            {
-                character.Stats.DeathKnellRoundsRemaining--;
-                if (character.Stats.DeathKnellRoundsRemaining <= 0)
-                {
-                    // Remove Death Knell buffs
-                    character.Stats.STR -= character.Stats.DeathKnellStrBonus;
-                    character.Stats.DeathKnellActive = false;
-                    character.Stats.DeathKnellStrBonus = 0;
-                    character.Stats.DeathKnellCLBonus = 0;
-
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("☠", character.Stats.CharacterName, "Death Knell buff"));
-                    Debug.Log($"[DeathKnell] Buff expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-
-        // ── Silence tick ──
-        if (character.Stats.SilenceActive)
-        {
-            if (character.Stats.SilenceRoundsRemaining > 0)
-            {
-                character.Stats.SilenceRoundsRemaining--;
-                if (character.Stats.SilenceRoundsRemaining <= 0)
-                {
-                    character.Stats.SilenceActive = false;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🔇", character.Stats.CharacterName, "Silence"));
-                    Debug.Log($"[Silence] Expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-
-        // ── Spiritual Weapon tick — handled by ProcessSpiritualWeaponTurnStart ──
-
-        // ── Align Weapon tick ──
-        if (character.Stats.AlignWeaponActive)
-        {
-            if (character.Stats.AlignWeaponRoundsRemaining > 0)
-            {
-                character.Stats.AlignWeaponRoundsRemaining--;
-                if (character.Stats.AlignWeaponRoundsRemaining <= 0)
-                {
-                    character.Stats.AlignWeaponActive = false;
-                    character.Stats.AlignWeaponAlignment = null;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("⚔", character.Stats.CharacterName, "Align Weapon"));
-                    Debug.Log($"[AlignWeapon] Expired on {character.Stats.CharacterName}");
-                }
-            }
-        }
-    }
+        => EffectService.TickClericSpell2Durations(character, msg => CombatUI?.ShowCombatLog(msg));
 
 }

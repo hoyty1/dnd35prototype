@@ -8065,72 +8065,11 @@ public partial class GameManager
             }
         }
 
-        if (character.Stats != null && character.Stats.ActiveResistEnergyEffects != null && character.Stats.ActiveResistEnergyEffects.Count > 0)
-        {
-            for (int i = character.Stats.ActiveResistEnergyEffects.Count - 1; i >= 0; i--)
-            {
-                ResistEnergyEffectData effect = character.Stats.ActiveResistEnergyEffects[i];
-                if (effect == null)
-                {
-                    character.Stats.ActiveResistEnergyEffects.RemoveAt(i);
-                    continue;
-                }
-
-                if (effect.DurationRemainingRounds >= 0)
-                    effect.DurationRemainingRounds--;
-
-                if (effect.DurationRemainingRounds <= 0)
-                {
-                    string energyLabel = DamageTextUtils.GetDamageTypeDisplay(effect.ToDamageType());
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Resist Energy ({energyLabel}) expires on {character.Stats.CharacterName}."));
-                    character.Stats.ActiveResistEnergyEffects.RemoveAt(i);
-                }
-            }
-        }
-
-        // Tick Protection from Energy durations
-        if (character.Stats != null && character.Stats.ActiveProtectionFromEnergyEffects != null && character.Stats.ActiveProtectionFromEnergyEffects.Count > 0)
-        {
-            for (int i = character.Stats.ActiveProtectionFromEnergyEffects.Count - 1; i >= 0; i--)
-            {
-                ProtectionFromEnergyEffectData protEffect = character.Stats.ActiveProtectionFromEnergyEffects[i];
-                if (protEffect == null)
-                {
-                    character.Stats.ActiveProtectionFromEnergyEffects.RemoveAt(i);
-                    continue;
-                }
-
-                if (protEffect.DurationRemainingRounds >= 0)
-                    protEffect.DurationRemainingRounds--;
-
-                if (protEffect.DurationRemainingRounds <= 0)
-                {
-                    string protEnergyLabel = protEffect.GetDisplayLabel();
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Protection from Energy ({protEnergyLabel}) expires on {character.Stats.CharacterName}."));
-                    character.Stats.ActiveProtectionFromEnergyEffects.RemoveAt(i);
-                }
-            }
-        }
-
-        EnfeebledConditionData expiredEnfeeblement = character.TickEnfeeblementEffect();
-        if (expiredEnfeeblement != null)
-        {
-            int amount = Mathf.Max(0, expiredEnfeeblement.StrengthPenaltyAmount);
-            string sourceName = !string.IsNullOrWhiteSpace(expiredEnfeeblement.CasterName)
-                ? expiredEnfeeblement.CasterName
-                : "an unknown caster";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Ray of Enfeeblement expires on {character.Stats.CharacterName}: STR +{amount} restored (source: {sourceName})."));
-        }
-
-        TouchOfIdiocyConditionData expiredIdiocy = character.TickTouchOfIdiocyEffect();
-        if (expiredIdiocy != null)
-        {
-            CombatUI?.ShowCombatLog(
-                $"<color=#FFAA44>⏱ Touch of Idiocy expires on {character.Stats.CharacterName}: " +
-                $"INT +{Mathf.Max(0, expiredIdiocy.IntelligenceDamage)}, " +
-                $"WIS +{Mathf.Max(0, expiredIdiocy.WisdomDamage)}, " +
-                $"CHA +{Mathf.Max(0, expiredIdiocy.CharismaDamage)} restored.</color>");
-        }
+        // Delegate energy resist, protection, and debuff ticking to EffectService
+        Action<string> logCb = msg => CombatUI?.ShowCombatLog(msg);
+        EffectService.TickResistEnergyEffects(character, logCb);
+        EffectService.TickProtectionFromEnergyEffects(character, logCb);
+        EffectService.TickDebuffEffects(character, logCb);
 
         TickCharacterItemSpellDurations(character);
 

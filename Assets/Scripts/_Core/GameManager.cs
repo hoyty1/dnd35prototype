@@ -446,7 +446,7 @@ public partial class GameManager : MonoBehaviour
 
     // ── Emanation tracking (Magic Circles, future: Prayer, Auras, etc.) ──
     /// <summary>All active emanation effects (Magic Circles, future: Prayer, Auras, etc.).</summary>
-    private readonly List<EmanationEffectData> _activeEmanations = new List<EmanationEffectData>();
+    // Emanation state is now managed by EffectService._activeEmanations
 
     private class ActiveSummonInstance
     {
@@ -2222,25 +2222,10 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Apply once-per-day disease progression and natural ability damage recovery.
-    /// Can be called by future rest/day systems; also auto-called every 14,400 rounds.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.ProcessDailyEffects"/>.</summary>
     public void ProcessDailyEffects()
     {
-        List<CharacterController> characters = GetAllCharacters();
-        if (characters == null || characters.Count == 0)
-            return;
-
-        foreach (CharacterController character in characters)
-        {
-            if (character == null || character.Stats == null || character.Stats.IsDead)
-                continue;
-
-            character.ProcessDiseaseEffectsDaily();
-            character.HealAbilityDamageDaily(1, "Daily recovery");
-        }
-
+        EffectService.ProcessDailyEffects(GetAllCharacters());
         UpdateAllStatsUI();
     }
 
@@ -3819,7 +3804,7 @@ public partial class GameManager : MonoBehaviour
         });
 
         CurrentPhase = TurnPhase.CombatOver;
-        _activeEmanations.Clear();
+        EffectService.ClearAll();
         ClearAllActiveGreaseEffects();
         ClearAllMirrorImageEffects("combat ended");
         MeleeReactionService.ClearAll();
@@ -9375,77 +9360,17 @@ public partial class GameManager : MonoBehaviour
         return TryGetWebEntangledCondition(actor, out _, out _);
     }
 
+    /// <summary>Delegates to <see cref="EffectService.ApplyWebEntangledCondition"/>.</summary>
     public void ApplyWebEntangledCondition(CharacterController caster, CharacterController target, int durationRounds)
-    {
-        if (target == null || target.Stats == null || target.Stats.IsDead)
-            return;
+        => EffectService.ApplyWebEntangledCondition(caster, target, durationRounds, _conditionService);
 
-        var data = new WebEntangledConditionData
-        {
-            Caster = caster,
-            Target = target,
-            EscapeDC = WebAreaEffect.EscapeDc,
-            SourceSpellId = SpellNames.WEB,
-            SourceSpellName = "Web"
-        };
-
-        int rounds = Mathf.Max(1, durationRounds);
-        if (_conditionService != null)
-        {
-            _conditionService.ApplyCondition(
-                target,
-                CombatConditionType.Entangled,
-                rounds,
-                source: caster,
-                data: data,
-                sourceNameOverride: "Web",
-                sourceCategory: "Spell",
-                sourceId: SpellNames.WEB);
-        }
-        else
-        {
-            target.ApplyCondition(CombatConditionType.Entangled, rounds, "Web");
-        }
-    }
-
+    /// <summary>Delegates to <see cref="EffectService.RemoveWebEntangledConditionsFromArea"/>.</summary>
     public void RemoveWebEntangledConditionsFromArea(WebAreaEffect sourceArea)
-    {
-        if (sourceArea == null)
-            return;
-
-        List<CharacterController> all = GetAllCharacters();
-        List<WebAreaEffect> activeWebs = AreaEffectManager.Instance.GetEffectsOfType<WebAreaEffect>();
-        for (int i = 0; i < all.Count; i++)
-        {
-            CharacterController character = all[i];
-            if (character == null || character.Stats == null)
-                continue;
-
-            if (!TryGetWebEntangledCondition(character, out _, out _))
-                continue;
-
-            // Only clear this entangled state if no remaining web area still covers the creature.
-            bool stillCoveredByAnyWeb = false;
-            for (int j = 0; j < activeWebs.Count; j++)
-            {
-                WebAreaEffect web = activeWebs[j];
-                if (web == null || web == sourceArea)
-                    continue;
-
-                if (web.IsCellInArea(character.GridPosition))
-                {
-                    stillCoveredByAnyWeb = true;
-                    break;
-                }
-            }
-
-            if (stillCoveredByAnyWeb)
-                continue;
-
-            character.RemoveCondition(CombatConditionType.Entangled);
-            CombatUI?.ShowCombatLog($"🕸 {character.Stats.CharacterName} is freed as the web dissipates.");
-        }
-    }
+        => EffectService.RemoveWebEntangledConditionsFromArea(
+            sourceArea,
+            GetAllCharacters(),
+            ch => TryGetWebEntangledCondition(ch, out _, out _),
+            msg => CombatUI?.ShowCombatLog(msg));
 
     private void DropAnimateRopeItemAt(Vector2Int position, ItemData ropeItem)
     {
@@ -9796,246 +9721,56 @@ public partial class GameManager : MonoBehaviour
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //  EMANATION AREA EFFECT MANAGEMENT
+    //  EMANATION / MAGIC CIRCLE — delegated to EffectService
     // ═══════════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Register any emanation effect. Replaces an existing emanation of the same type
-    /// centered on the same creature (one emanation per type per creature).
-    /// </summary>
-    /// <param name="emanation">The emanation to register.</param>
+    /// <summary>Delegates to <see cref="EffectService.RegisterEmanation"/>.</summary>
     public void RegisterEmanation(EmanationEffectData emanation)
-    {
-        if (emanation == null)
-            return;
+        => EffectService.RegisterEmanation(emanation);
 
-        // For mobile emanations, require a valid center creature
-        if (!emanation.CenterPosition.HasValue && emanation.CenterCreature == null)
-            return;
-
-        // Remove any existing emanation of the same concrete type on the same center
-        var emanationType = emanation.GetType();
-        for (int i = _activeEmanations.Count - 1; i >= 0; i--)
-        {
-            var existing = _activeEmanations[i];
-            if (existing.GetType() == emanationType && existing.CenterCreature == emanation.CenterCreature)
-            {
-                _activeEmanations.RemoveAt(i);
-            }
-        }
-
-        _activeEmanations.Add(emanation);
-        Debug.Log($"[Emanation] {emanation.GetEffectName()} registered on {emanation.CenterCreature?.Stats?.CharacterName ?? "fixed position"}, CL {emanation.CasterLevel}, {emanation.RemainingRounds} rounds");
-    }
-
-    /// <summary>
-    /// Unregister all emanations centered on a specific creature.
-    /// Called on death, dispel, etc.
-    /// </summary>
-    /// <param name="centerCreature">The creature whose emanations should be removed.</param>
+    /// <summary>Delegates to <see cref="EffectService.UnregisterEmanation"/>.</summary>
     public void UnregisterEmanation(CharacterController centerCreature)
-    {
-        if (centerCreature == null) return;
-        for (int i = _activeEmanations.Count - 1; i >= 0; i--)
-        {
-            if (_activeEmanations[i].CenterCreature == centerCreature)
-            {
-                Debug.Log($"[Emanation] Removed {_activeEmanations[i].GetEffectName()} from {centerCreature.Stats?.CharacterName}");
-                _activeEmanations.RemoveAt(i);
-            }
-        }
-    }
+        => EffectService.UnregisterEmanation(centerCreature);
 
-    /// <summary>
-    /// Tick all active emanations (call each round). Removes expired or invalid ones.
-    /// Also refreshes Invisibility Sphere membership: creatures who have moved
-    /// outside the emanation lose invisibility immediately at round boundaries.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.TickEmanations"/>.</summary>
     public void TickEmanations()
-    {
-        // Refresh Invisibility Sphere membership BEFORE ticking so that
-        // creatures who have left the emanation become visible during the
-        // round end / round start visual update pass.
-        RefreshInvisibilitySpheres();
+        => EffectService.TickEmanations(RefreshInvisibilitySpheres);
 
-        for (int i = _activeEmanations.Count - 1; i >= 0; i--)
-        {
-            var em = _activeEmanations[i];
-            if (em.ShouldRemove() || !em.Tick())
-            {
-                // For Invisibility Sphere, ensure all initially-affected creatures
-                // are made visible before we drop the emanation.
-                if (em is InvisibilitySphereEffect sphere)
-                    sphere.EndForAll("duration expired");
-
-                Debug.Log($"[Emanation] Expired: {em.GetEffectName()}");
-                _activeEmanations.RemoveAt(i);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Get all active emanations (read-only copy for tests/queries).
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.GetActiveEmanations"/>.</summary>
     public List<EmanationEffectData> GetActiveEmanations()
-    {
-        return new List<EmanationEffectData>(_activeEmanations);
-    }
+        => EffectService.GetActiveEmanations();
 
-    /// <summary>
-    /// Get all active emanations of a specific type.
-    /// </summary>
-    /// <typeparam name="T">The emanation subclass type to filter by.</typeparam>
-    /// <returns>List of active emanations of the requested type.</returns>
+    /// <summary>Delegates to <see cref="EffectService.GetActiveEmanationsOfType{T}"/>.</summary>
     public List<T> GetActiveEmanationsOfType<T>() where T : EmanationEffectData
-    {
-        var result = new List<T>();
-        for (int i = 0; i < _activeEmanations.Count; i++)
-        {
-            if (_activeEmanations[i] is T typed)
-                result.Add(typed);
-        }
-        return result;
-    }
+        => EffectService.GetActiveEmanationsOfType<T>();
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  MAGIC CIRCLE-SPECIFIC CONVENIENCE METHODS
-    //  (Delegate to generic emanation system, filter by MagicCircleEffectData)
-    // ═══════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Register a Magic Circle emanation. Convenience wrapper around RegisterEmanation.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.RegisterMagicCircle"/>.</summary>
     public void RegisterMagicCircle(MagicCircleEffectData data)
-    {
-        RegisterEmanation(data);
-    }
+        => EffectService.RegisterMagicCircle(data);
 
-    /// <summary>
-    /// Remove a Magic Circle effect (on death, dispel, etc.).
-    /// Removes only MagicCircleEffectData emanations centered on the creature.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.RemoveMagicCircle"/>.</summary>
     public void RemoveMagicCircle(CharacterController centerCreature)
-    {
-        if (centerCreature == null) return;
-        for (int i = _activeEmanations.Count - 1; i >= 0; i--)
-        {
-            if (_activeEmanations[i] is MagicCircleEffectData mc && mc.CenterCreature == centerCreature)
-            {
-                Debug.Log($"[MagicCircle] Removed {mc.GetSpellName()} from {centerCreature.Stats?.CharacterName}");
-                _activeEmanations.RemoveAt(i);
-            }
-        }
-    }
+        => EffectService.RemoveMagicCircle(centerCreature);
 
-    /// <summary>
-    /// Get Magic Circle protection benefits for a creature against an attacker's alignment.
-    /// Checks if the creature is within any active Magic Circle emanation that wards against the given alignment.
-    /// Returns the best (highest) benefits found.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.GetMagicCircleBenefitsAgainst"/>.</summary>
     public AlignmentProtectionBenefits GetMagicCircleBenefitsAgainst(CharacterController creature, Alignment sourceAlignment)
-    {
-        var benefits = new AlignmentProtectionBenefits();
-        if (creature == null || _activeEmanations.Count == 0)
-            return benefits;
+        => EffectService.GetMagicCircleBenefitsAgainst(creature, sourceAlignment);
 
-        for (int i = 0; i < _activeEmanations.Count; i++)
-        {
-            if (!(_activeEmanations[i] is MagicCircleEffectData mc))
-                continue;
-
-            if (mc.CenterCreature == null || mc.CenterCreature.IsDead)
-                continue;
-
-            // Check if creature is in the area
-            if (!mc.IsCreatureInArea(creature))
-                continue;
-
-            // Check if attacker matches the warded alignment
-            if (!mc.IsAttackerOfWardedAlignment(sourceAlignment))
-                continue;
-
-            benefits.HasMatch = true;
-            benefits.DeflectionAcBonus = Mathf.Max(benefits.DeflectionAcBonus, 2);
-            benefits.ResistanceSaveBonus = Mathf.Max(benefits.ResistanceSaveBonus, 2);
-            benefits.BlocksMentalControl = true;
-            benefits.BlocksSummonedContact = true;
-
-            if (string.IsNullOrEmpty(benefits.SourceSpellName))
-                benefits.SourceSpellName = mc.GetSpellName();
-        }
-
-        return benefits;
-    }
-
-    /// <summary>
-    /// Check if a creature is within any active Magic Circle that protects against the given alignment.
-    /// Used for mental control suppression checks.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.IsProtectedByMagicCircle"/>.</summary>
     public bool IsProtectedByMagicCircle(CharacterController creature, AlignmentProtectionType wardedAlignment)
-    {
-        if (creature == null || _activeEmanations.Count == 0)
-            return false;
+        => EffectService.IsProtectedByMagicCircle(creature, wardedAlignment);
 
-        for (int i = 0; i < _activeEmanations.Count; i++)
-        {
-            if (!(_activeEmanations[i] is MagicCircleEffectData mc))
-                continue;
-
-            if (mc.CenterCreature == null || mc.CenterCreature.IsDead)
-                continue;
-
-            if (mc.WardedAlignment != wardedAlignment)
-                continue;
-
-            if (mc.IsCreatureInArea(creature))
-                return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Check if a creature is within any active Magic Circle.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.IsInAnyMagicCircle"/>.</summary>
     public bool IsInAnyMagicCircle(CharacterController creature)
-    {
-        if (creature == null || _activeEmanations.Count == 0)
-            return false;
+        => EffectService.IsInAnyMagicCircle(creature);
 
-        for (int i = 0; i < _activeEmanations.Count; i++)
-        {
-            if (!(_activeEmanations[i] is MagicCircleEffectData mc))
-                continue;
-
-            if (mc.CenterCreature != null && !mc.CenterCreature.IsDead && mc.IsCreatureInArea(creature))
-                return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Get all active Magic Circle effects (read-only access for tests/queries).
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.GetActiveMagicCircles"/>.</summary>
     public List<MagicCircleEffectData> GetActiveMagicCircles()
-    {
-        return GetActiveEmanationsOfType<MagicCircleEffectData>();
-    }
+        => EffectService.GetActiveMagicCircles();
 
-    /// <summary>
-    /// Get the Magic Circle effect centered on a specific creature, or null.
-    /// </summary>
+    /// <summary>Delegates to <see cref="EffectService.GetMagicCircleOnCreature"/>.</summary>
     public MagicCircleEffectData GetMagicCircleOnCreature(CharacterController creature)
-    {
-        if (creature == null) return null;
-        for (int i = 0; i < _activeEmanations.Count; i++)
-        {
-            if (_activeEmanations[i] is MagicCircleEffectData mc && mc.CenterCreature == creature)
-                return mc;
-        }
-        return null;
-    }
+        => EffectService.GetMagicCircleOnCreature(creature);
 
     private void ShowSummonCreatureSelectionMenu(CharacterController caster, SpellData spell)
     {

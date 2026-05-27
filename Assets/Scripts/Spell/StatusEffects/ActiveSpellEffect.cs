@@ -514,7 +514,7 @@ public static class AlignmentProtectionRules
         // Magic Circle does NOT stack with Protection from Alignment — take the best.
         if (GameManager.Instance != null)
         {
-            AlignmentProtectionBenefits mcBenefits = GameManager.Instance.GetMagicCircleBenefitsAgainst(protectedTarget, sourceAlignment);
+            AlignmentProtectionBenefits mcBenefits = EffectService.GetMagicCircleBenefitsAgainst(protectedTarget, sourceAlignment);
             if (mcBenefits.HasMatch)
             {
                 benefits.HasMatch = true;
