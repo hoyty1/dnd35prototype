@@ -197,6 +197,10 @@ public class EconomyService : MonoBehaviour
         if (item == null)
             return 0;
 
+        // Treasure items use appraised value for sell price calculations
+        if (item.IsTreasureItem && item.IsAppraised && item.AppraisedValueGp > 0)
+            return Mathf.Max(0, item.AppraisedValueGp / 2);
+
         return Mathf.Max(0, item.BasePriceGp / 2);
     }
 

@@ -63,6 +63,51 @@ public partial class GameManager
             Debug.Log($"[LootFlow] Treasure coins auto-collected: {coinGP} gp added to party gold ({previousGold} → {PartyGold})");
             CombatUI?.ShowCombatLog(CombatLogHelper.Special("🪙", $"{coinGP} gp in coins collected automatically. Party gold: {PartyGold} gp"));
         }
+
+        // === Convert treasure items (gems, art, mundane, magic) to ItemData ===
+        // Performs Appraise skill checks on gems/art using best party modifier.
+        TreasureItemConverter.ConversionResult treasureConversion = null;
+        if (generatedTreasure != null && !generatedTreasure.IsEmpty)
+        {
+            // Gather active party members for Appraise checks
+            List<CharacterController> activeParty = new List<CharacterController>();
+            if (PCs != null)
+            {
+                for (int i = 0; i < PCs.Count; i++)
+                {
+                    CharacterController pc = PCs[i];
+                    if (pc != null && pc.Stats != null)
+                        activeParty.Add(pc);
+                }
+            }
+
+            treasureConversion = TreasureItemConverter.ConvertAll(generatedTreasure, activeParty);
+
+            // Log appraise results to combat log
+            if (treasureConversion.AppraiseLog.Count > 0)
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔍",
+                    $"{treasureConversion.BestAppraiserName} examines the treasure (Appraise +{treasureConversion.BestAppraiseModifier})..."));
+
+                // Count successful vs failed appraisals
+                int gemsAndArt = generatedTreasure.Gems.Count + generatedTreasure.ArtObjects.Count;
+                int successCount = 0;
+                int failCount = 0;
+                foreach (string logEntry in treasureConversion.AppraiseLog)
+                {
+                    if (logEntry.Contains("SUCCESS")) successCount++;
+                    else if (logEntry.Contains("FAILED")) failCount++;
+                }
+                if (gemsAndArt > 0)
+                {
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔍",
+                        $"Appraised {gemsAndArt} item(s): {successCount} accurate, {failCount} uncertain."));
+                }
+            }
+
+            Debug.Log($"[LootFlow] Treasure conversion complete | convertedItems={treasureConversion.Items.Count} | " +
+                      $"appraiser={treasureConversion.BestAppraiserName} (+{treasureConversion.BestAppraiseModifier})");
+        }
         // === End Treasure Generation ===
 
         EnsurePartyStashInitialized();
@@ -77,22 +122,33 @@ public partial class GameManager
             return;
         }
 
+        // Gather equipment loot from defeated enemies and ground
         List<LootCollectionUI.LootStackEntry> lootEntries = GatherPostCombatLootEntries();
+
+        // Add converted treasure items to loot entries (gems, art, mundane, magic)
+        if (treasureConversion != null && treasureConversion.Items.Count > 0)
+        {
+            GatherTreasureItemLootEntries(treasureConversion.Items, lootEntries);
+            Debug.Log($"[LootFlow] Added {treasureConversion.Items.Count} treasure items to loot grid");
+        }
+
         int totalItems = CountTotalItems(lootEntries);
         bool hasTreasure = generatedTreasure != null && !generatedTreasure.IsEmpty;
-        Debug.Log($"[LootFlow] Gather complete | stacks={lootEntries.Count} | totalItems={totalItems} | hasTreasure={hasTreasure}");
+        int treasureItemCount = treasureConversion != null ? treasureConversion.Items.Count : 0;
+        Debug.Log($"[LootFlow] Gather complete | stacks={lootEntries.Count} | totalItems={totalItems} | " +
+                  $"hasTreasure={hasTreasure} | treasureItems={treasureItemCount}");
 
         WaitingForLootCollection = true;
         if (hasTreasure && totalItems > 0)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Special("💰", $"Treasure & loot available: {totalItems} equipment item(s). Collect loot before continuing."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Special("💰", $"Treasure & loot available: {totalItems} item(s). Collect loot before continuing."));
         else if (totalItems > 0)
             CombatUI?.ShowCombatLog(CombatLogHelper.Special("💰", $"Loot available: {totalItems} item(s). Collect loot before continuing."));
         else if (hasTreasure)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Special("💎", "Treasure collected! No equipment drops. Close loot window to continue."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Special("💎", "Coins collected! No other treasure or loot. Close window to continue."));
         else
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "📭 No loot found. Review results and close loot window to continue."));
 
-        Debug.Log($"[LootFlow] Opening unified loot window | waitingForLootCollection={WaitingForLootCollection} | hasTreasure={hasTreasure} | equipmentItems={totalItems}");
+        Debug.Log($"[LootFlow] Opening unified loot window | waitingForLootCollection={WaitingForLootCollection} | hasTreasure={hasTreasure} | totalItems={totalItems}");
         LootCollectionUI.Open(
             lootEntries,
             generatedTreasure,
@@ -541,6 +597,35 @@ public partial class GameManager
         }
 
         Debug.Log($"[LootCollection] GatherLootFromGround complete | occupiedCells={occupiedGroundCells} | itemInstances={foundGroundItemCount}");
+    }
+
+    /// <summary>
+    /// Add converted treasure items (gems, art, mundane, magic) to the loot entry list.
+    /// These items use the "Treasure" source type and can be looted to party stash like
+    /// any other equipment.
+    /// </summary>
+    private void GatherTreasureItemLootEntries(List<ItemData> treasureItems, List<LootCollectionUI.LootStackEntry> ordered)
+    {
+        if (treasureItems == null || treasureItems.Count == 0)
+            return;
+
+        string sourceLabel = "From Treasure Hoard";
+        string sourceGroupKey = "treasure:hoard";
+
+        for (int i = 0; i < treasureItems.Count; i++)
+        {
+            ItemData item = treasureItems[i];
+            if (item == null || item.IsDestroyed)
+                continue;
+
+            string valueStr = item.IsAppraised
+                ? $" (appraised: {item.AppraisedValueGp:N0} gp)"
+                : $" (value: {item.BasePriceGp:N0} gp)";
+            Debug.Log($"[Loot] + Treasure item: {item.Name}{valueStr}");
+            AddLootInstance(ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Ground, null, Vector2Int.zero);
+        }
+
+        Debug.Log($"[LootCollection] GatherTreasureItemLootEntries complete | items={treasureItems.Count}");
     }
 
     private void AddLootInstance(

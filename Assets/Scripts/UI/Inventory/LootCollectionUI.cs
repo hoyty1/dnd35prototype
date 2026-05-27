@@ -623,8 +623,10 @@ public class LootCollectionUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Formats a TreasureResult into a compact rich-text summary for display in the loot window.
-    /// Uses the same color scheme as TreasureUI for visual consistency.
+    /// Formats a TreasureResult into a compact rich-text summary for the header area.
+    /// Since treasure items now appear as tiles in the loot grid, the summary only shows:
+    /// - Coins collected (auto-added to party gold)
+    /// - Brief breakdown of item categories found in the grid below
     /// </summary>
     private static string FormatTreasureSummary(TreasureResult result)
     {
@@ -634,7 +636,7 @@ public class LootCollectionUI : MonoBehaviour
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"<b><color=#F5DE69>══ Treasure Found — {result.TotalGPValue:N0} gp total ══</color></b>");
 
-        // Coins
+        // Coins (auto-collected)
         if (result.CoinsGPValue > 0)
         {
             var parts = new List<string>();
@@ -642,58 +644,23 @@ public class LootCollectionUI : MonoBehaviour
             if (result.SilverPieces > 0) parts.Add($"{result.SilverPieces:N0} sp");
             if (result.GoldPieces > 0) parts.Add($"{result.GoldPieces:N0} gp");
             if (result.PlatinumPieces > 0) parts.Add($"{result.PlatinumPieces:N0} pp");
-            sb.AppendLine($"<color=#FFD700>Coins:</color> {string.Join(", ", parts)} <i>(≈{result.CoinsGPValue:N0} gp)</i>");
+            sb.AppendLine($"<color=#FFD700>💰 Coins collected:</color> {string.Join(", ", parts)} <i>(≈{result.CoinsGPValue:N0} gp added to party gold)</i>");
         }
 
-        // Gems
+        // Brief summary of items in the loot grid below
+        var categories = new List<string>();
         if (result.Gems.Count > 0)
-        {
-            sb.Append($"<color=#80CCFF>Gems ({result.Gems.Count}):</color> ");
-            var names = new List<string>();
-            for (int i = 0; i < result.Gems.Count && i < 5; i++)
-                names.Add($"{result.Gems[i].Name} ({result.Gems[i].Value:N0} gp)");
-            if (result.Gems.Count > 5)
-                names.Add($"...+{result.Gems.Count - 5} more");
-            sb.AppendLine(string.Join(", ", names));
-        }
-
-        // Art Objects
+            categories.Add($"<color=#80CCFF>{result.Gems.Count} gem(s)</color>");
         if (result.ArtObjects.Count > 0)
-        {
-            sb.Append($"<color=#E6B3FF>Art ({result.ArtObjects.Count}):</color> ");
-            var names = new List<string>();
-            for (int i = 0; i < result.ArtObjects.Count && i < 5; i++)
-                names.Add($"{result.ArtObjects[i].Name} ({result.ArtObjects[i].Value:N0} gp)");
-            if (result.ArtObjects.Count > 5)
-                names.Add($"...+{result.ArtObjects.Count - 5} more");
-            sb.AppendLine(string.Join(", ", names));
-        }
-
-        // Mundane Items
+            categories.Add($"<color=#E6B3FF>{result.ArtObjects.Count} art object(s)</color>");
         if (result.MundaneItems.Count > 0)
-        {
-            sb.Append($"<color=#CCCCCC>Mundane ({result.MundaneItems.Count}):</color> ");
-            var names = new List<string>();
-            for (int i = 0; i < result.MundaneItems.Count && i < 4; i++)
-                names.Add($"{result.MundaneItems[i].Name} ({result.MundaneItems[i].Value:N0} gp)");
-            if (result.MundaneItems.Count > 4)
-                names.Add($"...+{result.MundaneItems.Count - 4} more");
-            sb.AppendLine(string.Join(", ", names));
-        }
-
-        // Magic Items
+            categories.Add($"<color=#CCCCCC>{result.MundaneItems.Count} mundane item(s)</color>");
         if (result.MagicItems.Count > 0)
+            categories.Add($"<color=#4DFF4D>{result.MagicItems.Count} magic item(s)</color>");
+
+        if (categories.Count > 0)
         {
-            sb.Append($"<color=#4DFF4D>Magic ({result.MagicItems.Count}):</color> ");
-            var names = new List<string>();
-            for (int i = 0; i < result.MagicItems.Count && i < 4; i++)
-            {
-                string typeTag = result.MagicItems[i].Type != null ? $" [{result.MagicItems[i].Type}]" : "";
-                names.Add($"{result.MagicItems[i].Name} ({result.MagicItems[i].Price:N0} gp){typeTag}");
-            }
-            if (result.MagicItems.Count > 4)
-                names.Add($"...+{result.MagicItems.Count - 4} more");
-            sb.AppendLine(string.Join(", ", names));
+            sb.AppendLine($"Loot items: {string.Join(", ", categories)} — <i>click tiles below to collect</i>");
         }
 
         // Monster gear note
@@ -969,6 +936,20 @@ public class LootCollectionUI : MonoBehaviour
         if (item == null)
             return new Color(0.22f, 0.28f, 0.38f, 0.98f);
 
+        // Treasure items get distinctive colors to stand out in the loot grid
+        if (item.IsTreasureItem)
+        {
+            // Gems (💎) — blue/cyan tint
+            if (item.IconChar == "💎")
+                return new Color(0.15f, 0.28f, 0.42f, 0.98f);
+            // Art objects (🖼) — purple tint
+            if (item.IconChar == "🖼")
+                return new Color(0.32f, 0.18f, 0.38f, 0.98f);
+            // Magic items (✨, 🪄, 🔮, 💍, 📜) — green tint
+            if (item.CountsAsMagicForBypass || item.EnhancementBonus > 0)
+                return new Color(0.14f, 0.32f, 0.18f, 0.98f);
+        }
+
         switch (item.Type)
         {
             case ItemType.Weapon: return new Color(0.34f, 0.2f, 0.2f, 0.98f);
@@ -989,7 +970,22 @@ public class LootCollectionUI : MonoBehaviour
         ItemData item = entry.Prototype;
         string stats = item.GetStatSummary();
         string desc = string.IsNullOrWhiteSpace(item.Description) ? "No description." : item.Description;
-        _tooltipText.text = $"<b>{SafeItemName(item)}</b>\n{stats}\n\n{desc}";
+
+        // Add appraisal info for treasure items (gems/art)
+        string appraiseInfo = "";
+        if (item.IsTreasureItem && item.IsAppraised)
+        {
+            bool accurate = item.AppraisedValueGp == item.TrueValueGp;
+            appraiseInfo = accurate
+                ? $"\n<color=#4DFF4D>Appraised: {item.AppraisedValueGp:N0} gp (accurate)</color>"
+                : $"\n<color=#FFD700>Appraised: {item.AppraisedValueGp:N0} gp</color>";
+        }
+        else if (item.IsTreasureItem && item.BasePriceGp > 0)
+        {
+            appraiseInfo = $"\n<color=#CCCCCC>Value: {item.BasePriceGp:N0} gp</color>";
+        }
+
+        _tooltipText.text = $"<b>{SafeItemName(item)}</b>\n{stats}{appraiseInfo}\n\n{desc}";
 
         RectTransform tooltipRT = _tooltipPanel.GetComponent<RectTransform>();
         RectTransform dialogRT = _dialog != null ? _dialog.GetComponent<RectTransform>() : null;

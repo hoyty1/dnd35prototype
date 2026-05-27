@@ -275,6 +275,16 @@ public class ItemData
     public int BasePriceGp;         // Mundane base price in gp (before magical enhancement)
     public int enhancementBonus;    // Serialized enhancement bonus field requested by enhancement item pipeline (0-5)
 
+    // --- Appraise / Treasure valuation (D&D 3.5e PHB p.67) ---
+    /// <summary>True value of the item in gp (set for appraised treasure items like gems/art).</summary>
+    public int TrueValueGp;
+    /// <summary>Appraised value after Appraise skill check. May differ from TrueValueGp on failed checks.</summary>
+    public int AppraisedValueGp;
+    /// <summary>Whether this item has been appraised (gems/art from treasure generation).</summary>
+    public bool IsAppraised;
+    /// <summary>Whether this item originated from treasure generation (gem, art object, mundane, or magic treasure).</summary>
+    public bool IsTreasureItem;
+
     // Legacy/compatibility field still used by existing systems/tests.
     public int EnhancementBonus;    // Magic enhancement bonus to durability (+2 hardness, +10 HP per +1)
 

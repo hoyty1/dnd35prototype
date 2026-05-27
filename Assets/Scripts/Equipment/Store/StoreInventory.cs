@@ -294,6 +294,14 @@ public class StoreInventory : MonoBehaviour
         if (item == null)
             return 0;
 
+        // Treasure items (gems, art objects) use their appraised value for sell price.
+        // D&D 3.5e: gems/art sell for appraised value (not half), but we apply the
+        // standard 50% sell discount in GetSellPrice(). The appraised value IS the
+        // effective "base price" for these items — a failed Appraise check means
+        // the party misjudged the value and gets less (or occasionally more).
+        if (item.IsTreasureItem && item.IsAppraised && item.AppraisedValueGp > 0)
+            return item.AppraisedValueGp;
+
         if (!string.IsNullOrWhiteSpace(item.Id) && _priceLookup.TryGetValue(item.Id, out int listed))
             return listed;
 
