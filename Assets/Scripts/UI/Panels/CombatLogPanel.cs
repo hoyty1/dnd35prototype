@@ -26,12 +26,65 @@ public class CombatLogPanel : MonoBehaviour
     private readonly StringBuilder _builder = new StringBuilder();
     private bool _autoScroll = true;
 
+    // Object pool for scrollable log message GameObjects — avoids constant
+    // new GameObject() + AddComponent<Text> + Destroy churn during combat.
+    private ObjectPool<Text> _logMessagePool;
+    private const int PoolPrewarmCount = 50;
+
     public void Initialize(CombatUI combatUI, Text legacyCombatLogText, GameObject combatLogContent, ScrollRect combatLogScrollRect)
     {
         _combatUI = combatUI;
         _legacyCombatLogText = legacyCombatLogText;
         _combatLogContent = combatLogContent;
         _combatLogScrollRect = combatLogScrollRect;
+
+        InitializeLogMessagePool();
+    }
+
+    private void InitializeLogMessagePool()
+    {
+        // Resolve font once — shared by every pooled Text component.
+        Font sharedFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (sharedFont == null)
+            sharedFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (sharedFont == null)
+            sharedFont = Font.CreateDynamicFontFromOSFont("Arial", 11);
+
+        _logMessagePool = new ObjectPool<Text>(
+            createFunc: () =>
+            {
+                GameObject go = new GameObject("PooledLogMsg");
+                Text t = go.AddComponent<Text>();
+                t.supportRichText = true;
+                t.font = sharedFont;
+                t.fontSize = 22;
+                t.color = Color.white;
+                t.alignment = TextAnchor.UpperLeft;
+                t.horizontalOverflow = HorizontalWrapMode.Wrap;
+                t.verticalOverflow = VerticalWrapMode.Overflow;
+                t.raycastTarget = false;
+
+                LayoutElement layout = go.AddComponent<LayoutElement>();
+                layout.flexibleWidth = 1;
+
+                go.SetActive(false);
+                return t;
+            },
+            onGet: t =>
+            {
+                t.gameObject.SetActive(true);
+            },
+            onReturn: t =>
+            {
+                t.text = string.Empty;
+                t.gameObject.SetActive(false);
+                // Re-parent to pool holder (no visible parent) to keep hierarchy clean.
+                t.transform.SetParent(null, false);
+            },
+            maxSize: MaxMessages + PoolPrewarmCount
+        );
+
+        _logMessagePool.Prewarm(PoolPrewarmCount);
     }
 
     /// <summary>
@@ -90,8 +143,17 @@ public class CombatLogPanel : MonoBehaviour
 
         if (_combatLogContent != null)
         {
-            foreach (Transform child in _combatLogContent.transform)
-                Destroy(child.gameObject);
+            // Return all children to pool instead of destroying them.
+            // Iterate in reverse since Return() re-parents children out of the container.
+            for (int i = _combatLogContent.transform.childCount - 1; i >= 0; i--)
+            {
+                Transform child = _combatLogContent.transform.GetChild(i);
+                Text childText = child.GetComponent<Text>();
+                if (childText != null)
+                    _logMessagePool.Return(childText);
+                else
+                    Destroy(child.gameObject); // Safety fallback
+            }
         }
 
         if (_legacyCombatLogText != null)
@@ -207,27 +269,10 @@ public class CombatLogPanel : MonoBehaviour
 
     private void AppendScrollableLogMessage(string formatted)
     {
-        GameObject msgObj = new GameObject($"LogMsg_{_messageHistory.Count}");
-        msgObj.transform.SetParent(_combatLogContent.transform, false);
-
-        Text text = msgObj.AddComponent<Text>();
-        text.supportRichText = true;
+        Text text = _logMessagePool.Get();
         text.text = formatted;
-        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (text.font == null)
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        if (text.font == null)
-            text.font = Font.CreateDynamicFontFromOSFont("Arial", 11);
-
-        text.fontSize = 22;
-        text.color = Color.white;
-        text.alignment = TextAnchor.UpperLeft;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
-        text.raycastTarget = false;
-
-        LayoutElement layout = msgObj.AddComponent<LayoutElement>();
-        layout.flexibleWidth = 1;
+        text.gameObject.name = $"LogMsg_{_messageHistory.Count}";
+        text.transform.SetParent(_combatLogContent.transform, false);
     }
 
     private void TrimScrollableLogChildren()
@@ -238,7 +283,11 @@ public class CombatLogPanel : MonoBehaviour
         while (_combatLogContent.transform.childCount > MaxMessages)
         {
             Transform oldest = _combatLogContent.transform.GetChild(0);
-            Destroy(oldest.gameObject);
+            Text oldText = oldest.GetComponent<Text>();
+            if (oldText != null)
+                _logMessagePool.Return(oldText);
+            else
+                Destroy(oldest.gameObject); // Safety fallback for non-pooled children
         }
     }
 
