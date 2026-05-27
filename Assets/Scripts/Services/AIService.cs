@@ -2609,4 +2609,300 @@ public class AIService : MonoBehaviour
             yield return new WaitForSeconds(0.3f);
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  PHASE 6A: EXTRACTED AI DECISION METHODS
+    //  Centralized from GameManager to reduce coupling and improve reuse.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Finds the closest alive enemy to the given character using Chebyshev distance.
+    /// Pure decision method — no side effects.
+    /// </summary>
+    /// <param name="source">The character to measure from.</param>
+    /// <param name="allCharacters">All characters currently in combat.</param>
+    /// <returns>The closest alive enemy, or null if none found.</returns>
+    public static CharacterController FindClosestAliveEnemy(CharacterController source, List<CharacterController> allCharacters)
+    {
+        if (source == null || allCharacters == null) return null;
+
+        CharacterController closest = null;
+        int closestDist = int.MaxValue;
+
+        for (int i = 0; i < allCharacters.Count; i++)
+        {
+            CharacterController candidate = allCharacters[i];
+            if (candidate == null || candidate == source || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!TeamUtility.IsEnemy(source, candidate))
+                continue;
+
+            int dist = SquareGridUtils.GetDistance(source.GridPosition, candidate.GridPosition);
+            if (dist < closestDist)
+            {
+                closestDist = dist;
+                closest = candidate;
+            }
+        }
+
+        return closest;
+    }
+
+    /// <summary>
+    /// Selects the best target for a summoned creature based on its current command.
+    /// Supports AttackNearest (targets closest to summon) and ProtectCaster (targets closest to caster).
+    /// </summary>
+    /// <param name="summon">The summoned creature selecting a target.</param>
+    /// <param name="caster">The caster who summoned the creature (used for ProtectCaster command).</param>
+    /// <param name="commandType">The current summon command type.</param>
+    /// <param name="allCharacters">All characters currently in combat.</param>
+    /// <returns>The best target for the summon, or null if no enemies found.</returns>
+    public static CharacterController SelectSummonTarget(
+        CharacterController summon,
+        CharacterController caster,
+        SummonCommandType commandType,
+        List<CharacterController> allCharacters)
+    {
+        if (summon == null || allCharacters == null) return null;
+
+        List<CharacterController> enemies = new List<CharacterController>();
+        for (int i = 0; i < allCharacters.Count; i++)
+        {
+            CharacterController candidate = allCharacters[i];
+            if (candidate == null || candidate == summon || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!TeamUtility.IsEnemy(summon, candidate))
+                continue;
+            enemies.Add(candidate);
+        }
+
+        if (enemies.Count == 0) return null;
+
+        switch (commandType)
+        {
+            case SummonCommandType.ProtectCaster:
+                return FindNearestEnemy(enemies, caster ?? summon);
+            case SummonCommandType.AttackNearest:
+            default:
+                return FindNearestEnemy(enemies, summon);
+        }
+    }
+
+    /// <summary>
+    /// Finds the nearest enemy to a reference character by Chebyshev distance.
+    /// Pure utility — used by summon targeting, retreat logic, and turn-undead flee.
+    /// </summary>
+    /// <param name="enemies">The pool of candidate enemies.</param>
+    /// <param name="referenceCharacter">The character to measure distance from.</param>
+    /// <returns>The nearest enemy, or null if the list is empty.</returns>
+    public static CharacterController FindNearestEnemy(List<CharacterController> enemies, CharacterController referenceCharacter)
+    {
+        if (enemies == null || enemies.Count == 0 || referenceCharacter == null) return null;
+
+        CharacterController nearest = null;
+        int nearestDist = int.MaxValue;
+
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            CharacterController enemy = enemies[i];
+            if (enemy == null) continue;
+            int dist = SquareGridUtils.GetDistance(referenceCharacter.GridPosition, enemy.GridPosition);
+            if (dist < nearestDist)
+            {
+                nearestDist = dist;
+                nearest = enemy;
+            }
+        }
+
+        return nearest;
+    }
+
+    /// <summary>
+    /// Processes NPC round-start perception: identifies visible enemies and attempts listen checks
+    /// for concealed targets tracked by the LastKnownPositionTracker.
+    /// D&D 3.5e: NPCs must attempt Listen checks to detect concealed enemies each round.
+    /// </summary>
+    /// <param name="npc">The NPC whose perception is being processed.</param>
+    /// <param name="allCharacters">All characters in combat.</param>
+    /// <param name="logCallback">Optional callback for combat log messages.</param>
+    public void ProcessRoundStartPerception(CharacterController npc, List<CharacterController> allCharacters, System.Action<string> logCallback = null)
+    {
+        if (npc == null || npc.Stats == null || npc.Stats.IsDead)
+            return;
+
+        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
+        if (tracker == null)
+            tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();
+
+        var visibleEnemies = new List<CharacterController>();
+        var concealedTrackedEnemies = new List<CharacterController>();
+
+        bool incomingIsRangedAttack = npc.IsEquippedWeaponRanged();
+
+        for (int i = 0; i < allCharacters.Count; i++)
+        {
+            CharacterController enemy = allCharacters[i];
+            if (enemy == null || enemy == npc || enemy.Stats == null || enemy.Stats.IsDead)
+                continue;
+            if (!TeamUtility.IsEnemy(npc, enemy))
+                continue;
+
+            if (npc.CanSee(enemy, incomingIsRangedAttack))
+                visibleEnemies.Add(enemy);
+            else if (tracker.HasLastKnownPosition(enemy))
+                concealedTrackedEnemies.Add(enemy);
+        }
+
+        tracker.UpdateVisibleCharacters(visibleEnemies);
+
+        if (concealedTrackedEnemies.Count > 0)
+        {
+            string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
+            logCallback?.Invoke($"{npcName} attempts to locate concealed targets:");
+            tracker.AttemptListenChecks(concealedTrackedEnemies, _gameManager);
+        }
+    }
+
+    /// <summary>
+    /// Determines whether an NPC should use a charge action to reach a target.
+    /// D&D 3.5e PHB p.154: Charge is a full-round action when target is beyond melee reach
+    /// but reachable via a valid straight-line charge path.
+    /// </summary>
+    /// <param name="npc">The NPC considering a charge.</param>
+    /// <param name="target">The intended charge target.</param>
+    /// <returns>True if the NPC should charge; false if melee is already possible or charge is invalid.</returns>
+    public bool ShouldNPCCharge(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null) return false;
+        if (npc.Actions == null || !npc.Actions.HasFullRoundAction) return false;
+        if (!npc.HasMeleeWeaponEquipped()) return false;
+        if (target.Stats == null || target.Stats.IsDead) return false;
+
+        int dist = npc.GetMinimumDistanceToTarget(target, chebyshev: true);
+        // Already in melee range — charge not needed
+        if (npc.CanMeleeAttackDistance(dist)) return false;
+
+        return _gameManager.CanChargeTargetForAI(npc, target);
+    }
+
+    /// <summary>
+    /// Selects the best target during an adaptive full-attack sequence.
+    /// When the current target dies or becomes invalid mid-attack, this method finds the next-best
+    /// in-range target using profile scoring and AIService target selection.
+    /// </summary>
+    /// <param name="attacker">The attacking NPC.</param>
+    /// <param name="profile">The NPC's AI profile for target scoring.</param>
+    /// <param name="allCharacters">All characters in combat.</param>
+    /// <param name="requireInRange">If true, only considers targets within current weapon range.</param>
+    /// <returns>The best adaptive target, or null if none available.</returns>
+    public CharacterController SelectAdaptiveFullAttackTarget(
+        CharacterController attacker,
+        AIProfile profile,
+        List<CharacterController> allCharacters,
+        bool requireInRange)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return null;
+
+        var enemies = new List<CharacterController>();
+        bool hasConsciousEnemy = false;
+
+        for (int i = 0; i < allCharacters.Count; i++)
+        {
+            CharacterController candidate = allCharacters[i];
+            if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!TeamUtility.IsEnemy(attacker, candidate))
+                continue;
+
+            enemies.Add(candidate);
+            if (!candidate.IsUnconscious)
+                hasConsciousEnemy = true;
+        }
+
+        bool ignoreUnconscious = profile != null
+            && profile.ShouldIgnoreUnconsciousTargets(attacker)
+            && hasConsciousEnemy;
+
+        var candidates = new List<CharacterController>();
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            CharacterController candidate = enemies[i];
+            if (ignoreUnconscious && candidate.IsUnconscious)
+                continue;
+
+            if (requireInRange && !attacker.IsTargetInCurrentWeaponRange(candidate))
+                continue;
+
+            candidates.Add(candidate);
+        }
+
+        if (candidates.Count == 0)
+            return null;
+
+        // Use full AIService target selection first
+        CharacterController profiled = SelectBestTarget(attacker, candidates);
+        if (profiled != null)
+            return profiled;
+
+        // Fallback: profile-based scoring
+        CharacterController best = null;
+        float bestScore = float.NegativeInfinity;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            CharacterController candidate = candidates[i];
+            float score = profile != null ? profile.ScoreTarget(candidate, attacker) : 0f;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// Evaluates which special maneuver an NPC should use against a target.
+    /// D&D 3.5e: Evaluates coup de grace, trip, disarm, grapple, and sunder in priority order
+    /// based on profile preferences, target state, and ability scores.
+    /// </summary>
+    /// <param name="npc">The NPC selecting a maneuver.</param>
+    /// <param name="target">The intended target.</param>
+    /// <param name="profile">The NPC's AI profile (optional).</param>
+    /// <returns>The recommended maneuver type, or null if no maneuver is beneficial.</returns>
+    public static SpecialAttackType? EvaluateBestManeuver(CharacterController npc, CharacterController target, AIProfile profile = null)
+    {
+        if (npc == null || target == null || npc.Stats == null || target.Stats == null)
+            return null;
+
+        bool hasImprovedGrab = npc.Stats.HasImprovedGrab;
+
+        // Trip: target must be standing, NPC must have melee weapon
+        if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped() && npc.CanPerformSpecialAttack(SpecialAttackType.Trip))
+            return SpecialAttackType.Trip;
+
+        // Disarm: target has weapon, NPC has high STR
+        if (target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3 && npc.CanPerformSpecialAttack(SpecialAttackType.Disarm))
+            return SpecialAttackType.Disarm;
+
+        // Grapple: NPC has high STR and no Improved Grab (which handles grapple differently)
+        if (npc.Stats.STRMod >= 4 && !hasImprovedGrab && npc.CanPerformSpecialAttack(SpecialAttackType.Grapple))
+            return SpecialAttackType.Grapple;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Determines if a creature is a Giant Bombardier Beetle by NPC definition ID.
+    /// Used to trigger special acid spray attacks during AI turns.
+    /// </summary>
+    /// <param name="npc">The NPC to check.</param>
+    /// <returns>True if the NPC is a Giant Bombardier Beetle.</returns>
+    public static bool IsGiantBombardierBeetle(CharacterController npc)
+    {
+        if (npc?.Stats == null) return false;
+        return string.Equals(npc.Stats.SourceNpcDefinitionId, "giant_bombardier_beetle", System.StringComparison.OrdinalIgnoreCase);
+    }
+
 }

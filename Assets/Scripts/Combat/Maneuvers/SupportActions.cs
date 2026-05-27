@@ -1793,19 +1793,9 @@ public partial class GameManager
         ShowActionChoices();
     }
 
+    /// <summary>Delegates to AIService.ShouldNPCCharge for centralized charge decision logic.</summary>
     private bool ShouldNPCUseCharge(CharacterController npc, CharacterController target)
-    {
-        if (npc == null || target == null) return false;
-        if (!npc.Actions.HasFullRoundAction) return false;
-        if (!npc.HasMeleeWeaponEquipped()) return false;
-        if (target.Stats == null || target.Stats.IsDead) return false;
-
-        int dist = npc.GetMinimumDistanceToTarget(target, chebyshev: true);
-        // Prefer charge when out of melee reach but still reachable via a valid charge path.
-        if (npc.CanMeleeAttackDistance(dist)) return false;
-
-        return CanChargeTarget(npc, target, logFailures: false);
-    }
+        => _aiService != null ? _aiService.ShouldNPCCharge(npc, target) : false;
 
     private IEnumerator NPCExecuteCharge(CharacterController npc, CharacterController target)
     {

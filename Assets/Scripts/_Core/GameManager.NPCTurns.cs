@@ -179,77 +179,14 @@ public partial class GameManager
         yield return StartCoroutine(NPCPerformAttack(summon, target));
     }
 
+    /// <summary>Delegates to AIService.SelectSummonTarget for centralized summon targeting.</summary>
     private CharacterController SelectSummonTargetByCommand(CharacterController summon, ActiveSummonInstance summonData)
     {
-        if (summon == null)
-            return null;
-
-        List<CharacterController> enemies = new List<CharacterController>();
-        foreach (var candidate in GetAllCharacters())
-        {
-            if (candidate == null || candidate == summon || candidate.Stats == null || candidate.Stats.IsDead)
-                continue;
-            if (!TeamUtility.IsEnemy(summon, candidate))
-                continue;
-            enemies.Add(candidate);
-        }
-
-        if (enemies.Count == 0)
-            return null;
-
         SummonCommandType cmd = summonData != null && summonData.CurrentCommand != null
             ? summonData.CurrentCommand.Type
             : SummonCommandType.AttackNearest;
-
-        switch (cmd)
-        {
-            case SummonCommandType.ProtectCaster:
-                return FindEnemyNearestToSummoner(enemies, summonData != null ? summonData.Caster : null, summon);
-            case SummonCommandType.AttackNearest:
-            default:
-                return FindNearestEnemyToSummon(enemies, summon);
-        }
-    }
-
-    private CharacterController FindNearestEnemyToSummon(List<CharacterController> enemies, CharacterController summon)
-    {
-        CharacterController nearest = null;
-        int nearestDist = int.MaxValue;
-
-        for (int i = 0; i < enemies.Count; i++)
-        {
-            CharacterController enemy = enemies[i];
-            int dist = SquareGridUtils.GetDistance(summon.GridPosition, enemy.GridPosition);
-            if (dist < nearestDist)
-            {
-                nearestDist = dist;
-                nearest = enemy;
-            }
-        }
-
-        return nearest;
-    }
-
-    private CharacterController FindEnemyNearestToSummoner(List<CharacterController> enemies, CharacterController summoner, CharacterController summon)
-    {
-        if (summoner == null)
-            return FindNearestEnemyToSummon(enemies, summon);
-
-        CharacterController nearest = null;
-        int nearestDist = int.MaxValue;
-
-        for (int i = 0; i < enemies.Count; i++)
-        {
-            CharacterController enemy = enemies[i];
-            int dist = SquareGridUtils.GetDistance(summoner.GridPosition, enemy.GridPosition);
-            if (dist < nearestDist)
-            {
-                nearestDist = dist;
-                nearest = enemy;
-            }
-        }
-
-        return nearest;
+        CharacterController caster = summonData != null ? summonData.Caster : null;
+        return AIService.SelectSummonTarget(summon, caster, cmd, GetAllCharacters());
     }
 
     private bool TryExecuteSummonSmiteAttack(CharacterController summon, CharacterController target, ActiveSummonInstance summonData)
@@ -733,73 +670,14 @@ public partial class GameManager
         return aggregate;
     }
 
+    /// <summary>Delegates to AIService.SelectAdaptiveFullAttackTarget for centralized target selection.</summary>
     private CharacterController SelectBestAdaptiveFullAttackTarget(
         CharacterController attacker,
         DND35.AI.AIProfile profile,
         bool requireInRange)
-    {
-        if (attacker == null || attacker.Stats == null)
-            return null;
-
-        var enemies = new List<CharacterController>();
-        bool hasConsciousEnemy = false;
-
-        foreach (CharacterController candidate in GetAllCharacters())
-        {
-            if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
-                continue;
-
-            if (!TeamUtility.IsEnemy(attacker, candidate))
-                continue;
-
-            enemies.Add(candidate);
-            if (!candidate.IsUnconscious)
-                hasConsciousEnemy = true;
-        }
-
-        bool ignoreUnconscious = profile != null
-            && profile.ShouldIgnoreUnconsciousTargets(attacker)
-            && hasConsciousEnemy;
-
-        var candidates = new List<CharacterController>();
-        for (int i = 0; i < enemies.Count; i++)
-        {
-            CharacterController candidate = enemies[i];
-            if (ignoreUnconscious && candidate.IsUnconscious)
-                continue;
-
-            if (requireInRange && !IsTargetInCurrentWeaponRange(attacker, candidate))
-                continue;
-
-            candidates.Add(candidate);
-        }
-
-        if (candidates.Count == 0)
-            return null;
-
-        if (_aiService != null)
-        {
-            CharacterController profiled = _aiService.SelectBestTarget(attacker, candidates);
-            if (profiled != null)
-                return profiled;
-        }
-
-        CharacterController best = null;
-        float bestScore = float.NegativeInfinity;
-
-        for (int i = 0; i < candidates.Count; i++)
-        {
-            CharacterController candidate = candidates[i];
-            float score = profile != null ? profile.ScoreTarget(candidate, attacker) : 0f;
-            if (score > bestScore)
-            {
-                bestScore = score;
-                best = candidate;
-            }
-        }
-
-        return best;
-    }
+        => _aiService != null
+            ? _aiService.SelectAdaptiveFullAttackTarget(attacker, profile, GetAllCharacters(), requireInRange)
+            : null;
 
     private bool TryTakeFiveFootStepForAdaptiveFullAttack(
         CharacterController attacker,
@@ -1090,13 +968,9 @@ public partial class GameManager
         return true;
     }
 
+    /// <summary>Delegates to AIService.IsGiantBombardierBeetle for centralized AI utility.</summary>
     private static bool IsGiantBombardierBeetle(CharacterController npc)
-    {
-        if (npc?.Stats == null)
-            return false;
-
-        return string.Equals(npc.Stats.SourceNpcDefinitionId, "giant_bombardier_beetle", StringComparison.OrdinalIgnoreCase);
-    }
+        => AIService.IsGiantBombardierBeetle(npc);
 
     private bool TryNPCUseBombardierAcidSpray(CharacterController npc, CharacterController primaryTarget)
     {

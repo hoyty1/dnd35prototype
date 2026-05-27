@@ -693,30 +693,9 @@ public partial class GameManager : MonoBehaviour
 
 
 
+    /// <summary>Delegates to AIService.FindClosestAliveEnemy for centralized AI decision logic.</summary>
     private CharacterController GetClosestAliveEnemyTo(CharacterController source)
-    {
-        if (source == null) return null;
-
-        CharacterController closest = null;
-        int closestDist = int.MaxValue;
-
-        foreach (var candidate in GetAllCharacters())
-        {
-            if (candidate == null || candidate == source || candidate.Stats == null || candidate.Stats.IsDead)
-                continue;
-            if (!TeamUtility.IsEnemy(source, candidate))
-                continue;
-
-            int dist = SquareGridUtils.GetDistance(source.GridPosition, candidate.GridPosition);
-            if (dist < closestDist)
-            {
-                closestDist = dist;
-                closest = candidate;
-            }
-        }
-
-        return closest;
-    }
+        => AIService.FindClosestAliveEnemy(source, GetAllCharacters());
 
     /// <summary>Get the 1-based PC index (1-4) for a given character, or 0 if not a PC.</summary>
     private int GetPCIndex(CharacterController c)
@@ -10505,43 +10484,10 @@ public partial class GameManager : MonoBehaviour
         CheckTurnUndeadProximityBreakingForMover(npc);
     }
 
+    /// <summary>Delegates to AIService.ProcessRoundStartPerception for centralized perception logic.</summary>
     private void ProcessNPCRoundStartPerception(CharacterController npc)
     {
-        if (npc == null || npc.Stats == null || npc.Stats.IsDead)
-            return;
-
-        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
-        if (tracker == null)
-            tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();
-
-        var visibleEnemies = new List<CharacterController>();
-        var concealedTrackedEnemies = new List<CharacterController>();
-
-        List<CharacterController> allCharacters = GetAllCharacters();
-        bool incomingIsRangedAttack = npc.IsEquippedWeaponRanged();
-
-        for (int i = 0; i < allCharacters.Count; i++)
-        {
-            CharacterController enemy = allCharacters[i];
-            if (enemy == null || enemy == npc || enemy.Stats == null || enemy.Stats.IsDead)
-                continue;
-            if (!TeamUtility.IsEnemy(npc, enemy))
-                continue;
-
-            if (npc.CanSee(enemy, incomingIsRangedAttack))
-                visibleEnemies.Add(enemy);
-            else if (tracker.HasLastKnownPosition(enemy))
-                concealedTrackedEnemies.Add(enemy);
-        }
-
-        tracker.UpdateVisibleCharacters(visibleEnemies);
-
-        if (concealedTrackedEnemies.Count > 0)
-        {
-            string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
-            CombatUI?.ShowCombatLog($"{npcName} attempts to locate concealed targets:");
-            tracker.AttemptListenChecks(concealedTrackedEnemies, this);
-        }
+        _aiService?.ProcessRoundStartPerception(npc, GetAllCharacters(), msg => CombatUI?.ShowCombatLog(msg));
     }
 
     public IEnumerator ExecuteGrappleRestrictedTurnForAI(CharacterController npc)
@@ -10551,7 +10497,11 @@ public partial class GameManager : MonoBehaviour
         => AI_SummonedCreature(npc);
 
     public bool ShouldNPCUseChargeForAI(CharacterController npc, CharacterController target)
-        => ShouldNPCUseCharge(npc, target);
+        => _aiService != null ? _aiService.ShouldNPCCharge(npc, target) : false;
+
+    /// <summary>Exposes charge path validation for AIService.</summary>
+    public bool CanChargeTargetForAI(CharacterController npc, CharacterController target)
+        => CanChargeTarget(npc, target, logFailures: false);
 
     public IEnumerator NPCExecuteChargeForAI(CharacterController npc, CharacterController target)
         => NPCExecuteCharge(npc, target);
