@@ -4217,7 +4217,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (character == null)
             return null;
 
-        InventoryComponent component = character.GetComponent<InventoryComponent>();
+        InventoryComponent component = character.InventoryComp;
         return component != null ? component.CharacterInventory : null;
     }
 

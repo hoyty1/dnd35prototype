@@ -296,7 +296,7 @@ public partial class GameManager
             {
                 if (target == null || target.Stats == null || target.Stats.IsDead) continue;
 
-                StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+                StatusEffectManager statusMgr = target.StatusEffectManager;
                 if (statusMgr == null)
                 {
                     statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
@@ -333,7 +333,7 @@ public partial class GameManager
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         string casterName = caster.Stats.CharacterName;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
         {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
@@ -377,7 +377,7 @@ public partial class GameManager
         int turningLevels = DiceRoller.D4() + 6; // 1d4+6
         string casterName = caster.Stats.CharacterName;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
         {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
@@ -592,7 +592,7 @@ public partial class GameManager
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
         // Apply via StatusEffectManager
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
         {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
@@ -642,7 +642,7 @@ public partial class GameManager
         target.ApplyInvisibilityEffectData(invisData);
 
         // Also register as a spell effect for duration tracking
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
         {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
@@ -673,7 +673,7 @@ public partial class GameManager
         target = caster; // Self-only
         string casterName = caster.Stats.CharacterName;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
         {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
@@ -776,7 +776,7 @@ public partial class GameManager
         string casterName = caster.Stats.CharacterName;
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
         {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();

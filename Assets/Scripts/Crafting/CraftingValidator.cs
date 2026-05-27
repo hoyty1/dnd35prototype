@@ -62,7 +62,7 @@ public static class CraftingValidator
                 // Skip the crafter themselves
                 if (crafter != null && member.Stats == crafter) continue;
 
-                var sc = member.GetComponent<SpellcastingComponent>();
+                var sc = member.Spellcasting;
                 if (sc == null) continue;
 
                 var spells = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);

@@ -3533,7 +3533,7 @@ public class CharacterStats
 
         if (OwnerCharacter != null)
         {
-            SpellcastingComponent spellcasting = OwnerCharacter.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent spellcasting = OwnerCharacter.Spellcasting;
             if (spellcasting != null)
                 spellcasting.RefreshSpellSlots();
         }
@@ -4550,7 +4550,7 @@ public class CharacterStats
         if (owner == null)
             return;
 
-        StatusEffectManager statusMgr = owner.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = owner.StatusEffectManager;
         if (statusMgr != null && statusMgr.HasEffect(SpellNames.PROTECTION_FROM_ARROWS))
             statusMgr.RemoveEffectsBySpellId(SpellNames.PROTECTION_FROM_ARROWS);
 
@@ -4572,7 +4572,7 @@ public class CharacterStats
         // Remove the DR entry that Stoneskin added
         RemoveDamageReduction(10, DamageBypassTag.Adamantine, false);
 
-        StatusEffectManager statusMgr = owner.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = owner.StatusEffectManager;
         if (statusMgr != null && statusMgr.HasEffect(SpellNames.STONESKIN))
             statusMgr.RemoveEffectsBySpellId(SpellNames.STONESKIN);
 

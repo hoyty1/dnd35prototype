@@ -35,7 +35,7 @@ public partial class GameManager
         target.Stats.DeathWardActive = true;
         target.Stats.DeathWardRoundsRemaining = durationRounds;
 
-        var statusMgr = target.GetComponent<StatusEffectManager>();
+        var statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, casterName, casterLevel);
@@ -90,7 +90,7 @@ public partial class GameManager
         target.Stats.DivinePowerBABBonus = babBonus;
         target.Stats.BaseAttackBonus += babBonus;
 
-        var statusMgr = target.GetComponent<StatusEffectManager>();
+        var statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, casterName, casterLevel);
@@ -255,7 +255,7 @@ public partial class GameManager
         if (recipient == null || recipient.Stats == null || spell == null)
             return null;
 
-        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
         if (recipientStatusMgr == null)
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);
@@ -268,7 +268,7 @@ public partial class GameManager
 
         if (effect != null)
         {
-            SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
             if (recipientSpellComp != null)
                 recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -363,7 +363,7 @@ public partial class GameManager
         caster.Stats.STR += 2;
 
         // Track via StatusEffectManager for display/cleanup
-        var statusMgr = caster.GetComponent<StatusEffectManager>();
+        var statusMgr = caster.StatusEffectManager;
         if (statusMgr != null)
         {
             int cl = caster.Stats.GetDomainBoostedCasterLevel(spell);
@@ -700,7 +700,7 @@ public partial class GameManager
         target.Stats.ActiveDimensionalAnchorEffect = effectData;
 
         // Add tracked spell effect for duration management
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             ActiveSpellEffect spellEffect = statusMgr.AddEffect(spell, casterName, casterLevel);

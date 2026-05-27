@@ -237,7 +237,7 @@ public class SolidFogAreaEffect : PersistentAreaEffect
 
     private void ApplyConcealment(CharacterController character)
     {
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = character.gameObject.AddComponent<StatusEffectManager>();
 
@@ -297,7 +297,7 @@ public class SolidFogAreaEffect : PersistentAreaEffect
 
         // Also check if creature is inside a regular Fog Cloud (same concealment spell ID would differ,
         // so we only remove OUR concealment effect).
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         if (statusMgr == null || statusMgr.ActiveEffects == null || statusMgr.ActiveEffects.Count == 0)
             return;
 

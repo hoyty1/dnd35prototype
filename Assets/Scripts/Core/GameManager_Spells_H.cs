@@ -264,7 +264,7 @@ public partial class GameManager
         if (recipient == null || recipient.Stats == null || spell == null)
             return null;
 
-        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
         if (recipientStatusMgr == null)
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);
@@ -303,7 +303,7 @@ public partial class GameManager
             // Apply custom effect data for extra attack tracking
             recipient.ApplyHasteEffect(durationRounds, caster);
 
-            SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
             if (recipientSpellComp != null)
                 recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 

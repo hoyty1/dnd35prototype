@@ -2753,7 +2753,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public static void ApplyMageArmor(CharacterController target, SpellData spell)
     {
-        var sc = target.GetComponent<SpellcastingComponent>();
+        var sc = target.Spellcasting;
         if (sc != null)
         {
             sc.MageArmorACBonus = spell.BuffACBonus;

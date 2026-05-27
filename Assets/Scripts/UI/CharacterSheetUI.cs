@@ -967,7 +967,7 @@ public class CharacterSheetUI : MonoBehaviour
         // not SpellcastingComponent.ActiveBuffs (only on spellcasters).
         // This ensures non-spellcasters (Fighter, Rogue, etc.) also show active buffs
         // like Bless, Shield of Faith, etc. that were applied to them by party spellcasters.
-        var statusMgr = SelectedPC?.GetComponent<StatusEffectManager>();
+        var statusMgr = SelectedPC?.StatusEffectManager;
         if (statusMgr != null && statusMgr.ActiveEffectCount > 0)
         {
             AddSeparator(content);
@@ -1237,7 +1237,7 @@ public class CharacterSheetUI : MonoBehaviour
         var stats = SelectedStats;
         if (stats == null) { AddLine(content, "No character selected.", 14, DimText); return; }
 
-        var spellComp = SelectedPC?.GetComponent<SpellcastingComponent>();
+        var spellComp = SelectedPC?.Spellcasting;
         if (spellComp == null)
         {
             AddLine(content, $"{stats.CharacterName} is not a spellcaster.", 13, DimText);

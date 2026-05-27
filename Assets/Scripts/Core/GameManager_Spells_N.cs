@@ -41,7 +41,7 @@ public partial class GameManager
         target.Stats.NeutralizePoisonImmunityActive = true;
         target.Stats.NeutralizePoisonImmunityRoundsRemaining = durationRounds;
 
-        var statusMgr = target.GetComponent<StatusEffectManager>();
+        var statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, casterName, casterLevel);

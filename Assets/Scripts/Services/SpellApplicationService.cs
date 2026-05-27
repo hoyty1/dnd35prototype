@@ -143,7 +143,7 @@ public class SpellApplicationService : MonoBehaviour
         if (target == null || spell == null)
             return null;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
         {
             Debug.LogWarning($"[SpellApplicationService] No StatusEffectManager on {target.Stats?.CharacterName ?? target.name}");
@@ -172,7 +172,7 @@ public class SpellApplicationService : MonoBehaviour
         if (target == null || string.IsNullOrWhiteSpace(spellId))
             return false;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null) return false;
 
         ActiveSpellEffect effectToRemove = null;
@@ -203,7 +203,7 @@ public class SpellApplicationService : MonoBehaviour
     {
         if (target == null) return;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null) return;
 
         statusMgr.RemoveAllEffects();
@@ -223,7 +223,7 @@ public class SpellApplicationService : MonoBehaviour
         if (target == null || string.IsNullOrWhiteSpace(spellId))
             return false;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null) return false;
 
         foreach (var effect in statusMgr.ActiveEffects)
@@ -247,7 +247,7 @@ public class SpellApplicationService : MonoBehaviour
         if (target == null || string.IsNullOrWhiteSpace(spellId))
             return -1;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null) return -1;
 
         foreach (var effect in statusMgr.ActiveEffects)
@@ -270,7 +270,7 @@ public class SpellApplicationService : MonoBehaviour
         var names = new List<string>();
         if (target == null) return names;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null) return names;
 
         foreach (var effect in statusMgr.ActiveEffects)
@@ -296,7 +296,7 @@ public class SpellApplicationService : MonoBehaviour
         var expired = new List<string>();
         if (character == null) return expired;
 
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         if (statusMgr == null) return expired;
 
         // StatusEffectManager.TickDurations handles this internally

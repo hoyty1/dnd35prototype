@@ -294,7 +294,7 @@ public class QuickItemUsePanel : MonoBehaviour
 
         if (_character == null) return;
 
-        var invComp = _character.GetComponent<InventoryComponent>();
+        var invComp = _character.InventoryComp;
         var inv = invComp != null ? invComp.CharacterInventory : null;
         if (inv == null || inv.GeneralSlots == null) return;
 
@@ -730,7 +730,7 @@ public class QuickItemUsePanel : MonoBehaviour
     {
         if (character == null) return 0;
 
-        var invComp = character.GetComponent<InventoryComponent>();
+        var invComp = character.InventoryComp;
         var inv = invComp != null ? invComp.CharacterInventory : null;
         if (inv == null || inv.GeneralSlots == null) return 0;
 

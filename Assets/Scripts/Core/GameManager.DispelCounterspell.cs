@@ -94,7 +94,7 @@ public partial class GameManager
         string targetName = target.Stats.CharacterName;
         int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
 
-        StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager targetStatusMgr = target.StatusEffectManager;
         if (targetStatusMgr == null || targetStatusMgr.ActiveEffects == null || targetStatusMgr.ActiveEffects.Count == 0)
         {
             CombatUI?.ShowCombatLog($"<color=#AAAAFF>🔮 {casterName} casts Dispel Magic on {targetName} — no active spell effects to dispel.</color>");

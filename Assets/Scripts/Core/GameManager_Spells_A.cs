@@ -50,7 +50,7 @@ public partial class GameManager
         target.Stats.AlignWeaponRoundsRemaining = durationRounds;
 
         // Track via StatusEffectManager
-        var statusMgr = target.GetComponent<StatusEffectManager>();
+        var statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);

@@ -340,7 +340,7 @@ public partial class GameManager
                 if (target == null || target.Stats == null || target.Stats.IsDead)
                     continue;
 
-                StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+                StatusEffectManager statusMgr = target.StatusEffectManager;
                 if (statusMgr == null)
                     statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
                 statusMgr.Init(target.Stats);

@@ -12,7 +12,7 @@ public class CharacterInventory : MonoBehaviour
     public void Initialize(CharacterController character)
     {
         _character = character;
-        _inventoryComponent = _character != null ? _character.GetComponent<InventoryComponent>() : null;
+        _inventoryComponent = _character != null ? _character.InventoryComp : null;
 
         if (_inventoryComponent == null)
         {
@@ -27,7 +27,7 @@ public class CharacterInventory : MonoBehaviour
             return null;
 
         if (_inventoryComponent == null)
-            _inventoryComponent = _character.GetComponent<InventoryComponent>();
+            _inventoryComponent = _character.InventoryComp;
 
         return _inventoryComponent;
     }

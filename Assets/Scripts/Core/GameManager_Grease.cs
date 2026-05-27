@@ -513,7 +513,7 @@ public partial class GameManager
             ClearSpellcastResourceSnapshot();
 
             int durationRounds = GetGreaseDurationRounds(caster);
-            StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+            StatusEffectManager statusMgr = target.StatusEffectManager;
             if (statusMgr == null)
                 statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
             statusMgr.Init(target.Stats);

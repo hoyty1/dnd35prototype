@@ -37,7 +37,7 @@ public static class ImbueWithSpellAbilityManager
             return (false, "Cannot imbue yourself.");
 
         // Target must be a non-spellcaster
-        var targetSpellComp = target.GetComponent<SpellcastingComponent>();
+        var targetSpellComp = target.Spellcasting;
         if (targetSpellComp != null && targetSpellComp.CanCastSpells)
             return (false, $"{target.Stats.CharacterName} is already a spellcaster.");
 
@@ -87,7 +87,7 @@ public static class ImbueWithSpellAbilityManager
         CharacterController caster, int maxLevel)
     {
         var result = new List<(SpellSlot, int)>();
-        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        var spellComp = caster.Spellcasting;
         if (spellComp == null) return result;
 
         for (int i = 0; i < spellComp.SpellSlots.Count; i++)
@@ -119,7 +119,7 @@ public static class ImbueWithSpellAbilityManager
         List<int> selectedSlotIndices)
     {
         if (caster == null || target == null) return;
-        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        var spellComp = caster.Spellcasting;
         if (spellComp == null) return;
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
@@ -245,7 +245,7 @@ public static class ImbueWithSpellAbilityManager
     private static void UnlockCasterSlot(CharacterController caster, int slotIndex)
     {
         if (caster == null) return;
-        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        var spellComp = caster.Spellcasting;
         if (spellComp == null) return;
 
         if (slotIndex >= 0 && slotIndex < spellComp.SpellSlots.Count)
@@ -276,7 +276,7 @@ public static class ImbueWithSpellAbilityManager
         // Unlock caster slots
         if (caster != null && caster.Stats != null)
         {
-            var spellComp = caster.GetComponent<SpellcastingComponent>();
+            var spellComp = caster.Spellcasting;
             if (spellComp != null)
             {
                 foreach (int idx in caster.Stats.ImbueLockedSlotIndices)
@@ -299,7 +299,7 @@ public static class ImbueWithSpellAbilityManager
             caster.Stats.ImbueLockedSlotIndices.Clear();
 
             // Remove status effect from caster
-            var casterStatusMgr = caster.GetComponent<StatusEffectManager>();
+            var casterStatusMgr = caster.StatusEffectManager;
             casterStatusMgr?.RemoveEffectsBySpellId(SpellNames.IMBUE_WITH_SPELL_ABILITY);
         }
 
@@ -312,7 +312,7 @@ public static class ImbueWithSpellAbilityManager
             target.Stats.ImbueCaster = null;
 
             // Remove status effect from target
-            var targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            var targetStatusMgr = target.StatusEffectManager;
             targetStatusMgr?.RemoveEffectsBySpellId(SpellNames.IMBUE_WITH_SPELL_ABILITY);
 
             if (remainingCount > 0)

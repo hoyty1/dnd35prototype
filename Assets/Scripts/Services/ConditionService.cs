@@ -204,7 +204,7 @@ public class ConditionService : MonoBehaviour
         ResolveTurnStartEscapeChecks(actor);
 
         actor.Stats?.RefreshNegativeLevelState();
-        SpellcastingComponent spellComp = actor.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = actor.Spellcasting;
         spellComp?.ApplyNegativeLevelSlotLoss();
     }
 

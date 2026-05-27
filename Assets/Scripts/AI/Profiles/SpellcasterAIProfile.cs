@@ -90,7 +90,7 @@ namespace DND35.AI.Profiles
             if ((spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Illusion)
                 && caster != null && caster.Stats != null)
             {
-                StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
+                StatusEffectManager statusMgr = caster.StatusEffectManager;
                 if (statusMgr != null && statusMgr.HasEffect(spell.SpellId))
                 {
                     int remaining = statusMgr.GetRemainingRounds(spell.SpellId);

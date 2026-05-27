@@ -36,7 +36,7 @@ public partial class GameManager
         if (caster == null || _pendingSpell == null) return false;
 
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
-        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        var spellComp = caster.Spellcasting;
         if (spellComp == null)
         {
             Debug.LogError("[GameManager] TryConsumePendingSpellCast: No SpellcastingComponent!");
@@ -411,7 +411,7 @@ public partial class GameManager
                 && casterIncapacitated
                 && IsCasterMaintainingSummonSwarmConcentration(summon.Caster))
             {
-                ConcentrationManager casterConc = summon.Caster.GetComponent<ConcentrationManager>();
+                ConcentrationManager casterConc = summon.Caster.Concentration;
                 if (casterConc != null)
                 {
                     string breakLog = casterConc.ForceBreakConcentration("incapacitated");
@@ -1374,7 +1374,7 @@ public partial class GameManager
         if (target == null)
             return false;
 
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             foreach (ActiveSpellEffect effect in statusMgr.ActiveEffects)
@@ -1390,7 +1390,7 @@ public partial class GameManager
             }
         }
 
-        SpellcastingComponent spellComp = target.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = target.Spellcasting;
         if (spellComp != null
             && spellComp.ActiveBuffs != null
             && spellComp.ActiveBuffs.TryGetValue(SpellNames.SHIELD, out int rounds)
@@ -1505,7 +1505,7 @@ public partial class GameManager
 
         CaptureSpellcastResourceSnapshot(caster);
 
-        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        var spellComp = caster.Spellcasting;
         if (spellComp == null)
         {
             ClearSpellcastResourceSnapshot();
@@ -1741,7 +1741,7 @@ public partial class GameManager
         else
         {
             // Mark that this character has used their one quickened spell for this round
-            var casterSpellComp = caster.GetComponent<SpellcastingComponent>();
+            var casterSpellComp = caster.Spellcasting;
             if (casterSpellComp != null)
             {
                 casterSpellComp.MarkQuickenedSpellCast();
@@ -1749,7 +1749,7 @@ public partial class GameManager
         }
 
         // Get spellcasting component
-        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        var spellComp = caster.Spellcasting;
         if (spellComp == null)
         {
             ClearSpellcastResourceSnapshot();
@@ -3604,13 +3604,13 @@ public partial class GameManager
         }
         else
         {
-            var casterSpellComp = caster.GetComponent<SpellcastingComponent>();
+            var casterSpellComp = caster.Spellcasting;
             if (casterSpellComp != null)
                 casterSpellComp.MarkQuickenedSpellCast();
         }
 
         // Get spellcasting component
-        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        var spellComp = caster.Spellcasting;
         if (spellComp == null)
         {
             ClearSpellcastResourceSnapshot();
@@ -5764,7 +5764,7 @@ public partial class GameManager
         target.ApplyGhoulTouchEffect(ghoulEffect);
 
         // Track via StatusEffectManager for dispel/duration
-        StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager targetStatusMgr = target.StatusEffectManager;
         if (targetStatusMgr == null)
         {
             targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
@@ -6786,7 +6786,7 @@ public partial class GameManager
                 Debug.Log("[GameManager] True Strike attempted on non-caster target; ignoring target and applying to caster only.");
             }
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             recipientStatusMgr?.RemoveEffectsBySpellId(SpellNames.TRUE_STRIKE);
 
             TrueStrikeEffect existing = recipient.GetComponent<TrueStrikeEffect>();
@@ -6807,7 +6807,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -6828,7 +6828,7 @@ public partial class GameManager
             {
                 recipient.ApplyDisguiseSelfEffect(selectedRace, effect.RemainingRounds, caster);
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -6846,7 +6846,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -6857,7 +6857,7 @@ public partial class GameManager
             {
                 recipient.ApplyExpeditiousRetreatEffect(effect.AppliedSpeedBonusFeet, effect.RemainingRounds, caster);
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -6874,7 +6874,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -6885,7 +6885,7 @@ public partial class GameManager
             {
                 recipient.ApplySeeInvisibilityEffect(effect.RemainingRounds, recipient);
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -6913,7 +6913,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -6924,7 +6924,7 @@ public partial class GameManager
             {
                 recipient.ApplyInvisibilityEffect(effect.RemainingRounds, caster, isMoving: false);
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -6942,7 +6942,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -6951,7 +6951,7 @@ public partial class GameManager
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7102,7 +7102,7 @@ public partial class GameManager
             if (recipient == null || recipient.Stats == null)
                 return null;
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -7122,7 +7122,7 @@ public partial class GameManager
                     AttacksBlocked = 0
                 };
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7179,7 +7179,7 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog($"<color=#888888>🔧 [Test] {casterStats.CharacterName} casts Stoneskin (component check bypassed for testing).</color>");
             }
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -7200,7 +7200,7 @@ public partial class GameManager
                     HitsBlocked = 0
                 };
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7273,7 +7273,7 @@ public partial class GameManager
             SpectralHandEffectData spectralHandEffect = SpectralHandEffectData.CreateWithHP(handHP, casterLevel, intMod, recipient);
 
             // Track via StatusEffectManager for duration and dispel
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -7284,7 +7284,7 @@ public partial class GameManager
                 // Apply the effect (handles HP loss)
                 recipient.ApplySpectralHandEffect(spectralHandEffect);
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7318,7 +7318,7 @@ public partial class GameManager
                 spell.SpellId, casterLevel, targetHD, caster);
 
             // Track via StatusEffectManager for duration and dispel (handles stat bonus apply/reverse)
-            StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            StatusEffectManager targetStatusMgr = target.StatusEffectManager;
             if (targetStatusMgr == null)
                 targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
             targetStatusMgr.Init(target.Stats);
@@ -7332,7 +7332,7 @@ public partial class GameManager
                 target.ApplyAttributeEnhancement(enhancementEffect);
 
                 // Track in SpellcastingComponent for backward compat
-                SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent targetSpellComp = target.Spellcasting;
                 if (targetSpellComp != null)
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7375,7 +7375,7 @@ public partial class GameManager
             FalseLifeEffectData falseLifeEffect = FalseLifeEffectData.CreateFalseLife(casterLevel, recipient);
 
             // Track via StatusEffectManager for duration and dispel
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -7386,7 +7386,7 @@ public partial class GameManager
                 // Apply the rolled temp HP via CharacterController (handles non-stacking)
                 recipient.ApplyFalseLifeEffect(falseLifeEffect);
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7413,7 +7413,7 @@ public partial class GameManager
             int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
             int saveDC = 10 + spell.SpellLevel + (recipient.Stats != null ? recipient.Stats.WISMod : 0);
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -7425,7 +7425,7 @@ public partial class GameManager
                 recipient.Stats.SanctuaryDC = saveDC;
                 recipient.Stats.SanctuaryCasterLevel = casterLevel;
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7446,7 +7446,7 @@ public partial class GameManager
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int saveDC = 10 + spell.SpellLevel + (caster != null && caster.Stats != null ? caster.Stats.WISMod : 0);
 
-            StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            StatusEffectManager targetStatusMgr = target.StatusEffectManager;
             if (targetStatusMgr == null)
                 targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
             targetStatusMgr.Init(target.Stats);
@@ -7458,7 +7458,7 @@ public partial class GameManager
                 target.Stats.HideFromUndeadDC = saveDC;
                 target.Stats.HideFromUndeadCasterLevel = casterLevel;
 
-                SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent targetSpellComp = target.Spellcasting;
                 if (targetSpellComp != null)
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7500,7 +7500,7 @@ public partial class GameManager
             }
 
             // Apply +4 morale bonus vs fear for 10 minutes
-            StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            StatusEffectManager targetStatusMgr = target.StatusEffectManager;
             if (targetStatusMgr == null)
                 targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
             targetStatusMgr.Init(target.Stats);
@@ -7510,7 +7510,7 @@ public partial class GameManager
             {
                 target.Stats.RemoveFearMoraleBonus = 4;
 
-                SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent targetSpellComp = target.Spellcasting;
                 if (targetSpellComp != null)
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7533,7 +7533,7 @@ public partial class GameManager
 
             int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -7544,7 +7544,7 @@ public partial class GameManager
                 recipient.Stats.EntropicShieldActive = true;
                 recipient.Stats.EntropicShieldCasterLevel = casterLevel;
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7567,7 +7567,7 @@ public partial class GameManager
 
             int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
 
-            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
@@ -7579,7 +7579,7 @@ public partial class GameManager
                 recipient.Stats.MagicStoneCharges = 3;
                 recipient.Stats.MagicStoneCasterLevel = casterLevel;
 
-                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7606,7 +7606,7 @@ public partial class GameManager
             else if (casterLevel >= 12) deflectionBonus = 4;
             else if (casterLevel >= 6) deflectionBonus = 3;
 
-            StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            StatusEffectManager targetStatusMgr = target.StatusEffectManager;
             if (targetStatusMgr == null)
                 targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
             targetStatusMgr.Init(target.Stats);
@@ -7621,7 +7621,7 @@ public partial class GameManager
                 target.Stats.DeflectionBonus = Mathf.Max(target.Stats.DeflectionBonus, deflectionBonus);
                 target.Stats.ShieldOfFaithDeflectionBonus = deflectionBonus;
 
-                SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent targetSpellComp = target.Spellcasting;
                 if (targetSpellComp != null)
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -7654,7 +7654,7 @@ public partial class GameManager
         }
 
         // Use StatusEffectManager for tracked buff application
-        var statusMgr = target.GetComponent<StatusEffectManager>();
+        var statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             // Defensive rebind: some encounter presets reinitialize CharacterStats objects on existing
@@ -7667,7 +7667,7 @@ public partial class GameManager
             if (effect != null)
             {
                 // Also track in SpellcastingComponent's ActiveBuffs for backward compat
-                var targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                var targetSpellComp = target.Spellcasting;
                 if (targetSpellComp != null)
                 {
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
@@ -7829,7 +7829,7 @@ public partial class GameManager
         }
 
         // ===== LEGACY FALLBACK (no StatusEffectManager) =====
-        var legacySpellComp = target.GetComponent<SpellcastingComponent>();
+        var legacySpellComp = target.Spellcasting;
 
         if (spell.SpellId == SpellNames.MAGE_ARMOR)
         {
@@ -7977,7 +7977,7 @@ public partial class GameManager
     {
         if (!IsActiveCombatant(character) || character.Stats.IsDead)
             return;
-        var statusMgr = character.GetComponent<StatusEffectManager>();
+        var statusMgr = character.StatusEffectManager;
         if (statusMgr != null && statusMgr.ActiveEffectCount > 0)
         {
             var expired = statusMgr.TickAllEffects();
@@ -8211,7 +8211,7 @@ public partial class GameManager
         if (character == null || character.Stats == null)
             return;
 
-        InventoryComponent inventoryComponent = character.GetComponent<InventoryComponent>();
+        InventoryComponent inventoryComponent = character.InventoryComp;
         Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
         if (inventory == null)
             return;
@@ -8485,7 +8485,7 @@ public partial class GameManager
             QuickenedSpellUsed = false
         };
 
-        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        var spellComp = caster.Spellcasting;
         if (spellComp != null)
         {
             snapshot.QuickenedSpellUsed = spellComp.HasCastQuickenedSpellThisRound;
@@ -8517,7 +8517,7 @@ public partial class GameManager
         caster.Actions.SwiftActionUsed = _pendingSpellcastSnapshot.SwiftActionUsed;
         caster.Actions.StandardConvertedToMove = _pendingSpellcastSnapshot.StandardConvertedToMove;
 
-        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        var spellComp = caster.Spellcasting;
         if (spellComp != null)
         {
             spellComp.HasCastQuickenedSpellThisRound = _pendingSpellcastSnapshot.QuickenedSpellUsed;
@@ -8579,7 +8579,7 @@ public partial class GameManager
         if (caster == null)
             return false;
 
-        ConcentrationManager concMgr = caster.GetComponent<ConcentrationManager>();
+        ConcentrationManager concMgr = caster.Concentration;
         if (concMgr == null || !concMgr.IsConcentrating || concMgr.ConcentratingOn == null || concMgr.ConcentratingOn.Spell == null)
             return false;
 
@@ -8591,7 +8591,7 @@ public partial class GameManager
         if (caster == null || spell == null)
             return;
 
-        ConcentrationManager concMgr = caster.GetComponent<ConcentrationManager>();
+        ConcentrationManager concMgr = caster.Concentration;
         if (concMgr == null)
             return;
 
@@ -8658,8 +8658,8 @@ public partial class GameManager
     {
         if (character == null || damageTaken <= 0) return;
 
-        var concMgr = character.GetComponent<ConcentrationManager>();
-        var spellComp = character.GetComponent<SpellcastingComponent>();
+        var concMgr = character.Concentration;
+        var spellComp = character.Spellcasting;
 
         bool hasConcentrationSpell = concMgr != null && concMgr.IsConcentrating;
         bool hasHeldTouchCharge = spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null;
@@ -8741,7 +8741,7 @@ public partial class GameManager
     {
         if (caster == null || newSpell == null) return true;
 
-        var concMgr = caster.GetComponent<ConcentrationManager>();
+        var concMgr = caster.Concentration;
         if (concMgr == null || !concMgr.IsConcentrating) return true;
 
         if (IsCasterMaintainingSummonSwarmConcentration(caster)
@@ -8796,7 +8796,7 @@ public partial class GameManager
         if (caster == null || effect == null || spell == null) return;
         if (spell.DurationType != DurationType.Concentration) return;
 
-        var concMgr = caster.GetComponent<ConcentrationManager>();
+        var concMgr = caster.Concentration;
         if (concMgr == null) return;
 
         if (IsCasterMaintainingSummonSwarmConcentration(caster)
@@ -8820,7 +8820,7 @@ public partial class GameManager
     {
         if (character == null) return;
 
-        var concMgr = character.GetComponent<ConcentrationManager>();
+        var concMgr = character.Concentration;
         if (concMgr == null || !concMgr.IsConcentrating) return;
 
         bool wasSummonSwarm = IsCasterMaintainingSummonSwarmConcentration(character);
@@ -8861,7 +8861,7 @@ public partial class GameManager
         }
 
         // Ensure StatusEffectManager exists
-        StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = caster.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = caster.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(caster.Stats);

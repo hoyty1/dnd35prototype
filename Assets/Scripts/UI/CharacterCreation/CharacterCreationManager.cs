@@ -348,7 +348,7 @@ public class CharacterCreationManager : MonoBehaviour
             _levelingCharacter.Stats.ChosenDomains = new List<string>(domains);
             Debug.Log($"[CharacterCreation] Domains selected: {string.Join(", ", domains)}");
 
-            SpellcastingComponent spellcasting = _levelingCharacter.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent spellcasting = _levelingCharacter.Spellcasting;
             if (spellcasting != null)
             {
                 spellcasting.RefreshSpellSlots();
@@ -423,7 +423,7 @@ public class CharacterCreationManager : MonoBehaviour
         if (_levelingCharacter == null || selectedSpellIds == null || selectedSpellIds.Count == 0)
             return;
 
-        SpellcastingComponent spellcasting = _levelingCharacter.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellcasting = _levelingCharacter.Spellcasting;
         if (spellcasting == null)
         {
             Debug.LogWarning("[CharacterCreationManager] No SpellcastingComponent found while applying level-up spells.");
@@ -457,9 +457,9 @@ public class CharacterCreationManager : MonoBehaviour
             return null;
 
         if (!IsSpellcaster(progressionClass))
-            return _levelingCharacter.GetComponent<SpellcastingComponent>();
+            return _levelingCharacter.Spellcasting;
 
-        SpellcastingComponent spellcasting = _levelingCharacter.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellcasting = _levelingCharacter.Spellcasting;
         bool createdDuringLevelUp = false;
         int wizardKnownBeforeRefresh = 0;
 
@@ -519,7 +519,7 @@ public class CharacterCreationManager : MonoBehaviour
 
         if (_levelingCharacter != null)
         {
-            SpellcastingComponent spellcasting = _levelingCharacter.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent spellcasting = _levelingCharacter.Spellcasting;
             if (spellcasting != null)
             {
                 Debug.Log($"[CharacterCreationManager] Refreshing spell slots after level-up for {name}");

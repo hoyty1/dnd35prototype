@@ -888,7 +888,7 @@ public partial class GameManager
         if (target.Stats.IsDead)
             return false;
 
-        SpellcastingComponent spellComp = npc.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = npc.Spellcasting;
         if (spellComp == null || !spellComp.CanCastSpells)
             return false;
 
@@ -1534,7 +1534,7 @@ public partial class GameManager
     {
         foreach (var character in GetAllCharacters())
         {
-            var spellComp = character.GetComponent<SpellcastingComponent>();
+            var spellComp = character.Spellcasting;
             if (spellComp != null)
             {
                 spellComp.ResetQuickenedSpellTracking();

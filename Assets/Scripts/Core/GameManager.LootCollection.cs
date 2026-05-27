@@ -711,7 +711,7 @@ public partial class GameManager
         if (character == null)
             return null;
 
-        InventoryComponent inventoryComponent = character.GetComponent<InventoryComponent>();
+        InventoryComponent inventoryComponent = character.InventoryComp;
         return inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
     }
 

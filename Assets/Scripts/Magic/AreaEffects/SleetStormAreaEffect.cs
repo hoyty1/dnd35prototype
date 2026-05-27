@@ -213,7 +213,7 @@ public class SleetStormAreaEffect : PersistentAreaEffect
 
     private void ApplyConcealment(CharacterController character)
     {
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = character.gameObject.AddComponent<StatusEffectManager>();
 
@@ -269,7 +269,7 @@ public class SleetStormAreaEffect : PersistentAreaEffect
                 return;
         }
 
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         if (statusMgr == null || statusMgr.ActiveEffects == null || statusMgr.ActiveEffects.Count == 0)
             return;
 

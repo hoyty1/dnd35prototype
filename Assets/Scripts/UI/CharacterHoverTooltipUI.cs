@@ -173,7 +173,7 @@ public class CharacterHoverTooltipUI : MonoBehaviour
                     hash = (hash * 31) + character.Stats.ChallengeRating.GetHashCode();
             }
 
-            InventoryComponent inventoryComponent = character.GetComponent<InventoryComponent>();
+            InventoryComponent inventoryComponent = character.InventoryComp;
             Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
             if (inventory != null)
             {

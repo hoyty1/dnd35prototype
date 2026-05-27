@@ -1248,7 +1248,7 @@ public class CombatFlowService : MonoBehaviour
             attacker.Stats.SanctuaryActive = false;
             attacker.Stats.SanctuaryDC = 0;
             attacker.Stats.SanctuaryCasterLevel = 0;
-            var statusMgr = attacker.GetComponent<StatusEffectManager>();
+            var statusMgr = attacker.StatusEffectManager;
             statusMgr?.RemoveEffectsBySpellId(SpellNames.SANCTUARY);
             string name = attacker.Stats.CharacterName;
             Debug.Log($"[Sanctuary] {name} attacks — Sanctuary spell ends.");
@@ -1262,7 +1262,7 @@ public class CombatFlowService : MonoBehaviour
             attacker.Stats.HideFromUndeadActive = false;
             attacker.Stats.HideFromUndeadDC = 0;
             attacker.Stats.HideFromUndeadCasterLevel = 0;
-            var statusMgr = attacker.GetComponent<StatusEffectManager>();
+            var statusMgr = attacker.StatusEffectManager;
             statusMgr?.RemoveEffectsBySpellId(SpellNames.HIDE_FROM_UNDEAD);
             string name = attacker.Stats.CharacterName;
             Debug.Log($"[HideFromUndead] {name} attacks — Hide from Undead spell ends.");

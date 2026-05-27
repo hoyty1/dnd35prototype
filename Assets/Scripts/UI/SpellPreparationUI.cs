@@ -279,7 +279,7 @@ public class SpellPreparationUI : MonoBehaviour
         if (!isPreparedCasterClass)
             return false;
 
-        SpellcastingComponent spellComp = character.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = character.Spellcasting;
         if (spellComp == null)
             return false;
 
@@ -301,7 +301,7 @@ public class SpellPreparationUI : MonoBehaviour
         }
 
         CharacterController character = _preparingCharacters[_currentCharacterIndex];
-        SpellcastingComponent spellComp = character != null ? character.GetComponent<SpellcastingComponent>() : null;
+        SpellcastingComponent spellComp = character != null ? character.Spellcasting : null;
         if (spellComp == null)
         {
             Debug.LogWarning("[SpellPrep] Character missing SpellcastingComponent during flow; advancing.");
@@ -331,7 +331,7 @@ public class SpellPreparationUI : MonoBehaviour
         }
 
         CharacterController character = _preparingCharacters[_currentCharacterIndex];
-        SpellcastingComponent spellComp = character != null ? character.GetComponent<SpellcastingComponent>() : null;
+        SpellcastingComponent spellComp = character != null ? character.Spellcasting : null;
         if (spellComp == null)
         {
             AdvanceToNextCharacter();

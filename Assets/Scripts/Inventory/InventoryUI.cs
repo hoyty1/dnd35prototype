@@ -855,7 +855,7 @@ public class InventoryUI : MonoBehaviour
     private Inventory GetInventory()
     {
         if (CurrentCharacter == null) return null;
-        return CurrentCharacter.GetComponent<InventoryComponent>()?.CharacterInventory;
+        return CurrentCharacter.InventoryComp?.CharacterInventory;
     }
 
     private void NotifyStatsChanged()

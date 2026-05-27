@@ -26,7 +26,7 @@ public class CharacterEquipment : MonoBehaviour
         if (_character == null)
             return null;
 
-        InventoryComponent invComp = _character.GetComponent<InventoryComponent>();
+        InventoryComponent invComp = _character.InventoryComp;
         return invComp != null ? invComp.CharacterInventory : null;
     }
 

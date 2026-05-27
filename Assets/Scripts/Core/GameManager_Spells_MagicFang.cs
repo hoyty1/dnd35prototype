@@ -52,7 +52,7 @@ public partial class GameManager
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
         string recipientName = recipient.Stats.CharacterName;
 
-        StatusEffectManager statusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = recipient.StatusEffectManager;
         if (statusMgr == null)
         {
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
@@ -82,7 +82,7 @@ public partial class GameManager
             effect.AppliedAttackBonus = enhancementBonus;
             effect.AppliedDamageBonus = enhancementBonus;
 
-            SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
             if (recipientSpellComp != null)
                 recipientSpellComp.ActiveBuffs[spell.SpellId] = durationRounds;
         }

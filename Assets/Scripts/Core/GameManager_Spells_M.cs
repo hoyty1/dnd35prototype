@@ -133,7 +133,7 @@ public partial class GameManager
             }
 
             // Apply the size change via StatusEffectManager (same path as base Enlarge/Reduce Person)
-            StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            StatusEffectManager targetStatusMgr = target.StatusEffectManager;
             if (targetStatusMgr == null)
                 targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
             targetStatusMgr.Init(target.Stats);
@@ -145,7 +145,7 @@ public partial class GameManager
 
             if (effect != null)
             {
-                SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                SpellcastingComponent targetSpellComp = target.Spellcasting;
                 if (targetSpellComp != null)
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -214,7 +214,7 @@ public partial class GameManager
         int enhBonus = Mathf.Clamp(casterLevel / 4, 1, 5);
 
         // Track effect via StatusEffectManager for proper duration/dispel
-        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
         if (recipientStatusMgr == null)
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);
@@ -231,7 +231,7 @@ public partial class GameManager
             recipient.Stats.MagicVestmentACBonus = enhBonus;
             effect.CustomTag = "MagicVestment";
 
-            SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
             if (recipientSpellComp != null)
                 recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
         }

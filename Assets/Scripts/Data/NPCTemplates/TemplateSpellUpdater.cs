@@ -95,7 +95,7 @@ public static class TemplateSpellUpdater
             if (template == null) continue;
 
             // Update the character's SpellcastingComponent
-            var spellcasting = character.GetComponent<SpellcastingComponent>();
+            var spellcasting = character.Spellcasting;
             if (spellcasting == null) continue;
 
             int newSpells = UpdateRuntimeSpellcasting(character, spellcasting, template);

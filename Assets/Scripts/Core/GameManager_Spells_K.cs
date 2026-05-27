@@ -143,7 +143,7 @@ public partial class GameManager
         weapons = new List<ItemData>();
         labels = new List<string>();
 
-        var inventory = target.GetComponent<InventoryComponent>()?.CharacterInventory;
+        var inventory = target.InventoryComp?.CharacterInventory;
         if (inventory == null)
             return false;
 

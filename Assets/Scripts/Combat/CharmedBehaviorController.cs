@@ -128,7 +128,7 @@ public sealed class CharmedBehaviorController
         if (actor == null || actor.Stats == null || !actor.Stats.IsSpellcaster)
             return false;
 
-        SpellcastingComponent spellcasting = actor.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellcasting = actor.Spellcasting;
         if (spellcasting == null || !spellcasting.CanCastSpells)
             return false;
 
@@ -171,7 +171,7 @@ public sealed class CharmedBehaviorController
                 return false;
         }
 
-        InventoryComponent invComp = actor.GetComponent<InventoryComponent>();
+        InventoryComponent invComp = actor.InventoryComp;
         Inventory inventory = invComp != null ? invComp.CharacterInventory : null;
         if (inventory == null || inventory.GeneralSlots == null)
             return false;

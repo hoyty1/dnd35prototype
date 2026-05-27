@@ -98,7 +98,7 @@ namespace DND35.AI.Profiles
             if (self.GetEquippedMainWeapon() != null)
                 return false;
 
-            InventoryComponent inventoryComponent = self.GetComponent<InventoryComponent>();
+            InventoryComponent inventoryComponent = self.InventoryComp;
             Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
             if (inventory == null || inventory.GeneralSlots == null)
                 return false;

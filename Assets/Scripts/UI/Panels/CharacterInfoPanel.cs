@@ -253,9 +253,9 @@ public class CharacterInfoPanel : MonoBehaviour
             return;
         }
 
-        StatusEffectManager statusMgr = ch.GetComponent<StatusEffectManager>();
-        ConcentrationManager concMgr = ch.GetComponent<ConcentrationManager>();
-        SpellcastingComponent spellComp = ch.GetComponent<SpellcastingComponent>();
+        StatusEffectManager statusMgr = ch.StatusEffectManager;
+        ConcentrationManager concMgr = ch.Concentration;
+        SpellcastingComponent spellComp = ch.Spellcasting;
 
         string buffStr = (statusMgr != null && statusMgr.ActiveEffectCount > 0)
             ? statusMgr.GetBuffSummaryString()

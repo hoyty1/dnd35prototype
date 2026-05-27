@@ -198,7 +198,7 @@ public static class WondrousItemActivation
         foreach (var pc in partyMembers)
         {
             if (pc == null) continue;
-            var inv = pc.GetComponent<InventoryComponent>();
+            var inv = pc.InventoryComp;
             if (inv == null) continue;
 
             // Reset haste state on character stats
@@ -308,7 +308,7 @@ public static class WondrousItemActivation
         foreach (var pc in partyMembers)
         {
             if (pc == null) continue;
-            var inv = pc.GetComponent<InventoryComponent>();
+            var inv = pc.InventoryComp;
             if (inv == null) continue;
             resetCount += ResetWeeklyUsesForInventory(inv.CharacterInventory);
         }
@@ -328,7 +328,7 @@ public static class WondrousItemActivation
         foreach (var pc in partyMembers)
         {
             if (pc == null) continue;
-            var inv = pc.GetComponent<InventoryComponent>();
+            var inv = pc.InventoryComp;
             if (inv == null) continue;
             resetCount += ResetMonthlyUsesForInventory(inv.CharacterInventory);
         }
@@ -498,7 +498,7 @@ public static class WondrousItemActivation
     public static ItemData FindEquippedBootsOfSpeed(CharacterController character)
     {
         if (character == null) return null;
-        var inv = character.GetComponent<InventoryComponent>();
+        var inv = character.InventoryComp;
         if (inv == null || inv.CharacterInventory == null) return null;
 
         ItemData feetItem = inv.CharacterInventory.GetEquipped(EquipSlot.Feet);

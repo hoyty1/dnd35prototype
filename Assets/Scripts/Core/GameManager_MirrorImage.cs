@@ -53,7 +53,7 @@ public partial class GameManager
 
         ClearMirrorImageForCaster(recipient, "recast", removeStatusEffect: true, log: false);
 
-        StatusEffectManager statusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = recipient.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats);
@@ -87,7 +87,7 @@ public partial class GameManager
 
         _mirrorImageStates[recipient] = state;
 
-        SpellcastingComponent spellComp = recipient.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = recipient.Spellcasting;
         if (spellComp != null)
             spellComp.ActiveBuffs[SpellNames.MIRROR_IMAGE] = effect.RemainingRounds;
 
@@ -368,10 +368,10 @@ public partial class GameManager
 
         if (removeStatusEffect)
         {
-            StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
+            StatusEffectManager statusMgr = caster.StatusEffectManager;
             statusMgr?.RemoveEffectsBySpellId(SpellNames.MIRROR_IMAGE);
 
-            SpellcastingComponent spellComp = caster.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent spellComp = caster.Spellcasting;
             spellComp?.ActiveBuffs?.Remove(SpellNames.MIRROR_IMAGE);
         }
 
@@ -559,7 +559,7 @@ public partial class GameManager
 
         state.Effect = mirrorEffect;
 
-        SpellcastingComponent spellComp = caster.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = caster.Spellcasting;
         if (spellComp != null)
             spellComp.ActiveBuffs[SpellNames.MIRROR_IMAGE] = mirrorEffect.RemainingRounds;
     }

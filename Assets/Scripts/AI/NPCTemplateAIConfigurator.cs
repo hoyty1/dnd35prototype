@@ -56,7 +56,7 @@ public static class NPCTemplateAIConfigurator
         if (character == null || template == null) return;
 
         // Configure SpellcastingComponent if present
-        var spellcasting = character.GetComponent<SpellcastingComponent>();
+        var spellcasting = character.Spellcasting;
         if (spellcasting != null && template.Spellcasting != null)
         {
             ConfigureRuntimeSpellcasting(character, spellcasting, template);

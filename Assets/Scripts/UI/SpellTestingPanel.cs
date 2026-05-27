@@ -810,7 +810,7 @@ public class SpellTestingPanel : MonoBehaviour
         if (caster == null || caster.Stats == null) return;
 
         // If the character is already a spellcaster with a SpellcastingComponent, nothing to do
-        if (caster.Stats.IsSpellcaster && caster.GetComponent<SpellcastingComponent>() != null)
+        if (caster.Stats.IsSpellcaster && caster.Spellcasting != null)
             return;
 
         // Restore any previous temp setup first
@@ -834,7 +834,7 @@ public class SpellTestingPanel : MonoBehaviour
         }
 
         // ── 2. Add SpellcastingComponent if missing ──
-        SpellcastingComponent spellComp = caster.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = caster.Spellcasting;
         if (spellComp == null)
         {
             spellComp = caster.gameObject.AddComponent<SpellcastingComponent>();
@@ -949,7 +949,7 @@ public class SpellTestingPanel : MonoBehaviour
     {
         if (caster == null) return;
 
-        SpellcastingComponent spellComp = caster.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = caster.Spellcasting;
         if (spellComp == null)
         {
             Debug.LogWarning($"[SpellTestPanel] EnsureSpellAvailable: No SpellcastingComponent on {caster.Stats?.CharacterName}");

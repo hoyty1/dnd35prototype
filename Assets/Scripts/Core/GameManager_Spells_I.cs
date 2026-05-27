@@ -282,7 +282,7 @@ public partial class GameManager
             ImbueWithSpellAbilityManager.TransferSpells(caster, target, chosen);
 
             // Add status effects on both characters
-            var casterStatusMgr = caster.GetComponent<StatusEffectManager>();
+            var casterStatusMgr = caster.StatusEffectManager;
             if (casterStatusMgr != null)
             {
                 var effect = casterStatusMgr.AddEffect(imbueSpell, casterName, casterLevel);
@@ -290,7 +290,7 @@ public partial class GameManager
                     effect.RemainingRounds = -1; // permanent until discharged
             }
 
-            var targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            var targetStatusMgr = target.StatusEffectManager;
             if (targetStatusMgr != null)
             {
                 var effect = targetStatusMgr.AddEffect(imbueSpell, casterName, casterLevel);
@@ -303,7 +303,7 @@ public partial class GameManager
             sb.AppendLine($"<color=#88CCFF>✨ {casterName} imbues {targetName} with spell ability!</color>");
             foreach (var idx in chosen)
             {
-                var spellComp = caster.GetComponent<SpellcastingComponent>();
+                var spellComp = caster.Spellcasting;
                 if (spellComp != null && idx >= 0 && idx < spellComp.SpellSlots.Count)
                 {
                     var slot = spellComp.SpellSlots[idx];
@@ -534,7 +534,7 @@ public partial class GameManager
         caster.Stats.InvisibilityPurgeRoundsRemaining = durationRounds;
 
         // Track via StatusEffectManager
-        var statusMgr = caster.GetComponent<StatusEffectManager>();
+        var statusMgr = caster.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, casterName, casterLevel);
@@ -592,7 +592,7 @@ public partial class GameManager
 
         // Track the spell on the recipient so duration/dispel/dismiss
         // work via the standard StatusEffectManager path.
-        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
         if (recipientStatusMgr == null)
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);
@@ -609,7 +609,7 @@ public partial class GameManager
             return null;
         }
 
-        SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
         if (recipientSpellComp != null)
             recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -730,7 +730,7 @@ public partial class GameManager
 
             // Also clean the recipient's tracking ActiveSpellEffect so the duration
             // bar / dismiss UI clears on the same round as the sphere ending.
-            StatusEffectManager mgr = attacker.GetComponent<StatusEffectManager>();
+            StatusEffectManager mgr = attacker.StatusEffectManager;
             mgr?.RemoveEffectsBySpellId(SpellNames.INVISIBILITY_SPHERE);
         }
         else

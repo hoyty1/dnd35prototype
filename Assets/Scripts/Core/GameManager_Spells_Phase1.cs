@@ -917,7 +917,7 @@ public partial class GameManager
         if (recipient == null || recipient.Stats == null || spell == null)
             return null;
 
-        StatusEffectManager statusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = recipient.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats);
@@ -951,7 +951,7 @@ public partial class GameManager
         if (recipient == null || recipient.Stats == null || spell == null)
             return null;
 
-        StatusEffectManager statusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = recipient.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats);
@@ -966,7 +966,7 @@ public partial class GameManager
 
         if (effect != null)
         {
-            SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
             if (recipientSpellComp != null)
                 recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
         }
@@ -1022,7 +1022,7 @@ public partial class GameManager
         if (recipient == null || recipient.Stats == null || spell == null)
             return null;
 
-        StatusEffectManager statusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = recipient.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(recipient.Stats);
@@ -1046,7 +1046,7 @@ public partial class GameManager
         {
             recipient.Stats.NaturalArmorBonus += natArmorBonus;
 
-            SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
             if (recipientSpellComp != null)
                 recipientSpellComp.ActiveBuffs[spell.SpellId] = durationRounds;
         }

@@ -99,7 +99,7 @@ public class StatusEffectIndicator : MonoBehaviour
             }
         }
 
-        StatusEffectManager statusMgr = _character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = _character.StatusEffectManager;
         if (statusMgr != null && statusMgr.HasEffect(SpellNames.EXPEDITIOUS_RETREAT))
         {
             int rounds = statusMgr.GetRemainingRounds(SpellNames.EXPEDITIOUS_RETREAT);

@@ -379,7 +379,7 @@ public partial class GameManager
         string casterName = caster?.Stats?.CharacterName ?? "Caster";
 
         // Track the effect via StatusEffectManager for duration/dispel
-        StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager targetStatusMgr = target.StatusEffectManager;
         if (targetStatusMgr == null)
             targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
         targetStatusMgr.Init(target.Stats);

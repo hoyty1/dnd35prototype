@@ -41,7 +41,7 @@ public partial class GameManager
         if (target.HasCondition(CombatConditionType.Entangled))
             target.RemoveCondition(CombatConditionType.Entangled);
 
-        var statusMgr = target.GetComponent<StatusEffectManager>();
+        var statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, casterName, casterLevel);
@@ -174,7 +174,7 @@ public partial class GameManager
         bool isWarmShield = _pendingFireShieldIsWarm ?? true;
 
         // Track via StatusEffectManager for duration and UI
-        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
         if (recipientStatusMgr == null)
             recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
         recipientStatusMgr.Init(recipient.Stats);

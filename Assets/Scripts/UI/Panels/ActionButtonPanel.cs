@@ -735,7 +735,7 @@ public class ActionButtonPanel : MonoBehaviour
         states.Set(RageButton, new ActionButtonState(isBarbarian, canRage, rageLabel));
 
         bool isSpellcaster = pc.Stats.IsSpellcaster;
-        SpellcastingComponent spellComp = pc.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = pc.Spellcasting;
         bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
         bool canCast = context.Actions.HasStandardAction && hasCastableSpells && !context.IsTurned;
         string castBaseLabel;
@@ -771,7 +771,7 @@ public class ActionButtonPanel : MonoBehaviour
         states.Set(ControlFlamingSphereButton, new ActionButtonState(hasActiveFlamingSphere, canControlFlamingSphere, controlFlamingSphereLabel));
 
         _combatUI.EnsureDischargeTouchButtonExistsForActionPanel();
-        SpellcastingComponent touchSpellComp = pc.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent touchSpellComp = pc.Spellcasting;
         bool hasHeldTouchCharge = pc.Stats.IsSpellcaster && touchSpellComp != null && touchSpellComp.HasHeldTouchCharge && touchSpellComp.HeldTouchSpell != null;
         string heldName = hasHeldTouchCharge ? touchSpellComp.HeldTouchSpell.Name : "Touch";
         states.Set(DischargeTouchButton, new ActionButtonState(hasHeldTouchCharge, hasHeldTouchCharge, $"Discharge {heldName}"));

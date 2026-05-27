@@ -173,7 +173,7 @@ public partial class GameManager
         target.Stats.RepelVerminActive = true;
         target.Stats.RepelVerminRoundsRemaining = durationRounds;
 
-        var statusMgr = target.GetComponent<StatusEffectManager>();
+        var statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, casterName, casterLevel);
@@ -223,7 +223,7 @@ public partial class GameManager
         target.Stats.SpellRageACPenalty = -2;
 
         // Create the tracked effect
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(target.Stats);
@@ -517,7 +517,7 @@ public partial class GameManager
         bool hasCurseTracker = CurseTracker.IsCursed(target);
         bool hasBestowCurseConditionGP = target.HasCondition(CombatConditionType.BestowCurseGeneralPenalty);
         bool hasBestowCurseConditionAL = target.HasCondition(CombatConditionType.BestowCurseActionLoss);
-        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = target.StatusEffectManager;
         bool hasBestowCurseStatusEffect = statusMgr != null && statusMgr.HasEffect(SpellNames.BESTOW_CURSE);
 
         bool hasAnyCurse = hasCurseTracker || hasBestowCurseConditionGP || hasBestowCurseConditionAL || hasBestowCurseStatusEffect;

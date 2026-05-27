@@ -310,7 +310,7 @@ public static class AISpellcastingStrategist
         else if (spell.EffectType == SpellEffectType.Buff)
         {
             // Check if already buffed by this spell
-            StatusEffectManager statusMgr = ally.GetComponent<StatusEffectManager>();
+            StatusEffectManager statusMgr = ally.StatusEffectManager;
             if (statusMgr != null && statusMgr.HasEffect(spell.SpellId))
             {
                 int remaining = statusMgr.GetRemainingRounds(spell.SpellId);
@@ -703,7 +703,7 @@ public static class AISpellcastingStrategist
         if (spell == null || enemy == null) return 0f;
         if (spell.EffectType != SpellEffectType.Dispel) return 0f;
 
-        StatusEffectManager enemyStatus = enemy.GetComponent<StatusEffectManager>();
+        StatusEffectManager enemyStatus = enemy.StatusEffectManager;
         if (enemyStatus == null) return -20f; // No buffs to dispel
 
         int activeBuffCount = enemyStatus.ActiveEffectCount;
@@ -864,7 +864,7 @@ public static class AISpellcastingStrategist
         // Summon + buff summon combo
         if (spell.EffectType == SpellEffectType.Summon)
         {
-            SpellcastingComponent sc = caster.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent sc = caster.Spellcasting;
             if (sc != null)
             {
                 var castable = sc.GetCastablePreparedSpells();
@@ -1145,7 +1145,7 @@ public static class AISpellcastingStrategist
             score += GetResistancePenalty(primaryTarget, spell);
 
         // ── T2.2: Resource management ──
-        SpellcastingComponent sc = caster?.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent sc = caster?.Spellcasting;
         if (sc != null)
             score += GetResourceManagementScore(caster, spell, sc);
 

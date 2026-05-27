@@ -60,7 +60,7 @@ public partial class GameManager
                 ch.Stats.PrayerActive = true;
                 ch.Stats.PrayerRoundsRemaining = durationRounds;
 
-                var statusMgr = ch.GetComponent<StatusEffectManager>();
+                var statusMgr = ch.StatusEffectManager;
                 if (statusMgr != null)
                 {
                     var effect = statusMgr.AddEffect(spell, casterName, casterLevel);
@@ -85,7 +85,7 @@ public partial class GameManager
             {
                 // –1 luck penalty to attacks, damage, saves
                 // Apply via debuff ActiveSpellEffect
-                var statusMgr = ch.GetComponent<StatusEffectManager>();
+                var statusMgr = ch.StatusEffectManager;
                 if (statusMgr != null)
                 {
                     var effect = statusMgr.AddEffect(spell, casterName, casterLevel);

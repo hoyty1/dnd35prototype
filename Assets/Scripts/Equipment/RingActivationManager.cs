@@ -343,7 +343,7 @@ public static class RingActivationManager
         int durationRounds = 7; // CL 7 × 1 round/level
 
         // Apply Blink via StatusEffectManager (same path as the Blink spell)
-        var statusMgr = actor.GetComponent<StatusEffectManager>();
+        var statusMgr = actor.StatusEffectManager;
         if (statusMgr != null)
         {
             var blinkSpell = CreateRingSpellData(SpellNames.BLINK, "Blink", durationRounds);
@@ -503,7 +503,7 @@ public static class RingActivationManager
         sb.AppendLine($"  Penetrates: 20 ft stone/wood/dirt, 10 ft iron");
 
         // Apply See Invisibility-like effect
-        var statusMgr = actor.GetComponent<StatusEffectManager>();
+        var statusMgr = actor.StatusEffectManager;
         if (statusMgr != null)
         {
             var xraySpell = CreateRingSpellData("xray_vision", "X-Ray Vision", durationRounds);
@@ -654,7 +654,7 @@ public static class RingActivationManager
         ring.RingSpellTurningPool = turningLevels;
 
         // Apply via StatusEffectManager using existing Spell Turning tag format
-        var statusMgr = wearer.GetComponent<StatusEffectManager>();
+        var statusMgr = wearer.StatusEffectManager;
         if (statusMgr != null)
         {
             var turningSpell = CreateRingSpellData(SpellNames.SPELL_TURNING, "Spell Turning", -1); // -1 = permanent
@@ -680,7 +680,7 @@ public static class RingActivationManager
     {
         if (wearer == null) return;
 
-        var statusMgr = wearer.GetComponent<StatusEffectManager>();
+        var statusMgr = wearer.StatusEffectManager;
         if (statusMgr != null)
         {
             statusMgr.RemoveEffectsBySpellId(SpellNames.SPELL_TURNING);
@@ -820,7 +820,7 @@ public static class RingActivationManager
         foreach (var pc in partyMembers)
         {
             if (pc == null) continue;
-            var invComp = pc.GetComponent<InventoryComponent>();
+            var invComp = pc.InventoryComp;
             if (invComp == null || invComp.CharacterInventory == null) continue;
 
             var inventory = invComp.CharacterInventory;
@@ -929,7 +929,7 @@ public static class RingActivationManager
         // Sprint 3: Ring of Wizardry — refresh spell slots to pick up doubled slots
         if (ring.RingWizardryLevel > 0)
         {
-            var spellComp = wearer.GetComponent<SpellcastingComponent>();
+            var spellComp = wearer.Spellcasting;
             if (spellComp != null)
             {
                 spellComp.RefreshSpellSlots();
@@ -970,7 +970,7 @@ public static class RingActivationManager
         // Sprint 3: Ring of Wizardry — refresh spell slots to remove doubled slots
         if (ring.RingWizardryLevel > 0)
         {
-            var spellComp = wearer.GetComponent<SpellcastingComponent>();
+            var spellComp = wearer.Spellcasting;
             if (spellComp != null)
             {
                 spellComp.RefreshSpellSlots();

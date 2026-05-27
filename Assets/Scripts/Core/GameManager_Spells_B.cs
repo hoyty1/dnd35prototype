@@ -43,7 +43,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || spell == null)
             return null;
 
-        StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = caster.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = caster.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(caster.Stats);
@@ -56,7 +56,7 @@ public partial class GameManager
 
         if (effect != null)
         {
-            SpellcastingComponent casterSpellComp = caster.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent casterSpellComp = caster.Spellcasting;
             if (casterSpellComp != null)
                 casterSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 

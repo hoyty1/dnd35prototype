@@ -391,7 +391,7 @@ public class SpellSelectionUI : MonoBehaviour
 
         _isLevelUpMode = true;
         _levelUpCharacter = character;
-        _levelUpSpellcasting = character.GetComponent<SpellcastingComponent>();
+        _levelUpSpellcasting = character.Spellcasting;
 
         string className = string.IsNullOrWhiteSpace(progressionClass)
             ? (character.Stats.CharacterClass ?? string.Empty)

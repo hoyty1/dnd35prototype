@@ -931,10 +931,10 @@ public partial class GameManager : MonoBehaviour
             if (stats.IsRaging)
                 stats.DeactivateRage();
 
-            StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+            StatusEffectManager statusMgr = pc.StatusEffectManager;
             statusMgr?.RemoveAllEffects();
 
-            SpellcastingComponent spellComp = pc.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent spellComp = pc.Spellcasting;
             if (spellComp != null)
             {
                 spellComp.ClearHeldTouchCharge("full rest");
@@ -984,7 +984,7 @@ public partial class GameManager : MonoBehaviour
             if (pc.ActivePoisons != null)
                 pc.ActivePoisons.Clear();
 
-            Inventory inventory = pc.GetComponent<InventoryComponent>()?.CharacterInventory;
+            Inventory inventory = pc.InventoryComp?.CharacterInventory;
             if (inventory != null)
             {
                 ClearTemporaryItemSpellEffects(inventory.RightHandSlot);
@@ -1315,7 +1315,7 @@ public partial class GameManager : MonoBehaviour
         if (!isPreparedCasterClass)
             return false;
 
-        SpellcastingComponent spellComp = character.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = character.Spellcasting;
         return spellComp != null && spellComp.SpellSlots != null && spellComp.SpellSlots.Count > 0;
     }
 
@@ -1324,7 +1324,7 @@ public partial class GameManager : MonoBehaviour
         if (character == null)
             return false;
 
-        SpellcastingComponent spellComp = character.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = character.Spellcasting;
         if (spellComp == null || spellComp.SpellSlots == null)
             return false;
 
@@ -1343,7 +1343,7 @@ public partial class GameManager : MonoBehaviour
             if (!IsPreparedCaster(member))
                 continue;
 
-            SpellcastingComponent spellComp = member.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent spellComp = member.Spellcasting;
             if (spellComp == null)
                 continue;
 
@@ -1366,7 +1366,7 @@ public partial class GameManager : MonoBehaviour
             if (!IsPreparedCaster(member))
                 continue;
 
-            SpellcastingComponent spellComp = member.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent spellComp = member.Spellcasting;
             if (spellComp == null)
                 continue;
 
@@ -1460,8 +1460,8 @@ public partial class GameManager : MonoBehaviour
 
         PreCombatHubUI?.HideMenu();
 
-        var spellComp = crafter.GetComponent<SpellcastingComponent>();
-        var invComp = crafter.GetComponent<InventoryComponent>();
+        var spellComp = crafter.Spellcasting;
+        var invComp = crafter.InventoryComp;
         var inventory = invComp != null ? invComp.CharacterInventory : null;
 
         _craftingWorkshopUI.Open(
@@ -1555,7 +1555,7 @@ public partial class GameManager : MonoBehaviour
             {
                 CharacterController caster = unpreparedCasters[i];
                 string name = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-                SpellcastingComponent spellComp = caster != null ? caster.GetComponent<SpellcastingComponent>() : null;
+                SpellcastingComponent spellComp = caster != null ? caster.Spellcasting : null;
                 List<string> missingClasses = spellComp != null ? spellComp.GetUnpreparedCasterClassNames() : new List<string>();
 
                 if (missingClasses.Count == 0)
@@ -2053,13 +2053,13 @@ public partial class GameManager : MonoBehaviour
             }
 
             // Initialize StatusEffectManager for duration tracking
-            var statusMgr = pcSlots[i].gameObject.GetComponent<StatusEffectManager>();
+            var statusMgr = pcSlots[i].StatusEffectManager;
             if (statusMgr == null)
                 statusMgr = pcSlots[i].gameObject.AddComponent<StatusEffectManager>();
             statusMgr.Init(stats);
 
             // Initialize ConcentrationManager for spell concentration tracking
-            var concMgr = pcSlots[i].gameObject.GetComponent<ConcentrationManager>();
+            var concMgr = pcSlots[i].Concentration;
             if (concMgr == null)
                 concMgr = pcSlots[i].gameObject.AddComponent<ConcentrationManager>();
             concMgr.Init(stats, pcSlots[i]);
@@ -4214,7 +4214,7 @@ public partial class GameManager : MonoBehaviour
         string spellInfo = "";
         if (pc.Stats.IsSpellcaster)
         {
-            var spellComp = pc.GetComponent<SpellcastingComponent>();
+            var spellComp = pc.Spellcasting;
             if (spellComp != null)
                 spellInfo = $"\n✦ Spells: {spellComp.GetSlotSummary()}";
         }
@@ -4305,7 +4305,7 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        var invComp = actor.GetComponent<InventoryComponent>();
+        var invComp = actor.InventoryComp;
         var inv = invComp != null ? invComp.CharacterInventory : null;
         if (inv == null)
         {
@@ -4537,7 +4537,7 @@ public partial class GameManager : MonoBehaviour
         if (character == null || character.Stats == null)
             return "No active character";
 
-        Inventory inv = character.GetComponent<InventoryComponent>()?.CharacterInventory;
+        Inventory inv = character.InventoryComp?.CharacterInventory;
         if (inv == null)
             return "No inventory";
 
@@ -4695,7 +4695,7 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        Inventory inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        Inventory inv = actor.InventoryComp?.CharacterInventory;
         if (inv == null)
         {
             feedback = $"{actor.Stats.CharacterName} has no inventory.";
@@ -4740,7 +4740,7 @@ public partial class GameManager : MonoBehaviour
         if (character == null || character.Stats == null)
             return "No active character";
 
-        Inventory inv = character.GetComponent<InventoryComponent>()?.CharacterInventory;
+        Inventory inv = character.InventoryComp?.CharacterInventory;
         if (inv == null)
             return "No inventory";
 
@@ -4917,7 +4917,7 @@ public partial class GameManager : MonoBehaviour
         if (actor == null)
             return false;
 
-        Inventory inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        Inventory inv = actor.InventoryComp?.CharacterInventory;
         if (inv == null)
             return false;
 
@@ -4942,7 +4942,7 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        Inventory inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        Inventory inv = actor.InventoryComp?.CharacterInventory;
         if (inv == null)
         {
             feedback = $"{actor.Stats.CharacterName} has no inventory.";
@@ -5050,7 +5050,7 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        Inventory inv = thrower.GetComponent<InventoryComponent>()?.CharacterInventory;
+        Inventory inv = thrower.InventoryComp?.CharacterInventory;
         if (inv == null)
         {
             feedback = $"Thrown weapon drop failed: {thrower.Stats.CharacterName} has no inventory.";
@@ -5166,7 +5166,7 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        Inventory inv = character.GetComponent<InventoryComponent>()?.CharacterInventory;
+        Inventory inv = character.InventoryComp?.CharacterInventory;
         if (inv == null)
         {
             feedback = $"{character.Stats.CharacterName} has no inventory for throwable auto-equip.";
@@ -5229,7 +5229,7 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        Inventory inv = character.GetComponent<InventoryComponent>()?.CharacterInventory;
+        Inventory inv = character.InventoryComp?.CharacterInventory;
         if (inv == null)
         {
             feedback = $"{character.Stats.CharacterName} has no inventory for off-hand throwable auto-equip.";
@@ -5290,7 +5290,7 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        Inventory inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        Inventory inv = actor.InventoryComp?.CharacterInventory;
         if (inv == null)
         {
             feedback = $"{actor.Stats.CharacterName} has no inventory.";
@@ -5426,7 +5426,7 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        var inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        var inv = actor.InventoryComp?.CharacterInventory;
         if (inv == null)
         {
             resultMessage = $"{actor.Stats.CharacterName} has no inventory.";
@@ -5655,7 +5655,7 @@ public partial class GameManager : MonoBehaviour
         if (consumableSpell.EffectType == SpellEffectType.Buff || consumableSpell.EffectType == SpellEffectType.Debuff ||
             consumableSpell.EffectType == SpellEffectType.Illusion || consumableSpell.EffectType == SpellEffectType.Control)
         {
-            var statusMgr = actor.GetComponent<StatusEffectManager>();
+            var statusMgr = actor.StatusEffectManager;
             if (statusMgr == null)
             {
                 statusMgr = actor.gameObject.AddComponent<StatusEffectManager>();
@@ -5698,7 +5698,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         string charName = actor.Stats.CharacterName;
-        var inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        var inv = actor.InventoryComp?.CharacterInventory;
 
         // Step 1: Validate eligibility
         var validation = ScrollValidator.Validate(actor, scrollItem);
@@ -6011,7 +6011,7 @@ public partial class GameManager : MonoBehaviour
                 else if (staffSpell.EffectType == SpellEffectType.Buff || staffSpell.EffectType == SpellEffectType.Debuff ||
                          staffSpell.EffectType == SpellEffectType.Illusion || staffSpell.EffectType == SpellEffectType.Control)
                 {
-                    var statusMgr = actor.GetComponent<StatusEffectManager>();
+                    var statusMgr = actor.StatusEffectManager;
                     if (statusMgr == null)
                     {
                         statusMgr = actor.gameObject.AddComponent<StatusEffectManager>();
@@ -8660,7 +8660,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        var spellComp = pc.GetComponent<SpellcastingComponent>();
+        var spellComp = pc.Spellcasting;
         if (spellComp == null) return;
 
         // Casting can only begin if there is a castable prepared spell.
@@ -8686,7 +8686,7 @@ public partial class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
-        var spellComp = pc.GetComponent<SpellcastingComponent>();
+        var spellComp = pc.Spellcasting;
         if (spellComp == null || !spellComp.HasHeldTouchCharge || spellComp.HeldTouchSpell == null)
             return;
 
@@ -8704,7 +8704,7 @@ public partial class GameManager : MonoBehaviour
         if (character == null)
             return false;
 
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         return statusMgr != null && statusMgr.HasEffect(SpellNames.DISGUISE_SELF);
     }
 
@@ -8713,7 +8713,7 @@ public partial class GameManager : MonoBehaviour
         if (character == null)
             return false;
 
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         return statusMgr != null && statusMgr.HasEffect(SpellNames.EXPEDITIOUS_RETREAT);
     }
 
@@ -8722,7 +8722,7 @@ public partial class GameManager : MonoBehaviour
         if (character == null)
             return false;
 
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         return statusMgr != null && statusMgr.HasEffect(SpellNames.JUMP);
     }
 
@@ -8736,7 +8736,7 @@ public partial class GameManager : MonoBehaviour
             return true;
 
         // Fallback: check StatusEffectManager for spell-based invisibility
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         return statusMgr != null && (statusMgr.HasEffect(SpellNames.INVISIBILITY)
             || statusMgr.HasEffect("greater_invisibility"));
     }
@@ -8746,7 +8746,7 @@ public partial class GameManager : MonoBehaviour
         if (character == null)
             return false;
 
-        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = character.StatusEffectManager;
         return statusMgr != null && statusMgr.HasEffect(SpellNames.SEE_INVISIBLE);
     }
 
@@ -8756,7 +8756,7 @@ public partial class GameManager : MonoBehaviour
         if (pc == null)
             return;
 
-        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = pc.StatusEffectManager;
         if (statusMgr == null || !statusMgr.HasEffect(SpellNames.EXPEDITIOUS_RETREAT))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Expeditious Retreat to dismiss.");
@@ -8777,7 +8777,7 @@ public partial class GameManager : MonoBehaviour
         if (pc == null || !pc.Actions.HasStandardAction)
             return;
 
-        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = pc.StatusEffectManager;
         if (statusMgr == null || !statusMgr.HasEffect(SpellNames.JUMP))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Jump spell to dismiss.");
@@ -8814,7 +8814,7 @@ public partial class GameManager : MonoBehaviour
         string sourceSpellId = pc.ActiveInvisibilityEffect?.SourceSpellId;
         string sourceName = pc.ActiveInvisibilityEffect?.SourceName ?? "Invisibility";
 
-        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = pc.StatusEffectManager;
         if (statusMgr != null && !string.IsNullOrEmpty(sourceSpellId))
             statusMgr.RemoveEffectsBySpellId(sourceSpellId);
         else if (statusMgr != null)
@@ -8834,7 +8834,7 @@ public partial class GameManager : MonoBehaviour
         if (pc == null)
             return;
 
-        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = pc.StatusEffectManager;
         if (statusMgr == null || !statusMgr.HasEffect(SpellNames.SEE_INVISIBLE))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active See Invisible spell to dismiss.");
@@ -8855,7 +8855,7 @@ public partial class GameManager : MonoBehaviour
         if (pc == null || !pc.Actions.HasStandardAction)
             return;
 
-        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = pc.StatusEffectManager;
         if (statusMgr == null || !statusMgr.HasEffect(SpellNames.DISGUISE_SELF))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Disguise Self to dismiss.");
@@ -8894,7 +8894,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSummonSwarmNpcId = null;
 
         // Casting another spell while holding a touch charge ends the held charge.
-        var spellComp = pc.GetComponent<SpellcastingComponent>();
+        var spellComp = pc.Spellcasting;
         if (spellComp != null && spellComp.HasHeldTouchCharge)
         {
             spellComp.ClearHeldTouchCharge("cast another spell");
@@ -9026,7 +9026,7 @@ public partial class GameManager : MonoBehaviour
         if (caster == null)
             return false;
 
-        InventoryComponent inventoryComponent = caster.GetComponent<InventoryComponent>();
+        InventoryComponent inventoryComponent = caster.InventoryComp;
         Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
         if (inventory == null || inventory.GeneralSlots == null)
             return false;
@@ -9074,7 +9074,7 @@ public partial class GameManager : MonoBehaviour
         if (caster == null)
             return null;
 
-        InventoryComponent inventoryComponent = caster.GetComponent<InventoryComponent>();
+        InventoryComponent inventoryComponent = caster.InventoryComp;
         Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
         if (inventory == null)
             return null;
@@ -9182,7 +9182,7 @@ public partial class GameManager : MonoBehaviour
         if (target == null)
             return false;
 
-        InventoryComponent inventoryComponent = target.GetComponent<InventoryComponent>();
+        InventoryComponent inventoryComponent = target.InventoryComp;
         Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
         if (inventory == null)
             return false;

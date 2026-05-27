@@ -2497,13 +2497,13 @@ public partial class GameManager
         if (character == null || !character.Stats.IsSpellcaster)
             return false;
 
-        var spellComp = character.GetComponent<SpellcastingComponent>();
+        var spellComp = character.Spellcasting;
         return spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null;
     }
 
     private string GetHeldTouchSpellName(CharacterController character)
     {
-        var spellComp = character != null ? character.GetComponent<SpellcastingComponent>() : null;
+        var spellComp = character != null ? character.Spellcasting : null;
         if (spellComp != null && spellComp.HeldTouchSpell != null)
             return spellComp.HeldTouchSpell.Name;
         return "held touch spell";

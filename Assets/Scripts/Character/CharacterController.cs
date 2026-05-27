@@ -1194,6 +1194,42 @@ public class CharacterController : MonoBehaviour
         }
     }
 
+    /// <summary>Cached accessor for the SpellcastingComponent.</summary>
+    private SpellcastingComponent _spellcastingComponent;
+    public SpellcastingComponent Spellcasting
+    {
+        get
+        {
+            if (_spellcastingComponent == null)
+                _spellcastingComponent = GetComponent<SpellcastingComponent>();
+            return _spellcastingComponent;
+        }
+    }
+
+    /// <summary>Cached accessor for the InventoryComponent.</summary>
+    private InventoryComponent _inventoryComponent;
+    public InventoryComponent InventoryComp
+    {
+        get
+        {
+            if (_inventoryComponent == null)
+                _inventoryComponent = GetComponent<InventoryComponent>();
+            return _inventoryComponent;
+        }
+    }
+
+    /// <summary>Cached accessor for the ConcentrationManager.</summary>
+    private ConcentrationManager _concentrationManager;
+    public ConcentrationManager Concentration
+    {
+        get
+        {
+            if (_concentrationManager == null)
+                _concentrationManager = GetComponent<ConcentrationManager>();
+            return _concentrationManager;
+        }
+    }
+
     public bool IsUnconscious => _currentHPState == HPState.Unconscious
                                  || _currentHPState == HPState.Dying
                                  || _currentHPState == HPState.Stable
@@ -1540,7 +1576,7 @@ public class CharacterController : MonoBehaviour
     {
         get
         {
-            StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+            StatusEffectManager statusMgr = StatusEffectManager;
             return statusMgr != null && statusMgr.HasEffect(SpellNames.BLUR) && statusMgr.GetRemainingRounds(SpellNames.BLUR) > 0;
         }
     }
@@ -1548,7 +1584,7 @@ public class CharacterController : MonoBehaviour
 
     public int GetBlurRemainingRounds()
     {
-        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = StatusEffectManager;
         return statusMgr != null ? Mathf.Max(0, statusMgr.GetRemainingRounds(SpellNames.BLUR)) : 0;
     }
 
@@ -1561,7 +1597,7 @@ public class CharacterController : MonoBehaviour
     {
         get
         {
-            StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+            StatusEffectManager statusMgr = StatusEffectManager;
             return statusMgr != null && statusMgr.HasEffect(SpellNames.DISPLACEMENT) && statusMgr.GetRemainingRounds(SpellNames.DISPLACEMENT) > 0;
         }
     }
@@ -1572,7 +1608,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public int GetDisplacementRemainingRounds()
     {
-        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = StatusEffectManager;
         return statusMgr != null ? Mathf.Max(0, statusMgr.GetRemainingRounds(SpellNames.DISPLACEMENT)) : 0;
     }
 
@@ -1584,7 +1620,7 @@ public class CharacterController : MonoBehaviour
     {
         get
         {
-            StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+            StatusEffectManager statusMgr = StatusEffectManager;
             return statusMgr != null && statusMgr.HasEffect(SpellNames.BLINK) && statusMgr.GetRemainingRounds(SpellNames.BLINK) > 0;
         }
     }
@@ -1594,7 +1630,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public int GetBlinkRemainingRounds()
     {
-        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = StatusEffectManager;
         return statusMgr != null ? Mathf.Max(0, statusMgr.GetRemainingRounds(SpellNames.BLINK)) : 0;
     }
 
@@ -1909,7 +1945,7 @@ public class CharacterController : MonoBehaviour
 
         string sourceSpellId = ActiveInvisibilityEffect.SourceSpellId;
 
-        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = StatusEffectManager;
         if (statusMgr != null)
         {
             // Remove the specific spell effect that created this invisibility
@@ -1945,7 +1981,7 @@ public class CharacterController : MonoBehaviour
 
         string sourceSpellId = ActiveInvisibilityEffect.SourceSpellId;
 
-        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = StatusEffectManager;
         if (statusMgr != null && !string.IsNullOrEmpty(sourceSpellId))
             statusMgr.RemoveEffectsBySpellId(sourceSpellId);
 
@@ -3390,7 +3426,7 @@ public class CharacterController : MonoBehaviour
 
         EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
 
-        SpellcastingComponent spellComp = GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = Spellcasting;
         spellComp?.ApplyNegativeLevelSlotLoss();
     }
 
@@ -3410,7 +3446,7 @@ public class CharacterController : MonoBehaviour
         if (removed)
         {
             EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
-            SpellcastingComponent spellComp = GetComponent<SpellcastingComponent>();
+            SpellcastingComponent spellComp = Spellcasting;
             spellComp?.ApplyNegativeLevelSlotLoss();
         }
 
@@ -3431,7 +3467,7 @@ public class CharacterController : MonoBehaviour
             : Stats.TickConditions();
 
         EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
-        SpellcastingComponent spellComp = GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = Spellcasting;
         spellComp?.ApplyNegativeLevelSlotLoss();
         return expired;
     }
@@ -3481,7 +3517,7 @@ public class CharacterController : MonoBehaviour
         {
             Stats.RefreshNegativeLevelState();
             EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
-            SpellcastingComponent spellComp = GetComponent<SpellcastingComponent>();
+            SpellcastingComponent spellComp = Spellcasting;
             spellComp?.ApplyNegativeLevelSlotLoss();
         }
 
@@ -4324,11 +4360,11 @@ public class CharacterController : MonoBehaviour
         {
             ReleaseGrappleState("incapacitated");
 
-            var concMgr = GetComponent<ConcentrationManager>();
+            var concMgr = Concentration;
             if (concMgr != null && concMgr.IsConcentrating)
                 concMgr.OnCharacterIncapacitated();
 
-            var spellComp = GetComponent<SpellcastingComponent>();
+            var spellComp = Spellcasting;
             if (spellComp != null && spellComp.HasHeldTouchCharge)
                 spellComp.ClearHeldTouchCharge("caster incapacitated");
         }
@@ -4852,7 +4888,7 @@ public class CharacterController : MonoBehaviour
                 Stats.MagicStoneCharges = 0;
                 Debug.Log($"[MagicStone] {Stats.CharacterName}: All magic stones discharged, spell ends.");
                 // Remove the spell effect since all charges are used
-                StatusEffectManager selfStatusMgr = GetComponent<StatusEffectManager>();
+                StatusEffectManager selfStatusMgr = StatusEffectManager;
                 if (selfStatusMgr != null)
                     selfStatusMgr.RemoveEffectsBySpellId(SpellNames.DOMAIN_MAGIC_STONE);
             }
@@ -5208,7 +5244,7 @@ public class CharacterController : MonoBehaviour
                     Stats.MagicStoneActive = false;
                     Stats.MagicStoneCharges = 0;
                     Debug.Log($"[MagicStone] {Stats.CharacterName}: All magic stones discharged during full attack, spell ends.");
-                    StatusEffectManager selfStatusMgr = GetComponent<StatusEffectManager>();
+                    StatusEffectManager selfStatusMgr = StatusEffectManager;
                     if (selfStatusMgr != null)
                         selfStatusMgr.RemoveEffectsBySpellId(SpellNames.DOMAIN_MAGIC_STONE);
                 }
@@ -8451,7 +8487,7 @@ public class CharacterController : MonoBehaviour
 
     private int GetGreasedArmorGrappleBonus(GrappleCheckContext context)
     {
-        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        StatusEffectManager statusEffectManager = StatusEffectManager;
         if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
             return 0;
 
@@ -8574,7 +8610,7 @@ public class CharacterController : MonoBehaviour
     {
         int bestMissChance = 0;
 
-        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        StatusEffectManager statusEffectManager = StatusEffectManager;
         if (statusEffectManager != null && statusEffectManager.ActiveEffects != null)
         {
             for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
@@ -8719,7 +8755,7 @@ public class CharacterController : MonoBehaviour
                 return string.Join("; ", reasons);
         }
 
-        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        StatusEffectManager statusEffectManager = StatusEffectManager;
         ActiveSpellEffect sourceEffect = null;
         if (statusEffectManager != null && statusEffectManager.ActiveEffects != null)
         {
@@ -8842,7 +8878,7 @@ public class CharacterController : MonoBehaviour
             result.AttackBuffDebuffModifiers.Clear();
 
         int spellAttackBonusTotal = 0;
-        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        StatusEffectManager statusEffectManager = StatusEffectManager;
         if (statusEffectManager != null && statusEffectManager.ActiveEffects != null)
         {
             for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
@@ -10160,14 +10196,14 @@ public class CharacterController : MonoBehaviour
             _sr.sprite = DeadSprite;
 
         // Break concentration on death (D&D 3.5e: concentration ends if killed/unconscious)
-        var concMgr = GetComponent<ConcentrationManager>();
+        var concMgr = Concentration;
         if (concMgr != null && concMgr.IsConcentrating)
         {
             concMgr.OnCharacterIncapacitated();
         }
 
         // Held touch charges are lost if the caster dies/unconscious.
-        var spellComp = GetComponent<SpellcastingComponent>();
+        var spellComp = Spellcasting;
         if (spellComp != null && spellComp.HasHeldTouchCharge)
         {
             spellComp.ClearHeldTouchCharge("caster incapacitated");
@@ -12008,7 +12044,7 @@ public class CharacterController : MonoBehaviour
         }
 
         // Must be a spellcaster with available spell slots
-        var spellComp = GetComponent<SpellcastingComponent>();
+        var spellComp = Spellcasting;
         if (spellComp == null || !spellComp.CanCastSpells)
         {
             Debug.Log($"[Counterspell] {Stats.CharacterName}: Cannot ready counterspell — not a spellcaster.");
@@ -12085,7 +12121,7 @@ public class CharacterController : MonoBehaviour
     public bool HasSpellAvailableForCounter(string spellId)
     {
         if (string.IsNullOrEmpty(spellId)) return false;
-        var spellComp = GetComponent<SpellcastingComponent>();
+        var spellComp = Spellcasting;
         if (spellComp == null) return false;
 
         SpellData spell = SpellDatabase.GetSpell(spellId);
@@ -12111,7 +12147,7 @@ public class CharacterController : MonoBehaviour
     public bool ConsumeSpellSlotForCounter(string spellId)
     {
         if (string.IsNullOrEmpty(spellId)) return false;
-        var spellComp = GetComponent<SpellcastingComponent>();
+        var spellComp = Spellcasting;
         if (spellComp == null) return false;
 
         SpellData spell = SpellDatabase.GetSpell(spellId);

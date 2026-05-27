@@ -471,7 +471,7 @@ public static class AlignmentProtectionRules
             return benefits;
 
         // ── Check direct Protection from Alignment effects on the target ──
-        StatusEffectManager statusMgr = protectedTarget.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = protectedTarget.StatusEffectManager;
         bool hasDirectProtection = false;
 
         if (statusMgr != null && statusMgr.ActiveEffects != null && statusMgr.ActiveEffects.Count > 0)

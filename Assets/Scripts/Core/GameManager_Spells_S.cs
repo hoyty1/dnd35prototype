@@ -116,7 +116,7 @@ public partial class GameManager
         target.Stats.SpellImmunityRoundsRemaining = durationRounds;
         target.Stats.SpellImmunitySpellId = immuneSpellId;
 
-        var statusMgr = target.GetComponent<StatusEffectManager>();
+        var statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, casterName, casterLevel);
@@ -182,7 +182,7 @@ public partial class GameManager
         }
 
         // If target has Haste, Slow dispels it
-        StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+        StatusEffectManager targetStatusMgr = target.StatusEffectManager;
         if (targetStatusMgr == null)
             targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
         targetStatusMgr.Init(target.Stats);
@@ -217,7 +217,7 @@ public partial class GameManager
             // Apply custom effect data
             target.ApplySlowEffect(durationRounds, caster);
 
-            SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+            SpellcastingComponent targetSpellComp = target.Spellcasting;
             if (targetSpellComp != null)
                 targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
@@ -432,7 +432,7 @@ public partial class GameManager
         target.Stats.SilenceRoundsRemaining = durationRounds;
 
         // Track via StatusEffectManager
-        var statusMgr = target.GetComponent<StatusEffectManager>();
+        var statusMgr = target.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
@@ -541,7 +541,7 @@ public partial class GameManager
         caster.Stats.SpiritualWeaponRoundsRemaining = durationRounds;
 
         // Track via StatusEffectManager
-        var statusMgr = caster.GetComponent<StatusEffectManager>();
+        var statusMgr = caster.StatusEffectManager;
         if (statusMgr != null)
         {
             var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);

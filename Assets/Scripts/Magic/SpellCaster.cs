@@ -580,7 +580,7 @@ public static class SpellCaster
         if (targetController == null)
             return false;
 
-        InventoryComponent invComponent = targetController.GetComponent<InventoryComponent>();
+        InventoryComponent invComponent = targetController.InventoryComp;
         ItemData armor = invComponent != null ? invComponent.CharacterInventory?.GetEquipped(EquipSlot.Armor) : null;
         if (armor == null)
             return false;
@@ -655,7 +655,7 @@ public static class SpellCaster
         if (targetController == null)
             return false;
 
-        StatusEffectManager statusMgr = targetController.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = targetController.StatusEffectManager;
         if (statusMgr != null && statusMgr.ActiveEffects != null)
         {
             for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
@@ -669,7 +669,7 @@ public static class SpellCaster
             }
         }
 
-        SpellcastingComponent spellComp = targetController.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellComp = targetController.Spellcasting;
         if (spellComp != null
             && spellComp.ActiveBuffs != null
             && spellComp.ActiveBuffs.TryGetValue(SpellNames.SHIELD, out int rounds)
@@ -834,7 +834,7 @@ public static class SpellCaster
         if (targetController == null)
             return string.Empty;
 
-        StatusEffectManager statusMgr = targetController.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = targetController.StatusEffectManager;
         if (statusMgr == null || statusMgr.ActiveEffects == null)
             return string.Empty;
 

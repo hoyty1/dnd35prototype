@@ -1572,7 +1572,7 @@ public class AIService : MonoBehaviour
             Debug.Log($"[AI][HideFromUndead] Intelligent undead {npcName} passed Will {saveResult.Total} vs DC {dc}");
             // Spell breaks for this target when the undead sees through
             candidate.Stats.HideFromUndeadActive = false;
-            var statusMgr = candidate.GetComponent<StatusEffectManager>();
+            var statusMgr = candidate.StatusEffectManager;
             statusMgr?.RemoveEffectsBySpellId(SpellNames.HIDE_FROM_UNDEAD);
             _gameManager.CombatUI?.ShowCombatLog(
                 $"👻 Hide from Undead on {candName} is broken — {npcName} perceived them!");
@@ -2149,7 +2149,7 @@ public class AIService : MonoBehaviour
         if (caster == null)
             return false;
 
-        SpellcastingComponent spellcasting = caster.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellcasting = caster.Spellcasting;
         return spellcasting != null && spellcasting.CanCastSpells && spellcasting.HasAnyCastablePreparedSpell();
     }
 
@@ -2177,7 +2177,7 @@ public class AIService : MonoBehaviour
         if (!caster.Stats.IsSpellcaster)
             return false;
 
-        SpellcastingComponent spellcasting = caster.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellcasting = caster.Spellcasting;
         List<SpellData> castableSpells = spellcasting != null ? spellcasting.GetCastablePreparedSpells() : null;
         int castableCount = castableSpells != null ? castableSpells.Count : 0;
 
@@ -2250,7 +2250,7 @@ public class AIService : MonoBehaviour
     {
         if (caster == null || caster.Stats == null) return null;
 
-        SpellcastingComponent spellcasting = caster.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellcasting = caster.Spellcasting;
         if (spellcasting == null) return null;
 
         List<SpellData> castable = spellcasting.GetCastablePreparedSpells();
@@ -2323,7 +2323,7 @@ public class AIService : MonoBehaviour
         if (caster == null || caster.Stats == null)
             return null;
 
-        SpellcastingComponent spellcasting = caster.GetComponent<SpellcastingComponent>();
+        SpellcastingComponent spellcasting = caster.Spellcasting;
         if (spellcasting == null || !spellcasting.CanCastSpells || !spellcasting.HasAnyCastablePreparedSpell())
             return null;
 
@@ -2354,7 +2354,7 @@ public class AIService : MonoBehaviour
             : new List<CharacterController>();
 
         // Cache StatusEffectManager for buff-already-active checks (prevents wasting spell slots).
-        StatusEffectManager statusMgr = caster.GetComponent<StatusEffectManager>();
+        StatusEffectManager statusMgr = caster.StatusEffectManager;
 
         for (int i = 0; i < castable.Count; i++)
         {
@@ -2490,7 +2490,7 @@ public class AIService : MonoBehaviour
         if (!npc.Actions.HasStandardAction) return false;
 
         // Must be a spellcaster
-        var spellComp = npc.GetComponent<SpellcastingComponent>();
+        var spellComp = npc.Spellcasting;
         if (spellComp == null || !spellComp.CanCastSpells) return false;
 
         // Need at least some Spellcraft or Dispel Magic to be useful
@@ -2510,7 +2510,7 @@ public class AIService : MonoBehaviour
             // Check if they're a spellcaster
             if (!c.Stats.IsSpellcaster) continue;
 
-            var enemySpellComp = c.GetComponent<SpellcastingComponent>();
+            var enemySpellComp = c.Spellcasting;
             if (enemySpellComp == null || !enemySpellComp.HasAnyCastablePreparedSpell()) continue;
 
             int distance = SquareGridUtils.GetDistance(npc.GridPosition, c.GridPosition);

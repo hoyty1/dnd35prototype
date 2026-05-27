@@ -615,7 +615,7 @@ public partial class GameManager
         CharacterTeam npcTeam = def.IsAlly ? CharacterTeam.Player : CharacterTeam.Enemy;
         npc.ConfigureTeamControl(npcTeam, def.IsControllable);
 
-        InventoryComponent inv = npc.gameObject.GetComponent<InventoryComponent>();
+        InventoryComponent inv = npc.InventoryComp;
         if (inv == null) inv = npc.gameObject.AddComponent<InventoryComponent>();
         inv.Init(stats);
 
@@ -671,7 +671,7 @@ public partial class GameManager
 
         if (shouldInitSpellcasting)
         {
-            SpellcastingComponent spellComp = npc.gameObject.GetComponent<SpellcastingComponent>()
+            SpellcastingComponent spellComp = npc.Spellcasting
                 ?? npc.gameObject.AddComponent<SpellcastingComponent>();
             spellComp.KnownSpells.Clear();
             spellComp.SelectedSpellIds = def.KnownSpellIds != null && def.KnownSpellIds.Count > 0
@@ -686,13 +686,13 @@ public partial class GameManager
         }
 
         // Initialize StatusEffectManager for NPC duration tracking
-        var statusMgr = npc.gameObject.GetComponent<StatusEffectManager>();
+        var statusMgr = npc.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = npc.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(stats);
 
         // Initialize ConcentrationManager for NPC concentration tracking
-        var concMgr = npc.gameObject.GetComponent<ConcentrationManager>();
+        var concMgr = npc.Concentration;
         if (concMgr == null)
             concMgr = npc.gameObject.AddComponent<ConcentrationManager>();
         concMgr.Init(stats, npc);
