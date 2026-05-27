@@ -636,7 +636,7 @@ public partial class GameManager
             }
 
             int saveDC = GetHighestGreaseSaveDCAtCell(currentCell);
-            int roll = UnityEngine.Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int reflex = mover.Stats.ReflexSave;
             int total = roll + reflex;
             bool success = total >= saveDC;
@@ -686,7 +686,7 @@ public partial class GameManager
             return $"Grease has no effect: no held item found on {target.Stats.CharacterName}.";
 
         int saveDC = GetSpellSaveDC(caster, _pendingSpell);
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int total = roll + target.Stats.ReflexSave;
         bool saveSucceeded = total >= saveDC;
 
@@ -790,7 +790,7 @@ public partial class GameManager
 
             if (TryFindGreasedItemHolder(effect.Item, out CharacterController holder, out EquipSlot slot))
             {
-                int roll = UnityEngine.Random.Range(1, 21);
+                int roll = DiceRoller.D20();
                 int reflex = holder.Stats != null ? holder.Stats.ReflexSave : 0;
                 int total = roll + reflex;
                 bool saveSucceeded = total >= effect.SaveDC;
@@ -842,7 +842,7 @@ public partial class GameManager
         if (effect == null)
             return true;
 
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int reflex = actor.Stats.ReflexSave;
         int total = roll + reflex;
         bool saveSucceeded = total >= effect.SaveDC;

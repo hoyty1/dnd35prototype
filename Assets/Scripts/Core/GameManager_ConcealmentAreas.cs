@@ -353,7 +353,7 @@ public partial class GameManager
                 int trackedDuration = effect != null ? effect.RemainingRounds : Mathf.Max(1, statusMgr.GetRemainingRounds(SpellNames.GLITTERDUST));
 
                 bool blinded = false;
-                int saveRoll = Random.Range(1, 21);
+                int saveRoll = DiceRoller.D20();
                 int saveTotal = saveRoll + target.Stats.WillSave;
                 if (saveTotal < saveDc)
                 {

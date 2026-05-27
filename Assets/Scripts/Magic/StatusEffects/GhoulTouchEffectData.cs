@@ -193,7 +193,7 @@ public class GhoulTouchEffectData
     /// </summary>
     public static int RollParalysisDuration()
     {
-        return Random.Range(1, 7) + 2; // 1d6+2
+        return DiceRoller.D6() + 2; // 1d6+2
     }
 
     /// <summary>

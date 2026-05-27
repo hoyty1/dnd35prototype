@@ -50,7 +50,7 @@ public partial class GameManager
         }
 
         // Roll 1d4 negative levels
-        int negativeLevels = UnityEngine.Random.Range(1, 5); // 1d4
+        int negativeLevels = DiceRoller.D4(); // 1d4
 
         // Apply negative levels using existing system
         int newTotal = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, "Enervation");

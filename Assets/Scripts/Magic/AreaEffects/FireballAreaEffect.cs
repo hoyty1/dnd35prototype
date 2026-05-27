@@ -58,9 +58,9 @@ public class FireballAreaEffect : PersistentAreaEffect
         int damage = 0;
 
         for (int i = 0; i < diceCount; i++)
-            damage += Random.Range(1, 7); // 1d6
+            damage += DiceRoller.D6(); // 1d6
 
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int reflexSave = character.Stats.ReflexSave;
         int total = roll + reflexSave;
 

@@ -46,7 +46,7 @@ public class SpikeStoneAreaEffect : PersistentAreaEffect
             int damage = Random.Range(1, MovementDamageDie + 1);
 
             // Reflex save for half
-            int reflexRoll = Random.Range(1, 21);
+            int reflexRoll = DiceRoller.D20();
             int reflexTotal = reflexRoll + character.Stats.ReflexSave;
             bool saved = reflexTotal >= ReflexDC;
             int actualDamage = saved ? Mathf.Max(1, damage / 2) : damage;

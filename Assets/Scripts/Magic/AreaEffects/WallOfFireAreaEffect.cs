@@ -293,8 +293,8 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
             + $"AffectedCells.Count={AffectedCells.Count}");
 
         int clBonus = Mathf.Min(CasterLevel, 20);
-        int d1 = Random.Range(1, 7);
-        int d2 = Random.Range(1, 7);
+        int d1 = DiceRoller.D6();
+        int d2 = DiceRoller.D6();
         int baseDamage = d1 + d2 + clBonus; // 2d6 + CL
 
         // Undead take double damage from Wall of Fire (PHB 3.5e p.298)
@@ -949,8 +949,8 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
         if (band == 1)
         {
-            int d1 = Random.Range(1, 5);
-            int d2 = Random.Range(1, 5);
+            int d1 = DiceRoller.D4();
+            int d2 = DiceRoller.D4();
             damage = d1 + d2; // 2d4
             bandLabel = "within 10 ft";
             diceLabel = "2d4";
@@ -958,7 +958,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         }
         else
         {
-            int d1 = Random.Range(1, 5);
+            int d1 = DiceRoller.D4();
             damage = d1; // 1d4
             bandLabel = "10-20 ft";
             diceLabel = "1d4";

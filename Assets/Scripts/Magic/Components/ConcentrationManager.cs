@@ -68,7 +68,7 @@ public class ConcentrationManager : MonoBehaviour
         SpellData spell,
         int damageDealt = 0)
     {
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int bonus = 0;
 
         if (caster != null && caster.Stats != null)
@@ -184,7 +184,7 @@ public class ConcentrationManager : MonoBehaviour
         int dc = 10 + damageTaken + Mathf.Max(0, heldSpell.SpellLevel);
 
         int concentrationBonus = GetConcentrationBonus();
-        int d20 = Random.Range(1, 21);
+        int d20 = DiceRoller.D20();
         int totalRoll = d20 + concentrationBonus;
         bool success = totalRoll >= dc;
 
@@ -298,7 +298,7 @@ public class ConcentrationManager : MonoBehaviour
         // (ranks + CON modifier + misc).
         int concentrationBonus = GetConcentrationBonus();
 
-        int d20 = Random.Range(1, 21);
+        int d20 = DiceRoller.D20();
         int totalRoll = d20 + concentrationBonus;
         bool success = totalRoll >= dc;
 

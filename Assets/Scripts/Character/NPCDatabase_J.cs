@@ -41,8 +41,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair("longbow", EquipSlot.Ranged),
                 new EquipmentSlotPair("chainmail", EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.6f, 0.55f, 0.5f, 1f),
             PanelColor = new Color(0.22f, 0.2f, 0.18f, 0.85f),

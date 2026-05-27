@@ -201,7 +201,7 @@ public class SpectralHandEffectData
     /// </summary>
     public static int RollHandHP()
     {
-        return Random.Range(1, 5); // 1d4
+        return DiceRoller.D4(); // 1d4
     }
 
     // ======================== FACTORY METHODS ========================

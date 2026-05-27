@@ -157,7 +157,7 @@ public static class CombatUtils
         int total = 0;
         for (int i = 0; i < sneakDice; i++)
         {
-            total += Random.Range(1, 7); // d6
+            total += DiceRoller.D6(); // d6
         }
         return total;
     }

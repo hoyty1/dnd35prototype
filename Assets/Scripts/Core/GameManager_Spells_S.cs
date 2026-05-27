@@ -56,14 +56,14 @@ public partial class GameManager
         {
             // Undead: 1d8 per 2 CL, max 5d8
             for (int i = 0; i < numDice; i++)
-                damage += Random.Range(1, 9); // 1d8
+                damage += DiceRoller.D8(); // 1d8
             damageDesc = $"{numDice}d8 = {damage} (undead — full divine damage)";
         }
         else if (isConstruct)
         {
             // Constructs: 1d6 per 2 CL, max 5d6
             for (int i = 0; i < numDice; i++)
-                damage += Random.Range(1, 7); // 1d6
+                damage += DiceRoller.D6(); // 1d6
             damageDesc = $"{numDice}d6 = {damage} (construct)";
         }
         else
@@ -71,7 +71,7 @@ public partial class GameManager
             // Others: 1d8 per 2 CL, max 5d8, then half damage
             int fullDamage = 0;
             for (int i = 0; i < numDice; i++)
-                fullDamage += Random.Range(1, 9); // 1d8
+                fullDamage += DiceRoller.D8(); // 1d8
             damage = Mathf.Max(1, fullDamage / 2);
             damageDesc = $"{numDice}d8 = {fullDamage}, halved to {damage} (living creature)";
         }
@@ -293,7 +293,7 @@ public partial class GameManager
                 // Check Spell Resistance
                 if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
                 {
-                    int srCheckRoll = UnityEngine.Random.Range(1, 21);
+                    int srCheckRoll = DiceRoller.D20();
                     int srCheckTotal = srCheckRoll + casterLevel;
                     bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
 
@@ -310,13 +310,11 @@ public partial class GameManager
                 // Roll 5d6 sonic damage
                 int damage = 0;
                 for (int i = 0; i < 5; i++)
-                    damage += UnityEngine.Random.Range(1, 7);
+                    damage += DiceRoller.D6();
 
                 // Fortitude save
-                int fortRoll = UnityEngine.Random.Range(1, 21);
-                int fortMod = target.Stats.FortitudeSave;
-                int fortTotal = fortRoll + fortMod;
-                bool savePassed = fortTotal >= saveDc;
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
+                bool savePassed = saveResult.Saved;
 
                 bool deafened = false;
                 int deafRounds = 0;
@@ -328,7 +326,7 @@ public partial class GameManager
                 else
                 {
                     // Failed save: deafened for 2d6 rounds
-                    deafRounds = UnityEngine.Random.Range(1, 7) + UnityEngine.Random.Range(1, 7);
+                    deafRounds = DiceRoller.D6() + DiceRoller.D6();
                     deafened = true;
                 }
 
@@ -393,7 +391,7 @@ public partial class GameManager
 
                 // 5d6 sonic (no save for objects)
                 int wallDamage = 0;
-                for (int i = 0; i < 5; i++) wallDamage += UnityEngine.Random.Range(1, 7);
+                for (int i = 0; i < 5; i++) wallDamage += DiceRoller.D6();
 
                 sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");
                 sb.AppendLine($"  Sonic damage to overlapping sections: {wallDamage}");

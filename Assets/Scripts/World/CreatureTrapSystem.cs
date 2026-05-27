@@ -243,7 +243,7 @@ public class CreatureTrapSystem : MonoBehaviour
             case "Fort": saveBonus = target.Stats.FortitudeSave; break;
         }
 
-        int saveRoll = Random.Range(1, 21);
+        int saveRoll = DiceRoller.D20();
         int saveTotal = saveRoll + saveBonus;
         result.SaveRoll = saveRoll;
         result.SaveTotal = saveTotal;
@@ -611,7 +611,7 @@ public class CreatureTrapSystem : MonoBehaviour
             if (distance > rangeCells) continue;
 
             // Will save
-            int saveRoll = Random.Range(1, 21);
+            int saveRoll = DiceRoller.D20();
             int saveTotal = saveRoll + character.Stats.WillSave;
 
             if (saveRoll != 20 && (saveRoll == 1 || saveTotal < saveDC))

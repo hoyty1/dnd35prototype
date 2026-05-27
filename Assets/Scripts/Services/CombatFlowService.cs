@@ -93,7 +93,7 @@ public class CombatFlowService : MonoBehaviour
 
     public int RollAttack(int baseAttackBonus, int miscellaneousModifiers)
     {
-        int dieRoll = UnityEngine.Random.Range(1, 21);
+        int dieRoll = DiceRoller.D20();
         return dieRoll + baseAttackBonus + miscellaneousModifiers;
     }
 

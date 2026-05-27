@@ -47,9 +47,6 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
             Feats = new List<string> { "Multiattack", "Track" },
             SpecialAbilities = new List<string> { "Scare (Ex/Sp): retract face skin, Will DC 12 or panicked 1d4 rounds (1+ HD), shaken if 6+ HD", "Scent", "Darkvision 60 ft.", "Low-light vision" },
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.6f, 0.5f, 0.4f, 1f),
             PanelColor = new Color(0.22f, 0.18f, 0.12f, 0.85f),
@@ -91,7 +88,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SPEAR, EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string> { ItemIDs.SLING },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.55f, 0.45f, 0.35f, 1f),
             PanelColor = new Color(0.2f, 0.15f, 0.1f, 0.85f),

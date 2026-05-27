@@ -37,7 +37,7 @@ public class EntangleAreaEffect : PersistentAreaEffect
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
 
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int reflexMod = character.Stats.ReflexSave;
         int total = roll + reflexMod;
         bool saved = total >= SaveDC;
@@ -62,7 +62,7 @@ public class EntangleAreaEffect : PersistentAreaEffect
         if (character.HasCondition(CombatConditionType.Entangled))
         {
             // Break free attempt (can use Str or Escape Artist)
-            int strCheck = Random.Range(1, 21) + character.Stats.STRMod;
+            int strCheck = DiceRoller.D20() + character.Stats.STRMod;
             bool breakFree = strCheck >= BreakFreeDC;
 
             LogEffect($"{character.Stats.CharacterName} tries to break free: Str d20+{character.Stats.STRMod}={strCheck} vs DC {BreakFreeDC} → {(breakFree ? "FREED" : "STILL ENTANGLED")}");
@@ -76,7 +76,7 @@ public class EntangleAreaEffect : PersistentAreaEffect
         else
         {
             // Re-check entanglement for creatures still in area but not entangled
-            int roll = Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int reflexMod = character.Stats.ReflexSave;
             int total = roll + reflexMod;
             bool saved = total >= SaveDC;

@@ -34,7 +34,7 @@ public class GreaseAreaEffect : PersistentAreaEffect
         if (character == null || character.Stats == null || character.Stats.IsDead)
             return;
 
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int reflex = character.Stats.ReflexSave;
         int total = roll + reflex;
         bool success = total >= SaveDC;

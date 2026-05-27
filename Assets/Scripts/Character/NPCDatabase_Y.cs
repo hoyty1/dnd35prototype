@@ -61,9 +61,6 @@ public static partial class NPCDatabase
                 "Skills: Listen +7, Spot +7, Survival +7 (+11 tracking by scent)",
                 "Alignment: Neutral Evil"
             },
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.35f, 0.32f, 0.42f, 1f),
             PanelColor = new Color(0.12f, 0.1f, 0.18f, 0.85f),
@@ -106,8 +103,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair("scimitar", EquipSlot.MainHand),
                 new EquipmentSlotPair("composite_longbow", EquipSlot.Ranged)
             },
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
             SpriteColor = new Color(0.3f, 0.42f, 0.22f, 1f),
             PanelColor = new Color(0.06f, 0.14f, 0.03f, 0.85f),
@@ -149,8 +144,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair("scimitar", EquipSlot.MainHand),
                 new EquipmentSlotPair("composite_longbow", EquipSlot.Ranged)
             },
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.35f, 0.48f, 0.28f, 1f),
             PanelColor = new Color(0.1f, 0.16f, 0.05f, 0.85f),
@@ -189,8 +182,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair("scimitar", EquipSlot.MainHand),
                 new EquipmentSlotPair("shortbow", EquipSlot.Ranged)
             },
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.4f, 0.5f, 0.3f, 1f),
             PanelColor = new Color(0.12f, 0.18f, 0.06f, 0.85f),

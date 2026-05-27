@@ -381,7 +381,7 @@ public partial class GameManager
     /// </summary>
     private bool RollWallOfIceReflexSave(CharacterController creature, int dc, out int roll, out int total)
     {
-        roll = Random.Range(1, 21);
+        roll = DiceRoller.D20();
         int reflexMod = creature.Stats.ReflexSave;
         total = roll + reflexMod;
         bool success = total >= dc;
@@ -910,19 +910,15 @@ public partial class GameManager
                 continue;
 
             // SR check for additional creatures
-            if (spell.SpellResistanceApplies && creature.Stats.SpellResistance > 0)
+            var srResult = SpellSaveResolver.RollSpellResistance(caster, creature, casterLevel);
+            if (!srResult.Overcame)
             {
-                int srRoll = UnityEngine.Random.Range(1, 21);
-                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-                if (srTotal < creature.Stats.SpellResistance)
-                {
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {creature.Stats.CharacterName} resists the Resilient Sphere via Spell Resistance — sphere fails to form!</color>");
-                    return true;
-                }
+                CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {creature.Stats.CharacterName} resists the Resilient Sphere via Spell Resistance — sphere fails to form!</color>");
+                return true;
             }
 
             // Reflex save for additional creatures
-            int reflexSave = UnityEngine.Random.Range(1, 21) + creature.Stats.ReflexSave;
+            int reflexSave = DiceRoller.D20() + creature.Stats.ReflexSave;
             if (reflexSave >= saveDC)
             {
                 CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {creature.Stats.CharacterName} dodges the forming Resilient Sphere (Reflex {reflexSave} vs DC {saveDC}) — sphere fails!</color>");

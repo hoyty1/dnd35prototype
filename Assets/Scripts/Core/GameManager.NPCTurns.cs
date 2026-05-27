@@ -1625,7 +1625,7 @@ public partial class GameManager
 
             // Roll saving throw
             int saveBonus = bw.IsReflexSave ? target.Stats.ReflexSave : target.Stats.FortitudeSave;
-            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveRoll = DiceRoller.D20();
             int saveTotal = saveRoll + saveBonus;
             bool saved = saveTotal >= bw.SaveDC;
 
@@ -1734,7 +1734,7 @@ public partial class GameManager
             int targetHD = target.Stats.Level > 0 ? target.Stats.Level : 1;
 
             // Will save
-            int roll = UnityEngine.Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int willMod = target.Stats.WillSave;
             int total = roll + willMod;
 

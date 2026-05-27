@@ -254,7 +254,7 @@ public static class ScrollValidator
         int scrollCL = scrollItem.ConsumableMinimumCasterLevel;
         result.DC = scrollCL + 1;
 
-        int d20 = UnityEngine.Random.Range(1, 21);
+        int d20 = DiceRoller.D20();
         result.D20Roll = d20;
         result.TotalCheck = d20 + characterCasterLevel;
 
@@ -265,7 +265,7 @@ public static class ScrollValidator
 
             // Wisdom check DC 5 to avoid mishap
             int wisMod = character != null && character.Stats != null ? character.Stats.WISMod : 0;
-            int wisCheck = UnityEngine.Random.Range(1, 21) + wisMod;
+            int wisCheck = DiceRoller.D20() + wisMod;
 
             if (wisCheck >= 5)
             {
@@ -281,7 +281,7 @@ public static class ScrollValidator
                 int spellLevel = Mathf.Max(1, scrollItem.ScrollSpellLevel);
                 int mishapDamage = 0;
                 for (int i = 0; i < spellLevel; i++)
-                    mishapDamage += UnityEngine.Random.Range(1, 7);
+                    mishapDamage += DiceRoller.D6();
 
                 result.MishapDamage = mishapDamage;
                 result.Summary = $"Caster level check failed (d20={d20}+{characterCasterLevel}={result.TotalCheck} vs DC {result.DC}). " +
@@ -312,7 +312,7 @@ public static class ScrollValidator
 
         int umdBonus = character.Stats.GetSkillBonus("Use Magic Device");
         int dc = 20 + scrollItem.ConsumableMinimumCasterLevel;
-        int d20 = UnityEngine.Random.Range(1, 21);
+        int d20 = DiceRoller.D20();
         int total = d20 + umdBonus;
 
         // Natural 1 on UMD is not auto-fail (UMD is a skill, not a save),

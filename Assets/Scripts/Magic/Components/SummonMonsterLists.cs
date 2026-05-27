@@ -413,7 +413,7 @@ public static class SummonMonsterLists
         if (levelDifference == 1)
             return UnityEngine.Random.Range(1, 4); // 1d3 = 1-3
 
-        return UnityEngine.Random.Range(1, 5) + 1; // 1d4+1 = 2-5
+        return DiceRoller.D4() + 1; // 1d4+1 = 2-5
     }
 
     /// <summary>

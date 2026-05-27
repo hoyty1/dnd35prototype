@@ -308,7 +308,7 @@ public class CharacterCreationUI : MonoBehaviour
         {
             int[] dice = new int[4];
             for (int d = 0; d < 4; d++)
-                dice[d] = UnityEngine.Random.Range(1, 7);
+                dice[d] = DiceRoller.D6();
 
             // Sort descending to find lowest
             System.Array.Sort(dice);

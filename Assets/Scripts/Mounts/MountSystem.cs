@@ -121,7 +121,7 @@ public static class MountSystem
         if (attemptFastMount)
         {
             int rideBonus = rider.Stats.GetSkillBonus("Ride");
-            int roll = Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int total = roll + rideBonus;
             fastMount = total >= DC_FAST_MOUNT_DISMOUNT;
             rideCheckLog = $" (Ride check: d20({roll})+{rideBonus}={total} vs DC {DC_FAST_MOUNT_DISMOUNT} — {(fastMount ? "FAST MOUNT" : "failed, uses move action")})";
@@ -159,7 +159,7 @@ public static class MountSystem
         if (attemptFastDismount)
         {
             int rideBonus = rider.Stats.GetSkillBonus("Ride");
-            int roll = Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int total = roll + rideBonus;
             fastDismount = total >= DC_FAST_MOUNT_DISMOUNT;
             rideCheckLog = $" (Ride check: d20({roll})+{rideBonus}={total} vs DC {DC_FAST_MOUNT_DISMOUNT} — {(fastDismount ? "FAST DISMOUNT" : "failed, uses move action")})";
@@ -184,7 +184,7 @@ public static class MountSystem
     {
         if (stats == null) return (false, 0, "No stats");
         int rideBonus = stats.GetSkillBonus("Ride");
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int total = roll + rideBonus;
         bool success = total >= dc;
         string log = $"Ride ({description}): d20({roll})+{rideBonus}={total} vs DC {dc} — {(success ? "SUCCESS" : "FAILED")}";
@@ -279,7 +279,7 @@ public static class MountSystem
 
         if (success)
         {
-            int spurDamage = Random.Range(1, 5); // 1d4
+            int spurDamage = DiceRoller.D4(); // 1d4
             mount.TakeDamage(spurDamage);
             string log = $"🐎 {rider.Stats.CharacterName} spurs {mount.Data.Name}: +10 ft speed this round! ({mount.Data.Name} takes {spurDamage} damage) — {checkLog}";
             Debug.Log($"[Mount] {log}");
@@ -387,7 +387,7 @@ public static class MountSystem
             softFall = TrySoftFall(rider.Stats);
             if (!softFall)
             {
-                fallDamage = Random.Range(1, 7); // 1d6 falling damage
+                fallDamage = DiceRoller.D6(); // 1d6 falling damage
                 rider.Stats.TakeDamage(fallDamage);
                 fallLog = $" Takes {fallDamage} falling damage!";
             }

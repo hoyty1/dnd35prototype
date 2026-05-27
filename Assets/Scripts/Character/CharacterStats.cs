@@ -164,6 +164,14 @@ public class CharacterStats
 
     [Header("Multiclassing")]
     public List<ClassLevelEntry> ClassLevels = new List<ClassLevelEntry>();
+
+    /// <summary>
+    /// Cached class-level lookups. Built lazily on first GetClassLevel() call
+    /// after EnsureMulticlassDataInitialized(). Invalidated by InvalidateClassLevelCache().
+    /// Keys are lower-cased class names for O(1) lookup.
+    /// </summary>
+    private Dictionary<string, int> _classLevelCache;
+
     public string FavoredClass;
     public bool HasXPPenalty;
     public int PendingLevelUps;
@@ -344,6 +352,9 @@ public class CharacterStats
 
     public void EnsureMulticlassDataInitialized()
     {
+        // Invalidate cache — this method may add/remove entries
+        _classLevelCache = null;
+
         if (ClassLevels == null)
             ClassLevels = new List<ClassLevelEntry>();
 
@@ -430,17 +441,42 @@ public class CharacterStats
             return 0;
 
         EnsureMulticlassDataInitialized();
-        for (int i = 0; i < ClassLevels.Count; i++)
-        {
-            ClassLevelEntry entry = ClassLevels[i];
-            if (entry != null && string.Equals(entry.ClassName, className, StringComparison.OrdinalIgnoreCase))
-                return Mathf.Max(0, entry.Level);
-        }
 
-        return 0;
+        // Build cache on first access (or after invalidation)
+        if (_classLevelCache == null)
+            RebuildClassLevelCache();
+
+        return _classLevelCache.TryGetValue(className.ToLowerInvariant(), out int level) ? level : 0;
     }
 
     public bool HasClass(string className) => GetClassLevel(className) > 0;
+
+    /// <summary>
+    /// Rebuild the class-level cache from the current ClassLevels list.
+    /// Called lazily by GetClassLevel() and explicitly after class changes.
+    /// </summary>
+    private void RebuildClassLevelCache()
+    {
+        _classLevelCache = new Dictionary<string, int>(ClassLevels.Count, StringComparer.Ordinal);
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry entry = ClassLevels[i];
+            if (entry != null && !string.IsNullOrWhiteSpace(entry.ClassName))
+            {
+                string key = entry.ClassName.ToLowerInvariant();
+                _classLevelCache[key] = Mathf.Max(0, entry.Level);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Invalidate the class-level cache. Must be called whenever ClassLevels is modified
+    /// (add, remove, level-up, etc.). Next GetClassLevel() call will rebuild automatically.
+    /// </summary>
+    public void InvalidateClassLevelCache()
+    {
+        _classLevelCache = null;
+    }
 
     public string ClassSummary
     {
@@ -907,7 +943,7 @@ public class CharacterStats
     {
         if (!LuckRerollPending) return originalRoll;
 
-        int reroll = UnityEngine.Random.Range(1, 21);
+        int reroll = DiceRoller.D20();
         int best = Mathf.Max(originalRoll, reroll);
 
         // Consume the power
@@ -3244,6 +3280,7 @@ public class CharacterStats
         HitDice = Mathf.Max(1, level);
         CharacterClass = characterClass;
         ClassLevels = new List<ClassLevelEntry> { new ClassLevelEntry(characterClass, Mathf.Max(1, level)) };
+        InvalidateClassLevelCache();
         PendingLevelUps = 0;
         HitPointGainsByClassLevel = new List<ClassHitPointEntry>();
 
@@ -3464,6 +3501,7 @@ public class CharacterStats
             classEntry.Level += 1;
         }
 
+        InvalidateClassLevelCache();
         CharacterClass = selectedClass;
         PendingLevelUps = Mathf.Max(0, PendingLevelUps - 1);
 
@@ -3995,7 +4033,7 @@ public class CharacterStats
     /// </summary>
     public (bool hit, int roll, int total) RollToHit(int targetAC)
     {
-        int roll = UnityEngine.Random.Range(1, 21); // 1-20
+        int roll = DiceRoller.D20(); // 1-20
         roll = ApplyLuckReroll(roll, "attack roll");
         int total = roll + AttackBonus;
 
@@ -4013,7 +4051,7 @@ public class CharacterStats
     /// </summary>
     public (bool hit, int roll, int total) RollToHitWithFlanking(int targetAC, int flankingBonus)
     {
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         roll = ApplyLuckReroll(roll, "attack roll");
         int total = roll + AttackBonus + flankingBonus;
 
@@ -4032,7 +4070,7 @@ public class CharacterStats
     /// <param name="targetAC">Target's Armor Class</param>
     public (bool hit, int roll, int total) RollToHitWithMod(int totalAttackMod, int targetAC)
     {
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         roll = ApplyLuckReroll(roll, "attack roll");
         int total = roll + totalAttackMod;
 
@@ -4103,7 +4141,7 @@ public class CharacterStats
     /// <returns>(confirmed, naturalRoll, total) - confirmed is true if the crit is confirmed</returns>
     public (bool confirmed, int roll, int total) RollCritConfirmation(int totalAttackMod, int targetAC)
     {
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int total = roll + totalAttackMod;
 
         // Natural 20 on confirmation always confirms; natural 1 always fails confirmation
@@ -5909,7 +5947,7 @@ public class CharacterStats
             return -1;
         }
 
-        int d20 = UnityEngine.Random.Range(1, 21);
+        int d20 = DiceRoller.D20();
         d20 = ApplyLuckReroll(d20, $"{skillName} skill check");
         GameManager.Instance?.LogLuckRerollIfTriggered(this);
         int totalBonus = skill.GetTotalBonus(abilityMod);

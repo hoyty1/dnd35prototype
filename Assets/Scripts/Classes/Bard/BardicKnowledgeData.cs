@@ -47,7 +47,7 @@ public class BardicKnowledgeData
     /// </summary>
     public int RollBardicKnowledge()
     {
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int total = roll + TotalModifier;
         Debug.Log($"[BardicKnowledge] Check: {roll} + {TotalModifier} (L{_bardLevel} + INT {_intModifier}) = {total}");
         return total;

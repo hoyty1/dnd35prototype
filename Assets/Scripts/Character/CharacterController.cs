@@ -4507,7 +4507,7 @@ public class CharacterController : MonoBehaviour
         // --- Paralysis on hit (Gelatinous Cube tentacle, Ghoul, etc.) ---
         if (naturalAttack.ParalysisOnHitDC > 0 && target.Stats != null)
         {
-            int roll = UnityEngine.Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int total = roll + target.Stats.FortitudeSave;
             if (total < naturalAttack.ParalysisOnHitDC)
             {
@@ -4538,7 +4538,7 @@ public class CharacterController : MonoBehaviour
         // --- Petrification on hit (Cockatrice) ---
         if (naturalAttack.PetrificationOnHitDC > 0 && target.Stats != null)
         {
-            int roll = UnityEngine.Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int total = roll + target.Stats.FortitudeSave;
             if (total < naturalAttack.PetrificationOnHitDC)
             {
@@ -6707,7 +6707,7 @@ public class CharacterController : MonoBehaviour
                     // Uses target's BAB + DEX mod as the attack roll (improvised thrown weapon, no penalty per RAW).
                     if (target.Stats != null && this.Stats != null && !this.Stats.IsDead)
                     {
-                        int counterAttackRoll = UnityEngine.Random.Range(1, 21);
+                        int counterAttackRoll = DiceRoller.D20();
                         int counterAttackBonus = target.Stats.BaseAttackBonus + target.Stats.DEXMod;
                         int counterTotal = counterAttackRoll + counterAttackBonus;
                         int snatchTargetAC = this.Stats.ArmorClass;
@@ -6715,7 +6715,7 @@ public class CharacterController : MonoBehaviour
                         if (counterAttackRoll == 20 || (counterAttackRoll != 1 && counterTotal >= snatchTargetAC))
                         {
                             // Hit: deal 1d4 + STR damage (thrown projectile)
-                            int snatchDamage = UnityEngine.Random.Range(1, 5) + target.Stats.STRMod;
+                            int snatchDamage = DiceRoller.D4() + target.Stats.STRMod;
                             snatchDamage = Mathf.Max(1, snatchDamage);
                             this.Stats.TakeDamage(snatchDamage);
                             result.SpecialAttackNote += $" Counter-attack hits for {snatchDamage} damage! (roll {counterAttackRoll}+{counterAttackBonus}={counterTotal} vs AC {targetAC})";

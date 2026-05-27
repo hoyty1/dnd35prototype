@@ -561,7 +561,7 @@ public class WallOfIceAreaEffect : PersistentAreaEffect, ILineOfEffectBlocker
 
         int dc = GetStrengthCheckDC();
         int strMod = CharacterStats.GetModifier(character.Stats.STR);
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int total = roll + strMod;
         bool success = total >= dc;
 
@@ -603,7 +603,7 @@ public class WallOfIceAreaEffect : PersistentAreaEffect, ILineOfEffectBlocker
         }
 
         // Line mode: 1d6 + CL cold damage
-        int coldDamage = UnityEngine.Random.Range(1, 7) + CasterLevel;
+        int coldDamage = DiceRoller.D6() + CasterLevel;
         character.Stats.TakeDamage(coldDamage);
 
         LogEffect($"❄️ {character.Stats.CharacterName} takes {coldDamage} cold damage passing through breached Wall of Ice at ({cell.x},{cell.y})");

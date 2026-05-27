@@ -176,18 +176,13 @@ public partial class GameManager
             sb.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
 
             // Spell Resistance check
-            if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+            srResult.AppendToLog(sb);
+            if (!srResult.Overcame)
             {
-                int srRoll = UnityEngine.Random.Range(1, 21);
-                int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-                bool srOvercome = srTotal >= target.Stats.SpellResistance;
-                sb.AppendLine($"  SR Check: d20({srRoll}) + {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
-                if (!srOvercome)
-                {
-                    sb.AppendLine($"  {target.Stats.CharacterName} resists Halt Undead via Spell Resistance!");
-                    sb.AppendLine();
-                    continue;
-                }
+                sb.AppendLine($"  {target.Stats.CharacterName} resists Halt Undead via Spell Resistance!");
+                sb.AppendLine();
+                continue;
             }
 
             // Save check (only intelligent undead get a save)
@@ -195,11 +190,9 @@ public partial class GameManager
             bool savePassed = false;
             if (isIntelligent)
             {
-                int willRoll = UnityEngine.Random.Range(1, 21);
-                int willMod = target.Stats.WillSave;
-                int willTotal = willRoll + willMod;
-                savePassed = willTotal >= saveDc;
-                sb.AppendLine($"  Will save (intelligent undead): d20({willRoll}) + {willMod} = {willTotal} vs DC {saveDc} → {(savePassed ? "SAVED (negated)" : "FAILED")}");
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+                savePassed = saveResult.Saved;
+                saveResult.AppendToLog(sb, "SAVED (negated)", "FAILED");
             }
             else
             {

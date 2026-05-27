@@ -398,7 +398,7 @@ public static class RingActivationManager
 
         int damage = 0;
         for (int i = 0; i < 5; i++)
-            damage += Random.Range(1, 7); // 5d6
+            damage += DiceRoller.D6(); // 5d6
 
         resultMessage = $"💍 {charName} hurls objects telekinetically! (Violent Thrust: {damage} bludgeoning damage, CL 9)";
         if (GameManager.Instance != null)
@@ -413,7 +413,7 @@ public static class RingActivationManager
 
         // Combat Maneuver: opposed CL check vs target for bull rush/disarm/trip
         // CL 9 + d20 vs target's relevant check
-        int clCheck = Random.Range(1, 21) + 9; // d20 + CL 9
+        int clCheck = DiceRoller.D20() + 9; // d20 + CL 9
 
         resultMessage = $"💍 {charName} uses telekinetic force! (Combat Maneuver: check {clCheck}, CL 9)";
         if (GameManager.Instance != null)
@@ -465,11 +465,11 @@ public static class RingActivationManager
         // Calculate damage: 1d6 per charge
         int damage = 0;
         for (int i = 0; i < chargeCost; i++)
-            damage += Random.Range(1, 7);
+            damage += DiceRoller.D6();
 
         // Bull rush: Str 25 (+7 mod) + charges spent
         int bullRushBonus = 7 + chargeCost; // Str 25 mod + charge bonus
-        int bullRushCheck = Random.Range(1, 21) + bullRushBonus;
+        int bullRushCheck = DiceRoller.D20() + bullRushBonus;
 
         var sb = new StringBuilder();
         sb.AppendLine($"💍 {charName} points the Ring of the Ram! ({chargeCost} charge{(chargeCost > 1 ? "s" : "")})");
@@ -513,7 +513,7 @@ public static class RingActivationManager
         // Con damage on repeated use (2nd+ per rest)
         if (useCount > 1)
         {
-            int conDamage = Random.Range(1, 5); // 1d4 Con damage per DMG errata (simplified to 1 in some interpretations)
+            int conDamage = DiceRoller.D4(); // 1d4 Con damage per DMG errata (simplified to 1 in some interpretations)
             // Apply ability damage
             if (actor.Stats != null)
             {
@@ -593,7 +593,7 @@ public static class RingActivationManager
         {
             int ballDamage = 0;
             for (int d = 0; d < dicePerBall; d++)
-                ballDamage += Random.Range(1, 7);
+                ballDamage += DiceRoller.D6();
             totalDamage += ballDamage;
             sb.AppendLine($"  Ball {b + 1}: {ballDamage} electricity damage (Reflex DC 13 half)");
         }
@@ -650,7 +650,7 @@ public static class RingActivationManager
     {
         if (wearer == null || ring == null) return 0;
 
-        int turningLevels = Random.Range(1, 5) + 6; // 1d4 + 6 = 7–10
+        int turningLevels = DiceRoller.D4() + 6; // 1d4 + 6 = 7–10
         ring.RingSpellTurningPool = turningLevels;
 
         // Apply via StatusEffectManager using existing Spell Turning tag format

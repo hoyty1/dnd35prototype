@@ -33,7 +33,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SHIELD_LIGHT_WOODEN, EquipSlot.LeftHand)
             },
             BackpackItemIds = new List<string> { ItemIDs.JAVELIN },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.6f, 0.8f, 0.3f, 1f),  // greenish
             PanelColor = new Color(0.4f, 0.1f, 0.1f, 0.85f), // dark red
@@ -71,8 +70,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.SHIELD_LIGHT_WOODEN, EquipSlot.LeftHand)
             },
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.58f, 0.8f, 0.3f, 1f),
             PanelColor = new Color(0.36f, 0.1f, 0.1f, 0.85f),
@@ -200,7 +197,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.LeftHand)
             },
-            BackpackItemIds = new List<string>(),
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Bludgeoning,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
@@ -244,13 +240,10 @@ public static partial class NPCDatabase
             BaseSpeed = 6,
             BaseHitDieHP = 26,
             CreatureTags = new List<string> { "Undead", "MM35" },
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Silver,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
             SpecialAbilities = new List<string> { "Energy drain (1 negative level on slam)", "Create spawn", "Darkvision 60 ft.", "Undead traits" },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.78f, 0.82f, 0.9f, 1f),
             PanelColor = new Color(0.19f, 0.18f, 0.3f, 0.85f),
@@ -283,12 +276,9 @@ public static partial class NPCDatabase
             {
                 new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
             },
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Slashing,
             IsMindless = true,
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
             SpriteColor = new Color(0.62f, 0.75f, 0.62f, 1f),
             PanelColor = new Color(0.17f, 0.28f, 0.17f, 0.85f),
@@ -333,7 +323,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.GREATAXE, EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string> { ItemIDs.JAVELIN, ItemIDs.JAVELIN },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.5f, 0.6f, 0.4f, 1f),     // olive-green skin
             PanelColor = new Color(0.35f, 0.15f, 0.05f, 0.85f), // dark brown
@@ -372,7 +361,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.DAGGER, EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string> { ItemIDs.DAGGER },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
             SpriteColor = new Color(0.55f, 0.68f, 0.45f, 1f),
             PanelColor = new Color(0.32f, 0.14f, 0.08f, 0.85f),
@@ -410,7 +398,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.STUDDED_LEATHER, EquipSlot.Armor),
                 new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand)
             },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
             AITargetPriority = "Slippery Sam",
             SpriteColor = new Color(0.64f, 0.54f, 0.42f, 1f),
@@ -440,7 +427,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
                 new EquipmentSlotPair(ItemIDs.CLUB, EquipSlot.RightHand)
             },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
             AITargetPriority = "Slippery Sam",
             SpriteColor = new Color(0.60f, 0.5f, 0.38f, 1f),
@@ -470,7 +456,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
                 new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
             AITargetPriority = "Slippery Sam",
             SpriteColor = new Color(0.62f, 0.52f, 0.4f, 1f),
@@ -500,7 +485,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
                 new EquipmentSlotPair(ItemIDs.DAGGER, EquipSlot.RightHand)
             },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
             AITargetPriority = "Slippery Sam",
             SpriteColor = new Color(0.58f, 0.48f, 0.37f, 1f),
@@ -585,7 +569,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.HIDE_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string> { ItemIDs.JAVELIN, ItemIDs.JAVELIN },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.65f, 0.55f, 0.45f, 1f),
             PanelColor = new Color(0.25f, 0.12f, 0.08f, 0.85f),
@@ -634,9 +617,6 @@ public static partial class NPCDatabase
                 "Skills: Hide +0, Listen +7, Move Silently +4, Spot +7, Survival +2 (+6 tracking by scent)",
                 "Alignment: True Neutral"
             },
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.62f, 0.62f, 0.62f, 1f),
             PanelColor = new Color(0.18f, 0.18f, 0.18f, 0.85f),
@@ -677,9 +657,6 @@ public static partial class NPCDatabase
             HasPounce = true,
             HasRake = true,
             RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.88f, 0.66f, 0.32f, 1f),
             PanelColor = new Color(0.35f, 0.2f, 0.08f, 0.85f),
@@ -722,9 +699,6 @@ public static partial class NPCDatabase
             HasPounce = true,
             HasRake = true,
             RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.9f, 0.72f, 0.38f, 1f),
             PanelColor = new Color(0.2f, 0.3f, 0.14f, 0.85f),
@@ -760,9 +734,6 @@ public static partial class NPCDatabase
             BaseHitDieHP = 57,
             CreatureTags = new List<string> { "Animal" },
             HasTripAttack = false,
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.5f, 0.38f, 0.28f, 1f),
             PanelColor = new Color(0.25f, 0.17f, 0.12f, 0.85f),
@@ -800,9 +771,6 @@ public static partial class NPCDatabase
             HasScent = true,
             HasImprovedGrab = true,
             ImprovedGrabTriggerAttackName = "Claw",
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.44f, 0.3f, 0.22f, 1f),
             PanelColor = new Color(0.2f, 0.14f, 0.1f, 0.85f),
@@ -842,9 +810,6 @@ public static partial class NPCDatabase
             TripAttackCheckBonus = 1,
             Feats = new List<string> { "Weapon Focus", "Track" },
             WeaponFocusChoice = "Bite",
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.72f, 0.72f, 0.72f, 1f),
             PanelColor = new Color(0.2f, 0.2f, 0.2f, 0.85f),
@@ -909,9 +874,7 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.LeftHand),
                 new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Human", "Good" },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.84f, 0.88f, 0.98f, 1f),
             PanelColor = new Color(0.2f, 0.2f, 0.35f, 0.85f),
@@ -941,7 +904,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.LeftHand),
                 new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Human", "Good" },
             AIBehavior = NPCAIBehavior.DefensiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
@@ -976,7 +938,6 @@ public static partial class NPCDatabase
             {
                 new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
-            BackpackItemIds = new List<string>(),
             KnownSpellIds = new List<string> { SpellNames.MAGIC_MISSILE },
             PreparedSpellSlotIds = new List<string> { SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "AI:MagicMissileOnly" },
@@ -1013,7 +974,6 @@ public static partial class NPCDatabase
             {
                 new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
-            BackpackItemIds = new List<string>(),
             KnownSpellIds = new List<string> { SpellNames.CHARM_PERSON },
             PreparedSpellSlotIds = new List<string>
             {
@@ -1055,9 +1015,7 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Goblin", "Evil", "ProtectionFromEvilTest" },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.52f, 0.76f, 0.52f, 1f),
             PanelColor = new Color(0.18f, 0.28f, 0.16f, 0.88f),
@@ -1091,9 +1049,7 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SHORT_SWORD, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Human", "ProtectionFromEvilTest", "ControlTest" },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.76f, 0.74f, 0.62f, 1f),
             PanelColor = new Color(0.2f, 0.2f, 0.2f, 0.88f),
@@ -1119,8 +1075,6 @@ public static partial class NPCDatabase
             BAB = 1,
             BaseSpeed = 6,
             BaseHitDieHP = 15,
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
             KnownSpellIds = new List<string> { SpellNames.DAZE },
             PreparedSpellSlotIds = new List<string> { SpellNames.DAZE, SpellNames.DAZE, SpellNames.DAZE, SpellNames.DAZE },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "ProtectionFromEvilTest", "ControlTest" },
@@ -1154,7 +1108,6 @@ public static partial class NPCDatabase
             {
                 new EquipmentSlotPair(ItemIDs.CHAIN_SHIRT, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             KnownSpellIds = new List<string> { SpellNames.DAZE },
             PreparedSpellSlotIds = new List<string> { SpellNames.DAZE, SpellNames.DAZE, SpellNames.DAZE, SpellNames.DAZE },
             CreatureTags = new List<string> { "Humanoid", "Divine", "Evil", "ProtectionFromEvilTest", "ControlTest" },
@@ -1191,7 +1144,6 @@ public static partial class NPCDatabase
             {
                 new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
-            BackpackItemIds = new List<string>(),
             KnownSpellIds = new List<string> { SpellNames.OBSCURING_MIST },
             PreparedSpellSlotIds = new List<string> { SpellNames.OBSCURING_MIST, SpellNames.OBSCURING_MIST, SpellNames.OBSCURING_MIST },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "WindDispersionTest" },
@@ -1225,7 +1177,6 @@ public static partial class NPCDatabase
             {
                 new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
-            BackpackItemIds = new List<string>(),
             KnownSpellIds = new List<string> { SpellNames.OBSCURING_MIST, SpellNames.MAGIC_MISSILE },
             PreparedSpellSlotIds = new List<string> { SpellNames.OBSCURING_MIST, SpellNames.MAGIC_MISSILE },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "WindDispersionTest" },
@@ -1260,9 +1211,7 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SHORT_SWORD, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "SmallTarget" },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.92f, 0.84f, 0.55f, 1f),
             PanelColor = new Color(0.24f, 0.20f, 0.10f, 0.88f),
@@ -1294,7 +1243,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_WOODEN, EquipSlot.LeftHand),
                 new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "MediumTarget" },
             AIBehavior = NPCAIBehavior.DefensiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
@@ -1327,9 +1275,7 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.GREATAXE, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.HIDE_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "MediumTarget", "HighFortitude" },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.78f, 0.52f, 0.42f, 1f),
             PanelColor = new Color(0.30f, 0.14f, 0.10f, 0.88f),
@@ -1360,9 +1306,7 @@ public static partial class NPCDatabase
             {
                 new EquipmentSlotPair(ItemIDs.GREATCLUB, EquipSlot.RightHand)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Giant", "WindDispersionTest", "LargeTarget" },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.65f, 0.55f, 0.45f, 1f),
             PanelColor = new Color(0.25f, 0.12f, 0.08f, 0.88f),
@@ -1394,7 +1338,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.LeftHand),
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "ArcherControl" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
@@ -1430,7 +1373,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.LONGBOW, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "North" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
@@ -1463,7 +1405,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.LONGBOW, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "Northeast" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
@@ -1496,7 +1437,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.COMPOSITE_LONGBOW, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "East" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
@@ -1529,7 +1469,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SHORTBOW, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "Southeast", "SmallTarget" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
@@ -1562,7 +1501,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.CROSSBOW_HEAVY, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "South", "Crossbow" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
@@ -1595,7 +1533,6 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SHORTBOW, EquipSlot.RightHand),
                 new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "West", "Scout" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
@@ -1630,10 +1567,7 @@ public static partial class NPCDatabase
             ReflexSaveOverride = SaveProgression.Poor,
             WillSaveOverride = SaveProgression.Poor,
             BaseHitDieHP = 50,
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Training" },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
             SpriteColor = new Color(0.62f, 0.58f, 0.46f, 1f),
             PanelColor = new Color(0.28f, 0.24f, 0.18f, 0.85f),
@@ -1668,10 +1602,7 @@ public static partial class NPCDatabase
             FortitudeSaveOverride = SaveProgression.Poor,
             ReflexSaveOverride = SaveProgression.Poor,
             WillSaveOverride = SaveProgression.Poor,
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Goblin", "Goblinoid", "Training", "Test", "XP" },
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.84f, 0.96f, 0.42f, 1f),
             PanelColor = new Color(0.35f, 0.3f, 0.08f, 0.88f),

@@ -422,7 +422,7 @@ public class ConditionService : MonoBehaviour
             if (!escapeData.CheckAtTurnStart)
                 continue;
 
-            int roll = UnityEngine.Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int saveMod = GetSaveModifierForType(actor.Stats, escapeData.SaveType);
             int total = roll + saveMod;
             bool success = total >= escapeData.SaveDC;

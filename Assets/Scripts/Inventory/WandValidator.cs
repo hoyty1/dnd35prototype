@@ -175,7 +175,7 @@ public static class WandValidator
 
         int umdBonus = character.Stats.GetSkillBonus("Use Magic Device");
         int dc = 20; // Flat DC 20 for wand activation via UMD
-        int d20 = UnityEngine.Random.Range(1, 21);
+        int d20 = DiceRoller.D20();
         int total = d20 + umdBonus;
 
         if (total >= dc)

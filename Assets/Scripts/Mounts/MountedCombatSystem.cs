@@ -45,7 +45,7 @@ public static class MountedCombatSystem
 
         // Make Ride check vs attack roll
         int rideBonus = rider.Stats.GetSkillBonus("Ride");
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int rideTotal = roll + rideBonus;
 
         rider.Stats.HasUsedMountedCombatThisRound = true;
@@ -174,7 +174,7 @@ public static class MountedCombatSystem
         }
         if (hoof == null) hoof = mount.Data.NaturalAttacks[0];
 
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int totalAttack = roll + hoof.AttackBonus + 4; // +4 vs prone
         int targetAC = target.Stats.ArmorClass;
 
@@ -257,7 +257,7 @@ public static class MountedCombatSystem
 
         foreach (var attack in mount.Data.NaturalAttacks)
         {
-            int roll = Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int totalAttack = roll + attack.AttackBonus;
             int targetAC = target.Stats.ArmorClass;
             bool hit = (roll == 20) || (roll != 1 && totalAttack >= targetAC);

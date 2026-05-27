@@ -797,7 +797,7 @@ public partial class GameManager
                 // Check Spell Resistance
                 if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
                 {
-                    int srCheckRoll = UnityEngine.Random.Range(1, 21);
+                    int srCheckRoll = DiceRoller.D20();
                     int srCheckTotal = srCheckRoll + casterLevel;
                     bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
 
@@ -814,12 +814,12 @@ public partial class GameManager
                 // Roll 3d6 bludgeoning
                 int bludgeoningDamage = 0;
                 for (int i = 0; i < 3; i++)
-                    bludgeoningDamage += UnityEngine.Random.Range(1, 7);
+                    bludgeoningDamage += DiceRoller.D6();
 
                 // Roll 2d6 cold
                 int coldDamage = 0;
                 for (int i = 0; i < 2; i++)
-                    coldDamage += UnityEngine.Random.Range(1, 7);
+                    coldDamage += DiceRoller.D6();
 
                 int totalDamage = bludgeoningDamage + coldDamage;
 
@@ -876,9 +876,9 @@ public partial class GameManager
 
                 // 3d6 bludgeoning + 2d6 cold (no save for objects)
                 int wallBludg = 0;
-                for (int i = 0; i < 3; i++) wallBludg += UnityEngine.Random.Range(1, 7);
+                for (int i = 0; i < 3; i++) wallBludg += DiceRoller.D6();
                 int wallCold = 0;
-                for (int i = 0; i < 2; i++) wallCold += UnityEngine.Random.Range(1, 7);
+                for (int i = 0; i < 2; i++) wallCold += DiceRoller.D6();
                 int wallTotal = wallBludg + wallCold;
 
                 sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");

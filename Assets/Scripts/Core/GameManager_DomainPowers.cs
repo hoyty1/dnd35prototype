@@ -297,7 +297,7 @@ public partial class GameManager
         int numDice = Mathf.Max(1, clericLevel); // 1d6 per cleric level, no cap
 
         // Melee touch attack
-        int attackRoll = Random.Range(1, 21);
+        int attackRoll = DiceRoller.D20();
         int attackMod = cleric.Stats.BaseAttackBonus + cleric.Stats.STRMod;
         int attackTotal = attackRoll + attackMod;
         int targetTouchAC = target.Stats.TouchArmorClass;
@@ -318,7 +318,7 @@ public partial class GameManager
         var diceResults = new List<int>();
         for (int i = 0; i < numDice; i++)
         {
-            int roll = Random.Range(1, 7);
+            int roll = DiceRoller.D6();
             diceResults.Add(roll);
             totalRoll += roll;
         }
@@ -662,13 +662,13 @@ public partial class GameManager
         }
 
         // Turning check (like evil cleric rebuke)
-        int checkRoll = Random.Range(1, 21);
+        int checkRoll = DiceRoller.D20();
         int checkTotal = checkRoll + cleric.Stats.CHAMod;
         int clericLevel = cleric.Stats.GetClassLevel("Cleric");
         int maxHD = GetMaxTurnableHD(checkTotal, clericLevel);
 
         // Turning damage: 2d6 + cleric level + CHA mod
-        int turnDamageRoll = Random.Range(1, 7) + Random.Range(1, 7);
+        int turnDamageRoll = DiceRoller.D6() + DiceRoller.D6();
         int turnPoolHd = turnDamageRoll + clericLevel + cleric.Stats.CHAMod;
         if (turnPoolHd < 0) turnPoolHd = 0;
 
@@ -817,13 +817,13 @@ public partial class GameManager
         }
 
         // Turning check: d20 + CHA mod
-        int checkRoll = Random.Range(1, 21);
+        int checkRoll = DiceRoller.D20();
         int checkTotal = checkRoll + cleric.Stats.CHAMod;
         int clericLevel = cleric.Stats.GetClassLevel("Cleric");
         int maxHD = GetMaxTurnableHD(checkTotal, clericLevel);
 
         // Turning damage: 2d6 + cleric level + CHA mod
-        int turnDamageRoll = Random.Range(1, 7) + Random.Range(1, 7);
+        int turnDamageRoll = DiceRoller.D6() + DiceRoller.D6();
         int turnPoolHd = turnDamageRoll + clericLevel + cleric.Stats.CHAMod;
         if (turnPoolHd < 0) turnPoolHd = 0;
 

@@ -187,7 +187,7 @@ public class LastKnownPositionTracker : MonoBehaviour
         // ═══════════════════════════════════════════════════════════════
         int listenDC = 20;
         int listenBonus = GetListenBonus();
-        int d20Roll = Random.Range(1, 21);
+        int d20Roll = DiceRoller.D20();
         int listenTotal = d20Roll + listenBonus;
         bool success = listenTotal >= listenDC;
 
@@ -289,8 +289,8 @@ public class LastKnownPositionTracker : MonoBehaviour
         int spotBonus = _owner.Stats.GetSkillBonus("Spot");
         int hideBonus = target.Stats.GetHideSkillBonusAgainstObserver(_owner);
 
-        spotRoll = Random.Range(1, 21);
-        hideRoll = Random.Range(1, 21);
+        spotRoll = DiceRoller.D20();
+        hideRoll = DiceRoller.D20();
         spotTotal = spotRoll + spotBonus;
         hideTotal = hideRoll + hideBonus;
 

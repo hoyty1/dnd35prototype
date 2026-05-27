@@ -144,7 +144,7 @@ public partial class GameManager
 
         // Will save with -5 penalty (D&D 3.5e)
         int saveDC = 10 + 4 + caster.Stats.WISMod;
-        int saveRoll = Random.Range(1, 21) + target.Stats.WillSave - 5;
+        int saveRoll = DiceRoller.D20() + target.Stats.WillSave - 5;
         bool saveSuccess = saveRoll >= saveDC;
 
         if (saveSuccess)

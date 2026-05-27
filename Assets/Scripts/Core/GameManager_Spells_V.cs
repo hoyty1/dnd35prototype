@@ -62,7 +62,7 @@ public partial class GameManager
         int diceCount = Mathf.Clamp(casterLevel / 2, 1, 10);
         int damage = 0;
         for (int i = 0; i < diceCount; i++)
-            damage += UnityEngine.Random.Range(1, 7);
+            damage += DiceRoller.D6();
 
         int hpBefore = target.Stats.CurrentHP;
         target.Stats.TakeDamage(damage);

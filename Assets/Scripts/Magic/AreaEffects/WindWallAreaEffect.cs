@@ -179,7 +179,7 @@ public class WindWallAreaEffect : PersistentAreaEffect
         if (!isTinyOrSmaller)
             return;
 
-        int dmg = Random.Range(1, 7) + Random.Range(1, 7) + Random.Range(1, 7); // 3d6
+        int dmg = DiceRoller.D6() + DiceRoller.D6() + DiceRoller.D6(); // 3d6
         character.Stats.ApplyNonlethalDamage(dmg);
         LogEffect($"  💨 {character.Stats.CharacterName} ({size}) is buffeted: {dmg} nonlethal damage.");
     }

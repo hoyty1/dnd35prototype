@@ -34,7 +34,7 @@ public sealed class ConfusedBehaviorController
         if (!actor.HasCondition(CombatConditionType.Confused))
             return false;
 
-        int roll = Random.Range(1, 101); // d%
+        int roll = DiceRoller.D100(); // d%
         CharacterController caster = ResolveConfusionSource(gameManager, actor);
 
         var resolved = new ConfusedTurnDecision

@@ -127,7 +127,7 @@ public class StinkingCloudAreaEffect : PersistentAreaEffect
         // If creature was nauseated, start lingering nausea timer
         if (_nauseatedCreatures.Contains(character))
         {
-            int lingeringRounds = Random.Range(1, 5) + 1; // 1d4+1
+            int lingeringRounds = DiceRoller.D4() + 1; // 1d4+1
             _lingeringNausea[character] = lingeringRounds;
             _nauseatedCreatures.Remove(character);
             LogEffect($"  {character.Stats.CharacterName} is still nauseated for {lingeringRounds} rounds after leaving.");
@@ -147,7 +147,7 @@ public class StinkingCloudAreaEffect : PersistentAreaEffect
                 // (e.g. when dispersed by Gust of Wind).
                 if (_nauseatedCreatures.Contains(character))
                 {
-                    int lingeringRounds = Random.Range(1, 5) + 1; // 1d4+1
+                    int lingeringRounds = DiceRoller.D4() + 1; // 1d4+1
                     // Re-apply with explicit duration so the condition system ticks it down
                     character.ApplyCondition(CombatConditionType.Nauseated, lingeringRounds, "Stinking Cloud (lingering)");
                     LogEffect($"  {character.Stats.CharacterName} remains nauseated for {lingeringRounds} rounds after cloud expires.");
@@ -184,7 +184,7 @@ public class StinkingCloudAreaEffect : PersistentAreaEffect
         if (creature == null || creature.Stats == null)
             return;
 
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int fortBonus = creature.Stats.FortitudeSave;
         int total = roll + fortBonus;
 

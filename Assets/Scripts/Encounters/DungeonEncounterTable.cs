@@ -60,7 +60,7 @@ public class DungeonEncounterTable
     /// </summary>
     public DungeonEncounterTableEntry RollEncounter()
     {
-        int roll = UnityEngine.Random.Range(1, 101); // 1-100 inclusive
+        int roll = DiceRoller.D100(); // 1-100 inclusive
         Debug.Log($"[DungeonEncounterTable] Rolled {roll} on {Name}");
         return GetEntryByRoll(roll);
     }

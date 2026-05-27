@@ -23,7 +23,7 @@ public class TurnService : MonoBehaviour
             Character = character;
             IsPC = isPC;
             Modifier = character != null && character.Stats != null ? character.Stats.InitiativeModifier : 0;
-            Roll = UnityEngine.Random.Range(1, 21);
+            Roll = DiceRoller.D20();
             Total = Roll + Modifier;
         }
 

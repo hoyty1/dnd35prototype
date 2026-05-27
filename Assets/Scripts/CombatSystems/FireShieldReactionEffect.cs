@@ -66,7 +66,7 @@ public class FireShieldReactionEffect : IMeleeReactionEffect
         // Calculate retribution damage: 1d6 + CL (max +15)
         int casterLevel = defender.Stats.FireShieldCasterLevel;
         int clBonus = Mathf.Min(casterLevel, 15);
-        int damage = Random.Range(1, 7) + clBonus;
+        int damage = DiceRoller.D6() + clBonus;
 
         bool isWarm = defender.Stats.FireShieldIsWarm;
         string dmgType = isWarm ? "fire" : "cold";

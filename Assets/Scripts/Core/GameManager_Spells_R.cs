@@ -56,7 +56,7 @@ public partial class GameManager
         {
             var disease = target.ActiveDiseases[i];
             int diseaseDC = disease.DiseaseData != null ? disease.DiseaseData.FortitudeDC : 14;
-            int check = Random.Range(1, 21) + casterLevel;
+            int check = DiceRoller.D20() + casterLevel;
 
             string diseaseName = disease.DiseaseData != null ? disease.DiseaseData.Name : "Unknown Disease";
 

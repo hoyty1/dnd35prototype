@@ -80,7 +80,7 @@ public partial class GameManager
             a => AlignmentHelper.IsLawful(a),
             a => AlignmentHelper.IsNeutralLC(a),
             (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Staggered, rounds, "Slow"); }, // Slowed = Staggered for simplicity
-            () => Random.Range(1, 7) // 1d6 rounds
+            () => DiceRoller.D6() // 1d6 rounds
         );
     }
 
@@ -122,7 +122,7 @@ public partial class GameManager
             a => AlignmentHelper.IsGood(a),
             a => AlignmentHelper.IsNeutralGE(a),
             (ch, rounds) => { ch.ApplyCondition(CombatConditionType.Sickened, rounds, "Sicken"); },
-            () => Random.Range(1, 5) // 1d4 rounds
+            () => DiceRoller.D4() // 1d4 rounds
         );
     }
 
@@ -166,7 +166,7 @@ public partial class GameManager
         int numDice = Mathf.Clamp(casterLevel / 2, 1, 5);
         int damage = 0;
         for (int i = 0; i < numDice; i++)
-            damage += Random.Range(1, 9); // 1d8
+            damage += DiceRoller.D8(); // 1d8
 
         // Half damage for neutral creatures on the relevant axis
         if (halfDamage)
@@ -174,7 +174,7 @@ public partial class GameManager
 
         // Will save: DC = 10 + spell level (4) + WIS mod
         int saveDC = 10 + 4 + caster.Stats.WISMod;
-        int saveRoll = Random.Range(1, 21) + target.Stats.WillSave;
+        int saveRoll = DiceRoller.D20() + target.Stats.WillSave;
         bool saveSuccess = saveRoll >= saveDC;
 
         if (saveSuccess)
@@ -385,7 +385,7 @@ public partial class GameManager
                 // Check Spell Resistance
                 if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
                 {
-                    int srCheckRoll = UnityEngine.Random.Range(1, 21);
+                    int srCheckRoll = DiceRoller.D20();
                     int srCheckTotal = srCheckRoll + casterLevel;
                     bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
 
@@ -402,28 +402,16 @@ public partial class GameManager
                 // Roll damage
                 int damage = 0;
                 for (int i = 0; i < diceCount; i++)
-                    damage += UnityEngine.Random.Range(1, 7); // 1d6
+                    damage += DiceRoller.D6(); // 1d6
 
-                // Reflex save
-                int reflexRoll = UnityEngine.Random.Range(1, 21);
-                int reflexMod = target.Stats.ReflexSave;
-                int reflexTotal = reflexRoll + reflexMod;
-                bool savePassed = reflexTotal >= saveDc;
-
+                // Reflex save + Blink
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc);
+                bool savePassed = saveResult.Saved;
                 if (savePassed)
                     damage = Mathf.Max(0, damage / 2);
-
-                // D&D 3.5e PHB p.206: Blinking creatures take half damage from area attacks
-                // (they are partially on the Ethereal Plane). This stacks with Reflex halving.
-                bool targetIsBlinking = target.HasActiveBlinkEffect;
-                if (targetIsBlinking)
-                    damage = Mathf.Max(0, damage / 2);
-
+                damage = SpellSaveResolver.ApplyBlinkHalving(damage, target, sb);
                 damage = Mathf.Max(damage > 0 ? 1 : 0, damage);
-
-                sb.AppendLine($"  Reflex save: d20({reflexRoll}) + {reflexMod} = {reflexTotal} vs DC {saveDc} → {(savePassed ? "SAVED (half)" : "FAILED (full)")}");
-                if (targetIsBlinking)
-                    sb.AppendLine($"  Blink: area damage halved (target partially ethereal)");
+                saveResult.AppendHalfDamageLog(sb);
 
                 int hpBefore = target.Stats.CurrentHP;
                 target.Stats.TakeDamage(damage);
@@ -474,7 +462,7 @@ public partial class GameManager
                 // Roll separate damage for the wall (same dice as character damage)
                 int wallDamage = 0;
                 for (int i = 0; i < diceCount; i++)
-                    wallDamage += UnityEngine.Random.Range(1, 7);
+                    wallDamage += DiceRoller.D6();
 
                 // No save for objects; fire is especially effective
                 sb.AppendLine($"  --- Wall of Ice ({overlapCells.Count} section(s) hit) ---");

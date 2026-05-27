@@ -123,7 +123,7 @@ public class SleetStormAreaEffect : PersistentAreaEffect
         if (creature == null || creature.Stats == null)
             return string.Empty;
 
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int dexMod = creature.Stats.DEXMod;
         int balanceRanks = creature.Stats.GetSkillBonus("Balance");
         int total = roll + balanceRanks;

@@ -162,12 +162,12 @@ public class BlackTentaclesAreaEffect : PersistentAreaEffect
             return;
 
         // Tentacle grapple roll
-        int tentacleRoll = Random.Range(1, 21);
+        int tentacleRoll = DiceRoller.D20();
         int tentacleTotal = tentacleRoll + TentacleGrappleModifier;
 
         // Creature's opposed grapple check
         int creatureGrappleMod = creature.GetGrappleModifier();
-        int creatureRoll = Random.Range(1, 21);
+        int creatureRoll = DiceRoller.D20();
         int creatureTotal = creatureRoll + creatureGrappleMod;
 
         if (tentacleTotal >= creatureTotal)
@@ -242,18 +242,18 @@ public class BlackTentaclesAreaEffect : PersistentAreaEffect
             return true;
 
         // Grapple check attempt
-        int grappleRoll = Random.Range(1, 21);
+        int grappleRoll = DiceRoller.D20();
         int creatureGrappleMod = creature.GetGrappleModifier();
         int grappleTotal = grappleRoll + creatureGrappleMod;
 
         // Tentacle opposing roll
-        int tentacleRoll = Random.Range(1, 21);
+        int tentacleRoll = DiceRoller.D20();
         int tentacleTotal = tentacleRoll + TentacleGrappleModifier;
 
         // Also check Escape Artist if creature has it
         // Escape Artist DC = tentacle's grapple check result
         int escapeArtistBonus = creature.Stats.GetSkillBonus("Escape Artist");
-        int escapeRoll = Random.Range(1, 21);
+        int escapeRoll = DiceRoller.D20();
         int escapeTotal = escapeRoll + escapeArtistBonus;
 
         // Use better result

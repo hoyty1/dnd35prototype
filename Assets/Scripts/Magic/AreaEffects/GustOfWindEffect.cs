@@ -61,7 +61,7 @@ public class GustOfWindEffect
 
             if (spell != null && spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
-                int srRoll = UnityEngine.Random.Range(1, 21);
+                int srRoll = DiceRoller.D20();
                 int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
                 bool overcameSR = srTotal >= target.Stats.SpellResistance;
                 log.AppendLine($"    SR check: d20({srRoll}) + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance} {(overcameSR ? "PASS" : "BLOCKED")}");
@@ -69,7 +69,7 @@ public class GustOfWindEffect
                     continue;
             }
 
-            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveRoll = DiceRoller.D20();
             int saveTotal = saveRoll + target.Stats.FortitudeSave;
             bool saveSucceeded = saveTotal >= saveDC;
             log.AppendLine($"    Fortitude save: d20({saveRoll}) + {target.Stats.FortitudeSave} = {saveTotal} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
@@ -231,12 +231,12 @@ public class GustOfWindEffect
         bool flying = IsFlyingTarget(target);
         if (flying)
         {
-            int pushDistanceFeet = (UnityEngine.Random.Range(1, 7) + UnityEngine.Random.Range(1, 7)) * 10; // 2d6 x 10
+            int pushDistanceFeet = (DiceRoller.D6() + DiceRoller.D6()) * 10; // 2d6 x 10
             int requestedSquares = Mathf.Max(0, pushDistanceFeet / 5);
             int movedSquares = PushTargetAlongWind(target, requestedSquares);
             int movedFeet = movedSquares * 5;
 
-            int nonlethalDamage = UnityEngine.Random.Range(1, 7) + UnityEngine.Random.Range(1, 7); // 2d6
+            int nonlethalDamage = DiceRoller.D6() + DiceRoller.D6(); // 2d6
             int appliedDamage = ApplySpellNonlethalDamage(target, nonlethalDamage, "Gust of Wind (flying)");
 
             log.AppendLine($"    Flying target is blown back {Mathf.Max(0, movedFeet)} ft (rolled {pushDistanceFeet} ft). Takes {appliedDamage} nonlethal damage.");
@@ -249,14 +249,14 @@ public class GustOfWindEffect
         {
             target.ApplyCondition(CombatConditionType.Prone, 1, "Gust of Wind");
 
-            int tenFootIncrements = UnityEngine.Random.Range(1, 5); // 1d4 x 10 ft
+            int tenFootIncrements = DiceRoller.D4(); // 1d4 x 10 ft
             int requestedSquares = tenFootIncrements * 2;
             int movedSquares = PushTargetAlongWind(target, requestedSquares);
             int movedTenFootIncrements = movedSquares / 2;
 
             int totalNonlethal = 0;
             for (int i = 0; i < movedTenFootIncrements; i++)
-                totalNonlethal += UnityEngine.Random.Range(1, 5); // 1d4 per 10 ft actually moved
+                totalNonlethal += DiceRoller.D4(); // 1d4 per 10 ft actually moved
 
             int appliedDamage = ApplySpellNonlethalDamage(target, totalNonlethal, "Gust of Wind (tiny)");
             log.AppendLine($"    Tiny or smaller: knocked prone and rolled {movedSquares * 5} ft (rolled {tenFootIncrements * 10} ft). Takes {appliedDamage} nonlethal damage.");

@@ -26,7 +26,7 @@ public static class InitiativeSystem
             Character = character;
             IsPC = isPC;
             Modifier = character.Stats.InitiativeModifier;
-            Roll = Random.Range(1, 21); // 1d20
+            Roll = DiceRoller.D20(); // 1d20
             Total = Roll + Modifier;
         }
 

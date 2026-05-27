@@ -131,7 +131,7 @@ public class FalseLifeEffectData
     /// </summary>
     public static int CalculateTempHP(int casterLevel)
     {
-        int roll = Random.Range(1, 11); // 1d10
+        int roll = DiceRoller.D10(); // 1d10
         int bonus = Mathf.Min(casterLevel, 10); // Cap at +10
         return roll + bonus;
     }

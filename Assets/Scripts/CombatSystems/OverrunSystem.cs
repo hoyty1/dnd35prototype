@@ -407,10 +407,10 @@ public partial class GameManager
 
     private bool ResolveOverrunOpposedCheck(CharacterController attacker, CharacterController defender)
     {
-        int attackerRoll = UnityEngine.Random.Range(1, 21);
+        int attackerRoll = DiceRoller.D20();
         int attackerTotal = attackerRoll + attacker.Stats.STRMod + GetOverrunSizeModifier(attacker.Stats.CurrentSizeCategory);
 
-        int defenderRoll = UnityEngine.Random.Range(1, 21);
+        int defenderRoll = DiceRoller.D20();
         int defenderAbility = Mathf.Max(defender.Stats.STRMod, defender.Stats.DEXMod);
         int defenderTotal = defenderRoll + defenderAbility + GetOverrunSizeModifier(defender.Stats.CurrentSizeCategory);
 

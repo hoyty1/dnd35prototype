@@ -80,7 +80,7 @@ public static class SpellCaster
             && spell.HasVerbalComponent
             && HasCondition(casterStats, CombatConditionType.Deafened))
         {
-            int failureRoll = Random.Range(1, 101);
+            int failureRoll = DiceRoller.D100();
             result.SaveRoll = 0;
             if (failureRoll <= 20)
             {
@@ -178,7 +178,7 @@ public static class SpellCaster
                 animateRopeRangePenalty = -2 * Mathf.Max(0, animateRopeIncrement - 1);
             }
 
-            int roll = Random.Range(1, 21);
+            int roll = DiceRoller.D20();
             int total = roll + atkBonus + situationalSpellAttackBonus + fightingDefensivelyPenalty + shootingIntoMeleePenalty + animateRopeRangePenalty;
 
             result.AttackRoll = roll;
@@ -226,7 +226,7 @@ public static class SpellCaster
 
             if (missChance > 0)
             {
-                int concealmentRoll = Random.Range(1, 101);
+                int concealmentRoll = DiceRoller.D100();
                 if (concealmentRoll <= missChance)
                 {
                     result.AttackHit = false;
@@ -336,7 +336,7 @@ public static class SpellCaster
         {
             result.SpellResistanceChecked = true;
             result.SpellResistanceValue = targetStats.SpellResistance;
-            result.SpellResistanceRoll = Random.Range(1, 21);
+            result.SpellResistanceRoll = DiceRoller.D20();
             result.SpellResistanceTotal = result.SpellResistanceRoll + GetCasterLevelForSpellResistanceCheck(casterStats);
             result.SpellResistancePassed = result.SpellResistanceTotal >= result.SpellResistanceValue;
 
@@ -379,7 +379,7 @@ public static class SpellCaster
             }
             else
             {
-                int saveRoll = Random.Range(1, 21);
+                int saveRoll = DiceRoller.D20();
                 int saveMod = GetSaveModifier(
                     targetStats,
                     spell,

@@ -37,27 +37,21 @@ public partial class GameManager
         sb.AppendLine($"  Fort DC {saveDc} partial (5d6) | SR: Yes");
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
-        // Spell Resistance check
-        if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+        // Spell Resistance + Fort save
+        var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+        srResult.AppendToLog(sb);
+        if (!srResult.Overcame)
         {
-            int srRoll = UnityEngine.Random.Range(1, 21);
-            int srCheck = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-            bool srOvercome = srCheck >= target.Stats.SpellResistance;
-            sb.AppendLine($"  SR Check: {srRoll}+{casterLevel}+pen = {srCheck} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCOME" : "RESISTED")}");
-            if (!srOvercome)
-            {
-                sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
-                sb.Append("═══════════════════════════════════");
-                CombatUI?.ShowCombatLog(sb.ToString());
-                return null;
-            }
+            sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
+            sb.Append("═══════════════════════════════════");
+            CombatUI?.ShowCombatLog(sb.ToString());
+            return null;
         }
 
         // Fort save
-        int saveRoll = UnityEngine.Random.Range(1, 21);
-        int saveTotal = saveRoll + target.Stats.FortitudeSave;
-        bool saved = saveTotal >= saveDc;
-        sb.AppendLine($"  Fort Save: {saveRoll} + {target.Stats.FortitudeSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
+        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
+        bool saved = saveResult.Saved;
+        saveResult.AppendToLog(sb, "SAVED", "FAILED");
 
         int damage;
         if (saved)
@@ -65,7 +59,7 @@ public partial class GameManager
             // On successful save: 5d6 damage
             damage = 0;
             for (int i = 0; i < 5; i++)
-                damage += UnityEngine.Random.Range(1, 7);
+                damage += DiceRoller.D6();
             sb.AppendLine($"  Partial: 5d6 = {damage} damage (Fort save succeeded)");
         }
         else
@@ -74,7 +68,7 @@ public partial class GameManager
             int diceCount = Mathf.Clamp(casterLevel * 2, 2, 40);
             damage = 0;
             for (int i = 0; i < diceCount; i++)
-                damage += UnityEngine.Random.Range(1, 7);
+                damage += DiceRoller.D6();
             sb.AppendLine($"  DISINTEGRATED: {diceCount}d6 = {damage} damage!");
         }
 
@@ -140,14 +134,9 @@ public partial class GameManager
                 sb.AppendLine($"  --- Target {idx}: {target.Stats.CharacterName} ---");
 
                 // SR check
-                if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
-                {
-                    int srRoll = UnityEngine.Random.Range(1, 21);
-                    int srCheck = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-                    bool srOk = srCheck >= target.Stats.SpellResistance;
-                    sb.AppendLine($"    SR: {srCheck} vs {target.Stats.SpellResistance} → {(srOk ? "OVERCOME" : "RESISTED")}");
-                    if (!srOk) { sb.AppendLine(); continue; }
-                }
+                var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+                srResult.AppendToLog(sb);
+                if (!srResult.Overcame) { sb.AppendLine(); continue; }
 
                 // Determine damage dice: undead get 1d6/CL (max 25d6), others 6d6
                 bool isUndead = !string.IsNullOrEmpty(target.Stats.CreatureType) &&
@@ -156,11 +145,11 @@ public partial class GameManager
 
                 int damage = 0;
                 for (int i = 0; i < diceCount; i++)
-                    damage += UnityEngine.Random.Range(1, 7);
+                    damage += DiceRoller.D6();
                 sb.AppendLine($"    Damage roll: {diceCount}d6 = {damage}{(isUndead ? " (Undead)" : "")}");
 
                 // Reflex save
-                int saveRoll = UnityEngine.Random.Range(1, 21);
+                int saveRoll = DiceRoller.D20();
                 int saveTotal = saveRoll + target.Stats.ReflexSave;
                 bool saved = saveTotal >= saveDc;
                 sb.AppendLine($"    Reflex: {saveRoll} + {target.Stats.ReflexSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
@@ -249,7 +238,7 @@ public partial class GameManager
                 idx++;
                 sb.AppendLine($"  --- Target {idx}: {target.Stats.CharacterName} ---");
 
-                int saveRoll = UnityEngine.Random.Range(1, 21);
+                int saveRoll = DiceRoller.D20();
                 int saveTotal = saveRoll + target.Stats.ReflexSave;
                 bool saved = saveTotal >= saveDc;
                 sb.AppendLine($"    Reflex: {saveRoll} + {target.Stats.ReflexSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
@@ -260,7 +249,7 @@ public partial class GameManager
                     sb.AppendLine($"    🔻 Knocked PRONE!");
 
                     // Debris damage: simplified (structures collapse for 8d6 in PHB, minor outdoors)
-                    int debrisDmg = UnityEngine.Random.Range(1, 7);
+                    int debrisDmg = DiceRoller.D6();
                     target.Stats.TakeDamage(debrisDmg);
                     sb.AppendLine($"    Debris: {debrisDmg} bludgeoning damage");
                     CheckConcentrationOnDamage(target, debrisDmg);
@@ -399,7 +388,7 @@ public partial class GameManager
 
         target = caster; // Self-only
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int turningLevels = UnityEngine.Random.Range(1, 5) + 6; // 1d4+6
+        int turningLevels = DiceRoller.D4() + 6; // 1d4+6
         string casterName = caster.Stats.CharacterName;
 
         StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
@@ -455,7 +444,7 @@ public partial class GameManager
         {
             int damage = Mathf.Min(casterLevel * 10, 150);
             int saveDc = GetSpellSaveDC(caster, spell);
-            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveRoll = DiceRoller.D20();
             int saveTotal = saveRoll + target.Stats.WillSave;
             bool saved = saveTotal >= saveDc;
             sb.AppendLine($"  ☠ Undead — positive energy deals damage!");
@@ -746,27 +735,21 @@ public partial class GameManager
         sb.AppendLine($"  Will DC {saveDc} negates | SR: Yes");
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
-        // Spell Resistance check
-        if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+        // Spell Resistance + Will save
+        var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+        srResult.AppendToLog(sb);
+        if (!srResult.Overcame)
         {
-            int srRoll = UnityEngine.Random.Range(1, 21);
-            int srTotal = srRoll + casterLevel + FeatManager.GetSpellPenetrationBonus(caster.Stats);
-            bool srOk = srTotal >= target.Stats.SpellResistance;
-            sb.AppendLine($"  SR Check: d20({srRoll}) + {casterLevel}+pen = {srTotal} vs SR {target.Stats.SpellResistance} → {(srOk ? "OVERCOME" : "RESISTED")}");
-            if (!srOk)
-            {
-                sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
-                sb.Append("═══════════════════════════════════");
-                CombatUI?.ShowCombatLog(sb.ToString());
-                return null;
-            }
+            sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
+            sb.Append("═══════════════════════════════════");
+            CombatUI?.ShowCombatLog(sb.ToString());
+            return null;
         }
 
         // Will save
-        int saveRoll = UnityEngine.Random.Range(1, 21);
-        int saveTotal = saveRoll + target.Stats.WillSave;
-        bool saved = saveTotal >= saveDc;
-        sb.AppendLine($"  Will Save: d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
+        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+        bool saved = saveResult.Saved;
+        saveResult.AppendToLog(sb, "SAVED", "FAILED");
 
         if (saved)
         {

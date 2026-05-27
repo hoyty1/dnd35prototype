@@ -471,11 +471,11 @@ public partial class GameManager
             return;
         }
 
-        int checkRoll = UnityEngine.Random.Range(1, 21);
+        int checkRoll = DiceRoller.D20();
         int checkTotal = checkRoll + cleric.Stats.CHAMod;
         int maxAffectedHd = ComputeTurnUndeadMaxHitDice(checkTotal, effectiveTurnLevel);
 
-        int turnDamageRoll = UnityEngine.Random.Range(1, 7) + UnityEngine.Random.Range(1, 7);
+        int turnDamageRoll = DiceRoller.D6() + DiceRoller.D6();
         int turnPoolHd = Mathf.Max(0, turnDamageRoll + effectiveTurnLevel + cleric.Stats.CHAMod);
 
         List<CharacterController> candidates = GetTurnableUndeadInRange(cleric, maxRangeSquares: 12);

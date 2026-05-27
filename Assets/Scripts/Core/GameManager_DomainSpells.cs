@@ -114,7 +114,7 @@ public partial class GameManager
         int saveDc = GetSpellSaveDC(caster, spell);
 
         // Roll 2d4 + caster level for HD budget
-        int hdBudget = Random.Range(1, 5) + Random.Range(1, 5) + casterLevel;
+        int hdBudget = DiceRoller.D4() + DiceRoller.D4() + casterLevel;
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -157,7 +157,7 @@ public partial class GameManager
             }
 
             // Will save
-            int willRoll = Random.Range(1, 21);
+            int willRoll = DiceRoller.D20();
             int willMod = target.Stats.WillSave;
             int willTotal = willRoll + willMod;
             bool savePassed = willTotal >= saveDc;
@@ -239,7 +239,7 @@ public partial class GameManager
             if (target == null || target.Stats == null || target.Stats.IsDead) continue;
 
             // Will save
-            int willRoll = Random.Range(1, 21);
+            int willRoll = DiceRoller.D20();
             int willMod = target.Stats.WillSave;
             int willTotal = willRoll + willMod;
             bool savePassed = willTotal >= saveDc;
@@ -314,7 +314,7 @@ public partial class GameManager
         int bonusDamage = Mathf.Min(casterLevel, 5); // +1 per CL, max +5
 
         // Ranged touch attack
-        int attackRoll = Random.Range(1, 21);
+        int attackRoll = DiceRoller.D20();
         int attackMod = caster.Stats.BaseAttackBonus + caster.Stats.DEXMod;
         int attackTotal = attackRoll + attackMod;
         int targetTouchAC = target.Stats.TouchArmorClass;
@@ -327,7 +327,7 @@ public partial class GameManager
 
         if (hit)
         {
-            int damage = Random.Range(1, 7) + bonusDamage; // 1d6 + min(CL,5)
+            int damage = DiceRoller.D6() + bonusDamage; // 1d6 + min(CL,5)
             damage = Mathf.Max(1, damage);
 
             int hpBefore = target.Stats.CurrentHP;
@@ -432,7 +432,7 @@ public partial class GameManager
 
         int totalDamage = 0;
         for (int i = 0; i < diceCount; i++)
-            totalDamage += Random.Range(1, 5); // 1d4
+            totalDamage += DiceRoller.D4(); // 1d4
 
         int hpBefore = target.Stats.CurrentHP;
         target.Stats.CurrentHP -= totalDamage;

@@ -57,7 +57,7 @@ public class WebAreaEffect : PersistentAreaEffect
         if (character.HasCondition(CombatConditionType.Entangled) && gameManager != null && gameManager.IsEntangledByWeb(character))
             return;
 
-        int roll = Random.Range(1, 21);
+        int roll = DiceRoller.D20();
         int reflex = character.Stats.ReflexSave;
         int total = roll + reflex;
         bool success = total >= SaveDC;
@@ -110,7 +110,7 @@ public class WebAreaEffect : PersistentAreaEffect
             if (character == null || character.Stats == null || character.Stats.IsDead)
                 continue;
 
-            int damage = Random.Range(1, 5) + Random.Range(1, 5); // 2d4 fire
+            int damage = DiceRoller.D4() + DiceRoller.D4(); // 2d4 fire
             DamageResolutionResult mitigation = character.Stats.ApplyIncomingDamage(damage, packet);
             int applied = mitigation != null ? mitigation.FinalDamage : 0;
             affectedCount++;

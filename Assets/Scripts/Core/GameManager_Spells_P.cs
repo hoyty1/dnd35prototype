@@ -141,7 +141,7 @@ public partial class GameManager
 
         // Fort save: DC = 10 + spell level (4) + WIS mod
         int saveDC = 10 + 4 + caster.Stats.WISMod;
-        int saveRoll = Random.Range(1, 21) + target.Stats.FortitudeSave;
+        int saveRoll = DiceRoller.D20() + target.Stats.FortitudeSave;
         bool saveSuccess = saveRoll >= saveDC;
 
         if (saveSuccess)
@@ -152,7 +152,7 @@ public partial class GameManager
         }
 
         // Initial CON damage: 1d10
-        int conDamage = Random.Range(1, 11);
+        int conDamage = DiceRoller.D10();
         target.Stats.AbilityScoreDamage.ApplyDamage(AbilityType.CON, conDamage);
 
         // Apply Poisoned condition (for secondary damage tracking)

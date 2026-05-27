@@ -69,7 +69,7 @@ public class Skill
             return -1;
         }
 
-        int d20 = Random.Range(1, 21);
+        int d20 = DiceRoller.D20();
         int total = d20 + GetTotalBonus(abilityModifier);
 
         Debug.Log($"[Skills] {SkillName} check: d20({d20}) + {Ranks}(ranks) + {abilityModifier}({KeyAbility}) = {total}");
