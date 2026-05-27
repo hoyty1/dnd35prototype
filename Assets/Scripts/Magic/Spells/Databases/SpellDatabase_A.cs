@@ -239,5 +239,9 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Divination/prediction not implemented]"
                 });
 
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+        RegisterClassSpellAlias("alarm_rgr", SpellNames.ALARM, "Ranger", 1);
+        RegisterClassSpellAlias("alarm_brd", SpellNames.ALARM, "Bard", 1);
+
     }
 }

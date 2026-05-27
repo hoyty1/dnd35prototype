@@ -151,11 +151,12 @@ public static partial class SpellDatabase
         // Obscure Object: Cleric 3 (also Wizard 2 — already registered above)
         RegisterClassSpellAlias("obscure_object_clr", SpellNames.OBSCURE_OBJECT, "Cleric", 3);
 
-        // Aliases — Owl's Wisdom: Cleric 2, Druid 2, Paladin 2, Ranger 2
+        // Aliases — Owl's Wisdom: Cleric 2, Druid 2, Paladin 2, Ranger 2, Bard 2
         RegisterClassSpellAlias("owls_wisdom_clr", SpellNames.OWLS_WISDOM, "Cleric", 2);
         RegisterClassSpellAlias("owls_wisdom_drd", SpellNames.OWLS_WISDOM, "Druid", 2);
         RegisterClassSpellAlias("owls_wisdom_pal", SpellNames.OWLS_WISDOM, "Paladin", 2);
         RegisterClassSpellAlias("owls_wisdom_rgr", SpellNames.OWLS_WISDOM, "Ranger", 2);
+        RegisterClassSpellAlias("owls_wisdom_brd", SpellNames.OWLS_WISDOM, "Bard", 2);
 
         // ═══════════════════════════════════════════════════════════════
         // Order's Wrath — PHB p.258

@@ -915,6 +915,30 @@ public static partial class SpellDatabase
         // Druid alias for Dispel Magic at level 4
         RegisterClassSpellAlias("dispel_magic_drd", SpellNames.DISPEL_MAGIC, "Druid", 4);
 
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Daze: Bard 0
+        RegisterClassSpellAlias("daze_brd", SpellNames.DAZE, "Bard", 0);
+
+        // Detect Magic: Bard 0, Druid 0
+        RegisterClassSpellAlias("detect_magic_brd", SpellNames.DETECT_MAGIC_WIZ, "Bard", 0);
+        RegisterClassSpellAlias("detect_magic_drd", SpellNames.DETECT_MAGIC_WIZ, "Druid", 0);
+
+        // Detect Poison: Druid 0, Paladin 1, Ranger 1
+        RegisterClassSpellAlias("detect_poison_drd", SpellNames.DETECT_POISON_WIZ, "Druid", 0);
+        RegisterClassSpellAlias("detect_poison_pal", SpellNames.DETECT_POISON_WIZ, "Paladin", 1);
+        RegisterClassSpellAlias("detect_poison_rgr", SpellNames.DETECT_POISON_WIZ, "Ranger", 1);
+
+        // Detect Undead: Paladin 1, Ranger 1
+        RegisterClassSpellAlias("detect_undead_pal", SpellNames.DETECT_UNDEAD, "Paladin", 1);
+        RegisterClassSpellAlias("detect_undead_rgr", SpellNames.DETECT_UNDEAD, "Ranger", 1);
+
+        // Dispel Magic: Bard 3
+        RegisterClassSpellAlias("dispel_magic_brd", SpellNames.DISPEL_MAGIC, "Bard", 3);
+
+        // Divine Favor: Paladin 1
+        RegisterClassSpellAlias("divine_favor_pal", SpellNames.DIVINE_FAVOR, "Paladin", 1);
+
         // ── DISINTEGRATE — PHB p.222 ──
         Register(new SpellData
                 {

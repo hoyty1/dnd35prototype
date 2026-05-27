@@ -365,15 +365,28 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
-        // Aliases — Bear's Endurance: Cleric 2, Druid 2, Ranger 2
+        // Aliases — Bear's Endurance: Cleric 2, Druid 2, Ranger 2, Bard 2
         RegisterClassSpellAlias("bears_endurance_clr", SpellNames.BEARS_ENDURANCE, "Cleric", 2);
         RegisterClassSpellAlias("bears_endurance_drd", SpellNames.BEARS_ENDURANCE, "Druid", 2);
         RegisterClassSpellAlias("bears_endurance_rgr", SpellNames.BEARS_ENDURANCE, "Ranger", 2);
+        RegisterClassSpellAlias("bears_endurance_brd", SpellNames.BEARS_ENDURANCE, "Bard", 2);
 
-        // Aliases — Bull's Strength: Cleric 2, Druid 2, Paladin 2
+        // Aliases — Bull's Strength: Cleric 2, Druid 2, Paladin 2, Bard 2
         RegisterClassSpellAlias("bulls_strength_clr", SpellNames.BULLS_STRENGTH, "Cleric", 2);
         RegisterClassSpellAlias("bulls_strength_drd", SpellNames.BULLS_STRENGTH, "Druid", 2);
         RegisterClassSpellAlias("bulls_strength_pal", SpellNames.BULLS_STRENGTH, "Paladin", 2);
+        RegisterClassSpellAlias("bulls_strength_brd", SpellNames.BULLS_STRENGTH, "Bard", 2);
+
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Barkskin: Druid 2 (already Ranger 2 via domain)
+        RegisterClassSpellAlias("barkskin_drd", SpellNames.BARKSKIN, "Druid", 2);
+
+        // Bless: Paladin 1
+        RegisterClassSpellAlias("bless_pal", SpellNames.BLESS, "Paladin", 1);
+
+        // Blur: Bard 2
+        RegisterClassSpellAlias("blur_brd", SpellNames.BLUR, "Bard", 2);
 
     }
 }

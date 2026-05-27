@@ -365,6 +365,9 @@ public static partial class SpellDatabase
         // Legacy alias retained for existing prepared spell references.
         RegisterClassSpellAlias("protection_from_evil_clr", SpellNames.PROTECTION_FROM_EVIL, "Cleric", 1);
 
+        // Phase 1: Paladin 1
+        RegisterClassSpellAlias("protection_from_evil_pal", SpellNames.PROTECTION_FROM_EVIL, "Paladin", 1);
+
         // ── Passwall (PHB p.259) ─────────────────────────────────────────
         Register(new SpellData
                 {

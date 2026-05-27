@@ -471,5 +471,21 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Fear: Bard 3
+        RegisterClassSpellAlias("fear_brd", SpellNames.FEAR, "Bard", 3);
+
+        // Flaming Sphere: Druid 2
+        RegisterClassSpellAlias("flaming_sphere_drd", SpellNames.FLAMING_SPHERE, "Druid", 2);
+
+        // Fox's Cunning: Bard 2
+        RegisterClassSpellAlias("foxs_cunning_brd", SpellNames.FOXS_CUNNING, "Bard", 2);
+
+        // Freedom of Movement: Bard 4, Ranger 4, Druid 4
+        RegisterClassSpellAlias("freedom_of_movement_brd", SpellNames.FREEDOM_OF_MOVEMENT, "Bard", 4);
+        RegisterClassSpellAlias("freedom_of_movement_rgr", SpellNames.FREEDOM_OF_MOVEMENT, "Ranger", 4);
+        RegisterClassSpellAlias("freedom_of_movement_drd", SpellNames.FREEDOM_OF_MOVEMENT, "Druid", 4);
+
     }
 }

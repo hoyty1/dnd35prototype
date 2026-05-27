@@ -552,5 +552,13 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Haste: Bard 3
+        RegisterClassSpellAlias("haste_brd", SpellNames.HASTE, "Bard", 3);
+
+        // Hold Person: Bard 2
+        RegisterClassSpellAlias("hold_person_brd", SpellNames.HOLD_PERSON, "Bard", 2);
+
     }
 }

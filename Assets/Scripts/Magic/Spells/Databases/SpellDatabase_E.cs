@@ -287,10 +287,22 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
-        // Aliases — Eagle's Splendor: Cleric 2, Paladin 2
+        // Aliases — Eagle's Splendor: Cleric 2, Paladin 2, Bard 2
         RegisterClassSpellAlias("eagles_splendor_clr", SpellNames.EAGLES_SPLENDOR, "Cleric", 2);
         RegisterClassSpellAlias("eagles_splendor_pal", SpellNames.EAGLES_SPLENDOR, "Paladin", 2);
+        RegisterClassSpellAlias("eagles_splendor_brd", SpellNames.EAGLES_SPLENDOR, "Bard", 2);
         RegisterClassSpellAlias("endure_elements_clr", SpellNames.ENDURE_ELEMENTS, "Cleric", 1);
+
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Endure Elements: Paladin 1, Ranger 1, Druid 1
+        RegisterClassSpellAlias("endure_elements_pal", SpellNames.ENDURE_ELEMENTS, "Paladin", 1);
+        RegisterClassSpellAlias("endure_elements_rgr", SpellNames.ENDURE_ELEMENTS, "Ranger", 1);
+        RegisterClassSpellAlias("endure_elements_drd", SpellNames.ENDURE_ELEMENTS, "Druid", 1);
+
+        // Entangle: Druid 1, Ranger 1
+        RegisterClassSpellAlias("entangle_drd", SpellNames.DOMAIN_ENTANGLE, "Druid", 1);
+        RegisterClassSpellAlias("entangle_rgr", SpellNames.DOMAIN_ENTANGLE, "Ranger", 1);
 
         // ── EARTHQUAKE — PHB p.225 ──
         Register(new SpellData

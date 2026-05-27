@@ -406,5 +406,10 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Invisibility: Bard 2
+        RegisterClassSpellAlias("invisibility_brd", SpellNames.INVISIBILITY, "Bard", 2);
+
     }
 }

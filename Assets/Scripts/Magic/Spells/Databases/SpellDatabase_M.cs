@@ -587,6 +587,21 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("magic_weapon_clr", SpellNames.MAGIC_WEAPON, "Cleric", 1);
         RegisterClassSpellAlias("mending_clr", SpellNames.MENDING, "Cleric", 0);
 
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Mage Hand: Bard 0
+        RegisterClassSpellAlias("mage_hand_brd", SpellNames.MAGE_HAND, "Bard", 0);
+
+        // Magic Weapon: Paladin 1
+        RegisterClassSpellAlias("magic_weapon_pal", SpellNames.MAGIC_WEAPON, "Paladin", 1);
+
+        // Mending: Bard 0, Druid 0
+        RegisterClassSpellAlias("mending_brd", SpellNames.MENDING, "Bard", 0);
+        RegisterClassSpellAlias("mending_drd", SpellNames.MENDING, "Druid", 0);
+
+        // Mirror Image: Bard 2
+        RegisterClassSpellAlias("mirror_image_brd", SpellNames.MIRROR_IMAGE, "Bard", 2);
+
         // ── MISLEAD — PHB p.254 ──
         Register(new SpellData
                 {

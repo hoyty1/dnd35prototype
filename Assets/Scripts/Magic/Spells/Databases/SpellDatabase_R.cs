@@ -472,6 +472,19 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("resist_energy_rgr", SpellNames.RESIST_ENERGY, "Ranger", 1);
         RegisterClassSpellAlias("resistance_clr", SpellNames.RESISTANCE_WIZ, "Cleric", 0);
 
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Read Magic: Bard 0, Paladin 1, Ranger 1, Druid 0
+        RegisterClassSpellAlias("read_magic_brd", SpellNames.READ_MAGIC, "Bard", 0);
+        RegisterClassSpellAlias("read_magic_pal", SpellNames.READ_MAGIC, "Paladin", 1);
+        RegisterClassSpellAlias("read_magic_rgr", SpellNames.READ_MAGIC, "Ranger", 1);
+        RegisterClassSpellAlias("read_magic_drd", SpellNames.READ_MAGIC, "Druid", 0);
+
+        // Resistance: Bard 0, Druid 0, Paladin 1
+        RegisterClassSpellAlias("resistance_brd", SpellNames.RESISTANCE_WIZ, "Bard", 0);
+        RegisterClassSpellAlias("resistance_drd", SpellNames.RESISTANCE_WIZ, "Druid", 0);
+        RegisterClassSpellAlias("resistance_pal", SpellNames.RESISTANCE_WIZ, "Paladin", 1);
+
         // ═══════════════════════════════════════════════════════════════
         // Repel Vermin — PHB p.271
         // School: Abjuration

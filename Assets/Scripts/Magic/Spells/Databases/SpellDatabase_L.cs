@@ -272,5 +272,11 @@ public static partial class SpellDatabase
         // Locate Object: Cleric 3 (also Wizard 2, Bard 2 — already registered above)
         RegisterClassSpellAlias("locate_object_clr", SpellNames.LOCATE_OBJECT, "Cleric", 3);
 
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Light: Bard 0, Druid 0
+        RegisterClassSpellAlias("light_brd", SpellNames.LIGHT, "Bard", 0);
+        RegisterClassSpellAlias("light_drd", SpellNames.LIGHT, "Druid", 0);
+
     }
 }

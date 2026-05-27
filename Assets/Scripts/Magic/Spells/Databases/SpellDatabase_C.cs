@@ -427,9 +427,10 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("cause_fear_clr", SpellNames.CAUSE_FEAR, "Cleric", 1);
         RegisterClassSpellAlias("comprehend_languages_clr", SpellNames.COMPREHEND_LANGUAGES, "Cleric", 1);
 
-        // Aliases — Cat's Grace: Druid 2, Ranger 2 (NOT Cleric)
+        // Aliases — Cat's Grace: Druid 2, Ranger 2, Bard 2 (NOT Cleric)
         RegisterClassSpellAlias("cats_grace_drd", SpellNames.CATS_GRACE, "Druid", 2);
         RegisterClassSpellAlias("cats_grace_rgr", SpellNames.CATS_GRACE, "Ranger", 2);
+        RegisterClassSpellAlias("cats_grace_brd", SpellNames.CATS_GRACE, "Bard", 2);
 
         // Aliases — Contagion: Sor/Wiz 4 (base is Clr 3/Dru 3)
         RegisterClassSpellAlias("contagion_wiz", SpellNames.CONTAGION, "Wizard", 4);
@@ -749,5 +750,28 @@ public static partial class SpellDatabase
 
         // Aliases — Continual Flame for Cleric
         RegisterClassSpellAlias("continual_flame_clr", SpellNames.CONTINUAL_FLAME, "Cleric", 3);
+
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Charm Person: Bard 1
+        RegisterClassSpellAlias("charm_person_brd", SpellNames.CHARM_PERSON, "Bard", 1);
+
+        // Cure Light Wounds: Bard 1, Paladin 1, Ranger 1, Druid 1
+        RegisterClassSpellAlias("cure_light_wounds_brd", SpellNames.CURE_LIGHT_WOUNDS, "Bard", 1);
+        RegisterClassSpellAlias("cure_light_wounds_pal", SpellNames.CURE_LIGHT_WOUNDS, "Paladin", 1);
+        RegisterClassSpellAlias("cure_light_wounds_rgr", SpellNames.CURE_LIGHT_WOUNDS, "Ranger", 1);
+        RegisterClassSpellAlias("cure_light_wounds_drd", SpellNames.CURE_LIGHT_WOUNDS, "Druid", 1);
+
+        // Cure Moderate Wounds: Bard 2, Druid 2
+        RegisterClassSpellAlias("cure_moderate_wounds_brd", SpellNames.CURE_MODERATE_WOUNDS, "Bard", 2);
+        RegisterClassSpellAlias("cure_moderate_wounds_drd", SpellNames.CURE_MODERATE_WOUNDS, "Druid", 2);
+
+        // Cure Serious Wounds: Bard 3, Druid 3
+        RegisterClassSpellAlias("cure_serious_wounds_brd", SpellNames.CURE_SERIOUS_WOUNDS, "Bard", 3);
+        RegisterClassSpellAlias("cure_serious_wounds_drd", SpellNames.CURE_SERIOUS_WOUNDS, "Druid", 3);
+
+        // Cure Critical Wounds: Bard 4
+        RegisterClassSpellAlias("cure_critical_wounds_brd", SpellNames.CURE_CRITICAL_WOUNDS, "Bard", 4);
+
     }
 }

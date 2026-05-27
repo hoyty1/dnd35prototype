@@ -1023,6 +1023,23 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("summon_monster_3_clr", SpellNames.SUMMON_MONSTER_3, "Cleric", 3);
         RegisterClassSpellAlias("summon_monster_4_clr", SpellNames.SUMMON_MONSTER_4, "Cleric", 4);
 
+        // ── Phase 1: Bard/Paladin/Ranger/Druid class assignments ──
+
+        // Silence: Bard 2
+        RegisterClassSpellAlias("silence_brd", SpellNames.SILENCE, "Bard", 2);
+
+        // Sleep: Bard 1
+        RegisterClassSpellAlias("sleep_brd", SpellNames.SLEEP, "Bard", 1);
+
+        // Slow: Bard 3
+        RegisterClassSpellAlias("slow_brd", SpellNames.SLOW, "Bard", 3);
+
+        // Shout: Bard 4
+        RegisterClassSpellAlias("shout_brd", SpellNames.SHOUT, "Bard", 4);
+
+        // Sound Burst: Bard 2
+        RegisterClassSpellAlias("sound_burst_brd", SpellNames.SOUND_BURST, "Bard", 2);
+
         // ═══════════════════════════════════════════════════════════════
         // Spell Immunity — PHB p.282
         // School: Abjuration
