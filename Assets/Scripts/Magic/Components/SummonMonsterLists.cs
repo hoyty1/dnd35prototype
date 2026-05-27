@@ -555,11 +555,11 @@ public static class SummonMonsterLists
         {
             // MISSING: Arrowhawk, Juvenile — needs NPCDatabase entry (Outsider [Air], CR 3)
             new SummonMonsterOption { DisplayName = "Bear, Brown (Grizzly)", NpcDefinitionId = "brown_bear" },
-            // MISSING: Crocodile, Giant — needs NPCDatabase entry (Animal, CR 4, Huge)
-            // MISSING: Deinonychus — needs NPCDatabase entry (Animal [Dinosaur], CR 3, Medium)
-            // MISSING: Dire Ape — needs NPCDatabase entry (Animal, CR 3, Large)
+            new SummonMonsterOption { DisplayName = "Crocodile, Giant", NpcDefinitionId = "giant_crocodile" },
+            new SummonMonsterOption { DisplayName = "Deinonychus", NpcDefinitionId = "deinonychus" },
+            new SummonMonsterOption { DisplayName = "Dire Ape", NpcDefinitionId = "dire_ape" },
             new SummonMonsterOption { DisplayName = "Dire Boar", NpcDefinitionId = "dire_boar" },
-            // MISSING: Dire Wolverine — needs NPCDatabase entry (Animal, CR 4, Large)
+            new SummonMonsterOption { DisplayName = "Dire Wolverine", NpcDefinitionId = "dire_wolverine" },
             new SummonMonsterOption { DisplayName = "Elemental, Medium Air", NpcDefinitionId = "medium_air_elemental" },
             new SummonMonsterOption { DisplayName = "Elemental, Medium Earth", NpcDefinitionId = "medium_earth_elemental" },
             new SummonMonsterOption { DisplayName = "Elemental, Medium Fire", NpcDefinitionId = "medium_fire_elemental" },

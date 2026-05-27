@@ -36,6 +36,7 @@ public static partial class NPCDatabase
         RegisterGoblinWarrior();
         RegisterGirallon();
         RegisterGhost();
+        RegisterGiantCrocodile();
     }
 
     // ════════════════════════════════════════════════════════════
@@ -1268,6 +1269,51 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.1f, 0.1f, 0.2f, 0.85f),
             NameColor = new Color(0.7f, 0.7f, 0.9f),
             Description = "Ghost (CR 7). Incorporeal undead. Touch drains energy. Frightful moan panics foes. Rejuvenates unless laid to rest. MM 3.5e p.117."
+        });
+    }
+
+    /// <summary>
+    /// Giant Crocodile (CR 4) — Huge animal. SNA IV.
+    /// MM 3.5e p.271. Improved grab on bite. Hold breath.
+    /// 7d8+28 HP (59), bite +11 (2d8+12) or tail slap +11 (1d12+12).
+    /// </summary>
+    private static void RegisterGiantCrocodile()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "giant_crocodile",
+            Name = "Giant Crocodile",
+            ChallengeRating = "4",
+            Level = 7,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Huge,
+            IsTallCreature = false,
+            STR = 27, DEX = 10, CON = 19, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 8,
+            BaseSpeed = 4, // 20 ft. land, swim 30 ft.
+            BaseHitDieHP = 59,
+            BAB = 5,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 2, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase", "MM35" },
+            Feats = new List<string> { "Alertness", "Endurance", "Skill Focus (Hide)" },
+            SpecialAbilities = new List<string> { "Improved grab (bite)", "Hold breath (114 rounds)", "Low-light vision", "Tail slap +11 (1d12+12) — alternate attack", "Swim 30 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.35f, 0.48f, 0.28f, 1f),
+            PanelColor = new Color(0.1f, 0.18f, 0.08f, 0.85f),
+            NameColor = new Color(0.78f, 0.9f, 0.7f),
+            Description = "Giant Crocodile (CR 4). Massive reptile with crushing bite and improved grab. Hold breath 114 rounds. MM 3.5e p.271."
         });
     }
 

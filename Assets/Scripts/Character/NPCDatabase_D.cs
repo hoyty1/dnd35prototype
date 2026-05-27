@@ -31,6 +31,9 @@ public static partial class NPCDatabase
         RegisterDireBoar();
         RegisterDireWolf();
         RegisterDarkmantle();
+        RegisterDireApe();
+        RegisterDireWolverine();
+        RegisterDeinonychus();
 
     }
 
@@ -926,6 +929,139 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.1f, 0.08f, 0.15f, 0.85f),
             NameColor = new Color(0.55f, 0.5f, 0.65f),
             Description = "Darkmantle (CR 1). Stalactite mimic with darkness aura and constrict. MM 3.5e p.38."
+        });
+    }
+
+    /// <summary>
+    /// Dire Ape (CR 3) — Large animal. SNA IV.
+    /// MM 3.5e p.62. Rend 2d6+9 if both claws hit.
+    /// 5d8+13 HP (35), 2 claws +8 (1d6+6), bite +3 (1d8+3).
+    /// </summary>
+    private static void RegisterDireApe()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "dire_ape",
+            Name = "Dire Ape",
+            ChallengeRating = "3",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 22, DEX = 15, CON = 14, WIS = 12, INT = 2, CHA = 7,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 6, // 30 ft., climb 15 ft.
+            BaseHitDieHP = 35,
+            BAB = 3,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Animal", "SummonBase", "MM35" },
+            Feats = new List<string> { "Alertness", "Toughness" },
+            SpecialAbilities = new List<string> { "Rend (Ex): 2d6+9 if both claws hit", "Scent", "Low-light vision", "Climb 15 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.35f, 0.25f, 0.2f, 1f),
+            PanelColor = new Color(0.14f, 0.1f, 0.08f, 0.85f),
+            NameColor = new Color(0.88f, 0.75f, 0.65f),
+            Description = "Dire Ape (CR 3). Massive ape with rend—2d6+9 if both claws hit. 10 ft. reach. MM 3.5e p.62."
+        });
+    }
+
+    /// <summary>
+    /// Dire Wolverine (CR 4) — Large animal. SNA IV.
+    /// MM 3.5e p.66. Rage when below 50% HP (+4 STR, +4 CON, -2 AC).
+    /// 5d8+23 HP (45), 2 claws +8 (1d6+6), bite +3 (1d8+3).
+    /// </summary>
+    private static void RegisterDireWolverine()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "dire_wolverine",
+            Name = "Dire Wolverine",
+            ChallengeRating = "4",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 22, DEX = 17, CON = 19, WIS = 12, INT = 2, CHA = 10,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 6, // 30 ft., climb 10 ft.
+            BaseHitDieHP = 45,
+            BAB = 3,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Animal", "SummonBase", "MM35" },
+            Feats = new List<string> { "Alertness", "Toughness", "Track" },
+            SpecialAbilities = new List<string> { "Rage (Ex): +4 STR, +4 CON, -2 AC when below 50% HP", "Scent", "Low-light vision", "Climb 10 ft." },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.4f, 0.32f, 0.25f, 1f),
+            PanelColor = new Color(0.16f, 0.12f, 0.09f, 0.85f),
+            NameColor = new Color(0.85f, 0.75f, 0.62f),
+            Description = "Dire Wolverine (CR 4). Ferocious beast that rages when wounded (+4 STR/CON, -2 AC). MM 3.5e p.66."
+        });
+    }
+
+    /// <summary>
+    /// Deinonychus (CR 3) — Medium animal (dinosaur). SNA IV.
+    /// MM 3.5e p.60. Pounce (full attack on charge). Very fast (60 ft).
+    /// 4d8+16 HP (34), talons +6 (1d8+4), 2 foreclaws +1 (1d3+2), bite +1 (2d4+2).
+    /// </summary>
+    private static void RegisterDeinonychus()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "deinonychus",
+            Name = "Deinonychus",
+            ChallengeRating = "3",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 19, DEX = 15, CON = 19, WIS = 12, INT = 2, CHA = 10,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 12, // 60 ft. — very fast dinosaur
+            BaseHitDieHP = 34,
+            BAB = 3,
+            HasScent = true,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Talons", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Foreclaw", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            CreatureTags = new List<string> { "Animal", "SummonBase", "MM35" },
+            Feats = new List<string> { "Run" },
+            SpecialAbilities = new List<string> { "Pounce (Ex): full attack on charge", "Scent", "Low-light vision" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.5f, 0.55f, 0.35f, 1f),
+            PanelColor = new Color(0.18f, 0.2f, 0.12f, 0.85f),
+            NameColor = new Color(0.88f, 0.92f, 0.72f),
+            Description = "Deinonychus (CR 3). Swift predatory dinosaur with pounce—full attack on charge. 60 ft. speed. MM 3.5e p.60."
         });
     }
 }
