@@ -11014,12 +11014,9 @@ public partial class GameManager : MonoBehaviour
         return all;
     }
 
+    /// <summary>Delegates to <see cref="ConcentrationService.CalculateSuccessChancePercent"/>.</summary>
     private static float CalculateDefensiveCastSuccessChancePercent(int concentrationBonus, int defensiveDC)
-    {
-        int requiredRoll = defensiveDC - concentrationBonus;
-        float successChance = (21 - requiredRoll) / 20f * 100f;
-        return Mathf.Clamp(successChance, 5f, 95f);
-    }
+        => ConcentrationService.CalculateSuccessChancePercent(concentrationBonus, defensiveDC);
 
     private void ShowAoOActionConfirmation(AoOProvokingActionInfo actionInfo)
     {

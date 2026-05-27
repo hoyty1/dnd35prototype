@@ -167,7 +167,7 @@ public class ConcentrationManager : MonoBehaviour
             return new ConcentrationCheckResult { Success = true, LogMessage = "" };
 
         int spellLevel = ConcentrationSpellLevel;
-        int dc = 10 + damageTaken + spellLevel;
+        int dc = ConcentrationService.GetDamageDC(damageTaken, spellLevel);
 
         return PerformConcentrationCheck(dc, $"taking {damageTaken} damage");
     }
@@ -181,7 +181,7 @@ public class ConcentrationManager : MonoBehaviour
         if (heldSpell == null)
             return new ConcentrationCheckResult { Success = true, LogMessage = "" };
 
-        int dc = 10 + damageTaken + Mathf.Max(0, heldSpell.SpellLevel);
+        int dc = ConcentrationService.GetDamageDC(damageTaken, Mathf.Max(0, heldSpell.SpellLevel));
 
         int concentrationBonus = GetConcentrationBonus();
         int d20 = DiceRoller.D20();
@@ -223,7 +223,7 @@ public class ConcentrationManager : MonoBehaviour
         if (!IsConcentrating)
             return new ConcentrationCheckResult { Success = true, LogMessage = "" };
 
-        int dc = 15 + newSpellLevel;
+        int dc = ConcentrationService.GetCastingWhileConcentratingDC(newSpellLevel);
 
         return PerformConcentrationCheck(dc, "casting a spell");
     }
@@ -237,7 +237,7 @@ public class ConcentrationManager : MonoBehaviour
         if (!IsConcentrating)
             return new ConcentrationCheckResult { Success = true, LogMessage = "" };
 
-        int dc = 10 + ConcentrationSpellLevel;
+        int dc = ConcentrationService.GetVigorousMotionDC(ConcentrationSpellLevel);
         return PerformConcentrationCheck(dc, "vigorous motion");
     }
 
@@ -250,7 +250,7 @@ public class ConcentrationManager : MonoBehaviour
         if (!IsConcentrating)
             return new ConcentrationCheckResult { Success = true, LogMessage = "" };
 
-        int dc = 15 + ConcentrationSpellLevel;
+        int dc = ConcentrationService.GetViolentMotionDC(ConcentrationSpellLevel);
         return PerformConcentrationCheck(dc, "violent motion");
     }
 
@@ -263,7 +263,7 @@ public class ConcentrationManager : MonoBehaviour
         if (!IsConcentrating)
             return new ConcentrationCheckResult { Success = true, LogMessage = "" };
 
-        int dc = 15 + ConcentrationSpellLevel;
+        int dc = ConcentrationService.GetEntangledCastingDC(ConcentrationSpellLevel);
         return PerformConcentrationCheck(dc, "being entangled");
     }
 

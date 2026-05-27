@@ -40,7 +40,7 @@ public static class AISpellcastingStrategist
 
     // T1.3: Defensive casting
     private const float MIN_DEFENSIVE_CAST_SUCCESS = 0.50f;
-    private const int DEFENSIVE_CAST_DC_BASE = 15;
+    // DC constant now in ConcentrationService.DEFENSIVE_CASTING_DC_BASE
 
     // T1.4: Save exploitation
     private const float WEAK_SAVE_BONUS = 15f;
@@ -497,12 +497,9 @@ public static class AISpellcastingStrategist
         if (!threatened) return 2; // Safe to cast normally
 
         // Defensive casting: DC = 15 + spell level
-        int dc = DEFENSIVE_CAST_DC_BASE + spell.SpellLevel;
-        int concentrationBonus = caster.Stats.GetSpellcastingConcentrationBonus(true);
-
-        // Success chance on d20: need to roll >= (DC - bonus)
-        int needToRoll = dc - concentrationBonus;
-        float successChance = Mathf.Clamp01((21f - needToRoll) / 20f);
+        int dc = ConcentrationService.GetDefensiveCastingDC(spell.SpellLevel);
+        int concentrationBonus = ConcentrationService.GetConcentrationBonus(caster);
+        float successChance = ConcentrationService.CalculateSuccessChanceFraction(concentrationBonus, dc);
 
         if (successChance >= MIN_DEFENSIVE_CAST_SUCCESS)
             return 1; // Cast defensively
@@ -529,9 +526,9 @@ public static class AISpellcastingStrategist
         bool threatened = HasAdjacentEnemy(caster, allCombatants);
         if (!threatened) return 0f;
 
-        int dc = DEFENSIVE_CAST_DC_BASE + spell.SpellLevel;
-        int concentrationBonus = caster.Stats?.GetSpellcastingConcentrationBonus(true) ?? 0;
-        float successChance = Mathf.Clamp01((21f - (dc - concentrationBonus)) / 20f);
+        int dc = ConcentrationService.GetDefensiveCastingDC(spell.SpellLevel);
+        int concentrationBonus = ConcentrationService.GetConcentrationBonus(caster);
+        float successChance = ConcentrationService.CalculateSuccessChanceFraction(concentrationBonus, dc);
 
         if (successChance >= 0.75f) return -2f;  // Minor penalty, likely to succeed
         if (successChance >= 0.50f) return -8f;  // Moderate penalty

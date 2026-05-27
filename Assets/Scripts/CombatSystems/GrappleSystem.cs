@@ -315,7 +315,7 @@ public partial class GameManager
         if (!TryGetGrappledOrPinnedState(caster, out string conditionLabel))
             return true;
 
-        int dc = 20 + spell.SpellLevel;
+        int dc = ConcentrationService.GetGrappledCastingDC(spell.SpellLevel);
         ConcentrationCheckResult check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
             caster,
             dc,

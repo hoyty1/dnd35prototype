@@ -409,7 +409,7 @@ public partial class GameManager
             if (summon.IsConcentrationSummon
                 && !summon.HasEnteredPostConcentrationDuration
                 && casterIncapacitated
-                && IsCasterMaintainingSummonSwarmConcentration(summon.Caster))
+                && ConcentrationService.IsConcentratingOnSpell(summon.Caster, SpellNames.SUMMON_SWARM))
             {
                 ConcentrationManager casterConc = summon.Caster.Concentration;
                 if (casterConc != null)
@@ -422,7 +422,7 @@ public partial class GameManager
 
             bool holdByConcentration = summon.IsConcentrationSummon
                 && !summon.HasEnteredPostConcentrationDuration
-                && IsCasterMaintainingSummonSwarmConcentration(summon.Caster);
+                && ConcentrationService.IsConcentratingOnSpell(summon.Caster, SpellNames.SUMMON_SWARM);
 
             if (!holdByConcentration)
             {
@@ -8268,7 +8268,7 @@ public partial class GameManager
     {
         if (caster == null || spell == null) return false;
 
-        int dc = 15 + spell.SpellLevel;
+        int dc = ConcentrationService.GetDefensiveCastingDC(spell.SpellLevel);
         var check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
             caster,
             dc,
@@ -8306,9 +8306,9 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} is casting {spell.Name} while threatened ({threateningEnemies.Count} adjacent).");
 
-        int defensiveDC = 15 + spell.SpellLevel;
-        int concentrationBonus = caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true);
-        float successChance = CalculateDefensiveCastSuccessChancePercent(concentrationBonus, defensiveDC);
+        int defensiveDC = ConcentrationService.GetDefensiveCastingDC(spell.SpellLevel);
+        int concentrationBonus = ConcentrationService.GetConcentrationBonus(caster);
+        float successChance = ConcentrationService.CalculateSuccessChancePercent(concentrationBonus, defensiveDC);
 
         ShowAoOActionConfirmation(new AoOProvokingActionInfo
         {
@@ -8363,7 +8363,7 @@ public partial class GameManager
                 // Existing concentration effects / held charges can also be disrupted by this damage.
                 CheckConcentrationOnDamage(caster, aooResult.TotalDamage);
 
-                int dc = 10 + aooResult.TotalDamage + spell.SpellLevel;
+                int dc = ConcentrationService.GetDamageDC(aooResult.TotalDamage, spell.SpellLevel);
                 var check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
                     caster,
                     dc,
@@ -8516,17 +8516,9 @@ public partial class GameManager
     }
     // ========== CONCENTRATION MECHANICS (D&D 3.5e PHB) ==========
 
+    /// <summary>Delegates to <see cref="ConcentrationService.IsConcentratingOnSpell"/>.</summary>
     private bool IsCasterMaintainingSummonSwarmConcentration(CharacterController caster)
-    {
-        if (caster == null)
-            return false;
-
-        ConcentrationManager concMgr = caster.Concentration;
-        if (concMgr == null || !concMgr.IsConcentrating || concMgr.ConcentratingOn == null || concMgr.ConcentratingOn.Spell == null)
-            return false;
-
-        return string.Equals(concMgr.ConcentratingOn.Spell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal);
-    }
+        => ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM);
 
     private void BeginSummonSwarmConcentration(CharacterController caster, SpellData spell, CharacterController summonedSwarm)
     {
@@ -8613,7 +8605,7 @@ public partial class GameManager
         {
             if (hasConcentrationSpell)
             {
-                bool wasSummonSwarm = IsCasterMaintainingSummonSwarmConcentration(character);
+                bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(character, SpellNames.SUMMON_SWARM);
                 string breakLog = concMgr.ForceBreakConcentration("killed");
                 if (!string.IsNullOrEmpty(breakLog))
                     CombatUI?.ShowCombatLog($"<color=#FF6644>{breakLog}</color>");
@@ -8656,7 +8648,7 @@ public partial class GameManager
         // 2) Ongoing concentration spell check
         if (hasConcentrationSpell)
         {
-            bool wasSummonSwarm = IsCasterMaintainingSummonSwarmConcentration(character);
+            bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(character, SpellNames.SUMMON_SWARM);
             var result = concMgr.CheckConcentrationOnDamage(damageTaken);
             if (!string.IsNullOrEmpty(result.LogMessage))
             {
@@ -8686,7 +8678,7 @@ public partial class GameManager
         var concMgr = caster.Concentration;
         if (concMgr == null || !concMgr.IsConcentrating) return true;
 
-        if (IsCasterMaintainingSummonSwarmConcentration(caster)
+        if (ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM)
             && !string.Equals(newSpell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
         {
             string endLog = concMgr.EndConcentration();
@@ -8706,7 +8698,7 @@ public partial class GameManager
 
         // Casting a non-concentration spell while concentrating requires a check
         // DC = 15 + spell level of the NEW spell
-        bool wasSummonSwarm = IsCasterMaintainingSummonSwarmConcentration(caster);
+        bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM);
         var result = concMgr.CheckConcentrationOnCasting(newSpell.SpellLevel);
         if (!string.IsNullOrEmpty(result.LogMessage))
         {
@@ -8741,7 +8733,7 @@ public partial class GameManager
         var concMgr = caster.Concentration;
         if (concMgr == null) return;
 
-        if (IsCasterMaintainingSummonSwarmConcentration(caster)
+        if (ConcentrationService.IsConcentratingOnSpell(caster, SpellNames.SUMMON_SWARM)
             && !string.Equals(spell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
         {
             TransitionSummonSwarmToPostConcentration(caster, "started another concentration spell");
@@ -8765,7 +8757,7 @@ public partial class GameManager
         var concMgr = character.Concentration;
         if (concMgr == null || !concMgr.IsConcentrating) return;
 
-        bool wasSummonSwarm = IsCasterMaintainingSummonSwarmConcentration(character);
+        bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(character, SpellNames.SUMMON_SWARM);
         string log = concMgr.EndConcentration();
         if (!string.IsNullOrEmpty(log))
         {
