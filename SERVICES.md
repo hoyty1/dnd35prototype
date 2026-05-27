@@ -26,7 +26,7 @@ global namespace — no `using` imports are needed between project files.
 
 ---
 
-## 1. SpellUtilities  (`Assets/Scripts/Magic/SpellUtilities.cs`)
+## 1. SpellUtilities  (`Assets/Scripts/Spell/Casting/SpellUtilities.cs`)
 
 Centralises spell save-DC computation and caster-ability-modifier lookups.
 
@@ -43,7 +43,7 @@ Centralises spell save-DC computation and caster-ability-modifier lookups.
 
 ---
 
-## 2. SpellCastingHelper  (`Assets/Scripts/Magic/SpellCastingHelper.cs`)
+## 2. SpellCastingHelper  (`Assets/Scripts/Spell/Casting/SpellCastingHelper.cs`)
 
 Provides caster-level calculations, duration formulas, damage-dice scaling,
 and the `SpellCastContext` struct for one-stop context building.
@@ -72,7 +72,7 @@ public struct SpellCastContext {
 
 ---
 
-## 3. TeamUtility  (`Assets/Scripts/Combat/TeamUtility.cs`)
+## 3. TeamUtility  (`Assets/Scripts/Combat/Core/TeamUtility.cs`)
 
 Replaces `GameManager.IsEnemyTeam` / `IsAllyTeam` with pure-static queries.
 
@@ -129,7 +129,7 @@ VIOLENT_MOTION_DC_BASE     = 15   ENTANGLED_DC_BASE = 15
 
 ---
 
-## 6. CombatLogHelper  (`Assets/Scripts/Combat/CombatLogHelper.cs`)
+## 6. CombatLogHelper  (`Assets/Scripts/Combat/Logging/CombatLogHelper.cs`)
 
 25 named colour constants + semantic formatting helpers.  Returns Unity
 rich-text strings — callers still push via `CombatUI?.ShowCombatLog(...)`.
@@ -181,7 +181,7 @@ validators used by 20+ spell implementations.
 
 ---
 
-## 8. CombatCalculationService  (`Assets/Scripts/Combat/CombatCalculationService.cs`)
+## 8. CombatCalculationService  (`Assets/Scripts/Combat/Utilities/CombatCalculationService.cs`)
 
 Pure-math combat formulas — hit determination, AC modifiers, STR scaling,
 critical-threat math, concealment, and opposed checks.
