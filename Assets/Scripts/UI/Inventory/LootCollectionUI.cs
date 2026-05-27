@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using TMPro;
+using DND35e.Treasure;
 
 /// <summary>
 /// Post-combat modal loot collection window.
@@ -97,6 +98,15 @@ public class LootCollectionUI : MonoBehaviour
     private float _savedScrollPosition = 1f;
     private int _openedFrame = -1;
 
+    /// <summary>Stored treasure result for the unified loot window.</summary>
+    private TreasureResult _treasureResult;
+
+    /// <summary>UI element for displaying treasure summary above the loot grid.</summary>
+    private Text _treasureSummaryText;
+
+    /// <summary>Title text element for the window header.</summary>
+    private Text _titleText;
+
     public bool IsOpen => _isOpen && _root != null && _root.activeSelf;
 
     private void Awake()
@@ -110,7 +120,7 @@ public class LootCollectionUI : MonoBehaviour
         Action<int> onClosed,
         Action onExitLoop = null)
     {
-        Debug.Log($"[LootUI] Open requested | incomingEntries={(entries != null ? entries.Count : 0)}");
+        Debug.Log($"[LootUI] Open requested | incomingEntries={(entries != null ? entries.Count : 0)} | hasTreasure={_treasureResult != null}");
 
         EnsureBuilt();
         if (_root == null)
@@ -154,7 +164,32 @@ public class LootCollectionUI : MonoBehaviour
 
         RebuildContent();
         UpdateFooter();
-        ShowStatus(_entries.Count == 0 ? "No loot found." : "Click an item to loot it to stash.", false);
+
+        bool hasTreasure = _treasureResult != null && !_treasureResult.IsEmpty;
+        bool hasEquipment = _entries.Count > 0;
+        string statusMsg = hasTreasure && hasEquipment
+            ? "Treasure collected! Click equipment items to loot them to stash."
+            : hasTreasure
+                ? "Treasure collected! No equipment drops."
+                : hasEquipment
+                    ? "Click an item to loot it to stash."
+                    : "No loot found.";
+        ShowStatus(statusMsg, hasTreasure || hasEquipment);
+    }
+
+    /// <summary>
+    /// Open the unified loot window with both generated treasure and equipment drops.
+    /// Treasure is displayed as a read-only summary section above the interactive loot grid.
+    /// </summary>
+    public void Open(
+        List<LootStackEntry> entries,
+        TreasureResult treasureResult,
+        Action<LootItemInstance, Action<bool>> onLootSingle,
+        Action<int> onClosed,
+        Action onExitLoop = null)
+    {
+        _treasureResult = treasureResult;
+        Open(entries, onLootSingle, onClosed, onExitLoop);
     }
 
     public void Close(bool invokeClosedCallback = true)
@@ -168,6 +203,7 @@ public class LootCollectionUI : MonoBehaviour
             _root.SetActive(false);
 
         _isOpen = false;
+        _treasureResult = null;
         HideTooltip();
 
         Action<int> callback = _onClosed;
@@ -281,10 +317,10 @@ public class LootCollectionUI : MonoBehaviour
             // Swallow clicks so they don't close the overlay.
         });
 
-        CreateText(
+        _titleText = CreateText(
             _dialog.transform,
             "Title",
-            "LOOT COLLECTION",
+            "POST-COMBAT LOOT",
             new Vector2(0f, 1f),
             new Vector2(1f, 1f),
             new Vector2(0.5f, 1f),
@@ -322,6 +358,30 @@ public class LootCollectionUI : MonoBehaviour
             FontStyle.Bold,
             new Color(1f, 0.89f, 0.43f),
             TextAnchor.MiddleRight);
+
+        // Treasure summary section — shown between header and loot grid when treasure exists.
+        // Uses rich text for colored categories matching TreasureUI style.
+        _treasureSummaryText = CreateText(
+            _dialog.transform,
+            "TreasureSummary",
+            "",
+            new Vector2(0.08f, 0.85f),
+            new Vector2(0.92f, 0.85f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, -8f),
+            new Vector2(0f, 0f),
+            14,
+            FontStyle.Normal,
+            new Color(0.9f, 0.9f, 0.9f),
+            TextAnchor.UpperLeft);
+        _treasureSummaryText.supportRichText = true;
+        _treasureSummaryText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        _treasureSummaryText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        // Add a ContentSizeFitter so the treasure text auto-sizes vertically
+        ContentSizeFitter treasureFitter = _treasureSummaryText.gameObject.AddComponent<ContentSizeFitter>();
+        treasureFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        treasureFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
         _statusText = CreateText(
             _dialog.transform,
@@ -417,6 +477,8 @@ public class LootCollectionUI : MonoBehaviour
         if (_contentRoot == null)
             return;
 
+        UpdateTreasureSection();
+
         if (_scrollRect != null)
             _savedScrollPosition = _scrollRect.verticalNormalizedPosition;
 
@@ -483,6 +545,164 @@ public class LootCollectionUI : MonoBehaviour
 
         if (_scrollRect != null)
             _scrollRect.verticalNormalizedPosition = Mathf.Clamp01(_savedScrollPosition);
+    }
+
+    /// <summary>
+    /// Updates the treasure summary section and adjusts the loot grid position accordingly.
+    /// When treasure is present, the summary is shown between the header and the loot grid.
+    /// When no treasure exists, the section is hidden and the grid uses full available space.
+    /// </summary>
+    private void UpdateTreasureSection()
+    {
+        bool hasTreasure = _treasureResult != null && !_treasureResult.IsEmpty;
+
+        // Update title to reflect content
+        if (_titleText != null)
+        {
+            _titleText.text = hasTreasure ? "POST-COMBAT REWARDS" : "LOOT COLLECTION";
+        }
+
+        if (_treasureSummaryText == null)
+            return;
+
+        if (!hasTreasure)
+        {
+            _treasureSummaryText.text = "";
+            _treasureSummaryText.gameObject.SetActive(false);
+
+            // Restore the full scroll area
+            if (_scrollRect != null)
+            {
+                RectTransform scrollRT = _scrollRect.GetComponent<RectTransform>();
+                if (scrollRT != null)
+                {
+                    scrollRT.anchorMin = new Vector2(0.08f, 0.18f);
+                    scrollRT.anchorMax = new Vector2(0.92f, 0.85f);
+                }
+            }
+            return;
+        }
+
+        // Build the treasure summary text (rich text with colors matching TreasureUI)
+        _treasureSummaryText.text = FormatTreasureSummary(_treasureResult);
+        _treasureSummaryText.gameObject.SetActive(true);
+
+        // Force layout rebuild so ContentSizeFitter calculates height
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_treasureSummaryText.rectTransform);
+
+        // Calculate how much vertical space the treasure section needs (in normalized anchor units)
+        float treasureHeight = LayoutUtility.GetPreferredHeight(_treasureSummaryText.rectTransform);
+        RectTransform dialogRT = _dialog != null ? _dialog.GetComponent<RectTransform>() : null;
+        float dialogHeight = dialogRT != null ? dialogRT.rect.height : Screen.height;
+
+        // Treasure section sits at top (below header ~0.85) and pushes loot grid down.
+        // Minimum space: at least 0.10 normalized units for treasure.
+        float treasureNorm = Mathf.Clamp(treasureHeight / Mathf.Max(dialogHeight, 1f), 0.05f, 0.35f);
+        float treasureBottom = 0.85f - treasureNorm - 0.01f;
+
+        // Position treasure summary text
+        RectTransform treasureRT = _treasureSummaryText.rectTransform;
+        treasureRT.anchorMin = new Vector2(0.08f, treasureBottom);
+        treasureRT.anchorMax = new Vector2(0.92f, 0.85f);
+        treasureRT.offsetMin = new Vector2(8f, 4f);
+        treasureRT.offsetMax = new Vector2(-8f, -8f);
+
+        // Shrink the loot grid to below the treasure section
+        if (_scrollRect != null)
+        {
+            RectTransform scrollRT = _scrollRect.GetComponent<RectTransform>();
+            if (scrollRT != null)
+            {
+                scrollRT.anchorMin = new Vector2(0.08f, 0.18f);
+                scrollRT.anchorMax = new Vector2(0.92f, treasureBottom - 0.01f);
+            }
+        }
+
+        Debug.Log($"[LootUI] Treasure section displayed | treasureHeight={treasureHeight:F0}px | treasureNorm={treasureNorm:F3} | gridTop={treasureBottom - 0.01f:F3}");
+    }
+
+    /// <summary>
+    /// Formats a TreasureResult into a compact rich-text summary for display in the loot window.
+    /// Uses the same color scheme as TreasureUI for visual consistency.
+    /// </summary>
+    private static string FormatTreasureSummary(TreasureResult result)
+    {
+        if (result == null || result.IsEmpty)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"<b><color=#F5DE69>══ Treasure Found — {result.TotalGPValue:N0} gp total ══</color></b>");
+
+        // Coins
+        if (result.CoinsGPValue > 0)
+        {
+            var parts = new List<string>();
+            if (result.CopperPieces > 0) parts.Add($"{result.CopperPieces:N0} cp");
+            if (result.SilverPieces > 0) parts.Add($"{result.SilverPieces:N0} sp");
+            if (result.GoldPieces > 0) parts.Add($"{result.GoldPieces:N0} gp");
+            if (result.PlatinumPieces > 0) parts.Add($"{result.PlatinumPieces:N0} pp");
+            sb.AppendLine($"<color=#FFD700>Coins:</color> {string.Join(", ", parts)} <i>(≈{result.CoinsGPValue:N0} gp)</i>");
+        }
+
+        // Gems
+        if (result.Gems.Count > 0)
+        {
+            sb.Append($"<color=#80CCFF>Gems ({result.Gems.Count}):</color> ");
+            var names = new List<string>();
+            for (int i = 0; i < result.Gems.Count && i < 5; i++)
+                names.Add($"{result.Gems[i].Name} ({result.Gems[i].Value:N0} gp)");
+            if (result.Gems.Count > 5)
+                names.Add($"...+{result.Gems.Count - 5} more");
+            sb.AppendLine(string.Join(", ", names));
+        }
+
+        // Art Objects
+        if (result.ArtObjects.Count > 0)
+        {
+            sb.Append($"<color=#E6B3FF>Art ({result.ArtObjects.Count}):</color> ");
+            var names = new List<string>();
+            for (int i = 0; i < result.ArtObjects.Count && i < 5; i++)
+                names.Add($"{result.ArtObjects[i].Name} ({result.ArtObjects[i].Value:N0} gp)");
+            if (result.ArtObjects.Count > 5)
+                names.Add($"...+{result.ArtObjects.Count - 5} more");
+            sb.AppendLine(string.Join(", ", names));
+        }
+
+        // Mundane Items
+        if (result.MundaneItems.Count > 0)
+        {
+            sb.Append($"<color=#CCCCCC>Mundane ({result.MundaneItems.Count}):</color> ");
+            var names = new List<string>();
+            for (int i = 0; i < result.MundaneItems.Count && i < 4; i++)
+                names.Add($"{result.MundaneItems[i].Name} ({result.MundaneItems[i].Value:N0} gp)");
+            if (result.MundaneItems.Count > 4)
+                names.Add($"...+{result.MundaneItems.Count - 4} more");
+            sb.AppendLine(string.Join(", ", names));
+        }
+
+        // Magic Items
+        if (result.MagicItems.Count > 0)
+        {
+            sb.Append($"<color=#4DFF4D>Magic ({result.MagicItems.Count}):</color> ");
+            var names = new List<string>();
+            for (int i = 0; i < result.MagicItems.Count && i < 4; i++)
+            {
+                string typeTag = result.MagicItems[i].Type != null ? $" [{result.MagicItems[i].Type}]" : "";
+                names.Add($"{result.MagicItems[i].Name} ({result.MagicItems[i].Price:N0} gp){typeTag}");
+            }
+            if (result.MagicItems.Count > 4)
+                names.Add($"...+{result.MagicItems.Count - 4} more");
+            sb.AppendLine(string.Join(", ", names));
+        }
+
+        // Monster gear note
+        if (result.MonsterGearSubtracted > 0)
+        {
+            sb.AppendLine($"<color=#FF8888><i>(Monster gear subtracted: {result.MonsterGearSubtracted:N0} gp)</i></color>");
+        }
+
+        return sb.ToString().TrimEnd();
     }
 
     private ItemTileRefs BuildItemTile(Transform parent, LootStackEntry entry, LootItemInstance instance)

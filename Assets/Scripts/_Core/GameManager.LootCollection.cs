@@ -24,7 +24,7 @@ public partial class GameManager
 
     private void BeginPostCombatLootCollection()
     {
-        Debug.Log("[LootFlow] Beginning post-combat loot collection");
+        Debug.Log("[LootFlow] Beginning post-combat loot collection (unified window)");
 
         Canvas canvas = FindObjectOfType<Canvas>();
         Debug.Log($"[LootFlow] BeginPostCombatLootCollection START | frame={Time.frameCount} | phase={CurrentPhase} | lootUiAssigned={LootCollectionUI != null} | partyStashAssigned={PartyStash != null} | partyStashLocked={(PartyStash != null && PartyStash.IsLocked)} | canvasFound={canvas != null}");
@@ -38,7 +38,7 @@ public partial class GameManager
         _postCombatLootCollectionTriggered = true;
 
         // === D&D 3.5e Treasure Generation ===
-        // Generate random treasure based on encounter level before opening loot window.
+        // Generate random treasure based on encounter level. Displayed in the unified loot window.
         TreasureResult generatedTreasure = GeneratePostCombatTreasure();
         if (generatedTreasure != null && !generatedTreasure.IsEmpty)
         {
@@ -48,18 +48,10 @@ public partial class GameManager
                             generatedTreasure.MundaneItems.Count + generatedTreasure.MagicItems.Count;
             CombatUI?.ShowCombatLog(CombatLogHelper.Special("💎", $"Treasure found! {coinSummary}" +
                 (itemCount > 0 ? $" + {itemCount} item(s) worth {generatedTreasure.TotalGPValue:N0} gp" : "")));
-
-            // Show treasure UI; when closed, proceed to normal loot collection
-            ShowTreasureUI(generatedTreasure, () =>
-            {
-                Debug.Log("[LootFlow] Treasure UI closed, proceeding to equipment loot collection.");
-                ContinueToLootCollection();
-            });
-            return;
         }
         else
         {
-            Debug.Log("[LootFlow] No random treasure generated; proceeding directly to loot collection.");
+            Debug.Log("[LootFlow] No random treasure generated; loot window will show equipment only.");
         }
         // === End Treasure Generation ===
 
@@ -77,24 +69,30 @@ public partial class GameManager
 
         List<LootCollectionUI.LootStackEntry> lootEntries = GatherPostCombatLootEntries();
         int totalItems = CountTotalItems(lootEntries);
-        Debug.Log($"[LootFlow] Gather complete | stacks={lootEntries.Count} | totalItems={totalItems}");
+        bool hasTreasure = generatedTreasure != null && !generatedTreasure.IsEmpty;
+        Debug.Log($"[LootFlow] Gather complete | stacks={lootEntries.Count} | totalItems={totalItems} | hasTreasure={hasTreasure}");
 
         WaitingForLootCollection = true;
-        if (totalItems > 0)
+        if (hasTreasure && totalItems > 0)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Special("💰", $"Treasure & loot available: {totalItems} equipment item(s). Collect loot before continuing."));
+        else if (totalItems > 0)
             CombatUI?.ShowCombatLog(CombatLogHelper.Special("💰", $"Loot available: {totalItems} item(s). Collect loot before continuing."));
+        else if (hasTreasure)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Special("💎", "Treasure collected! No equipment drops. Close loot window to continue."));
         else
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "📭 No loot found. Review results and close loot window to continue."));
 
-        Debug.Log($"[LootFlow] Opening loot window | waitingForLootCollection={WaitingForLootCollection}");
+        Debug.Log($"[LootFlow] Opening unified loot window | waitingForLootCollection={WaitingForLootCollection} | hasTreasure={hasTreasure} | equipmentItems={totalItems}");
         LootCollectionUI.Open(
             lootEntries,
+            generatedTreasure,
             onLootSingle: TryTransferLootItemInstanceToStash,
             onClosed: lootedCount =>
             {
                 WaitingForLootCollection = false;
                 PartyStash?.Unlock();
 
-                Debug.Log($"[LootFlow] Loot window closed | lootedCount={lootedCount} | stashLocked={PartyStash != null && PartyStash.IsLocked}");
+                Debug.Log($"[LootFlow] Unified loot window closed | lootedCount={lootedCount} | stashLocked={PartyStash != null && PartyStash.IsLocked}");
                 Debug.Log($"[LootFlow] Loot collection complete, {lootedCount} items looted");
 
                 if (lootedCount > 0)
@@ -103,53 +101,6 @@ public partial class GameManager
                     CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "📦 Loot window closed. Party stash unlocked."));
 
                 Debug.Log($"[LootFlow] Transitioning from loot to XP flow | lootedCount={lootedCount} | waitingLoot={WaitingForLootCollection} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
-                ShowPostCombatXPFlow(lootedCount);
-            },
-            onExitLoop: ExitCombatLoopToMenu);
-    }
-
-    /// <summary>
-    /// Continue to the standard loot collection flow (called after treasure UI is closed).
-    /// Extracts the same logic as the second half of BeginPostCombatLootCollection.
-    /// </summary>
-    private void ContinueToLootCollection()
-    {
-        EnsurePartyStashInitialized();
-        PartyStash?.Unlock();
-
-        EnsureLootCollectionUIInitialized();
-        if (LootCollectionUI == null)
-        {
-            WaitingForLootCollection = false;
-            Debug.LogError("[LootFlow] LootCollectionUI is null. Cannot open loot window after treasure.");
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Loot window unavailable. Stash unlocked."));
-            return;
-        }
-
-        List<LootCollectionUI.LootStackEntry> lootEntries = GatherPostCombatLootEntries();
-        int totalItems = CountTotalItems(lootEntries);
-        Debug.Log($"[LootFlow] Post-treasure gather complete | stacks={lootEntries.Count} | totalItems={totalItems}");
-
-        WaitingForLootCollection = true;
-        if (totalItems > 0)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Special("💰", $"Equipment loot: {totalItems} item(s). Collect loot before continuing."));
-        else
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "📭 No equipment loot. Close loot window to continue."));
-
-        LootCollectionUI.Open(
-            lootEntries,
-            onLootSingle: TryTransferLootItemInstanceToStash,
-            onClosed: lootedCount =>
-            {
-                WaitingForLootCollection = false;
-                PartyStash?.Unlock();
-                Debug.Log($"[LootFlow] Loot window closed (post-treasure) | lootedCount={lootedCount}");
-
-                if (lootedCount > 0)
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"📦 {lootedCount} item(s) looted to party stash."));
-                else
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "📦 Loot window closed. Party stash unlocked."));
-
                 ShowPostCombatXPFlow(lootedCount);
             },
             onExitLoop: ExitCombatLoopToMenu);
