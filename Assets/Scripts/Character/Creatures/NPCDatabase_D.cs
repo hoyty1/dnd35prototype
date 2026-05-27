@@ -29,7 +29,6 @@ public static partial class NPCDatabase
         RegisterDuergar();
         RegisterDwarfWarrior();
         RegisterDireBoar();
-        RegisterDireWolf();
         RegisterDarkmantle();
         RegisterDireApe();
         RegisterDireWolverine();
@@ -789,48 +788,6 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.2f, 0.14f, 0.1f, 0.85f),
             NameColor = new Color(0.82f, 0.65f, 0.5f),
             Description = "Dire Boar (CR 4). Massive boar with ferocity—fights past 0 HP. MM 3.5e p.63."
-        });
-    }
-
-    /// <summary>
-    /// Dire Wolf (CR 3) — Large animal.
-    /// MM 3.5e p.65. Trip attack on bite.
-    /// 6d8+18 HP (45), bite 1d8+10.
-    /// </summary>
-    private static void RegisterDireWolf()
-    {
-        Register(new NPCDefinition
-        {
-            Id = "dire_wolf",
-            Name = "Dire Wolf",
-            ChallengeRating = "3",
-            Level = 6,
-            CharacterClass = "Warrior",
-            CreatureType = "Animal",
-            CharacterAlignment = Alignment.TrueNeutral,
-            HitDice = 6,
-            SizeCategory = SizeCategory.Large,
-            IsTallCreature = false,
-            STR = 25, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 10,
-            NaturalArmorBonus = 3,
-            BaseSpeed = 10, // 50 ft
-            BaseHitDieHP = 45,
-            BAB = 4,
-            HasTripAttack = true,
-            TripAttackCheckBonus = 11,
-            HasScent = true,
-            NaturalAttacks = new List<NaturalAttackDefinition>
-            {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
-            },
-            CreatureTags = new List<string> { "Animal", "MM35" },
-            Feats = new List<string> { "Alertness", "Run", "Weapon Focus (bite)" },
-            SpecialAbilities = new List<string> { "Trip (Ex): free trip on bite (+11 check)", "Scent", "Low-light vision" },
-            AIProfileArchetype = NPCAIProfileArchetype.Animal,
-            SpriteColor = new Color(0.5f, 0.48f, 0.42f, 1f),
-            PanelColor = new Color(0.18f, 0.16f, 0.14f, 0.85f),
-            NameColor = new Color(0.78f, 0.75f, 0.68f),
-            Description = "Dire Wolf (CR 3). Pack predator with devastating trip attack. MM 3.5e p.65."
         });
     }
 
