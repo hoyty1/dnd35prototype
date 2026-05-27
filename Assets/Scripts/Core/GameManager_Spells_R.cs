@@ -588,7 +588,7 @@ public partial class GameManager
 
         // Combat log
         string removedSummary = string.Join(", ", removedDescriptions);
-        CombatUI?.ShowCombatLog($"<color=#FFD700>✦ {casterName} casts Remove Curse on {targetName}!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Special("✦", $"{casterName} casts Remove Curse on {targetName}!"));
         CombatUI?.ShowCombatLog($"<color=#FFD700>   {(cursesRemoved > 0 ? $"{cursesRemoved} curse(s) removed: {removedSummary}" : "Curses lifted!")}.</color>");
 
         result.BuffApplied = true;

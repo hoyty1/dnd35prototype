@@ -101,7 +101,7 @@ public partial class GameManager
             }
         }
 
-        CombatUI?.ShowCombatLog($"<color=#FFD700>⚔✨ Divine Power! {casterName} gains +{strBonus} STR, +{tempHP} temp HP, BAB +{babBonus} for {durationRounds} rounds.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Special("⚔✨", $"Divine Power! {casterName} gains +{strBonus} STR, +{tempHP} temp HP, BAB +{babBonus} for {durationRounds} rounds."));
         Debug.Log($"[DivinePower] {casterName}: STR+{strBonus}, tempHP+{tempHP}, BAB+{babBonus}, duration {durationRounds} rounds");
 
         result.BuffApplied = true;

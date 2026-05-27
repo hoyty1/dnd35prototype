@@ -66,14 +66,14 @@ public partial class GameManager
         // Fort save negates
         if (result.RequiredSave && result.SaveSucceeded)
         {
-            CombatUI?.ShowCombatLog($"<color=#66CC66>🛡 {target.Stats.CharacterName} resists Contagion with a Fortitude save!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Immune("🛡", $"{target.Stats.CharacterName} resists Contagion with a Fortitude save!"));
             return true;
         }
 
         // Check disease immunity
         if (target.Stats.IsImmuneToDisease())
         {
-            CombatUI?.ShowCombatLog($"<color=#66CC66>🛡 {target.Stats.CharacterName} is immune to disease!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Immune("🛡", $"{target.Stats.CharacterName} is immune to disease!"));
             return true;
         }
 

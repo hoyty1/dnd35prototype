@@ -91,7 +91,7 @@ public partial class GameManager
 
         if (data.CurrentCommand != null && data.CurrentCommand.Type == SummonCommandType.ProtectCaster && data.Caster != null && data.Caster.Stats != null)
         {
-            CombatUI.ShowCombatLog($"<color=#66E8FF>{GetSummonDisplayName(summon)} protects {data.Caster.Stats.CharacterName}.</color>");
+            CombatUI.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} protects {data.Caster.Stats.CharacterName}."));
         }
 
         CharacterController target = SelectSummonTargetByCommand(summon, data);
@@ -116,7 +116,7 @@ public partial class GameManager
 
                 if (summon.Actions.HasMoveAction)
                     summon.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"<color=#FFCC66>{GetSummonDisplayName(summon)} withdraws to survive.</color>");
+                CombatUI.ShowCombatLog(CombatLogHelper.Buff("", $"{GetSummonDisplayName(summon)} withdraws to survive."));
                 yield return new WaitForSeconds(0.45f);
             }
         }
@@ -136,7 +136,7 @@ public partial class GameManager
                 }
 
                 summon.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"<color=#66E8FF>{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}.</color>");
+                CombatUI.ShowCombatLog(CombatLogHelper.SummonRaw($"{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}."));
                 yield return new WaitForSeconds(0.4f);
             }
         }
@@ -158,7 +158,7 @@ public partial class GameManager
         if (summon.Stats != null && summon.Stats.HasTripAttack && !target.Stats.IsProne && summon.Actions.HasStandardAction)
         {
             var trip = summon.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
-            CombatUI.ShowCombatLog($"<color=#66E8FF>✦ {GetSummonDisplayName(summon)} attempts Trip: {trip.Log}</color>");
+            CombatUI.ShowCombatLog(CombatLogHelper.Summon("✦", $"{GetSummonDisplayName(summon)} attempts Trip: {trip.Log}"));
 
             // Melee reaction effects (Fire Shield, Thorns, etc.) — trip is a melee maneuver
             MeleeReactionService.TriggerReactions(summon, target, null);
@@ -489,7 +489,7 @@ public partial class GameManager
 
         if (attacker.Stats.IsDead)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF6644>💀 {attacker.Stats.CharacterName} is slain before completing the ranged attack.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💀", $"{attacker.Stats.CharacterName} is slain before completing the ranged attack."));
             return false;
         }
 

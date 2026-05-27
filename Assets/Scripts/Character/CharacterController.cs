@@ -1961,7 +1961,7 @@ public class CharacterController : MonoBehaviour
         string targetLabel = hostileTarget != null && hostileTarget.Stats != null
             ? $" against {hostileTarget.Stats.CharacterName}"
             : string.Empty;
-        GameManager.Instance?.CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {actorName}'s {sourceName} ends ({reasonLabel}{targetLabel}).</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("👁", $"{actorName}'s {sourceName} ends ({reasonLabel}{targetLabel})."));
 
         if (HasCondition(CombatConditionType.Invisible))
             RemoveCondition(CombatConditionType.Invisible);
@@ -1990,7 +1990,7 @@ public class CharacterController : MonoBehaviour
 
         string actorName = Stats != null ? Stats.CharacterName : name;
         string reasonLabel = string.IsNullOrWhiteSpace(reason) ? "effect ended" : reason;
-        GameManager.Instance?.CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {actorName}'s invisibility ends ({reasonLabel}).</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("👁", $"{actorName}'s invisibility ends ({reasonLabel})."));
 
         ClearInvisibilityEffect();
     }

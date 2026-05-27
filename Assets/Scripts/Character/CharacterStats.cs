@@ -4555,7 +4555,7 @@ public class CharacterStats
             statusMgr.RemoveEffectsBySpellId(SpellNames.PROTECTION_FROM_ARROWS);
 
         if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && owner.Stats != null)
-            GameManager.Instance.CombatUI.ShowCombatLog($"<color=#FFAA44>🛡 Protection from Arrows discharged on {owner.Stats.CharacterName}!</color>");
+            GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Expired("🛡", $"Protection from Arrows discharged on {owner.Stats.CharacterName}!"));
     }
 
     private void TryDischargeStoneskin()
@@ -4577,7 +4577,7 @@ public class CharacterStats
             statusMgr.RemoveEffectsBySpellId(SpellNames.STONESKIN);
 
         if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && owner.Stats != null)
-            GameManager.Instance.CombatUI.ShowCombatLog($"<color=#FFAA44>🪨 Stoneskin discharged on {owner.Stats.CharacterName}! (absorption pool depleted)</color>");
+            GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Expired("🪨", $"Stoneskin discharged on {owner.Stats.CharacterName}! (absorption pool depleted)"));
     }
 
     /// <summary>

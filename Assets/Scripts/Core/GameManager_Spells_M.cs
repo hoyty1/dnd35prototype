@@ -104,7 +104,7 @@ public partial class GameManager
 
                     if (!srResult.Overcame)
                     {
-                        CombatUI?.ShowCombatLog($"<color=#AAAAFF>  {target.Stats.CharacterName} resists {spellName} via Spell Resistance!</color>");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("", $" {target.Stats.CharacterName} resists {spellName} via Spell Resistance!"));
                         continue;
                     }
                 }

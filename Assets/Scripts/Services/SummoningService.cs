@@ -196,7 +196,7 @@ public class SummoningService : MonoBehaviour
         active.CurrentCommand = command;
 
         string summonName = GetSummonDisplayName(summon);
-        CombatUI?.ShowCombatLog($"<color=#66E8FF>{summonName}: {command.Description}.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{summonName}: {command.Description}."));
     }
 
     // ==================== REGISTRATION ====================
@@ -283,7 +283,7 @@ public class SummoningService : MonoBehaviour
                 {
                     summon.HasEnteredPostConcentrationDuration = true;
                     summon.RemainingRounds = Mathf.Max(1, summon.TotalDurationRounds);
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>{summon.Controller.Stats.CharacterName}: concentration ended, {summon.RemainingRounds} rounds until dismissal.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("", $"{summon.Controller.Stats.CharacterName}: concentration ended, {summon.RemainingRounds} rounds until dismissal."));
                 }
                 else
                 {
@@ -298,9 +298,9 @@ public class SummoningService : MonoBehaviour
             if (!holdByConcentration)
             {
                 if (summon.RemainingRounds == 2)
-                    CombatUI?.ShowCombatLog($"<color=#66E8FF>{summon.Controller.Stats.CharacterName}: 2 rounds remaining.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{summon.Controller.Stats.CharacterName}: 2 rounds remaining."));
                 else if (summon.RemainingRounds == 1)
-                    CombatUI?.ShowCombatLog($"<color=#FFCC66>{summon.Controller.Stats.CharacterName}: 1 round remaining!</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", $"{summon.Controller.Stats.CharacterName}: 1 round remaining!"));
             }
 
             if (!holdByConcentration && summon.RemainingRounds <= 0)

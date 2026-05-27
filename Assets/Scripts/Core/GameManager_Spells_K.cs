@@ -224,7 +224,7 @@ public partial class GameManager
         weapon.AddOrReplaceItemSpellEffect(effect);
 
         string recipientName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
-        CombatUI?.ShowCombatLog($"<color=#88FFEE>🗡 {spell.Name} sharpens {recipientName}'s {weapon.Name}: threat range doubled to {newThreatMin}-20 [{effect.GetDurationDisplayString()}].</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🗡", $"{spell.Name} sharpens {recipientName}'s {weapon.Name}: threat range doubled to {newThreatMin}-20 [{effect.GetDurationDisplayString()}]."));
         Debug.Log($"[GameManager] Keen Edge: {weapon.Name} threat {baseThreatMin}-20 → {newThreatMin}-20 (modifier {critModifier}), CL {casterLevel}");
 
         UpdateAllStatsUI();
@@ -307,7 +307,7 @@ public partial class GameManager
             totalEnchanted += toEnchant;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#88FFEE>🗡 {casterName} casts Keen Edge — {totalEnchanted} projectiles now have doubled threat range (19-20) [{durationRounds} rounds].</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🗡", $"{casterName} casts Keen Edge — {totalEnchanted} projectiles now have doubled threat range (19-20) [{durationRounds} rounds]."));
         Debug.Log($"[GameManager] Keen Edge (Ammo): {casterName} enchanted {totalEnchanted} projectiles with doubled threat range, CL {casterLevel}, {durationRounds} rounds");
 
         UpdateAllStatsUI();

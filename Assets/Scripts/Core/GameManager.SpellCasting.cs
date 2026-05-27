@@ -416,7 +416,7 @@ public partial class GameManager
                 {
                     string breakLog = casterConc.ForceBreakConcentration("incapacitated");
                     if (!string.IsNullOrEmpty(breakLog))
-                        CombatUI?.ShowCombatLog($"<color=#FF6644>{breakLog}</color>");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.InterruptedRaw(breakLog));
                 }
             }
 
@@ -430,7 +430,7 @@ public partial class GameManager
                 {
                     summon.HasEnteredPostConcentrationDuration = true;
                     summon.RemainingRounds = Mathf.Max(1, summon.TotalDurationRounds);
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>{summon.Controller.Stats.CharacterName}: concentration ended, {summon.RemainingRounds} rounds until dismissal.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("", $"{summon.Controller.Stats.CharacterName}: concentration ended, {summon.RemainingRounds} rounds until dismissal."));
                 }
                 else
                 {
@@ -445,9 +445,9 @@ public partial class GameManager
             if (!holdByConcentration)
             {
                 if (summon.RemainingRounds == 2)
-                    CombatUI?.ShowCombatLog($"<color=#66E8FF>{summon.Controller.Stats.CharacterName}: 2 rounds remaining.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{summon.Controller.Stats.CharacterName}: 2 rounds remaining."));
                 else if (summon.RemainingRounds == 1)
-                    CombatUI?.ShowCombatLog($"<color=#FFCC66>{summon.Controller.Stats.CharacterName}: 1 round remaining!</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", $"{summon.Controller.Stats.CharacterName}: 1 round remaining!"));
             }
 
             if (!holdByConcentration && summon.RemainingRounds <= 0)
@@ -636,7 +636,7 @@ public partial class GameManager
             BeginSummonSwarmConcentration(caster, _pendingSpell, summonCC);
 
             int rangeFeet = CalculateSummonSwarmRangeFeet(caster != null && caster.Stats != null ? caster.Stats.Level : 1);
-            CombatUI?.ShowCombatLog($"<color=#66E8FF>{caster.Stats.CharacterName} casts {_pendingSpell.Name}!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{caster.Stats.CharacterName} casts {_pendingSpell.Name}!"));
             CombatUI?.ShowCombatLog($"  Range: {rangeFeet} ft (level {Mathf.Max(1, caster.Stats.Level)} caster)");
             CombatUI?.ShowCombatLog($"  Target location: ({targetCell.Coords.x}, {targetCell.Coords.y})");
             CombatUI?.ShowCombatLog($"  Swarm type: {baseDef.Name}");
@@ -717,12 +717,12 @@ public partial class GameManager
             creatureCount = Mathf.Max(1, creatureCount);
 
             string selectedListRoman = SummonMonsterLists.ToRomanLevel(Mathf.Max(1, selectedListLevel));
-            CombatUI?.ShowCombatLog($"<color=#66E8FF>{caster.Stats.CharacterName} casts {_pendingSpell.Name} (using Level {selectedListRoman} list).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{caster.Stats.CharacterName} casts {_pendingSpell.Name} (using Level {selectedListRoman} list)."));
             if (countInfo != null && countInfo.RequiresRoll)
                 CombatUI?.ShowCombatLog($"<color=#CCEEFF>{rollLog}</color>");
 
             string summonLabel = option.BuildUiLabel();
-            CombatUI?.ShowCombatLog($"<color=#66E8FF>Summoning {creatureCount} {summonLabel}{(creatureCount == 1 ? string.Empty : "s")}...</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"Summoning {creatureCount} {summonLabel}{(creatureCount == 1 ? string.Empty : "s")}..."));
             if (isSwarmSummonOption)
                 CombatUI?.ShowCombatLog("<color=#77EE99>Swarm summons are AI-controlled allies and cannot be directly commanded.</color>");
 
@@ -757,7 +757,7 @@ public partial class GameManager
                 }
 
                 if (stackedDueToNoSpace)
-                    CombatUI?.ShowCombatLog("<color=#FFCC66>Not enough open slots; stacking extra summons on the primary tile.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", "Not enough open slots; stacking extra summons on the primary tile."));
 
                 InsertIntoInitiative(summonCC, caster);
                 RegisterActiveSummon(summonCC, caster, _pendingSpell.SpellId);
@@ -6330,7 +6330,7 @@ public partial class GameManager
                 target.ApplyCondition(CombatConditionType.Dazed, dazeRounds, sourceName);
             }
 
-            CombatUI?.ShowCombatLog($"<color=#FFCC66>💫 {target.Stats.CharacterName} is dazed for {dazeRounds} round(s)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("💫", $"{target.Stats.CharacterName} is dazed for {dazeRounds} round(s)!"));
             Debug.Log($"[GameManager] {spell.Name} applied Dazed to {target.Stats.CharacterName} for {dazeRounds} round(s)");
             return null;
         }
@@ -6378,7 +6378,7 @@ public partial class GameManager
             int dazzledRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 10);
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
             target.ApplyCondition(CombatConditionType.Dazzled, dazzledRounds, sourceName);
-            CombatUI?.ShowCombatLog($"<color=#FFCC66>✨ {target.Stats.CharacterName} is dazzled (-1 attack, Spot, and Search) for {dazzledRounds} round(s)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("✨", $"{target.Stats.CharacterName} is dazzled (-1 attack, Spot, and Search) for {dazzledRounds} round(s)!"));
             Debug.Log($"[GameManager] Flare applied Dazzled to {target.Stats.CharacterName} for {dazzledRounds} round(s)");
             return null;
         }
@@ -6416,14 +6416,14 @@ public partial class GameManager
             {
                 var blindEffect = BlindnessDeafnessEffectData.CreateSpellBlindness(spell.SpellId, caster, casterLevel);
                 target.ApplyBlindnessEffect(blindEffect);
-                CombatUI?.ShowCombatLog($"<color=#FF9966>🔲 {target.Stats.CharacterName} is blinded by {spell.Name}!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🔲", $"{target.Stats.CharacterName} is blinded by {spell.Name}!"));
                 Debug.Log($"[GameManager] {spell.Name} applied Blindness to {target.Stats.CharacterName} (permanent)");
             }
             else
             {
                 var deafEffect = BlindnessDeafnessEffectData.CreateSpellDeafness(spell.SpellId, caster, casterLevel);
                 target.ApplyDeafnessEffect(deafEffect);
-                CombatUI?.ShowCombatLog($"<color=#FF9966>🔔 {target.Stats.CharacterName} is deafened by {spell.Name}!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🔔", $"{target.Stats.CharacterName} is deafened by {spell.Name}!"));
                 Debug.Log($"[GameManager] {spell.Name} applied Deafness to {target.Stats.CharacterName} (permanent)");
             }
             return null;
@@ -6552,7 +6552,7 @@ public partial class GameManager
             // Dominate Person only works on humanoids
             if (!TeamUtility.IsHumanoid(target))
             {
-                CombatUI?.ShowCombatLog($"<color=#FF9966>🧠 {caster.Stats.CharacterName} casts Dominate Person on {target.Stats.CharacterName} — no effect (not a humanoid)!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🧠", $"{caster.Stats.CharacterName} casts Dominate Person on {target.Stats.CharacterName} — no effect (not a humanoid)!"));
                 return null;
             }
 
@@ -6611,7 +6611,7 @@ public partial class GameManager
                 target.ApplyCondition(CombatConditionType.Petrified, rounds, fallbackSource);
             }
 
-            CombatUI?.ShowCombatLog($"<color=#AAAAAA>🪨 {target.Stats.CharacterName} is petrified!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪨", $"{target.Stats.CharacterName} is petrified!"));
             return null;
         }
 
@@ -6678,7 +6678,7 @@ public partial class GameManager
                 target.ApplyCondition(CombatConditionType.Stunned, stunRounds, fallbackSource);
             }
 
-            CombatUI?.ShowCombatLog($"<color=#FFCC66>💫 {target.Stats.CharacterName} is stunned by {spell.Name} for {stunRounds} round(s)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("💫", $"{target.Stats.CharacterName} is stunned by {spell.Name} for {stunRounds} round(s)!"));
             Debug.Log($"[GameManager] {spell.Name} applied Stunned to {target.Stats.CharacterName} for {stunRounds} rounds");
             return null;
         }
@@ -6693,7 +6693,7 @@ public partial class GameManager
             bool wasExhausted = target.HasCondition(CombatConditionType.Exhausted);
             if (wasExhausted)
             {
-                CombatUI?.ShowCombatLog($"<color=#FFCC66>💤 {target.Stats.CharacterName} is already exhausted. Touch of Fatigue has no effect.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Buff("💤", $"{target.Stats.CharacterName} is already exhausted. Touch of Fatigue has no effect."));
                 Debug.Log($"[GameManager] Touch of Fatigue had no effect on {target.Stats.CharacterName} (already exhausted)");
                 return null;
             }
@@ -6704,12 +6704,12 @@ public partial class GameManager
             bool isNowExhausted = target.HasCondition(CombatConditionType.Exhausted);
             if (wasFatigued && isNowExhausted)
             {
-                CombatUI?.ShowCombatLog($"<color=#FF9966>🥵 {target.Stats.CharacterName} becomes exhausted for {casterLevel} round(s)!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🥵", $"{target.Stats.CharacterName} becomes exhausted for {casterLevel} round(s)!"));
                 Debug.Log($"[GameManager] Touch of Fatigue escalated {target.Stats.CharacterName} to Exhausted for {casterLevel} rounds");
             }
             else
             {
-                CombatUI?.ShowCombatLog($"<color=#FFCC66>😫 {target.Stats.CharacterName} is fatigued for {casterLevel} round(s)!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Buff("😫", $"{target.Stats.CharacterName} is fatigued for {casterLevel} round(s)!"));
                 Debug.Log($"[GameManager] Touch of Fatigue applied Fatigued to {target.Stats.CharacterName} for {casterLevel} rounds");
             }
 
@@ -6739,7 +6739,7 @@ public partial class GameManager
             effect.Initialize(recipient, this, CurrentRound);
 
             string casterName = recipient.Stats != null ? recipient.Stats.CharacterName : "Unknown";
-            CombatUI?.ShowCombatLog($"<color=#88CCFF>✨ {casterName} casts True Strike (+20 insight on next attack, ignores concealment).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("✨", $"{casterName} casts True Strike (+20 insight on next attack, ignores concealment)."));
             return null;
         }
 
@@ -6774,7 +6774,7 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88FFEE>🎭 {recipient.Stats.CharacterName} now appears as {recipient.DisplayedRace} ({effect.GetDurationDisplayString()}).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🎭", $"{recipient.Stats.CharacterName} now appears as {recipient.DisplayedRace} ({effect.GetDurationDisplayString()})."));
             }
 
             _pendingDisguiseSelfRace = null;
@@ -6803,7 +6803,7 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88FFEE>💨 {recipient.Stats.CharacterName}'s land speed increases by +{effect.AppliedSpeedBonusFeet} ft ({effect.GetDurationDisplayString()}).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("💨", $"{recipient.Stats.CharacterName}'s land speed increases by +{effect.AppliedSpeedBonusFeet} ft ({effect.GetDurationDisplayString()})."));
             }
 
             UpdateAllStatsUI();
@@ -6831,7 +6831,7 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88FFEE>👁 {recipient.Stats.CharacterName} can now see invisible creatures ({effect.GetDurationDisplayString()}).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("👁", $"{recipient.Stats.CharacterName} can now see invisible creatures ({effect.GetDurationDisplayString()})."));
             }
 
             UpdateAllStatsUI();
@@ -6871,7 +6871,7 @@ public partial class GameManager
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
                 UpdateEnemyLastKnownPositionForInvisibility(recipient);
-                CombatUI?.ShowCombatLog($"<color=#88FFEE>👁 {recipient.Stats.CharacterName} becomes invisible ({effect.GetDurationDisplayString()}).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("👁", $"{recipient.Stats.CharacterName} becomes invisible ({effect.GetDurationDisplayString()})."));
             }
 
             UpdateAllStatsUI();
@@ -6977,7 +6977,7 @@ public partial class GameManager
             });
 
             string energyLabel = DamageTextUtils.GetDamageTypeDisplay(chosenDamageType);
-            CombatUI?.ShowCombatLog($"<color=#88FFEE>🛡 {recipient.Stats.CharacterName} gains Resist Energy ({energyLabel} {resistance}) for {Mathf.Max(0, durationRounds)} rounds.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🛡", $"{recipient.Stats.CharacterName} gains Resist Energy ({energyLabel} {resistance}) for {Mathf.Max(0, durationRounds)} rounds."));
             _pendingResistEnergyType = null;
             _pendingFireShieldIsWarm = null;
             _pendingProtectionFromEnergyType = null;
@@ -7032,7 +7032,7 @@ public partial class GameManager
             }
 
             string protEnergyLabel = DamageTextUtils.GetDamageTypeDisplay(chosenDamageTypeProtEnergy);
-            CombatUI?.ShowCombatLog($"<color=#88FFEE>🛡 {recipient.Stats.CharacterName} gains Protection from Energy ({protEnergyLabel}, {absorptionPool} pts) for {Mathf.Max(0, durationRoundsProtEnergy)} rounds (CL {casterLevel}).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🛡", $"{recipient.Stats.CharacterName} gains Protection from Energy ({protEnergyLabel}, {absorptionPool} pts) for {Mathf.Max(0, durationRoundsProtEnergy)} rounds (CL {casterLevel})."));
             _pendingProtectionFromEnergyType = null;
             UpdateAllStatsUI();
             return null;
@@ -7068,7 +7068,7 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88FFEE>🛡 {recipient.Stats.CharacterName} gains Protection from Arrows (DR {drAmount}/magic vs ranged weapons, {maxPool} absorption pool).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🛡", $"{recipient.Stats.CharacterName} gains Protection from Arrows (DR {drAmount}/magic vs ranged weapons, {maxPool} absorption pool)."));
             }
 
             UpdateAllStatsUI();
@@ -7146,7 +7146,7 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88FFEE>🪨 {recipient.Stats.CharacterName} gains Stoneskin (DR 10/adamantine, {maxPool} absorption pool, CL {casterLevel}).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪨", $"{recipient.Stats.CharacterName} gains Stoneskin (DR 10/adamantine, {maxPool} absorption pool, CL {casterLevel})."));
             }
 
             UpdateAllStatsUI();
@@ -7230,9 +7230,9 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88FF88>👻 {recipient.Stats.CharacterName} casts Spectral Hand — loses {handHP} HP. " +
+                CombatUI?.ShowCombatLog(CombatLogHelper.Success("👻", $"{recipient.Stats.CharacterName} casts Spectral Hand — loses {handHP} HP. " +
                                         $"Hand HP: {handHP}, AC: {spectralHandEffect.HandAC} " +
-                                        $"(22 + Int {intMod:+#;-#;+0}) [{effect.GetDurationDisplayString()}]</color>");
+                                        $"(22 + Int {intMod:+#;-#;+0}) [{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] Spectral Hand applied to {recipient.Stats.CharacterName}: " +
                           $"Hand HP {handHP}, AC {spectralHandEffect.HandAC}, CL {casterLevel}");
             }
@@ -7286,9 +7286,9 @@ public partial class GameManager
                     : "";
                 string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
 
-                CombatUI?.ShowCombatLog($"<color=#88FF88>💪 {casterName} casts {spellName} on {target.Stats.CharacterName} — " +
+                CombatUI?.ShowCombatLog(CombatLogHelper.Success("💪", $"{casterName} casts {spellName} on {target.Stats.CharacterName} — " +
                     $"+{enhancementEffect.BonusAmount} enhancement bonus to {abilityName}{hpNote} " +
-                    $"[{effect.GetDurationDisplayString()}]</color>");
+                    $"[{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] {spellName} applied to {target.Stats.CharacterName}: " +
                     $"+{enhancementEffect.BonusAmount} {abilityName}, CL {casterLevel}{hpNote}");
             }
@@ -7332,8 +7332,8 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88FF88>💀 {recipient.Stats.CharacterName} casts False Life — gains {falseLifeEffect.CurrentTempHP} temporary HP " +
-                                        $"(1d10+{Mathf.Min(casterLevel, 10)}) [{effect.GetDurationDisplayString()}]</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Success("💀", $"{recipient.Stats.CharacterName} casts False Life — gains {falseLifeEffect.CurrentTempHP} temporary HP " +
+                                        $"(1d10+{Mathf.Min(casterLevel, 10)}) [{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] False Life applied to {recipient.Stats.CharacterName}: {falseLifeEffect.CurrentTempHP} temp HP, CL {casterLevel}");
             }
             else
@@ -7629,7 +7629,7 @@ public partial class GameManager
                         CasterName = caster.Stats.CharacterName
                     };
                     RegisterMagicCircle(mcData);
-                    CombatUI?.ShowCombatLog($"<color=#88CCFF>🔵 {spell.Name} emanation (10-ft radius) centered on {target.Stats.CharacterName}.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🔵", $"{spell.Name} emanation (10-ft radius) centered on {target.Stats.CharacterName}."));
                 }
 
                 string durStr = effect.GetDurationDisplayString();
@@ -7906,7 +7906,7 @@ public partial class GameManager
             bool expired = character.TickAlignmentDetectionDuration();
             if (expired)
             {
-                CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {detSpellName} expires on {character.Stats.CharacterName}.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"{detSpellName} expires on {character.Stats.CharacterName}."));
                 ClearDetectionHighlights(character);
             }
         }
@@ -7928,44 +7928,44 @@ public partial class GameManager
             {
                 string msg = $"⏱ {effect.Spell?.Name ?? "Unknown"} has expired on {character.Stats.CharacterName}!";
                 Debug.Log($"[SpellDuration] {msg}");
-                CombatUI?.ShowCombatLog($"<color=#FFAA44>{msg}</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Color(msg, CombatLogHelper.ColorOrange));
 
                 if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DISGUISE_SELF, StringComparison.Ordinal))
                 {
-                    CombatUI?.ShowCombatLog($"<color=#88CCFF>🎭 {character.Stats.CharacterName}'s disguise fades; visible race returns to {character.DisplayedRace}.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🎭", $"{character.Stats.CharacterName}'s disguise fades; visible race returns to {character.DisplayedRace}."));
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.EXPEDITIOUS_RETREAT, StringComparison.Ordinal))
                 {
                     ExpeditiousRetreatEffectData expiredData = character.RemoveExpeditiousRetreatEffect();
                     int speedDelta = expiredData != null ? Mathf.Max(0, expiredData.SpeedBonusFeet) : Mathf.Max(0, effect.AppliedSpeedBonusFeet);
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Expeditious Retreat expires on {character.Stats.CharacterName}: speed -{speedDelta} ft.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Expeditious Retreat expires on {character.Stats.CharacterName}: speed -{speedDelta} ft."));
                 }
                 else if (effect.Spell != null && (string.Equals(effect.Spell.SpellId, SpellNames.INVISIBILITY, StringComparison.Ordinal)
                     || string.Equals(effect.Spell.SpellId, "greater_invisibility", StringComparison.Ordinal)
                     || string.Equals(effect.Spell.SpellId, "improved_invisibility", StringComparison.Ordinal)))
                 {
                     character.ClearInvisibilityEffect();
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {effect.Spell.Name} expires on {character.Stats.CharacterName}.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"{effect.Spell.Name} expires on {character.Stats.CharacterName}."));
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SEE_INVISIBLE, StringComparison.Ordinal))
                 {
                     character.ClearSeeInvisibilityEffect();
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {character.Stats.CharacterName}'s See Invisible expires.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"{character.Stats.CharacterName}'s See Invisible expires."));
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.GLITTERDUST, StringComparison.Ordinal))
                 {
                     character.ClearGlitterdustEffect();
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Glitterdust fades from {character.Stats.CharacterName}.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Glitterdust fades from {character.Stats.CharacterName}."));
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.PROTECTION_FROM_ARROWS, StringComparison.Ordinal))
                 {
                     character.Stats.ActiveProtectionFromArrowsEffect = null;
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Protection from Arrows expires on {character.Stats.CharacterName}.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Protection from Arrows expires on {character.Stats.CharacterName}."));
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.STONESKIN, StringComparison.Ordinal))
                 {
                     character.Stats.ActiveStoneskinEffect = null;
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Stoneskin expires on {character.Stats.CharacterName}.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Stoneskin expires on {character.Stats.CharacterName}."));
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DIMENSIONAL_ANCHOR, StringComparison.Ordinal))
                 {
@@ -7985,7 +7985,7 @@ public partial class GameManager
                         character.Stats.HasteACBonus = 0;
                         character.Stats.HasteReflexBonus = 0;
                     }
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Haste expires on {character.Stats.CharacterName}: attack, AC, Reflex, and speed bonuses removed.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Haste expires on {character.Stats.CharacterName}: attack, AC, Reflex, and speed bonuses removed."));
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SLOW, StringComparison.Ordinal))
                 {
@@ -7997,7 +7997,7 @@ public partial class GameManager
                         character.Stats.SlowReflexPenalty = 0;
                         character.Stats.SlowSpeedMultiplier = 1f;
                     }
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Slow expires on {character.Stats.CharacterName}: penalties removed, full actions restored.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Slow expires on {character.Stats.CharacterName}: penalties removed, full actions restored."));
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.FIRE_SHIELD, StringComparison.Ordinal))
                 {
@@ -8008,13 +8008,13 @@ public partial class GameManager
                         character.Stats.FireShieldCasterLevel = 0;
                         character.Stats.FireShieldDurationRounds = 0;
                     }
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Fire Shield expires on {character.Stats.CharacterName}: retribution and elemental damage reduction removed.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Fire Shield expires on {character.Stats.CharacterName}: retribution and elemental damage reduction removed."));
                 }
                 else if (effect.Spell != null && AlignmentDetectionEffectData.IsDetectionSpell(effect.Spell.SpellId))
                 {
                     character.RemoveAlignmentDetectionEffect();
                     ClearDetectionHighlights(character);
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {effect.Spell.Name} expires on {character.Stats.CharacterName}.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"{effect.Spell.Name} expires on {character.Stats.CharacterName}."));
                 }
                 // NOTE: Resilient Sphere expiry is now handled by the area effect system
                 // (ResilientSphereAreaEffect.OnRoundStart → RoundsRemaining countdown → ExpireEffect).
@@ -8091,7 +8091,7 @@ public partial class GameManager
                 if (effect.DurationRemainingRounds <= 0)
                 {
                     string energyLabel = DamageTextUtils.GetDamageTypeDisplay(effect.ToDamageType());
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Resist Energy ({energyLabel}) expires on {character.Stats.CharacterName}.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Resist Energy ({energyLabel}) expires on {character.Stats.CharacterName}."));
                     character.Stats.ActiveResistEnergyEffects.RemoveAt(i);
                 }
             }
@@ -8115,7 +8115,7 @@ public partial class GameManager
                 if (protEffect.DurationRemainingRounds <= 0)
                 {
                     string protEnergyLabel = protEffect.GetDisplayLabel();
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Protection from Energy ({protEnergyLabel}) expires on {character.Stats.CharacterName}.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Protection from Energy ({protEnergyLabel}) expires on {character.Stats.CharacterName}."));
                     character.Stats.ActiveProtectionFromEnergyEffects.RemoveAt(i);
                 }
             }
@@ -8128,7 +8128,7 @@ public partial class GameManager
             string sourceName = !string.IsNullOrWhiteSpace(expiredEnfeeblement.CasterName)
                 ? expiredEnfeeblement.CasterName
                 : "an unknown caster";
-            CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Ray of Enfeeblement expires on {character.Stats.CharacterName}: STR +{amount} restored (source: {sourceName}).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Ray of Enfeeblement expires on {character.Stats.CharacterName}: STR +{amount} restored (source: {sourceName})."));
         }
 
         TouchOfIdiocyConditionData expiredIdiocy = character.TickTouchOfIdiocyEffect();
@@ -8204,7 +8204,7 @@ public partial class GameManager
                 continue;
 
             string spellName = string.IsNullOrWhiteSpace(effect.SpellName) ? "Item Spell" : effect.SpellName;
-            CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {spellName} expires on {owner.Stats.CharacterName}'s {item.Name}.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"{spellName} expires on {owner.Stats.CharacterName}'s {item.Name}."));
         }
     }
 
@@ -8279,11 +8279,11 @@ public partial class GameManager
 
         if (!check.Success)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF6644>💥 {caster.Stats.CharacterName} fails to cast defensively. {spell.Name} is lost!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💥", $"{caster.Stats.CharacterName} fails to cast defensively. {spell.Name} is lost!"));
             return false;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>🛡 {caster.Stats.CharacterName} casts defensively and avoids attacks of opportunity.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{caster.Stats.CharacterName} casts defensively and avoids attacks of opportunity."));
         return true;
     }
 
@@ -8375,7 +8375,7 @@ public partial class GameManager
 
                 if (!check.Success)
                 {
-                    CombatUI?.ShowCombatLog($"<color=#FF6644>💥 {caster.Stats.CharacterName}'s casting is interrupted by damage. {spell.Name} is lost!</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💥", $"{caster.Stats.CharacterName}'s casting is interrupted by damage. {spell.Name} is lost!"));
                     onResolved?.Invoke(false);
                     return;
                 }
@@ -8383,7 +8383,7 @@ public partial class GameManager
 
             if (caster.Stats.IsDead)
             {
-                CombatUI?.ShowCombatLog($"<color=#FF6644>💀 {caster.Stats.CharacterName} is slain while casting {spell.Name}!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💀", $"{caster.Stats.CharacterName} is slain while casting {spell.Name}!"));
                 onResolved?.Invoke(false);
                 return;
             }
@@ -8580,7 +8580,7 @@ public partial class GameManager
 
         if (transitionedAny)
         {
-            CombatUI?.ShowCombatLog($"<color=#FFAA44>Concentration on Summon Swarm ended ({reason}). Swarm will last 2 more rounds.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("", $"Concentration on Summon Swarm ended ({reason}). Swarm will last 2 more rounds."));
         }
     }
 
@@ -8608,7 +8608,7 @@ public partial class GameManager
                 bool wasSummonSwarm = ConcentrationService.IsConcentratingOnSpell(character, SpellNames.SUMMON_SWARM);
                 string breakLog = concMgr.ForceBreakConcentration("killed");
                 if (!string.IsNullOrEmpty(breakLog))
-                    CombatUI?.ShowCombatLog($"<color=#FF6644>{breakLog}</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.InterruptedRaw(breakLog));
                 if (wasSummonSwarm)
                     TransitionSummonSwarmToPostConcentration(character, "caster incapacitated");
             }
@@ -8617,7 +8617,7 @@ public partial class GameManager
             {
                 string lostSpellName = spellComp.HeldTouchSpell.Name;
                 spellComp.ClearHeldTouchCharge("killed");
-                CombatUI?.ShowCombatLog($"<color=#FF6644>💥 {character.Stats.CharacterName}'s held {lostSpellName} charge is lost (killed)!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💥", $"{character.Stats.CharacterName}'s held {lostSpellName} charge is lost (killed)!"));
             }
 
             UpdateAllStatsUI();
@@ -8641,7 +8641,7 @@ public partial class GameManager
             {
                 string lostSpellName = spellComp.HeldTouchSpell.Name;
                 spellComp.ClearHeldTouchCharge("failed concentration after damage");
-                CombatUI?.ShowCombatLog($"<color=#FF6644>💥 {character.Stats.CharacterName} loses concentration and the held {lostSpellName} charge dissipates!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💥", $"{character.Stats.CharacterName} loses concentration and the held {lostSpellName} charge dissipates!"));
             }
         }
 
@@ -8683,7 +8683,7 @@ public partial class GameManager
         {
             string endLog = concMgr.EndConcentration();
             if (!string.IsNullOrEmpty(endLog))
-                CombatUI?.ShowCombatLog($"<color=#FFAA44>{endLog}</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Color(endLog, CombatLogHelper.ColorOrange));
 
             TransitionSummonSwarmToPostConcentration(caster, "caster cast another spell");
             return true;
@@ -8761,7 +8761,7 @@ public partial class GameManager
         string log = concMgr.EndConcentration();
         if (!string.IsNullOrEmpty(log))
         {
-            CombatUI?.ShowCombatLog($"<color=#FFAA44>{log}</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color(log, CombatLogHelper.ColorOrange));
         }
 
         if (wasSummonSwarm)
@@ -8790,7 +8790,7 @@ public partial class GameManager
             var old = caster.RemoveAlignmentDetectionEffect();
             if (old != null)
             {
-                CombatUI?.ShowCombatLog($"<color=#AAAAAA>Previous {old.SpellDisplayName} ends as {caster.Stats.CharacterName} begins a new detection.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"Previous {old.SpellDisplayName} ends as {caster.Stats.CharacterName} begins a new detection."));
             }
         }
 
@@ -8823,7 +8823,7 @@ public partial class GameManager
         // Show combat log with initial results
         string typeName = detectionData.Type == DetectionType.Undead ? "undead" : detectionData.Type.ToString().ToLower();
         string emoji = GetDetectionEmoji(detectionData.Type);
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>{emoji} {caster.Stats.CharacterName} begins concentrating on {detectionData.SpellDisplayName}.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive(emoji, $"{caster.Stats.CharacterName} begins concentrating on {detectionData.SpellDisplayName}."));
 
         string summary = detectionData.GetDetectionSummary();
         CombatUI?.ShowCombatLog($"<color=#BBDDFF>  → {summary}</color>");
@@ -8851,7 +8851,7 @@ public partial class GameManager
         if (detection.DurationRemainingRounds <= 0)
         {
             string emoji = GetDetectionEmoji(detection.Type);
-            CombatUI?.ShowCombatLog($"<color=#FFAA44>{emoji} {character.Stats.CharacterName}'s {detection.SpellDisplayName} expires.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired(emoji, $"{character.Stats.CharacterName}'s {detection.SpellDisplayName} expires."));
             character.RemoveAlignmentDetectionEffect();
             ClearDetectionHighlights(character);
             return;

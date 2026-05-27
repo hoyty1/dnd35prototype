@@ -3999,7 +3999,7 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[Turn][DualWield] Turn start reset: choiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, mainPenalty={_mainHandPenalty}, offPenalty={_offHandPenalty}");
 
         // Log turn start in combat log
-        CombatUI.ShowCombatLog($"<color=#FFD700>⚔ {pc.Stats.CharacterName}'s turn begins</color>");
+        CombatUI.ShowCombatLog(CombatLogHelper.Special("⚔", $"{pc.Stats.CharacterName}'s turn begins"));
 
         if (pc.IsGrappling())
             CombatUI?.ShowCombatLog("🪢 You are grappling — only grapple actions are available (spellcasting allowed with concentration and component restrictions).");
@@ -8767,7 +8767,7 @@ public partial class GameManager : MonoBehaviour
         statusMgr.RemoveEffectsBySpellId(SpellNames.EXPEDITIOUS_RETREAT);
         ExpeditiousRetreatEffectData removed = pc.RemoveExpeditiousRetreatEffect();
         int removedBonus = removed != null ? Mathf.Max(0, removed.SpeedBonusFeet) : 30;
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>💨 {pc.Stats.CharacterName} dismisses Expeditious Retreat (speed -{removedBonus} ft).</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("💨", $"{pc.Stats.CharacterName} dismisses Expeditious Retreat (speed -{removedBonus} ft)."));
         UpdateAllStatsUI();
         ShowActionChoices();
     }
@@ -8788,7 +8788,7 @@ public partial class GameManager : MonoBehaviour
         pc.CommitStandardAction();
         statusMgr.RemoveEffectsBySpellId(SpellNames.JUMP);
 
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>🦘 {pc.Stats.CharacterName} dismisses Jump.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🦘", $"{pc.Stats.CharacterName} dismisses Jump."));
         UpdateAllStatsUI();
         ShowActionChoices();
     }
@@ -8824,7 +8824,7 @@ public partial class GameManager : MonoBehaviour
         pc.CommitStandardAction();
         pc.ClearInvisibilityEffect();
 
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {pc.Stats.CharacterName} dismisses {sourceName}.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("👁", $"{pc.Stats.CharacterName} dismisses {sourceName}."));
         UpdateAllStatsUI();
         ShowActionChoices();
     }
@@ -8845,7 +8845,7 @@ public partial class GameManager : MonoBehaviour
         statusMgr.RemoveEffectsBySpellId(SpellNames.SEE_INVISIBLE);
         pc.ClearSeeInvisibilityEffect();
 
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {pc.Stats.CharacterName} dismisses See Invisible.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("👁", $"{pc.Stats.CharacterName} dismisses See Invisible."));
         UpdateAllStatsUI();
         ShowActionChoices();
     }
@@ -8866,7 +8866,7 @@ public partial class GameManager : MonoBehaviour
         pc.CommitStandardAction();
         statusMgr.RemoveEffectsBySpellId(SpellNames.DISGUISE_SELF);
 
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>🎭 {pc.Stats.CharacterName} dismisses Disguise Self and appears as {pc.DisplayedRace}.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🎭", $"{pc.Stats.CharacterName} dismisses Disguise Self and appears as {pc.DisplayedRace}."));
         UpdateAllStatsUI();
         ShowActionChoices();
     }
@@ -9259,8 +9259,8 @@ public partial class GameManager : MonoBehaviour
         bool magicBypass = weapon.IsMagicForBypass;
         string recipientName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
 
-        CombatUI?.ShowCombatLog($"<color=#88FFEE>✨ {spell.Name} enchants {recipientName}'s {weapon.Name}: +1 enhancement for {effect.GetDurationDisplayString()}.</color>");
-        CombatUI?.ShowCombatLog($"<color=#88FFEE>🗡 {weapon.Name} effective enhancement now +{Mathf.Max(effectiveAttackBonus, effectiveDamageBonus)} (attack +{effectiveAttackBonus}, damage +{effectiveDamageBonus}); counts as magic: {(magicBypass ? "yes" : "no")}.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"{spell.Name} enchants {recipientName}'s {weapon.Name}: +1 enhancement for {effect.GetDurationDisplayString()}."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🗡", $"{weapon.Name} effective enhancement now +{Mathf.Max(effectiveAttackBonus, effectiveDamageBonus)} (attack +{effectiveAttackBonus}, damage +{effectiveDamageBonus}); counts as magic: {(magicBypass ? "yes" : "no")}."));
         return true;
     }
 
@@ -9714,7 +9714,7 @@ public partial class GameManager : MonoBehaviour
         active.CurrentCommand = command;
 
         string summonName = GetSummonDisplayName(summon);
-        CombatUI?.ShowCombatLog($"<color=#66E8FF>{summonName}: {command.Description}.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{summonName}: {command.Description}."));
     }
 
     private ActiveSummonInstance GetActiveSummon(CharacterController character)

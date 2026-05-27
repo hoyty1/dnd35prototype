@@ -161,7 +161,7 @@ public class DispelMagicService : MonoBehaviour
         StatusEffectManager targetStatusMgr = target.StatusEffectManager;
         if (targetStatusMgr == null || targetStatusMgr.ActiveEffects == null || targetStatusMgr.ActiveEffects.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAFF>🔮 {casterName} casts Dispel Magic on {targetName} — no active spell effects to dispel.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮", $"{casterName} casts Dispel Magic on {targetName} — no active spell effects to dispel."));
             Debug.Log($"[DispelMagic] {casterName} targets {targetName} — no active effects found");
             return;
         }
@@ -180,7 +180,7 @@ public class DispelMagicService : MonoBehaviour
 
         if (dispellableEffects.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAFF>🔮 {casterName} casts Dispel Magic on {targetName} — no dispellable effects found.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮", $"{casterName} casts Dispel Magic on {targetName} — no dispellable effects found."));
             Debug.Log($"[DispelMagic] {casterName} targets {targetName} — all effects are instantaneous or non-dispellable");
             return;
         }
@@ -196,7 +196,7 @@ public class DispelMagicService : MonoBehaviour
         // Roll once: 1d20 + min(CL, 10)
         int dispelRoll = RollDispelCheck(casterLevel);
 
-        CombatUI?.ShowCombatLog($"<color=#AAAAFF>🔮 {casterName} casts Dispel Magic on {targetName} (dispel check: {dispelRoll})</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮", $"{casterName} casts Dispel Magic on {targetName} (dispel check: {dispelRoll})"));
 
         bool dispelledSomething = false;
         foreach (var effect in dispellableEffects)
@@ -251,7 +251,7 @@ public class DispelMagicService : MonoBehaviour
         }
 
         string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-        CombatUI?.ShowCombatLog($"<color=#AAAAFF>🔮 {casterName} casts Dispel Magic (area dispel) — targeting {targets.Count} creature(s)</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮", $"{casterName} casts Dispel Magic (area dispel) — targeting {targets.Count} creature(s)"));
 
         foreach (var target in targets)
         {
@@ -533,7 +533,7 @@ public class DispelMagicService : MonoBehaviour
         string casterName = caster.Stats.CharacterName;
         string counterName = counterspeller.Stats.CharacterName;
 
-        CombatUI?.ShowCombatLog($"<color=#FFD700>⚡ {counterName}'s readied counterspell triggers against {casterName}!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Special("⚡", $"{counterName}'s readied counterspell triggers against {casterName}!"));
         Debug.Log($"[Counterspell] {counterName}'s readied counterspell triggers! {casterName} is casting {spell.Name}.");
 
         // Step 1: Try to identify the spell via Spellcraft (free action)

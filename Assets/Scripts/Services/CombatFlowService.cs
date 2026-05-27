@@ -321,7 +321,7 @@ public class CombatFlowService : MonoBehaviour
 
         if (attacker.Stats.IsDead)
         {
-            _gameManager.CombatUI?.ShowCombatLog($"<color=#FF6644>💀 {attacker.Stats.CharacterName} is slain before completing the ranged attack.</color>");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💀", $"{attacker.Stats.CharacterName} is slain before completing the ranged attack."));
             return false;
         }
 

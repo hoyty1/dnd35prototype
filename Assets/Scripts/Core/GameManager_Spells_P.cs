@@ -107,7 +107,7 @@ public partial class GameManager
             }
         }
 
-        CombatUI?.ShowCombatLog($"<color=#FFD700>🙏 Prayer! {casterName} prays — {allyCount} allies gain +1 luck bonus, {enemyCount} enemies suffer –1 luck penalty. Duration: {durationRounds} rounds.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Special("🙏", $"Prayer! {casterName} prays — {allyCount} allies gain +1 luck bonus, {enemyCount} enemies suffer –1 luck penalty. Duration: {durationRounds} rounds."));
         Debug.Log($"[Prayer] {casterName}: allies={allyCount}, enemies={enemyCount}, duration={durationRounds} rounds");
 
         return true;
@@ -210,7 +210,7 @@ public partial class GameManager
         {
             result.Success = false;
             result.NoEffectReason = $"{targetName} is immune to mind-affecting effects.";
-            CombatUI?.ShowCombatLog($"<color=#66CC66>🛡 {targetName} is immune to mind-affecting effects!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Immune("🛡", $"{targetName} is immune to mind-affecting effects!"));
             return true;
         }
 
@@ -219,7 +219,7 @@ public partial class GameManager
         {
             result.Success = false;
             result.NoEffectReason = $"{targetName} is immune to fear effects (not a living creature).";
-            CombatUI?.ShowCombatLog($"<color=#66CC66>🧟 {targetName} is immune to fear effects!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Immune("🧟", $"{targetName} is immune to fear effects!"));
             return true;
         }
 
@@ -229,7 +229,7 @@ public partial class GameManager
         // Will save to disbelieve (this is the primary save from the spell pipeline)
         if (result.RequiredSave && result.SaveSucceeded)
         {
-            CombatUI?.ShowCombatLog($"<color=#66CC66>🛡 {targetName} disbelieves the phantasm (Will save)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Immune("🛡", $"{targetName} disbelieves the phantasm (Will save)!"));
             return true;
         }
 

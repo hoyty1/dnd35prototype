@@ -59,7 +59,7 @@ public partial class GameManager
             target.ApplyCondition(CombatConditionType.Helpless, holdRounds, fallbackSource);
         }
 
-        CombatUI?.ShowCombatLog($"<color=#FF9966>⛓ {target.Stats.CharacterName} is paralyzed by Hold Person for {holdRounds} round(s)! (Will save each round with cumulative +2 to break free)</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("⛓", $"{target.Stats.CharacterName} is paralyzed by Hold Person for {holdRounds} round(s)! (Will save each round with cumulative +2 to break free)"));
         Debug.Log($"[GameManager] Hold Person applied Paralyzed+Helpless to {target.Stats.CharacterName} for {holdRounds} rounds (CL {casterLevel})");
 
         return null;

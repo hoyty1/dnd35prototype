@@ -82,7 +82,7 @@ public partial class GameManager
 
         // Log
         string typeLabel = isUndead ? "☀💀" : isConstruct ? "☀🔧" : "☀";
-        CombatUI?.ShowCombatLog($"<color=#FFD700>{typeLabel} Searing Light! {casterName} blasts {targetName} for {damageDesc} divine damage!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Special(typeLabel, $"Searing Light! {casterName} blasts {targetName} for {damageDesc} divine damage!"));
         Debug.Log($"[SearingLight] {casterName} -> {targetName}: {damage} damage ({creatureType})");
 
         return true;
@@ -164,7 +164,7 @@ public partial class GameManager
         }
         if (!srResult.Overcame)
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAFF>  {target.Stats.CharacterName} resists Slow via Spell Resistance!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("", $" {target.Stats.CharacterName} resists Slow via Spell Resistance!"));
             return null;
         }
 

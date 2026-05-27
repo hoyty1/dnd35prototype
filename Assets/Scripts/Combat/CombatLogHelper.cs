@@ -167,4 +167,68 @@ public static class CombatLogHelper
     /// <summary>A condition fading / expiring (gray).</summary>
     public static string ConditionFaded(string emoji, string characterName, string effect)
         => Color($"{emoji} {characterName}'s {effect} fades.", ColorGray);
+
+    // ─────────────────────────────────────────────
+    //  Expiration / timer  (#FFAA44 orange)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Spell or effect expiration line (orange timer).</summary>
+    public static string Expired(string emoji, string message)
+        => Color($"{emoji} {message}", ColorOrange);
+
+    // ─────────────────────────────────────────────
+    //  Summon / creature  (#66E8FF sky-blue)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Summon action or creature info (sky-blue).</summary>
+    public static string Summon(string emoji, string message)
+        => Color($"{emoji} {message}", ColorSkyBlue);
+
+    /// <summary>Summon action (sky-blue, no emoji prefix).</summary>
+    public static string SummonRaw(string message)
+        => Color(message, ColorSkyBlue);
+
+    // ─────────────────────────────────────────────
+    //  Spell Resistance  (#AAAAFF lavender)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Spell-resistance related message (lavender).</summary>
+    public static string SpellResistance(string emoji, string message)
+        => Color($"{emoji} {message}", ColorLavender);
+
+    // ─────────────────────────────────────────────
+    //  Condition immune / resist  (#66CC66 soft green)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Condition immunity or soft resist (soft green).</summary>
+    public static string Immune(string emoji, string message)
+        => Color($"{emoji} {message}", ColorSoftGreen);
+
+    // ─────────────────────────────────────────────
+    //  Casting interrupt  (#FF6644 dim red)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Casting interrupted or charge lost (dim red).</summary>
+    public static string Interrupted(string emoji, string message)
+        => Color($"{emoji} {message}", ColorDimRed);
+
+    /// <summary>Casting interrupted (dim red, no emoji prefix — for pre-formatted strings).</summary>
+    public static string InterruptedRaw(string message)
+        => Color(message, ColorDimRed);
+
+    // ─────────────────────────────────────────────
+    //  Amber / debuff condition  (#FF9966)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Debuff or crowd-control condition applied (amber).</summary>
+    public static string Debuff(string emoji, string message)
+        => Color($"{emoji} {message}", ColorAmber);
+
+    // ─────────────────────────────────────────────
+    //  Light-blue / defensive  (#88CCFF)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Defensive/concentration action (light blue).</summary>
+    public static string Defensive(string emoji, string message)
+        => Color($"{emoji} {message}", ColorLightBlue);
 }

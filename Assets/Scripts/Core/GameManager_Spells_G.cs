@@ -119,8 +119,8 @@ public partial class GameManager
         int effectiveDamageBonus = weapon.GetEnhancementDamageBonus();
         string recipientName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
 
-        CombatUI?.ShowCombatLog($"<color=#88FFEE>✨ {spell.Name} enchants {recipientName}'s {weapon.Name}: +{enhancementBonus} enhancement for {effect.GetDurationDisplayString()} (CL {casterLevel}).</color>");
-        CombatUI?.ShowCombatLog($"<color=#88FFEE>🗡 {weapon.Name} effective enhancement now +{Mathf.Max(effectiveAttackBonus, effectiveDamageBonus)} (attack +{effectiveAttackBonus}, damage +{effectiveDamageBonus}); counts as magic: yes.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"{spell.Name} enchants {recipientName}'s {weapon.Name}: +{enhancementBonus} enhancement for {effect.GetDurationDisplayString()} (CL {casterLevel})."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🗡", $"{weapon.Name} effective enhancement now +{Mathf.Max(effectiveAttackBonus, effectiveDamageBonus)} (attack +{effectiveAttackBonus}, damage +{effectiveDamageBonus}); counts as magic: yes."));
         Debug.Log($"[GameManager] Greater Magic Weapon: {weapon.Name} +{enhancementBonus} enhancement, CL {casterLevel}, {rounds} rounds");
 
         UpdateAllStatsUI();

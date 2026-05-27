@@ -64,7 +64,7 @@ public partial class GameManager
             caster.ApplyCondition(CombatConditionType.Blinking, effect.RemainingRounds, spell.Name);
 
             string casterName = caster.Stats.CharacterName;
-            CombatUI?.ShowCombatLog($"<color=#88CCFF>✨ {casterName} casts Blink!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("✨", $"{casterName} casts Blink!"));
             CombatUI?.ShowCombatLog($"<color=#A6D4FF>   {casterName} begins blinking between the Material and Ethereal Planes.</color>");
             CombatUI?.ShowCombatLog($"<color=#A6D4FF>   Defensive: 50% miss chance vs attacks ({effect.GetDurationDisplayString()}).</color>");
             CombatUI?.ShowCombatLog($"<color=#A6D4FF>   Offensive: 20% miss chance, but +2 attack & deny Dex to AC.</color>");
@@ -130,7 +130,7 @@ public partial class GameManager
         // Will save negates
         if (result.RequiredSave && result.SaveSucceeded)
         {
-            CombatUI?.ShowCombatLog($"<color=#66CC66>🛡 {target.Stats.CharacterName} resists Bestow Curse with a Will save!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Immune("🛡", $"{target.Stats.CharacterName} resists Bestow Curse with a Will save!"));
             return true;
         }
 

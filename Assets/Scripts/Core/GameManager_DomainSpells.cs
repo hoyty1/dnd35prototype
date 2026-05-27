@@ -49,7 +49,7 @@ public partial class GameManager
         if (!string.Equals(creatureType.Trim(), "Animal", StringComparison.OrdinalIgnoreCase))
         {
             string casterName = caster?.Stats?.CharacterName ?? "Caster";
-            CombatUI?.ShowCombatLog($"<color=#FF9966>⛓ {casterName} casts Hold Animal on {target.Stats.CharacterName} — no effect (not an animal, creature type: {creatureType})!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("⛓", $"{casterName} casts Hold Animal on {target.Stats.CharacterName} — no effect (not an animal, creature type: {creatureType})!"));
             return true;
         }
 
@@ -85,7 +85,7 @@ public partial class GameManager
             target.ApplyCondition(CombatConditionType.Helpless, holdRounds, fallbackSource);
         }
 
-        CombatUI?.ShowCombatLog($"<color=#FF9966>⛓ {target.Stats.CharacterName} is paralyzed by Hold Animal for {holdRounds} round(s)! (Will save each round with cumulative +2 to break free)</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("⛓", $"{target.Stats.CharacterName} is paralyzed by Hold Animal for {holdRounds} round(s)! (Will save each round with cumulative +2 to break free)"));
         Debug.Log($"[GameManager] Hold Animal applied Paralyzed+Helpless to {target.Stats.CharacterName} for {holdRounds} rounds (CL {casterLevel})");
         return true;
     }
@@ -395,8 +395,8 @@ public partial class GameManager
 
         // Immediate round 1 = warm, no damage yet
         CombatUI?.ShowCombatLog($"<color=#FF6600>🔥 {casterName} casts Heat Metal on {target.Stats.CharacterName}!</color>");
-        CombatUI?.ShowCombatLog($"<color=#FFCC66>   Metal equipment begins to warm. Escalating fire damage over 7 rounds.</color>");
-        CombatUI?.ShowCombatLog($"<color=#FFCC66>   Round pattern: warm(0)/hot(1d4)/searing(2d4)/searing(2d4)/hot(2d4)/warm(1d4)/cool(0)</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", "  Metal equipment begins to warm. Escalating fire damage over 7 rounds."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", "  Round pattern: warm(0)/hot(1d4)/searing(2d4)/searing(2d4)/hot(2d4)/warm(1d4)/cool(0)"));
 
         Debug.Log($"[GameManager] Heat Metal applied to {target.Stats.CharacterName} for 7 rounds (CL {casterLevel})");
         return true;
@@ -426,7 +426,7 @@ public partial class GameManager
 
         if (diceCount == 0)
         {
-            CombatUI?.ShowCombatLog($"<color=#FFCC66>🔥 Heat Metal on {target.Stats.CharacterName}: {phase} — no damage this round.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("🔥", $"Heat Metal on {target.Stats.CharacterName}: {phase} — no damage this round."));
             return;
         }
 
@@ -477,7 +477,7 @@ public partial class GameManager
         string creatureType = target.Stats.CreatureType ?? "";
         if (!string.Equals(creatureType.Trim(), "Animal", StringComparison.OrdinalIgnoreCase))
         {
-            CombatUI?.ShowCombatLog($"<color=#FF9966>🧠 {caster.Stats.CharacterName} casts Dominate Animal on {target.Stats.CharacterName} — no effect (not an animal, type: {creatureType})!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🧠", $"{caster.Stats.CharacterName} casts Dominate Animal on {target.Stats.CharacterName} — no effect (not an animal, type: {creatureType})!"));
             return true;
         }
 
@@ -532,7 +532,7 @@ public partial class GameManager
         string creatureType = target.Stats.CreatureType ?? "";
         if (!string.Equals(creatureType.Trim(), "Plant", StringComparison.OrdinalIgnoreCase))
         {
-            CombatUI?.ShowCombatLog($"<color=#FF9966>🌿 {caster.Stats.CharacterName} casts Command Plants on {target.Stats.CharacterName} — no effect (not a plant creature, type: {creatureType})!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌿", $"{caster.Stats.CharacterName} casts Command Plants on {target.Stats.CharacterName} — no effect (not a plant creature, type: {creatureType})!"));
             return true;
         }
 
@@ -542,7 +542,7 @@ public partial class GameManager
 
         if (targetHD > maxHD)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF9966>🌿 {caster.Stats.CharacterName} casts Command Plants on {target.Stats.CharacterName} — no effect ({targetHD} HD exceeds budget of {maxHD} HD)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌿", $"{caster.Stats.CharacterName} casts Command Plants on {target.Stats.CharacterName} — no effect ({targetHD} HD exceeds budget of {maxHD} HD)!"));
             return true;
         }
 
@@ -563,7 +563,7 @@ public partial class GameManager
 
         target.ApplyCommandUndeadEffect(effectData);
 
-        CombatUI?.ShowCombatLog($"<color=#66CC66>🌿 {caster.Stats.CharacterName} commands {target.Stats.CharacterName}!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Immune("🌿", $"{caster.Stats.CharacterName} commands {target.Stats.CharacterName}!"));
         CombatUI?.ShowCombatLog($"<color=#88DD88>   The plant creature ({targetHD} HD) obeys for {durationRounds} rounds (~{durationRounds / 14400} days).</color>");
 
         Debug.Log($"[GameManager] Command Plants: {target.Stats.CharacterName} ({targetHD} HD) controlled by {caster.Stats.CharacterName} for {durationRounds} rounds");

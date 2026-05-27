@@ -274,7 +274,7 @@ public partial class GameManager
             var chosen = toggles.Where(t => t.toggle.isOn).Select(t => t.slotIndex).ToList();
             if (chosen.Count == 0)
             {
-                CombatUI?.ShowCombatLog("<color=#FFAA44>⚠ No spells selected for imbuing. Select at least one spell.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No spells selected for imbuing. Select at least one spell."));
                 return;
             }
 
@@ -350,7 +350,7 @@ public partial class GameManager
         }
 
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>✨ {targetName} begins casting imbued {entry.Spell.Name}! (CL {entry.CasterLevel}, DC {entry.SaveDC})</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("✨", $"{targetName} begins casting imbued {entry.Spell.Name}! (CL {entry.CasterLevel}, DC {entry.SaveDC})"));
         Debug.Log($"[ImbueWithSpellAbility] {targetName} initiating imbued spell cast: {entry.Spell.Name} at CL {entry.CasterLevel}, DC {entry.SaveDC}");
 
         // Set the pending spell for the resolution pipeline

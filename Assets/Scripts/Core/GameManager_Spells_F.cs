@@ -48,7 +48,7 @@ public partial class GameManager
             if (effect != null) effect.RemainingRounds = durationRounds;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>🦅✨ Freedom of Movement! {casterName} grants {targetName} freedom from movement restrictions for {durationRounds} rounds.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🦅✨", $"Freedom of Movement! {casterName} grants {targetName} freedom from movement restrictions for {durationRounds} rounds."));
         Debug.Log($"[FreedomOfMovement] {casterName} -> {targetName}: duration {durationRounds} rounds");
 
         result.BuffApplied = true;

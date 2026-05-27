@@ -364,7 +364,7 @@ public partial class GameManager
         // Set flag for TurnUndeadSystem to pick up
         cleric.Stats.GreaterTurningActive = true;
 
-        CombatUI?.ShowCombatLog($"<color=#FFD700>☀️ {cleric.Stats.CharacterName} channels the power of the Sun for Greater Turning!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Special("☀️", $"{cleric.Stats.CharacterName} channels the power of the Sun for Greater Turning!"));
         CombatUI?.ShowCombatLog($"   Next Turn Undead will DESTROY affected undead instead of turning them.");
     }
 
@@ -414,7 +414,7 @@ public partial class GameManager
                 int clericLevel = character.Stats.GetClassLevel("Cleric");
                 character.Stats.TemporarySTRBonus -= Mathf.Max(1, clericLevel);
                 if (character.Stats.TemporarySTRBonus < 0) character.Stats.TemporarySTRBonus = 0;
-                CombatUI?.ShowCombatLog($"<color=#AAAAAA>💪 {character.Stats.CharacterName}'s Feat of Strength ends.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("💪", character.Stats.CharacterName, "Feat of Strength"));
             }
         }
 
@@ -424,7 +424,7 @@ public partial class GameManager
             character.Stats.TravelDomainFreedomRounds--;
             if (character.Stats.TravelDomainFreedomRounds <= 0)
             {
-                CombatUI?.ShowCombatLog($"<color=#AAAAAA>🗺️ {character.Stats.CharacterName}'s Freedom of Movement ends.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🗺️", character.Stats.CharacterName, "Freedom of Movement"));
             }
         }
     }

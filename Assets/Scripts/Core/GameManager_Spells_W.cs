@@ -883,7 +883,7 @@ public partial class GameManager
         // Check if target is already inside an existing sphere
         if (ResilientSphereAreaEffect.IsCharacterInAnySphere(target))
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {target.Stats.CharacterName} is already enclosed in a Resilient Sphere.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔮", $"{target.Stats.CharacterName} is already enclosed in a Resilient Sphere."));
             return true;
         }
 
@@ -913,7 +913,7 @@ public partial class GameManager
             var srResult = SpellSaveResolver.RollSpellResistance(caster, creature, casterLevel);
             if (!srResult.Overcame)
             {
-                CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {creature.Stats.CharacterName} resists the Resilient Sphere via Spell Resistance — sphere fails to form!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔮", $"{creature.Stats.CharacterName} resists the Resilient Sphere via Spell Resistance — sphere fails to form!"));
                 return true;
             }
 
@@ -921,7 +921,7 @@ public partial class GameManager
             int reflexSave = DiceRoller.D20() + creature.Stats.ReflexSave;
             if (reflexSave >= saveDC)
             {
-                CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔮 {creature.Stats.CharacterName} dodges the forming Resilient Sphere (Reflex {reflexSave} vs DC {saveDC}) — sphere fails!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔮", $"{creature.Stats.CharacterName} dodges the forming Resilient Sphere (Reflex {reflexSave} vs DC {saveDC}) — sphere fails!"));
                 return true; // Spell consumed but sphere doesn't form
             }
         }
@@ -1064,7 +1064,7 @@ public partial class GameManager
                     affliction, spellId, isItemWish: false);
 
                 if (success)
-                    CombatUI?.ShowCombatLog($"<color=#FFD700>✨ {caster.Stats.CharacterName}'s Wish is granted!</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Special("✨", $"{caster.Stats.CharacterName}'s Wish is granted!"));
                 else
                     CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", $"{caster.Stats.CharacterName}'s Wish fails."));
 
@@ -1094,7 +1094,7 @@ public partial class GameManager
                 decision.ability, decision.affliction, decision.spellId, isItemWish: false);
 
             if (success)
-                CombatUI?.ShowCombatLog($"<color=#FFD700>✨ {caster.Stats.CharacterName}'s Wish is granted!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Special("✨", $"{caster.Stats.CharacterName}'s Wish is granted!"));
             else
                 CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", $"{caster.Stats.CharacterName}'s Wish fails."));
 
@@ -1128,7 +1128,7 @@ public partial class GameManager
                     affliction, spellId, isItemWish: true);
 
                 if (success)
-                    CombatUI?.ShowCombatLog($"<color=#FFD700>✨ The Luck Blade grants {caster.Stats.CharacterName}'s Wish!</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Special("✨", $"The Luck Blade grants {caster.Stats.CharacterName}'s Wish!"));
                 else
                     CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", "The Wish from the Luck Blade fails."));
 
@@ -1151,7 +1151,7 @@ public partial class GameManager
                 decision.ability, decision.affliction, decision.spellId, isItemWish: true);
 
             if (success)
-                CombatUI?.ShowCombatLog($"<color=#FFD700>✨ The Luck Blade grants {caster.Stats.CharacterName}'s Wish!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Special("✨", $"The Luck Blade grants {caster.Stats.CharacterName}'s Wish!"));
             else
                 CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", "The Wish from the Luck Blade fails."));
         }

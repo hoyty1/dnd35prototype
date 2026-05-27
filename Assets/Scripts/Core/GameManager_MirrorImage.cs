@@ -94,7 +94,7 @@ public partial class GameManager
         CombatUI?.ShowCombatLog($"<color=#B7A8FF>🪞 {recipient.Stats.CharacterName} casts Mirror Image: {state.Clones.Count} clone(s) appear (rolled {intendedCloneCount}).</color>");
 
         if (state.Clones.Count < intendedCloneCount)
-            CombatUI?.ShowCombatLog($"<color=#FFCC66>⚠ Only {state.Clones.Count}/{intendedCloneCount} images could be placed due to blocked adjacent cells.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚠", $"Only {state.Clones.Count}/{intendedCloneCount} images could be placed due to blocked adjacent cells."));
 
         return true;
     }
@@ -378,7 +378,7 @@ public partial class GameManager
         if (log)
         {
             string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-            CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Mirror Image ends on {casterName} ({reason}).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Mirror Image ends on {casterName} ({reason})."));
         }
     }
 
