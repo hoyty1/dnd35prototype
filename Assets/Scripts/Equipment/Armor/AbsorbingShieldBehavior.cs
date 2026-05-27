@@ -67,8 +67,7 @@ public class AbsorbingShieldBehavior : SpecificItemBehavior
         string name = character.Stats?.CharacterName ?? "Wielder";
         Log($"Equipped by {name} — can absorb up to {_maxSpellLevels} spell levels");
 
-        GameManager.Instance?.CombatUI?.ShowCombatLog(
-            $"<color=#4169E1>🛡️ {DisplayName} active — absorbs spells ({_absorbedSpellLevels}/{_maxSpellLevels} levels stored)</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.RoyalBlue("🛡", $"️ {DisplayName} active — absorbs spells ({_absorbedSpellLevels}/{_maxSpellLevels} levels stored)"));
     }
 
     // ========================================================================
@@ -114,9 +113,7 @@ public class AbsorbingShieldBehavior : SpecificItemBehavior
                      $"({_absorbedSpellLevels}/{_maxSpellLevels} spell levels stored)");
         Log($"Absorbed {spellName} (level {spellLevel}) from {casterName} — {_absorbedSpellLevels}/{_maxSpellLevels} total");
 
-        GameManager.Instance?.CombatUI?.ShowCombatLog(
-            $"<color=#4169E1>🛡️ {DisplayName} absorbs {casterName}'s {spellName}! " +
-            $"({_absorbedSpellLevels}/{_maxSpellLevels} levels)</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.RoyalBlue("🛡️", $"{DisplayName} absorbs {casterName}'s {spellName}! ({_absorbedSpellLevels}/{_maxSpellLevels} levels)"));
 
         return true; // Spell negated
     }

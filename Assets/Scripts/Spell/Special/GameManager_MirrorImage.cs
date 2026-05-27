@@ -48,7 +48,7 @@ public partial class GameManager
         CharacterController recipient = caster;
         if (target != null && target != caster)
         {
-            CombatUI?.ShowCombatLog("⚠ Mirror Image is a personal spell and affects only the caster.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Mirror Image is a personal spell and affects only the caster."));
         }
 
         ClearMirrorImageForCaster(recipient, "recast", removeStatusEffect: true, log: false);
@@ -62,7 +62,7 @@ public partial class GameManager
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
         if (effect == null)
         {
-            CombatUI?.ShowCombatLog($"⚠ {recipient.Stats.CharacterName} could not gain Mirror Image due to stacking rules.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{recipient.Stats.CharacterName} could not gain Mirror Image due to stacking rules."));
             return true;
         }
 
@@ -469,7 +469,7 @@ public partial class GameManager
             }
         }
 
-        CombatUI?.ShowCombatLog("⚠ Select an adjacent Mirror Image clone, or press Skip.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Select an adjacent Mirror Image clone, or press Skip."));
     }
 
     private void CompleteMirrorImageSwapSelection(bool skip, CharacterController selectedClone)

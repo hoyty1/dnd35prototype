@@ -392,7 +392,7 @@ public partial class GameManager
         }
 
         // Immediate round 1 = warm, no damage yet
-        CombatUI?.ShowCombatLog($"<color=#FF6600>🔥 {casterName} casts Heat Metal on {target.Stats.CharacterName}!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔥", $"{casterName} casts Heat Metal on {target.Stats.CharacterName}!"));
         CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", "  Metal equipment begins to warm. Escalating fire damage over 7 rounds."));
         CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", "  Round pattern: warm(0)/hot(1d4)/searing(2d4)/searing(2d4)/hot(2d4)/warm(1d4)/cool(0)"));
 
@@ -496,8 +496,8 @@ public partial class GameManager
 
         target.ApplyCommandUndeadEffect(effectData);
 
-        CombatUI?.ShowCombatLog($"<color=#CC66FF>🧠 {caster.Stats.CharacterName} dominates {target.Stats.CharacterName}!</color>");
-        CombatUI?.ShowCombatLog($"<color=#CC99FF>   The animal is now under {caster.Stats.CharacterName}'s telepathic control for {durationRounds} rounds.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🧠", $"{caster.Stats.CharacterName} dominates {target.Stats.CharacterName}!"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   The animal is now under {caster.Stats.CharacterName}'s telepathic control for {durationRounds} rounds."));
 
         Debug.Log($"[GameManager] Dominate Animal: {target.Stats.CharacterName} controlled by {caster.Stats.CharacterName} for {durationRounds} rounds");
         return true;
@@ -560,7 +560,7 @@ public partial class GameManager
         target.ApplyCommandUndeadEffect(effectData);
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Immune("🌿", $"{caster.Stats.CharacterName} commands {target.Stats.CharacterName}!"));
-        CombatUI?.ShowCombatLog($"<color=#88DD88>   The plant creature ({targetHD} HD) obeys for {durationRounds} rounds (~{durationRounds / 14400} days).</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   The plant creature ({targetHD} HD) obeys for {durationRounds} rounds (~{durationRounds / 14400} days)."));
 
         Debug.Log($"[GameManager] Command Plants: {target.Stats.CharacterName} ({targetHD} HD) controlled by {caster.Stats.CharacterName} for {durationRounds} rounds");
         return true;

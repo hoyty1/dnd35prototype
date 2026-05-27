@@ -207,7 +207,7 @@ public partial class GameManager
         string reason;
         if (!CanActivateDomainPower(cleric, "Strength", out reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Feat of Strength: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Feat of Strength: {reason}."));
             return;
         }
 
@@ -239,7 +239,7 @@ public partial class GameManager
         string reason;
         if (!CanActivateDomainPower(cleric, "Destruction", out reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Smite: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Smite: {reason}."));
             return;
         }
 
@@ -247,7 +247,7 @@ public partial class GameManager
         cleric.Stats.DestructionSmiteActive = true;
 
         CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⚔️", $"{cleric.Stats.CharacterName} invokes Destruction Smite!"));
-        CombatUI?.ShowCombatLog($"   Next melee attack: +4 attack, +{cleric.Stats.GetClassLevel("Cleric")} damage");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Next melee attack: +4 attack, +{cleric.Stats.GetClassLevel("Cleric")} damage"));
     }
 
     /// <summary>
@@ -265,20 +265,20 @@ public partial class GameManager
         string reason;
         if (!CanActivateDomainPower(cleric, "Death", out reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Death Touch: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Death Touch: {reason}."));
             return;
         }
 
         if (target == null || target.Stats == null || target.Stats.CurrentHP <= 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ Invalid target for Death Touch.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Invalid target for Death Touch."));
             return;
         }
 
         // Death effect: does not affect undead, constructs, or creatures immune to death effects
         if (SpellTargetingService.IsUndead(target) || SpellTargetingService.IsConstruct(target))
         {
-            CombatUI?.ShowCombatLog($"⚠ Death Touch has no effect on {target.Stats.CharacterName} ({creatureType} creatures are immune to death effects).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Death Touch has no effect on {target.Stats.CharacterName} ({creatureType} creatures are immune to death effects)."));
             return;
         }
 
@@ -288,7 +288,7 @@ public partial class GameManager
         // Consume standard action
         if (!cleric.CommitStandardAction())
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Death Touch: standard action unavailable.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Death Touch: standard action unavailable."));
             return;
         }
 
@@ -354,7 +354,7 @@ public partial class GameManager
         string reason;
         if (!CanActivateDomainPower(cleric, "Sun", out reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Greater Turning: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Greater Turning: {reason}."));
             return;
         }
 
@@ -364,7 +364,7 @@ public partial class GameManager
         cleric.Stats.GreaterTurningActive = true;
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Special("☀️", $"{cleric.Stats.CharacterName} channels the power of the Sun for Greater Turning!"));
-        CombatUI?.ShowCombatLog($"   Next Turn Undead will DESTROY affected undead instead of turning them.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Next Turn Undead will DESTROY affected undead instead of turning them."));
     }
 
     /// <summary>
@@ -378,7 +378,7 @@ public partial class GameManager
         string reason;
         if (!CanActivateDomainPower(cleric, "Travel", out reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Freedom of Movement: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Freedom of Movement: {reason}."));
             return;
         }
 
@@ -390,8 +390,8 @@ public partial class GameManager
 
         // Freedom of Movement: immune to movement-impairing effects
         // This is checked in grapple, web, entangle, hold person, etc.
-        CombatUI?.ShowCombatLog($"<color=#00BFFF>🗺️ {cleric.Stats.CharacterName} activates Freedom of Movement!</color>");
-        CombatUI?.ShowCombatLog($"   Duration: {durationRounds} rounds. Immune to movement-impairing effects.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🗺️ {cleric.Stats.CharacterName} activates Freedom of Movement!"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Duration: {durationRounds} rounds. Immune to movement-impairing effects."));
     }
 
     // ==================== ROUND TICK ====================
@@ -472,13 +472,13 @@ public partial class GameManager
         string reason;
         if (!CanActivateDomainPower(cleric, "Luck", out reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Luck Reroll: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Luck Reroll: {reason}."));
             return;
         }
 
         cleric.Stats.LuckRerollPending = true;
 
-        CombatUI?.ShowCombatLog($"<color=#00CC66>🍀 {cleric.Stats.CharacterName} invokes the Luck domain — next d20 roll will be rerolled!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🍀 {cleric.Stats.CharacterName} invokes the Luck domain — next d20 roll will be rerolled!"));
     }
 
     /// <summary>
@@ -492,7 +492,7 @@ public partial class GameManager
         if (cleric.Stats.LuckRerollPending)
         {
             cleric.Stats.LuckRerollPending = false;
-            CombatUI?.ShowCombatLog($"<color=#00CC66>🍀 {cleric.Stats.CharacterName} disarms the Luck reroll (not consumed).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🍀 {cleric.Stats.CharacterName} disarms the Luck reroll (not consumed)."));
         }
     }
 
@@ -505,10 +505,7 @@ public partial class GameManager
         if (stats == null || !stats.LastLuckRerollTriggered) return;
 
         string usedLabel = stats.LastLuckRerollUsed == stats.LastLuckRerollOriginal ? "original" : "reroll";
-        CombatUI?.ShowCombatLog(
-            $"<color=#00CC66>🍀 Luck reroll on {stats.LastLuckRerollContext}: " +
-            $"original {stats.LastLuckRerollOriginal}, reroll {stats.LastLuckRerollSecond} → " +
-            $"using {usedLabel} ({stats.LastLuckRerollUsed}). Luck domain power expended for today.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("🍀", $"Luck reroll on {stats.LastLuckRerollContext}: original {stats.LastLuckRerollOriginal}, reroll {stats.LastLuckRerollSecond} → using {usedLabel} ({stats.LastLuckRerollUsed}). Luck domain power expended for today."));
 
         stats.LastLuckRerollTriggered = false;
     }
@@ -540,7 +537,7 @@ public partial class GameManager
         var powers = GetAvailableDomainPowers(activePC);
         if (powers.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {activePC.Stats.CharacterName} has no domain powers available.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{activePC.Stats.CharacterName} has no domain powers available."));
             return;
         }
 
@@ -577,7 +574,7 @@ public partial class GameManager
                 break;
             case "Death":
                 // Death Touch needs a target — store pending and let player click an adjacent enemy
-                CombatUI?.ShowCombatLog($"<color=#8B008B>💀 Select an adjacent target for Death Touch (click an enemy).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"Select an adjacent target for Death Touch (click an enemy)."));
                 _pendingDomainPower = "Death";
                 _pendingDomainPowerCleric = cleric;
                 // Target selection handled by existing click-on-character system
@@ -637,14 +634,14 @@ public partial class GameManager
         string reason;
         if (!CanActivateDomainPower(cleric, "Plant", out reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Rebuke Plants: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Rebuke Plants: {reason}."));
             return;
         }
 
         // Consume standard action
         if (!cleric.CommitStandardAction())
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Rebuke Plants: standard action unavailable.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Rebuke Plants: standard action unavailable."));
             return;
         }
 
@@ -655,8 +652,8 @@ public partial class GameManager
         var plants = GetPlantCreaturesInRange(cleric, 12); // 60ft = 12 squares
         if (plants.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"🌿 {cleric.Stats.CharacterName} channels energy to rebuke plants, but none are in range.");
-            CombatUI?.ShowCombatLog($"   Remaining attempts today: {attemptsRemaining}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🌿", $"{cleric.Stats.CharacterName} channels energy to rebuke plants, but none are in range."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Remaining attempts today: {attemptsRemaining}"));
             return;
         }
 
@@ -786,14 +783,14 @@ public partial class GameManager
         string reason;
         if (!CanActivateDomainPower(cleric, domain, out reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use {domain} domain power: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use {domain} domain power: {reason}."));
             return;
         }
 
         // Consume standard action
         if (!cleric.CommitStandardAction())
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use {domain} domain power: standard action unavailable.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use {domain} domain power: standard action unavailable."));
             return;
         }
 
@@ -810,8 +807,8 @@ public partial class GameManager
         if (elementals.Count == 0)
         {
             string emoji = GetElementalEmoji(domain);
-            CombatUI?.ShowCombatLog($"{emoji} {cleric.Stats.CharacterName} channels energy to {actionVerb} {domain.ToLower()} creatures, but none are in range.");
-            CombatUI?.ShowCombatLog($"   Remaining attempts today: {attemptsRemaining}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{emoji} {cleric.Stats.CharacterName} channels energy to {actionVerb} {domain.ToLower()} creatures, but none are in range."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Remaining attempts today: {attemptsRemaining}"));
             return;
         }
 

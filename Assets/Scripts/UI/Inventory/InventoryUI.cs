@@ -508,7 +508,7 @@ public class InventoryUI : MonoBehaviour
         if (!gm.TryDropInventoryItemToGround(CurrentCharacter, _contextMenuSlotIndex, out string feedback))
         {
             if (!string.IsNullOrEmpty(feedback))
-                gm.CombatUI?.ShowCombatLog($"⚠ {feedback}");
+                gm.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{feedback}"));
         }
 
         HideContextMenu();
@@ -676,7 +676,7 @@ public class InventoryUI : MonoBehaviour
         {
             used = gm.TryUseConsumableFromInventory(CurrentCharacter, index, out feedback);
             if (!used && !string.IsNullOrEmpty(feedback))
-                gm.CombatUI?.ShowCombatLog($"⚠ {feedback}");
+                gm.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{feedback}"));
         }
 
         if (!used && gm == null)

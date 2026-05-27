@@ -66,7 +66,7 @@ public partial class GameManager
 
         if (weaponOptions.Count == 0 && !hasAmmo)
         {
-            CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no eligible slashing/piercing weapon and {(caster != null ? caster.Stats.CharacterName : "caster")} has no ammunition for Keen Edge.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} has no eligible slashing/piercing weapon and {(caster != null ? caster.Stats.CharacterName : "caster")} has no ammunition for Keen Edge."));
             _pendingSpell = null;
             _pendingKeenEdgeItem = null;
             _pendingKeenEdgeIsAmmo = false;
@@ -199,7 +199,7 @@ public partial class GameManager
 
         if (weapon == null)
         {
-            CombatUI?.ShowCombatLog("⚠ Keen Edge failed: no weapon selected.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Keen Edge failed: no weapon selected."));
             return true;
         }
 
@@ -240,14 +240,14 @@ public partial class GameManager
     {
         if (caster == null || caster.Stats == null)
         {
-            CombatUI?.ShowCombatLog("⚠ Keen Edge failed: no caster.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Keen Edge failed: no caster."));
             return true;
         }
 
         var inventory = Combat_GetCharacterInventory(caster);
         if (inventory == null)
         {
-            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no inventory for Keen Edge.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} has no inventory for Keen Edge."));
             return true;
         }
 
@@ -264,7 +264,7 @@ public partial class GameManager
 
         if (ammoStacks.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no projectiles in inventory to enchant with Keen Edge.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} has no projectiles in inventory to enchant with Keen Edge."));
             return true;
         }
 

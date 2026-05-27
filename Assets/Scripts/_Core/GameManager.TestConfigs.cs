@@ -78,7 +78,7 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🧪 Grapple Test: Fighter and target start adjacent. Use Special Attack -> Grapple.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", "Grapple Test: Fighter and target start adjacent. Use Special Attack -> Grapple."));
     }
 
     private void ConfigureGreaseTestParty()
@@ -173,23 +173,23 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("╔═══════════════════════════════════════════════════════╗");
-        CombatUI?.ShowCombatLog("║          🧪 GREASE MECHANICS TEST SCENARIO           ║");
-        CombatUI?.ShowCombatLog("╚═══════════════════════════════════════════════════════╝");
-        CombatUI?.ShowCombatLog("This scenario tests all three Grease modes and grapple defense timing.");
-        CombatUI?.ShowCombatLog("  • Greasy Greg (Wizard 5): Grease prepared x4 (DC 15). ");
-        CombatUI?.ShowCombatLog("  • Slippery Sam (Fighter 5): NO pre-applied grease; must be buffed by spell.");
-        CombatUI?.ShowCombatLog("  • Enemies: 4 low-Reflex grapplers clustered for 10-ft area testing.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "╔═══════════════════════════════════════════════════════╗"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "║          🧪 GREASE MECHANICS TEST SCENARIO           ║"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "╚═══════════════════════════════════════════════════════╝"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", "This scenario tests all three Grease modes and grapple defense timing."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  • Greasy Greg (Wizard 5): Grease prepared x4 (DC 15). "));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  • Slippery Sam (Fighter 5): NO pre-applied grease; must be buffed by spell."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  • Enemies: 4 low-Reflex grapplers clustered for 10-ft area testing."));
         CombatUI?.ShowCombatLog("");
-        CombatUI?.ShowCombatLog("WIZARD ACTIONS:");
-        CombatUI?.ShowCombatLog("  1. Cast Grease (Armor) on Slippery Sam (+10 grapple defense, 5 rounds).");
-        CombatUI?.ShowCombatLog("  2. Cast Grease (Area) on enemy cluster to force Reflex saves/prone.");
-        CombatUI?.ShowCombatLog("  3. Cast Grease (Object) on enemy weapon to force drops.");
-        CombatUI?.ShowCombatLog("FIGHTER ACTIONS:");
-        CombatUI?.ShowCombatLog("  1. Wait for Grease (Armor), then absorb enemy grapple attempts.");
-        CombatUI?.ShowCombatLog("  2. If grappled, test escape checks with the +10 circumstance bonus.");
-        CombatUI?.ShowCombatLog("ENEMY BEHAVIOR:");
-        CombatUI?.ShowCombatLog("  • All grapplers prioritize Slippery Sam first.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "WIZARD ACTIONS:"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  1. Cast Grease (Armor) on Slippery Sam (+10 grapple defense, 5 rounds)."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  2. Cast Grease (Area) on enemy cluster to force Reflex saves/prone."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  3. Cast Grease (Object) on enemy weapon to force drops."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "FIGHTER ACTIONS:"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  1. Wait for Grease (Armor), then absorb enemy grapple attempts."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  2. If grappled, test escape checks with the +10 circumstance bonus."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "ENEMY BEHAVIOR:"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  • All grapplers prioritize Slippery Sam first."));
 
         Debug.Log($"[GreaseTest] Party ready. Wizard at {wizardStart}, Fighter at {fighterStart}. Grease prepared: 4.");
     }
@@ -252,7 +252,7 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🗡️ Feint Test: Shadow (Rogue 6) starts adjacent to a goblin. Use Special Attack -> Feint, then attack for sneak damage.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("🗡", "️ Feint Test: Shadow (Rogue 6) starts adjacent to a goblin. Use Special Attack -> Feint, then attack for sneak damage."));
     }
 
     private void ConfigureTurnUndeadTestParty()
@@ -360,9 +360,9 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("✝️ Turn Undead Test (Expanded): Brother Marcus (Cleric 6) + Gareth (Fighter 6) vs 12 skeletons + 3 wights (24 HD total).");
-        CombatUI?.ShowCombatLog("   Turn HD pool at L6 cleric + CHA 16 averages ~15 (range 10-20), so the HD selection menu should appear consistently.");
-        CombatUI?.ShowCombatLog("   Goals: validate HD pool target selection, destruction vs turning choices, and that fighter attacks do NOT break Turn Undead.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Death("✝", "️ Turn Undead Test (Expanded): Brother Marcus (Cleric 6) + Gareth (Fighter 6) vs 12 skeletons + 3 wights (24 HD total)."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Turn HD pool at L6 cleric + CHA 16 averages ~15 (range 10-20), so the HD selection menu should appear consistently."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Goals: validate HD pool target selection, destruction vs turning choices, and that fighter attacks do NOT break Turn Undead."));
     }
 
     private void ConfigureArmorTargetingTestParty()
@@ -457,8 +457,8 @@ public partial class GameManager
         PC2.DebugPrintTags();
         PC3.DebugPrintTags();
 
-        CombatUI?.ShowCombatLog("🏹 Armor Targeting Test: Skeleton archers prioritize Unarmored > Light > Medium > Heavy when targets are in range.");
-        CombatUI?.ShowCombatLog($"   {PC1.Stats.CharacterName}: {PC1.GetArmorTag()} | {PC2.Stats.CharacterName}: {PC2.GetArmorTag()} | {PC3.Stats.CharacterName}: {PC3.GetArmorTag()}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("🏹", "Armor Targeting Test: Skeleton archers prioritize Unarmored > Light > Medium > Heavy when targets are in range."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {PC1.Stats.CharacterName}: {PC1.GetArmorTag()} | {PC2.Stats.CharacterName}: {PC2.GetArmorTag()} | {PC3.Stats.CharacterName}: {PC3.GetArmorTag()}"));
     }
 
     private void ConfigureTigerHuntTestParty()
@@ -556,9 +556,9 @@ public partial class GameManager
         SetPCActiveState(PC3, true, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🐅 Tiger Hunt Test: Fighter, wounded rogue, and invisible wizard face a tiger in open terrain.");
-        CombatUI?.ShowCombatLog("   Verify: Pounce charge + rake sequence, Improved Grab follow-up, scent targeting on invisible wizard, and predator target choice.");
-        CombatUI?.ShowCombatLog("   Optional: focus fire tiger below 30% HP to verify animal withdraw/flee behavior.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Summon("🐅", "Tiger Hunt Test: Fighter, wounded rogue, and invisible wizard face a tiger in open terrain."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Verify: Pounce charge + rake sequence, Improved Grab follow-up, scent targeting on invisible wizard, and predator target choice."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Optional: focus fire tiger below 30% HP to verify animal withdraw/flee behavior."));
     }
 
     private void ConfigureOgreBattleTestParty()
@@ -601,8 +601,8 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🧙 Ogre Battle: Aria (Wizard 6) fights alongside a controllable dire tiger against two ogres.");
-        CombatUI?.ShowCombatLog("   Validate: multi-character player turns, ally tiger control, and berserk ogre pressure.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧙", "Ogre Battle: Aria (Wizard 6) fights alongside a controllable dire tiger against two ogres."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Validate: multi-character player turns, ally tiger control, and berserk ogre pressure."));
     }
 
     private void ConfigureShieldBashTestParty()
@@ -678,9 +678,9 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🛡️ Shield Bash Test: Shielder (Improved Shield Bash) vs Basher (no feat).");
-        CombatUI?.ShowCombatLog("   Both use longsword + heavy shield + chain shirt. Expected base AC: 18 each.");
-        CombatUI?.ShowCombatLog("   After shield bash: Shielder keeps AC 18; Basher drops to AC 16 until next turn.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", "️ Shield Bash Test: Shielder (Improved Shield Bash) vs Basher (no feat)."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Both use longsword + heavy shield + chain shirt. Expected base AC: 18 each."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   After shield bash: Shielder keeps AC 18; Basher drops to AC 16 until next turn."));
     }
 
     private void ConfigureCelestialTemplateTestParty()
@@ -727,9 +727,9 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("✨ Celestial Template Test: Lysara (Cleric 5) commands celestial wolf + celestial dire bear allies.");
-        CombatUI?.ShowCombatLog("   Verify: templates are applied at spawn time (Magical Beast type, resistances, DR/SR scaling, Smite Evil). ");
-        CombatUI?.ShowCombatLog("   Opposing undead should remain evil-aligned to validate celestial smite targeting.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", "Celestial Template Test: Lysara (Cleric 5) commands celestial wolf + celestial dire bear allies."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Verify: templates are applied at spawn time (Magical Beast type, resistances, DR/SR scaling, Smite Evil). "));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Opposing undead should remain evil-aligned to validate celestial smite targeting."));
     }
 
     private void ConfigureFiendishTemplateTestParty()
@@ -775,9 +775,9 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🔥 Fiendish Template Test: Malakai (NE Wizard 5) commands fiendish wolf + fiendish dire bear allies.");
-        CombatUI?.ShowCombatLog("   Verify Fiendish scaling: darkvision, Resist Cold/Fire, Smite Good, DR 10/magic at 12 HD, and SR 22 on the dire bear.");
-        CombatUI?.ShowCombatLog("   Targets are good-aligned human paladin + cleric to validate Smite Good selection and damage bonuses.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", "Fiendish Template Test: Malakai (NE Wizard 5) commands fiendish wolf + fiendish dire bear allies."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Verify Fiendish scaling: darkvision, Resist Cold/Fire, Smite Good, DR 10/magic at 12 HD, and SR 22 on the dire bear."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Targets are good-aligned human paladin + cleric to validate Smite Good selection and damage bonuses."));
     }
 
     private void ConfigureSummonMonsterTestParty()
@@ -880,9 +880,9 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🌀 Summon Monster Test: Ilyra (Cleric 5) and Theron (Wizard 5) both have Summon Monster I/II prepared.");
-        CombatUI?.ShowCombatLog("   Flow validation: choose creature first, then pick a legal placement tile.");
-        CombatUI?.ShowCombatLog("   Alignment validation: cleric sees celestial/fiendish cleric-locked options based on alignment; wizard sees class-agnostic options.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", "Summon Monster Test: Ilyra (Cleric 5) and Theron (Wizard 5) both have Summon Monster I/II prepared."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Flow validation: choose creature first, then pick a legal placement tile."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Alignment validation: cleric sees celestial/fiendish cleric-locked options based on alignment; wizard sees class-agnostic options."));
     }
 
     private void ConfigureNpcMagicMissileTestParty()
@@ -949,9 +949,9 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🧪 NPC Magic Missile Test: Theron (Wizard 5) has Shield prepared for direct counter-testing.");
-        CombatUI?.ShowCombatLog("   Cast Shield on Theron, then end turn to verify Arcane Missile Adept cannot damage him with Magic Missile.");
-        CombatUI?.ShowCombatLog("   Scenario is now focused to two combatants only: player wizard vs enemy Arcane Missile Adept.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", "NPC Magic Missile Test: Theron (Wizard 5) has Shield prepared for direct counter-testing."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Cast Shield on Theron, then end turn to verify Arcane Missile Adept cannot damage him with Magic Missile."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Scenario is now focused to two combatants only: player wizard vs enemy Arcane Missile Adept."));
     }
 
     private void ConfigureProtectionFromEvilTestParty()
@@ -1010,7 +1010,7 @@ public partial class GameManager
         if (protectionFromEvil != null)
         {
             wizardStatusMgr.AddEffect(protectionFromEvil, "Scenario Setup", casterLevel: wizardStats.Level);
-            CombatUI?.ShowCombatLog("🛡️ Warded Theron starts with Protection from Evil active.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", "️ Warded Theron starts with Protection from Evil active."));
         }
         else
         {
@@ -1025,14 +1025,14 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🧪 Protection from Evil Test: Warded Theron (Wizard 10) vs evil + non-evil controls.");
-        CombatUI?.ShowCombatLog("This scenario tests SIX mechanics:");
-        CombatUI?.ShowCombatLog("  1. Mental Control Immunity (Charm Person blocked)");
-        CombatUI?.ShowCombatLog("  2. Summoned Barrier (Fiendish Wolf can't touch)");
-        CombatUI?.ShowCombatLog("  3. AC Bonus vs Evil (+2 vs Evil Goblin)");
-        CombatUI?.ShowCombatLog("  4. NO AC Bonus vs Non-Evil (normal AC vs Neutral Bandit)");
-        CombatUI?.ShowCombatLog("  5. Save Bonus vs Evil (+2 vs Evil Acolyte's Daze)");
-        CombatUI?.ShowCombatLog("  6. NO Save Bonus vs Non-Evil (normal save vs Neutral Mage's Daze)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", "Protection from Evil Test: Warded Theron (Wizard 10) vs evil + non-evil controls."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "This scenario tests SIX mechanics:"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  1. Mental Control Immunity (Charm Person blocked)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  2. Summoned Barrier (Fiendish Wolf can't touch)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  3. AC Bonus vs Evil (+2 vs Evil Goblin)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  4. NO AC Bonus vs Non-Evil (normal AC vs Neutral Bandit)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  5. Save Bonus vs Evil (+2 vs Evil Acolyte's Daze)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  6. NO Save Bonus vs Non-Evil (normal save vs Neutral Mage's Daze)"));
         CombatUI?.ShowCombatLog("");
     }
 
@@ -1141,14 +1141,14 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("╔══════════════════════════════════════════════════════╗");
-        CombatUI?.ShowCombatLog("║           OBSCURING MIST TEST SCENARIO              ║");
-        CombatUI?.ShowCombatLog("╚══════════════════════════════════════════════════════╝");
-        CombatUI?.ShowCombatLog("Party: Zephyr Windcaller (Wizard 5) + Misty Veilweaver (Wizard 5)");
-        CombatUI?.ShowCombatLog("Enemy line: Small + Medium + Medium (high Fort) + Large + off-line Archer");
-        CombatUI?.ShowCombatLog("Phase 1: Cast Obscuring Mist and verify 20% miss chance for adjacent attackers.");
-        CombatUI?.ShowCombatLog("Phase 2: Separate attacker/target by >5 ft inside mist and verify 50% total concealment.");
-        CombatUI?.ShowCombatLog("Phase 3: Recast mist in a second lane and verify persistent area indicators remain visible.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "╔══════════════════════════════════════════════════════╗"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "║           OBSCURING MIST TEST SCENARIO              ║"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "╚══════════════════════════════════════════════════════╝"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Party: Zephyr Windcaller (Wizard 5) + Misty Veilweaver (Wizard 5)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Enemy line: Small + Medium + Medium (high Fort) + Large + off-line Archer"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Phase 1: Cast Obscuring Mist and verify 20% miss chance for adjacent attackers."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Phase 2: Separate attacker/target by >5 ft inside mist and verify 50% total concealment."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", "Phase 3: Recast mist in a second lane and verify persistent area indicators remain visible."));
     }
 
     private void ConfigureObscuringMistRangedOnlyTestParty()
@@ -1266,43 +1266,43 @@ public partial class GameManager
         SetPCActiveState(PC3, true, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("╔═══════════════════════════════════════════════════════════════╗");
-        CombatUI?.ShowCombatLog("║       OBSCURING MIST - RANGED COMBAT ONLY TEST               ║");
-        CombatUI?.ShowCombatLog("╚═══════════════════════════════════════════════════════════════╝");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "╔═══════════════════════════════════════════════════════════════╗"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "║       OBSCURING MIST - RANGED COMBAT ONLY TEST               ║"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "╚═══════════════════════════════════════════════════════════════╝"));
         CombatUI?.ShowCombatLog("");
-        CombatUI?.ShowCombatLog("PARTY (center lane - intended to fight inside mist):");
-        CombatUI?.ShowCombatLog("  • Thoran Ironshield (Fighter 4)");
-        CombatUI?.ShowCombatLog("  • Valdor the Brave (Fighter 4)");
-        CombatUI?.ShowCombatLog("  • Mira Veilbinder (Wizard 4, casts Obscuring Mist)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "PARTY (center lane - intended to fight inside mist):"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  • Thoran Ironshield (Fighter 4)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  • Valdor the Brave (Fighter 4)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  • Mira Veilbinder (Wizard 4, casts Obscuring Mist)"));
         CombatUI?.ShowCombatLog("");
-        CombatUI?.ShowCombatLog("RANGED ENEMIES (6-direction surround):");
-        CombatUI?.ShowCombatLog("  NORTH:     Aelindra Swiftarrow (Longbow)");
-        CombatUI?.ShowCombatLog("  NORTHEAST: Marcus Longshot (Longbow)");
-        CombatUI?.ShowCombatLog("  EAST:      Garrick Strongbow (Composite Longbow)");
-        CombatUI?.ShowCombatLog("  SOUTHEAST: Pip Quickfingers (Shortbow)");
-        CombatUI?.ShowCombatLog("  SOUTH:     Borlin Ironbolt (Heavy Crossbow)");
-        CombatUI?.ShowCombatLog("  WEST:      Kira Windrunner (Shortbow)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "RANGED ENEMIES (6-direction surround):"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  NORTH:     Aelindra Swiftarrow (Longbow)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  NORTHEAST: Marcus Longshot (Longbow)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  EAST:      Garrick Strongbow (Composite Longbow)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  SOUTHEAST: Pip Quickfingers (Shortbow)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  SOUTH:     Borlin Ironbolt (Heavy Crossbow)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  WEST:      Kira Windrunner (Shortbow)"));
         CombatUI?.ShowCombatLog("");
-        CombatUI?.ShowCombatLog("BATTLEFIELD LAYOUT:");
-        CombatUI?.ShowCombatLog("═══════════════════════════════════════════════════════════════");
-        CombatUI?.ShowCombatLog("                    Aelindra (Longbow)");
-        CombatUI?.ShowCombatLog("                             N");
-        CombatUI?.ShowCombatLog("               Marcus      |      Pip");
-        CombatUI?.ShowCombatLog("                  NE       |       SE");
-        CombatUI?.ShowCombatLog("                            ");
-        CombatUI?.ShowCombatLog("     Kira (W)  ←      [ PARTY IN MIST ]      →  Garrick (E)");
-        CombatUI?.ShowCombatLog("                            ");
-        CombatUI?.ShowCombatLog("                             S");
-        CombatUI?.ShowCombatLog("                   Borlin (Crossbow)");
-        CombatUI?.ShowCombatLog("═══════════════════════════════════════════════════════════════");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "BATTLEFIELD LAYOUT:"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "═══════════════════════════════════════════════════════════════"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "                    Aelindra (Longbow)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "                             N"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "               Marcus      |      Pip"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "                  NE       |       SE"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "                            "));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "     Kira (W)  ←      [ PARTY IN MIST ]      →  Garrick (E)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "                            "));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "                             S"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "                   Borlin (Crossbow)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "═══════════════════════════════════════════════════════════════"));
         CombatUI?.ShowCombatLog("");
-        CombatUI?.ShowCombatLog("HOW TO TEST:");
-        CombatUI?.ShowCombatLog("  1) Cast Obscuring Mist with Mira on party center.");
-        CombatUI?.ShowCombatLog("  2) Verify ranged attacks against misted targets resolve with concealment checks.");
-        CombatUI?.ShowCombatLog("  3) Move targets inside mist to validate last-known-position attacks and misses.");
-        CombatUI?.ShowCombatLog("  4) Move one target outside mist; verify archers prioritize visible target.");
-        CombatUI?.ShowCombatLog("  5) Confirm AI remains ranged-focused (no melee maneuvers/disarm/trip/grapple attempts).");
-        CombatUI?.ShowCombatLog("  6) Compare longbow/shortbow/composite/heavy-crossbow behavior and damage output.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "HOW TO TEST:"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  1) Cast Obscuring Mist with Mira on party center."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  2) Verify ranged attacks against misted targets resolve with concealment checks."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  3) Move targets inside mist to validate last-known-position attacks and misses."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  4) Move one target outside mist; verify archers prioritize visible target."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  5) Confirm AI remains ranged-focused (no melee maneuvers/disarm/trip/grapple attempts)."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  6) Compare longbow/shortbow/composite/heavy-crossbow behavior and damage output."));
         CombatUI?.ShowCombatLog("");
     }
 
@@ -1365,10 +1365,10 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("☀️ Disrupt Undead Test: Necromancer Theron (Wizard 3) prepared 5× Disrupt Undead.");
-        CombatUI?.ShowCombatLog("   Test Mode - Easy to Hit is active for all enemies (very low AC / Touch AC).");
-        CombatUI?.ShowCombatLog("   Procedure: use ranged touch attacks vs skeletons/zombie and verify 1d6 positive damage.");
-        CombatUI?.ShowCombatLog("   Validation: cast at the living orc as a control target — Disrupt Undead should report no effect.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Special("☀", "️ Disrupt Undead Test: Necromancer Theron (Wizard 3) prepared 5× Disrupt Undead."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Test Mode - Easy to Hit is active for all enemies (very low AC / Touch AC)."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Procedure: use ranged touch attacks vs skeletons/zombie and verify 1d6 positive damage."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Validation: cast at the living orc as a control target — Disrupt Undead should report no effect."));
     }
 
     private void PrepareSummonMonsterTestSpellSlots(
@@ -1483,15 +1483,15 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("📘 Wizard Spell Test: Archmage Theron auto-prepared all implemented wizard spells.");
-        CombatUI?.ShowCombatLog("   Target Dummy has AC 1, HP 50, and severe save penalties for deterministic spell validation.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("📘", "Wizard Spell Test: Archmage Theron auto-prepared all implemented wizard spells."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Target Dummy has AC 1, HP 50, and severe save penalties for deterministic spell validation."));
     }
 
     private void ConfigureTrueStrikeTestParty()
     {
         ConfigureWizardSpellTestParty();
-        CombatUI?.ShowCombatLog("🎯 True Strike Test: Cast True Strike, then make one attack to verify +20 insight, concealment bypass, and one-use consumption.");
-        CombatUI?.ShowCombatLog("   If you end your next turn without attacking, True Strike should expire automatically.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", "True Strike Test: Cast True Strike, then make one attack to verify +20 insight, concealment bypass, and one-use consumption."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   If you end your next turn without attacking, True Strike should expire automatically."));
     }
 
     private void ConfigureCharmPersonTestParty()
@@ -1584,9 +1584,9 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("💞 Charm Person Test: Selene (Wizard 5) and Rook (Fighter 5) vs humanoid targets.");
-        CombatUI?.ShowCombatLog("   Validation goals: humanoid-only + 4 HD cap, +5 Will if threatened by caster side, and charmed AI non-hostility/support behavior.");
-        CombatUI?.ShowCombatLog("   Selene begins lightly injured so charmed heal-capable targets can demonstrate emergency aid.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("💞", "Charm Person Test: Selene (Wizard 5) and Rook (Fighter 5) vs humanoid targets."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Validation goals: humanoid-only + 4 HD cap, +5 Will if threatened by caster side, and charmed AI non-hostility/support behavior."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Selene begins lightly injured so charmed heal-capable targets can demonstrate emergency aid."));
     }
 
     private void ConfigureSleepSpellTestParty()
@@ -1613,8 +1613,8 @@ public partial class GameManager
             spellComp.Init(PC1.Stats);
         }
 
-        CombatUI?.ShowCombatLog("💤 Sleep Spell Test: Cast Sleep on clustered enemies to validate 4d4 HD pool, lowest-HD-first, 4 HD cap, and wake conditions.");
-        CombatUI?.ShowCombatLog("   Use Aid Another → Wake Sleeping Ally to test manual wake action.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("💤", "Sleep Spell Test: Cast Sleep on clustered enemies to validate 4d4 HD pool, lowest-HD-first, 4 HD cap, and wake conditions."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Use Aid Another → Wake Sleeping Ally to test manual wake action."));
     }
 
     private void ConfigureMirrorImageTestParty()
@@ -1688,10 +1688,10 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🪞 Mirror Image Test Arena loaded: Mirror Mage Theron (Wizard 5, HP 30, AC 14).");
-        CombatUI?.ShowCombatLog("   Turn 1 prompt: cast Mirror Image to spawn 1d4+1 clones around the caster.");
-        CombatUI?.ShowCombatLog("   End-turn flow: use swap prompt to reposition with adjacent clone and watch target redirection.");
-        CombatUI?.ShowCombatLog("   Validate outcomes: clone dissipates on hit, real caster can still be struck, and status icon/log tracks remaining images + duration.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "🪞 Mirror Image Test Arena loaded: Mirror Mage Theron (Wizard 5, HP 30, AC 14)."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Turn 1 prompt: cast Mirror Image to spawn 1d4+1 clones around the caster."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   End-turn flow: use swap prompt to reposition with adjacent clone and watch target redirection."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Validate outcomes: clone dissipates on hit, real caster can still be struck, and status icon/log tracks remaining images + duration."));
     }
 
     private void ConfigureClericSpellTestParty()
@@ -1745,8 +1745,8 @@ public partial class GameManager
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("📖 Cleric Spell Test: High Priestess Ilyra auto-prepared all implemented cleric spells.");
-        CombatUI?.ShowCombatLog("   Target Dummy has AC 1, HP 50, and severe save penalties for deterministic spell validation.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("📖", "Cleric Spell Test: High Priestess Ilyra auto-prepared all implemented cleric spells."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Target Dummy has AC 1, HP 50, and severe save penalties for deterministic spell validation."));
     }
 
     private void AutoPopulateAndPrepareAllImplementedClassSpells(SpellcastingComponent spellComp, string className)

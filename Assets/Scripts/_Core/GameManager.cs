@@ -1014,9 +1014,9 @@ public partial class GameManager : MonoBehaviour
         WondrousItemActivation.OnRest(PCs);
 
         CombatUI?.SetTurnIndicator("Party Rested and Restored!");
-        CombatUI?.ShowCombatLog("✅ Party Rested and Restored!");
-        CombatUI?.ShowCombatLog("💖 HP and abilities fully recovered.");
-        CombatUI?.ShowCombatLog("⚔ Ready for next encounter.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", "Party Rested and Restored!"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("💖", "HP and abilities fully recovered."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", "Ready for next encounter."));
 
         UpdateAllStatsUI();
     }
@@ -1241,7 +1241,7 @@ public partial class GameManager : MonoBehaviour
         WaitingForEncounterSelection = false;
         CurrentPhase = TurnPhase.CombatOver;
 
-        CombatUI?.ShowCombatLog($"📊 Combat Loop Stats — Fights: {CompletedCombatCount} | Loot Items: {TotalLootItemsCollected} | XP Defeated: {TotalEncounterXPDefeated}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"📊 Combat Loop Stats — Fights: {CompletedCombatCount} | Loot Items: {TotalLootItemsCollected} | XP Defeated: {TotalEncounterXPDefeated}"));
         PromptEncounterSelection();
     }
 
@@ -1253,7 +1253,7 @@ public partial class GameManager : MonoBehaviour
 
         EnsurePartyStashInitialized();
         PartyStash?.Unlock();
-        CombatUI?.ShowCombatLog("🛑 Combat loop exited.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("🛑", "Combat loop exited."));
 
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
@@ -1502,7 +1502,7 @@ public partial class GameManager : MonoBehaviour
             partyMembers,
             onComplete: () =>
             {
-                CombatUI?.ShowCombatLog("🔮 Spell preparation complete. Returning to pre-combat menu.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🔮", "Spell preparation complete. Returning to pre-combat menu."));
                 ReturnToPreCombatHubFromSubWindow("SpellPrep.Done");
             },
             onBackToMenu: () => ReturnToPreCombatHubFromSubWindow("SpellPrep.Back"),
@@ -1715,9 +1715,9 @@ public partial class GameManager : MonoBehaviour
         UpdateAllStatsUI();
 
         if (generated != null)
-            CombatUI?.ShowCombatLog($"🎲 Random encounter loaded: {generated.BuildHeaderLine()} • XP {generated.TotalXP}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎲", $"Random encounter loaded: {generated.BuildHeaderLine()} • XP {generated.TotalXP}"));
         else
-            CombatUI?.ShowCombatLog("🎲 Random encounter loaded.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎲", "Random encounter loaded."));
     }
 
     private void ApplyEncounterPreset(string presetId)
@@ -1750,14 +1750,14 @@ public partial class GameManager : MonoBehaviour
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
             _activeEncounterEnemyIds.AddRange(preset.NPCIds);
-            CombatUI?.ShowCombatLog($"🧭 Encounter selected: {preset.DisplayName}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🧭", $"Encounter selected: {preset.DisplayName}"));
         }
         else
         {
             _activeEncounterEnemyIds.Add("goblin_warchief");
             _activeEncounterEnemyIds.Add("hobgoblin_sergeant");
             _activeEncounterEnemyIds.Add("skeleton_archer");
-            CombatUI?.ShowCombatLog("🧭 Encounter fallback selected: Goblin Raiders");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🧭", "Encounter fallback selected: Goblin Raiders"));
         }
 
         if (_isGrappleTestEncounter)
@@ -2440,13 +2440,13 @@ public partial class GameManager : MonoBehaviour
 
         if (string.Equals(active.SourceSpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
         {
-            CombatUI?.ShowCombatLog("⚠ Summon Swarm is uncontrolled. You cannot issue commands to it.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Summon Swarm is uncontrolled. You cannot issue commands to it."));
             return true;
         }
 
         if (!summon.IsControllable)
         {
-            CombatUI?.ShowCombatLog("⚠ This summoned ally is AI-controlled. Direct command menus are unavailable.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "This summoned ally is AI-controlled. Direct command menus are unavailable."));
             return true;
         }
 
@@ -3044,7 +3044,7 @@ public partial class GameManager : MonoBehaviour
 
             if (RemoveCondition(target, CombatConditionType.Charmed))
             {
-                CombatUI?.ShowCombatLog($"💔 {target.Stats.CharacterName} is no longer charmed after being attacked by {attacker.Stats.CharacterName}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"💔 {target.Stats.CharacterName} is no longer charmed after being attacked by {attacker.Stats.CharacterName}."));
             }
 
             return;
@@ -3232,7 +3232,7 @@ public partial class GameManager : MonoBehaviour
         {
             if (RemoveCondition(target, CombatConditionType.Fascinated))
             {
-                CombatUI?.ShowCombatLog($"🔔 {target.Stats.CharacterName} is disturbed by {reasonText} and breaks free of fascination (Will {saveTotal} vs DC {disturbanceDc}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🔔", $"{target.Stats.CharacterName} is disturbed by {reasonText} and breaks free of fascination (Will {saveTotal} vs DC {disturbanceDc})."));
             }
             return;
         }
@@ -3240,7 +3240,7 @@ public partial class GameManager : MonoBehaviour
         string sourceName = source != null && source.Stats != null ? source.Stats.CharacterName : fascinatedCondition.SourceName;
         string disturberName = disturber != null && disturber.Stats != null ? disturber.Stats.CharacterName : "disturbance";
         if (!string.IsNullOrWhiteSpace(sourceName))
-            CombatUI?.ShowCombatLog($"👁 {target.Stats.CharacterName} remains fascinated by {sourceName} despite {disturberName}'s {reasonText} (Will {saveTotal} vs DC {disturbanceDc}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("👁", $"{target.Stats.CharacterName} remains fascinated by {sourceName} despite {disturberName}'s {reasonText} (Will {saveTotal} vs DC {disturbanceDc})."));
     }
 
     public void BreakFascinationFromLoudNoise(CharacterController noiseSource, Vector2Int noiseOrigin, int radiusSquares = 6)
@@ -3928,7 +3928,7 @@ public partial class GameManager : MonoBehaviour
             if (pc != null && pc.Stats != null)
             {
                 string reason = GetUnableToActReason(pc);
-                CombatUI?.ShowCombatLog($"⏭ {pc.Stats.CharacterName} {reason} and cannot act this turn.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"⏭ {pc.Stats.CharacterName} {reason} and cannot act this turn."));
             }
 
             NextInitiativeTurn();
@@ -3966,19 +3966,19 @@ public partial class GameManager : MonoBehaviour
         CombatUI.ShowCombatLog(CombatLogHelper.Special("⚔", $"{pc.Stats.CharacterName}'s turn begins"));
 
         if (pc.IsGrappling())
-            CombatUI?.ShowCombatLog("🪢 You are grappling — only grapple actions are available (spellcasting allowed with concentration and component restrictions).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", "You are grappling — only grapple actions are available (spellcasting allowed with concentration and component restrictions)."));
         // Tick Barbarian Rage at start of turn
         if (pc.Stats.IsBarbarian && pc.Stats.IsRaging)
         {
             pc.Stats.TickRage();
             if (!pc.Stats.IsRaging)
             {
-                CombatUI.ShowCombatLog($"😫 {pc.Stats.CharacterName}'s rage has ended! Now fatigued.");
+                CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"😫 {pc.Stats.CharacterName}'s rage has ended! Now fatigued."));
                 UpdateAllStatsUI();
             }
             else
             {
-                CombatUI.ShowCombatLog($"⚡ {pc.Stats.CharacterName}: Rage - {pc.Stats.RageRoundsRemaining} rounds remaining");
+                CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{pc.Stats.CharacterName}: Rage - {pc.Stats.RageRoundsRemaining} rounds remaining"));
             }
         }
 
@@ -4028,7 +4028,7 @@ public partial class GameManager : MonoBehaviour
 
         if (decision.Mode == ConfusedBehaviorController.ConfusedTurnMode.ActNormally)
         {
-            CombatUI?.ShowCombatLog($"🌀 {pc.Stats.CharacterName} is confused but acts normally this turn.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{pc.Stats.CharacterName} is confused but acts normally this turn."));
             return false;
         }
 
@@ -4237,7 +4237,7 @@ public partial class GameManager : MonoBehaviour
 
                 if (!_loggedHeldChargeNoActionsReminder)
                 {
-                    CombatUI.ShowCombatLog($"✋ {pcName} has no main actions left but is still holding {heldSpellName}. Discharging is a free action.");
+                    CombatUI.ShowCombatLog(CombatLogHelper.SpellEffect("", $"✋ {pcName} has no main actions left but is still holding {heldSpellName}. Discharging is a free action."));
                     _loggedHeldChargeNoActionsReminder = true;
                 }
             }
@@ -4426,7 +4426,7 @@ public partial class GameManager : MonoBehaviour
             }
             else
             {
-                CombatUI?.ShowCombatLog($"⚠ {noThreatMessage}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{noThreatMessage}"));
             }
 
             ShowActionChoices();
@@ -4451,7 +4451,7 @@ public partial class GameManager : MonoBehaviour
             yield break;
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} uses a full-round action to retrieve and use {item.Name} (provokes AoO).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} uses a full-round action to retrieve and use {item.Name} (provokes AoO)."));
 
         foreach (var enemy in threateningEnemies)
         {
@@ -4462,7 +4462,7 @@ public partial class GameManager : MonoBehaviour
             CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor);
             if (aooResult == null) continue;
 
-            CombatUI?.ShowCombatLog($"⚔ AoO vs item use: {aooResult.GetDetailedSummary()}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs item use: {aooResult.GetDetailedSummary()}"));
             UpdateAllStatsUI();
 
             if (aooResult.Hit && aooResult.TotalDamage > 0)
@@ -4473,7 +4473,7 @@ public partial class GameManager : MonoBehaviour
 
         if (actor.Stats.IsDead)
         {
-            CombatUI?.ShowCombatLog($"💀 {actor.Stats.CharacterName} is slain before using {item.Name}!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{actor.Stats.CharacterName} is slain before using {item.Name}!"));
             UpdateAllStatsUI();
             EndActivePCTurn();
             yield break;
@@ -4487,7 +4487,7 @@ public partial class GameManager : MonoBehaviour
         }
         else
         {
-            CombatUI?.ShowCombatLog($"⚠ {resultMessage}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{resultMessage}"));
         }
 
         ShowActionChoices();
@@ -4531,13 +4531,13 @@ public partial class GameManager : MonoBehaviour
 
         if (!CanUseItemManipulationAction(pc, out string reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use items: {reason} (retrieving and using a stowed item is a full-round action)");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use items: {reason} (retrieving and using a stowed item is a full-round action)"));
             return;
         }
 
         if (QuickItemUsePanel == null)
         {
-            CombatUI?.ShowCombatLog("⚠ Quick Item Use panel is not available.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Quick Item Use panel is not available."));
             return;
         }
 
@@ -4551,7 +4551,7 @@ public partial class GameManager : MonoBehaviour
             }
             else
             {
-                CombatUI?.ShowCombatLog($"⚠ {feedback}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{feedback}"));
             }
             ShowActionChoices();
         };
@@ -4574,13 +4574,13 @@ public partial class GameManager : MonoBehaviour
         string disabledReason = GetDropEquippedItemDisabledReason(pc);
         if (!string.IsNullOrEmpty(disabledReason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot drop an equipped item: {disabledReason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot drop an equipped item: {disabledReason}."));
             return;
         }
 
         if (!TryGetHeldItemDropOptions(pc, out List<DropEquippedHeldItemOption> options))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no held item to drop.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no held item to drop."));
             ShowActionChoices();
             return;
         }
@@ -4621,7 +4621,7 @@ public partial class GameManager : MonoBehaviour
                 bool slotStillHeld = latestOptions.Exists(o => o.HandSlot == selectedSlot);
                 if (!slotStillHeld)
                 {
-                    CombatUI?.ShowCombatLog("⚠ That held item is no longer equipped.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "That held item is no longer equipped."));
                     ShowActionChoices();
                     return;
                 }
@@ -4635,13 +4635,13 @@ public partial class GameManager : MonoBehaviour
     {
         if (!TryDropEquippedHeldItemToGround(actor, handSlot, out ItemData droppedItem, out EquipSlot droppedSlot, out string feedback))
         {
-            CombatUI?.ShowCombatLog($"⚠ {feedback}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{feedback}"));
             ShowActionChoices();
             return;
         }
 
-        CombatUI?.ShowCombatLog($"⬇ {actor.Stats.CharacterName} drops {droppedItem.Name} from {droppedSlot}.");
-        CombatUI?.ShowCombatLog("(Free action - no attacks of opportunity provoked)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("⬇", $"{actor.Stats.CharacterName} drops {droppedItem.Name} from {droppedSlot}."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "(Free action - no attacks of opportunity provoked)"));
         UpdateAllStatsUI();
         InvalidatePreviewThreats();
         ShowActionChoices();
@@ -4690,7 +4690,7 @@ public partial class GameManager : MonoBehaviour
         inv.RemoveItemAt(inventoryIndex);
         cell.AddGroundItem(item);
         feedback = $"{actor.Stats.CharacterName} drops {item.Name} on the ground at ({cell.Coords.x},{cell.Coords.y}).";
-        CombatUI?.ShowCombatLog($"⬇ {feedback}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("⬇", $"{feedback}"));
         UpdateAllStatsUI();
         InvalidatePreviewThreats();
         return true;
@@ -4737,13 +4737,13 @@ public partial class GameManager : MonoBehaviour
         string disabledReason = GetPickUpItemDisabledReason(pc);
         if (!string.IsNullOrEmpty(disabledReason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot pick up item: {disabledReason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot pick up item: {disabledReason}."));
             return;
         }
 
         if (!TryGetAvailablePickUpItems(pc, out List<PickUpGroundItemOption> options))
         {
-            CombatUI?.ShowCombatLog("⚠ No item to pick up in current or adjacent squares.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No item to pick up in current or adjacent squares."));
             return;
         }
 
@@ -4781,7 +4781,7 @@ public partial class GameManager : MonoBehaviour
                 PickUpGroundItemOption selectedOption = options[selectedIndex];
                 if (selectedOption.Cell == null || selectedOption.Item == null)
                 {
-                    CombatUI?.ShowCombatLog("⚠ That item is no longer available.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "That item is no longer available."));
                     ShowActionChoices();
                     return;
                 }
@@ -4809,7 +4809,7 @@ public partial class GameManager : MonoBehaviour
             }
             else
             {
-                CombatUI?.ShowCombatLog($"⚠ {pickupMsg}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pickupMsg}"));
             }
 
             ShowActionChoices();
@@ -4834,7 +4834,7 @@ public partial class GameManager : MonoBehaviour
             yield break;
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} reaches for {item.Name} on the ground (provokes AoO).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} reaches for {item.Name} on the ground (provokes AoO)."));
 
         foreach (var enemy in threateningEnemies)
         {
@@ -4845,7 +4845,7 @@ public partial class GameManager : MonoBehaviour
             CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor);
             if (aooResult == null) continue;
 
-            CombatUI?.ShowCombatLog($"⚔ AoO vs pick up: {aooResult.GetDetailedSummary()}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs pick up: {aooResult.GetDetailedSummary()}"));
             UpdateAllStatsUI();
 
             if (aooResult.Hit && aooResult.TotalDamage > 0)
@@ -4856,7 +4856,7 @@ public partial class GameManager : MonoBehaviour
 
         if (actor.Stats.IsDead)
         {
-            CombatUI?.ShowCombatLog($"💀 {actor.Stats.CharacterName} is slain before picking up {item.Name}!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{actor.Stats.CharacterName} is slain before picking up {item.Name}!"));
             UpdateAllStatsUI();
             EndActivePCTurn();
             yield break;
@@ -4870,7 +4870,7 @@ public partial class GameManager : MonoBehaviour
         }
         else
         {
-            CombatUI?.ShowCombatLog($"⚠ {pickupMsg}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pickupMsg}"));
         }
 
         ShowActionChoices();
@@ -4975,16 +4975,16 @@ public partial class GameManager : MonoBehaviour
         if (!TryDropThrownWeaponToGround(thrower, thrownWeapon, landingPosition, EquipSlot.RightHand, out string dropFeedback))
         {
             Debug.LogWarning($"[Attack][Thrown] {dropFeedback}");
-            CombatUI?.ShowCombatLog($"⚠ {dropFeedback}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{dropFeedback}"));
             return;
         }
 
-        CombatUI?.ShowCombatLog($"→ {thrownWeapon.Name} lands on ground at ({landingPosition.x},{landingPosition.y}).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"→ {thrownWeapon.Name} lands on ground at ({landingPosition.x},{landingPosition.y})."));
 
         if (TryEquipNextThrowableWeapon(thrower, out ItemData nextWeapon, out string equipFeedback))
         {
             Debug.Log($"[Attack][Thrown] {equipFeedback}");
-            CombatUI?.ShowCombatLog($"↻ {thrower.Stats.CharacterName} auto-equips {nextWeapon.Name}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{thrower.Stats.CharacterName} auto-equips {nextWeapon.Name}."));
             _equippedWeapon = nextWeapon;
             return;
         }
@@ -4995,7 +4995,7 @@ public partial class GameManager : MonoBehaviour
         if (!thrower.HasThrowableWeaponEquipped())
         {
             Debug.Log($"[Attack][Thrown] {thrower.Stats.CharacterName} has no throwable weapon equipped after the throw.");
-            CombatUI?.ShowCombatLog($"⚠ {thrower.Stats.CharacterName} has no more throwable weapons equipped.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{thrower.Stats.CharacterName} has no more throwable weapons equipped."));
         }
     }
 
@@ -5514,7 +5514,7 @@ public partial class GameManager : MonoBehaviour
             if (wandValidation.NeedsUMDCheck)
             {
                 bool umdPassed = WandValidator.PerformUMDCheck(actor, currentItem, out string umdSummary);
-                CombatUI?.ShowCombatLog($"🪄 {actor.Stats.CharacterName} attempts UMD on {currentItem.Name}: {umdSummary}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{actor.Stats.CharacterName} attempts UMD on {currentItem.Name}: {umdSummary}"));
                 if (!umdPassed)
                 {
                     resultMessage = $"🪄 {umdSummary}";
@@ -5525,7 +5525,7 @@ public partial class GameManager : MonoBehaviour
             // Log Magic domain usage for healing wands
             if (wandValidation.UsedMagicDomain)
             {
-                CombatUI?.ShowCombatLog($"🪄 {actor.Stats.CharacterName} uses Magic domain power to activate arcane wand as a wizard of level {wandValidation.EffectiveWizardLevel}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{actor.Stats.CharacterName} uses Magic domain power to activate arcane wand as a wizard of level {wandValidation.EffectiveWizardLevel}."));
             }
 
             currentItem.CurrentCharges--;
@@ -5678,7 +5678,7 @@ public partial class GameManager : MonoBehaviour
         if (validation.UsedUMD)
         {
             bool umdPassed = ScrollValidator.PerformUMDCheck(actor, scrollItem, out string umdSummary);
-            CombatUI?.ShowCombatLog($"📜 {charName} attempts Use Magic Device on {scrollItem.Name}: {umdSummary}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("📜", $"{charName} attempts Use Magic Device on {scrollItem.Name}: {umdSummary}"));
 
             if (!umdPassed)
             {
@@ -5692,14 +5692,14 @@ public partial class GameManager : MonoBehaviour
             // Log Magic domain usage
             if (validation.UsedMagicDomain)
             {
-                CombatUI?.ShowCombatLog($"📜 {charName} uses Magic domain power to activate arcane scroll as a wizard of level {validation.CharacterCasterLevel}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("📜", $"{charName} uses Magic domain power to activate arcane scroll as a wizard of level {validation.CharacterCasterLevel}."));
             }
 
             // Step 3: Caster level check if needed
             if (validation.NeedsCasterLevelCheck)
             {
                 var clCheck = ScrollValidator.PerformCasterLevelCheck(actor, scrollItem, validation.CharacterCasterLevel);
-                CombatUI?.ShowCombatLog($"📜 {charName} attempts caster level check: {clCheck.Summary}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("📜", $"{charName} attempts caster level check: {clCheck.Summary}"));
 
                 if (!clCheck.Success)
                 {
@@ -5784,7 +5784,7 @@ public partial class GameManager : MonoBehaviour
         if (validation.NeedsUMDCheck)
         {
             bool umdPassed = WandValidator.PerformUMDCheck(actor, wandItem, out string umdSummary);
-            CombatUI?.ShowCombatLog($"🪄 {charName} attempts Use Magic Device on {wandItem.Name}: {umdSummary}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{charName} attempts Use Magic Device on {wandItem.Name}: {umdSummary}"));
 
             if (!umdPassed)
             {
@@ -5797,7 +5797,7 @@ public partial class GameManager : MonoBehaviour
         // Log Magic domain usage
         if (validation.UsedMagicDomain)
         {
-            CombatUI?.ShowCombatLog($"🪄 {charName} uses Magic domain power to activate arcane wand as a wizard of level {validation.EffectiveWizardLevel}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{charName} uses Magic domain power to activate arcane wand as a wizard of level {validation.EffectiveWizardLevel}."));
         }
 
         // Step 3: Apply the spell effect
@@ -5864,7 +5864,7 @@ public partial class GameManager : MonoBehaviour
         if (validation.NeedsUMDCheck)
         {
             bool umdPassed = StaffValidator.PerformUMDCheck(actor, staffItem, out string umdSummary);
-            CombatUI?.ShowCombatLog($"⚡ {charName} attempts Use Magic Device on {staffItem.Name}: {umdSummary}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{charName} attempts Use Magic Device on {staffItem.Name}: {umdSummary}"));
 
             if (!umdPassed)
             {
@@ -5877,7 +5877,7 @@ public partial class GameManager : MonoBehaviour
         // Log Magic domain usage
         if (validation.UsedMagicDomain)
         {
-            CombatUI?.ShowCombatLog($"⚡ {charName} uses Magic domain power to activate staff as a wizard of level {validation.EffectiveWizardLevel}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{charName} uses Magic domain power to activate staff as a wizard of level {validation.EffectiveWizardLevel}."));
         }
 
         // Step 3: Open spell selection panel
@@ -5927,7 +5927,7 @@ public partial class GameManager : MonoBehaviour
         // Double-check charges
         if (staffItem.StaffCharges < spellEntry.ChargeCost)
         {
-            CombatUI?.ShowCombatLog($"⚡ Insufficient charges on {staffName}!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Insufficient charges on {staffName}!"));
             ShowActionChoices();
             return;
         }
@@ -5936,7 +5936,7 @@ public partial class GameManager : MonoBehaviour
         staffItem.StaffCharges -= spellEntry.ChargeCost;
 
         string chargeInfo = $" ({staffItem.StaffCharges}/{staffDef?.MaxCharges ?? 50} charges)";
-        CombatUI?.ShowCombatLog($"⚡ {charName} uses {staffName}: {spellEntry.SpellName}{chargeInfo}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{charName} uses {staffName}: {spellEntry.SpellName}{chargeInfo}"));
 
         // Cast the spell
         if (spellEntry.IsStub)
@@ -5971,7 +5971,7 @@ public partial class GameManager : MonoBehaviour
                     int oldHP = actor.Stats.CurrentHP;
                     int hpHealed = actor.Stats.HealDamage(healRoll, out nonlethalHealed);
                     int newHP = actor.Stats.CurrentHP;
-                    CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} heals {hpHealed} HP ({oldHP} → {newHP}) at CL {staffCL}.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{spellEntry.SpellName} heals {hpHealed} HP ({oldHP} → {newHP}) at CL {staffCL}."));
                 }
                 else if (staffSpell.EffectType == SpellEffectType.Buff || staffSpell.EffectType == SpellEffectType.Debuff ||
                          staffSpell.EffectType == SpellEffectType.Illusion || staffSpell.EffectType == SpellEffectType.Control)
@@ -5984,19 +5984,19 @@ public partial class GameManager : MonoBehaviour
                     }
                     var effect = statusMgr.AddEffect(staffSpell, staffName, staffCL);
                     if (effect != null)
-                        CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} applied [{effect.GetDurationDisplayString()}] at CL {staffCL}.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{spellEntry.SpellName} applied [{effect.GetDurationDisplayString()}] at CL {staffCL}."));
                     else
-                        CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} could not be applied (stacking or stronger existing effect).");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{spellEntry.SpellName} could not be applied (stacking or stronger existing effect)."));
                 }
                 else if (staffSpell.EffectType == SpellEffectType.Damage || staffSpell.EffectType == SpellEffectType.Wall)
                 {
                     // For damage/wall spells, log that they'd be cast
                     // Full targeting integration is aspirational — for now, log the intent
-                    CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} cast at CL {staffCL}. (Full targeting integration pending)");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{spellEntry.SpellName} cast at CL {staffCL}. (Full targeting integration pending)"));
                 }
                 else
                 {
-                    CombatUI?.ShowCombatLog($"⚡ {spellEntry.SpellName} cast at CL {staffCL}.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{spellEntry.SpellName} cast at CL {staffCL}."));
                 }
             }
             else
@@ -6054,7 +6054,7 @@ public partial class GameManager : MonoBehaviour
 
         if (staff.IsStaffExpended())
         {
-            CombatUI?.ShowCombatLog($"⚡ {staff.Name} has no charges remaining — it is now non-magical!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{staff.Name} has no charges remaining — it is now non-magical!"));
             return;
         }
 
@@ -6148,25 +6148,25 @@ public partial class GameManager : MonoBehaviour
 
         if (pc.IsGrappling())
         {
-            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is grappled and cannot take normal movement. Use a grapple action (Move while grappling) after winning the opposed check.");
+            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is grappled and cannot take normal movement. Use a grapple action (Move while grappling) after winning the opposed check."));
             return;
         }
 
         if (pc.Stats.MovementBlockedByCondition || GetCurrentMoveRangeSquares(pc) <= 0)
         {
-            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot move due to an active condition.");
+            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot move due to an active condition."));
             return;
         }
 
         if (pc.HasTakenFiveFootStep)
         {
-            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} already used a 5-foot step this turn and cannot take normal movement.");
+            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} already used a 5-foot step this turn and cannot take normal movement."));
             return;
         }
 
         if (pc.HasCondition(CombatConditionType.Prone))
         {
-            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is prone and must stand up or crawl.");
+            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is prone and must stand up or crawl."));
             return;
         }
 
@@ -6216,7 +6216,7 @@ public partial class GameManager : MonoBehaviour
         string reason = GetWithdrawDisabledReason(pc);
         if (!string.IsNullOrEmpty(reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot withdraw: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot withdraw: {reason}."));
             return;
         }
 
@@ -6226,7 +6226,7 @@ public partial class GameManager : MonoBehaviour
         ShowMovementRange(pc, maxRangeOverride: GetWithdrawMoveRangeSquares(pc));
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Withdraw: select destination (double move, first square avoids AoO)");
-        CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} begins Withdraw (full-round, up to {GetWithdrawMoveRangeSquares(pc) * 5} ft). First square is protected from attacks of opportunity.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} begins Withdraw (full-round, up to {GetWithdrawMoveRangeSquares(pc) * 5} ft). First square is protected from attacks of opportunity."));
     }
 
     public bool CanTakeFiveFootStep(CharacterController character)
@@ -6258,7 +6258,7 @@ public partial class GameManager : MonoBehaviour
         string reason = GetFiveFootStepDisabledReason(pc);
         if (!string.IsNullOrEmpty(reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot take a 5-foot step: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot take a 5-foot step: {reason}."));
             return;
         }
 
@@ -6266,7 +6266,7 @@ public partial class GameManager : MonoBehaviour
         ShowFiveFootStepOptions(pc);
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Select 5-foot step destination (right-click/ESC to cancel)");
-        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} prepares a 5-foot step.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} prepares a 5-foot step."));
     }
 
     private void ShowFiveFootStepOptions(CharacterController pc)
@@ -6330,7 +6330,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!IsValidFiveFootStepDestination(pc, destination.Coords))
         {
-            CombatUI?.ShowCombatLog("⚠ Invalid 5-foot step destination.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Invalid 5-foot step destination."));
             return false;
         }
 
@@ -6343,7 +6343,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!fiveFootStepSucceeded)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} failed to take a 5-foot step.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} failed to take a 5-foot step."));
             return false;
         }
 
@@ -6354,8 +6354,8 @@ public partial class GameManager : MonoBehaviour
         UpdateAllStatsUI();
         InvalidatePreviewThreats();
 
-        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} takes a 5-foot step ({oldPos.x},{oldPos.y} → {destination.Coords.x},{destination.Coords.y}).");
-        CombatUI?.ShowCombatLog("(No attacks of opportunity provoked)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("", $"{pc.Stats.CharacterName} takes a 5-foot step ({oldPos.x},{oldPos.y} → {destination.Coords.x},{destination.Coords.y})."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "(No attacks of opportunity provoked)"));
 
         if (returnToActionChoices)
             ShowActionChoices();
@@ -6378,12 +6378,12 @@ public partial class GameManager : MonoBehaviour
             CurrentSubPhase = PlayerSubPhase.Animating;
 
             if (pc != null)
-                CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} skips 5-foot step.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} skips 5-foot step."));
             return;
         }
 
         if (pc != null)
-            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels 5-foot step.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} cancels 5-foot step."));
 
         ShowActionChoices();
     }
@@ -6478,13 +6478,13 @@ public partial class GameManager : MonoBehaviour
         string reason = GetDropProneDisabledReason(pc);
         if (!string.IsNullOrEmpty(reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot drop prone: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot drop prone: {reason}."));
             return;
         }
 
         pc.ApplyCondition(CombatConditionType.Prone, -1, pc.Stats.CharacterName);
-        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} drops prone.");
-        CombatUI?.ShowCombatLog("(Free action - no attacks of opportunity provoked)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} drops prone."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "(Free action - no attacks of opportunity provoked)"));
 
         RefreshFlankedConditions();
         UpdateAllStatsUI();
@@ -6503,7 +6503,7 @@ public partial class GameManager : MonoBehaviour
         string reason = GetStandUpDisabledReason(pc);
         if (!string.IsNullOrEmpty(reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot stand up: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot stand up: {reason}."));
             return;
         }
 
@@ -6539,7 +6539,7 @@ public partial class GameManager : MonoBehaviour
         string reason = GetCrawlDisabledReason(pc);
         if (!string.IsNullOrEmpty(reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot crawl: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot crawl: {reason}."));
             return;
         }
 
@@ -6547,7 +6547,7 @@ public partial class GameManager : MonoBehaviour
         ShowCrawlOptions(pc);
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Select crawl destination (right-click/ESC to cancel)");
-        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} prepares to crawl (5 ft, provokes AoO).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} prepares to crawl (5 ft, provokes AoO)."));
     }
 
     private IEnumerator ResolveStandUp(CharacterController pc, List<CharacterController> threateners = null)
@@ -6556,7 +6556,7 @@ public partial class GameManager : MonoBehaviour
             yield break;
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} attempts to stand up...");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} attempts to stand up..."));
 
         if (threateners == null)
         {
@@ -6566,7 +6566,7 @@ public partial class GameManager : MonoBehaviour
 
         if (threateners.Count > 0)
         {
-            CombatUI?.ShowCombatLog("Standing up provokes attacks of opportunity!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Standing up provokes attacks of opportunity!"));
 
             foreach (var enemy in threateners)
             {
@@ -6578,7 +6578,7 @@ public partial class GameManager : MonoBehaviour
                     : ThreatSystem.ExecuteAoO(enemy, pc);
                 if (aooResult != null)
                 {
-                    CombatUI?.ShowCombatLog($"⚔ AoO (standing up): {aooResult.GetDetailedSummary()}");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO (standing up): {aooResult.GetDetailedSummary()}"));
                     UpdateAllStatsUI();
 
                     if (aooResult.Hit && aooResult.TotalDamage > 0)
@@ -6590,12 +6590,12 @@ public partial class GameManager : MonoBehaviour
         }
         else
         {
-            CombatUI?.ShowCombatLog("(No enemies threaten - no attacks of opportunity)");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "(No enemies threaten - no attacks of opportunity)"));
         }
 
         if (pc.Stats.IsDead)
         {
-            CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} was slain while trying to stand up!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("", $"{pc.Stats.CharacterName} was slain while trying to stand up!"));
             UpdateAllStatsUI();
             EndActivePCTurn();
             yield break;
@@ -6603,7 +6603,7 @@ public partial class GameManager : MonoBehaviour
 
         bool removed = pc.RemoveCondition(CombatConditionType.Prone);
         if (removed)
-            CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} stands up.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} stands up."));
 
         ConsumeMoveAction(pc);
 
@@ -6669,7 +6669,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!IsValidCrawlDestination(pc, destination.Coords))
         {
-            CombatUI?.ShowCombatLog("⚠ Invalid crawl destination.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Invalid crawl destination."));
             yield break;
         }
 
@@ -6691,7 +6691,7 @@ public partial class GameManager : MonoBehaviour
         bool interruptedByIncapacitation = false;
         if (provokedAoOs.Count > 0)
         {
-            CombatUI?.ShowCombatLog("Crawling provokes attacks of opportunity!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Crawling provokes attacks of opportunity!"));
             foreach (var aooInfo in provokedAoOs)
             {
                 CharacterController threatener = aooInfo != null ? aooInfo.Threatener : null;
@@ -6704,7 +6704,7 @@ public partial class GameManager : MonoBehaviour
                 if (aooResult == null)
                     continue;
 
-                CombatUI?.ShowCombatLog($"⚔ AoO (crawling): {aooResult.GetDetailedSummary()}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO (crawling): {aooResult.GetDetailedSummary()}"));
                 UpdateAllStatsUI();
 
                 if (aooResult.Hit && aooResult.TotalDamage > 0)
@@ -6726,12 +6726,12 @@ public partial class GameManager : MonoBehaviour
 
         if (interruptedByIncapacitation)
         {
-            CombatUI?.ShowCombatLog($"⛔ {pc.Stats.CharacterName}'s crawl is interrupted by incapacitation.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{pc.Stats.CharacterName}'s crawl is interrupted by incapacitation."));
             EndActivePCTurn();
             yield break;
         }
 
-        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} crawls ({oldPos.x},{oldPos.y} → {destination.Coords.x},{destination.Coords.y}).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} crawls ({oldPos.x},{oldPos.y} → {destination.Coords.x},{destination.Coords.y})."));
 
         ShowActionChoices();
     }
@@ -6744,7 +6744,7 @@ public partial class GameManager : MonoBehaviour
         _highlightedCells.Clear();
 
         if (pc != null)
-            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels crawl.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} cancels crawl."));
 
         ShowActionChoices();
     }
@@ -6869,7 +6869,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         if (!string.IsNullOrEmpty(reloadLog))
-            CombatUI?.ShowCombatLog($"⚠ {reloadLog}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{reloadLog}"));
     }
 
 
@@ -6903,7 +6903,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot attack: {cannotAttackReason}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot attack: {cannotAttackReason}"));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -6968,7 +6968,7 @@ public partial class GameManager : MonoBehaviour
         if (pc.Stats == null || !pc.Stats.HasNaturalAttacks || pc.GetEquippedMainWeapon() != null)
         {
             string pcName = pc.Stats != null ? pc.Stats.CharacterName : "Character";
-            CombatUI?.ShowCombatLog($"⚠ {pcName} cannot use a natural-weapon attack option right now.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pcName} cannot use a natural-weapon attack option right now."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -6977,7 +6977,7 @@ public partial class GameManager : MonoBehaviour
         {
             if (pc.Actions == null || !pc.Actions.HasStandardAction)
             {
-                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no standard action available for a natural attack.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no standard action available for a natural attack."));
                 CombatUI?.UpdateActionButtons(pc);
                 return;
             }
@@ -6986,7 +6986,7 @@ public partial class GameManager : MonoBehaviour
         {
             if (pc.Actions == null || !pc.Actions.HasMoveAction)
             {
-                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot continue natural attacks after moving.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot continue natural attacks after moving."));
                 CombatUI?.UpdateActionButtons(pc);
                 return;
             }
@@ -6994,7 +6994,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!HasRemainingNaturalAttacks(pc))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no natural attacks remaining this turn.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no natural attacks remaining this turn."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -7003,7 +7003,7 @@ public partial class GameManager : MonoBehaviour
         int resolvedSequenceIndex = ResolveNextAvailableNaturalAttackSequenceIndex(pc, naturalAttackSequenceIndex, resolvedLabel);
         if (resolvedSequenceIndex < 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no {resolvedLabel} attack remaining this turn.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no {resolvedLabel} attack remaining this turn."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -7135,7 +7135,7 @@ public partial class GameManager : MonoBehaviour
             Debug.Log($"[{contextTag}][DualWield] Main hand penalty: {_mainHandPenalty}");
             Debug.Log($"[{contextTag}][DualWield] Off-hand penalty: {_offHandPenalty}");
 
-            CombatUI?.ShowCombatLog($"⚔ {attacker.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{attacker.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty})."));
         }
         else
         {
@@ -7149,7 +7149,7 @@ public partial class GameManager : MonoBehaviour
             Debug.Log($"[{contextTag}][DualWield] Dual wielding disabled");
             Debug.Log($"[{contextTag}][DualWield] Off-hand attack available this turn: false");
 
-            CombatUI?.ShowCombatLog($"⚔ {attacker.Stats.CharacterName} fights with main hand only (no dual-wield penalties). Off-hand attack disabled for this round.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{attacker.Stats.CharacterName} fights with main hand only (no dual-wield penalties). Off-hand attack disabled for this round."));
         }
 
         Debug.Log($"[{contextTag}][DualWield] Choice: {(dualWield ? "Yes" : "No")}");
@@ -7232,14 +7232,14 @@ public partial class GameManager : MonoBehaviour
         ItemData offHandWeapon = pc.GetOffHandAttackWeapon();
         if (offHandWeapon == null)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no valid off-hand weapon.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no valid off-hand weapon."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
 
         if (!pc.CanAttackWithWeapon(offHandWeapon, out string cannotAttackReason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot off-hand attack: {cannotAttackReason}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot off-hand attack: {cannotAttackReason}"));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -7258,7 +7258,7 @@ public partial class GameManager : MonoBehaviour
             _offHandAttackAvailableThisTurn = true;
             _offHandAttackUsedThisTurn = false;
             Debug.Log("[OffHand] Off-hand attack available this turn: true");
-            CombatUI?.ShowCombatLog($"⚔ {pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty})."));
         }
 
         // NOTE: Do not consume standard action yet. We consume only after a valid target is selected
@@ -7304,14 +7304,14 @@ public partial class GameManager : MonoBehaviour
         ItemData offHandWeapon = pc.GetOffHandAttackWeapon();
         if (offHandWeapon == null || !offHandWeapon.IsThrown || offHandWeapon.RangeIncrement <= 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no throwable off-hand weapon.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no throwable off-hand weapon."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
 
         if (!pc.CanAttackWithWeapon(offHandWeapon, out string cannotAttackReason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot off-hand throw: {cannotAttackReason}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot off-hand throw: {cannotAttackReason}"));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -7329,7 +7329,7 @@ public partial class GameManager : MonoBehaviour
             _offHandAttackAvailableThisTurn = true;
             _offHandAttackUsedThisTurn = false;
             Debug.Log("[OffHand][Thrown] Off-hand attack available this turn: true");
-            CombatUI?.ShowCombatLog($"⚔ {pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty})."));
         }
 
         // NOTE: Do not consume standard action yet. We consume only after a valid target is selected
@@ -7452,7 +7452,7 @@ public partial class GameManager : MonoBehaviour
             _currentOffHandBAB = 0;
             _currentOffHandWeapon = null;
             string mode = useThrownRange ? "throw" : "melee";
-            CombatUI.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no enemies in off-hand {mode} range.");
+            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no enemies in off-hand {mode} range."));
             StartCoroutine(ReturnToActionChoicesAfterDelay(0.9f));
         }
     }
@@ -7514,13 +7514,13 @@ public partial class GameManager : MonoBehaviour
         if (!attacker.Actions.HasMoveAction)
         {
             string actionLabel = string.IsNullOrWhiteSpace(attemptedActionLabel) ? "another attack" : attemptedActionLabel;
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot continue attacking: {actionLabel} would require consuming the remaining move action.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot continue attacking: {actionLabel} would require consuming the remaining move action."));
             return false;
         }
 
         attacker.Actions.UseMoveAction();
         _attackSequenceConsumesFullRound = true;
-        CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} commits to a full attack and spends their move action.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
         return true;
     }
 
@@ -7684,7 +7684,7 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         string actionLabel = string.IsNullOrWhiteSpace(attemptedAction) ? "that action" : attemptedAction;
-        CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is Turned and cannot perform {actionLabel}. They must flee from the source of divine turning.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} is Turned and cannot perform {actionLabel}. They must flee from the source of divine turning."));
         return true;
     }
 
@@ -7997,7 +7997,7 @@ public partial class GameManager : MonoBehaviour
         {
             if (_equippedWeapon == null || !_equippedWeapon.IsThrown || _equippedWeapon.RangeIncrement <= 0)
             {
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no throwable weapon equipped!");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no throwable weapon equipped!"));
                 EndAttackSequence();
                 ShowActionChoices();
                 return;
@@ -8005,7 +8005,7 @@ public partial class GameManager : MonoBehaviour
 
             if (!attacker.CanAttackWithWeapon(_equippedWeapon, out string cannotAttackReason))
             {
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot throw: {cannotAttackReason}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot throw: {cannotAttackReason}"));
                 EndAttackSequence();
                 ShowActionChoices();
                 return;
@@ -8185,7 +8185,7 @@ public partial class GameManager : MonoBehaviour
 
         if (pc.HasCondition(CombatConditionType.Turned) && type != SpecialAttackType.TurnUndead)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is Turned and cannot perform offensive special attacks.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is Turned and cannot perform offensive special attacks."));
             ShowActionChoices();
             return;
         }
@@ -8194,7 +8194,7 @@ public partial class GameManager : MonoBehaviour
         {
             if (!CanUseAidAnother(pc, out string aidAnotherReason))
             {
-                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot Aid Another: {aidAnotherReason}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot Aid Another: {aidAnotherReason}."));
                 ShowActionChoices();
                 return;
             }
@@ -8211,7 +8211,7 @@ public partial class GameManager : MonoBehaviour
 
             if (!CanUseOverrun(pc, out string overrunReason))
             {
-                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use Overrun: {overrunReason}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use Overrun: {overrunReason}."));
                 ShowActionChoices();
                 return;
             }
@@ -8293,7 +8293,7 @@ public partial class GameManager : MonoBehaviour
                                         : (type == SpecialAttackType.BullRushCharge
                                             ? "Need a full-round action and valid charge movement"
                                             : "Need a standard action")))))));
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {type}: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use {type}: {reason}."));
             ShowActionChoices();
             return;
         }
@@ -8309,7 +8309,7 @@ public partial class GameManager : MonoBehaviour
         if (type == SpecialAttackType.Grapple
             && pc.TryGetGrappleState(out _, out _, out _, out _))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is already grappling. Use the grapple action buttons in the action panel.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is already grappling. Use the grapple action buttons in the action panel."));
             ShowActionChoices();
             return;
         }
@@ -8331,7 +8331,7 @@ public partial class GameManager : MonoBehaviour
         // Slow prevents full-round actions (PHB p.280)
         if (pc.HasActiveSlowEffect)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is Slowed and cannot take full-round actions!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is Slowed and cannot take full-round actions!"));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -8347,7 +8347,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot full attack: {cannotAttackReason}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot full attack: {cannotAttackReason}"));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -8379,14 +8379,14 @@ public partial class GameManager : MonoBehaviour
 
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot attack: {cannotAttackReason}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot attack: {cannotAttackReason}"));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
 
         if (pc.Stats.BaseAttackBonus < 1)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} needs BAB +1 to fight defensively.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} needs BAB +1 to fight defensively."));
             return;
         }
 
@@ -8400,7 +8400,7 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
         ShowAttackTargets(pc);
         CombatUI?.SetTurnIndicator("FIGHTING DEFENSIVELY (STD): Select target");
-        CombatUI?.ShowCombatLog($"🛡 {pc.Stats.CharacterName} declares Fighting Defensively (Std): -4 attack, +2 AC.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{pc.Stats.CharacterName} declares Fighting Defensively (Std): -4 attack, +2 AC."));
         UpdateAllStatsUI();
     }
 
@@ -8420,14 +8420,14 @@ public partial class GameManager : MonoBehaviour
 
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot full attack: {cannotAttackReason}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot full attack: {cannotAttackReason}"));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
 
         if (pc.Stats.BaseAttackBonus < 1)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} needs BAB +1 to fight defensively.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} needs BAB +1 to fight defensively."));
             return;
         }
 
@@ -8441,7 +8441,7 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
         ShowAttackTargets(pc);
         CombatUI?.SetTurnIndicator("FULL ATTACK (DEF): Select target");
-        CombatUI?.ShowCombatLog($"🛡 {pc.Stats.CharacterName} declares Full Attack (Def): -4 attack, +2 AC.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{pc.Stats.CharacterName} declares Full Attack (Def): -4 attack, +2 AC."));
         UpdateAllStatsUI();
     }
 
@@ -8461,7 +8461,7 @@ public partial class GameManager : MonoBehaviour
 
         if (pc.HasCondition(CombatConditionType.Grappled))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot dual-wield while grappled (D&D 3.5: no two-weapon attacks in a grapple).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot dual-wield while grappled (D&D 3.5: no two-weapon attacks in a grapple)."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -8474,7 +8474,7 @@ public partial class GameManager : MonoBehaviour
         bool canOff = pc.CanAttackWithWeapon(off, out string offReason);
         if (!canMain && !canOff)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot dual-wield attack: {mainReason}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot dual-wield attack: {mainReason}"));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -8504,7 +8504,7 @@ public partial class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (IsHoldingTouchCharge(pc))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} ends turn while holding {GetHeldTouchSpellName(pc)}. The charge persists.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} ends turn while holding {GetHeldTouchSpellName(pc)}. The charge persists."));
         }
 
         EndAttackSequence();
@@ -8559,7 +8559,7 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.UpdateActionButtons(pc);
 
         string modeLabel = pc.CurrentAttackDamageMode == AttackDamageMode.Nonlethal ? "Nonlethal" : "Lethal";
-        CombatUI?.ShowCombatLog($"🗡 {pc.Stats.CharacterName} switches damage mode to {modeLabel}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("🗡", $"{pc.Stats.CharacterName} switches damage mode to {modeLabel}."));
     }
     public void OnFlurryOfBlowsButtonPressed()
     {
@@ -8595,8 +8595,7 @@ public partial class GameManager : MonoBehaviour
         bool success = pc.ActivateRage();
         if (success)
         {
-            CombatUI.ShowCombatLog($"⚡ {pc.Stats.CharacterName} enters a BARBARIAN RAGE! " +
-                                  $"+4 STR, +4 CON, +2 Will, -2 AC for {pc.Stats.RageRoundsRemaining} rounds!");
+            CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{pc.Stats.CharacterName} enters a BARBARIAN RAGE! +4 STR, +4 CON, +2 Will, -2 AC for {pc.Stats.RageRoundsRemaining} rounds!"));
             UpdateAllStatsUI();
             CombatUI.UpdateActionButtons(pc);
             Debug.Log($"[GameManager] {pc.Stats.CharacterName} activated Rage via button");
@@ -8606,7 +8605,7 @@ public partial class GameManager : MonoBehaviour
             string reason = pc.Stats.IsRaging ? "already raging" :
                            (pc.Stats.IsExhaustedState ? "exhausted" :
                                (pc.Stats.IsFatiguedState ? "fatigued" : "no rages left today"));
-            CombatUI.ShowCombatLog($"{pc.Stats.CharacterName} cannot rage: {reason}");
+            CombatUI.ShowCombatLog(CombatLogHelper.Failure("", $"{pc.Stats.CharacterName} cannot rage: {reason}"));
             Debug.Log($"[GameManager] {pc.Stats.CharacterName} failed to activate Rage: {reason}");
         }
     }
@@ -8637,7 +8636,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         if (pc.IsGrappling())
-            CombatUI?.ShowCombatLog("🪢 Grappled casting: you must satisfy component restrictions and pass a concentration check (DC 20 + spell level).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", "Grappled casting: you must satisfy component restrictions and pass a concentration check (DC 20 + spell level)."));
         // Show spell selection panel with metamagic support (only prepared spells shown)
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.ShowSpellSelection(spellComp, OnSpellSelectedWithMetamagic, OnSpellSelectionCancelled);
@@ -8724,7 +8723,7 @@ public partial class GameManager : MonoBehaviour
         StatusEffectManager statusMgr = pc.StatusEffectManager;
         if (statusMgr == null || !statusMgr.HasEffect(SpellNames.EXPEDITIOUS_RETREAT))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Expeditious Retreat to dismiss.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no active Expeditious Retreat to dismiss."));
             return;
         }
 
@@ -8745,7 +8744,7 @@ public partial class GameManager : MonoBehaviour
         StatusEffectManager statusMgr = pc.StatusEffectManager;
         if (statusMgr == null || !statusMgr.HasEffect(SpellNames.JUMP))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Jump spell to dismiss.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no active Jump spell to dismiss."));
             return;
         }
 
@@ -8765,14 +8764,14 @@ public partial class GameManager : MonoBehaviour
 
         if (!pc.HasActiveInvisibilityEffect)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active invisibility effect to dismiss.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no active invisibility effect to dismiss."));
             return;
         }
 
         // Check if the effect is dismissible
         if (pc.ActiveInvisibilityEffect != null && !pc.ActiveInvisibilityEffect.IsDismissible)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName}'s invisibility cannot be dismissed.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName}'s invisibility cannot be dismissed."));
             return;
         }
 
@@ -8802,7 +8801,7 @@ public partial class GameManager : MonoBehaviour
         StatusEffectManager statusMgr = pc.StatusEffectManager;
         if (statusMgr == null || !statusMgr.HasEffect(SpellNames.SEE_INVISIBLE))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active See Invisible spell to dismiss.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no active See Invisible spell to dismiss."));
             return;
         }
 
@@ -8823,7 +8822,7 @@ public partial class GameManager : MonoBehaviour
         StatusEffectManager statusMgr = pc.StatusEffectManager;
         if (statusMgr == null || !statusMgr.HasEffect(SpellNames.DISGUISE_SELF))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Disguise Self to dismiss.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no active Disguise Self to dismiss."));
             return;
         }
 
@@ -8863,7 +8862,7 @@ public partial class GameManager : MonoBehaviour
         if (spellComp != null && spellComp.HasHeldTouchCharge)
         {
             spellComp.ClearHeldTouchCharge("cast another spell");
-            CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName}'s held touch charge dissipates as they begin another spell.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{pc.Stats.CharacterName}'s held touch charge dissipates as they begin another spell."));
         }
 
         // If metamagic modifies the spell data (range, action type), clone and apply
@@ -8920,7 +8919,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!TryGetAnimateRopeInventoryOptions(caster, out List<ItemData> ropeOptions))
         {
-            CombatUI?.ShowCombatLog("⚠ You need rope to cast this spell.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "You need rope to cast this spell."));
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
@@ -9082,7 +9081,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!TryGetMagicWeaponInventoryOptions(target, out List<ItemData> weaponOptions, out List<string> weaponLabels))
         {
-            CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no weapon in inventory to enchant with Magic Weapon.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} has no weapon in inventory to enchant with Magic Weapon."));
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
@@ -9200,7 +9199,7 @@ public partial class GameManager : MonoBehaviour
 
         if (weapon == null)
         {
-            CombatUI?.ShowCombatLog("⚠ Magic Weapon failed: no weapon selected.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Magic Weapon failed: no weapon selected."));
             return true;
         }
 
@@ -9236,7 +9235,7 @@ public partial class GameManager : MonoBehaviour
         ItemData ropeItem = ConsumePendingAnimateRopeItem(caster);
         if (ropeItem == null)
         {
-            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no rope available to animate.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} has no rope available to animate."));
             return true;
         }
 
@@ -9245,14 +9244,14 @@ public partial class GameManager : MonoBehaviour
         if (result.RequiredAttackRoll && !result.AttackHit)
         {
             DropAnimateRopeItemAt(target.GridPosition, ropeItem);
-            CombatUI?.ShowCombatLog($"🪢 Animate Rope misses. {ropeItem.Name} lands on the ground.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Animate Rope misses. {ropeItem.Name} lands on the ground."));
             return true;
         }
 
         if (result.RequiredSave && result.SaveSucceeded)
         {
             DropAnimateRopeItemAt(target.GridPosition, ropeItem);
-            CombatUI?.ShowCombatLog($"🪢 {target.Stats.CharacterName} dodges the rope with a successful Reflex save. {ropeItem.Name} falls to the ground.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"{target.Stats.CharacterName} dodges the rope with a successful Reflex save. {ropeItem.Name} falls to the ground."));
             return true;
         }
 
@@ -9289,7 +9288,7 @@ public partial class GameManager : MonoBehaviour
             target.ApplyCondition(CombatConditionType.Entangled, durationRounds, spell.Name);
         }
 
-        CombatUI?.ShowCombatLog($"🪢 {target.Stats.CharacterName} is entangled by {ropeItem.Name}! Movement is reduced to half speed, -2 attack, -4 DEX. Escape with STR vs DC {breakDc} or Escape Artist DC 20.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"{target.Stats.CharacterName} is entangled by {ropeItem.Name}! Movement is reduced to half speed, -2 attack, -4 DEX. Escape with STR vs DC {breakDc} or Escape Artist DC 20."));
         return true;
     }
 
@@ -9431,7 +9430,7 @@ public partial class GameManager : MonoBehaviour
 
         if (consumeStandardAction && (actor.Actions == null || !actor.Actions.HasStandardAction || !actor.CommitStandardAction()))
         {
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} has no standard action available to attempt escape.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} has no standard action available to attempt escape."));
             return true;
         }
 
@@ -9452,7 +9451,7 @@ public partial class GameManager : MonoBehaviour
         bool success = total >= dc;
 
         string icon = fromAnimateRope ? "🪢" : "🕸";
-        CombatUI?.ShowCombatLog($"{icon} {actor.Stats.CharacterName} attempts to escape {sourceLabel} ({checkLabel}): d20 {roll} + {bonus} = {total} vs DC {dc}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{icon} {actor.Stats.CharacterName} attempts to escape {sourceLabel} ({checkLabel}): d20 {roll} + {bonus} = {total} vs DC {dc}."));
 
         if (success)
         {
@@ -9464,11 +9463,11 @@ public partial class GameManager : MonoBehaviour
                 ropeData.LastKnownTargetPosition = actor.GridPosition;
             }
 
-            CombatUI?.ShowCombatLog($"✅ {actor.Stats.CharacterName} escapes {sourceLabel}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"{actor.Stats.CharacterName} escapes {sourceLabel}."));
         }
         else
         {
-            CombatUI?.ShowCombatLog($"❌ {actor.Stats.CharacterName} fails to escape {sourceLabel}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{actor.Stats.CharacterName} fails to escape {sourceLabel}."));
         }
 
         UpdateAllStatsUI();
@@ -9509,7 +9508,7 @@ public partial class GameManager : MonoBehaviour
             data.RopeDroppedToGround = true;
         }
 
-        CombatUI?.ShowCombatLog($"⏱ Animate Rope ends on {character.Stats.CharacterName}. The rope falls to the ground.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Animate Rope ends on {character.Stats.CharacterName}. The rope falls to the ground."));
         return true;
     }
 
@@ -9527,7 +9526,7 @@ public partial class GameManager : MonoBehaviour
         if (!isWeb)
             return false;
 
-        CombatUI?.ShowCombatLog($"⏱ {character.Stats.CharacterName} is no longer entangled by web.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"{character.Stats.CharacterName} is no longer entangled by web."));
         return true;
     }
 
@@ -9605,13 +9604,13 @@ public partial class GameManager : MonoBehaviour
 
         if (string.Equals(active.SourceSpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
         {
-            CombatUI?.ShowCombatLog("⚠ Summon Swarm cannot be controlled.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Summon Swarm cannot be controlled."));
             return;
         }
 
         if (!summon.IsControllable)
         {
-            CombatUI?.ShowCombatLog("⚠ This summoned ally is AI-controlled and cannot receive direct commands.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "This summoned ally is AI-controlled and cannot receive direct commands."));
             return;
         }
 
@@ -9783,7 +9782,7 @@ public partial class GameManager : MonoBehaviour
         int spellLevel = SummonMonsterLists.GetSummonMonsterSpellLevel(spell.SpellId);
         if (spellLevel <= 0)
         {
-            CombatUI?.ShowCombatLog($"{spell.Name} is not recognized as a Summon Monster spell.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{spell.Name} is not recognized as a Summon Monster spell."));
             ShowActionChoices();
             return;
         }
@@ -9791,7 +9790,7 @@ public partial class GameManager : MonoBehaviour
         List<int> availableListLevels = SummonMonsterLists.GetAvailableListLevelsForSpell(spell.SpellId);
         if (availableListLevels == null || availableListLevels.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"No summon list levels available for {spell.Name}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"No summon list levels available for {spell.Name}."));
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
@@ -9813,7 +9812,7 @@ public partial class GameManager : MonoBehaviour
         bool hasAnySummonOption = optionsByLevel.Values.Any(v => v != null && v.Count > 0);
         if (!hasAnySummonOption)
         {
-            CombatUI?.ShowCombatLog($"No valid summon options for {spell.Name} ({caster.Stats.CharacterAlignment}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"No valid summon options for {spell.Name} ({caster.Stats.CharacterAlignment})."));
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
@@ -9932,7 +9931,7 @@ public partial class GameManager : MonoBehaviour
         List<string> labels = BuildSummonSwarmChoiceLabels();
         if (ids.Count == 0 || labels.Count == 0)
         {
-            CombatUI?.ShowCombatLog("No swarm creatures are available in the NPC database.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "No swarm creatures are available in the NPC database."));
             ShowActionChoices();
             return;
         }
@@ -10342,12 +10341,12 @@ public partial class GameManager : MonoBehaviour
         {
             if (wasFreeAdjacentGrappleMoveSelection)
             {
-                CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} remains in place after ending the grapple.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} remains in place after ending the grapple."));
             }
             else
             {
                 if (wasOverrunDestinationSelection)
-                    CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels overrun destination selection.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} cancels overrun destination selection."));
                 else
                     CombatUI?.ShowCombatLog(wasGrappleMoveSelection
                         ? $"↩ {pc.Stats.CharacterName} chooses not to move after winning grapple control."

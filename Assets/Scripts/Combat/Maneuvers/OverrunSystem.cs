@@ -79,7 +79,7 @@ public partial class GameManager
         ShowOverrunDestinationOptions(attacker);
         CombatUI?.SetActionButtonsVisible(false);
         CombatUI?.SetTurnIndicator($"{attacker.Stats.CharacterName} - Select destination for overrun");
-        CombatUI?.ShowCombatLog("Select destination for overrun.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", "Select destination for overrun."));
     }
 
     private void ShowOverrunDestinationOptions(CharacterController attacker)
@@ -124,7 +124,7 @@ public partial class GameManager
 
         if (_highlightedCells.Count <= 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no reachable overrun destination.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no reachable overrun destination."));
             ShowActionChoices();
         }
     }
@@ -177,7 +177,7 @@ public partial class GameManager
 
         if (overrunPath.Count == 0 || overrunPath[overrunPath.Count - 1] != destination)
         {
-            CombatUI?.ShowCombatLog("⚠ No valid overrun path to that destination.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No valid overrun path to that destination."));
             ShowOverrunDestinationOptions(attacker);
             return;
         }
@@ -235,7 +235,7 @@ public partial class GameManager
 
         if (!attacker.Actions.HasMoveAction)
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} no longer has a move action for overrun.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} no longer has a move action for overrun."));
             ShowActionChoices();
             return;
         }
@@ -255,7 +255,7 @@ public partial class GameManager
         {
             if (stepIndex >= path.Count)
             {
-                CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} completes the overrun!");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} completes the overrun!"));
                 UpdateAllStatsUI();
                 ShowActionChoices();
                 return;
@@ -267,17 +267,17 @@ public partial class GameManager
             {
                 if (ThreatSystem.CanMakeAoO(enemy) && !enemy.Stats.IsDead)
                 {
-                    CombatUI?.ShowCombatLog($"{enemy.Stats.CharacterName} gets an attack of opportunity!");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{enemy.Stats.CharacterName} gets an attack of opportunity!"));
                     CombatResult aooResult = TriggerAoO(enemy, attacker);
                     if (aooResult != null)
                     {
-                        CombatUI?.ShowCombatLog($"⚔ Overrun AoO: {aooResult.GetDetailedSummary()}");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"Overrun AoO: {aooResult.GetDetailedSummary()}"));
                         UpdateAllStatsUI();
                     }
 
                     if (attacker.Stats.IsDead)
                     {
-                        CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} is dropped before completing the overrun.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} is dropped before completing the overrun."));
                         ShowActionChoices();
                         return;
                     }
@@ -287,17 +287,17 @@ public partial class GameManager
                 {
                     if (!enemyBlocks)
                     {
-                        CombatUI?.ShowCombatLog($"{enemy.Stats.CharacterName} avoids the overrun!");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{enemy.Stats.CharacterName} avoids the overrun!"));
                         ProcessStep(stepIndex + 1);
                         return;
                     }
 
-                    CombatUI?.ShowCombatLog($"{enemy.Stats.CharacterName} attempts to block!");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{enemy.Stats.CharacterName} attempts to block!"));
                     if (!standardActionConsumed)
                     {
                         if (!attacker.CommitStandardAction())
                         {
-                            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot spend a standard action to resolve overrun block.");
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot spend a standard action to resolve overrun block."));
                             ShowActionChoices();
                             return;
                         }
@@ -307,7 +307,7 @@ public partial class GameManager
                     bool attackerWon = ResolveOverrunOpposedCheck(attacker, enemy);
                     if (!attackerWon)
                     {
-                        CombatUI?.ShowCombatLog($"{enemy.Stats.CharacterName} stops the overrun!");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{enemy.Stats.CharacterName} stops the overrun!"));
                         SquareCell lastSafeCell = Grid.GetCell(lastSafePosition);
                         if (lastSafeCell != null)
                             attacker.MoveToCell(lastSafeCell, markAsMoved: true);
@@ -317,7 +317,7 @@ public partial class GameManager
                         return;
                     }
 
-                    CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} pushes through!");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} pushes through!"));
                     ProcessStep(stepIndex + 1);
                 });
 
@@ -414,7 +414,7 @@ public partial class GameManager
         int defenderAbility = Mathf.Max(defender.Stats.STRMod, defender.Stats.DEXMod);
         int defenderTotal = defenderRoll + defenderAbility + GetOverrunSizeModifier(defender.Stats.CurrentSizeCategory);
 
-        CombatUI?.ShowCombatLog($"Overrun: {attacker.Stats.CharacterName} ({attackerTotal}) vs {defender.Stats.CharacterName} ({defenderTotal})");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"Overrun: {attacker.Stats.CharacterName} ({attackerTotal}) vs {defender.Stats.CharacterName} ({defenderTotal})"));
         return attackerTotal > defenderTotal;
     }
 
@@ -462,7 +462,7 @@ public partial class GameManager
                 bool continueMoving = selectedIndex == 0;
                 if (!continueMoving)
                 {
-                    CombatUI.ShowCombatLog($"↔ {attacker.Stats.CharacterName} holds position after overrun.");
+                    CombatUI.ShowCombatLog(CombatLogHelper.Info("↔", $"{attacker.Stats.CharacterName} holds position after overrun."));
                     StartCoroutine(AfterAttackDelay(attacker, 1.0f));
                     return;
                 }
@@ -500,7 +500,7 @@ public partial class GameManager
         ShowOverrunContinuationOptions(attacker);
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.SetTurnIndicator($"{attacker.Stats.CharacterName} - Overrun continuation: choose a square along the path");
-        CombatUI.ShowCombatLog($"↪ Overrun continuation: choose how far to move straight ahead ({remainingMovement} square(s) remaining).");
+        CombatUI.ShowCombatLog(CombatLogHelper.Info("↪", $"Overrun continuation: choose how far to move straight ahead ({remainingMovement} square(s) remaining)."));
     }
 
     private void ShowOverrunContinuationOptions(CharacterController attacker)
@@ -770,7 +770,7 @@ public partial class GameManager
 
         if (!IsValidOverrunTarget(attacker, target, out string invalidReason, requireAdjacency: true))
         {
-            CombatUI?.ShowCombatLog($"⚠ Overrun aborted: {invalidReason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Overrun aborted: {invalidReason}."));
             ShowActionChoices();
             return;
         }
@@ -786,7 +786,7 @@ public partial class GameManager
             CombatResult aooResult = TriggerAoO(target, attacker);
             if (aooResult != null)
             {
-                CombatUI.ShowCombatLog($"⚔ Overrun AoO: {aooResult.GetDetailedSummary()}");
+                CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"Overrun AoO: {aooResult.GetDetailedSummary()}"));
                 UpdateAllStatsUI();
 
                 if (aooResult.Hit && aooResult.TotalDamage > 0)
@@ -796,7 +796,7 @@ public partial class GameManager
 
         if (attacker.Stats.IsDead)
         {
-            CombatUI.ShowCombatLog($"{attacker.Stats.CharacterName} is dropped before completing the overrun.");
+            CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} is dropped before completing the overrun."));
             Grid.ClearAllHighlights();
             _highlightedCells.Clear();
             _isSelectingSpecialAttack = false;
@@ -813,13 +813,13 @@ public partial class GameManager
         {
             if (!TryResolveOverrunAvoidMovement(attacker, target, out overrunDirection, out movementSpentByOverrun))
             {
-                CombatUI.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no room to avoid and must block the overrun.");
+                CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} has no room to avoid and must block the overrun."));
                 resolvedAsBlock = true;
             }
         }
 
         SpecialAttackResult result = attacker.ResolveOverrunAttempt(target, resolvedAsBlock, provokedAoO);
-        CombatUI.ShowCombatLog($"⚔ SPECIAL [Overrun]: {result.Log}");
+        CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"SPECIAL [Overrun]: {result.Log}"));
 
         if (result.Success && !result.DefenderAvoided)
             TryPushTargetAway(attacker, target, 1, allowAttackerFollow: true);
@@ -888,9 +888,9 @@ public partial class GameManager
             return false;
         }
 
-        CombatUI.ShowCombatLog($"↔ {target.Stats.CharacterName} avoids and sidesteps to ({sidestepCell.Coords.x},{sidestepCell.Coords.y}).");
+        CombatUI.ShowCombatLog(CombatLogHelper.Info("↔", $"{target.Stats.CharacterName} avoids and sidesteps to ({sidestepCell.Coords.x},{sidestepCell.Coords.y})."));
         attacker.MoveToCell(attackerDestination);
-        CombatUI.ShowCombatLog($"➤ {attacker.Stats.CharacterName} moves through into ({originalTargetPos.x},{originalTargetPos.y}).");
+        CombatUI.ShowCombatLog(CombatLogHelper.Info("➤", $"{attacker.Stats.CharacterName} moves through into ({originalTargetPos.x},{originalTargetPos.y})."));
 
         overrunDirection = originalTargetPos - attackerStart;
         overrunDirection.x = Mathf.Clamp(overrunDirection.x, -1, 1);

@@ -77,7 +77,7 @@ public partial class GameManager
         ApplyRandomEncounter(result.EnemyIds, null);
 
         if (CombatUI != null)
-            CombatUI.ShowCombatLog($"⚔ Dungeon encounter: {encounter.Name ?? "unnamed"} ({result.Count} creatures)");
+            CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"Dungeon encounter: {encounter.Name ?? "unnamed"} ({result.Count} creatures)"));
     }
 
     /// <summary>
@@ -124,7 +124,7 @@ public partial class GameManager
         if (CombatUI != null)
         {
             string name = result.Source != null ? result.Source.Name : "unnamed";
-            CombatUI.ShowCombatLog($"⚔ Dungeon encounter: {name} ({result.Count} creatures)");
+            CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"Dungeon encounter: {name} ({result.Count} creatures)"));
         }
     }
 

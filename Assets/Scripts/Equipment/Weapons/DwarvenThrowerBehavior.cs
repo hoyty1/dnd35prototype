@@ -38,14 +38,12 @@ public class DwarvenThrowerBehavior : SpecificItemBehavior
         if (!race.Equals("Dwarf", System.StringComparison.OrdinalIgnoreCase))
         {
             Log($"WARNING: {character.Stats.CharacterName} ({race}) equips Dwarven Thrower — no special abilities for non-dwarves");
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#FF8888>⚠ {character.Stats.CharacterName} is not a dwarf — Dwarven Thrower functions as a normal warhammer.</color>");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚠", $"{character.Stats.CharacterName} is not a dwarf — Dwarven Thrower functions as a normal warhammer."));
         }
         else
         {
             Log($"Equipped by dwarf {character.Stats.CharacterName}");
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#D4AF37>🪓 Dwarven Thrower bonds with {character.Stats.CharacterName}!</color>");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🪓 Dwarven Thrower bonds with {character.Stats.CharacterName}!"));
         }
     }
 

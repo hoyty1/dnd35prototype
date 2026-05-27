@@ -71,7 +71,7 @@ public sealed class CharmedBehaviorController
             yield break;
         }
 
-        gameManager.CombatUI?.ShowCombatLog($"💞 {actor.Stats.CharacterName} is charmed by {caster.Stats.CharacterName} and will not attack them.");
+        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("💞", $"{actor.Stats.CharacterName} is charmed by {caster.Stats.CharacterName} and will not attack them."));
 
         bool casterInjured = caster.Stats.CurrentHP < caster.Stats.TotalMaxHP;
         if (casterInjured)
@@ -90,7 +90,7 @@ public sealed class CharmedBehaviorController
                 {
                     if (gameManager.TryNPCPerformSpellCastForAI(actor, caster, healingSpell))
                     {
-                        gameManager.CombatUI?.ShowCombatLog($"💚 {actor.Stats.CharacterName} uses {healingSpell.Name} to aid {caster.Stats.CharacterName}.");
+                        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Success("💚", $"{actor.Stats.CharacterName} uses {healingSpell.Name} to aid {caster.Stats.CharacterName}."));
                         yield break;
                     }
                 }
@@ -107,7 +107,7 @@ public sealed class CharmedBehaviorController
         CharacterController hostileToCaster = FindNearestEnemyOfCaster(gameManager, actor, caster);
         if (hostileToCaster == null)
         {
-            gameManager.CombatUI?.ShowCombatLog($"💞 {actor.Stats.CharacterName} stays near {caster.Stats.CharacterName}.");
+            gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("💞", $"{actor.Stats.CharacterName} stays near {caster.Stats.CharacterName}."));
             yield return new WaitForSeconds(0.25f);
             yield break;
         }
@@ -190,7 +190,7 @@ public sealed class CharmedBehaviorController
 
             inventory.RemoveItemAt(i);
             actor.Actions.UseStandardAction();
-            gameManager.CombatUI?.ShowCombatLog($"🧪 {actor.Stats.CharacterName} uses {item.Name} to heal {caster.Stats.CharacterName} for {healed} HP.");
+            gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"{actor.Stats.CharacterName} uses {item.Name} to heal {caster.Stats.CharacterName} for {healed} HP."));
             gameManager.Combat_UpdateAllStatsUI();
             return true;
         }

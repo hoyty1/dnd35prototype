@@ -86,7 +86,7 @@ public partial class GameManager
         {
             Debug.LogWarning("[TreasureGen] Could not create TreasureUI. Skipping treasure display.");
             // Log treasure to combat log as fallback
-            CombatUI?.ShowCombatLog($"💰 Treasure found: {result.TotalGPValue:N0} gp (see console for details)");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Special("💰", $"Treasure found: {result.TotalGPValue:N0} gp (see console for details)"));
             onClosed?.Invoke();
             return;
         }
@@ -107,7 +107,7 @@ public partial class GameManager
         }
         else
         {
-            CombatUI?.ShowCombatLog("📭 No treasure was found.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "📭 No treasure was found."));
             onClosed?.Invoke();
         }
     }

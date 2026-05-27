@@ -164,7 +164,7 @@ public class LastKnownPositionTracker : MonoBehaviour
                     {
                         string seeInvisibleOwnerName = _owner.Stats != null ? _owner.Stats.CharacterName : _owner.name;
                         string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-                        gameManager.CombatUI.ShowCombatLog($"👁 {seeInvisibleOwnerName} sees invisible {targetName} clearly (Spot d20({spotRoll})={spotTotal} vs Hide d20({hideRoll})={hideTotal}).");
+                        gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("👁", $"{seeInvisibleOwnerName} sees invisible {targetName} clearly (Spot d20({spotRoll})={spotTotal} vs Hide d20({hideRoll})={hideTotal})."));
                     }
 
                     continue;
@@ -196,13 +196,13 @@ public class LastKnownPositionTracker : MonoBehaviour
         if (gameManager != null && gameManager.CombatUI != null)
         {
             gameManager.CombatUI.ShowCombatLog(string.Empty);
-            gameManager.CombatUI.ShowCombatLog($"{ownerName} makes Listen check to pinpoint concealed enemies");
+            gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Warning("", $"{ownerName} makes Listen check to pinpoint concealed enemies"));
 
             if (validConcealedTargets.Count == 1)
             {
                 CharacterController onlyTarget = validConcealedTargets[0];
                 string onlyTargetName = onlyTarget.Stats != null ? onlyTarget.Stats.CharacterName : onlyTarget.name;
-                gameManager.CombatUI.ShowCombatLog($"  Concealed target: {onlyTargetName}");
+                gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"  Concealed target: {onlyTargetName}"));
             }
             else
             {
@@ -213,10 +213,10 @@ public class LastKnownPositionTracker : MonoBehaviour
                     targetNames.Add(target.Stats != null ? target.Stats.CharacterName : target.name);
                 }
 
-                gameManager.CombatUI.ShowCombatLog($"  Concealed targets: {string.Join(", ", targetNames)}");
+                gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"  Concealed targets: {string.Join(", ", targetNames)}"));
             }
 
-            gameManager.CombatUI.ShowCombatLog($"  Listen: d20({d20Roll}) + {listenBonus} = {listenTotal} vs DC {listenDC}");
+            gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"  Listen: d20({d20Roll}) + {listenBonus} = {listenTotal} vs DC {listenDC}"));
         }
 
         if (success)
@@ -230,21 +230,21 @@ public class LastKnownPositionTracker : MonoBehaviour
 
             if (gameManager != null && gameManager.CombatUI != null)
             {
-                gameManager.CombatUI.ShowCombatLog("  ✓ SUCCESS - All targets pinpointed!");
+                gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", "  ✓ SUCCESS - All targets pinpointed!"));
                 for (int i = 0; i < validConcealedTargets.Count; i++)
                 {
                     CharacterController target = validConcealedTargets[i];
                     string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-                    gameManager.CombatUI.ShowCombatLog($"    • {targetName} location pinpointed");
+                    gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"    • {targetName} location pinpointed"));
                 }
 
-                gameManager.CombatUI.ShowCombatLog("  Can attack current positions (still 50% concealment)");
+                gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", "  Can attack current positions (still 50% concealment)"));
             }
         }
         else if (gameManager != null && gameManager.CombatUI != null)
         {
-            gameManager.CombatUI.ShowCombatLog("  ✗ FAILURE - Cannot locate any targets");
-            gameManager.CombatUI.ShowCombatLog("  Must attack last known positions");
+            gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", "  ✗ FAILURE - Cannot locate any targets"));
+            gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", "  Must attack last known positions"));
         }
 
         if (gameManager != null && gameManager.CombatUI != null)

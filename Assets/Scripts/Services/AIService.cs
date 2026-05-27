@@ -57,7 +57,7 @@ public class AIService : MonoBehaviour
         string turnIcon = isSummon ? "✶" : "💀";
 
         _gameManager.CombatUI.SetTurnIndicator($"{_gameManager.GetSummonDisplayName(npc)}'s turn...");
-        _gameManager.CombatUI.ShowCombatLog($"<color={turnColor}>{turnIcon} {_gameManager.GetSummonDisplayName(npc)}'s turn begins</color>");
+        _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Summon("", $"<color={turnColor}>{turnIcon} {_gameManager.GetSummonDisplayName(npc)}'s turn begins</color>"));
         yield return new WaitForSeconds(0.6f);
 
         // ── Death/disable check after turn-start effects ──
@@ -66,7 +66,7 @@ public class AIService : MonoBehaviour
         if (npc.Stats.CurrentHP <= 0)
         {
             Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} is dead/disabled (HP={npc.Stats.CurrentHP}) after turn-start effects — turn ended immediately");
-            _gameManager.CombatUI?.ShowCombatLog($"💀 {npc.Stats.CharacterName} is dead/disabled and cannot act.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{npc.Stats.CharacterName} is dead/disabled and cannot act."));
             yield break;
         }
 
@@ -78,7 +78,7 @@ public class AIService : MonoBehaviour
                 yield break;
             }
 
-            _gameManager.CombatUI?.ShowCombatLog($"🌀 {npc.Stats.CharacterName} is confused but acts normally.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{npc.Stats.CharacterName} is confused but acts normally."));
         }
 
         if (_gameManager.TryGetCharmedTurnDecisionForAI(npc, out CharmedBehaviorController.CharmedTurnDecision charmedDecision))
@@ -93,11 +93,11 @@ public class AIService : MonoBehaviour
             if (source == null || source.Stats == null || source.Stats.IsDead)
             {
                 _gameManager.RemoveCondition(npc, CombatConditionType.Fascinated);
-                _gameManager.CombatUI?.ShowCombatLog($"👁 {npc.Stats.CharacterName} is no longer fascinated.");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("👁", $"{npc.Stats.CharacterName} is no longer fascinated."));
             }
             else
             {
-                _gameManager.CombatUI?.ShowCombatLog($"👁 {npc.Stats.CharacterName} stares blankly at {source.Stats.CharacterName} and takes no actions.");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("👁", $"{npc.Stats.CharacterName} stares blankly at {source.Stats.CharacterName} and takes no actions."));
             }
 
             yield return new WaitForSeconds(0.25f);
@@ -123,11 +123,11 @@ public class AIService : MonoBehaviour
             if (targetPC == null)
             {
                 string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
-                _gameManager.CombatUI?.ShowCombatLog($"{npcName} cannot find a target and keeps searching the battlefield.");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npcName} cannot find a target and keeps searching the battlefield."));
                 yield break;
             }
 
-            _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} spots {targetPC.Stats.CharacterName} after searching.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} spots {targetPC.Stats.CharacterName} after searching."));
         }
 
         if (npc.HasCondition(CombatConditionType.Turned) && _gameManager.IsUndeadCharacterForAI(npc))
@@ -146,8 +146,7 @@ public class AIService : MonoBehaviour
         // cannot pass the boundary (PHB p.263). The sphere is now a stationary area effect.
         if (ResilientSphereAreaEffect.IsCharacterInAnySphere(npc))
         {
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"<color=#44CCFF>🔮 {npc.Stats.CharacterName} is enclosed in a Resilient Sphere — attacks and spells cannot pass through the boundary!</color>");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("🔮", $"{npc.Stats.CharacterName} is enclosed in a Resilient Sphere — attacks and spells cannot pass through the boundary!"));
             // NPC skips offensive actions but could still move within sphere
             yield return new WaitForSeconds(0.5f);
             yield break;
@@ -277,18 +276,18 @@ public class AIService : MonoBehaviour
             yield break;
 
         string npcName = npc.Stats.CharacterName;
-        _gameManager.CombatUI?.ShowCombatLog($"{npcName} has no valid targets and starts searching.");
+        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npcName} has no valid targets and starts searching."));
 
         if (!npc.Actions.HasMoveAction || npc.Stats.MovementBlockedByCondition)
         {
-            _gameManager.CombatUI?.ShowCombatLog($"{npcName} cannot move to search this turn.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npcName} cannot move to search this turn."));
             yield break;
         }
 
         Vector2Int searchDestination;
         if (!TryFindSearchDestination(npc, out searchDestination) || searchDestination == npc.GridPosition)
         {
-            _gameManager.CombatUI?.ShowCombatLog($"{npcName} scans the area but finds no better position.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npcName} scans the area but finds no better position."));
             yield break;
         }
 
@@ -300,7 +299,7 @@ public class AIService : MonoBehaviour
         if (npc.Actions.HasMoveAction)
             npc.Actions.UseMoveAction();
 
-        _gameManager.CombatUI?.ShowCombatLog($"{npcName} moves to search for enemies.");
+        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npcName} moves to search for enemies."));
         yield return new WaitForSeconds(0.35f);
     }
 
@@ -438,13 +437,13 @@ public class AIService : MonoBehaviour
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
                 npc.Actions.UseMoveAction();
-                _gameManager.CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} flees from divine turning!");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} flees from divine turning!"));
                 yield return new WaitForSeconds(0.45f);
                 yield break;
             }
         }
 
-        _gameManager.CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} is turned and cowers, unable to attack.");
+        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} is turned and cowers, unable to attack."));
         yield return new WaitForSeconds(0.35f);
     }
 
@@ -486,7 +485,7 @@ public class AIService : MonoBehaviour
                 }
 
                 npc.Actions.UseMoveAction();
-                _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!");
+                _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
                 yield return new WaitForSeconds(0.5f);
             }
         }
@@ -586,7 +585,7 @@ public class AIService : MonoBehaviour
                             yield return _gameManager.StartCoroutine(
                                 _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
                             npc.Actions.UseMoveAction();
-                            _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} repositions after breath weapon.");
+                            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} repositions after breath weapon."));
                             yield return new WaitForSeconds(0.3f);
                         }
                     }
@@ -621,7 +620,7 @@ public class AIService : MonoBehaviour
                 }
 
                 npc.Actions.UseMoveAction();
-                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
                 yield return new WaitForSeconds(0.5f);
             }
         }
@@ -683,9 +682,9 @@ public class AIService : MonoBehaviour
 
             Vector2Int? lastKnown = tracker.GetLastKnownPosition(closestPC);
             if (tracker.IsPinpointedThisRound(closestPC))
-                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} pinpoints {closestPC.Stats.CharacterName} by sound and attacks their current position.");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} pinpoints {closestPC.Stats.CharacterName} by sound and attacks their current position."));
             else if (lastKnown.HasValue)
-                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} cannot see {closestPC.Stats.CharacterName} clearly and fires at the last known position.");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npc.Stats.CharacterName} cannot see {closestPC.Stats.CharacterName} clearly and fires at the last known position."));
 
             if (tracker.IsPinpointedThisRound(closestPC) || lastKnown.HasValue)
             {
@@ -702,7 +701,7 @@ public class AIService : MonoBehaviour
                     yield return _gameManager.StartCoroutine(
                         _gameManager.MoveCharacterAlongComputedPathForAI(npc, blindSearchCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
                     npc.Actions.UseMoveAction();
-                    _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} advances, trying to reacquire line of sight through concealment.");
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances, trying to reacquire line of sight through concealment."));
                     yield return new WaitForSeconds(0.4f);
                 }
             }
@@ -731,8 +730,7 @@ public class AIService : MonoBehaviour
                 {
                     tookTacticalStep = true;
                     riskIsTooHigh = false;
-                    _gameManager.CombatUI?.ShowCombatLog(
-                        $"{npc.Stats.CharacterName} takes a tactical 5-foot step to avoid incoming attacks before firing.");
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Damage("", $"{npc.Stats.CharacterName} takes a tactical 5-foot step to avoid incoming attacks before firing."));
                     Debug.Log($"[AI][RangedAoO] {npc.Stats.CharacterName} 5-foot steps to {stepDestination} (expected={riskAssessment.ExpectedDamage:F1}, tolerance={riskAssessment.RiskTolerance:F1})");
                     yield return new WaitForSeconds(0.35f);
                 }
@@ -766,9 +764,9 @@ public class AIService : MonoBehaviour
                 npc.Actions.UseMoveAction();
 
                 if (shouldRetreatForRisk)
-                    _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} repositions to avoid provoking attacks of opportunity.");
+                    _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} repositions to avoid provoking attacks of opportunity."));
                 else
-                    _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} retreats to maintain distance!");
+                    _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} retreats to maintain distance!"));
 
                 yield return new WaitForSeconds(0.5f);
             }
@@ -814,7 +812,7 @@ public class AIService : MonoBehaviour
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, approachCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
                 npc.Actions.UseMoveAction();
-                _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} moves to get a better shot.");
+                _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} moves to get a better shot."));
                 yield return new WaitForSeconds(0.5f);
             }
         }
@@ -995,7 +993,7 @@ public class AIService : MonoBehaviour
                     yield break;
                 }
 
-                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} withdraws from {target.Stats.CharacterName}.");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} withdraws from {target.Stats.CharacterName}."));
                 yield return new WaitForSeconds(0.45f);
                 yield break;
             }
@@ -1017,7 +1015,7 @@ public class AIService : MonoBehaviour
                 }
 
                 npc.Actions.UseMoveAction();
-                _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances methodically toward {target.Stats.CharacterName}.");
+                _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances methodically toward {target.Stats.CharacterName}."));
                 yield return new WaitForSeconds(0.5f);
             }
         }
@@ -1058,12 +1056,12 @@ public class AIService : MonoBehaviour
 
         if (target == null)
         {
-            _gameManager.CombatUI?.ShowCombatLog($"{swarm.Stats.CharacterName} finds no living creatures to swarm.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{swarm.Stats.CharacterName} finds no living creatures to swarm."));
             yield return new WaitForSeconds(0.3f);
             yield break;
         }
 
-        _gameManager.CombatUI?.ShowCombatLog($"{swarm.Stats.CharacterName} scans for nearest creature: {target.Stats.CharacterName}.");
+        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{swarm.Stats.CharacterName} scans for nearest creature: {target.Stats.CharacterName}."));
 
         // Indiscriminate swarms (Summon Swarm) attack nearest creature regardless of team
         if (indiscriminate && target.Team == swarm.Team)
@@ -1104,11 +1102,11 @@ public class AIService : MonoBehaviour
 
         if (swarm.IsTargetInCurrentWeaponRange(target))
         {
-            _gameManager.CombatUI?.ShowCombatLog($"{swarm.Stats.CharacterName} occupies {target.Stats.CharacterName}'s space and continues swarming.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{swarm.Stats.CharacterName} occupies {target.Stats.CharacterName}'s space and continues swarming."));
         }
         else
         {
-            _gameManager.CombatUI?.ShowCombatLog($"{swarm.Stats.CharacterName} shuffles toward {target.Stats.CharacterName}.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{swarm.Stats.CharacterName} shuffles toward {target.Stats.CharacterName}."));
         }
 
         yield return new WaitForSeconds(0.3f);
@@ -1159,8 +1157,7 @@ public class AIService : MonoBehaviour
                 continue;
 
             string dmgTypeStr = traits.SwarmDamageType.ToString();
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"<color=#FF6644>🐝 {swarm.Stats.CharacterName} swarm damage: {damage} {dmgTypeStr} damage to {victim.Stats.CharacterName}! (no attack roll)</color>");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("", $"🐝 {swarm.Stats.CharacterName} swarm damage: {damage} {dmgTypeStr} damage to {victim.Stats.CharacterName}! (no attack roll)"));
 
             victim.Stats.TakeDamage(damage);
             yield return new WaitForSeconds(0.25f);
@@ -1168,8 +1165,7 @@ public class AIService : MonoBehaviour
             // Check if victim died from swarm damage
             if (victim.Stats.IsDead)
             {
-                _gameManager.CombatUI?.ShowCombatLog(
-                    $"💀 {victim.Stats.CharacterName} is killed by the swarm!");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{victim.Stats.CharacterName} is killed by the swarm!"));
                 victim.OnDeath();
                 continue;
             }
@@ -1182,13 +1178,11 @@ public class AIService : MonoBehaviour
 
                 if (saveResult.Succeeded)
                 {
-                    _gameManager.CombatUI?.ShowCombatLog(
-                        $"💪 {victim.Stats.CharacterName} resists distraction (Fort {saveResult.Total} vs DC {traits.DistractionDC}).");
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Success("💪", $"{victim.Stats.CharacterName} resists distraction (Fort {saveResult.Total} vs DC {traits.DistractionDC})."));
                 }
                 else
                 {
-                    _gameManager.CombatUI?.ShowCombatLog(
-                        $"<color=#FFAA00>🤢 {victim.Stats.CharacterName} fails distraction save (Fort {saveResult.Total} vs DC {traits.DistractionDC}) — nauseated for 1 round!</color>");
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🤢 {victim.Stats.CharacterName} fails distraction save (Fort {saveResult.Total} vs DC {traits.DistractionDC}) — nauseated for 1 round!"));
                     victim.ApplyNauseatedCondition(1, $"{swarm.Stats.CharacterName} Distraction");
                 }
                 yield return new WaitForSeconds(0.2f);
@@ -1197,8 +1191,7 @@ public class AIService : MonoBehaviour
             // ── Poison rider (if applicable) ──
             if (traits.HasPoison && !string.IsNullOrEmpty(traits.PoisonId))
             {
-                _gameManager.CombatUI?.ShowCombatLog(
-                    $"☠ {victim.Stats.CharacterName} is exposed to {swarm.Stats.CharacterName}'s poison!");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("☠", $"{victim.Stats.CharacterName} is exposed to {swarm.Stats.CharacterName}'s poison!"));
                 // Poison application handled by existing poison system if available
             }
         }
@@ -1518,15 +1511,13 @@ public class AIService : MonoBehaviour
 
         if (saveResult.Succeeded)
         {
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"🛡️ {npcName} overcomes {candName}'s Sanctuary (Will {saveResult.Total} vs DC {dc}).");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"️ {npcName} overcomes {candName}'s Sanctuary (Will {saveResult.Total} vs DC {dc})."));
             Debug.Log($"[AI][Sanctuary] {npcName} passed Will save {saveResult.Total} vs DC {dc} — can target {candName}");
             return false; // can target
         }
         else
         {
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"🛡️ {npcName} is unable to attack {candName} — Sanctuary! (Will {saveResult.Total} vs DC {dc})");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"️ {npcName} is unable to attack {candName} — Sanctuary! (Will {saveResult.Total} vs DC {dc})"));
             Debug.Log($"[AI][Sanctuary] {npcName} failed Will save {saveResult.Total} vs DC {dc} — cannot target {candName}");
             return true; // excluded
         }
@@ -1555,8 +1546,7 @@ public class AIService : MonoBehaviour
         // Mindless undead: automatically hidden from, no save
         if (npc.Stats != null && npc.Stats.IsMindless)
         {
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"👻 {npcName} cannot perceive {candName} — Hidden from Undead! (mindless, no save)");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"👻 {npcName} cannot perceive {candName} — Hidden from Undead! (mindless, no save)"));
             Debug.Log($"[AI][HideFromUndead] Mindless undead {npcName} auto-excluded from targeting {candName}");
             return true;
         }
@@ -1567,21 +1557,18 @@ public class AIService : MonoBehaviour
 
         if (saveResult.Succeeded)
         {
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"👻 {npcName} sees through {candName}'s ward! (Will {saveResult.Total} vs DC {dc})");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"👻 {npcName} sees through {candName}'s ward! (Will {saveResult.Total} vs DC {dc})"));
             Debug.Log($"[AI][HideFromUndead] Intelligent undead {npcName} passed Will {saveResult.Total} vs DC {dc}");
             // Spell breaks for this target when the undead sees through
             candidate.Stats.HideFromUndeadActive = false;
             var statusMgr = candidate.StatusEffectManager;
             statusMgr?.RemoveEffectsBySpellId(SpellNames.HIDE_FROM_UNDEAD);
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"👻 Hide from Undead on {candName} is broken — {npcName} perceived them!");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("", $"👻 Hide from Undead on {candName} is broken — {npcName} perceived them!"));
             return false;
         }
         else
         {
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"👻 {npcName} cannot perceive {candName} — Hidden from Undead! (Will {saveResult.Total} vs DC {dc})");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"👻 {npcName} cannot perceive {candName} — Hidden from Undead! (Will {saveResult.Total} vs DC {dc})"));
             Debug.Log($"[AI][HideFromUndead] Intelligent undead {npcName} failed Will {saveResult.Total} vs DC {dc}");
             return true;
         }
@@ -2544,8 +2531,7 @@ public class AIService : MonoBehaviour
             if (npc.ReadiedCounterspell != null)
                 npc.ReadiedCounterspell.PreferDispelMagic = !hasDispelMagic ? false : (spellcraftBonus < 5);
 
-            _gameManager.CombatUI?.ShowCombatLog(
-                $"<color=#FFD700>⚡ {npc.Stats.CharacterName} readies a counterspell against {bestTarget.Stats.CharacterName}!</color>");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Special("⚡", $"{npc.Stats.CharacterName} readies a counterspell against {bestTarget.Stats.CharacterName}!"));
         }
 
         return readied;

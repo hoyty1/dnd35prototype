@@ -37,7 +37,7 @@ public partial class GameManager
 
         if (!CanUseMainHandDisarmAttackOption(attacker))
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Disarm: no main-hand disarm attacks remaining.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Disarm: no main-hand disarm attacks remaining."));
             ShowActionChoices();
             return;
         }
@@ -77,7 +77,7 @@ public partial class GameManager
 
         if (!CanUseMainHandSunderAttackOption(attacker))
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Sunder: no main-hand sunder attacks remaining.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Sunder: no main-hand sunder attacks remaining."));
             ShowActionChoices();
             return;
         }
@@ -752,7 +752,7 @@ public partial class GameManager
         {
             string targetName = target.Stats != null ? target.Stats.CharacterName : "Target";
             Debug.Log($"[Disarm][Flow] Invalid target selected: {targetName} has no disarmable weapon equipped.");
-            CombatUI?.ShowCombatLog($"{targetName} has no weapon to disarm!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{targetName} has no weapon to disarm!"));
 
             // Do not consume any attack action; allow selecting another target.
             ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
@@ -793,7 +793,7 @@ public partial class GameManager
                 bool slotStillValid = latestOptions.Exists(o => o.HandSlot == selectedSlot);
                 if (!slotStillValid)
                 {
-                    CombatUI.ShowCombatLog($"⚠ {target.Stats.CharacterName}'s selected held item is no longer equipped.");
+                    CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName}'s selected held item is no longer equipped."));
                     ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
                     return;
                 }
@@ -822,7 +822,7 @@ public partial class GameManager
         {
             string targetName = target.Stats != null ? target.Stats.CharacterName : "Target";
             Debug.Log($"[Sunder][Flow] Invalid target selected: {targetName} has no sunderable item equipped.");
-            CombatUI?.ShowCombatLog($"{targetName} has no item to sunder!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{targetName} has no item to sunder!"));
 
             // Do not consume any attack action; allow selecting another target.
             ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
@@ -859,7 +859,7 @@ public partial class GameManager
                 bool slotStillValid = latestOptions.Exists(o => o.Slot == selectedSlot);
                 if (!slotStillValid)
                 {
-                    CombatUI.ShowCombatLog($"⚠ {target.Stats.CharacterName}'s selected item is no longer equipped.");
+                    CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName}'s selected item is no longer equipped."));
                     ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
                     return;
                 }
@@ -941,8 +941,8 @@ public partial class GameManager
         int difference = Mathf.Max(0, bullRushResult.CheckTotal - bullRushResult.OpposedTotal);
         int maxExtraSquares = difference / 5;
 
-        CombatUI?.ShowCombatLog($"Result: {attacker.Stats.CharacterName} wins ({bullRushResult.CheckTotal} vs {bullRushResult.OpposedTotal})");
-        CombatUI?.ShowCombatLog($"Difference: {difference}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"Result: {attacker.Stats.CharacterName} wins ({bullRushResult.CheckTotal} vs {bullRushResult.OpposedTotal})"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"Difference: {difference}"));
 
         void ExecuteSelectedExtraDistance(int chosenExtraSquares)
         {
@@ -951,9 +951,9 @@ public partial class GameManager
             Debug.Log($"[GameManager][BullRushExtraPush] ExecuteSelectedExtraDistance chosen={chosenExtraSquares}, clamped={clampedExtra}, totalSquares={totalSquares}, maxExtraSquares={maxExtraSquares}, frame={Time.frameCount}");
 
             if (clampedExtra <= 0)
-                CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} chooses to push 1 square (base only)");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} chooses to push 1 square (base only)"));
             else
-                CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} chooses to push {clampedExtra} extra square{(clampedExtra == 1 ? string.Empty : "s")} ({totalSquares} total)");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} chooses to push {clampedExtra} extra square{(clampedExtra == 1 ? string.Empty : "s")} ({totalSquares} total)"));
 
             BullRushPushResolution pushResolution = ExecuteBullRushPush(attacker, target, totalSquares);
             UpdateAllStatsUI();
@@ -971,7 +971,7 @@ public partial class GameManager
                     if (shouldFollow)
                         ExecuteBullRushFollow(attacker, pushResolution);
                     else
-                        CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} chooses not to follow.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} chooses not to follow."));
 
                     UpdateAllStatsUI();
                     onComplete?.Invoke();
@@ -987,7 +987,7 @@ public partial class GameManager
 
         if (maxExtraSquares > 0)
         {
-            CombatUI?.ShowCombatLog($"Can push 0 to {maxExtraSquares} extra squares (base 1 + extra)");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"Can push 0 to {maxExtraSquares} extra squares (base 1 + extra)"));
 
             if (attacker.IsControllable && CombatUI != null)
             {
@@ -1013,7 +1013,7 @@ public partial class GameManager
         }
         else
         {
-            CombatUI?.ShowCombatLog("Push 1 square (5 feet) - no extra available");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Push 1 square (5 feet) - no extra available"));
             ExecuteSelectedExtraDistance(0);
         }
     }
@@ -1061,14 +1061,14 @@ public partial class GameManager
 
         if (resolution.ActualSquares <= 0)
         {
-            CombatUI?.ShowCombatLog($"{target.Stats.CharacterName} cannot be pushed; path is blocked.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{target.Stats.CharacterName} cannot be pushed; path is blocked."));
             return resolution;
         }
 
         SquareCell destinationCell = Grid.GetCell(destination);
         if (destinationCell == null)
         {
-            CombatUI?.ShowCombatLog($"{target.Stats.CharacterName} cannot be pushed; no valid destination.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{target.Stats.CharacterName} cannot be pushed; no valid destination."));
             resolution.ActualSquares = 0;
             resolution.FinalTargetPosition = resolution.OriginalTargetPosition;
             return resolution;
@@ -1076,10 +1076,10 @@ public partial class GameManager
 
         target.MoveToCell(destinationCell);
         int feet = resolution.ActualSquares * 5;
-        CombatUI?.ShowCombatLog($"↗ {target.Stats.CharacterName} is pushed back {resolution.ActualSquares} square{(resolution.ActualSquares == 1 ? string.Empty : "s")} ({feet} feet).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↗", $"{target.Stats.CharacterName} is pushed back {resolution.ActualSquares} square{(resolution.ActualSquares == 1 ? string.Empty : "s")} ({feet} feet)."));
 
         if (resolution.Obstructed && resolution.ActualSquares < resolution.RequestedSquares)
-            CombatUI?.ShowCombatLog($"⚠ Obstacle reached: push stops after {resolution.ActualSquares} square{(resolution.ActualSquares == 1 ? string.Empty : "s")}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Obstacle reached: push stops after {resolution.ActualSquares} square{(resolution.ActualSquares == 1 ? string.Empty : "s")}."));
 
         return resolution;
     }
@@ -1105,7 +1105,7 @@ public partial class GameManager
 
         if (movedSquares <= 0)
         {
-            CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} cannot follow due to blocked path.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} cannot follow due to blocked path."));
             return;
         }
 
@@ -1114,6 +1114,6 @@ public partial class GameManager
             return;
 
         attacker.MoveToCell(followDestination);
-        CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} follows {movedSquares} square{(movedSquares == 1 ? string.Empty : "s")}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} follows {movedSquares} square{(movedSquares == 1 ? string.Empty : "s")}."));
     }
 }

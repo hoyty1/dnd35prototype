@@ -320,7 +320,7 @@ public partial class GameManager
             if (turnedCondition == null)
                 continue;
 
-            CombatUI?.ShowCombatLog($"[Turn Undead] {undead.Stats.CharacterName} continues fleeing ({Mathf.Max(0, turnedCondition.RemainingRounds)} rounds remaining)");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("", $"[Turn Undead] {undead.Stats.CharacterName} continues fleeing ({Mathf.Max(0, turnedCondition.RemainingRounds)} rounds remaining)"));
         }
     }
 
@@ -458,7 +458,7 @@ public partial class GameManager
 
         if (!CanUseTurnUndead(cleric, out string reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Turn Undead: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Turn Undead: {reason}."));
             ShowActionChoices();
             return;
         }
@@ -466,7 +466,7 @@ public partial class GameManager
         int effectiveTurnLevel = GetTurnUndeadEffectiveLevel(cleric);
         if (effectiveTurnLevel <= 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Turn Undead: insufficient effective turning level.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Turn Undead: insufficient effective turning level."));
             ShowActionChoices();
             return;
         }
@@ -522,8 +522,8 @@ public partial class GameManager
             context.AttemptsUsedAfterResolution = cleric.Stats.TurnUndeadAttemptsUsedToday;
             context.AttemptsRemainingAfterResolution = attemptsRemaining;
             LogTurnUndeadHeader(context);
-            CombatUI?.ShowCombatLog("   No undead are within 60 ft to be affected.");
-            CombatUI?.ShowCombatLog($"   Remaining Turn Undead attempts today: {attemptsRemaining}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   No undead are within 60 ft to be affected."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Remaining Turn Undead attempts today: {attemptsRemaining}"));
 
             UpdateAllStatsUI();
             StartCoroutine(AfterAttackDelay(cleric, 0.8f));
@@ -538,7 +538,7 @@ public partial class GameManager
 
             int undeadHd = Mathf.Max(1, undead.Stats.Level);
             if (undeadHd > maxAffectedHd)
-                CombatUI?.ShowCombatLog($"   {undead.Stats.CharacterName} ({undeadHd} HD) is too powerful to be turned.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {undead.Stats.CharacterName} ({undeadHd} HD) is too powerful to be turned."));
         }
 
         if (totalValidHd > turnPoolHd)
@@ -553,7 +553,7 @@ public partial class GameManager
         context.AttemptsUsedAfterResolution = cleric.Stats.TurnUndeadAttemptsUsedToday;
         context.AttemptsRemainingAfterResolution = autoAttemptsRemaining;
         LogTurnUndeadHeader(context);
-        CombatUI?.ShowCombatLog("   Affecting all valid undead automatically.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Affecting all valid undead automatically."));
         ResolveTurnUndeadOnTargets(context, validTargets);
     }
 
@@ -566,14 +566,14 @@ public partial class GameManager
 
         if (!CanUseTurnUndead(cleric, out string reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Turn Undead: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Turn Undead: {reason}."));
             ShowActionChoices();
             return false;
         }
 
         if (!cleric.CommitStandardAction())
         {
-            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Turn Undead: standard action unavailable.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{cleric.Stats.CharacterName} cannot use Turn Undead: standard action unavailable."));
             ShowActionChoices();
             return false;
         }
@@ -588,9 +588,9 @@ public partial class GameManager
         if (context == null || context.Turner == null || context.Turner.Stats == null)
             return;
 
-        CombatUI?.ShowCombatLog($"✝️ {context.Turner.Stats.CharacterName} invokes Turn Undead! (Attempt {context.AttemptsUsedAfterResolution}/{context.Turner.Stats.MaxTurnUndeadAttemptsPerDay})");
-        CombatUI?.ShowCombatLog($"   Turning Check: d20 ({context.CheckRoll}) + CHA {CharacterStats.FormatMod(context.Turner.Stats.CHAMod)} = {context.CheckTotal} → affects undead up to {context.MaxAffectedHd} HD");
-        CombatUI?.ShowCombatLog($"   Turning Damage: 2d6 ({context.TurnDamageRoll}) + turning level {context.EffectiveTurnLevel} + CHA {CharacterStats.FormatMod(context.Turner.Stats.CHAMod)} = {context.TurnPoolHd} total HD");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Death("✝", $"️ {context.Turner.Stats.CharacterName} invokes Turn Undead! (Attempt {context.AttemptsUsedAfterResolution}/{context.Turner.Stats.MaxTurnUndeadAttemptsPerDay})"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Turning Check: d20 ({context.CheckRoll}) + CHA {CharacterStats.FormatMod(context.Turner.Stats.CHAMod)} = {context.CheckTotal} → affects undead up to {context.MaxAffectedHd} HD"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Turning Damage: 2d6 ({context.TurnDamageRoll}) + turning level {context.EffectiveTurnLevel} + CHA {CharacterStats.FormatMod(context.Turner.Stats.CHAMod)} = {context.TurnPoolHd} total HD"));
     }
 
     private void ShowTurnUndeadTargetSelectionMenu(TurnUndeadSelectionContext context)
@@ -614,7 +614,7 @@ public partial class GameManager
 
         if (canvas == null)
         {
-            CombatUI?.ShowCombatLog("⚠ Turn Undead target selection UI failed to open. Auto-resolving by HD priority.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Turn Undead target selection UI failed to open. Auto-resolving by HD priority."));
 
             if (!TryConsumeTurnUndeadResources(context.Turner, out int fallbackAttemptsRemaining))
                 return;
@@ -629,7 +629,7 @@ public partial class GameManager
         _activeTurnUndeadSelectionPanel = TurnUndeadTargetSelectionPanel.Create(canvas);
         if (_activeTurnUndeadSelectionPanel == null)
         {
-            CombatUI?.ShowCombatLog("⚠ Turn Undead target selection UI failed to open. Auto-resolving by HD priority.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Turn Undead target selection UI failed to open. Auto-resolving by HD priority."));
 
             if (!TryConsumeTurnUndeadResources(context.Turner, out int fallbackAttemptsRemaining))
                 return;
@@ -666,7 +666,7 @@ public partial class GameManager
         }
 
         CombatUI?.SetActionButtonsVisible(false);
-        CombatUI?.ShowCombatLog("   Turning power is insufficient for all valid targets. Select which undead to affect.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Turning power is insufficient for all valid targets. Select which undead to affect."));
         CombatUI?.SetTurnIndicator("TURN UNDEAD: Select targets by HD pool, then Confirm or Cancel.");
     }
 
@@ -683,9 +683,7 @@ public partial class GameManager
         if (selected && IsTurnedUndead(target))
         {
             int roundsLeft = GetTurnedRoundsRemaining(target);
-            CombatUI?.ShowCombatLog(
-                $"   [Turn Undead] Note: {target.Stats.CharacterName} is already turned ({roundsLeft} rounds left). " +
-                "Selecting this target will refresh the timer to 10 rounds.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   [Turn Undead] Note: {target.Stats.CharacterName} is already turned ({roundsLeft} rounds left). Selecting this target will refresh the timer to 10 rounds."));
         }
     }
 
@@ -696,7 +694,7 @@ public partial class GameManager
 
         if (selectedTargets == null || selectedTargets.Count == 0)
         {
-            CombatUI?.ShowCombatLog("⚠ [Turn Undead] No targets selected.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "[Turn Undead] No targets selected."));
             return;
         }
 
@@ -712,7 +710,7 @@ public partial class GameManager
         _activeTurnUndeadSelectionContext.AttemptsRemainingAfterResolution = attemptsRemaining;
 
         LogTurnUndeadHeader(_activeTurnUndeadSelectionContext);
-        CombatUI?.ShowCombatLog($"   Manual selection confirmed: {selectedTargets.Count} target(s), {spentHd} HD spent, {remainingHd} HD unspent.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Manual selection confirmed: {selectedTargets.Count} target(s), {spentHd} HD spent, {remainingHd} HD unspent."));
 
         CloseTurnUndeadSelectionPanel(clearHighlights: true);
 
@@ -746,7 +744,7 @@ public partial class GameManager
         CloseTurnUndeadSelectionPanel(clearHighlights: true);
         _activeTurnUndeadSelectionContext = null;
 
-        CombatUI?.ShowCombatLog("↩ [Turn Undead] Target selection cancelled. Turn attempt was not consumed.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "[Turn Undead] Target selection cancelled. Turn attempt was not consumed."));
         ShowActionChoices();
     }
 
@@ -848,7 +846,7 @@ public partial class GameManager
                     HandleSummonDeathCleanup(option.Target);
                     destroyedCount++;
                     string destroySource = greaterTurning && !option.CanDestroy ? "Greater Turning" : "holy power";
-                    CombatUI?.ShowCombatLog($"   💥 {option.Target.Stats.CharacterName} is destroyed by {destroySource}! ({option.HitDice} HD)");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   💥 {option.Target.Stats.CharacterName} is destroyed by {destroySource}! ({option.HitDice} HD)"));
                 }
                 else
                 {
@@ -859,13 +857,13 @@ public partial class GameManager
 
                     RegisterTurnUndeadTracker(option.Target, context.Turner);
                     turnedCount++;
-                    CombatUI?.ShowCombatLog($"   ↩ {option.Target.Stats.CharacterName} is turned for 10 rounds and flees! ({option.HitDice} HD)");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   ↩ {option.Target.Stats.CharacterName} is turned for 10 rounds and flees! ({option.HitDice} HD)"));
                 }
             }
         }
 
         if (turnedCount == 0 && destroyedCount == 0)
-            CombatUI?.ShowCombatLog("   The divine surge fails to overcome any undead this turn.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   The divine surge fails to overcome any undead this turn."));
 
         // Consume Greater Turning flag after resolution
         if (context.Turner != null && context.Turner.Stats != null && context.Turner.Stats.GreaterTurningActive)
@@ -873,8 +871,8 @@ public partial class GameManager
             context.Turner.Stats.GreaterTurningActive = false;
         }
 
-        CombatUI?.ShowCombatLog($"   Results: {destroyedCount} destroyed, {turnedCount} turned, {hdRemaining} HD turning power unspent.");
-        CombatUI?.ShowCombatLog($"   Remaining Turn Undead attempts today: {context.AttemptsRemainingAfterResolution}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Results: {destroyedCount} destroyed, {turnedCount} turned, {hdRemaining} HD turning power unspent."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Remaining Turn Undead attempts today: {context.AttemptsRemainingAfterResolution}"));
 
         UpdateAllStatsUI();
 
@@ -899,7 +897,7 @@ public partial class GameManager
 
         if (!CanUseTurnUndead(pc, out string reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use Turn Undead: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use Turn Undead: {reason}."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -1001,7 +999,7 @@ public partial class GameManager
 
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
-        CombatUI?.ShowCombatLog("↩ Turn Undead cancelled.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Turn Undead cancelled."));
         ShowActionChoices();
     }
 }

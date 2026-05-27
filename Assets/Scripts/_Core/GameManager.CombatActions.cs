@@ -363,7 +363,7 @@ public partial class GameManager
 
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
         ShowAttackTargets(attacker);
-        CombatUI?.ShowCombatLog($"🎯 Select a new {modeLabel} target for {remainingAttacks} remaining attack(s), or right-click/ESC to cancel.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"Select a new {modeLabel} target for {remainingAttacks} remaining attack(s), or right-click/ESC to cancel."));
         CombatUI?.SetTurnIndicator($"TARGET SWITCH: Select {modeLabel} target ({remainingAttacks} attack(s) remain) | Right-click/ESC to cancel");
 
         while (_isAwaitingRangedRetargetSelection)
@@ -426,7 +426,7 @@ public partial class GameManager
             yield break;
         }
 
-        CombatUI?.ShowCombatLog($"↔ {prompt} Select a highlighted square for a 5-foot step, or right-click/ESC to skip.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↔", $"{prompt} Select a highlighted square for a 5-foot step, or right-click/ESC to skip."));
         CombatUI?.SetTurnIndicator($"5-FOOT STEP: {prompt} Click destination or right-click/ESC to skip");
 
         while (_isAwaitingFullAttackFiveFootStepSelection)
@@ -543,7 +543,7 @@ public partial class GameManager
         {
             pc.SetFightingDefensively(false);
             _pendingDefensiveAttackSelection = false;
-            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels defensive attack declaration.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} cancels defensive attack declaration."));
             UpdateAllStatsUI();
         }
 
@@ -671,7 +671,7 @@ public partial class GameManager
 
         if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
         {
-            CombatUI?.ShowCombatLog("⚠ No valid movement path to that tile.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No valid movement path to that tile."));
             return;
         }
 
@@ -757,7 +757,7 @@ public partial class GameManager
             }
             else
             {
-                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot complete Withdraw without a full-round action.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot complete Withdraw without a full-round action."));
                 ShowActionChoices();
                 yield break;
             }
@@ -781,7 +781,7 @@ public partial class GameManager
 
         if (!consumedAction)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no action available for movement.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no action available for movement."));
             ShowActionChoices();
             yield break;
         }
@@ -798,7 +798,7 @@ public partial class GameManager
             int stepCost = 1 + GetGreaseAreaExtraMovementCost(pc, step);
             if (movementCostConsumed + stepCost > movementBudgetSquares)
             {
-                CombatUI?.ShowCombatLog($"🛢 {pc.Stats.CharacterName} cannot move farther this action (grease slows movement).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{pc.Stats.CharacterName} cannot move farther this action (grease slows movement)."));
                 break;
             }
 
@@ -884,14 +884,14 @@ public partial class GameManager
         {
             pc.WithdrawFirstStepProtected = false;
             if (!interruptedByIncapacitation)
-                CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} completes Withdraw.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} completes Withdraw."));
         }
 
         InvalidatePreviewThreats();
 
         if (interruptedByIncapacitation)
         {
-            CombatUI?.ShowCombatLog($"⛔ {pc.Stats.CharacterName}'s movement stops immediately due to incapacitation.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{pc.Stats.CharacterName}'s movement stops immediately due to incapacitation."));
 
             if (AreAllPCsDead())
             {
@@ -906,7 +906,7 @@ public partial class GameManager
         }
 
         if (interruptedByGreaseSlip)
-            CombatUI?.ShowCombatLog($"🛢 {pc.Stats.CharacterName}'s movement ends after slipping in grease.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{pc.Stats.CharacterName}'s movement ends after slipping in grease."));
 
         ShowActionChoices();
     }
@@ -961,7 +961,7 @@ public partial class GameManager
                     : ThreatSystem.ExecuteAoO(threatener, mover, isFromMovement: true);
 
                 if (aooResult != null)
-                    CombatUI?.ShowCombatLog($"⚔ AoO (Withdraw): {aooResult.GetDetailedSummary()}");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO (Withdraw): {aooResult.GetDetailedSummary()}"));
 
                 yield return new WaitForSeconds(0.35f);
             }
@@ -1034,13 +1034,13 @@ public partial class GameManager
 
                 if (!_highlightedCells.Contains(cell))
                 {
-                    CombatUI.ShowCombatLog("Choose a highlighted empty tile in range for the summon.");
+                    CombatUI.ShowCombatLog(CombatLogHelper.Summon("", "Choose a highlighted empty tile in range for the summon."));
                     return;
                 }
 
                 if (cell.IsOccupied)
                 {
-                    CombatUI.ShowCombatLog("Choose an empty tile to place your summon.");
+                    CombatUI.ShowCombatLog(CombatLogHelper.Summon("", "Choose an empty tile to place your summon."));
                     return;
                 }
 
@@ -1058,7 +1058,7 @@ public partial class GameManager
 
                 if (!_highlightedCells.Contains(cell))
                 {
-                    CombatUI.ShowCombatLog("Choose a highlighted tile in range to place the swarm.");
+                    CombatUI.ShowCombatLog(CombatLogHelper.Info("", "Choose a highlighted tile in range to place the swarm."));
                     return;
                 }
 
@@ -1076,7 +1076,7 @@ public partial class GameManager
                 }
                 else
                 {
-                    CombatUI.ShowCombatLog($"{_pendingSpell.Name} cannot target self right now.");
+                    CombatUI.ShowCombatLog(CombatLogHelper.Failure("", $"{_pendingSpell.Name} cannot target self right now."));
                 }
                 return;
             }
@@ -1133,7 +1133,7 @@ public partial class GameManager
         {
             if (!cell.IsOccupied || cell.Occupant == null || cell.Occupant == pc || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead || !_highlightedCells.Contains(cell))
             {
-                CombatUI?.ShowCombatLog("Select a highlighted valid smite target.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Select a highlighted valid smite target."));
                 return;
             }
 
@@ -1152,7 +1152,7 @@ public partial class GameManager
                 return;
             }
 
-            CombatUI?.ShowCombatLog("Select a highlighted valid target, or right-click/ESC to cancel remaining attacks.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Select a highlighted valid target, or right-click/ESC to cancel remaining attacks."));
             return;
         }
 
@@ -1239,7 +1239,7 @@ public partial class GameManager
         if (offHandWeapon == null)
         {
             Debug.Log("[OffHand] Early return: current off-hand weapon is null.");
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no off-hand weapon available.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no off-hand weapon available."));
             _isSelectingOffHandTarget = false;
             _isSelectingOffHandThrownTarget = false;
             _currentOffHandBAB = 0;
@@ -1274,7 +1274,7 @@ public partial class GameManager
                 {
                     Debug.Log("[OffHand] Early return: failed to consume standard action at confirm-time.");
                     string modeLabel = useThrownRange ? "off-hand thrown attack" : "off-hand attack";
-                    CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} could not commit a standard action for an {modeLabel}.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} could not commit a standard action for an {modeLabel}."));
                     _isSelectingOffHandTarget = false;
                     _isSelectingOffHandThrownTarget = false;
                     _currentOffHandBAB = 0;
@@ -1358,16 +1358,16 @@ public partial class GameManager
         if (!TryDropThrownWeaponToGround(thrower, thrownWeapon, landingPosition, EquipSlot.LeftHand, out string dropFeedback))
         {
             Debug.LogWarning($"[Attack][OffHand][Thrown] {dropFeedback}");
-            CombatUI?.ShowCombatLog($"⚠ {dropFeedback}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{dropFeedback}"));
             return;
         }
 
-        CombatUI?.ShowCombatLog($"→ {thrownWeapon.Name} lands on ground at ({landingPosition.x},{landingPosition.y}).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"→ {thrownWeapon.Name} lands on ground at ({landingPosition.x},{landingPosition.y})."));
 
         if (TryEquipNextThrowableOffHandWeapon(thrower, out ItemData nextWeapon, out string equipFeedback))
         {
             Debug.Log($"[Attack][OffHand][Thrown] {equipFeedback}");
-            CombatUI?.ShowCombatLog($"↻ {thrower.Stats.CharacterName} auto-equips {nextWeapon.Name} to off-hand.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{thrower.Stats.CharacterName} auto-equips {nextWeapon.Name} to off-hand."));
             _currentOffHandWeapon = nextWeapon;
             return;
         }
@@ -1378,7 +1378,7 @@ public partial class GameManager
         if (!thrower.HasThrowableOffHandWeaponEquipped())
         {
             Debug.Log($"[Attack][OffHand][Thrown] {thrower.Stats.CharacterName} has no throwable off-hand weapon equipped after the throw.");
-            CombatUI?.ShowCombatLog($"⚠ {thrower.Stats.CharacterName} has no more throwable off-hand weapons equipped.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{thrower.Stats.CharacterName} has no more throwable off-hand weapons equipped."));
         }
     }
 
@@ -1546,7 +1546,7 @@ public partial class GameManager
         {
             if (!TryConsumeFeintAction(attacker, out actionLabel))
             {
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot feint: no eligible action remaining.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot feint: no eligible action remaining."));
                 ShowActionChoices();
                 return;
             }
@@ -1555,21 +1555,21 @@ public partial class GameManager
         {
             if (!target.IsHelplessForCoupDeGrace())
             {
-                CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} is not helpless; Coup de Grace cannot be performed.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} is not helpless; Coup de Grace cannot be performed."));
                 ShowActionChoices();
                 return;
             }
 
             if (target.IsImmuneToCriticalHits())
             {
-                CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} is immune to critical hits and cannot be coup de graced.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} is immune to critical hits and cannot be coup de graced."));
                 ShowActionChoices();
                 return;
             }
 
             if (!attacker.Actions.HasFullRoundAction)
             {
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Coup de Grace: full-round action already spent.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Coup de Grace: full-round action already spent."));
                 ShowActionChoices();
                 return;
             }
@@ -1597,7 +1597,7 @@ public partial class GameManager
                     ? "no eligible disarm attack remaining"
                     : disarmConsumeReason;
                 Debug.LogWarning($"[Disarm][Flow] Consume failed for {attacker.Stats.CharacterName}: {reason}");
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Disarm: {reason}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Disarm: {reason}."));
                 _pendingDisarmUseOffHandSelection = false;
                 ClearDisarmSequenceState();
                 ShowActionChoices();
@@ -1636,7 +1636,7 @@ public partial class GameManager
                     ? "no eligible sunder attack remaining"
                     : sunderConsumeReason;
                 Debug.LogWarning($"[Sunder][Flow] Consume failed for {attacker.Stats.CharacterName}: {reason}");
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Sunder: {reason}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Sunder: {reason}."));
                 _pendingSunderUseOffHandSelection = false;
                 ClearSunderSequenceState();
                 ShowActionChoices();
@@ -1664,7 +1664,7 @@ public partial class GameManager
                     ? "no eligible attack remaining"
                     : grappleConsumeReason;
                 Debug.LogWarning($"[GameManager][Grapple] Shared-pool consume failed actor={attacker.Stats.CharacterName} reason={reason}");
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot initiate grapple: {reason}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot initiate grapple: {reason}."));
                 ShowActionChoices();
                 return;
             }
@@ -1682,7 +1682,7 @@ public partial class GameManager
                     ? "no eligible attack remaining"
                     : bullRushConsumeReason;
                 Debug.LogWarning($"[GameManager][BullRushAttack] Shared-pool consume failed actor={attacker.Stats.CharacterName} reason={reason}");
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Bull Rush (Attack): {reason}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Bull Rush (Attack): {reason}."));
                 ShowActionChoices();
                 return;
             }
@@ -1700,7 +1700,7 @@ public partial class GameManager
                     ? "no eligible attack remaining"
                     : tripConsumeReason;
                 Debug.LogWarning($"[GameManager][Trip] Shared-pool consume failed actor={attacker.Stats.CharacterName} reason={reason}");
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Trip: {reason}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Trip: {reason}."));
                 ShowActionChoices();
                 return;
             }
@@ -1713,7 +1713,7 @@ public partial class GameManager
         {
             if (!attacker.CommitStandardAction())
             {
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot use {type}: standard action already spent.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot use {type}: standard action already spent."));
                 ShowActionChoices();
                 return;
             }
@@ -1756,12 +1756,12 @@ public partial class GameManager
                     if (maneuverAoO == null)
                         continue;
 
-                    CombatUI.ShowCombatLog($"⚔ {maneuverLabel} initiation AoO: {maneuverAoO.GetDetailedSummary()}");
+                    CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{maneuverLabel} initiation AoO: {maneuverAoO.GetDetailedSummary()}"));
                     UpdateAllStatsUI();
 
                     if (type != SpecialAttackType.CoupDeGrace && maneuverAoO.Hit)
                     {
-                        CombatUI.ShowCombatLog($"{maneuverLabel} attempt disrupted by attack of opportunity");
+                        CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{maneuverLabel} attempt disrupted by attack of opportunity"));
                         Grid.ClearAllHighlights();
                         _highlightedCells.Clear();
                         _isSelectingSpecialAttack = false;
@@ -1776,7 +1776,7 @@ public partial class GameManager
 
                     if (attacker.Stats.IsDead || attacker.IsUnconscious)
                     {
-                        CombatUI.ShowCombatLog($"💀 {attacker.Stats.CharacterName} is incapacitated while attempting to start {maneuverLabel.ToLowerInvariant()}.");
+                        CombatUI.ShowCombatLog(CombatLogHelper.Death("💀", $"{attacker.Stats.CharacterName} is incapacitated while attempting to start {maneuverLabel.ToLowerInvariant()}."));
                         Grid.ClearAllHighlights();
                         _highlightedCells.Clear();
                         _isSelectingSpecialAttack = false;
@@ -1814,7 +1814,7 @@ public partial class GameManager
         if (type == SpecialAttackType.Disarm)
             CombatUI.ShowCombatLog(result.Log);
         else
-            CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}] ({actionLabel}): {result.Log}");
+            CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"SPECIAL [{type}] ({actionLabel}): {result.Log}"));
         if (type == SpecialAttackType.Grapple)
         {
             int attacksRemaining = GetRemainingGrappleAttackActions(attacker);
@@ -1822,9 +1822,9 @@ public partial class GameManager
             Debug.Log($"[GameManager][Grapple] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingSharedPool={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} phase={CurrentPhase} subPhase={CurrentSubPhase}");
 
             if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} grapple attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} grapple attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
             else
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no grapple attacks remaining this turn.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no grapple attacks remaining this turn."));
         }
         else if (type == SpecialAttackType.BullRushAttack)
         {
@@ -1833,9 +1833,9 @@ public partial class GameManager
             Debug.Log($"[GameManager][BullRushAttack] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingSharedPool={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} phase={CurrentPhase} subPhase={CurrentSubPhase}");
 
             if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} Bull Rush (Attack) attempt(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} Bull Rush (Attack) attempt(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
             else
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no Bull Rush (Attack) attempts remaining this turn.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no Bull Rush (Attack) attempts remaining this turn."));
         }
         else if (type == SpecialAttackType.Trip)
         {
@@ -1844,9 +1844,9 @@ public partial class GameManager
             Debug.Log($"[GameManager][Trip] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingSharedPool={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} phase={CurrentPhase} subPhase={CurrentSubPhase}");
 
             if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} trip attempt(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} trip attempt(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
             else
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no trip attempts remaining this turn.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no trip attempts remaining this turn."));
         }
         else if (type == SpecialAttackType.Disarm)
         {
@@ -1861,12 +1861,12 @@ public partial class GameManager
                 $"success={result.Success} hand={handLabel} usedBAB={CharacterStats.FormatMod(disarmAttackBonusUsed)} " +
                 $"attacksRemaining={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} targetDisarmableItems={targetDisarmableItems}");
 
-            CombatUI?.ShowCombatLog($"[Disarm] Attempt #{_disarmAttemptNumber} ({handLabel}) used BAB {CharacterStats.FormatMod(disarmAttackBonusUsed)}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"[Disarm] Attempt #{_disarmAttemptNumber} ({handLabel}) used BAB {CharacterStats.FormatMod(disarmAttackBonusUsed)}."));
 
             if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} disarm-capable attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} disarm-capable attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
             else
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no disarm-capable attacks remaining this turn.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no disarm-capable attacks remaining this turn."));
 
             _pendingDisarmUseOffHandSelection = false;
             ClearDisarmSequenceState();
@@ -1884,12 +1884,12 @@ public partial class GameManager
                 $"success={result.Success} hand={handLabel} usedBAB={CharacterStats.FormatMod(sunderAttackBonusUsed)} " +
                 $"attacksRemaining={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} targetSunderableItems={targetSunderableItems}");
 
-            CombatUI?.ShowCombatLog($"[Sunder] Attempt #{_sunderAttemptNumber} ({handLabel}) used BAB {CharacterStats.FormatMod(sunderAttackBonusUsed)}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"[Sunder] Attempt #{_sunderAttemptNumber} ({handLabel}) used BAB {CharacterStats.FormatMod(sunderAttackBonusUsed)}."));
 
             if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} sunder-capable attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} sunder-capable attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
             else
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no sunder-capable attacks remaining this turn.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no sunder-capable attacks remaining this turn."));
 
             _pendingSunderUseOffHandSelection = false;
             ClearSunderSequenceState();
@@ -2141,14 +2141,14 @@ public partial class GameManager
 
         if (!hasAdjacentWall)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is not adjacent to any intact Wall of Ice.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is not adjacent to any intact Wall of Ice."));
             ShowActionChoices();
             return;
         }
 
         _isSelectingBreakWallTarget = true;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
-        CombatUI?.ShowCombatLog($"💪 Select an adjacent Wall of Ice cell to attempt a Strength check, or right-click/ESC to cancel.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("💪", $"Select an adjacent Wall of Ice cell to attempt a Strength check, or right-click/ESC to cancel."));
         Debug.Log($"[BreakWall] {pc.Stats.CharacterName} entering break-wall target selection with {_highlightedCells.Count} adjacent wall cells.");
     }
 
@@ -2166,21 +2166,21 @@ public partial class GameManager
         int dist = SquareGridUtils.ChebyshevDistance(attacker.GridPosition, wallCell);
         if (dist > 1)
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} must be adjacent to attempt a Strength check.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} must be adjacent to attempt a Strength check."));
             return;
         }
 
         // Cell must be intact
         if (wall.IsBreached(wallCell))
         {
-            CombatUI?.ShowCombatLog($"⚠ That wall cell is already breached.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"That wall cell is already breached."));
             return;
         }
 
         // Consume standard action
         if (!attacker.CommitStandardAction())
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no standard action available."));
             ShowActionChoices();
             return;
         }
@@ -2281,7 +2281,7 @@ public partial class GameManager
         int plannedAttackCount = attacker.GetPlannedFullAttackCount(initialRangeInfo);
         if (plannedAttackCount <= 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no available attacks.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no available attacks."));
             StartCoroutine(DelayedEndActivePCTurn(0.8f));
             yield break;
         }
@@ -2314,14 +2314,14 @@ public partial class GameManager
             {
                 if (currentTarget != null && currentTarget.Stats != null && !currentTarget.Stats.IsDead)
                 {
-                    CombatUI?.ShowCombatLog($"⚠ {currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach."));
                 }
 
                 List<CharacterController> validTargets = GetValidTargetsForCurrentWeapon(attacker);
 
                 if (validTargets.Count == 0 && CanTakeFiveFootStep(attacker))
                 {
-                    CombatUI?.ShowCombatLog($"No valid {modeLabel} targets right now. You may take a 5-foot step to continue.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"No valid {modeLabel} targets right now. You may take a 5-foot step to continue."));
 
                     yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
                         attacker,
@@ -2331,7 +2331,7 @@ public partial class GameManager
 
                     if (_fullAttackFiveFootStepSelectionCancelled || !_fullAttackFiveFootStepWasTaken)
                     {
-                        CombatUI?.ShowCombatLog($"↩ {attacker.Stats.CharacterName} ends full attack early. {remainingAttacks} attack(s) unused.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} ends full attack early. {remainingAttacks} attack(s) unused."));
                         break;
                     }
 
@@ -2340,7 +2340,7 @@ public partial class GameManager
 
                 if (validTargets.Count == 0)
                 {
-                    CombatUI?.ShowCombatLog($"⚠ No valid {modeLabel} targets for {remainingAttacks} remaining attack(s).");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"No valid {modeLabel} targets for {remainingAttacks} remaining attack(s)."));
                     break;
                 }
 
@@ -2348,7 +2348,7 @@ public partial class GameManager
 
                 if (_rangedRetargetSelectionCancelled || _selectedRangedRetarget == null)
                 {
-                    CombatUI?.ShowCombatLog($"↩ {attacker.Stats.CharacterName} ends full attack early. {remainingAttacks} attack(s) unused.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} ends full attack early. {remainingAttacks} attack(s) unused."));
                     break;
                 }
 
@@ -2356,7 +2356,7 @@ public partial class GameManager
                 _selectedRangedRetarget = null;
                 _rangedRetargetSelectionCancelled = false;
 
-                CombatUI?.ShowCombatLog($"🎯 {attacker.Stats.CharacterName} switches to {currentTarget.Stats.CharacterName}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{attacker.Stats.CharacterName} switches to {currentTarget.Stats.CharacterName}."));
             }
 
             // Recompute flanking/range context each attack in case target/position changed.
@@ -2420,7 +2420,7 @@ public partial class GameManager
                 int attacksRemainingAfterKill = plannedAttackCount - (attackIndex + 1);
                 if (attacksRemainingAfterKill > 0)
                 {
-                    CombatUI?.ShowCombatLog($"💀 {currentTarget.Stats.CharacterName} is defeated! {attacksRemainingAfterKill} attack(s) remaining.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{currentTarget.Stats.CharacterName} is defeated! {attacksRemainingAfterKill} attack(s) remaining."));
                     currentTarget = null;
                 }
             }
@@ -2455,7 +2455,7 @@ public partial class GameManager
         _fullAttackFiveFootStepSelectionCancelled = false;
         _fullAttackFiveFootStepWasTaken = false;
 
-        CombatUI?.ShowCombatLog($"✅ {attacker.Stats.CharacterName} completes {modeLabel} full attack ({attacksMade}/{plannedAttackCount} attacks used).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"{attacker.Stats.CharacterName} completes {modeLabel} full attack ({attacksMade}/{plannedAttackCount} attacks used)."));
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
@@ -2641,7 +2641,7 @@ public partial class GameManager
         // AI must commit its own standard action (player path commits via Attack button)
         if (!npc.CommitStandardAction())
         {
-            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no standard action available.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no standard action available."));
             yield break;
         }
 

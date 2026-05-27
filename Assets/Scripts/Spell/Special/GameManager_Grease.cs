@@ -608,7 +608,7 @@ public partial class GameManager
             // If an area hook has already applied prone on entry, stop movement immediately.
             if (mover.HasCondition(CombatConditionType.Prone))
             {
-                CombatUI?.ShowCombatLog($"💥 {mover.Stats.CharacterName} enters grease, falls prone, and stops moving.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("💥", $"{mover.Stats.CharacterName} enters grease, falls prone, and stops moving."));
                 return false;
             }
 
@@ -618,12 +618,12 @@ public partial class GameManager
             int total = roll + reflex;
             bool success = total >= saveDC;
 
-            CombatUI?.ShowCombatLog($"🛢 Grease check ({mover.Stats.CharacterName}): Reflex d20({roll}) + {reflex} = {total} vs DC {saveDC} {(success ? "SUCCESS" : "FAIL")}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"Grease check ({mover.Stats.CharacterName}): Reflex d20({roll}) + {reflex} = {total} vs DC {saveDC} {(success ? "SUCCESS" : "FAIL")}."));
 
             if (!success)
             {
                 mover.ApplyCondition(CombatConditionType.Prone, -1, "Grease");
-                CombatUI?.ShowCombatLog($"💥 {mover.Stats.CharacterName} slips in grease, falls prone, and movement ends immediately.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("💥", $"{mover.Stats.CharacterName} slips in grease, falls prone, and movement ends immediately."));
                 return false;
             }
         }
@@ -771,7 +771,7 @@ public partial class GameManager
                 int reflex = holder.Stats != null ? holder.Stats.ReflexSave : 0;
                 int total = roll + reflex;
                 bool saveSucceeded = total >= effect.SaveDC;
-                CombatUI?.ShowCombatLog($"🛢 Greased item check: {holder.Stats.CharacterName} d20({roll}) + {reflex} = {total} vs DC {effect.SaveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}." );
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"Greased item check: {holder.Stats.CharacterName} d20({roll}) + {reflex} = {total} vs DC {effect.SaveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}."));
 
                 if (!saveSucceeded)
                 {
@@ -780,7 +780,7 @@ public partial class GameManager
                     {
                         SquareCell cell = Grid != null ? Grid.GetCell(holder.GridPosition) : null;
                         cell?.AddGroundItem(dropped);
-                        CombatUI?.ShowCombatLog($"💨 {holder.Stats.CharacterName} drops {dropped.Name} (too slippery to hold)." );
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("💨", $"{holder.Stats.CharacterName} drops {dropped.Name} (too slippery to hold)."));
                     }
                 }
             }
@@ -830,7 +830,7 @@ public partial class GameManager
             return false;
         }
 
-        CombatUI?.ShowCombatLog($"🛢 {actor.Stats.CharacterName} steadies {item.Name}: Reflex d20({roll}) + {reflex} = {total} vs DC {effect.SaveDC}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{actor.Stats.CharacterName} steadies {item.Name}: Reflex d20({roll}) + {reflex} = {total} vs DC {effect.SaveDC}."));
         return true;
     }
 }

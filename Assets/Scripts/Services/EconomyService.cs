@@ -225,7 +225,7 @@ public class EconomyService : MonoBehaviour
         Debug.Log($"[Economy] Sold '{item.Name}' for {sellPrice} gp");
 
         CombatUI ui = _combatUIProvider?.Invoke();
-        ui?.ShowCombatLog($"💰 Sold {item.Name} for {sellPrice} gp");
+        ui?.ShowCombatLog(CombatLogHelper.Special("💰", $"Sold {item.Name} for {sellPrice} gp"));
 
         return true;
     }
@@ -248,7 +248,7 @@ public class EconomyService : MonoBehaviour
         {
             Debug.LogWarning($"[Economy] Cannot afford '{item.Name}' ({buyPrice} gp). Have {_partyGold} gp.");
             CombatUI ui = _combatUIProvider?.Invoke();
-            ui?.ShowCombatLog($"⚠ Not enough gold to buy {item.Name} ({buyPrice} gp)");
+            ui?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Not enough gold to buy {item.Name} ({buyPrice} gp)"));
             return false;
         }
 
@@ -274,7 +274,7 @@ public class EconomyService : MonoBehaviour
         Debug.Log($"[Economy] Bought '{item.Name}' for {buyPrice} gp. Remaining: {_partyGold} gp");
 
         CombatUI ui2 = _combatUIProvider?.Invoke();
-        ui2?.ShowCombatLog($"🛒 Bought {item.Name} for {buyPrice} gp");
+        ui2?.ShowCombatLog(CombatLogHelper.Info("", $"🛒 Bought {item.Name} for {buyPrice} gp"));
 
         return true;
     }
@@ -313,6 +313,6 @@ public class EconomyService : MonoBehaviour
         Debug.Log($"[Economy] Combat gold award: +{amount} gp from {source}");
 
         CombatUI ui = _combatUIProvider?.Invoke();
-        ui?.ShowCombatLog($"💰 +{amount} gp from {source}");
+        ui?.ShowCombatLog(CombatLogHelper.Special("💰", $"+{amount} gp from {source}"));
     }
 }

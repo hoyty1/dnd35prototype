@@ -324,7 +324,6 @@ public class InvisibilitySphereEffect : EmanationEffectData
             creature.RemoveCondition(CombatConditionType.Invisible);
 
         string actorName = creature.Stats != null ? creature.Stats.CharacterName : creature.name;
-        GameManager.Instance?.CombatUI?.ShowCombatLog(
-            $"<color=#88CCFF>👁 {actorName}'s Invisibility Sphere fades ({reason}).</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("👁", $"{actorName}'s Invisibility Sphere fades ({reason})."));
     }
 }

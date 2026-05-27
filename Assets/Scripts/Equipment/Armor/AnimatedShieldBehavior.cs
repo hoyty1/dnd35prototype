@@ -92,8 +92,7 @@ public class AnimatedShieldBehavior : SpecificItemBehavior
         logNotes?.Add($"🛡️✨ <color=#4169E1>{DisplayName}</color> ({enhText}) floats into the air, protecting {Wielder?.Stats?.CharacterName ?? "wielder"} while leaving both hands free! ({AnimationDurationRounds} rounds)");
         Log($"Shield animated for {AnimationDurationRounds} rounds ({_usesRemaining} uses remaining)");
 
-        GameManager.Instance?.CombatUI?.ShowCombatLog(
-            $"<color=#4169E1>🛡️ {DisplayName} animates! Hands-free defense for {AnimationDurationRounds} rounds.</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.RoyalBlue("🛡", $"️ {DisplayName} animates! Hands-free defense for {AnimationDurationRounds} rounds."));
 
         return true;
     }
@@ -119,8 +118,7 @@ public class AnimatedShieldBehavior : SpecificItemBehavior
                 _animationActive = false;
                 Log("Shield animation expired — returns to arm");
 
-                GameManager.Instance?.CombatUI?.ShowCombatLog(
-                    $"<color=#4169E1>🛡️ {DisplayName} stops floating and returns to {Wielder?.Stats?.CharacterName ?? "wielder"}'s arm.</color>");
+                GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.RoyalBlue("🛡", $"️ {DisplayName} stops floating and returns to {Wielder?.Stats?.CharacterName ?? "wielder"}'s arm."));
             }
             else
             {

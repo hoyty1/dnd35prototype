@@ -492,7 +492,7 @@ public class CharacterEquipment : MonoBehaviour
             _suppressedShieldBonusAmount = 0;
             _character?.RemoveCondition(CombatConditionType.LostShieldAC);
             Debug.Log($"[ShieldBash] {Stats.CharacterName}: Improved Shield Bash active, shield AC bonus retained.");
-            GameManager.Instance?.CombatUI?.ShowCombatLog($"🛡 {Stats.CharacterName} uses Improved Shield Bash and keeps shield AC while bashing.");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{Stats.CharacterName} uses Improved Shield Bash and keeps shield AC while bashing."));
             return;
         }
 
@@ -505,7 +505,7 @@ public class CharacterEquipment : MonoBehaviour
             Stats.ShieldBonus = 0;
             _character?.ApplyCondition(CombatConditionType.LostShieldAC, -1, "Shield Bash");
             Debug.Log($"[ShieldBash] {Stats.CharacterName}: Shield bonus suppressed (+{_suppressedShieldBonusAmount} AC) until next turn.");
-            GameManager.Instance?.CombatUI?.ShowCombatLog($"⚠ {Stats.CharacterName} loses shield AC bonus (+{_suppressedShieldBonusAmount}) until next turn after shield bash.");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{Stats.CharacterName} loses shield AC bonus (+{_suppressedShieldBonusAmount}) until next turn after shield bash."));
         }
     }
 
@@ -524,7 +524,7 @@ public class CharacterEquipment : MonoBehaviour
         _character?.RemoveCondition(CombatConditionType.LostShieldAC);
 
         Debug.Log($"[ShieldBash] {Stats.CharacterName}: Shield bonus restored (+{restoredShieldBonus} AC).");
-        GameManager.Instance?.CombatUI?.ShowCombatLog($"🛡 {Stats.CharacterName}'s shield AC bonus is restored (+{restoredShieldBonus}).");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{Stats.CharacterName}'s shield AC bonus is restored (+{restoredShieldBonus})."));
     }
 
     // ========== ITEM TYPE HELPERS ==========

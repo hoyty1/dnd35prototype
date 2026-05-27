@@ -61,17 +61,14 @@ public class HolyAvengerBehavior : SpecificItemBehavior
         {
             _srValue = SRBase + _paladinLevel;
 
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#FFD700>✨ HOLY AVENGER awakens to its full power in {character.Stats.CharacterName}'s hands!</color>");
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#FFD700>✨ +{PaladinEnhancement} holy cold iron longsword | SR {_srValue} aura | Greater Dispel Magic at will</color>");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Special("✨", $"HOLY AVENGER awakens to its full power in {character.Stats.CharacterName}'s hands!"));
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Special("✨", $"+{PaladinEnhancement} holy cold iron longsword | SR {_srValue} aura | Greater Dispel Magic at will"));
 
             Log($"Paladin wielder: level {_paladinLevel}, SR {_srValue}, enhancement +{PaladinEnhancement}");
         }
         else
         {
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#C0C0C0>⚠ Holy Avenger functions as +{BaseEnhancement} holy longsword for {character.Stats.CharacterName} (not a paladin).</color>");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Info("⚠", $"Holy Avenger functions as +{BaseEnhancement} holy longsword for {character.Stats.CharacterName} (not a paladin)."));
 
             Log($"Non-paladin wielder: functions as +{BaseEnhancement} holy only");
         }
@@ -200,8 +197,7 @@ public class HolyAvengerBehavior : SpecificItemBehavior
         if (target != null)
         {
             // Targeted dispel against specific creature
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#FFD700>✨ Holy Avenger: Greater Dispel Magic vs {target.Stats?.CharacterName} (CL {dispelCL})</color>");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Special("✨", $"Holy Avenger: Greater Dispel Magic vs {target.Stats?.CharacterName} (CL {dispelCL})"));
 
             // Use the existing dispel system — create a temporary "caster" context
             // The PerformTargetedDispel uses the caster's CL, so we simulate via the wielder
@@ -211,8 +207,7 @@ public class HolyAvengerBehavior : SpecificItemBehavior
         else
         {
             // Area dispel affecting enemies in range
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#FFD700>✨ Holy Avenger: Greater Dispel Magic (area) by {wielderName} (CL {dispelCL})</color>");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Special("✨", $"Holy Avenger: Greater Dispel Magic (area) by {wielderName} (CL {dispelCL})"));
 
             // Get all enemies within range
             var allChars = GameManager.Instance?.GetAllCharactersForAI();

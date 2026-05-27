@@ -52,7 +52,7 @@ public partial class GameManager
             if (npc != null && npc.Stats != null)
             {
                 string reason = GetUnableToActReason(npc);
-                CombatUI?.ShowCombatLog($"⏭ {npc.Stats.CharacterName} {reason} and cannot act this turn.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"⏭ {npc.Stats.CharacterName} {reason} and cannot act this turn."));
             }
             NextInitiativeTurn();
             yield break;
@@ -259,7 +259,7 @@ public partial class GameManager
             ? "free trip follow-up"
             : "free trip attempt failed";
 
-        CombatUI?.ShowCombatLog($"☠ {attacker.Stats.CharacterName} follows up with Trip ({tripContext}): {tripResult.Log}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Death("☠", $"{attacker.Stats.CharacterName} follows up with Trip ({tripContext}): {tripResult.Log}"));
         Debug.Log($"[NPC Trip Follow-up] {attacker.Stats.CharacterName} triggered free trip after hit. Success={tripResult.Success}");
 
         // Melee reaction effects (Fire Shield, Thorns, etc.) — free trip follow-up is a melee maneuver
@@ -359,7 +359,7 @@ public partial class GameManager
         }
 
         var result = npc.ExecuteSpecialAttack(choice.Value, target);
-        CombatUI.ShowCombatLog($"☠ {npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}");
+        CombatUI.ShowCombatLog(CombatLogHelper.Death("☠", $"{npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}"));
 
         // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
         if (choice.Value == SpecialAttackType.Trip || choice.Value == SpecialAttackType.Disarm)
@@ -404,7 +404,7 @@ public partial class GameManager
         if (threateningEnemies.Count == 0)
             return true;
 
-        CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} makes a ranged attack while threatened and provokes up to {threateningEnemies.Count} attack(s) of opportunity.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} makes a ranged attack while threatened and provokes up to {threateningEnemies.Count} attack(s) of opportunity."));
 
         foreach (CharacterController enemy in threateningEnemies)
         {
@@ -421,7 +421,7 @@ public partial class GameManager
                 continue;
             }
 
-            CombatUI?.ShowCombatLog($"⚔ AoO vs ranged attack: {aooResult.GetDetailedSummary()}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs ranged attack: {aooResult.GetDetailedSummary()}"));
         }
 
         if (attacker.Stats.IsDead)
@@ -456,14 +456,14 @@ public partial class GameManager
 
         if (!shouldAttemptGrab)
         {
-            CombatUI?.ShowCombatLog($"↷ {attacker?.Stats?.CharacterName ?? "Attacker"} declines to start a grapple.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↷", $"{attacker?.Stats?.CharacterName ?? "Attacker"} declines to start a grapple."));
             onResolved?.Invoke();
             yield break;
         }
 
         SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
         string attackName = !string.IsNullOrWhiteSpace(attackResult?.WeaponName) ? attackResult.WeaponName : "trigger attack";
-        CombatUI?.ShowCombatLog($"🪢 Improved Grab ({attackName} hit): {grabResult.Log}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab ({attackName} hit): {grabResult.Log}"));
         onResolved?.Invoke();
     }
 
@@ -480,7 +480,7 @@ public partial class GameManager
 
         SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
         string attackName = !string.IsNullOrWhiteSpace(attackResult?.WeaponName) ? attackResult.WeaponName : "trigger attack";
-        CombatUI?.ShowCombatLog($"🪢 Improved Grab ({attackName} hit): {grabResult.Log}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab ({attackName} hit): {grabResult.Log}"));
         return false;
     }
 
@@ -499,7 +499,7 @@ public partial class GameManager
                 continue;
 
             SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
-            CombatUI?.ShowCombatLog($"🪢 Improved Grab ({attackResult.WeaponName} hit): {grabResult.Log}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab ({attackResult.WeaponName} hit): {grabResult.Log}"));
 
             if (grabResult.Success || target.Stats.IsDead)
                 break;
@@ -526,7 +526,7 @@ public partial class GameManager
         int plannedAttackCount = npc.GetPlannedFullAttackCount(initialRangeInfo);
         if (plannedAttackCount <= 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no available full-attack steps.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no available full-attack steps."));
             aggregate.DefenderHPAfter = initialTarget.Stats.CurrentHP;
             aggregate.TargetKilled = initialTarget.Stats.IsDead;
             return aggregate;
@@ -554,7 +554,7 @@ public partial class GameManager
                 {
                     currentTarget = inReachTarget;
                     targetSwitchCount++;
-                    CombatUI?.ShowCombatLog($"🎯 {npc.Stats.CharacterName} shifts focus to {currentTarget.Stats.CharacterName}.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{npc.Stats.CharacterName} shifts focus to {currentTarget.Stats.CharacterName}."));
                 }
                 else
                 {
@@ -567,12 +567,12 @@ public partial class GameManager
                     {
                         currentTarget = steppedTarget;
                         targetSwitchCount++;
-                        CombatUI?.ShowCombatLog($"🎯 {npc.Stats.CharacterName} re-engages {currentTarget.Stats.CharacterName} after a 5-foot step.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{npc.Stats.CharacterName} re-engages {currentTarget.Stats.CharacterName} after a 5-foot step."));
                     }
                     else
                     {
                         int remainingAttacks = plannedAttackCount - attackIndex;
-                        CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} has no valid active targets for {remainingAttacks} remaining attack(s).");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} has no valid active targets for {remainingAttacks} remaining attack(s)."));
                         break;
                     }
                 }
@@ -643,7 +643,7 @@ public partial class GameManager
 
                 int attacksRemainingAfterKill = plannedAttackCount - (attackIndex + 1);
                 if (attacksRemainingAfterKill > 0)
-                    CombatUI?.ShowCombatLog($"💀 {currentTarget.Stats.CharacterName} is defeated! {attacksRemainingAfterKill} attack(s) remaining.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{currentTarget.Stats.CharacterName} is defeated! {attacksRemainingAfterKill} attack(s) remaining."));
 
                 currentTarget = null;
                 continue;
@@ -653,7 +653,7 @@ public partial class GameManager
             {
                 int attacksRemainingAfterDrop = plannedAttackCount - (attackIndex + 1);
                 if (attacksRemainingAfterDrop > 0)
-                    CombatUI?.ShowCombatLog($"💤 {currentTarget.Stats.CharacterName} drops unconscious! {npc.Stats.CharacterName} looks for another active target.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("💤", $"{currentTarget.Stats.CharacterName} drops unconscious! {npc.Stats.CharacterName} looks for another active target."));
 
                 currentTarget = null;
             }
@@ -807,7 +807,7 @@ public partial class GameManager
             int blinkNpcRoll = DiceService.Percentile("Blink NPC caster spell failure");
             if (blinkNpcRoll <= 20)
             {
-                CombatUI?.ShowCombatLog($"⚡ {npc.Stats.CharacterName}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkNpcRoll} ≤ 20%)");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{npc.Stats.CharacterName}'s {spell.Name} fizzles! (Blink spell failure: rolled {blinkNpcRoll} ≤ 20%)"));
                 UpdateAllStatsUI();
                 return true;
             }
@@ -844,7 +844,7 @@ public partial class GameManager
             if (blinkTargetRoll <= 50)
             {
                 string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-                CombatUI?.ShowCombatLog($"🌀 {spell.Name} fails to reach {targetName}! Target is on the Ethereal Plane. (Blink: rolled {blinkTargetRoll} ≤ 50%)");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{spell.Name} fails to reach {targetName}! Target is on the Ethereal Plane. (Blink: rolled {blinkTargetRoll} ≤ 50%)"));
                 UpdateAllStatsUI();
                 return true;
             }
@@ -873,10 +873,10 @@ public partial class GameManager
                                    && !commandUndeadNoSaveOverrideNPC;
 
         if (effectNegatedBySave)
-            CombatUI?.ShowCombatLog($"🛡 {target.Stats.CharacterName} resists {spell.Name} with a successful {result.SaveType} save.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{target.Stats.CharacterName} resists {spell.Name} with a successful {result.SaveType} save."));
 
         if (result.MindAffectingImmunityBlocked)
-            CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {spell.Name} has no effect.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧠", $"{target.Stats.CharacterName} is immune to mind-affecting effects. {spell.Name} has no effect."));
 
         // ── Lesser Globe of Invulnerability check ──
         if (target != null && spell != null && result.Success && !effectNegatedBySave)
@@ -884,7 +884,7 @@ public partial class GameManager
             if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target))
             {
                 result.Success = false;
-                CombatUI?.ShowCombatLog($"🛡 {spell.Name} (level {spell.SpellLevel}) is blocked by Lesser Globe of Invulnerability! Spell effects of 3rd level or lower cannot affect {target.Stats.CharacterName}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{spell.Name} (level {spell.SpellLevel}) is blocked by Lesser Globe of Invulnerability! Spell effects of 3rd level or lower cannot affect {target.Stats.CharacterName}."));
             }
         }
 
@@ -1009,7 +1009,7 @@ public partial class GameManager
         if (!npc.CommitStandardAction())
             return false;
 
-        CombatUI?.ShowCombatLog($"🧪 {npc.Stats.CharacterName} unleashes Acid Spray (10-ft cone)!");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"{npc.Stats.CharacterName} unleashes Acid Spray (10-ft cone)!"));
 
         for (int i = 0; i < victims.Count; i++)
         {
@@ -1042,7 +1042,7 @@ public partial class GameManager
             int finalDamage = mitigation.FinalDamage;
 
             string blinkAreaNote = victim.HasActiveBlinkEffect ? " [Blink: halved]" : "";
-            CombatUI?.ShowCombatLog($"   {victim.Stats.CharacterName}: Reflex d20({saveRoll}) + {victim.Stats.ReflexSave} = {saveTotal} {(saveSuccess ? "SUCCESS" : "FAIL")} | Acid {finalDamage} damage{blinkAreaNote}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {victim.Stats.CharacterName}: Reflex d20({saveRoll}) + {victim.Stats.ReflexSave} = {saveTotal} {(saveSuccess ? "SUCCESS" : "FAIL")} | Acid {finalDamage} damage{blinkAreaNote}"));
 
             if (finalDamage > 0)
                 CheckConcentrationOnDamage(victim, finalDamage);
@@ -1056,7 +1056,7 @@ public partial class GameManager
 
         int cooldown = DiceService.D4("Acid spray cooldown 1d4");
         npc.ConfigureBombardierAcidSprayCooldown(cooldown);
-        CombatUI?.ShowCombatLog($"⏱ Acid spray recharges in {cooldown} rounds.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Acid spray recharges in {cooldown} rounds."));
 
         UpdateAllStatsUI();
         return true;
@@ -1069,7 +1069,7 @@ public partial class GameManager
 
         if (target == null || target.Stats == null || target.Stats.IsDead)
         {
-            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no valid target and stops attacking.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no valid target and stops attacking."));
             yield break;
         }
 
@@ -1096,7 +1096,7 @@ public partial class GameManager
                 yield break;
             }
 
-            CombatUI.ShowCombatLog($"⚠ {npc.Stats.CharacterName} cannot attack: {cannotAttackReason}");
+            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} cannot attack: {cannotAttackReason}"));
             yield return new WaitForSeconds(0.6f);
             yield break;
         }
@@ -1212,7 +1212,7 @@ public partial class GameManager
 
         if (!npc.CommitStandardAction())
         {
-            CombatUI.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no standard action available.");
+            CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no standard action available."));
             yield return new WaitForSeconds(0.6f);
             yield break;
         }
@@ -1289,7 +1289,7 @@ public partial class GameManager
 
         string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
         string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-        CombatUI?.ShowCombatLog($"{npcName} loses track of {targetName} after {missCount} failed attacks on the last known square and stops blind-firing.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npcName} loses track of {targetName} after {missCount} failed attacks on the last known square and stops blind-firing."));
         Debug.Log($"[AI][Concealment] {npcName} forgetting stale last-known position for {targetName} after {missCount} consecutive auto-misses.");
 
         return false;
@@ -1350,7 +1350,7 @@ public partial class GameManager
         string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
         string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
 
-        CombatUI?.ShowCombatLog($"{npcName} rushes to search after missing {targetName}'s last known position.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npcName} rushes to search after missing {targetName}'s last known position."));
 
         yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, searchCell.Coords, PlayerMoveSecondsPerStep));
 
@@ -1580,7 +1580,7 @@ public partial class GameManager
         int rangeSquares = Mathf.Max(1, fp.RangeFeet / 5);
         string dragonName = dragon.Stats != null ? dragon.Stats.CharacterName : "Dragon";
 
-        CombatUI?.ShowCombatLog($"🐉 <b>{dragonName}</b> radiates Frightful Presence! (DC {fp.SaveDC}, {fp.RangeFeet} ft.)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🐉 <b>{dragonName}</b> radiates Frightful Presence! (DC {fp.SaveDC}, {fp.RangeFeet} ft.)"));
         yield return new WaitForSeconds(0.6f);
 
         // Gather all player characters in range
@@ -1614,7 +1614,7 @@ public partial class GameManager
 
             if (total >= fp.SaveDC)
             {
-                CombatUI?.ShowCombatLog($"  ✅ {targetName} resists Frightful Presence (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}) — immune for remainder of combat");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  ✅ {targetName} resists Frightful Presence (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}) — immune for remainder of combat"));
                 continue;
             }
 
@@ -1627,13 +1627,13 @@ public partial class GameManager
             {
                 // Panicked
                 target.ApplyCondition(CombatConditionType.Panicked, durationRounds, dragonName);
-                CombatUI?.ShowCombatLog($"  😱 {targetName} is <b>Panicked</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}, {targetHD} HD ≤ {fp.HDThresholdForPanic})");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  😱 {targetName} is <b>Panicked</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC}, {targetHD} HD ≤ {fp.HDThresholdForPanic})"));
             }
             else
             {
                 // Shaken
                 target.ApplyCondition(CombatConditionType.Shaken, durationRounds, dragonName);
-                CombatUI?.ShowCombatLog($"  😰 {targetName} is <b>Shaken</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC})");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  😰 {targetName} is <b>Shaken</b> for {durationRounds} rounds! (Will {roll}+{willMod}={total} vs DC {fp.SaveDC})"));
             }
         }
 

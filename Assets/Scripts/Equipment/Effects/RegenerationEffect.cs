@@ -98,8 +98,7 @@ public class RegenerationEffect : MonoBehaviour
             Debug.Log($"[Regeneration] {_owner.Stats.CharacterName}'s Ring of Regeneration stabilizes at {_owner.Stats.CurrentHP} HP!");
 
             if (GameManager.Instance != null)
-                GameManager.Instance.CombatUI?.ShowCombatLog(
-                    $"<color=#00FF88>💍 {_owner.Stats.CharacterName}'s Ring of Regeneration prevents death! Stabilized at {_owner.Stats.CurrentHP} HP.</color>");
+                GameManager.Instance.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"💍 {_owner.Stats.CharacterName}'s Ring of Regeneration prevents death! Stabilized at {_owner.Stats.CurrentHP} HP."));
         }
     }
 

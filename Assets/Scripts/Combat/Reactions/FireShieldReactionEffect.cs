@@ -77,13 +77,13 @@ public class FireShieldReactionEffect : IMeleeReactionEffect
 
         // Show combat log
         var combatUI = GameManager.Instance?.CombatUI;
-        combatUI?.ShowCombatLog($"  \ud83d\udd25 Fire Shield retribution! {attacker.Stats.CharacterName} takes {damage} {dmgType} damage (no save)!");
+        combatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  \ud83d\udd25 Fire Shield retribution! {attacker.Stats.CharacterName} takes {damage} {dmgType} damage (no save)!"));
 
         if (attacker.Stats.IsDead)
         {
             attacker.OnDeath();
             GameManager.Instance?.Combat_HandleSummonDeathCleanup(attacker);
-            combatUI?.ShowCombatLog($"  \ud83d\udc80 {attacker.Stats.CharacterName} is slain by Fire Shield retribution!");
+            combatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  \ud83d\udc80 {attacker.Stats.CharacterName} is slain by Fire Shield retribution!"));
         }
     }
 }

@@ -899,7 +899,7 @@ public class SpellTestingPanel : MonoBehaviour
         if (gm == null)
         {
             Debug.LogError("[SpellTestPanel] GameManager.Instance is null!");
-            gm?.CombatUI?.ShowCombatLog("❌ [TEST] GameManager not found!");
+            gm?.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", "[TEST] GameManager not found!"));
             return;
         }
 
@@ -908,7 +908,7 @@ public class SpellTestingPanel : MonoBehaviour
         if (caster == null)
         {
             Debug.LogWarning("[SpellTestPanel] No ActivePC — must be used during a PC's turn!");
-            gm.CombatUI?.ShowCombatLog("❌ [TEST] No active PC! Use this during a PC's turn.");
+            gm.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", "[TEST] No active PC! Use this during a PC's turn."));
             return;
         }
 
@@ -925,19 +925,19 @@ public class SpellTestingPanel : MonoBehaviour
 
         string abilityInfo = $"{_boostedAbility} boosted +4 ({_originalAbilityScore}→{_originalAbilityScore + 4})";
         string casterNote = _temporaryCasterSetup ? " (temp Wizard CL10)" : "";
-        gm.CombatUI?.ShowCombatLog($"🔮 [TEST] Casting {spell.Name} via {caster.Stats?.CharacterName}{casterNote} | {abilityInfo}");
+        gm.CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🔮", $"[TEST] Casting {spell.Name} via {caster.Stats?.CharacterName}{casterNote} | {abilityInfo}"));
 
         // Use TestCastSpellFromPanel which bypasses ActivePC/turn-phase guards
         try
         {
             var metamagic = new MetamagicData();
             gm.TestCastSpellFromPanel(caster, spell, true, metamagic);
-            gm.CombatUI?.ShowCombatLog($"✅ [TEST] Spell targeting initiated for {spell.Name}");
+            gm.CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"[TEST] Spell targeting initiated for {spell.Name}"));
             Debug.Log($"[SpellTestPanel] TestCastSpellFromPanel returned normally.");
         }
         catch (System.Exception ex)
         {
-            gm.CombatUI?.ShowCombatLog($"❌ [TEST] Cast error: {ex.Message}");
+            gm.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"[TEST] Cast error: {ex.Message}"));
             Debug.LogError($"[SpellTestPanel] Cast error: {ex}");
             // Restore immediately on error
             RestoreAbilityBoost();
@@ -1061,6 +1061,6 @@ public class SpellTestingPanel : MonoBehaviour
     public void LogMessage(string message, Color? color = null)
     {
         GameManager gm = GameManager.Instance;
-        gm?.CombatUI?.ShowCombatLog($"[TEST] {message}");
+        gm?.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"[TEST] {message}"));
     }
 }

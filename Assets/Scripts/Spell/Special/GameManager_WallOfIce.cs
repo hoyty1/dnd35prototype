@@ -166,7 +166,7 @@ public partial class GameManager
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
                     ResetPendingWallOfIceMode();
-                    CombatUI?.ShowCombatLog("⚠ Wall of Ice cancelled: no mode selected.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Wall of Ice cancelled: no mode selected."));
                     ShowActionChoices();
                     return;
                 }
@@ -176,7 +176,7 @@ public partial class GameManager
                     : WallOfIceMode.Circle;
 
                 string chosen = selectedIndex == 0 ? "Wall (Line)" : "Hemisphere (Circle)";
-                CombatUI?.ShowCombatLog($"❄ Wall of Ice mode: {chosen}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"❄ Wall of Ice mode: {chosen}."));
 
                 // Continue to normal AoE targeting
                 BeginPendingSpellTargeting(caster);
@@ -187,7 +187,7 @@ public partial class GameManager
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
                 ResetPendingWallOfIceMode();
-                CombatUI?.ShowCombatLog("↩ Wall of Ice cancelled (mode not selected).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Wall of Ice cancelled (mode not selected)."));
                 ShowActionChoices();
             },
             titleOverride: "Wall of Ice — Choose Shape (PHB p.299)",
@@ -237,7 +237,7 @@ public partial class GameManager
                     // Cancel — go back to center selection
                     _pendingWallOfIceCircleCenter = null;
                     _pendingWallOfIceCircleRadius = null;
-                    CombatUI?.ShowCombatLog("⚠ Hemisphere radius selection cancelled. Pick a new center.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Hemisphere radius selection cancelled. Pick a new center."));
                     EnterAoETargetingMode(caster, _pendingSpell);
                     return;
                 }
@@ -246,14 +246,14 @@ public partial class GameManager
                 _pendingWallOfIceCircleRadius = chosenRadius;
                 _pendingWallOfIceCircleCenter = centerCell;
 
-                CombatUI?.ShowCombatLog($"❄ Wall of Ice hemisphere: {chosenRadius * 5}-ft radius at ({centerCell.x}, {centerCell.y}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"❄ Wall of Ice hemisphere: {chosenRadius * 5}-ft radius at ({centerCell.x}, {centerCell.y})."));
 
                 // Compute circle (ring) cells
                 HashSet<Vector2Int> circleCells = AoESystem.GetRingCells(centerCell, chosenRadius, Grid);
 
                 if (circleCells == null || circleCells.Count == 0)
                 {
-                    CombatUI?.ShowCombatLog("⚠ No valid cells for hemisphere. Wall of Ice cancelled.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No valid cells for hemisphere. Wall of Ice cancelled."));
                     ResetPendingWallOfIceMode();
                     _pendingSpell = null;
                     _pendingMetamagic = null;
@@ -290,7 +290,7 @@ public partial class GameManager
                 // Cancel radius selection — go back to center selection
                 _pendingWallOfIceCircleCenter = null;
                 _pendingWallOfIceCircleRadius = null;
-                CombatUI?.ShowCombatLog("↩ Hemisphere radius selection cancelled. Pick a new center.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Hemisphere radius selection cancelled. Pick a new center."));
                 EnterAoETargetingMode(caster, _pendingSpell);
             },
             titleOverride: "Wall of Ice Hemisphere — Choose Radius",

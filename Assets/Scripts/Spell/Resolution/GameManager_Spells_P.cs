@@ -159,7 +159,7 @@ public partial class GameManager
         if (!target.HasCondition(CombatConditionType.Poisoned))
             target.ApplyCondition(CombatConditionType.Poisoned, 10, "Poison");
 
-        CombatUI?.ShowCombatLog($"<color=#CC44CC>☠ Poison! {casterName} poisons {targetName}! {conDamage} CON damage (Fort {saveRoll} vs DC {saveDC}). Secondary: 1d10 CON in 1 minute.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("☠", $"Poison! {casterName} poisons {targetName}! {conDamage} CON damage (Fort {saveRoll} vs DC {saveDC}). Secondary: 1d10 CON in 1 minute."));
         Debug.Log($"[Poison] {casterName} -> {targetName}: {conDamage} CON damage, Fort save {saveRoll} vs DC {saveDC}");
 
         result.BuffApplied = true;
@@ -203,7 +203,7 @@ public partial class GameManager
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int saveDc = GetSpellSaveDC(caster, spell);
 
-        CombatUI?.ShowCombatLog($"<color=#6600CC>👻 {casterName} casts Phantasmal Killer on {targetName}!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Curse("", $"👻 {casterName} casts Phantasmal Killer on {targetName}!"));
 
         // Mind-affecting immunity check
         if (target.Stats.IsImmuneToMindAffecting())
@@ -234,8 +234,8 @@ public partial class GameManager
         }
 
         // Will save failed — now target must make a Fortitude save or die
-        CombatUI?.ShowCombatLog($"<color=#CC0000>😱 {targetName} fails to disbelieve the phantasm!</color>");
-        CombatUI?.ShowCombatLog($"<color=#CC3333>   Must make Fortitude save DC {saveDc} or die from fear!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("😱", $"{targetName} fails to disbelieve the phantasm!"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"   Must make Fortitude save DC {saveDc} or die from fear!"));
 
         SavingThrowResolver.SaveResult fortSave = SavingThrowResolver.ResolveFortitudeSave(target.Stats, saveDc, "Phantasmal Killer (Fort)");
 
@@ -255,14 +255,14 @@ public partial class GameManager
             // Apply Shaken for 1 round
             target.ApplyCondition(CombatConditionType.Shaken, 1, "Phantasmal Killer");
 
-            CombatUI?.ShowCombatLog($"<color=#CC9933>   Fort save: {fortRollStr} → SUCCESS!</color>");
-            CombatUI?.ShowCombatLog($"<color=#CC6600>   Takes {damage} damage ({hpBefore} → {hpAfter} HP) and is shaken for 1 round.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"   Fort save: {fortRollStr} → SUCCESS!"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"   Takes {damage} damage ({hpBefore} → {hpAfter} HP) and is shaken for 1 round."));
 
             // Check if damage killed the target
             if (hpAfter <= 0)
             {
                 result.TargetKilled = true;
-                CombatUI?.ShowCombatLog($"<color=#FF3333>☠ {targetName} is slain by the phantasm's lingering terror!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("☠", $"{targetName} is slain by the phantasm's lingering terror!"));
             }
 
             Debug.Log($"[PhantasmalKiller] {casterName} -> {targetName}: Will failed, Fort succeeded. {damage} damage, shaken 1 round.");

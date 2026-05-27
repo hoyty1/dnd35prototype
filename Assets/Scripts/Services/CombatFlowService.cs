@@ -299,7 +299,7 @@ public class CombatFlowService : MonoBehaviour
         if (threateningEnemies.Count == 0)
             return true;
 
-        _gameManager.CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} makes a ranged attack while threatened and provokes up to {threateningEnemies.Count} attack(s) of opportunity.");
+        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} makes a ranged attack while threatened and provokes up to {threateningEnemies.Count} attack(s) of opportunity."));
 
         foreach (CharacterController enemy in threateningEnemies)
         {
@@ -316,7 +316,7 @@ public class CombatFlowService : MonoBehaviour
                 continue;
             }
 
-            _gameManager.CombatUI?.ShowCombatLog($"⚔ AoO vs ranged attack: {aooResult.GetDetailedSummary()}");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs ranged attack: {aooResult.GetDetailedSummary()}"));
         }
 
         if (attacker.Stats.IsDead)
@@ -420,7 +420,7 @@ public class CombatFlowService : MonoBehaviour
         {
             Debug.Log($"[OffHand] ExecuteOffHandAttack blocked: {attacker.Stats?.CharacterName ?? "Unknown"} is using a two-handed weapon.");
             string attackerName = attacker.Stats?.CharacterName ?? "Attacker";
-            _gameManager.CombatUI?.ShowCombatLog($"⚠ {attackerName} cannot make an off-hand attack while wielding a two-handed weapon.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attackerName} cannot make an off-hand attack while wielding a two-handed weapon."));
             return null;
         }
 
@@ -468,7 +468,7 @@ public class CombatFlowService : MonoBehaviour
             : string.Empty;
 
         string modeLabel = useThrownRange ? "Off-Hand Thrown Attack" : "Off-Hand Attack";
-        _gameManager.CombatUI?.ShowCombatLog($"↻ {modeLabel} (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}");
+        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{modeLabel} (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}"));
 
         string log = BuildAttackLog(attacker, isFlanking, partnerName, result);
         _gameManager.Combat_SetLastCombatLog(log);
@@ -759,7 +759,7 @@ public class CombatFlowService : MonoBehaviour
         {
             if (!attacker.CommitStandardAction())
             {
-                _gameManager.CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available.");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no standard action available."));
                 _gameManager.Combat_ShowActionChoices();
                 return;
             }
@@ -906,7 +906,7 @@ public class CombatFlowService : MonoBehaviour
 
                     cleaveCount++;
                     string cleaveFeatName = isGreatCleave ? "Great Cleave" : "Cleave";
-                    _gameManager.CombatUI?.ShowCombatLog($"⚔️ {cleaveFeatName}! {attacker.Stats.CharacterName} strikes {cleaveTarget.Stats.CharacterName}!");
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"️ {cleaveFeatName}! {attacker.Stats.CharacterName} strikes {cleaveTarget.Stats.CharacterName}!"));
 
                     // Cleave attack uses the same weapon at full BAB
                     CombatResult cleaveResult = attacker.Attack(cleaveTarget, false, 0, null, null, null, attackWeapon);
@@ -923,7 +923,7 @@ public class CombatFlowService : MonoBehaviour
                     {
                         LogDeathPoint("Cleave:TargetKilled", attacker, cleaveTarget);
                         _gameManager.Combat_HandleSummonDeathCleanup(cleaveTarget);
-                        _gameManager.CombatUI?.ShowCombatLog($"⚔️ {cleaveTarget.Stats.CharacterName} is slain by {cleaveFeatName}!");
+                        _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"️ {cleaveTarget.Stats.CharacterName} is slain by {cleaveFeatName}!"));
                         _gameManager.Combat_UpdateAllStatsUI();
 
                         if (TryHandleVictoryAfterEnemyDeath("Cleave", attacker, cleaveTarget))
@@ -1175,7 +1175,7 @@ public class CombatFlowService : MonoBehaviour
         {
             string ammoName = weapon.RequiresAmmoType.ToString();
             string charName = attacker.Stats != null ? attacker.Stats.CharacterName : "Attacker";
-            _gameManager?.CombatUI?.ShowCombatLog($"⚠ {charName} has no {ammoName} ammunition! Cannot fire {weapon.Name}.");
+            _gameManager?.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charName} has no {ammoName} ammunition! Cannot fire {weapon.Name}."));
             Debug.LogWarning($"[Ammo] {charName} attempted ranged attack with {weapon.Name} but has no {ammoName} ammo.");
             return false;
         }
@@ -1223,7 +1223,7 @@ public class CombatFlowService : MonoBehaviour
         }
 
         Debug.Log($"[Ammo] {charName} consumed 1 {ammoName}{enchantInfo}. {remaining} remaining.");
-        _gameManager?.CombatUI?.ShowCombatLog($"🏹 {charName} uses 1 {ammoName}{enchantInfo}. ({remaining} remaining)");
+        _gameManager?.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("🏹", $"{charName} uses 1 {ammoName}{enchantInfo}. ({remaining} remaining)"));
 
         return consumedAmmo;
     }
@@ -1252,8 +1252,7 @@ public class CombatFlowService : MonoBehaviour
             statusMgr?.RemoveEffectsBySpellId(SpellNames.SANCTUARY);
             string name = attacker.Stats.CharacterName;
             Debug.Log($"[Sanctuary] {name} attacks — Sanctuary spell ends.");
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"🛡️ {name} makes an attack — Sanctuary ends!");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"️ {name} makes an attack — Sanctuary ends!"));
         }
 
         // Hide from Undead: ends if the warded creature attacks
@@ -1266,8 +1265,7 @@ public class CombatFlowService : MonoBehaviour
             statusMgr?.RemoveEffectsBySpellId(SpellNames.HIDE_FROM_UNDEAD);
             string name = attacker.Stats.CharacterName;
             Debug.Log($"[HideFromUndead] {name} attacks — Hide from Undead spell ends.");
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"👻 {name} makes an attack — Hide from Undead ends!");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Death("", $"👻 {name} makes an attack — Hide from Undead ends!"));
         }
     }
 
@@ -1308,7 +1306,7 @@ public class CombatFlowService : MonoBehaviour
 
         if (!FeatManager.CanUseWhirlwindAttack(attacker.Stats))
         {
-            _gameManager.CombatUI?.ShowCombatLog($"❌ {attacker.Stats.CharacterName} cannot use Whirlwind Attack.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{attacker.Stats.CharacterName} cannot use Whirlwind Attack."));
             return;
         }
 
@@ -1317,7 +1315,7 @@ public class CombatFlowService : MonoBehaviour
         List<CharacterController> adjacentEnemies = FindAllAdjacentEnemies(attacker);
         if (adjacentEnemies.Count == 0)
         {
-            _gameManager.CombatUI?.ShowCombatLog($"🌀 {attacker.Stats.CharacterName} uses Whirlwind Attack but has no adjacent enemies!");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{attacker.Stats.CharacterName} uses Whirlwind Attack but has no adjacent enemies!"));
             _gameManager.Combat_StartDelayedEndActivePCTurn(1.5f);
             return;
         }
@@ -1398,7 +1396,7 @@ public class CombatFlowService : MonoBehaviour
 
         if (!FeatManager.CanUseManyshot(attacker.Stats))
         {
-            _gameManager.CombatUI?.ShowCombatLog($"❌ {attacker.Stats.CharacterName} cannot use Manyshot.");
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{attacker.Stats.CharacterName} cannot use Manyshot."));
             return;
         }
 

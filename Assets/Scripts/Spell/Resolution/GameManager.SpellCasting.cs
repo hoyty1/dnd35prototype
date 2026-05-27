@@ -200,7 +200,7 @@ public partial class GameManager
 
         roll = DiceService.Percentile("Arcane spell failure");
 
-        CombatUI?.ShowCombatLog($"ASF Check ({caster.Stats.CharacterName}, {spell.Name}): roll {roll}% vs {asfChance}%");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"ASF Check ({caster.Stats.CharacterName}, {spell.Name}): roll {roll}% vs {asfChance}%"));
         return roll <= asfChance;
     }
 
@@ -208,11 +208,11 @@ public partial class GameManager
     {
         if (caster == null || caster.Stats == null || spell == null) return;
 
-        CombatUI?.ShowCombatLog("═══════════════════════════════");
-        CombatUI?.ShowCombatLog($"{caster.Stats.CharacterName} attempts to cast {spell.Name}");
-        CombatUI?.ShowCombatLog($"Arcane Spell Failure: {roll}% ≤ {asfChance}%");
-        CombatUI?.ShowCombatLog("⚠️ SPELL FAILS! Spell slot consumed, no effect.");
-        CombatUI?.ShowCombatLog("═══════════════════════════════");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "═══════════════════════════════"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{caster.Stats.CharacterName} attempts to cast {spell.Name}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"Arcane Spell Failure: {roll}% ≤ {asfChance}%"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "️ SPELL FAILS! Spell slot consumed, no effect."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "═══════════════════════════════"));
     }
 
     private void InsertIntoInitiative(CharacterController combatant, CharacterController summoner)
@@ -569,7 +569,7 @@ public partial class GameManager
         NPCDefinition baseDef = NPCDatabase.Get(swarmNpcId);
         if (baseDef == null)
         {
-            CombatUI?.ShowCombatLog($"Cannot summon swarm: missing creature definition '{swarmNpcId}'.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"Cannot summon swarm: missing creature definition '{swarmNpcId}'."));
             ShowActionChoices();
             return;
         }
@@ -611,7 +611,7 @@ public partial class GameManager
             CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, option);
             if (summonCC == null)
             {
-                CombatUI?.ShowCombatLog("⚠ Summon Swarm failed: creature could not be spawned.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Summon Swarm failed: creature could not be spawned."));
                 ShowActionChoices();
                 return;
             }
@@ -637,11 +637,11 @@ public partial class GameManager
 
             int rangeFeet = CalculateSummonSwarmRangeFeet(caster != null && caster.Stats != null ? caster.Stats.Level : 1);
             CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{caster.Stats.CharacterName} casts {_pendingSpell.Name}!"));
-            CombatUI?.ShowCombatLog($"  Range: {rangeFeet} ft (level {Mathf.Max(1, caster.Stats.Level)} caster)");
-            CombatUI?.ShowCombatLog($"  Target location: ({targetCell.Coords.x}, {targetCell.Coords.y})");
-            CombatUI?.ShowCombatLog($"  Swarm type: {baseDef.Name}");
-            CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ WARNING: The swarm is uncontrolled and will attack the nearest creature (NO friend/foe distinction - caster and allies ARE valid targets)!</color>");
-            CombatUI?.ShowCombatLog($"<color=#44AAFF>{caster.Stats.CharacterName} is concentrating on {_pendingSpell.Name}.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Range: {rangeFeet} ft (level {Mathf.Max(1, caster.Stats.Level)} caster)"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Target location: ({targetCell.Coords.x}, {targetCell.Coords.y})"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Swarm type: {baseDef.Name}"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("⚠", $"WARNING: The swarm is uncontrolled and will attack the nearest creature (NO friend/foe distinction - caster and allies ARE valid targets)!"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("", $"{caster.Stats.CharacterName} is concentrating on {_pendingSpell.Name}."));
 
             _pendingSpell = null;
             _pendingMetamagic = null;
@@ -668,7 +668,7 @@ public partial class GameManager
         NPCDefinition baseDef = NPCDatabase.Get(option.NpcDefinitionId);
         if (baseDef == null)
         {
-            CombatUI?.ShowCombatLog($"Cannot summon {option.DisplayName}: missing creature definition.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"Cannot summon {option.DisplayName}: missing creature definition."));
             ShowActionChoices();
             return;
         }
@@ -678,7 +678,7 @@ public partial class GameManager
         int summonSizeSquares = baseDef.SizeCategory.GetSpaceWidthSquares();
         if (!Grid.CanPlaceCreature(targetCell.Coords, summonSizeSquares))
         {
-            CombatUI.ShowCombatLog("Cannot summon there: not enough open space for that creature size.");
+            CombatUI.ShowCombatLog(CombatLogHelper.Failure("", "Cannot summon there: not enough open space for that creature size."));
             ShowSummonPlacementTargets(caster, _pendingSpell);
             return;
         }
@@ -719,12 +719,12 @@ public partial class GameManager
             string selectedListRoman = SummonMonsterLists.ToRomanLevel(Mathf.Max(1, selectedListLevel));
             CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"{caster.Stats.CharacterName} casts {_pendingSpell.Name} (using Level {selectedListRoman} list)."));
             if (countInfo != null && countInfo.RequiresRoll)
-                CombatUI?.ShowCombatLog($"<color=#CCEEFF>{rollLog}</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{rollLog}"));
 
             string summonLabel = option.BuildUiLabel();
             CombatUI?.ShowCombatLog(CombatLogHelper.SummonRaw($"Summoning {creatureCount} {summonLabel}{(creatureCount == 1 ? string.Empty : "s")}..."));
             if (isSwarmSummonOption)
-                CombatUI?.ShowCombatLog("<color=#77EE99>Swarm summons are AI-controlled allies and cannot be directly commanded.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Swarm summons are AI-controlled allies and cannot be directly commanded."));
 
             List<CharacterController> spawnedCreatures = new List<CharacterController>(creatureCount);
             Vector2Int primaryCell = targetCell.Coords;
@@ -764,12 +764,12 @@ public partial class GameManager
                 spawnedCreatures.Add(summonCC);
 
                 string summonIndexLabel = creatureCount > 1 ? $" {i + 1}" : string.Empty;
-                CombatUI?.ShowCombatLog($"<color=#CCEEFF>{summonLabel}{summonIndexLabel} appears!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{summonLabel}{summonIndexLabel} appears!"));
             }
 
             if (spawnedCreatures.Count == 0)
             {
-                CombatUI?.ShowCombatLog("⚠ Summoning failed: no valid creatures could be spawned.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Summoning failed: no valid creatures could be spawned."));
                 ShowActionChoices();
                 return;
             }
@@ -806,8 +806,7 @@ public partial class GameManager
         if (ResilientSphereAreaEffect.IsCharacterInAnySphere(caster)
             && _pendingSpell.TargetType != SpellTargetType.Self)
         {
-            CombatUI?.ShowCombatLog(
-                $"<color=#44CCFF>🔮 {caster.Stats.CharacterName}'s spell cannot pass through the Resilient Sphere!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("🔮", $"{caster.Stats.CharacterName}'s spell cannot pass through the Resilient Sphere!"));
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
@@ -930,7 +929,7 @@ public partial class GameManager
         List<string> raceOptions = RaceDatabase.GetRaceNamesBySizeCategory(casterSize);
         if (raceOptions == null || raceOptions.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ No races available for size {casterSize}. Disguise Self cancelled.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"No races available for size {casterSize}. Disguise Self cancelled."));
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
@@ -993,13 +992,13 @@ public partial class GameManager
                     _pendingResistEnergyType = null;
                     _pendingFireShieldIsWarm = null;
                     _pendingProtectionFromEnergyType = null;
-                    CombatUI?.ShowCombatLog("⚠ Resist Energy cancelled: no energy type selected.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Resist Energy cancelled: no energy type selected."));
                     ShowActionChoices();
                     return;
                 }
 
                 _pendingResistEnergyType = (ResistEnergyType)selectedIndex;
-                CombatUI?.ShowCombatLog($"✨ Resist Energy prepared for {options[selectedIndex].ToLowerInvariant()}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"Resist Energy prepared for {options[selectedIndex].ToLowerInvariant()}."));
                 BeginPendingSpellTargeting(caster);
             },
             onCancel: () =>
@@ -1010,7 +1009,7 @@ public partial class GameManager
                 _pendingResistEnergyType = null;
                 _pendingFireShieldIsWarm = null;
                 _pendingProtectionFromEnergyType = null;
-                CombatUI?.ShowCombatLog("↩ Resist Energy cancelled (energy type not selected).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Resist Energy cancelled (energy type not selected)."));
                 ShowActionChoices();
             },
             titleOverride: "Resist Energy - Choose Energy Type",
@@ -1049,13 +1048,13 @@ public partial class GameManager
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
                     _pendingProtectionFromEnergyType = null;
-                    CombatUI?.ShowCombatLog("⚠ Protection from Energy cancelled: no energy type selected.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Protection from Energy cancelled: no energy type selected."));
                     ShowActionChoices();
                     return;
                 }
 
                 _pendingProtectionFromEnergyType = (ResistEnergyType)selectedIndex;
-                CombatUI?.ShowCombatLog($"✨ Protection from Energy prepared for {options[selectedIndex].ToLowerInvariant()}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"Protection from Energy prepared for {options[selectedIndex].ToLowerInvariant()}."));
                 BeginPendingSpellTargeting(caster);
             },
             onCancel: () =>
@@ -1064,7 +1063,7 @@ public partial class GameManager
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
                 _pendingProtectionFromEnergyType = null;
-                CombatUI?.ShowCombatLog("↩ Protection from Energy cancelled (energy type not selected).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Protection from Energy cancelled (energy type not selected)."));
                 ShowActionChoices();
             },
             titleOverride: "Protection from Energy - Choose Energy Type",
@@ -1100,7 +1099,7 @@ public partial class GameManager
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
                     _pendingFireShieldIsWarm = null;
-                    CombatUI?.ShowCombatLog("⚠ Fire Shield cancelled: no shield type selected.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Fire Shield cancelled: no shield type selected."));
                     ShowActionChoices();
                     return;
                 }
@@ -1108,7 +1107,7 @@ public partial class GameManager
                 // Index 0 = Chill Shield (not warm), Index 1 = Warm Shield
                 _pendingFireShieldIsWarm = (selectedIndex == 1);
                 string chosen = selectedIndex == 1 ? "Warm Shield" : "Chill Shield";
-                CombatUI?.ShowCombatLog($"✨ Fire Shield prepared: {chosen}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"Fire Shield prepared: {chosen}."));
                 BeginPendingSpellTargeting(caster);
             },
             onCancel: () =>
@@ -1117,7 +1116,7 @@ public partial class GameManager
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
                 _pendingFireShieldIsWarm = null;
-                CombatUI?.ShowCombatLog("↩ Fire Shield cancelled (shield type not selected).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Fire Shield cancelled (shield type not selected)."));
                 ShowActionChoices();
             },
             titleOverride: "Fire Shield — Choose Shield Type",
@@ -1585,7 +1584,7 @@ public partial class GameManager
             ClearSpellcastResourceSnapshot();
             spellComp.SetHeldTouchCharge(_pendingSpell, _pendingMetamagic);
 
-            CombatUI.ShowCombatLog($"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {_pendingSpell.Name}.");
+            CombatUI.ShowCombatLog(CombatLogHelper.SpellEffect("", $"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {_pendingSpell.Name}."));
             UpdateAllStatsUI();
             Grid.ClearAllHighlights();
 
@@ -1611,7 +1610,7 @@ public partial class GameManager
 
         if (!IsValidTargetForSpell(caster, target, _pendingSpell))
         {
-            CombatUI?.ShowCombatLog($"{_pendingSpell.Name} has invalid target (requires humanoid ally/enemy constraints).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{_pendingSpell.Name} has invalid target (requires humanoid ally/enemy constraints)."));
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
@@ -1628,21 +1627,21 @@ public partial class GameManager
 
         if (string.Equals(_pendingSpell.SpellId, SpellNames.RESIST_ENERGY, StringComparison.Ordinal) && !_pendingResistEnergyType.HasValue)
         {
-            CombatUI?.ShowCombatLog("⚠ Resist Energy requires selecting an energy type before casting.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Resist Energy requires selecting an energy type before casting."));
             ShowResistEnergyTypeSelection(caster);
             return;
         }
 
         if (string.Equals(_pendingSpell.SpellId, SpellNames.PROTECTION_FROM_ENERGY, StringComparison.Ordinal) && !_pendingProtectionFromEnergyType.HasValue)
         {
-            CombatUI?.ShowCombatLog("⚠ Protection from Energy requires selecting an energy type before casting.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Protection from Energy requires selecting an energy type before casting."));
             ShowProtectionFromEnergyTypeSelection(caster);
             return;
         }
 
         if (string.Equals(_pendingSpell.SpellId, SpellNames.FIRE_SHIELD, StringComparison.Ordinal) && !_pendingFireShieldIsWarm.HasValue)
         {
-            CombatUI?.ShowCombatLog("⚠ Fire Shield requires selecting a shield type before casting.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Fire Shield requires selecting a shield type before casting."));
             ShowFireShieldTypeSelection(caster);
             return;
         }
@@ -1858,7 +1857,7 @@ public partial class GameManager
                     }
 
                     HandleConcentrationOnCasting(caster, _pendingSpell);
-                    CombatUI?.ShowCombatLog($"⚡ {caster.Stats.CharacterName}'s {_pendingSpell.Name} fizzles! (Blink spell failure: rolled {blinkSpellRoll} ≤ 20%)");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{caster.Stats.CharacterName}'s {_pendingSpell.Name} fizzles! (Blink spell failure: rolled {blinkSpellRoll} ≤ 20%)"));
                     UpdateAllStatsUI();
                     Grid.ClearAllHighlights();
 
@@ -1876,7 +1875,7 @@ public partial class GameManager
                 }
                 else
                 {
-                    CombatUI?.ShowCombatLog($"⚡ Blink spell check: {caster.Stats.CharacterName} rolled {blinkSpellRoll} > 20% (spell proceeds).");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Blink spell check: {caster.Stats.CharacterName} rolled {blinkSpellRoll} > 20% (spell proceeds)."));
                 }
             }
 
@@ -2017,7 +2016,7 @@ public partial class GameManager
                 if (blinkTargetRoll <= 50)
                 {
                     string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-                    CombatUI?.ShowCombatLog($"🌀 {_pendingSpell.Name} fails to reach {targetName}! Target is on the Ethereal Plane. (Blink: rolled {blinkTargetRoll} ≤ 50%)");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{_pendingSpell.Name} fails to reach {targetName}! Target is on the Ethereal Plane. (Blink: rolled {blinkTargetRoll} ≤ 50%)"));
                     UpdateAllStatsUI();
                     Grid.ClearAllHighlights();
 
@@ -2037,7 +2036,7 @@ public partial class GameManager
                 else
                 {
                     string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-                    CombatUI?.ShowCombatLog($"🌀 Blink target check: {targetName} rolled {blinkTargetRoll} > 50% (spell connects).");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"Blink target check: {targetName} rolled {blinkTargetRoll} > 50% (spell connects)."));
                 }
             }
 
@@ -2073,12 +2072,12 @@ public partial class GameManager
                                        && !commandUndeadNoSaveOverride;
             if (effectNegatedBySave)
             {
-                CombatUI?.ShowCombatLog($"🛡 {target.Stats.CharacterName} resists {_pendingSpell.Name} with a successful {result.SaveType} save.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{target.Stats.CharacterName} resists {_pendingSpell.Name} with a successful {result.SaveType} save."));
             }
 
             if (result.MindAffectingImmunityBlocked)
             {
-                CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {_pendingSpell.Name} has no effect.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧠", $"{target.Stats.CharacterName} is immune to mind-affecting effects. {_pendingSpell.Name} has no effect."));
             }
 
             // ── Lesser Globe of Invulnerability check ──
@@ -2092,7 +2091,7 @@ public partial class GameManager
                 {
                     blockedByGlobe = true;
                     result.Success = false;
-                    CombatUI?.ShowCombatLog($"🛡 {_pendingSpell.Name} (level {_pendingSpell.SpellLevel}) is blocked by Lesser Globe of Invulnerability! Spell effects of 3rd level or lower cannot affect {target.Stats.CharacterName}.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{_pendingSpell.Name} (level {_pendingSpell.SpellLevel}) is blocked by Lesser Globe of Invulnerability! Spell effects of 3rd level or lower cannot affect {target.Stats.CharacterName}."));
                 }
             }
 
@@ -3096,7 +3095,7 @@ public partial class GameManager
                         int clickSide = GetSideOfLine(lineStart, lineEnd, targetPos);
                         if (clickSide == 0)
                         {
-                            CombatUI?.ShowCombatLog("⚠ Click on one side of the wall, not on the wall itself.");
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Click on one side of the wall, not on the wall itself."));
                             return;
                         }
 
@@ -3114,7 +3113,7 @@ public partial class GameManager
                         }
 
                         _pendingWallLineStart = targetPos;
-                        CombatUI?.ShowCombatLog($"🔥 Wall start set at ({targetPos.x}, {targetPos.y}). Click END point.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", $"Wall start set at ({targetPos.x}, {targetPos.y}). Click END point."));
 
                         // Highlight start cell and update instructions
                         SquareCell startCell = Grid.GetCell(targetPos);
@@ -3136,7 +3135,7 @@ public partial class GameManager
                         if (distFromStart > maxLen)
                         {
                             Debug.Log($"[WallOfFire] End point ({targetPos.x},{targetPos.y}) too far from start ({distFromStart} > {maxLen})");
-                            CombatUI?.ShowCombatLog($"⚠ End point too far from start (max {maxLen * 5} ft). Click closer.");
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"End point too far from start (max {maxLen * 5} ft). Click closer."));
                             return;
                         }
 
@@ -3184,7 +3183,7 @@ public partial class GameManager
                         if (_pendingWallRingCellsForDirection.Contains(targetPos))
                         {
                             Debug.Log($"[WallOfFire][RingDir] Click was on ring itself — ignored");
-                            CombatUI?.ShowCombatLog("⚠ Click inside or outside the ring, not on the ring itself.");
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Click inside or outside the ring, not on the ring itself."));
                             return;
                         }
 
@@ -3225,7 +3224,7 @@ public partial class GameManager
                         }
 
                         _pendingWallOfIceLineStart = targetPos;
-                        CombatUI?.ShowCombatLog($"❄ Wall start set at ({targetPos.x}, {targetPos.y}). Click END point.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"❄ Wall start set at ({targetPos.x}, {targetPos.y}). Click END point."));
 
                         SquareCell startCell = Grid.GetCell(targetPos);
                         if (startCell != null) startCell.SetHighlight(HighlightType.AoETarget);
@@ -3245,7 +3244,7 @@ public partial class GameManager
                         if (distFromStart > maxLen)
                         {
                             Debug.Log($"[WallOfIce] End point ({targetPos.x},{targetPos.y}) too far from start ({distFromStart} > {maxLen})");
-                            CombatUI?.ShowCombatLog($"⚠ End point too far from start (max {maxLen * 5} ft). Click closer.");
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"End point too far from start (max {maxLen * 5} ft). Click closer."));
                             return;
                         }
 
@@ -3431,7 +3430,7 @@ public partial class GameManager
             Grid.ClearAllHighlights();
             _highlightedCells.Clear();
             CurrentSubPhase = PlayerSubPhase.Animating;
-            CombatUI?.ShowCombatLog("↩ Remaining full-attack swings/shots cancelled.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Remaining full-attack swings/shots cancelled."));
             return;
         }
 
@@ -3439,7 +3438,7 @@ public partial class GameManager
         if (pc != null && _pendingDefensiveAttackSelection)
         {
             pc.SetFightingDefensively(false);
-            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels defensive attack declaration.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{pc.Stats.CharacterName} cancels defensive attack declaration."));
             UpdateAllStatsUI();
         }
 
@@ -5432,14 +5431,14 @@ public partial class GameManager
         int nextStage = GetColorSprayNextStage(data.HdTier, data.CurrentStage);
         if (nextStage <= 0)
         {
-            CombatUI?.ShowCombatLog($"⏱ {character.Stats.CharacterName} is no longer stunned.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"{character.Stats.CharacterName} is no longer stunned."));
             return true;
         }
 
         if (data.CurrentStage == 1 && data.HdTier == 1)
-            CombatUI?.ShowCombatLog($"⏱ {character.Stats.CharacterName} no longer unconscious, still blinded and stunned ({Mathf.Max(1, GetColorSprayStageDuration(data, nextStage))} rounds).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"{character.Stats.CharacterName} no longer unconscious, still blinded and stunned ({Mathf.Max(1, GetColorSprayStageDuration(data, nextStage))} rounds)."));
         else if (((data.CurrentStage == 2 && data.HdTier == 1) || (data.CurrentStage == 1 && data.HdTier == 2)))
-            CombatUI?.ShowCombatLog($"⏱ {character.Stats.CharacterName} no longer blinded, still stunned ({Mathf.Max(1, GetColorSprayStageDuration(data, nextStage))} round{(Mathf.Max(1, GetColorSprayStageDuration(data, nextStage)) == 1 ? string.Empty : "s")}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"{character.Stats.CharacterName} no longer blinded, still stunned ({Mathf.Max(1, GetColorSprayStageDuration(data, nextStage))} round{(Mathf.Max(1, GetColorSprayStageDuration(data, nextStage)) == 1 ? string.Empty : "s")})."));
 
         RemoveCondition(character, CombatConditionType.Unconscious);
         RemoveCondition(character, CombatConditionType.Blinded);
@@ -5531,7 +5530,7 @@ public partial class GameManager
                 ? $" by {waker.Stats.CharacterName}"
                 : string.Empty;
             string reasonText = string.IsNullOrWhiteSpace(reason) ? "" : $" ({reason})";
-            CombatUI?.ShowCombatLog($"💤 {target.Stats.CharacterName} wakes{wakerText}{reasonText}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("💤", $"{target.Stats.CharacterName} wakes{wakerText}{reasonText}."));
         }
 
         return true;
@@ -5548,7 +5547,7 @@ public partial class GameManager
         string targetName = target.Stats.CharacterName;
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
 
-        CombatUI?.ShowCombatLog($"✨ {casterName} casts Cause Fear on {targetName}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"{casterName} casts Cause Fear on {targetName}."));
 
         if (!SpellTargetingService.IsLivingCreature(target))
         {
@@ -5558,7 +5557,7 @@ public partial class GameManager
                 result.NoEffectReason = $"{targetName} is immune to fear (not a living creature).";
             }
 
-            CombatUI?.ShowCombatLog($"🧟 {targetName} is immune to fear effects.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Immune("", $"🧟 {targetName} is immune to fear effects."));
             return true;
         }
 
@@ -5571,7 +5570,7 @@ public partial class GameManager
                 result.NoEffectReason = $"{targetName} is too powerful to be frightened.";
             }
 
-            CombatUI?.ShowCombatLog($"⚠ {targetName} is too powerful to be frightened.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{targetName} is too powerful to be frightened."));
             return true;
         }
 
@@ -5596,7 +5595,7 @@ public partial class GameManager
 
             result.BuffApplied = true;
             result.BuffDescription = "Debuff: Shaken for 1 round (successful Will save reduces Cause Fear).";
-            CombatUI?.ShowCombatLog($"😰 {targetName} resists the worst of Cause Fear and is shaken for 1 round.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😰", $"{targetName} resists the worst of Cause Fear and is shaken for 1 round."));
             return true;
         }
 
@@ -5633,7 +5632,7 @@ public partial class GameManager
             result.BuffDescription = $"Debuff: Frightened for {frightenedRounds} rounds.";
         }
 
-        CombatUI?.ShowCombatLog($"😱 {targetName} fails Will save - Frightened for {frightenedRounds} rounds! ({casterName} is the source of fear)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😱", $"{targetName} fails Will save - Frightened for {frightenedRounds} rounds! ({casterName} is the source of fear)"));
         return true;
     }
 
@@ -5652,7 +5651,7 @@ public partial class GameManager
         string targetName = target.Stats.CharacterName;
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
 
-        CombatUI?.ShowCombatLog($"✨ {casterName} casts Ghoul Touch on {targetName}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"{casterName} casts Ghoul Touch on {targetName}."));
 
         // Ghoul Touch only works on living humanoids (PHB p.235)
         if (!SpellTargetingService.IsLivingCreature(target))
@@ -5662,7 +5661,7 @@ public partial class GameManager
                 result.Success = false;
                 result.NoEffectReason = $"{targetName} is not a living creature.";
             }
-            CombatUI?.ShowCombatLog($"🧟 {targetName} is immune to Ghoul Touch (not a living creature).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Immune("", $"🧟 {targetName} is immune to Ghoul Touch (not a living creature)."));
             return true;
         }
 
@@ -5673,21 +5672,21 @@ public partial class GameManager
                 result.Success = false;
                 result.NoEffectReason = $"{targetName} is not a humanoid.";
             }
-            CombatUI?.ShowCombatLog($"⚠ {targetName} is immune to Ghoul Touch (not a humanoid).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{targetName} is immune to Ghoul Touch (not a humanoid)."));
             return true;
         }
 
         // Touch attack must hit
         if (result != null && result.RequiredAttackRoll && !result.AttackHit)
         {
-            CombatUI?.ShowCombatLog($"❌ {casterName}'s Ghoul Touch misses {targetName}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{casterName}'s Ghoul Touch misses {targetName}."));
             return true;
         }
 
         // Fort save negates
         if (result != null && result.RequiredSave && result.SaveSucceeded)
         {
-            CombatUI?.ShowCombatLog($"🛡 {targetName} resists Ghoul Touch with a successful Fortitude save.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{targetName} resists Ghoul Touch with a successful Fortitude save."));
             return true;
         }
 
@@ -5714,7 +5713,7 @@ public partial class GameManager
         }
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Failure("⛓", $"{targetName} is paralyzed by Ghoul Touch for {ghoulEffect.ParalysisDurationRounds} rounds!"));
-        CombatUI?.ShowCombatLog($"<color=#99CC66>☠ Carrion stench emanates from {targetName} (10-ft radius, sickens living creatures).</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("☠", $"Carrion stench emanates from {targetName} (10-ft radius, sickens living creatures)."));
 
         // Apply stench to nearby creatures immediately
         ApplyGhoulTouchStench(caster, target, ghoulEffect);
@@ -5749,7 +5748,7 @@ public partial class GameManager
             if (!ghoulEffect.IsValidStenchTarget(creature)) continue;
             if (ghoulEffect.IsCreaturePoisonImmune(creature))
             {
-                CombatUI?.ShowCombatLog($"🛡 {creature.Stats.CharacterName} is immune to poison (stench has no effect).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{creature.Stats.CharacterName} is immune to poison (stench has no effect)."));
                 continue;
             }
 
@@ -5766,7 +5765,7 @@ public partial class GameManager
 
             if (saved)
             {
-                CombatUI?.ShowCombatLog($"🛡 {creature.Stats.CharacterName} resists the carrion stench (Fort {fortSave} vs DC {spellDC}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{creature.Stats.CharacterName} resists the carrion stench (Fort {fortSave} vs DC {spellDC})."));
             }
             else
             {
@@ -5788,7 +5787,7 @@ public partial class GameManager
                         "Ghoul Touch stench");
                 }
 
-                CombatUI?.ShowCombatLog($"<color=#CCCC66>🤢 {creature.Stats.CharacterName} is sickened by the carrion stench! (-2 to attacks, damage, saves, checks) Fort {fortSave} vs DC {spellDC}</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🤢 {creature.Stats.CharacterName} is sickened by the carrion stench! (-2 to attacks, damage, saves, checks) Fort {fortSave} vs DC {spellDC}"));
             }
         }
     }
@@ -5809,7 +5808,7 @@ public partial class GameManager
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
 
-        CombatUI?.ShowCombatLog($"✨ {casterName} casts Scare on {targetName}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"{casterName} casts Scare on {targetName}."));
 
         // Check mind-affecting immunity
         if (result != null && result.MindAffectingImmunityBlocked)
@@ -5823,7 +5822,7 @@ public partial class GameManager
                 result.Success = false;
                 result.NoEffectReason = $"{targetName} is immune to fear (not a living creature).";
             }
-            CombatUI?.ShowCombatLog($"🧟 {targetName} is immune to Scare (not a living creature).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Immune("", $"🧟 {targetName} is immune to Scare (not a living creature)."));
             return true;
         }
 
@@ -5836,7 +5835,7 @@ public partial class GameManager
                 result.Success = false;
                 result.NoEffectReason = $"{targetName} has {targetHd} HD (6+ HD immune to Scare).";
             }
-            CombatUI?.ShowCombatLog($"⚠ {targetName} ({targetHd} HD) is too powerful to be affected by Scare.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{targetName} ({targetHd} HD) is too powerful to be affected by Scare."));
             return true;
         }
 
@@ -5865,7 +5864,7 @@ public partial class GameManager
                 result.BuffDescription = "Debuff: Shaken for 1 round (successful Will save reduces Scare).";
             }
 
-            CombatUI?.ShowCombatLog($"😰 {targetName} resists the worst of Scare and is shaken for 1 round (-2 to attacks, saves, checks).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😰", $"{targetName} resists the worst of Scare and is shaken for 1 round (-2 to attacks, saves, checks)."));
             return true;
         }
 
@@ -5906,7 +5905,7 @@ public partial class GameManager
             result.BuffDescription = $"Debuff: Frightened for {frightenedRounds} rounds.";
         }
 
-        CombatUI?.ShowCombatLog($"😱 {targetName} fails Will save - Frightened for {frightenedRounds} rounds! Must flee from {casterName}. (-2 to attacks, saves, checks)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("😱", $"{targetName} fails Will save - Frightened for {frightenedRounds} rounds! Must flee from {casterName}. (-2 to attacks, saves, checks)"));
         Debug.Log($"[GameManager] Scare: {targetName} frightened for {frightenedRounds} rounds by {casterName}");
         return true;
     }
@@ -6138,11 +6137,11 @@ public partial class GameManager
                 ? "stronger"
                 : (penalty < previousPenalty ? "weaker" : "equally strong");
             string article = replacementDescriptor == "equally strong" ? "an" : "a";
-            CombatUI?.ShowCombatLog($"♻ Previous enfeeblement replaced on {target.Stats.CharacterName}.");
-            CombatUI?.ShowCombatLog($"💀 {target.Stats.CharacterName}'s enfeeblement is replaced by {article} {replacementDescriptor} effect (old STR -{previousPenalty} → new STR -{penalty}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("♻", $"Previous enfeeblement replaced on {target.Stats.CharacterName}."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{target.Stats.CharacterName}'s enfeeblement is replaced by {article} {replacementDescriptor} effect (old STR -{previousPenalty} → new STR -{penalty})."));
         }
 
-        CombatUI?.ShowCombatLog($"💀 {target.Stats.CharacterName} is enfeebled by {casterName}: STR -{penalty} for {durationRounds} rounds (STR now {resultingStrength}).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{target.Stats.CharacterName} is enfeebled by {casterName}: STR -{penalty} for {durationRounds} rounds (STR now {resultingStrength})."));
         return true;
     }
 
@@ -6191,9 +6190,9 @@ public partial class GameManager
         result.BuffApplied = true;
         result.BuffDescription = $"Debuff: Int -{intDamage}, Wis -{wisDamage}, Cha -{chaDamage} for {durationRounds} rounds.";
 
-        CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is touched by idiocy for {durationRounds} rounds.");
-        CombatUI?.ShowCombatLog($"   Ability damage: INT 1d6={intDamage}, WIS 1d6={wisDamage}, CHA 1d6={chaDamage}");
-        CombatUI?.ShowCombatLog($"   INT {intBefore}→{intAfter}, WIS {wisBefore}→{wisAfter}, CHA {chaBefore}→{chaAfter}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧠", $"{target.Stats.CharacterName} is touched by idiocy for {durationRounds} rounds."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Ability damage: INT 1d6={intDamage}, WIS 1d6={wisDamage}, CHA 1d6={chaDamage}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   INT {intBefore}→{intAfter}, WIS {wisBefore}→{wisAfter}, CHA {chaBefore}→{chaAfter}"));
 
         return true;
     }
@@ -6232,7 +6231,7 @@ public partial class GameManager
         }
 
         int initialDamage = Mathf.Max(0, result.DamageDealt);
-        CombatUI?.ShowCombatLog($"🧪 Melf's Acid Arrow hits for {initialDamage} damage");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"Melf's Acid Arrow hits for {initialDamage} damage"));
 
         int lingeringRounds = CalculateMelfsAcidArrowAdditionalRounds(caster);
         if (lingeringRounds > 0)
@@ -6278,7 +6277,7 @@ public partial class GameManager
         if (damageDealt > 0)
             CheckConcentrationOnDamage(character, damageDealt);
 
-        CombatUI?.ShowCombatLog($"🧪 Acid continues to burn for {damageDealt} damage ({roundsLeft} rounds left)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"Acid continues to burn for {damageDealt} damage ({roundsLeft} rounds left)"));
 
         if (character.Stats.IsDead)
         {
@@ -6289,7 +6288,7 @@ public partial class GameManager
         if (roundsLeft <= 0)
         {
             character.ClearMelfsAcidArrowEffect();
-            CombatUI?.ShowCombatLog("⏱ Acid effect expires");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", "Acid effect expires"));
         }
     }
 
@@ -6359,7 +6358,7 @@ public partial class GameManager
                 target.ApplyCondition(CombatConditionType.Prone, laughterRounds, fallbackSource);
             }
 
-            CombatUI?.ShowCombatLog($"<color=#FF99FF>🤣 HAHAHA! {target.Stats.CharacterName} collapses in hideous laughter and falls prone for {laughterRounds} round(s)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🤣 HAHAHA! {target.Stats.CharacterName} collapses in hideous laughter and falls prone for {laughterRounds} round(s)!"));
             Debug.Log($"[GameManager] Tasha's Hideous Laughter applied to {target.Stats.CharacterName} for {laughterRounds} rounds");
             return null;
         }
@@ -6436,7 +6435,7 @@ public partial class GameManager
             // Validate target is undead
             if (!target.CanBeCommandedAsUndead())
             {
-                CombatUI?.ShowCombatLog($"⚠ {spell.Name} has no effect — {target.Stats.CharacterName} is not undead.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{spell.Name} has no effect — {target.Stats.CharacterName} is not undead."));
                 Debug.Log($"[GameManager] {spell.Name} failed: {target.Stats.CharacterName} is not undead (CreatureType={target.Stats.CreatureType})");
                 return null;
             }
@@ -6448,12 +6447,12 @@ public partial class GameManager
             if (isIntelligent)
             {
                 effectData = CommandUndeadEffectData.CreateForIntelligent(caster, target, casterLevel);
-                CombatUI?.ShowCombatLog($"<color=#9966FF>💀 {target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (intelligent undead — Friendly attitude, {casterLevel} day(s))</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"{target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (intelligent undead — Friendly attitude, {casterLevel} day(s))"));
             }
             else
             {
                 effectData = CommandUndeadEffectData.CreateForNonintelligent(caster, target, casterLevel);
-                CombatUI?.ShowCombatLog($"<color=#9966FF>💀 {target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (mindless undead — full obedience, {casterLevel} day(s))</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"{target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (mindless undead — full obedience, {casterLevel} day(s))"));
             }
 
             target.ApplyCommandUndeadEffect(effectData);
@@ -6485,7 +6484,7 @@ public partial class GameManager
                 target.ApplyCondition(CombatConditionType.Confused, confusionRounds, fallbackSource);
             }
 
-            CombatUI?.ShowCombatLog($"<color=#FFCC99>🌀 {target.Stats.CharacterName} is confused for {confusionRounds} round(s)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🌀", $"{target.Stats.CharacterName} is confused for {confusionRounds} round(s)!"));
             return null;
         }
 
@@ -6522,7 +6521,7 @@ public partial class GameManager
                 target.ApplyCondition(CombatConditionType.Charmed, charmRounds, fallbackSource);
             }
 
-            CombatUI?.ShowCombatLog($"<color=#FFD699>💞 {target.Stats.CharacterName} is charmed by {charmData.CasterName} for {charmRounds} round(s)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("💞", $"{target.Stats.CharacterName} is charmed by {charmData.CasterName} for {charmRounds} round(s)!"));
             return null;
         }
 
@@ -6565,8 +6564,8 @@ public partial class GameManager
 
             target.ApplyCommandUndeadEffect(effectData);
 
-            CombatUI?.ShowCombatLog($"<color=#CC66FF>🧠 {caster.Stats.CharacterName} dominates {target.Stats.CharacterName}!</color>");
-            CombatUI?.ShowCombatLog($"<color=#CC99FF>   The target is under {caster.Stats.CharacterName}'s telepathic control for {durationRounds} round(s).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🧠", $"{caster.Stats.CharacterName} dominates {target.Stats.CharacterName}!"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   The target is under {caster.Stats.CharacterName}'s telepathic control for {durationRounds} round(s)."));
 
             Debug.Log($"[GameManager] Dominate Person: {target.Stats.CharacterName} controlled by {caster.Stats.CharacterName} for {durationRounds} rounds");
             return null;
@@ -6577,7 +6576,7 @@ public partial class GameManager
             string sourceName = spell.Name;
             int negativeLevels = DiceService.D4("Enervation negative levels 1d4");
             int total = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, sourceName);
-            CombatUI?.ShowCombatLog($"<color=#9966CC>☠ {target.Stats.CharacterName} gains {negativeLevels} negative level(s) from Enervation (total {total}).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("☠", $"{target.Stats.CharacterName} gains {negativeLevels} negative level(s) from Enervation (total {total})."));
             return null;
         }
 
@@ -6610,14 +6609,14 @@ public partial class GameManager
         {
             bool removed = target.RemoveCondition(CombatConditionType.Petrified);
             if (removed)
-                CombatUI?.ShowCombatLog($"<color=#99FF99>✨ {target.Stats.CharacterName} returns to flesh.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("✨", $"{target.Stats.CharacterName} returns to flesh."));
             return null;
         }
 
         if (spell != null && (spell.SpellId == SpellNames.RESTORATION || spell.SpellId == SpellNames.GREATER_RESTORATION))
         {
             int removed = NegativeLevelSystem.RemoveNegativeLevels(target, int.MaxValue, spell.Name);
-            CombatUI?.ShowCombatLog($"<color=#99FFCC>✨ {target.Stats.CharacterName} recovers {removed} negative level(s).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✨", $"{target.Stats.CharacterName} recovers {removed} negative level(s)."));
             return null;
         }
 
@@ -6629,7 +6628,7 @@ public partial class GameManager
 
             ApplySleepState(caster, target, sleepRounds, wakeDc, spell);
 
-            CombatUI?.ShowCombatLog($"<color=#99CCFF>💤 {target.Stats.CharacterName} falls asleep for {sleepRounds} round(s)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.StatusEnd($"💤 {target.Stats.CharacterName} falls asleep for {sleepRounds} round(s)!"));
             Debug.Log($"[GameManager] Sleep applied Asleep/Unconscious to {target.Stats.CharacterName} for {sleepRounds} rounds");
             return null;
         }
@@ -6642,7 +6641,7 @@ public partial class GameManager
 
             ApplySleepState(caster, target, sleepRounds, wakeDc, spell);
 
-            CombatUI?.ShowCombatLog($"<color=#9999FF>💤 {target.Stats.CharacterName} falls into deep slumber for {sleepRounds} round(s)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("💤", $"{target.Stats.CharacterName} falls into deep slumber for {sleepRounds} round(s)!"));
             Debug.Log($"[GameManager] Deep Slumber applied Asleep/Unconscious to {target.Stats.CharacterName} for {sleepRounds} rounds");
             return null;
         }
@@ -6715,7 +6714,7 @@ public partial class GameManager
 
             if (target != null && target != caster)
             {
-                CombatUI?.ShowCombatLog($"<color=#FFAA66>⚠ True Strike is personal and can only target the caster.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("⚠", $"True Strike is personal and can only target the caster."));
                 Debug.Log("[GameManager] True Strike attempted on non-caster target; ignoring target and applying to caster only.");
             }
 
@@ -6895,8 +6894,8 @@ public partial class GameManager
                     : $"<color=#88FFEE>🌫 {casterName} casts Blur on {recipient.Stats.CharacterName}!</color>";
 
                 CombatUI?.ShowCombatLog(castLine);
-                CombatUI?.ShowCombatLog($"<color=#A6F3FF>   {recipient.Stats.CharacterName}'s outline becomes blurred and indistinct.</color>");
-                CombatUI?.ShowCombatLog($"<color=#A6F3FF>   Attacks against {recipient.Stats.CharacterName} have 20% miss chance ({effect.GetDurationDisplayString()}, {Mathf.Max(0, effect.RemainingRounds)} rounds).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("", $"   {recipient.Stats.CharacterName}'s outline becomes blurred and indistinct."));
+                CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("", $"   Attacks against {recipient.Stats.CharacterName} have 20% miss chance ({effect.GetDurationDisplayString()}, {Mathf.Max(0, effect.RemainingRounds)} rounds)."));
             }
 
             UpdateAllStatsUI();
@@ -6940,7 +6939,7 @@ public partial class GameManager
                     _pendingResistEnergyType = ResistEnergyType.Fire;
                 else
                 {
-                    CombatUI?.ShowCombatLog("⚠ Resist Energy failed: no energy type selected.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Resist Energy failed: no energy type selected."));
                     return null;
                 }
             }
@@ -6993,7 +6992,7 @@ public partial class GameManager
                     _pendingProtectionFromEnergyType = ResistEnergyType.Fire;
                 else
                 {
-                    CombatUI?.ShowCombatLog("⚠ Protection from Energy failed: no energy type selected.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Protection from Energy failed: no energy type selected."));
                     return null;
                 }
             }
@@ -7091,7 +7090,7 @@ public partial class GameManager
                         return null;
                     }
                     SpellComponentRegistry.ConsumeInventoryComponents(spell.SpellId, caster);
-                    CombatUI?.ShowCombatLog($"<color=#CCAA44>💎 {casterStats.CharacterName} consumes diamond dust (250 gp) from inventory for Stoneskin.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("💎", $"{casterStats.CharacterName} consumes diamond dust (250 gp) from inventory for Stoneskin."));
                 }
                 else
                 {
@@ -7103,13 +7102,13 @@ public partial class GameManager
                         return null;
                     }
                     SpellComponentRegistry.ConsumeComponents(spell.SpellId, casterStats);
-                    CombatUI?.ShowCombatLog($"<color=#CCAA44>💎 {casterStats.CharacterName} consumes 250 gp diamond dust for Stoneskin ({casterStats.ComponentGold} gp remaining).</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("💎", $"{casterStats.CharacterName} consumes 250 gp diamond dust for Stoneskin ({casterStats.ComponentGold} gp remaining)."));
                 }
             }
             else if (isTestPanelCast && casterStats != null)
             {
                 Debug.Log($"[SpellCasting] F12 test panel cast — bypassing inventory component check for {spell.SpellId}.");
-                CombatUI?.ShowCombatLog($"<color=#888888>🔧 [Test] {casterStats.CharacterName} casts Stoneskin (component check bypassed for testing).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Stub("", $"🔧 [Test] {casterStats.CharacterName} casts Stoneskin (component check bypassed for testing)."));
             }
 
             StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
@@ -7362,7 +7361,7 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88DDFF>🛡️ {recipient.Stats.CharacterName} casts Sanctuary — enemies must make Will save DC {saveDC} to attack [{effect.GetDurationDisplayString()}]</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🛡", $"️ {recipient.Stats.CharacterName} casts Sanctuary — enemies must make Will save DC {saveDC} to attack [{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] Sanctuary applied to {recipient.Stats.CharacterName}: DC {saveDC}, CL {casterLevel}");
             }
 
@@ -7395,7 +7394,7 @@ public partial class GameManager
                 if (targetSpellComp != null)
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88DDFF>👻 {target.Stats.CharacterName} is hidden from undead — mindless undead auto-fail, intelligent undead Will DC {saveDC} [{effect.GetDurationDisplayString()}]</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"👻 {target.Stats.CharacterName} is hidden from undead — mindless undead auto-fail, intelligent undead Will DC {saveDC} [{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] Hide from Undead applied to {target.Stats.CharacterName}: DC {saveDC}, CL {casterLevel}");
             }
 
@@ -7448,7 +7447,7 @@ public partial class GameManager
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
                 string fearStatus = removedFear ? "Fear removed! " : "";
-                CombatUI?.ShowCombatLog($"<color=#AAFF88>✨ {fearStatus}{target.Stats.CharacterName} gains +4 morale bonus vs fear [{effect.GetDurationDisplayString()}]</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("✨", $"{fearStatus}{target.Stats.CharacterName} gains +4 morale bonus vs fear [{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] Remove Fear applied to {target.Stats.CharacterName}: +4 morale vs fear, CL {casterLevel}, fear removed={removedFear}");
             }
 
@@ -7481,7 +7480,7 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88DDFF>🛡️ {recipient.Stats.CharacterName} casts Entropic Shield — ranged attacks have 20% miss chance (CL {casterLevel}) [{effect.GetDurationDisplayString()}]</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🛡", $"️ {recipient.Stats.CharacterName} casts Entropic Shield — ranged attacks have 20% miss chance (CL {casterLevel}) [{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] Entropic Shield applied to {recipient.Stats.CharacterName}: CL {casterLevel}");
             }
 
@@ -7516,7 +7515,7 @@ public partial class GameManager
                 if (recipientSpellComp != null)
                     recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88DDFF>🪨 {recipient.Stats.CharacterName} casts Magic Stone — 3 pebbles enchanted (+1 atk, 1d6+1 dmg, magic) (CL {casterLevel}) [{effect.GetDurationDisplayString()}]</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪨", $"{recipient.Stats.CharacterName} casts Magic Stone — 3 pebbles enchanted (+1 atk, 1d6+1 dmg, magic) (CL {casterLevel}) [{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] Magic Stone applied to {recipient.Stats.CharacterName}: 3 charges, CL {casterLevel}");
             }
 
@@ -7558,7 +7557,7 @@ public partial class GameManager
                 if (targetSpellComp != null)
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog($"<color=#88DDFF>🛡️ {target.Stats.CharacterName} gains +{deflectionBonus} deflection bonus to AC from Shield of Faith (CL {casterLevel}) [{effect.GetDurationDisplayString()}]</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🛡", $"️ {target.Stats.CharacterName} gains +{deflectionBonus} deflection bonus to AC from Shield of Faith (CL {casterLevel}) [{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] Shield of Faith applied to {target.Stats.CharacterName}: +{deflectionBonus} deflection, CL {casterLevel}");
             }
 
@@ -7582,7 +7581,7 @@ public partial class GameManager
         if (spell != null && spell.SpellId == SpellNames.BREAK_ENCHANTMENT)
         {
             PerformTargetedDispel(caster, target);
-            CombatUI?.ShowCombatLog($"<color=#99FFCC>✨ {caster.Stats.CharacterName} attempts to break enchantments on {target.Stats.CharacterName}!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✨", $"{caster.Stats.CharacterName} attempts to break enchantments on {target.Stats.CharacterName}!"));
             return null; // Break Enchantment is instantaneous
         }
 
@@ -7627,7 +7626,7 @@ public partial class GameManager
                 bool isDebuff = spell.EffectType == SpellEffectType.Debuff || spell.EffectType == SpellEffectType.Control;
                 string color = isDebuff ? "#FF8888" : "#88FF88";
                 string effectLabel = isDebuff ? "debuff" : "buff";
-                CombatUI?.ShowCombatLog($"<color={color}>✨ {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} [{durStr}]</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"<color={color}>✨ {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} [{durStr}]</color>"));
                 Debug.Log($"[GameManager] {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} via StatusEffectManager: {effect.GetDetailedString()}");
             }
             else
@@ -7961,7 +7960,7 @@ public partial class GameManager
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DIMENSIONAL_ANCHOR, StringComparison.Ordinal))
                 {
                     character.Stats.ActiveDimensionalAnchorEffect = null;
-                    CombatUI?.ShowCombatLog($"<color=#00FF88>⏱ Dimensional Anchor fades from {character.Stats.CharacterName}. Extradimensional travel is no longer blocked.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("⏱", $"Dimensional Anchor fades from {character.Stats.CharacterName}. Extradimensional travel is no longer blocked."));
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
                 {
@@ -8169,7 +8168,7 @@ public partial class GameManager
         int total = roll + bonus;
         bool success = total >= dc;
 
-        CombatUI?.ShowCombatLog($"🪢 Entangled somatic concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {roll} + {bonus} = {total} vs DC {dc}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Entangled somatic concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {roll} + {bonus} = {total} vs DC {dc}."));
 
         if (success)
             return true;
@@ -8190,7 +8189,7 @@ public partial class GameManager
             return false;
         }
 
-        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} fails the DC {dc} concentration check while entangled. {spell.Name} is lost and the spell slot is spent.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} fails the DC {dc} concentration check while entangled. {spell.Name} is lost and the spell slot is spent."));
         return false;
     }
 
@@ -8234,7 +8233,7 @@ public partial class GameManager
             return;
         }
 
-        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} is casting {spell.Name} while threatened ({threateningEnemies.Count} adjacent).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} is casting {spell.Name} while threatened ({threateningEnemies.Count} adjacent)."));
 
         int defensiveDC = ConcentrationService.GetDefensiveCastingDC(spell.SpellLevel);
         int concentrationBonus = ConcentrationService.GetConcentrationBonus(caster);
@@ -8275,7 +8274,7 @@ public partial class GameManager
             return;
         }
 
-        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} casts normally and provokes {threateningEnemies.Count} attack(s) of opportunity.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} casts normally and provokes {threateningEnemies.Count} attack(s) of opportunity."));
 
         foreach (var enemy in threateningEnemies)
         {
@@ -8286,7 +8285,7 @@ public partial class GameManager
             if (aooResult == null)
                 continue;
 
-            CombatUI?.ShowCombatLog($"⚔ AoO vs spellcasting: {aooResult.GetDetailedSummary()}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs spellcasting: {aooResult.GetDetailedSummary()}"));
 
             if (aooResult.Hit && aooResult.TotalDamage > 0)
             {
@@ -8335,7 +8334,7 @@ public partial class GameManager
         string status = check.Success ? "SUCCESS" : "FAIL";
         string color = check.Success ? "#88CCFF" : "#FF6644";
 
-        CombatUI?.ShowCombatLog($"<color={color}>Concentration [{reason}] {caster.Stats.CharacterName}: d20 {check.Roll} + {check.Bonus} = {check.Total} vs DC {check.DC} — {status}</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"<color={color}>Concentration [{reason}] {caster.Stats.CharacterName}: d20 {check.Roll} + {check.Bonus} = {check.Total} vs DC {check.DC} — {status}</color>"));
     }
 
     private void CaptureSpellcastResourceSnapshot(CharacterController caster)
@@ -8424,7 +8423,7 @@ public partial class GameManager
         UpdateAllStatsUI();
 
         if (caster != null && caster.Stats != null)
-            CombatUI?.ShowCombatLog($"↩ {caster.Stats.CharacterName} cancels spell cast.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{caster.Stats.CharacterName} cancels spell cast."));
 
         ShowActionChoices();
     }
@@ -8470,7 +8469,7 @@ public partial class GameManager
         ActiveSpellEffect concentrationMarker = new ActiveSpellEffect(spell, caster.Stats != null ? caster.Stats.CharacterName : "Caster", caster.Stats != null ? caster.Stats.GetDomainBoostedCasterLevel(spell) : 1, caster.Stats != null ? caster.Stats.CharacterName : "Caster");
         string log = concMgr.BeginConcentration(concentrationMarker);
         if (!string.IsNullOrEmpty(log))
-            CombatUI?.ShowCombatLog($"<color=#44AAFF>{log}</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("", $"{log}"));
 
         if (summonedSwarm != null)
         {
@@ -8564,7 +8563,7 @@ public partial class GameManager
             if (!string.IsNullOrEmpty(heldResult.LogMessage))
             {
                 string color = heldResult.Success ? "#88CCFF" : "#FF6644";
-                CombatUI?.ShowCombatLog($"<color={color}>{heldResult.LogMessage}</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"<color={color}>{heldResult.LogMessage}</color>"));
             }
 
             if (!heldResult.Success)
@@ -8583,7 +8582,7 @@ public partial class GameManager
             if (!string.IsNullOrEmpty(result.LogMessage))
             {
                 string color = result.Success ? "#88CCFF" : "#FF6644";
-                CombatUI?.ShowCombatLog($"<color={color}>{result.LogMessage}</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"<color={color}>{result.LogMessage}</color>"));
             }
 
             if (!result.Success && wasSummonSwarm)
@@ -8633,7 +8632,7 @@ public partial class GameManager
         if (!string.IsNullOrEmpty(result.LogMessage))
         {
             string color = result.Success ? "#88CCFF" : "#FF6644";
-            CombatUI?.ShowCombatLog($"<color={color}>{result.LogMessage}</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"<color={color}>{result.LogMessage}</color>"));
         }
 
         if (!result.Success)
@@ -8672,7 +8671,7 @@ public partial class GameManager
         string log = concMgr.BeginConcentration(effect);
         if (!string.IsNullOrEmpty(log))
         {
-            CombatUI?.ShowCombatLog($"<color=#44AAFF>{log}</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("", $"{log}"));
         }
     }
 
@@ -8756,7 +8755,7 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Defensive(emoji, $"{caster.Stats.CharacterName} begins concentrating on {detectionData.SpellDisplayName}."));
 
         string summary = detectionData.GetDetectionSummary();
-        CombatUI?.ShowCombatLog($"<color=#BBDDFF>  → {summary}</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  → {summary}"));
 
         // Apply visual highlights to detected creatures
         RefreshDetectionHighlights(caster);
@@ -8794,7 +8793,7 @@ public partial class GameManager
         // Log updated info
         string summary = detection.GetDetectionSummary();
         string emoji2 = GetDetectionEmoji(detection.Type);
-        CombatUI?.ShowCombatLog($"<color=#BBDDFF>{emoji2} {detection.SpellDisplayName} (Round {detection.ConcentrationRounds}): {summary}</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{emoji2} {detection.SpellDisplayName} (Round {detection.ConcentrationRounds}): {summary}"));
 
         // Update visual highlights
         RefreshDetectionHighlights(character);

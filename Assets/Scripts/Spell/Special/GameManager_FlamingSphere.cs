@@ -67,7 +67,7 @@ public partial class GameManager
         if (!CanControlFlamingSphere(pc, out string reason))
         {
             if (!string.IsNullOrWhiteSpace(reason))
-                CombatUI?.ShowCombatLog($"⚠ Cannot control Flaming Sphere: {reason}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Cannot control Flaming Sphere: {reason}."));
             ShowActionChoices();
             return;
         }
@@ -121,7 +121,7 @@ public partial class GameManager
             if (sphere.MovedThisTurn || sphere.WarnedNotMovedThisTurn)
                 continue;
 
-            CombatUI?.ShowCombatLog($"⚠ {character.Stats.CharacterName} ends turn without moving Flaming Sphere.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{character.Stats.CharacterName} ends turn without moving Flaming Sphere."));
             sphere.WarnedNotMovedThisTurn = true;
         }
     }
@@ -297,7 +297,7 @@ public partial class GameManager
 
         if (_highlightedCells.Count <= 1)
         {
-            CombatUI?.ShowCombatLog("⚠ No valid control destinations for Flaming Sphere.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No valid control destinations for Flaming Sphere."));
             CancelFlamingSphereControlSelection(showCancelLog: false);
             return;
         }
@@ -316,7 +316,7 @@ public partial class GameManager
 
         if (!_highlightedCells.Contains(cell))
         {
-            CombatUI?.ShowCombatLog("⚠ Choose a highlighted destination for Flaming Sphere.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Choose a highlighted destination for Flaming Sphere."));
             return;
         }
 
@@ -346,7 +346,7 @@ public partial class GameManager
         _hoverMarker?.Hide();
 
         if (showCancelLog && caster != null && caster.Stats != null)
-            CombatUI?.ShowCombatLog($"↩ {caster.Stats.CharacterName} cancels Flaming Sphere control.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{caster.Stats.CharacterName} cancels Flaming Sphere control."));
 
         ShowActionChoices();
     }
@@ -391,7 +391,7 @@ public partial class GameManager
         if (showLog)
         {
             string who = caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-            CombatUI?.ShowCombatLog($"🔥 {who} rolls Flaming Sphere to ({finalPos.x}, {finalPos.y}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", $"{who} rolls Flaming Sphere to ({finalPos.x}, {finalPos.y})."));
         }
 
         if (hitTarget != null)
@@ -552,12 +552,12 @@ public partial class GameManager
             if (result.RequiredSave)
             {
                 string saveOutcome = result.SaveSucceeded ? "negates" : "fails";
-                CombatUI?.ShowCombatLog($"🔥 Flaming Sphere hits {target.Stats.CharacterName} {context}: Reflex {saveOutcome} (d20 {result.SaveRoll} + {result.SaveMod} = {result.SaveTotal} vs DC {result.SaveDC}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", $"Flaming Sphere hits {target.Stats.CharacterName} {context}: Reflex {saveOutcome} (d20 {result.SaveRoll} + {result.SaveMod} = {result.SaveTotal} vs DC {result.SaveDC})."));
             }
 
             if (result.DamageDealt > 0)
             {
-                CombatUI?.ShowCombatLog($"   {target.Stats.CharacterName} takes {result.DamageDealt} fire damage ({result.TargetHPBefore} → {result.TargetHPAfter} HP).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {target.Stats.CharacterName} takes {result.DamageDealt} fire damage ({result.TargetHPBefore} → {result.TargetHPAfter} HP)."));
                 CheckConcentrationOnDamage(target, result.DamageDealt);
             }
 
@@ -565,7 +565,7 @@ public partial class GameManager
             {
                 target.OnDeath();
                 HandleSummonDeathCleanup(target);
-                CombatUI?.ShowCombatLog($"💀 {target.Stats.CharacterName} is slain by Flaming Sphere.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{target.Stats.CharacterName} is slain by Flaming Sphere."));
             }
         }
 
@@ -615,7 +615,7 @@ public partial class GameManager
 
         CharacterController caster = sphere.Caster;
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-        CombatUI?.ShowCombatLog($"🕯 Flaming Sphere ({casterName}) dissipates: {reason}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"🕯 Flaming Sphere ({casterName}) dissipates: {reason}"));
 
         _activeFlamingSpheres.Remove(sphere);
         if (_selectedFlamingSphereForControl == sphere)

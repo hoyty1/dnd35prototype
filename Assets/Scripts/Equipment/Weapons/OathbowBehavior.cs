@@ -52,9 +52,7 @@ public class OathbowBehavior : SpecificItemBehavior
 
         if (_hasSwornEnemy && _swornEnemy != null && !_swornEnemy.IsDead)
         {
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#8B4513>🏹 Oathbow reminds {character.Stats?.CharacterName}: " +
-                $"sworn enemy {_swornEnemy.Stats?.CharacterName} still lives!</color>");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🏹", $"Oathbow reminds {character.Stats?.CharacterName}: sworn enemy {_swornEnemy.Stats?.CharacterName} still lives!"));
         }
     }
 
@@ -108,8 +106,7 @@ public class OathbowBehavior : SpecificItemBehavior
         logNotes?.Add($"⚠️ Oathbow: {NonSwornPenalty} penalty and no magic bonus vs all others until oath fulfilled");
         Log($"Sworn enemy designated: {targetName}");
 
-        GameManager.Instance?.CombatUI?.ShowCombatLog(
-            $"<color=#FF0000>🏹 {wielderName} speaks the Oathbow's oath against {targetName}!</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Death("🏹", $"{wielderName} speaks the Oathbow's oath against {targetName}!"));
 
         return true;
     }
@@ -204,8 +201,7 @@ public class OathbowBehavior : SpecificItemBehavior
             logNotes?.Add($"🏹 <color=#FFD700>Sworn enemy {target.Stats?.CharacterName} slain! Oath fulfilled!</color>");
             Log($"Sworn enemy slain: {target.Stats?.CharacterName}");
 
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#FFD700>🏹 {Wielder?.Stats?.CharacterName}'s oath is fulfilled! {target.Stats?.CharacterName} is slain!</color>");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Special("🏹", $"{Wielder?.Stats?.CharacterName}'s oath is fulfilled! {target.Stats?.CharacterName} is slain!"));
 
             _swornEnemy = null;
             _hasSwornEnemy = false;

@@ -46,7 +46,7 @@ public partial class GameManager
         // Melee touch missed → no effect
         if (result.RequiredAttackRoll && !result.AttackHit)
         {
-            CombatUI?.ShowCombatLog($"❌ Vampiric Touch misses {target.Stats.CharacterName}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"Vampiric Touch misses {target.Stats.CharacterName}."));
             return true;
         }
 
@@ -75,7 +75,7 @@ public partial class GameManager
         result.TargetHPAfter = hpAfter;
         result.TargetKilled = target.Stats.IsDead;
 
-        CombatUI?.ShowCombatLog($"<color=#9933CC>🖤 {caster.Stats.CharacterName}'s Vampiric Touch deals {damage} negative energy damage to {target.Stats.CharacterName} ({hpBefore} → {hpAfter} HP).</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🖤 {caster.Stats.CharacterName}'s Vampiric Touch deals {damage} negative energy damage to {target.Stats.CharacterName} ({hpBefore} → {hpAfter} HP)."));
 
         // Concentration on damage is checked downstream in the touch pipeline (uses result.DamageDealt).
 
@@ -102,7 +102,7 @@ public partial class GameManager
 
         if (target.Stats.IsDead)
         {
-            CombatUI?.ShowCombatLog($"<color=#660033>💀 {target.Stats.CharacterName} is slain by Vampiric Touch!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"{target.Stats.CharacterName} is slain by Vampiric Touch!"));
             // OnDeath/HandleSummonDeathCleanup are called downstream in the touch pipeline (uses result.TargetKilled).
         }
 

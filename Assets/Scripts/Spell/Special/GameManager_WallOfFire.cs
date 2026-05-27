@@ -237,7 +237,7 @@ public partial class GameManager
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
                     ResetPendingWallOfFireMode();
-                    CombatUI?.ShowCombatLog("⚠ Wall of Fire cancelled: no mode selected.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Wall of Fire cancelled: no mode selected."));
                     ShowActionChoices();
                     return;
                 }
@@ -247,7 +247,7 @@ public partial class GameManager
                     : WallOfFireMode.Ring;
 
                 string chosen = selectedIndex == 0 ? "Wall (Line)" : "Ring";
-                CombatUI?.ShowCombatLog($"🔥 Wall of Fire mode: {chosen}.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", $"Wall of Fire mode: {chosen}."));
 
                 // Continue to normal AoE targeting
                 BeginPendingSpellTargeting(caster);
@@ -258,7 +258,7 @@ public partial class GameManager
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
                 ResetPendingWallOfFireMode();
-                CombatUI?.ShowCombatLog("↩ Wall of Fire cancelled (mode not selected).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Wall of Fire cancelled (mode not selected)."));
                 ShowActionChoices();
             },
             titleOverride: "Wall of Fire — Choose Shape (PHB p.298)",
@@ -308,7 +308,7 @@ public partial class GameManager
                     // Cancel — go back to center selection
                     _pendingWallRingCenter = null;
                     _pendingWallRingRadius = null;
-                    CombatUI?.ShowCombatLog("⚠ Ring radius selection cancelled. Pick a new center.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Ring radius selection cancelled. Pick a new center."));
                     EnterAoETargetingMode(caster, _pendingSpell);
                     return;
                 }
@@ -317,14 +317,14 @@ public partial class GameManager
                 _pendingWallRingRadius = chosenRadius;
                 _pendingWallRingCenter = centerCell;
 
-                CombatUI?.ShowCombatLog($"🔥 Wall of Fire ring: {chosenRadius * 5}-ft radius at ({centerCell.x}, {centerCell.y}).");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", $"Wall of Fire ring: {chosenRadius * 5}-ft radius at ({centerCell.x}, {centerCell.y})."));
 
                 // Compute ring cells
                 HashSet<Vector2Int> ringCells = AoESystem.GetRingCells(centerCell, chosenRadius, Grid);
 
                 if (ringCells == null || ringCells.Count == 0)
                 {
-                    CombatUI?.ShowCombatLog("⚠ No valid cells for ring. Wall of Fire cancelled.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No valid cells for ring. Wall of Fire cancelled."));
                     ResetPendingWallOfFireMode();
                     _pendingSpell = null;
                     _pendingMetamagic = null;
@@ -353,7 +353,7 @@ public partial class GameManager
                 // Cancel radius selection — go back to center selection
                 _pendingWallRingCenter = null;
                 _pendingWallRingRadius = null;
-                CombatUI?.ShowCombatLog("↩ Ring radius selection cancelled. Pick a new center.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", "Ring radius selection cancelled. Pick a new center."));
                 EnterAoETargetingMode(caster, _pendingSpell);
             },
             titleOverride: "Wall of Fire Ring — Choose Radius",
@@ -433,7 +433,7 @@ public partial class GameManager
 
         CombatUI?.SetTurnIndicator(
             $"✦ Wall of Fire (Ring): Click INSIDE ring for Inwards heat, OUTSIDE for Outwards | Right-click to cancel");
-        CombatUI?.ShowCombatLog("🔥 Ring placed! Click inside the ring for Inwards heat, or outside for Outwards. Right-click to cancel.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", "Ring placed! Click inside the ring for Inwards heat, or outside for Outwards. Right-click to cancel."));
 
         Debug.Log($"[WallOfFire][RingDir] Entered ring direction selection phase. center=({centerCell.x},{centerCell.y}), radius={chosenRadius}, ringCells={ringCells?.Count ?? 0}, subPhase={CurrentSubPhase}");
     }
@@ -495,7 +495,7 @@ public partial class GameManager
         _pendingWallHeatDirectionRing = inwards ? "Inwards" : "Outwards";
 
         string chosen = _pendingWallHeatDirectionRing;
-        CombatUI?.ShowCombatLog($"🔥 Wall of Fire heat waves: {chosen}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", $"Wall of Fire heat waves: {chosen}."));
         Debug.Log($"[WallOfFire] Ring heat direction confirmed: {chosen}, center=({_pendingWallRingCenterForDirection.x},{_pendingWallRingCenterForDirection.y}), radius={_pendingWallRingRadiusForDirection}");
 
         // Exit direction selection phase
@@ -628,7 +628,7 @@ public partial class GameManager
         int maxLen = GetWallOfFireMaxLengthSquares(caster);
         CombatUI?.SetTurnIndicator(
             $"✦ Wall of Fire (Line): Move mouse to choose HEAT WAVE side — click to confirm | Right-click to cancel");
-        CombatUI?.ShowCombatLog("🔥 Wall placed! Move mouse to choose which side radiates heat (2d4 fire within 10 ft). Click to confirm.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", "Wall placed! Move mouse to choose which side radiates heat (2d4 fire within 10 ft). Click to confirm."));
 
         Debug.Log($"[WallOfFire] Entered line direction selection phase. wallCells={wallCells?.Count ?? 0}");
     }
@@ -662,7 +662,7 @@ public partial class GameManager
         _pendingWallHeatDirectionLine = GetPerpendicularNormal(lineStart, lineEnd, side);
 
         string sideLabel = side > 0 ? "left" : "right";
-        CombatUI?.ShowCombatLog($"🔥 Wall of Fire heat waves: {sideLabel} side (hot).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", $"Wall of Fire heat waves: {sideLabel} side (hot)."));
         Debug.Log($"[WallOfFire] Line heat direction confirmed: side={side}, normal={_pendingWallHeatDirectionLine}");
 
         // Exit direction selection phase

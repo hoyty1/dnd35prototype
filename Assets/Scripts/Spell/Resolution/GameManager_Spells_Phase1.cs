@@ -850,7 +850,7 @@ public partial class GameManager
             target.ApplyCondition(CombatConditionType.Charmed, charmRounds, fallback);
         }
 
-        CombatUI?.ShowCombatLog($"<color=#FFD699>💞 {target.Stats.CharacterName} is charmed by {spell.Name} for {charmRounds} round(s)! (No HD/type limit)</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("💞", $"{target.Stats.CharacterName} is charmed by {spell.Name} for {charmRounds} round(s)! (No HD/type limit)"));
         Debug.Log($"[GameManager] Charm Monster: Charmed on {target.Stats.CharacterName} for {charmRounds} rounds (CL {casterLevel})");
         return null;
     }
@@ -930,7 +930,7 @@ public partial class GameManager
             casterLevel);
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-        CombatUI?.ShowCombatLog($"<color=#FFFF88>🔥 {casterName} casts Continual Flame! A permanent, heatless flame springs forth. (50 gp ruby dust consumed)</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("🔥", $"{casterName} casts Continual Flame! A permanent, heatless flame springs forth. (50 gp ruby dust consumed)"));
         Debug.Log($"[GameManager] Continual Flame: permanent light effect applied (CL {casterLevel})");
 
         return effect;
@@ -978,7 +978,7 @@ public partial class GameManager
             : $"<color=#88CCFF>🪶 {casterName} casts Levitate on {recipient.Stats.CharacterName}!</color>";
 
         CombatUI?.ShowCombatLog(castLine);
-        CombatUI?.ShowCombatLog($"<color=#AADDFF>   Vertical movement 20 ft/round. Duration: {durationRounds} rounds (CL {casterLevel})</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.PaleBlue("", $"   Vertical movement 20 ft/round. Duration: {durationRounds} rounds (CL {casterLevel})"));
 
         return effect;
     }
@@ -1000,7 +1000,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
-        CombatUI?.ShowCombatLog($"<color=#CCCC88>📦 {caster.Stats.CharacterName} casts Shrink Item! An item is reduced to 1/16 its normal size. Duration: {casterLevel} day(s).</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"📦 {caster.Stats.CharacterName} casts Shrink Item! An item is reduced to 1/16 its normal size. Duration: {casterLevel} day(s)."));
         Debug.Log($"[GameManager] Shrink Item cast (CL {casterLevel}, duration {casterLevel} days)");
 
         return null;
@@ -1052,7 +1052,7 @@ public partial class GameManager
         }
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-        CombatUI?.ShowCombatLog($"<color=#88CC66>🌿 {casterName} casts Barkskin on {recipient.Stats.CharacterName}! +{natArmorBonus} enhancement to natural armor for {durationRounds} rounds (CL {casterLevel})</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("", $"🌿 {casterName} casts Barkskin on {recipient.Stats.CharacterName}! +{natArmorBonus} enhancement to natural armor for {durationRounds} rounds (CL {casterLevel})"));
 
         UpdateAllStatsUI();
         return effect;
@@ -1076,7 +1076,7 @@ public partial class GameManager
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int depthFt = 10 + (Mathf.Max(0, (casterLevel - 9)) / 3) * 5;
 
-        CombatUI?.ShowCombatLog($"<color=#CCAA88>🚪 {caster.Stats.CharacterName} casts Passwall! A passage (5 ft × 8 ft × {depthFt} ft deep) opens through the wall. Duration: {durationRounds} rounds.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🚪 {caster.Stats.CharacterName} casts Passwall! A passage (5 ft × 8 ft × {depthFt} ft deep) opens through the wall. Duration: {durationRounds} rounds."));
         Debug.Log($"[GameManager] Passwall cast (CL {casterLevel}, depth {depthFt} ft, duration {durationRounds} rounds)");
 
         return null;

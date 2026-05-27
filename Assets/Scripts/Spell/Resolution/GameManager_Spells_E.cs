@@ -45,7 +45,7 @@ public partial class GameManager
         // Ranged touch missed → no effect
         if (result.RequiredAttackRoll && !result.AttackHit)
         {
-            CombatUI?.ShowCombatLog($"❌ Enervation ray misses {target.Stats.CharacterName}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"Enervation ray misses {target.Stats.CharacterName}."));
             return true;
         }
 

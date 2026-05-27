@@ -654,7 +654,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.CombatLogScrollRect = scrollRect;
 
         // Add initial welcome message
-        combatUI.ShowCombatLog("Combat begins! Choose your actions.");
+        combatUI.ShowCombatLog(CombatLogHelper.Info("", "Combat begins! Choose your actions."));
     }
 
     /// <summary>Floating action button window with draggable title bar + resizable edges/corners.</summary>

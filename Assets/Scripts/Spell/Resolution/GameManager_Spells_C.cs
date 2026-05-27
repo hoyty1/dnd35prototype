@@ -59,7 +59,7 @@ public partial class GameManager
         // Melee touch missed → no effect (charge held)
         if (result.RequiredAttackRoll && !result.AttackHit)
         {
-            CombatUI?.ShowCombatLog($"❌ Contagion touch misses {target.Stats.CharacterName}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"Contagion touch misses {target.Stats.CharacterName}."));
             return true;
         }
 

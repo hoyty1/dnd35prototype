@@ -85,7 +85,7 @@ public partial class GameManager
         var inventory = Combat_GetCharacterInventory(caster);
         if (inventory == null)
         {
-            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no inventory for Flame Arrow.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} has no inventory for Flame Arrow."));
             return true;
         }
 
@@ -103,7 +103,7 @@ public partial class GameManager
 
         if (ammoStacks.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no projectiles in inventory to enchant with Flame Arrow.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} has no projectiles in inventory to enchant with Flame Arrow."));
             return true;
         }
 
@@ -199,10 +199,10 @@ public partial class GameManager
         string shieldName = isWarmShield ? "Warm Shield" : "Chill Shield";
         int maxBonus = 15;
 
-        CombatUI?.ShowCombatLog($"🔥 {recipient.Stats.CharacterName} is wreathed in {(isWarmShield ? "warm" : "chill")} flames! (Fire Shield — {shieldName})");
-        CombatUI?.ShowCombatLog($"  {resistType} damage reduced by 50% (0 if save-for-half)");
-        CombatUI?.ShowCombatLog($"  Retribution: 1d6+{Mathf.Min(casterLevel, maxBonus)} {retribType} damage to melee attackers");
-        CombatUI?.ShowCombatLog($"  Duration: {durationRounds} round(s)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🔥", $"{recipient.Stats.CharacterName} is wreathed in {(isWarmShield ? "warm" : "chill")} flames! (Fire Shield — {shieldName})"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  {resistType} damage reduced by 50% (0 if save-for-half)"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Retribution: 1d6+{Mathf.Min(casterLevel, maxBonus)} {retribType} damage to melee attackers"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Duration: {durationRounds} round(s)"));
 
         Debug.Log($"[FireShield] {recipient.Stats.CharacterName}: {shieldName}, CL {casterLevel}, {durationRounds} rounds");
 

@@ -180,7 +180,7 @@ public partial class GameManager
             if (effect != null) effect.RemainingRounds = durationRounds;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#88CC88>🐛🚫 Repel Vermin! {casterName} creates a {radiusFeet}-ft anti-vermin emanation for {durationRounds} rounds.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🐛🚫 Repel Vermin! {casterName} creates a {radiusFeet}-ft anti-vermin emanation for {durationRounds} rounds."));
         Debug.Log($"[RepelVermin] {casterName}: radius {radiusFeet} ft, duration {durationRounds} rounds");
 
         result.BuffApplied = true;
@@ -243,7 +243,7 @@ public partial class GameManager
 
         statusMgr.ActiveEffects.Add(effect);
 
-        CombatUI?.ShowCombatLog($"<color=#FF6633>🔥 {target.Stats.CharacterName} is filled with magical rage! (+2 Str, +2 Con, +1 Will, -2 AC) for {rageRounds} round(s)!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔥", $"{target.Stats.CharacterName} is filled with magical rage! (+2 Str, +2 Con, +1 Will, -2 AC) for {rageRounds} round(s)!"));
         Debug.Log($"[GameManager] Rage spell applied to {target.Stats.CharacterName} for {rageRounds} rounds");
 
         return effect;
@@ -282,7 +282,7 @@ public partial class GameManager
         // Ranged touch missed → no effect
         if (result.RequiredAttackRoll && !result.AttackHit)
         {
-            CombatUI?.ShowCombatLog($"❌ Ray of Exhaustion misses {target.Stats.CharacterName}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"Ray of Exhaustion misses {target.Stats.CharacterName}."));
             return true;
         }
 
@@ -321,11 +321,11 @@ public partial class GameManager
 
         if (savePassed)
         {
-            CombatUI?.ShowCombatLog($"<color=#9966FF>🩸 {target.Stats.CharacterName} resists the worst of the ray with a Fort save — only Fatigued for {durationRounds} round(s).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🩸", $"{target.Stats.CharacterName} resists the worst of the ray with a Fort save — only Fatigued for {durationRounds} round(s)."));
         }
         else
         {
-            CombatUI?.ShowCombatLog($"<color=#9933CC>🩸 {target.Stats.CharacterName} is Exhausted by Ray of Exhaustion! (-6 STR, -6 DEX, half speed) for {durationRounds} round(s).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🩸", $"{target.Stats.CharacterName} is Exhausted by Ray of Exhaustion! (-6 STR, -6 DEX, half speed) for {durationRounds} round(s)."));
         }
 
         Debug.Log($"[GameManager] Ray of Exhaustion applied {conditionName} to {target.Stats.CharacterName} for {durationRounds} rounds (CL {casterLevel}, savePassed={savePassed})");
@@ -589,7 +589,7 @@ public partial class GameManager
         // Combat log
         string removedSummary = string.Join(", ", removedDescriptions);
         CombatUI?.ShowCombatLog(CombatLogHelper.Special("✦", $"{casterName} casts Remove Curse on {targetName}!"));
-        CombatUI?.ShowCombatLog($"<color=#FFD700>   {(cursesRemoved > 0 ? $"{cursesRemoved} curse(s) removed: {removedSummary}" : "Curses lifted!")}.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Special("", $"   {(cursesRemoved > 0 ? $"{cursesRemoved} curse(s) removed: {removedSummary}" : "Curses lifted!")}."));
 
         result.BuffApplied = true;
         result.BuffDescription = $"Remove Curse: {cursesRemoved} curse(s) removed from {targetName}.";

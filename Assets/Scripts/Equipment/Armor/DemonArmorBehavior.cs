@@ -47,8 +47,7 @@ public class DemonArmorBehavior : SpecificItemBehavior
             _negativeLevelApplied = true;
             Log($"Non-evil wielder {character.Stats.CharacterName} gains {NonEvilNegativeLevels} negative level");
 
-            GameManager.Instance?.CombatUI?.ShowCombatLog(
-                $"<color=#8B0000>👿 Demon Armor inflicts a negative level on {character.Stats.CharacterName} (non-evil wearer)!</color>");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Curse("", $"👿 Demon Armor inflicts a negative level on {character.Stats.CharacterName} (non-evil wearer)!"));
         }
 
         Log($"Equipped by {character.Stats?.CharacterName} — grants claw attacks with contagion");

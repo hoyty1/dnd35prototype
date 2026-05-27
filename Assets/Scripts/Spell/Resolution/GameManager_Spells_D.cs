@@ -709,10 +709,7 @@ public partial class GameManager
         }
 
         // Combat log with emerald/green styling
-        CombatUI?.ShowCombatLog(
-            $"<color=#00FF88>🟢 {casterName}'s green ray strikes {targetName}! " +
-            $"A shimmering emerald field envelops {targetName}, blocking all extradimensional travel " +
-            $"for {durationRounds} rounds ({durationRounds / 10} minutes).</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("🟢", $"{casterName}'s green ray strikes {targetName}! A shimmering emerald field envelops {targetName}, blocking all extradimensional travel for {durationRounds} rounds ({durationRounds / 10} minutes)."));
 
         Debug.Log($"[DimensionalAnchor] Applied to {targetName} by {casterName} " +
                   $"(CL {casterLevel}, {durationRounds} rounds). " +

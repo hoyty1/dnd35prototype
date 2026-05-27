@@ -43,7 +43,7 @@ public partial class GameManager
 
         if (!TryGetMagicWeaponInventoryOptions(target, out List<ItemData> weaponOptions, out List<string> weaponLabels))
         {
-            CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no weapon in inventory to enchant with Greater Magic Weapon.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{target.Stats.CharacterName} has no weapon in inventory to enchant with Greater Magic Weapon."));
             _pendingSpell = null;
             _pendingGreaterMagicWeaponItem = null;
             ShowActionChoices();
@@ -94,7 +94,7 @@ public partial class GameManager
 
         if (weapon == null)
         {
-            CombatUI?.ShowCombatLog("⚠ Greater Magic Weapon failed: no weapon selected.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Greater Magic Weapon failed: no weapon selected."));
             return true;
         }
 

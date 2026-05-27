@@ -68,16 +68,16 @@ public sealed class ConfusedBehaviorController
             ? decision.CasterSource.Stats.CharacterName
             : "the confusion source";
 
-        gameManager.CombatUI?.ShowCombatLog($"🌀 {actorName} is confused (d% {decision.Roll:00}).");
+        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} is confused (d% {decision.Roll:00})."));
 
         switch (decision.Mode)
         {
             case ConfusedTurnMode.ActNormally:
-                gameManager.CombatUI?.ShowCombatLog($"🌀 {actorName} fights through confusion and acts normally.");
+                gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} fights through confusion and acts normally."));
                 yield break;
 
             case ConfusedTurnMode.Babble:
-                gameManager.CombatUI?.ShowCombatLog($"🌀 {actorName} babbles incoherently and does nothing.");
+                gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} babbles incoherently and does nothing."));
                 yield return new WaitForSeconds(0.35f);
                 yield break;
 
@@ -87,7 +87,7 @@ public sealed class ConfusedBehaviorController
                     && !decision.PreferredTarget.Stats.IsDead
                     && actor.IsTargetInCurrentWeaponRange(decision.PreferredTarget))
                 {
-                    gameManager.CombatUI?.ShowCombatLog($"🌀 {actorName} lashes out at the confusion source ({casterName})!");
+                    gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} lashes out at the confusion source ({casterName})!"));
                     yield return gameManager.StartCoroutine(gameManager.NPCPerformAttackForAI(actor, decision.PreferredTarget));
                     yield break;
                 }
@@ -104,7 +104,7 @@ public sealed class ConfusedBehaviorController
                         SquareCell fleeCell = FindBestMovementCell(gameManager, actor, fleeAnchor, maximizeDistance: true);
                         if (fleeCell != null && fleeCell.Coords != actor.GridPosition)
                         {
-                            gameManager.CombatUI?.ShowCombatLog($"🌀 {actorName} panics and flees from {casterName}!");
+                            gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} panics and flees from {casterName}!"));
                             yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, fleeCell.Coords, gameManager.GetPlayerMoveSecondsPerStepForAI()));
                             ConsumeMoveAction(actor);
                             moved = true;
@@ -112,7 +112,7 @@ public sealed class ConfusedBehaviorController
                     }
 
                     if (!moved)
-                        gameManager.CombatUI?.ShowCombatLog($"🌀 {actorName} tries to flee from {casterName} but cannot move.");
+                        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} tries to flee from {casterName} but cannot move."));
 
                     yield return new WaitForSeconds(0.25f);
                     yield break;
@@ -123,7 +123,7 @@ public sealed class ConfusedBehaviorController
                     CharacterController target = decision.PreferredTarget;
                     if (target == null || target.Stats == null || target.Stats.IsDead)
                     {
-                        gameManager.CombatUI?.ShowCombatLog($"🌀 {actorName} is too disoriented to find a target.");
+                        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} is too disoriented to find a target."));
                         yield break;
                     }
 
@@ -139,12 +139,12 @@ public sealed class ConfusedBehaviorController
 
                     if (actor.IsTargetInCurrentWeaponRange(target))
                     {
-                        gameManager.CombatUI?.ShowCombatLog($"🌀 {actorName} attacks the nearest creature ({target.Stats.CharacterName})!");
+                        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} attacks the nearest creature ({target.Stats.CharacterName})!"));
                         yield return gameManager.StartCoroutine(gameManager.NPCPerformAttackForAI(actor, target));
                     }
                     else
                     {
-                        gameManager.CombatUI?.ShowCombatLog($"🌀 {actorName} stumbles toward {target.Stats.CharacterName} but cannot attack this turn.");
+                        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{actorName} stumbles toward {target.Stats.CharacterName} but cannot attack this turn."));
                     }
 
                     yield break;
@@ -319,7 +319,7 @@ public sealed class ConfusedBehaviorController
         DamageResolutionResult result = actor.Stats.ApplyIncomingDamage(raw, packet);
         int hpAfter = actor.Stats.CurrentHP;
 
-        gameManager.CombatUI?.ShowCombatLog($"🩸 {actor.Stats.CharacterName} hits itself for {result.FinalDamage} damage ({hpBefore} → {hpAfter} HP).");
+        gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🩸", $"{actor.Stats.CharacterName} hits itself for {result.FinalDamage} damage ({hpBefore} → {hpAfter} HP)."));
 
         yield return new WaitForSeconds(0.35f);
     }

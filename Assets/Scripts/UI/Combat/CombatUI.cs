@@ -466,7 +466,7 @@ public class CombatUI : MonoBehaviour
         }
 
         PlayerPrefs.Save();
-        ShowCombatLog("UI layout reset to default window positions and sizes.");
+        ShowCombatLog(CombatLogHelper.Info("", "UI layout reset to default window positions and sizes."));
     }
 
     private static void DeleteWindowPrefs(string persistenceKey)

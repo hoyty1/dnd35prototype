@@ -183,13 +183,13 @@ public class SummoningService : MonoBehaviour
 
         if (string.Equals(active.SourceSpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
         {
-            CombatUI?.ShowCombatLog("⚠ Summon Swarm cannot be controlled.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Summon Swarm cannot be controlled."));
             return;
         }
 
         if (!summon.IsControllable)
         {
-            CombatUI?.ShowCombatLog("⚠ This summoned ally is AI-controlled and cannot receive direct commands.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "This summoned ally is AI-controlled and cannot receive direct commands."));
             return;
         }
 

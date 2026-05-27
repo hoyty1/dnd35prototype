@@ -211,7 +211,7 @@ public partial class GameManager
                 : string.Empty;
             Debug.Log($"[GameManager] Spawned NPC {i}: {def.Name} (Lv {def.Level} {def.CharacterClass}) at ({pos.x},{pos.y}) — AI: {def.AIBehavior}{templateLog}");
             if (!string.IsNullOrWhiteSpace(def.AITargetPriority))
-                CombatUI?.ShowCombatLog($"  {npc.Stats.CharacterName} priority target: {def.AITargetPriority}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  {npc.Stats.CharacterName} priority target: {def.AITargetPriority}"));
 
             if (_isGreaseTestEncounter && npc.Stats != null)
             {
@@ -230,45 +230,45 @@ public partial class GameManager
                     }
                 }
 
-                CombatUI?.ShowCombatLog($"✓ {npc.Stats.CharacterName}: Grapple {CharacterStats.FormatMod(grappleMod)}, Reflex {CharacterStats.FormatMod(npc.Stats.ReflexSave)}, Weapon {weaponLabel}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Success("✓", $"{npc.Stats.CharacterName}: Grapple {CharacterStats.FormatMod(grappleMod)}, Reflex {CharacterStats.FormatMod(npc.Stats.ReflexSave)}, Weapon {weaponLabel}"));
             }
         }
 
         if (_isGreaseTestEncounter)
         {
-            CombatUI?.ShowCombatLog("🧪 Grease scenario loaded: enemies are clustered in a 2x2 square (12,5) to (13,6).");
-            CombatUI?.ShowCombatLog("   Use Grease (Armor) on Slippery Sam first, then validate Area and Object modes.");
-            CombatUI?.ShowCombatLog("   Enemies are scripted to prioritize Slippery Sam for grapple pressure.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", "Grease scenario loaded: enemies are clustered in a 2x2 square (12,5) to (13,6)."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Use Grease (Armor) on Slippery Sam first, then validate Area and Object modes."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Enemies are scripted to prioritize Slippery Sam for grapple pressure."));
         }
 
         if (_isMirrorImageTestEncounter)
         {
-            CombatUI?.ShowCombatLog("🪞 Mirror Image Test Arena enemy ring: 4 goblin archers spawned at N/E/S/W ~25 ft from center.");
-            CombatUI?.ShowCombatLog("   Expected flow: cast Mirror Image, observe clone visuals, end-turn swap prompt, and clone-target redirection in combat log.");
-            CombatUI?.ShowCombatLog("   Repeat until all clones dissipate, then confirm real caster hits and remaining duration behavior.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "🪞 Mirror Image Test Arena enemy ring: 4 goblin archers spawned at N/E/S/W ~25 ft from center."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Expected flow: cast Mirror Image, observe clone visuals, end-turn swap prompt, and clone-target redirection in combat log."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "   Repeat until all clones dissipate, then confirm real caster hits and remaining duration behavior."));
         }
 
         if (_isProtectionFromEvilTestEncounter)
         {
-            CombatUI?.ShowCombatLog("╔═══════════════════════════════════════════════════════╗");
-            CombatUI?.ShowCombatLog("║   CONTROL TESTS (Non-Evil + Evil Save Comparison)    ║");
-            CombatUI?.ShowCombatLog("╚═══════════════════════════════════════════════════════╝");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "╔═══════════════════════════════════════════════════════╗"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "║   CONTROL TESTS (Non-Evil + Evil Save Comparison)    ║"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "╚═══════════════════════════════════════════════════════╝"));
             CombatUI?.ShowCombatLog("");
-            CombatUI?.ShowCombatLog("✓ Neutral Bandit (TRUE NEUTRAL): NO AC bonus from ward expected.");
-            CombatUI?.ShowCombatLog("✓ Neutral Mage (TRUE NEUTRAL): Daze allows normal save (no +2 bonus).");
-            CombatUI?.ShowCombatLog("✓ Evil Acolyte (NEUTRAL EVIL): Daze allows save with +2 protection bonus.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("✓", "Neutral Bandit (TRUE NEUTRAL): NO AC bonus from ward expected."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("✓", "Neutral Mage (TRUE NEUTRAL): Daze allows normal save (no +2 bonus)."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("✓", "Evil Acolyte (NEUTRAL EVIL): Daze allows save with +2 protection bonus."));
             CombatUI?.ShowCombatLog("");
-            CombatUI?.ShowCombatLog("AC BONUS TEST:");
-            CombatUI?.ShowCombatLog("  Evil Goblin      → Player AC includes +2 deflection");
-            CombatUI?.ShowCombatLog("  Neutral Bandit   → Player AC has no protection deflection bonus");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "AC BONUS TEST:"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  Evil Goblin      → Player AC includes +2 deflection"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  Neutral Bandit   → Player AC has no protection deflection bonus"));
             CombatUI?.ShowCombatLog("");
-            CombatUI?.ShowCombatLog("SAVE BONUS TEST:");
-            CombatUI?.ShowCombatLog("  Evil Acolyte Daze   → Will save gains +2 resistance bonus");
-            CombatUI?.ShowCombatLog("  Neutral Mage Daze   → Will save remains base value (no +2)");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "SAVE BONUS TEST:"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  Evil Acolyte Daze   → Will save gains +2 resistance bonus"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  Neutral Mage Daze   → Will save remains base value (no +2)"));
             CombatUI?.ShowCombatLog("");
-            CombatUI?.ShowCombatLog("MENTAL CONTROL TEST:");
-            CombatUI?.ShowCombatLog("  Evil Enchanter Charm Person → BLOCKED completely by protection");
-            CombatUI?.ShowCombatLog("  Daze (both evil/neutral casters) → NOT blocked, only save mechanics apply");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "MENTAL CONTROL TEST:"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  Evil Enchanter Charm Person → BLOCKED completely by protection"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "  Daze (both evil/neutral casters) → NOT blocked, only save mechanics apply"));
             CombatUI?.ShowCombatLog("");
         }
 
@@ -308,7 +308,7 @@ public partial class GameManager
         int loweredTouchAC = SpellcastingComponent.GetTouchAC(stats);
 
         string enemyLabel = string.IsNullOrEmpty(stats.CharacterName) ? enemyId : stats.CharacterName;
-        CombatUI?.ShowCombatLog($"🧪 Test Mode - Easy to Hit: {enemyLabel} defenses lowered (AC {loweredAC}, Touch AC {loweredTouchAC}).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"Test Mode - Easy to Hit: {enemyLabel} defenses lowered (AC {loweredAC}, Touch AC {loweredTouchAC})."));
         Debug.Log($"[DisruptUndeadTest] Easy-hit override applied to {enemyLabel}: AC={loweredAC}, TouchAC={loweredTouchAC}");
     }
 

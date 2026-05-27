@@ -666,7 +666,7 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     protected void LogEffect(string message)
     {
         if (gameManager != null && gameManager.CombatUI != null)
-            gameManager.CombatUI.ShowCombatLog($"<color=#66E0FF>[{EffectName}]</color> {message}");
+            gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"<color=#66E0FF>[{EffectName}]</color> {message}"));
         else
             Debug.Log($"[{EffectName}] {message}");
     }

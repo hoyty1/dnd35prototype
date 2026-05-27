@@ -64,7 +64,7 @@ public partial class GameManager
 
         if (!CanUseTemplateSmite(pc, out string reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot smite: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot smite: {reason}."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -156,7 +156,7 @@ public partial class GameManager
 
         if (_highlightedCells.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no valid alignment target in weapon range for smite.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no valid alignment target in weapon range for smite."));
             ShowActionChoices();
         }
     }
@@ -168,21 +168,21 @@ public partial class GameManager
 
         if (!CanUseTemplateSmite(attacker, out string reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot smite: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot smite: {reason}."));
             ShowActionChoices();
             return;
         }
 
         if (!IsValidTemplateSmiteTarget(attacker, target))
         {
-            CombatUI?.ShowCombatLog("⚠ Invalid smite target.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Invalid smite target."));
             ShowTemplateSmiteTargets(attacker);
             return;
         }
 
         if (!attacker.CommitStandardAction())
         {
-            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no standard action available."));
             ShowActionChoices();
             return;
         }

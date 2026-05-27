@@ -941,14 +941,14 @@ public partial class GameManager
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
 
-        CombatUI?.ShowCombatLog($"<color=#44CCFF>🔮 A Resilient Sphere forms at {targetName}'s position!</color>");
-        CombatUI?.ShowCombatLog($"  Cast by {casterName} (CL {casterLevel})");
-        CombatUI?.ShowCombatLog($"  Sphere: {diameterFeet} ft diameter, {squareSize}×{squareSize} squares");
-        CombatUI?.ShowCombatLog($"  Creatures enclosed: {creaturesInArea.Count}");
-        CombatUI?.ShowCombatLog($"  Sphere is STATIONARY — creatures can move within but cannot leave");
-        CombatUI?.ShowCombatLog($"  Nothing passes through the sphere boundary in either direction");
-        CombatUI?.ShowCombatLog($"  Indestructible except by Disintegrate, Rod of Cancellation/Negation, or Dispel Magic");
-        CombatUI?.ShowCombatLog($"  Duration: {durationRounds} round(s)");
+        CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("🔮", $"A Resilient Sphere forms at {targetName}'s position!"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Cast by {casterName} (CL {casterLevel})"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Sphere: {diameterFeet} ft diameter, {squareSize}×{squareSize} squares"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Creatures enclosed: {creaturesInArea.Count}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Sphere is STATIONARY — creatures can move within but cannot leave"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Nothing passes through the sphere boundary in either direction"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Indestructible except by Disintegrate, Rod of Cancellation/Negation, or Dispel Magic"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Duration: {durationRounds} round(s)"));
 
         Debug.Log($"[ResilientSphere] Sphere created at ({centerCell.x},{centerCell.y}) by {casterName}: CL {casterLevel}, {squareSize}×{squareSize}, {durationRounds} rounds, {creaturesInArea.Count} creatures enclosed");
 
@@ -1020,7 +1020,7 @@ public partial class GameManager
             return;
 
         string targetName = target.Stats != null ? target.Stats.CharacterName ?? "Unknown" : "Unknown";
-        CombatUI?.ShowCombatLog($"<color=#44CCFF>🔮 Resilient Sphere near {targetName} has been dispelled!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("🔮", $"Resilient Sphere near {targetName} has been dispelled!"));
         Debug.Log($"[ResilientSphere] Area effect removed near {targetName}");
 
         sphere.ExpireEffect();
@@ -1049,7 +1049,7 @@ public partial class GameManager
             // Player: open the WishUI selection panel
             if (WishUI == null)
             {
-                CombatUI?.ShowCombatLog("⚠ Wish UI not available — spell fizzles.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Wish UI not available — spell fizzles."));
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 ShowActionChoices();
@@ -1075,7 +1075,7 @@ public partial class GameManager
 
             WishUI.OnCancelled = () =>
             {
-                CombatUI?.ShowCombatLog($"{caster.Stats.CharacterName} decides not to make a Wish.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{caster.Stats.CharacterName} decides not to make a Wish."));
                 // Note: spell slot is already consumed; this is intentional for D&D 3.5e (casting began).
                 _pendingSpell = null;
                 _pendingMetamagic = null;
@@ -1118,7 +1118,7 @@ public partial class GameManager
         {
             if (WishUI == null)
             {
-                CombatUI?.ShowCombatLog("⚠ Wish UI not available.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Wish UI not available."));
                 return;
             }
 
@@ -1137,7 +1137,7 @@ public partial class GameManager
 
             WishUI.OnCancelled = () =>
             {
-                CombatUI?.ShowCombatLog($"{caster.Stats.CharacterName} decides not to use the Luck Blade's Wish.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"{caster.Stats.CharacterName} decides not to use the Luck Blade's Wish."));
                 ShowActionChoices();
             };
 

@@ -45,9 +45,7 @@ public class SwordOfThePlanesBehavior : SpecificItemBehavior
         int totalEnh = BaseEnhancement + GetPlaneBonus(currentPlane);
         string planeName = PlaneHelper.GetDisplayName(currentPlane);
 
-        GameManager.Instance?.CombatUI?.ShowCombatLog(
-            $"<color=#9370DB>🌌 Sword of the Planes attunes to {character.Stats?.CharacterName} — " +
-            $"+{totalEnh} on {planeName}</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🌌", $"Sword of the Planes attunes to {character.Stats?.CharacterName} — +{totalEnh} on {planeName}"));
         Log($"Equipped on {planeName}: effective +{totalEnh}");
     }
 

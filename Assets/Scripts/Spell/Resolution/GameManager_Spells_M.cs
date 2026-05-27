@@ -35,7 +35,7 @@ public partial class GameManager
         int maxTargets = casterLevel; // One creature per caster level
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
-        CombatUI?.ShowCombatLog($"<color=#FFDD44>📏 {casterName} casts {spellName}!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("📏", $"{casterName} casts {spellName}!"));
 
         // Gather valid humanoid targets near the primary target.
         // "No two of which can be more than 30 ft. apart" — we use the primary target as anchor
@@ -79,7 +79,7 @@ public partial class GameManager
             return null;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#FFDD44>  Targeting {candidates.Count} humanoid creature(s) (max {maxTargets} at CL {casterLevel})</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", $"  Targeting {candidates.Count} humanoid creature(s) (max {maxTargets} at CL {casterLevel})"));
 
         ActiveSpellEffect firstEffect = null;
         int affectedCount = 0;
@@ -116,13 +116,13 @@ public partial class GameManager
                 if (isAlly)
                 {
                     // Willing target — auto-accept
-                    CombatUI?.ShowCombatLog($"  {target.Stats.CharacterName}: willing target, auto-accepts {spellName}.");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  {target.Stats.CharacterName}: willing target, auto-accepts {spellName}."));
                 }
                 else
                 {
                     // Unwilling target — Fort save to negate
                     var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
-                    CombatUI?.ShowCombatLog($"  Fort Save ({target.Stats.CharacterName}): d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Fort Save ({target.Stats.CharacterName}): d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}"));
 
                     if (saveResult.Saved)
                     {
@@ -156,12 +156,12 @@ public partial class GameManager
                     ? "+2 STR, -2 DEX, -1 size penalty to AC/attack"
                     : "-2 STR, +2 DEX, +1 size bonus to AC/attack";
 
-                CombatUI?.ShowCombatLog($"<color=#FFDD44>  📏 {target.Stats.CharacterName} is {(isEnlarge ? "enlarged" : "reduced")}! {sizeChangeDesc}</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", $"  📏 {target.Stats.CharacterName} is {(isEnlarge ? "enlarged" : "reduced")}! {sizeChangeDesc}"));
             }
         }
 
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
-        CombatUI?.ShowCombatLog($"<color=#FFDD44>  {spellName}: {affectedCount} creature(s) affected. Duration: {durationRounds} rounds (CL {casterLevel})</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", $"  {spellName}: {affectedCount} creature(s) affected. Duration: {durationRounds} rounds (CL {casterLevel})"));
 
         UpdateAllStatsUI();
         return firstEffect;
@@ -241,8 +241,8 @@ public partial class GameManager
         string targetName = selfCast ? "self" : recipient.Stats.CharacterName;
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Success("🛡", $"{casterName} casts Magic Vestment on {targetName}!"));
-        CombatUI?.ShowCombatLog($"<color=#AAFFAA>   +{enhBonus} enhancement bonus to armor (CL {casterLevel})</color>");
-        CombatUI?.ShowCombatLog($"<color=#AAFFAA>   Duration: {durationRounds} rounds ({durationRounds / 600} hours)</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("", $"   +{enhBonus} enhancement bonus to armor (CL {casterLevel})"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("", $"   Duration: {durationRounds} rounds ({durationRounds / 600} hours)"));
 
         UpdateAllStatsUI();
         return true;

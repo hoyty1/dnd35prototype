@@ -50,10 +50,10 @@ public partial class GameManager
             return false;
 
         string actionName = string.IsNullOrWhiteSpace(attemptedActionLabel) ? "that action" : attemptedActionLabel;
-        CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is pinned and cannot use {actionName}. Only grapple escape actions are allowed.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} is pinned and cannot use {actionName}. Only grapple escape actions are allowed."));
 
         if (!actor.Actions.HasStandardAction)
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} has no standard action left to attempt an escape and must end the turn.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} has no standard action left to attempt an escape and must end the turn."));
 
         // Grapple actions are now presented as direct action buttons in the main action panel.
         ShowActionChoices();
@@ -76,7 +76,7 @@ public partial class GameManager
         if (!pc.IsGrappling())
         {
             LogMenuFlow("ShowGrappleActionMenu(PUBLIC):PC_NOT_GRAPPLING", pc);
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is not currently grappling.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is not currently grappling."));
             ShowActionChoices();
             return;
         }
@@ -84,7 +84,7 @@ public partial class GameManager
         if (!pc.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
         {
             LogMenuFlow("ShowGrappleActionMenu(PUBLIC):NO_GRAPPLE_STATE", pc);
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is no longer in a grapple.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is no longer in a grapple."));
             ShowActionChoices();
             return;
         }
@@ -164,21 +164,21 @@ public partial class GameManager
 
         if (!pc.IsGrappling() || !pc.TryGetGrappleState(out _, out _, out _, out _))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is not currently in a valid grapple state.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} is not currently in a valid grapple state."));
             ShowActionChoices();
             return false;
         }
 
         if (!CanUseGrappleAction(pc, actionType))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {actionType} in the current pin state.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use {actionType} in the current pin state."));
             ShowActionChoices();
             return false;
         }
 
         if (CharacterController.IsIterativeGrappleAttackAction(actionType) && !CanUseGrappleAttackOption(pc))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no grapple attacks remaining in the shared attack pool this turn.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no grapple attacks remaining in the shared attack pool this turn."));
             ShowActionChoices();
             return false;
         }
@@ -230,7 +230,7 @@ public partial class GameManager
 
         if (!CanUseOverrun(pc, out string reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use Overrun: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot use Overrun: {reason}."));
             return;
         }
 
@@ -277,21 +277,21 @@ public partial class GameManager
             || spell.ActionType == SpellActionType.Free;
         if (!hasAllowedCastingTime)
         {
-            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: casting time must be 1 standard action or less.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: casting time must be 1 standard action or less."));
             return false;
         }
 
         bool isPinned = caster.HasCondition(CombatConditionType.Pinned);
         if (isPinned && spell.HasVerbalComponent)
         {
-            CombatUI?.ShowCombatLog("⚠ Cannot cast - pinned (no verbal components)");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Cannot cast - pinned (no verbal components)"));
             return false;
         }
 
         // Grappled/pinned casters also cannot provide somatic components.
         if (spell.HasSomaticComponent)
         {
-            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: spells with somatic components are blocked.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: spells with somatic components are blocked."));
             return false;
         }
 
@@ -322,8 +322,7 @@ public partial class GameManager
             ConcentrationCheckType.Grappled,
             spell);
 
-        CombatUI?.ShowCombatLog(
-            $"🪢 {conditionLabel.ToUpperInvariant()} casting concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {check.D20Roll} + conc {check.TotalBonus} = {check.TotalRoll} vs DC {dc} (20 + spell level {spell.SpellLevel})");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"{conditionLabel.ToUpperInvariant()} casting concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {check.D20Roll} + conc {check.TotalBonus} = {check.TotalRoll} vs DC {dc} (20 + spell level {spell.SpellLevel})"));
 
         if (check.Success)
             return true;
@@ -344,7 +343,7 @@ public partial class GameManager
             return false;
         }
 
-        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} fails the DC {dc} concentration check while {conditionLabel}. {spell.Name} is lost and the spell slot is spent.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} fails the DC {dc} concentration check while {conditionLabel}. {spell.Name} is lost and the spell slot is spent."));
         return false;
     }
 
@@ -398,7 +397,7 @@ public partial class GameManager
         List<Vector2Int> validSquares = GetValidFreeAdjacentGrappleMoveSquares(actor);
         if (validSquares.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} has no adjacent squares to move to after the grapple ends.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{actor.Stats.CharacterName} has no adjacent squares to move to after the grapple ends."));
             return false;
         }
 
@@ -458,7 +457,7 @@ public partial class GameManager
 
         CombatUI?.SetActionButtonsVisible(false);
         CombatUI?.SetTurnIndicator($"{actor.Stats.CharacterName} - Grapple ended: choose a free adjacent square");
-        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} can move to an adjacent square (free action). Right-click/ESC to remain in place.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} can move to an adjacent square (free action). Right-click/ESC to remain in place."));
     }
 
     private bool ExecuteFreeAdjacentGrappleMovement(CharacterController actor, Vector2Int destination, bool showActionChoicesAfterMove)
@@ -481,7 +480,7 @@ public partial class GameManager
         if (actor.GridPosition != destination)
             return false;
 
-        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} moves to ({destination.x},{destination.y}) (free action after ending grapple).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{actor.Stats.CharacterName} moves to ({destination.x},{destination.y}) (free action after ending grapple)."));
 
         RefreshFlankedConditions();
         UpdateAllStatsUI();
@@ -522,7 +521,7 @@ public partial class GameManager
             return;
 
         if (!ExecuteFreeAdjacentGrappleMovement(actor, cell.Coords, showActionChoicesAfterMove: true))
-            CombatUI?.ShowCombatLog("⚠ Invalid adjacent free-move destination.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Invalid adjacent free-move destination."));
     }
 
     private void CancelFreeAdjacentGrappleMovementSelection(CharacterController actor)
@@ -532,7 +531,7 @@ public partial class GameManager
         ClearFreeAdjacentGrappleMoveSelectionState();
 
         if (actor != null && actor.Stats != null)
-            CombatUI?.ShowCombatLog($"↩ {actor.Stats.CharacterName} remains in place after ending the grapple.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{actor.Stats.CharacterName} remains in place after ending the grapple."));
 
         ShowActionChoices();
     }
@@ -557,7 +556,7 @@ public partial class GameManager
         if (!actor.TryGetActiveGrappleOpponents(out List<CharacterController> opponents)
             || opponents.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot move the grapple: no valid grapple opponents.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} cannot move the grapple: no valid grapple opponents."));
             StartCoroutine(AfterAttackDelay(actor, 0.5f));
             return;
         }
@@ -565,7 +564,7 @@ public partial class GameManager
         int halfSpeedRange = Mathf.Max(0, GetCurrentMoveRangeSquares(actor) / 2);
         if (halfSpeedRange <= 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} has no available movement (half speed is 0 squares). Grapple move action is spent.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} has no available movement (half speed is 0 squares). Grapple move action is spent."));
             StartCoroutine(AfterAttackDelay(actor, 0.5f));
             return;
         }
@@ -584,14 +583,14 @@ public partial class GameManager
 
         if (_highlightedCells.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} beats the grapple check but has no valid destination within half speed ({halfSpeedRange} squares) while dragging grappled opponents.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} beats the grapple check but has no valid destination within half speed ({halfSpeedRange} squares) while dragging grappled opponents."));
             ClearGrappleMoveSelectionState();
             StartCoroutine(AfterAttackDelay(actor, 0.5f));
             return;
         }
 
         CombatUI?.SetTurnIndicator($"{actor.Stats.CharacterName} - Move while grappling: choose destination within half speed ({halfSpeedRange} sq)");
-        CombatUI?.ShowCombatLog($"↔ Move while grappling: select any highlighted square up to half speed ({halfSpeedRange} squares). Grappled opponents will be dragged with you.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↔", $"Move while grappling: select any highlighted square up to half speed ({halfSpeedRange} squares). Grappled opponents will be dragged with you."));
     }
 
     private void ShowGrappleMoveRange(CharacterController actor)
@@ -853,12 +852,12 @@ public partial class GameManager
             || selectedPath == null
             || selectedPath.Count == 0)
         {
-            CombatUI?.ShowCombatLog("⚠ Invalid grapple move destination.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Invalid grapple move destination."));
             return;
         }
 
         Vector2Int destination = selectedPath[selectedPath.Count - 1];
-        CombatUI?.ShowCombatLog($"↔ {actor.Stats.CharacterName} selects grapple move destination ({destination.x},{destination.y}).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↔", $"{actor.Stats.CharacterName} selects grapple move destination ({destination.x},{destination.y})."));
         StartCoroutine(ExecuteGrappleMovement(actor, selectedPath));
     }
 
@@ -917,7 +916,7 @@ public partial class GameManager
                     SquareCell destinationCell = Grid.GetCell(opponentDestination);
                     if (destinationCell == null)
                     {
-                        CombatUI?.ShowCombatLog($"⚠ Grapple drag failed for {opponent.Stats.CharacterName}: invalid destination square.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Grapple drag failed for {opponent.Stats.CharacterName}: invalid destination square."));
                         continue;
                     }
 
@@ -930,7 +929,7 @@ public partial class GameManager
                     else if (opponentStartPositions.TryGetValue(opponent, out Vector2Int failedStart))
                     {
                         Grid.SetCreatureOccupancy(opponent, failedStart, opponent.GetVisualSquaresOccupied());
-                        CombatUI?.ShowCombatLog($"⚠ Grapple drag failed for {opponent.Stats.CharacterName}: destination blocked.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Grapple drag failed for {opponent.Stats.CharacterName}: destination blocked."));
                     }
                 }
 
@@ -953,7 +952,7 @@ public partial class GameManager
                         Grid.SetCreatureOccupancy(opponent, startPosition, opponent.GetVisualSquaresOccupied());
                 }
 
-                CombatUI?.ShowCombatLog("⚠ Grapple drag destination became invalid; opponents remain in place.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Grapple drag destination became invalid; opponents remain in place."));
             }
         }
         else
@@ -961,9 +960,9 @@ public partial class GameManager
             RestoreOccupancy(temporarilyClearedOpponents);
         }
 
-        CombatUI?.ShowCombatLog($"↔ {actor.Stats.CharacterName} moves while grappling from ({actorStart.x},{actorStart.y}) to ({actor.GridPosition.x},{actor.GridPosition.y}).");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↔", $"{actor.Stats.CharacterName} moves while grappling from ({actorStart.x},{actorStart.y}) to ({actor.GridPosition.x},{actor.GridPosition.y})."));
         for (int i = 0; i < draggedMessages.Count; i++)
-            CombatUI?.ShowCombatLog($"   • {draggedMessages[i]}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   • {draggedMessages[i]}"));
 
         RefreshFlankedConditions();
         UpdateAllStatsUI();
@@ -981,7 +980,7 @@ public partial class GameManager
         ClearGrappleMoveSelectionState();
 
         if (actor != null && actor.Stats != null)
-            CombatUI?.ShowCombatLog($"↩ {actor.Stats.CharacterName} chooses not to move after winning grapple control.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{actor.Stats.CharacterName} chooses not to move after winning grapple control."));
 
         ShowActionChoices();
     }
@@ -1023,7 +1022,7 @@ public partial class GameManager
         if (!actor.TryGetGrappleState(out CharacterController liveOpponent, out _, out bool isPinned, out bool opponentPinned))
         {
             LogMenuFlow("ShowGrappleActionMenu:NO_LONGER_GRAPPLING", actor);
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} is no longer in a grapple."));
             ShowActionChoices();
             return;
         }
@@ -1185,7 +1184,7 @@ public partial class GameManager
                         ? options[selectedIndex].Label
                         : options[selectedIndex].DisabledMessage;
                     LogMenuFlow("ShowGrappleActionMenu:OPTION_BLOCKED", actor, $"selectedIndex={selectedIndex}, reason={blockedMessage}");
-                    CombatUI?.ShowCombatLog($"⚠ {blockedMessage}");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{blockedMessage}"));
                     ShowGrappleActionMenu(actor, opponent);
                     return;
                 }
@@ -1239,7 +1238,7 @@ public partial class GameManager
         if (!actor.TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out _))
         {
             LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:NO_LONGER_GRAPPLING", actor);
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} is no longer in a grapple."));
             ShowActionChoices();
             return;
         }
@@ -1247,7 +1246,7 @@ public partial class GameManager
         if (isPinned)
         {
             LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:ACTOR_PINNED", actor);
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is pinned and cannot use opponent's weapon.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} is pinned and cannot use opponent's weapon."));
             ShowActionChoices();
             return;
         }
@@ -1258,7 +1257,7 @@ public partial class GameManager
         if (options == null || options.Count == 0)
         {
             LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:NO_OPTIONS", actor, $"opponent={opponent.Stats.CharacterName}");
-            CombatUI?.ShowCombatLog($"⚠ {opponent.Stats.CharacterName} has no equipped light weapon to use.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{opponent.Stats.CharacterName} has no equipped light weapon to use."));
             ShowActionChoices();
             return;
         }
@@ -1314,7 +1313,7 @@ public partial class GameManager
         if (!actor.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
         {
             LogMenuFlow("ShowGrappleDamageModeMenu:NO_LONGER_GRAPPLING", actor);
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} is no longer in a grapple."));
             ShowActionChoices();
             return;
         }
@@ -1407,7 +1406,7 @@ public partial class GameManager
             string fallback = string.IsNullOrWhiteSpace(reason)
                 ? "no grapple attacks remain in the shared pool"
                 : reason;
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use {actionType}: {fallback}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} cannot use {actionType}: {fallback}"));
             Debug.LogWarning($"[GameManager][Grapple] Shared-pool consume failed for {actor.Stats.CharacterName} action={actionType} reason={fallback}");
             return false;
         }
@@ -1485,8 +1484,8 @@ public partial class GameManager
         string escaperName = escaper.Stats.CharacterName;
         string grapplerName = grappler.Stats.CharacterName;
 
-        CombatUI?.ShowCombatLog($"{escaperName} attempts to escape {grapplerName}'s grapple!");
-        CombatUI?.ShowCombatLog($"Waiting for {grapplerName}'s decision...");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{escaperName} attempts to escape {grapplerName}'s grapple!"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"Waiting for {grapplerName}'s decision..."));
 
         CombatUI?.ShowConfirmationDialog(
             title: "Escape Attempt",
@@ -1495,7 +1494,7 @@ public partial class GameManager
             cancelLabel: "Allow Escape",
             onConfirm: () =>
             {
-                CombatUI?.ShowCombatLog($"{grapplerName} opposes the escape attempt!");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{grapplerName} opposes the escape attempt!"));
                 SpecialAttackResult opposedResult = escaper.ResolveGrappleAction(
                     GrappleActionType.OpposedGrappleEscape,
                     null,
@@ -1505,7 +1504,7 @@ public partial class GameManager
             },
             onCancel: () =>
             {
-                CombatUI?.ShowCombatLog($"{grapplerName} allows {escaperName} to escape.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{grapplerName} allows {escaperName} to escape."));
                 escaper.ReleaseGrappleState("escape allowed by grappler");
                 onResolved?.Invoke(BuildAllowedGrappleEscapeResult(escaper, grappler));
             });
@@ -1541,7 +1540,7 @@ public partial class GameManager
         }
         else
         {
-            CombatUI?.ShowCombatLog($"{grappleHeader}: {result.Log}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{grappleHeader}: {result.Log}"));
         }
 
         UpdateAllStatsUI();
@@ -1577,14 +1576,14 @@ public partial class GameManager
 
         if (!CanUseGrappleAction(actor, actionType))
         {
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use {actionType} in the current pin state.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} cannot use {actionType} in the current pin state."));
             ShowActionChoices();
             return;
         }
 
         if (actor.IsGrappleActionBlockedWhilePinning(actionType, out string blockedReason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {blockedReason}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{blockedReason}"));
             ShowActionChoices();
             return;
         }
@@ -1606,7 +1605,7 @@ public partial class GameManager
         }
         else if (!isFreeAction && !actor.CommitStandardAction())
         {
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use grapple action: standard action already spent.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} cannot use grapple action: standard action already spent."));
             ShowActionChoices();
             return;
         }
@@ -1645,7 +1644,7 @@ public partial class GameManager
 
             if (!npc.TryGetGrappleState(out CharacterController opponent, out _, out bool actorPinned, out bool opponentPinned) || opponent == null || opponent.Stats == null)
             {
-                CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} is in an invalid grapple state and cannot pick a grapple action.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} is in an invalid grapple state and cannot pick a grapple action."));
                 yield return new WaitForSeconds(0.35f);
                 yield break;
             }
@@ -1653,7 +1652,7 @@ public partial class GameManager
             GrappleActionType? chosenAction = ChooseNPCGrappleAction(npc, opponent, actorPinned, opponentPinned);
             if (chosenAction == null)
             {
-                CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no legal grapple actions available.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} has no legal grapple actions available."));
                 yield return new WaitForSeconds(0.35f);
                 yield break;
             }
@@ -1672,7 +1671,7 @@ public partial class GameManager
             }
             else if (!isFreeAction && !npc.CommitStandardAction())
             {
-                CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} cannot use grapple action: standard action already spent.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} cannot use grapple action: standard action already spent."));
                 break;
             }
 
@@ -1709,7 +1708,7 @@ public partial class GameManager
             }
             else
             {
-                CombatUI?.ShowCombatLog($"{npcGrappleHeader}: {result.Log}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{npcGrappleHeader}: {result.Log}"));
             }
             UpdateAllStatsUI();
 

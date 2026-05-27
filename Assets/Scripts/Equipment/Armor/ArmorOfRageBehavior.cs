@@ -137,9 +137,7 @@ public class ArmorOfRageBehavior : SpecificItemBehavior
         _enhancementActive = true;
         Log($"Rage enhancement applied: +{BonusRageEnhancement} STR/CON, +{hpGain} HP");
 
-        GameManager.Instance?.CombatUI?.ShowCombatLog(
-            $"<color=#FF4500>💢 Armor of Rage amplifies {stats.CharacterName}'s fury! " +
-            $"(+{4 + BonusRageEnhancement} STR/CON total)</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Damage("💢", $"Armor of Rage amplifies {stats.CharacterName}'s fury! (+{4 + BonusRageEnhancement} STR/CON total)"));
     }
 
     private void RemoveRageEnhancement(CharacterStats stats)

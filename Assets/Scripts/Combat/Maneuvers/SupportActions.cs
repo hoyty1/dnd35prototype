@@ -402,9 +402,9 @@ public partial class GameManager
         string sourceList = names.Count > 0 ? string.Join(", ", names) : "unknown";
         string expiryHint = $"expires if unused by the start of {beneficiaryName}'s following turn";
         if (aidType == AidType.Defense)
-            CombatUI?.ShowCombatLog($"✅ {beneficiaryName} gains +{totalForPair} AC vs {targetName} (from {sourceList}; {expiryHint}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"{beneficiaryName} gains +{totalForPair} AC vs {targetName} (from {sourceList}; {expiryHint})."));
         else
-            CombatUI?.ShowCombatLog($"✅ {beneficiaryName} gains +{totalForPair} attack vs {targetName} (from {sourceList}; {expiryHint}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"{beneficiaryName} gains +{totalForPair} attack vs {targetName} (from {sourceList}; {expiryHint})."));
 
         NotifyAidBonusStateChanged(beneficiary);
     }
@@ -435,7 +435,7 @@ public partial class GameManager
         if (totalBonus > 0)
         {
             string from = string.Join(", ", consumed.ConvertAll(b => GetCombatantName(b.Aider)));
-            CombatUI?.ShowCombatLog($"🤝 Aid offense consumed: +{totalBonus} attack for {attacker.Stats.CharacterName} vs {defender.Stats.CharacterName} (from {from}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🤝", $"Aid offense consumed: +{totalBonus} attack for {attacker.Stats.CharacterName} vs {defender.Stats.CharacterName} (from {from})."));
             for (int i = 0; i < consumed.Count; i++)
                 ActiveAidBonuses.Remove(consumed[i]);
             Debug.Log($"[AidBonus][Attack] Consumed {consumed.Count} offense bonuses; total applied +{totalBonus}");
@@ -475,7 +475,7 @@ public partial class GameManager
         if (totalBonus > 0)
         {
             string from = string.Join(", ", consumed.ConvertAll(b => GetCombatantName(b.Aider)));
-            CombatUI?.ShowCombatLog($"🛡 Aid defense consumed: +{totalBonus} AC for {defender.Stats.CharacterName} vs {attacker.Stats.CharacterName} (from {from}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"Aid defense consumed: +{totalBonus} AC for {defender.Stats.CharacterName} vs {attacker.Stats.CharacterName} (from {from})."));
             for (int i = 0; i < consumed.Count; i++)
                 ActiveAidBonuses.Remove(consumed[i]);
             Debug.Log($"[AidBonus][Defense] Consumed {consumed.Count} defense bonuses; total applied +{totalBonus}");
@@ -514,7 +514,7 @@ public partial class GameManager
         for (int i = 0; i < expiring.Count; i++)
         {
             AidBonus bonus = expiring[i];
-            CombatUI?.ShowCombatLog($"⌛ Aid {GetAidTypeLabel(bonus.Type)} bonus expired: {GetCombatantName(bonus.Aider)} → {GetCombatantName(bonus.Beneficiary)} vs {GetCombatantName(bonus.Target)} (+{bonus.Bonus}).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⌛", $"Aid {GetAidTypeLabel(bonus.Type)} bonus expired: {GetCombatantName(bonus.Aider)} → {GetCombatantName(bonus.Beneficiary)} vs {GetCombatantName(bonus.Target)} (+{bonus.Bonus})."));
             Debug.Log($"[AidBonus][Expire] Removing expired bonus: {DescribeAidBonus(bonus)}");
             ActiveAidBonuses.Remove(bonus);
         }
@@ -543,15 +543,15 @@ public partial class GameManager
         if (bonuses.Count == 0)
             return;
 
-        CombatUI?.ShowCombatLog($"📋 {character.Stats.CharacterName}'s active Aid Another bonuses:");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("📋", $"{character.Stats.CharacterName}'s active Aid Another bonuses:"));
 
         for (int i = 0; i < bonuses.Count; i++)
         {
             AidBonus bonus = bonuses[i];
             if (bonus.Type == AidType.Defense)
-                CombatUI?.ShowCombatLog($"   Defense: +{bonus.Bonus} AC vs {GetCombatantName(bonus.Target)} (from {GetCombatantName(bonus.Aider)})");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Defense: +{bonus.Bonus} AC vs {GetCombatantName(bonus.Target)} (from {GetCombatantName(bonus.Aider)})"));
             else
-                CombatUI?.ShowCombatLog($"   Offense: +{bonus.Bonus} attack vs {GetCombatantName(bonus.Target)} (from {GetCombatantName(bonus.Aider)})");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Offense: +{bonus.Bonus} attack vs {GetCombatantName(bonus.Target)} (from {GetCombatantName(bonus.Aider)})"));
         }
     }
 
@@ -566,7 +566,7 @@ public partial class GameManager
 
         if (!CanUseAidAnother(pc, out string reason))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot Aid Another: {reason}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot Aid Another: {reason}."));
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -606,7 +606,7 @@ public partial class GameManager
 
         if (!canGrantBonus && !canWakeAlly)
         {
-            CombatUI?.ShowCombatLog($"⚠ {initiator.Stats.CharacterName} has no valid Aid Another targets.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{initiator.Stats.CharacterName} has no valid Aid Another targets."));
             ShowActionChoices();
             return;
         }
@@ -652,7 +652,7 @@ public partial class GameManager
         List<CharacterController> threatenedEnemies = GetThreatenedEnemies(initiator);
         if (threatenedEnemies.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {initiator.Stats.CharacterName} doesn't threaten any enemies!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{initiator.Stats.CharacterName} doesn't threaten any enemies!"));
             ShowActionChoices();
             return;
         }
@@ -745,7 +745,7 @@ public partial class GameManager
         List<CharacterController> alliesInRange = GetAlliesInMeleeRange(enemy, initiator);
         if (alliesInRange.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ No allies in melee range of {enemy.Stats.CharacterName}!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"No allies in melee range of {enemy.Stats.CharacterName}!"));
             ShowActionChoices();
             return;
         }
@@ -792,7 +792,7 @@ public partial class GameManager
         List<CharacterController> sleepingAllies = GetAdjacentSleepingAllies(initiator);
         if (sleepingAllies.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ No adjacent sleeping ally for {initiator.Stats.CharacterName} to wake.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"No adjacent sleeping ally for {initiator.Stats.CharacterName} to wake."));
             ShowActionChoices();
             return;
         }
@@ -820,21 +820,21 @@ public partial class GameManager
 
         if (!aider.Actions.HasStandardAction)
         {
-            CombatUI?.ShowCombatLog($"⚠ {aider.Stats.CharacterName} has no standard action remaining to wake an ally.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{aider.Stats.CharacterName} has no standard action remaining to wake an ally."));
             ShowActionChoices();
             return;
         }
 
         if (!IsAdjacent(aider, ally))
         {
-            CombatUI?.ShowCombatLog($"⚠ {ally.Stats.CharacterName} is not adjacent to {aider.Stats.CharacterName}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{ally.Stats.CharacterName} is not adjacent to {aider.Stats.CharacterName}."));
             ShowActionChoices();
             return;
         }
 
         if (!IsCharacterAsleep(ally))
         {
-            CombatUI?.ShowCombatLog($"⚠ {ally.Stats.CharacterName} is not asleep.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{ally.Stats.CharacterName} is not asleep."));
             ShowActionChoices();
             return;
         }
@@ -843,9 +843,9 @@ public partial class GameManager
 
         bool woke = TryWakeSleepingCharacter(ally, "shaken awake", aider, suppressLog: true);
         if (woke)
-            CombatUI?.ShowCombatLog($"🤝 {aider.Stats.CharacterName} shakes {ally.Stats.CharacterName} awake.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🤝", $"{aider.Stats.CharacterName} shakes {ally.Stats.CharacterName} awake."));
         else
-            CombatUI?.ShowCombatLog($"⚠ {aider.Stats.CharacterName} cannot wake {ally.Stats.CharacterName} right now.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{aider.Stats.CharacterName} cannot wake {ally.Stats.CharacterName} right now."));
 
         UpdateAllStatsUI();
         StartCoroutine(AfterAttackDelay(aider, 0.9f));
@@ -861,39 +861,39 @@ public partial class GameManager
 
         if (!CanAttemptAidAnotherTouch(aider, enemy))
         {
-            CombatUI?.ShowCombatLog($"⚠ {GetCombatantName(enemy)} is not in melee reach for Aid Another.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{GetCombatantName(enemy)} is not in melee reach for Aid Another."));
             ShowActionChoices();
             return;
         }
 
         if (!ally.ThreatensWith(enemy, ally.GetEquippedWeapon()))
         {
-            CombatUI?.ShowCombatLog($"⚠ {GetCombatantName(ally)} is no longer in melee range of {GetCombatantName(enemy)}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{GetCombatantName(ally)} is no longer in melee range of {GetCombatantName(enemy)}."));
             ShowActionChoices();
             return;
         }
 
-        CombatUI?.ShowCombatLog($"🤝 {aider.Stats.CharacterName} aids {ally.Stats.CharacterName}'s {GetAidTypeLabel(aidType)} vs {enemy.Stats.CharacterName}.");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("🤝", $"{aider.Stats.CharacterName} aids {ally.Stats.CharacterName}'s {GetAidTypeLabel(aidType)} vs {enemy.Stats.CharacterName}."));
 
         int touchAtkMod = GetAidAnotherTouchAttackModifier(aider);
         (bool hit, int roll, int total) = aider.Stats.RollToHitWithMod(touchAtkMod, 10);
 
-        CombatUI?.ShowCombatLog("Melee touch attack vs AC 10:");
-        CombatUI?.ShowCombatLog($"  Roll: 1d20 = {roll}");
-        CombatUI?.ShowCombatLog($"  Modifier: {CharacterStats.FormatMod(touchAtkMod)}");
-        CombatUI?.ShowCombatLog($"  Total: {total}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Melee touch attack vs AC 10:"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Roll: 1d20 = {roll}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Modifier: {CharacterStats.FormatMod(touchAtkMod)}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Total: {total}"));
 
         aider.CommitStandardAction();
 
         if (!hit)
         {
-            CombatUI?.ShowCombatLog("❌ Aid Another failed (needed 10).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", "Aid Another failed (needed 10)."));
             UpdateAllStatsUI();
             StartCoroutine(AfterAttackDelay(aider, 0.9f));
             return;
         }
 
-        CombatUI?.ShowCombatLog("✅ Aid Another success!");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", "Aid Another success!"));
         AddAidBonus(aider, ally, enemy, aidType);
         DisplayActiveAidBonuses(ally);
 
@@ -973,26 +973,26 @@ public partial class GameManager
 
         if (charger.HasTakenFiveFootStep)
         {
-            CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} cannot charge after taking a 5-foot step.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName} cannot charge after taking a 5-foot step."));
             return;
         }
 
         if (!charger.Actions.HasFullRoundAction)
         {
-            CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} needs a full-round action to charge.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName} needs a full-round action to charge."));
             return;
         }
 
         if (!charger.HasMeleeWeaponEquipped())
         {
-            CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} needs a melee weapon (or natural/unarmed attack) to charge.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName} needs a melee weapon (or natural/unarmed attack) to charge."));
             return;
         }
 
         var validTargets = GetValidChargeTargets(charger, true);
         if (validTargets.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ No valid charge targets for {charger.Stats.CharacterName}.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"No valid charge targets for {charger.Stats.CharacterName}."));
             return;
         }
 
@@ -1036,7 +1036,7 @@ public partial class GameManager
         }
 
         if (logFailures && list.Count == 0)
-            CombatUI?.ShowCombatLog("⚠ No enemies meet charge requirements (distance, clear path, reachable endpoint).");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No enemies meet charge requirements (distance, clear path, reachable endpoint)."));
 
         return list;
     }
@@ -1064,7 +1064,7 @@ public partial class GameManager
 
         if (!TeamUtility.IsEnemy(charger, target))
         {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ You can only charge an enemy target.");
+            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "You can only charge an enemy target."));
             return false;
         }
 
@@ -1073,26 +1073,26 @@ public partial class GameManager
         {
             if (logFailures)
             {
-                CombatUI?.ShowCombatLog($"⚠ Cannot charge {target.Stats.CharacterName}: target is within {ChargeBlockedDistanceSquares} squares ({startingDistanceSquares} squares away) from your starting position.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Cannot charge {target.Stats.CharacterName}: target is within {ChargeBlockedDistanceSquares} squares ({startingDistanceSquares} squares away) from your starting position."));
             }
             return false;
         }
 
         if (!charger.Actions.HasFullRoundAction)
         {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Need full-round action to charge.");
+            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Need full-round action to charge."));
             return false;
         }
 
         if (charger.HasTakenFiveFootStep)
         {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Cannot charge after taking a 5-foot step.");
+            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Cannot charge after taking a 5-foot step."));
             return false;
         }
 
         if (!charger.HasMeleeWeaponEquipped())
         {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Need a melee weapon (or natural/unarmed attack) to charge.");
+            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Need a melee weapon (or natural/unarmed attack) to charge."));
             return false;
         }
 
@@ -1101,7 +1101,7 @@ public partial class GameManager
             if (logFailures)
             {
                 string fatigueState = charger.Stats.IsExhaustedState ? "Exhausted" : "Fatigued";
-                CombatUI?.ShowCombatLog($"⚠ {fatigueState} creatures cannot charge.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{fatigueState} creatures cannot charge."));
             }
             return false;
         }
@@ -1109,7 +1109,7 @@ public partial class GameManager
         if (charger.HasCondition(CombatConditionType.Entangled))
         {
             if (logFailures)
-                CombatUI?.ShowCombatLog("⚠ Entangled creatures cannot charge.");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Entangled creatures cannot charge."));
             return false;
         }
 
@@ -1121,13 +1121,13 @@ public partial class GameManager
                 switch (failureReason)
                 {
                     case ChargePathFailureReason.TooClose:
-                        CombatUI?.ShowCombatLog($"⚠ Cannot charge targets within {ChargeBlockedDistanceSquares} squares ({ChargeBlockedDistanceSquares * 5} ft). Move at least {MinChargeMovementSquares} squares ({MinChargeMovementSquares * 5} ft).");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Cannot charge targets within {ChargeBlockedDistanceSquares} squares ({ChargeBlockedDistanceSquares * 5} ft). Move at least {MinChargeMovementSquares} squares ({MinChargeMovementSquares * 5} ft)."));
                         break;
                     case ChargePathFailureReason.TooFar:
-                        CombatUI?.ShowCombatLog($"⚠ Target is too far to charge (max {maxDistanceFeet} ft).");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Target is too far to charge (max {maxDistanceFeet} ft)."));
                         break;
                     default:
-                        CombatUI?.ShowCombatLog("⚠ No valid charge path to target.");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "No valid charge path to target."));
                         break;
                 }
             }
@@ -1421,7 +1421,7 @@ public partial class GameManager
         if (rakeResult == null || rakeResult.Attacks == null || rakeResult.Attacks.Count == 0)
             return;
 
-        CombatUI?.ShowCombatLog($"🩸 {attacker.Stats.CharacterName} rakes grappled opponent {target.Stats.CharacterName}!");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🩸", $"{attacker.Stats.CharacterName} rakes grappled opponent {target.Stats.CharacterName}!"));
         CombatUI?.ShowCombatLog(rakeResult.GetFullSummary());
 
         for (int i = 0; i < rakeResult.Attacks.Count; i++)
@@ -1446,14 +1446,14 @@ public partial class GameManager
         List<Vector2Int> path = GetChargePath(charger, target);
         if (path == null || path.Count == 0)
         {
-            CombatUI?.ShowCombatLog("⚠ Charge aborted: invalid path.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Charge aborted: invalid path."));
             ShowActionChoices();
             yield break;
         }
 
         if (charger.Actions == null || !charger.Actions.HasFullRoundAction)
         {
-            CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} cannot charge: no full-round action remaining.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName} cannot charge: no full-round action remaining."));
             ShowActionChoices();
             yield break;
         }
@@ -1489,7 +1489,7 @@ public partial class GameManager
                 if (aooResult == null)
                     continue;
 
-                CombatUI.ShowCombatLog($"⚔ AoO during charge: {aooResult.GetDetailedSummary()}");
+                CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO during charge: {aooResult.GetDetailedSummary()}"));
                 UpdateAllStatsUI();
 
                 if (aooResult.Hit && aooResult.TotalDamage > 0)
@@ -1516,7 +1516,7 @@ public partial class GameManager
 
         if (interruptedByIncapacitation)
         {
-            CombatUI?.ShowCombatLog($"⛔ {charger.Stats.CharacterName}'s charge is interrupted by incapacitation.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{charger.Stats.CharacterName}'s charge is interrupted by incapacitation."));
             UpdateAllStatsUI();
             _chargeTarget = null;
             _pendingChargePath.Clear();
@@ -1534,7 +1534,7 @@ public partial class GameManager
                 SpecialAttackType.BullRushCharge,
                 target,
                 bullRushChargeBonusOverride: 2);
-            CombatUI.ShowCombatLog($"⚡ Charge Bull Rush (+2): {bullRushResult.Log}");
+            CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Bull Rush (+2): {bullRushResult.Log}"));
 
             if (bullRushResult.Success)
                 yield return StartCoroutine(ResolveBullRushPushAndFollowCoroutine(charger, target, bullRushResult));
@@ -1548,7 +1548,7 @@ public partial class GameManager
 
             if (usedPounce)
             {
-                CombatUI?.ShowCombatLog($"🐅 {charger.Stats.CharacterName} uses Pounce and unleashes a full natural attack at the end of the charge!");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Summon("🐅", $"{charger.Stats.CharacterName} uses Pounce and unleashes a full natural attack at the end of the charge!"));
 
                 charger.Stats.MoraleAttackBonus += 2;
                 FullAttackResult pounceResult;
@@ -1571,7 +1571,7 @@ public partial class GameManager
 
                 if (pounceResult != null)
                 {
-                    CombatUI?.ShowCombatLog($"⚡ Charge Pounce (+2): {pounceResult.GetFullSummary()}");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Pounce (+2): {pounceResult.GetFullSummary()}"));
 
                     // Melee reaction effects (Fire Shield, Thorns, etc.) — pounce triggers per hit
                     if (pounceResult.Attacks != null)
@@ -1585,8 +1585,8 @@ public partial class GameManager
 
                     if (pounceRakeResult != null && pounceRakeResult.Attacks != null && pounceRakeResult.Attacks.Count > 0)
                     {
-                        CombatUI?.ShowCombatLog($"🦶 {charger.Stats.CharacterName} pounces and rakes with hind claws!");
-                        CombatUI?.ShowCombatLog($"🩸 Pounce Rake: {pounceRakeResult.GetFullSummary()}");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🦶", $"{charger.Stats.CharacterName} pounces and rakes with hind claws!"));
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🩸", $"Pounce Rake: {pounceRakeResult.GetFullSummary()}"));
 
                         for (int i = 0; i < pounceRakeResult.Attacks.Count; i++)
                         {
@@ -1631,19 +1631,19 @@ public partial class GameManager
                         improvedGrabAttempted = true;
                         if (!shouldAttemptGrab)
                         {
-                            CombatUI?.ShowCombatLog($"↷ {charger.Stats.CharacterName} declines to start a grapple.");
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↷", $"{charger.Stats.CharacterName} declines to start a grapple."));
                             continue;
                         }
 
                         SpecialAttackResult grabResult = charger.ResolveImprovedGrabFreeAttempt(target);
-                        CombatUI?.ShowCombatLog($"🪢 Improved Grab: {grabResult.Log}");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
                         improvedGrabSucceeded = grabResult.Success;
 
                         if (grabResult.Success)
                         {
                             if (usedPounce)
                             {
-                                CombatUI?.ShowCombatLog($"⏹ {charger.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn.");
+                                CombatUI?.ShowCombatLog(CombatLogHelper.Info("⏹", $"{charger.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn."));
                             }
                             else
                             {
@@ -1690,7 +1690,7 @@ public partial class GameManager
                     RangeInfo chargeRangeInfo = CalculateRangeInfo(charger, target);
                     TryResolveFreeTripOnHit(charger, target, result, chargeRangeInfo);
 
-                    CombatUI.ShowCombatLog($"⚡ Charge Attack (+2): {result.GetDetailedSummary()}");
+                    CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Attack (+2): {result.GetDetailedSummary()}"));
                     if (result.Hit && result.TotalDamage > 0)
                     {
                         Debug.Log($"[Charge] Target {target?.Stats?.CharacterName ?? target?.name ?? "<null>"} took {result.TotalDamage} charge damage.");
@@ -1716,13 +1716,13 @@ public partial class GameManager
                         if (shouldAttemptGrab)
                         {
                             SpecialAttackResult grabResult = charger.ResolveImprovedGrabFreeAttempt(target);
-                            CombatUI?.ShowCombatLog($"🪢 Improved Grab: {grabResult.Log}");
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
                             if (grabResult.Success)
                                 ResolveRakeAfterSuccessfulImprovedGrab(charger, target);
                         }
                         else
                         {
-                            CombatUI?.ShowCombatLog($"↷ {charger.Stats.CharacterName} declines to start a grapple.");
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↷", $"{charger.Stats.CharacterName} declines to start a grapple."));
                         }
                     }
                 }
@@ -1731,7 +1731,7 @@ public partial class GameManager
 
         // D&D 3.5e: charge AC penalty lasts until the start of this charger's next turn.
         ApplyChargePenaltyUntilStartOfNextTurn(charger);
-        CombatUI.ShowCombatLog($"🛡 {charger.Stats.CharacterName} is charging: -2 AC until next turn.");
+        CombatUI.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{charger.Stats.CharacterName} is charging: -2 AC until next turn."));
 
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
@@ -1808,13 +1808,13 @@ public partial class GameManager
 
         if (npc.Actions == null || !npc.Actions.HasFullRoundAction)
         {
-            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} cannot charge: no full-round action remaining.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} cannot charge: no full-round action remaining."));
             yield break;
         }
 
         npc.Actions.UseFullRoundAction();
 
-        CombatUI.ShowCombatLog($"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!");
+        CombatUI.ShowCombatLog(CombatLogHelper.Warning("", $"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!"));
 
         var provokedAoOs = CheckForAoO(npc, path);
         bool interruptedByIncapacitation = false;
@@ -1840,7 +1840,7 @@ public partial class GameManager
                 if (aooResult == null)
                     continue;
 
-                CombatUI.ShowCombatLog($"⚔ AoO vs {npc.Stats.CharacterName}: {aooResult.GetDetailedSummary()}");
+                CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs {npc.Stats.CharacterName}: {aooResult.GetDetailedSummary()}"));
                 UpdateAllStatsUI();
 
                 if (aooResult.Hit && aooResult.TotalDamage > 0)
@@ -1867,7 +1867,7 @@ public partial class GameManager
 
         if (interruptedByIncapacitation)
         {
-            CombatUI?.ShowCombatLog($"⛔ {npc.Stats.CharacterName}'s charge is interrupted by incapacitation.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{npc.Stats.CharacterName}'s charge is interrupted by incapacitation."));
             UpdateAllStatsUI();
             yield break;
         }
@@ -1883,7 +1883,7 @@ public partial class GameManager
 
         if (usedPounce)
         {
-            CombatUI?.ShowCombatLog($"🐅 {npc.Stats.CharacterName} uses Pounce!");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Summon("🐅", $"{npc.Stats.CharacterName} uses Pounce!"));
             npc.Stats.MoraleAttackBonus += 2;
             FullAttackResult pounceResult;
             FullAttackResult pounceRakeResult = null;
@@ -1907,7 +1907,7 @@ public partial class GameManager
             if (pounceResult != null)
             {
                 string flankText = isFlankingCharge ? " + Flanking" : "";
-                CombatUI?.ShowCombatLog($"☠ Charge Pounce (+2{flankText}): {pounceResult.GetFullSummary()}");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Death("☠", $"Charge Pounce (+2{flankText}): {pounceResult.GetFullSummary()}"));
 
                 // Melee reaction effects (Fire Shield, Thorns, etc.) — NPC pounce triggers per hit
                 if (pounceResult.Attacks != null)
@@ -1921,8 +1921,8 @@ public partial class GameManager
 
                 if (pounceRakeResult != null && pounceRakeResult.Attacks != null && pounceRakeResult.Attacks.Count > 0)
                 {
-                    CombatUI?.ShowCombatLog($"🦶 {npc.Stats.CharacterName} pounces and rakes with hind claws!");
-                    CombatUI?.ShowCombatLog($"🩸 Pounce Rake: {pounceRakeResult.GetFullSummary()}");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🦶", $"{npc.Stats.CharacterName} pounces and rakes with hind claws!"));
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🩸", $"Pounce Rake: {pounceRakeResult.GetFullSummary()}"));
 
                     for (int i = 0; i < pounceRakeResult.Attacks.Count; i++)
                     {
@@ -1954,14 +1954,14 @@ public partial class GameManager
 
                     improvedGrabAttempted = true;
                     SpecialAttackResult grabResult = npc.ResolveImprovedGrabFreeAttempt(target);
-                    CombatUI?.ShowCombatLog($"🪢 Improved Grab: {grabResult.Log}");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
                     improvedGrabSucceeded = grabResult.Success;
 
                     if (grabResult.Success)
                     {
                         if (usedPounce)
                         {
-                            CombatUI?.ShowCombatLog($"⏹ {npc.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn.");
+                            CombatUI?.ShowCombatLog(CombatLogHelper.Info("⏹", $"{npc.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn."));
                         }
                         else
                         {
@@ -1992,7 +1992,7 @@ public partial class GameManager
                 TryResolveFreeTripOnHit(npc, target, result, chargeRangeInfo);
 
                 string flankText = isFlankingCharge ? " + Flanking" : "";
-                CombatUI.ShowCombatLog($"☠ Charge Attack (+2{flankText}): {result.GetDetailedSummary()}");
+                CombatUI.ShowCombatLog(CombatLogHelper.Death("☠", $"Charge Attack (+2{flankText}): {result.GetDetailedSummary()}"));
                 if (result.Hit && result.TotalDamage > 0)
                     CheckConcentrationOnDamage(target, result.TotalDamage);
 
@@ -2003,7 +2003,7 @@ public partial class GameManager
                 if (npc.Stats != null && npc.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(npc, result) && !target.Stats.IsDead)
                 {
                     SpecialAttackResult grabResult = npc.ResolveImprovedGrabFreeAttempt(target);
-                    CombatUI?.ShowCombatLog($"🪢 Improved Grab: {grabResult.Log}");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));
                     if (grabResult.Success)
                         ResolveRakeAfterSuccessfulImprovedGrab(npc, target);
                 }

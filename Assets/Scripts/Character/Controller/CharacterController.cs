@@ -3760,7 +3760,7 @@ public class CharacterController : MonoBehaviour
         {
             LogAbilityScoreMessage($"♻ {Stats.CharacterName} regenerates {healedHp} HP and removes {nonlethalHealed} nonlethal.");
             if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
-                GameManager.Instance.CombatUI.ShowCombatLog($"♻ {Stats.CharacterName} regenerates ({hpBefore}→{Stats.CurrentHP} HP, nonlethal {nonlethalBefore}→{Stats.NonlethalDamage}).");
+                GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Success("♻", $"{Stats.CharacterName} regenerates ({hpBefore}→{Stats.CurrentHP} HP, nonlethal {nonlethalBefore}→{Stats.NonlethalDamage})."));
         }
     }
 
@@ -4266,7 +4266,7 @@ public class CharacterController : MonoBehaviour
         if (newHP < oldHP && GameManager.Instance != null && GameManager.Instance.IsCharacterAsleep(this))
         {
             if (GameManager.Instance.TryWakeSleepingCharacter(this, "takes damage", suppressLog: true))
-                GameManager.Instance.CombatUI?.ShowCombatLog($"💥 {Stats.CharacterName} wakes from taking damage.");
+                GameManager.Instance.CombatUI?.ShowCombatLog(CombatLogHelper.Damage("💥", $"{Stats.CharacterName} wakes from taking damage."));
         }
     }
 
@@ -4281,7 +4281,7 @@ public class CharacterController : MonoBehaviour
         if (newValue > oldValue && GameManager.Instance != null && GameManager.Instance.IsCharacterAsleep(this))
         {
             if (GameManager.Instance.TryWakeSleepingCharacter(this, "takes nonlethal damage", suppressLog: true))
-                GameManager.Instance.CombatUI?.ShowCombatLog($"💥 {Stats.CharacterName} wakes from taking damage.");
+                GameManager.Instance.CombatUI?.ShowCombatLog(CombatLogHelper.Damage("💥", $"{Stats.CharacterName} wakes from taking damage."));
         }
     }
 
@@ -4461,7 +4461,7 @@ public class CharacterController : MonoBehaviour
         {
             SetHPState(HPState.Disabled, emitLog: true);
             if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
-                GameManager.Instance.CombatUI.ShowCombatLog($"💪 {Stats.CharacterName} stabilizes automatically (Diehard feat) and remains conscious at {Stats.CurrentHP} HP.");
+                GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Success("💪", $"{Stats.CharacterName} stabilizes automatically (Diehard feat) and remains conscious at {Stats.CurrentHP} HP."));
             return;
         }
 
@@ -4472,8 +4472,7 @@ public class CharacterController : MonoBehaviour
 
         if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
         {
-            GameManager.Instance.CombatUI.ShowCombatLog(
-                $"🎲 {Stats.CharacterName} stabilization check: d20({roll}) + CON({CharacterStats.FormatMod(conMod)}) = {total} vs DC {dc}");
+            GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Info("🎲", $"{Stats.CharacterName} stabilization check: d20({roll}) + CON({CharacterStats.FormatMod(conMod)}) = {total} vs DC {dc}"));
         }
 
         if (total >= dc)
@@ -4488,7 +4487,7 @@ public class CharacterController : MonoBehaviour
 
         if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
         {
-            GameManager.Instance.CombatUI.ShowCombatLog($"💉 {Stats.CharacterName} fails to stabilize and loses 1 HP ({before} → {after}).");
+            GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Failure("💉", $"{Stats.CharacterName} fails to stabilize and loses 1 HP ({before} → {after})."));
         }
     }
 
@@ -4501,7 +4500,7 @@ public class CharacterController : MonoBehaviour
         {
             SetHPState(HPState.Stable, emitLog: true);
             if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
-                GameManager.Instance.CombatUI.ShowCombatLog($"🩹 {Stats.CharacterName} is stabilized by {sourceName}.");
+                GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Success("🩹", $"{Stats.CharacterName} is stabilized by {sourceName}."));
         }
     }
 
@@ -4515,7 +4514,7 @@ public class CharacterController : MonoBehaviour
         if (_currentHPState == HPState.Disabled && Stats != null && Stats.CurrentHP == 0)
         {
             if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
-                GameManager.Instance.CombatUI.ShowCombatLog($"⚠ {Stats.CharacterName} takes a standard action while disabled and drops to -1 HP!");
+                GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{Stats.CharacterName} takes a standard action while disabled and drops to -1 HP!"));
 
             Stats.CurrentHP = -1;
         }
@@ -6214,10 +6213,10 @@ public class CharacterController : MonoBehaviour
         GameManager gm = GameManager.Instance;
         if (gm != null && gm.CombatUI != null)
         {
-            gm.CombatUI.ShowCombatLog($"{attackerName} attacks {targetName}'s last known position.");
-            gm.CombatUI.ShowCombatLog($"  Last known: {lastKnownText}");
-            gm.CombatUI.ShowCombatLog($"  Current: {currentText}");
-            gm.CombatUI.ShowCombatLog("  ATTACKING EMPTY SQUARE: automatic miss (no attack roll)");
+            gm.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{attackerName} attacks {targetName}'s last known position."));
+            gm.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"  Last known: {lastKnownText}"));
+            gm.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"  Current: {currentText}"));
+            gm.CombatUI.ShowCombatLog(CombatLogHelper.Info("", "  ATTACKING EMPTY SQUARE: automatic miss (no attack roll)"));
         }
 
         autoMiss = new CombatResult
@@ -10229,7 +10228,7 @@ public class CharacterController : MonoBehaviour
             CharacterController pinnedNoMaintainer = link.PinnedCharacter;
             ClearPinnedState(link);
             if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && pinnedNoMaintainer != null && pinnedNoMaintainer.Stats != null)
-                GameManager.Instance.CombatUI.ShowCombatLog($"⏱ Pin on {pinnedNoMaintainer.Stats.CharacterName} ends because the controlling grappler can no longer maintain it.");
+                GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Pin on {pinnedNoMaintainer.Stats.CharacterName} ends because the controlling grappler can no longer maintain it."));
         }
     }
 
@@ -11680,7 +11679,7 @@ public class CharacterController : MonoBehaviour
         {
             DropItemToGround(this, rightHand);
             droppedCount++;
-            GameManager.Instance?.CombatUI?.ShowCombatLog($"💨 {ownerName} drops {rightHand.Name} ({reason}).");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💨", $"{ownerName} drops {rightHand.Name} ({reason})."));
         }
 
         ItemData leftHand = inventory.RemoveEquippedHeldItem(EquipSlot.LeftHand);
@@ -11688,7 +11687,7 @@ public class CharacterController : MonoBehaviour
         {
             DropItemToGround(this, leftHand);
             droppedCount++;
-            GameManager.Instance?.CombatUI?.ShowCombatLog($"💨 {ownerName} drops {leftHand.Name} ({reason}).");
+            GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Info("💨", $"{ownerName} drops {leftHand.Name} ({reason})."));
         }
 
         return droppedCount;

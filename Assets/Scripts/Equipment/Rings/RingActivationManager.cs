@@ -867,8 +867,7 @@ public static class RingActivationManager
                 }
                 if (totalHealed > 0 && GameManager.Instance != null)
                 {
-                    GameManager.Instance.CombatUI?.ShowCombatLog(
-                        $"<color=#00FF88>💍 {wearer.Stats?.CharacterName}'s Ring of Regeneration heals {totalHealed} HP during rest.</color>");
+                    GameManager.Instance.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"💍 {wearer.Stats?.CharacterName}'s Ring of Regeneration heals {totalHealed} HP during rest."));
                 }
             }
         }

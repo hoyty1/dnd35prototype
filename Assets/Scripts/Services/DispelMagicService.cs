@@ -150,7 +150,7 @@ public class DispelMagicService : MonoBehaviour
     {
         if (caster == null || target == null || target.Stats == null)
         {
-            CombatUI?.ShowCombatLog("⚠ Dispel Magic: Invalid target.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Dispel Magic: Invalid target."));
             return;
         }
 
@@ -246,7 +246,7 @@ public class DispelMagicService : MonoBehaviour
     {
         if (caster == null || targets == null || targets.Count == 0)
         {
-            CombatUI?.ShowCombatLog("⚠ Dispel Magic (area): No targets in range.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Dispel Magic (area): No targets in range."));
             return;
         }
 
@@ -552,11 +552,11 @@ public class DispelMagicService : MonoBehaviour
 
         if (spellIdentified)
         {
-            CombatUI?.ShowCombatLog($"🔍 {counterName} identifies {spell.Name}! (Spellcraft {scTotal} vs DC {scDC})");
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"🔍 {counterName} identifies {spell.Name}! (Spellcraft {scTotal} vs DC {scDC})"));
         }
         else
         {
-            CombatUI?.ShowCombatLog($"❌ {counterName} fails to identify the spell. (Spellcraft {scTotal} vs DC {scDC})");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{counterName} fails to identify the spell. (Spellcraft {scTotal} vs DC {scDC})"));
         }
 
         // Step 2: Try same-spell counter (requires identification)
@@ -711,7 +711,7 @@ public class DispelMagicService : MonoBehaviour
         if (character != null && character.HasReadiedCounterspell)
         {
             Debug.Log($"[Counterspell] {character.Stats.CharacterName}: Readied counterspell expired (start of turn).");
-            CombatUI?.ShowCombatLog($"⏰ {character.Stats.CharacterName}'s readied counterspell expires.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏰", $"{character.Stats.CharacterName}'s readied counterspell expires."));
             character.ClearReadiedCounterspell();
         }
     }

@@ -120,7 +120,7 @@ public partial class GameManager
             if (effect != null) effect.RemainingRounds = durationRounds;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#AADDFF>🛡🔮 Spell Immunity! {casterName} grants {targetName} immunity to {immuneSpellName} for {durationRounds} rounds.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.PaleBlue("🛡", $"🔮 Spell Immunity! {casterName} grants {targetName} immunity to {immuneSpellName} for {durationRounds} rounds."));
         Debug.Log($"[SpellImmunity] {casterName} -> {targetName}: immune to {immuneSpellId}, duration {durationRounds} rounds");
 
         result.BuffApplied = true;
@@ -150,7 +150,7 @@ public partial class GameManager
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
 
-        CombatUI?.ShowCombatLog($"<color=#CC88FF>🐌 {casterName} casts Slow on {target.Stats.CharacterName}!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🐌 {casterName} casts Slow on {target.Stats.CharacterName}!"));
 
         // Spell Resistance check
         var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
@@ -169,7 +169,7 @@ public partial class GameManager
         if (spell.AllowsSavingThrow)
         {
             var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
-            CombatUI?.ShowCombatLog($"  Will Save: d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Will Save: d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}"));
 
             if (saveResult.Saved)
             {
@@ -193,7 +193,7 @@ public partial class GameManager
 
             targetStatusMgr.RemoveEffectsBySpellId(SpellNames.HASTE);
 
-            CombatUI?.ShowCombatLog($"<color=#CC88FF>  🐌 Slow dispels Haste on {target.Stats.CharacterName}!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  🐌 Slow dispels Haste on {target.Stats.CharacterName}!"));
         }
 
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
@@ -218,9 +218,9 @@ public partial class GameManager
             if (targetSpellComp != null)
                 targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-            CombatUI?.ShowCombatLog($"<color=#CC88FF>  {target.Stats.CharacterName} is Slowed!</color>");
-            CombatUI?.ShowCombatLog($"<color=#DDAAFF>   -1 attack, -1 AC, -1 Reflex, half speed, no full-round actions</color>");
-            CombatUI?.ShowCombatLog($"<color=#DDAAFF>   Duration: {durationRounds} rounds (CL {casterLevel})</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  {target.Stats.CharacterName} is Slowed!"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   -1 attack, -1 AC, -1 Reflex, half speed, no full-round actions"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   Duration: {durationRounds} rounds (CL {casterLevel})"));
         }
 
         UpdateAllStatsUI();
@@ -437,7 +437,7 @@ public partial class GameManager
                 effect.RemainingRounds = durationRounds;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#99CCFF>🔇 Silence! {target.Stats.CharacterName} is silenced for {durationRounds} round(s)! Cannot cast spells with verbal components.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.StatusEnd($"🔇 Silence! {target.Stats.CharacterName} is silenced for {durationRounds} round(s)! Cannot cast spells with verbal components."));
         Debug.Log($"[Silence] Applied to {target.Stats.CharacterName} for {durationRounds} rounds (CL {casterLevel})");
 
         return true;
@@ -492,12 +492,12 @@ public partial class GameManager
                 target.ApplyCondition(CombatConditionType.Stunned, 1, sourceName);
             }
 
-            CombatUI?.ShowCombatLog($"<color=#FF9933>💥🔔 {target.Stats.CharacterName} is stunned by Sound Burst! (Fort {fortSave} vs DC {saveDC})</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("💥", $"🔔 {target.Stats.CharacterName} is stunned by Sound Burst! (Fort {fortSave} vs DC {saveDC})"));
             Debug.Log($"[SoundBurst] {target.Stats.CharacterName} STUNNED for 1 round (Fort {fortSave} < DC {saveDC})");
         }
         else
         {
-            CombatUI?.ShowCombatLog($"<color=#CCCCCC>🔔 {target.Stats.CharacterName} resists Sound Burst's stun (Fort {fortSave} vs DC {saveDC}).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔔", $"{target.Stats.CharacterName} resists Sound Burst's stun (Fort {fortSave} vs DC {saveDC})."));
             Debug.Log($"[SoundBurst] {target.Stats.CharacterName} resisted stun (Fort {fortSave} >= DC {saveDC})");
         }
 
@@ -549,7 +549,7 @@ public partial class GameManager
         // Make the initial attack on casting
         string attackLog = ResolveSpiritualWeaponAttack(caster, target, casterLevel);
 
-        CombatUI?.ShowCombatLog($"<color=#CCAAFF>⚔🌟 Spiritual Weapon! {caster.Stats.CharacterName} conjures a force weapon for {durationRounds} round(s)!\n{attackLog}</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("⚔", $"🌟 Spiritual Weapon! {caster.Stats.CharacterName} conjures a force weapon for {durationRounds} round(s)!\n{attackLog}"));
         Debug.Log($"[SpiritualWeapon] Created for {caster.Stats.CharacterName}, target={target.Stats.CharacterName}, CL={casterLevel}, duration={durationRounds}");
 
         return true;
@@ -644,7 +644,7 @@ public partial class GameManager
         }
 
         string attackLog = ResolveSpiritualWeaponAttack(character, target, character.Stats.SpiritualWeaponCasterLevel);
-        CombatUI?.ShowCombatLog($"<color=#CCAAFF>{attackLog}</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attackLog}"));
         UpdateAllStatsUI();
     }
 
@@ -711,7 +711,7 @@ public partial class GameManager
         caster.Stats.ShieldOtherProtectorActive = true;
         caster.Stats.ShieldOtherProtected = target;
 
-        CombatUI?.ShowCombatLog($"<color=#66CCFF>🛡 Shield Other! {caster.Stats.CharacterName} protects {target.Stats.CharacterName} (+1 deflection AC, +1 resistance saves, damage shared).</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("🛡", $"Shield Other! {caster.Stats.CharacterName} protects {target.Stats.CharacterName} (+1 deflection AC, +1 resistance saves, damage shared)."));
         Debug.Log($"[ShieldOther] Empathic link: {caster.Stats.CharacterName} (protector) ↔ {target.Stats.CharacterName} (protected)");
 
         return false; // Return false so the normal buff application (deflection/resistance) still runs
