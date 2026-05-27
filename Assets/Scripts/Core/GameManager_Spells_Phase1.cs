@@ -34,7 +34,7 @@ public partial class GameManager
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int diceCount = Mathf.Clamp(casterLevel, 1, 15); // 1d6/CL, max 15d6
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -127,7 +127,7 @@ public partial class GameManager
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int diceCount = Mathf.Clamp(casterLevel, 1, 20); // 1d6/CL, max 20d6
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
         int maxSecondary = Mathf.Min(casterLevel, 20);
 
         // Roll primary damage once
@@ -226,7 +226,7 @@ public partial class GameManager
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int hdDiceCount = Mathf.Clamp(casterLevel, 1, 20);
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         // Roll total HD pool
         int hdPool = 0;
@@ -333,7 +333,7 @@ public partial class GameManager
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -354,7 +354,7 @@ public partial class GameManager
                 if (target == null || target.Stats == null || target.Stats.IsDead) continue;
                 sb.AppendLine($"  --- {target.Stats.CharacterName} ---");
 
-                if (IsImmuneToMindAffecting(target))
+                if (SpellUtilities.IsImmuneToMindAffecting(target))
                 {
                     sb.AppendLine($"  Immune to mind-affecting effects!");
                     sb.AppendLine();
@@ -419,7 +419,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
         int fogDurationRounds = 300; // 30 minutes = 300 rounds
 
         var sb = new StringBuilder();
@@ -441,7 +441,7 @@ public partial class GameManager
                 if (target == null || target.Stats == null || target.Stats.IsDead) continue;
                 sb.AppendLine($"  --- {target.Stats.CharacterName} ---");
 
-                if (IsImmuneToMindAffecting(target))
+                if (SpellUtilities.IsImmuneToMindAffecting(target))
                 {
                     sb.AppendLine($"  Immune to mind-affecting effects!");
                     sb.AppendLine();
@@ -507,7 +507,7 @@ public partial class GameManager
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int maxTargets = casterLevel;
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -530,7 +530,7 @@ public partial class GameManager
 
                 sb.AppendLine($"  --- {target.Stats.CharacterName} ---");
 
-                if (IsImmuneToMindAffecting(target))
+                if (SpellUtilities.IsImmuneToMindAffecting(target))
                 {
                     sb.AppendLine($"  Immune to mind-affecting!");
                     sb.AppendLine();
@@ -598,7 +598,7 @@ public partial class GameManager
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int numSwarms = Mathf.Clamp(casterLevel / 3, 1, 6);
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");

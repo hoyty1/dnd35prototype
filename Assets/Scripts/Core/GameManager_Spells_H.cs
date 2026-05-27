@@ -95,7 +95,7 @@ public partial class GameManager
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         // Filter to undead only
         List<CharacterController> undeadCandidates = new List<CharacterController>();

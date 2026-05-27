@@ -1177,52 +1177,22 @@ public partial class GameManager
         return Mathf.Max(1, target.Stats.HitDice > 0 ? target.Stats.HitDice : target.Stats.Level);
     }
 
+    /// <summary>Delegates to <see cref="SpellUtilities.IsImmuneToMindAffecting"/>.</summary>
     private bool IsImmuneToMindAffecting(CharacterController target)
     {
-        if (target?.Stats == null) return false;
-
-        string creatureType = string.IsNullOrWhiteSpace(target.Stats.CreatureType)
-            ? string.Empty
-            : target.Stats.CreatureType.Trim().ToLowerInvariant();
-
-        if (creatureType == "undead" || creatureType == "construct" || creatureType == "ooze" || creatureType == "plant" || creatureType == "vermin")
-            return true;
-
-        if (target.Stats.SpecialAbilities != null)
-        {
-            for (int i = 0; i < target.Stats.SpecialAbilities.Count; i++)
-            {
-                string trait = target.Stats.SpecialAbilities[i];
-                if (string.IsNullOrWhiteSpace(trait))
-                    continue;
-
-                string normalized = trait.ToLowerInvariant();
-                if (normalized.Contains("mind-affect") || normalized.Contains("mind affecting") || normalized.Contains("mindless"))
-                    return true;
-            }
-        }
-
-        return false;
+        return SpellUtilities.IsImmuneToMindAffecting(target);
     }
 
+    /// <summary>Delegates to <see cref="SpellUtilities.IsFearSpell"/> (Cause Fear only).</summary>
     private static bool IsCauseFearSpell(SpellData spell)
     {
-        return spell != null && string.Equals(spell.SpellId, SpellNames.CAUSE_FEAR, StringComparison.Ordinal);
+        return spell != null && string.Equals(spell.SpellId, SpellNames.CAUSE_FEAR, System.StringComparison.Ordinal);
     }
 
+    /// <summary>Delegates to <see cref="SpellUtilities.IsLivingCreatureForFear"/>.</summary>
     private bool IsLivingCreatureForFearSpell(CharacterController target)
     {
-        if (target?.Stats == null)
-            return false;
-
-        string creatureType = string.IsNullOrWhiteSpace(target.Stats.CreatureType)
-            ? string.Empty
-            : target.Stats.CreatureType.Trim().ToLowerInvariant();
-
-        if (creatureType == "undead" || creatureType == "construct")
-            return false;
-
-        return true;
+        return SpellUtilities.IsLivingCreatureForFear(target);
     }
 
     private bool IsValidTargetForSpell(CharacterController caster, CharacterController target, SpellData spell)
@@ -4984,28 +4954,13 @@ public partial class GameManager
         StartCoroutine(AfterAttackDelay(caster, 1.5f));
     }
 
+    /// <summary>
+    /// Delegates to <see cref="SpellUtilities.GetCastingAbilityModifier(CharacterController)"/>.
+    /// Kept as an instance method so existing call-sites compile unchanged.
+    /// </summary>
     private int GetSpellSaveAbilityModifier(CharacterController caster, SpellData spell)
     {
-        if (caster == null || caster.Stats == null)
-            return 0;
-
-        // Default by class; this keeps custom/legacy classes stable for now.
-        if (caster.Stats.IsWizard)
-            return caster.Stats.INTMod;
-        if (caster.Stats.IsCleric)
-            return caster.Stats.WISMod;
-
-        string className = caster.Stats.CharacterClass ?? string.Empty;
-        if (string.Equals(className, "Druid", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(className, "Ranger", StringComparison.OrdinalIgnoreCase))
-            return caster.Stats.WISMod;
-
-        if (string.Equals(className, "Sorcerer", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(className, "Bard", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(className, "Paladin", StringComparison.OrdinalIgnoreCase))
-            return caster.Stats.CHAMod;
-
-        return caster.Stats.WISMod;
+        return SpellUtilities.GetCastingAbilityModifier(caster);
     }
 
     private void ResolveSleepSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
@@ -5515,18 +5470,10 @@ public partial class GameManager
         return true;
     }
 
+    /// <summary>Delegates to <see cref="SpellUtilities.IsImmuneToSleepEffects"/>.</summary>
     private bool IsImmuneToSleepEffects(CharacterController target)
     {
-        if (target == null || target.Stats == null)
-            return true;
-
-        if (IsImmuneToMindAffecting(target))
-            return true;
-
-        if (target.Stats.Race != null && target.Stats.Race.ImmunityToSleep)
-            return true;
-
-        return false;
+        return SpellUtilities.IsImmuneToSleepEffects(target);
     }
 
     private void ApplySleepState(CharacterController caster, CharacterController target, int sleepRounds, int wakeDc, SpellData sourceSpell)
@@ -5979,9 +5926,10 @@ public partial class GameManager
 
     // ======================== FEAR SPELL HANDLER (Cone AoE) ========================
 
+    /// <summary>Delegates to <see cref="SpellUtilities.IsFearSpell"/>.</summary>
     private static bool IsFearSpell(SpellData spell)
     {
-        return spell != null && string.Equals(spell.SpellId, SpellNames.FEAR, StringComparison.Ordinal);
+        return SpellUtilities.IsFearSpell(spell);
     }
 
     /// <summary>

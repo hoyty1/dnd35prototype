@@ -150,7 +150,7 @@ public partial class GameManager
             return null;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
 
         CombatUI?.ShowCombatLog($"<color=#CC88FF>🐌 {casterName} casts Slow on {target.Stats.CharacterName}!</color>");
@@ -258,7 +258,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int saveDc = GetSpellSaveDC(caster, spell);
+        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");

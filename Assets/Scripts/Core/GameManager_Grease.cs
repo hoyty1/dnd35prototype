@@ -256,33 +256,13 @@ public partial class GameManager
         return filtered;
     }
 
+    /// <summary>
+    /// Delegates to <see cref="SpellUtilities.GetSpellSaveDC(CharacterController, SpellData)"/>.
+    /// Kept as an instance method so existing call-sites compile unchanged.
+    /// </summary>
     private int GetSpellSaveDC(CharacterController caster, SpellData spell)
     {
-        if (caster == null || caster.Stats == null || spell == null)
-            return 10;
-
-        CharacterStats stats = caster.Stats;
-        string className = (stats.CharacterClass ?? string.Empty).Trim().ToLowerInvariant();
-
-        int castingMod;
-        if (stats.IsWizard)
-        {
-            castingMod = stats.INTMod;
-        }
-        else if (stats.IsCleric || className == "druid" || className == "ranger" || className == "paladin")
-        {
-            castingMod = stats.WISMod;
-        }
-        else if (className == "sorcerer" || className == "bard")
-        {
-            castingMod = stats.CHAMod;
-        }
-        else
-        {
-            castingMod = Mathf.Max(stats.INTMod, Mathf.Max(stats.WISMod, stats.CHAMod));
-        }
-
-        return 10 + spell.SpellLevel + castingMod;
+        return SpellUtilities.GetSpellSaveDC(caster, spell);
     }
 
     private int GetGreaseDurationRounds(CharacterController caster)
