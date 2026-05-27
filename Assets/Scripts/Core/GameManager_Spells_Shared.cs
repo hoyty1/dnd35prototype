@@ -337,17 +337,19 @@ public partial class GameManager
 
         bool isFireball = string.Equals(spell.SpellId, SpellNames.FIREBALL, System.StringComparison.Ordinal);
         bool isLightningBolt = string.Equals(spell.SpellId, SpellNames.LIGHTNING_BOLT, System.StringComparison.Ordinal);
+        bool isCallLightning = string.Equals(spell.SpellId, SpellNames.CALL_LIGHTNING, System.StringComparison.Ordinal);
 
-        if (!isFireball && !isLightningBolt)
+        if (!isFireball && !isLightningBolt && !isCallLightning)
             return false;
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int diceCount = Mathf.Clamp(casterLevel, 1, 10); // 1d6/CL, max 10d6
+        // Call Lightning: fixed 3d6 (PHB p.207). Fireball/Lightning Bolt: 1d6/CL, max 10d6.
+        int diceCount = isCallLightning ? 3 : Mathf.Clamp(casterLevel, 1, 10);
         int saveDc = GetSpellSaveDC(caster, spell);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, spell);
 
         string damageType = isFireball ? "fire" : "electricity";
-        string shapeStr = isFireball ? "20-ft radius burst" : "120-ft line";
+        string shapeStr = isFireball ? "20-ft radius burst" : isCallLightning ? "vertical bolt" : "120-ft line";
         string spellName = spell.Name;
 
         // Fire damage notifies for fire-based area effects (pyrotechnics, web ignition, etc.)

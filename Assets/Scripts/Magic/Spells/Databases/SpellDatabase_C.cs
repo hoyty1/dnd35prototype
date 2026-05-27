@@ -630,6 +630,68 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ── Call Lightning (PHB p.207) ────────────────────────────────────
+        // Evocation [Electricity]
+        // Level: Druid 3
+        // Components: V, S
+        // Casting Time: 1 round
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Effect: One or more bolts of lightning
+        // Duration: 1 min./level
+        // Saving Throw: Reflex half
+        // Spell Resistance: Yes
+        //
+        // Immediately upon completion of the spell, and once per round
+        // thereafter, you may call down a 5-foot-wide, 30-foot-long,
+        // vertical bolt of lightning that deals 3d6 points of electricity
+        // damage. The bolt of lightning flashes down in a vertical stroke
+        // at whatever target point you choose within the spell's range
+        // (measured from your position at the time). Outdoors in a stormy
+        // area the damage increases to 3d10.
+        //
+        // NOTE: For the prototype we simplify this as an instantaneous
+        //       single-bolt AoE targeting one 5-ft square (Burst radius 0)
+        //       dealing 3d6 electricity (Reflex half). The multi-round
+        //       bolt-per-turn mechanic is deferred.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.CALL_LIGHTNING,
+                    Name = "Call Lightning",
+                    Description = "Evocation [Electricity]. You call down a vertical bolt of lightning upon a target, dealing 3d6 electricity damage "
+                        + "(Reflex half). Outdoors in a storm, damage increases to 3d10. SR: Yes. Components: V, S. PHB p.207",
+                    SpellLevel = 3,
+                    School = "Evocation [Electricity]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 3)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeSquares = 22,          // Medium range: ~100 ft + 10/lvl ≈ 110 ft ≈ 22 sq at CL 5
+                    AreaRadius = 0,             // Single 5-ft square target
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 0,         // 0 = single square
+                    AoERangeSquares = 22,       // Can place bolt at medium range
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 6,
+                    DamageCount = 3,            // 3d6 electricity
+                    DamageType = "electricity",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous, // Simplified for prototype
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // Call Lightning: Druid 3
+        RegisterClassSpellAlias("call_lightning_drd", SpellNames.CALL_LIGHTNING, "Druid", 3);
+
         // ── Chain Lightning (PHB p.208) ───────────────────────────────────
         Register(new SpellData
                 {

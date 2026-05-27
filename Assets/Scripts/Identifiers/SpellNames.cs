@@ -78,6 +78,9 @@ namespace DND35e.Identifiers
         /// <summary>Cat's Grace (spell id: cats_grace)</summary>
         public const string CATS_GRACE = "cats_grace";
 
+        /// <summary>Call Lightning (spell id: call_lightning)</summary>
+        public const string CALL_LIGHTNING = "call_lightning";
+
         /// <summary>Cause Fear (spell id: cause_fear)</summary>
         public const string CAUSE_FEAR = "cause_fear";
 
