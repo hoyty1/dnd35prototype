@@ -69,7 +69,8 @@ public static class SpellUtilities
 
     /// <summary>
     /// Determine the spellcasting ability modifier for a character based on their class.
-    /// PHB p.8: Wizard=INT, Cleric/Druid/Ranger=WIS, Sorcerer/Bard/Paladin=CHA.
+    /// PHB p.8/p.43: Wizard=INT, Cleric/Druid/Ranger/Paladin=WIS, Sorcerer/Bard=CHA.
+    /// Paladin uses WIS for spell DCs (CHA governs Smite/Turn/Lay on Hands only).
     /// Falls back to WIS for unrecognized classes, or highest of INT/WIS/CHA for no class.
     /// </summary>
     /// <param name="stats">The character's stats.</param>
@@ -82,12 +83,13 @@ public static class SpellUtilities
         if (stats.IsWizard)
             return stats.INTMod;
 
-        // WIS-based casters
-        if (stats.IsCleric || stats.IsDruid || stats.IsRanger)
+        // WIS-based casters (Paladin uses WIS for spell DCs — PHB p.43;
+        // CHA is for Smite Evil, Turn Undead, Lay on Hands, NOT spell DCs)
+        if (stats.IsCleric || stats.IsDruid || stats.IsRanger || stats.IsPaladin)
             return stats.WISMod;
 
         // CHA-based casters
-        if (stats.IsSorcerer || stats.IsBard || stats.IsPaladin)
+        if (stats.IsSorcerer || stats.IsBard)
             return stats.CHAMod;
 
         // NPC classes: Adept uses WIS
@@ -97,12 +99,12 @@ public static class SpellUtilities
         // Fallback: check class name string for edge cases
         string className = (stats.CharacterClass ?? string.Empty).Trim();
         if (string.Equals(className, "Druid", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(className, "Ranger", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(className, "Ranger", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Paladin", StringComparison.OrdinalIgnoreCase))
             return stats.WISMod;
 
         if (string.Equals(className, "Sorcerer", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(className, "Bard", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(className, "Paladin", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(className, "Bard", StringComparison.OrdinalIgnoreCase))
             return stats.CHAMod;
 
         // Unknown class: use highest modifier (reasonable for monsters/custom NPCs)
