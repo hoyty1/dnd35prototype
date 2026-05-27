@@ -80,6 +80,7 @@ public partial class GameManager
         // Log
         string typeLabel = isUndead ? "☀💀" : isConstruct ? "☀🔧" : "☀";
         CombatUI?.ShowCombatLog(CombatLogHelper.Special(typeLabel, $"Searing Light! {casterName} blasts {targetName} for {damageDesc} divine damage!"));
+        string creatureType = isUndead ? "Undead" : isConstruct ? "Construct" : "Living";
         Debug.Log($"[SearingLight] {casterName} -> {targetName}: {damage} damage ({creatureType})");
 
         return true;
@@ -319,7 +320,7 @@ public partial class GameManager
                 if (targetIsBlinking)
                     damage = Mathf.Max(1, damage / 2);
 
-                sb.AppendLine($"  Fort save: d20({fortRoll}) + {fortMod} = {fortTotal} vs DC {saveDc} → {(savePassed ? "SAVED (half)" : "FAILED (full + deafened)")}");
+                sb.AppendLine($"  Fort save: d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(savePassed ? "SAVED (half)" : "FAILED (full + deafened)")}");
                 if (targetIsBlinking)
                     sb.AppendLine($"  Blink: area damage halved");
 
@@ -492,13 +493,13 @@ public partial class GameManager
                 target.ApplyCondition(CombatConditionType.Stunned, 1, sourceName);
             }
 
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("💥", $"🔔 {target.Stats.CharacterName} is stunned by Sound Burst! (Fort {fortSave} vs DC {saveDC})"));
-            Debug.Log($"[SoundBurst] {target.Stats.CharacterName} STUNNED for 1 round (Fort {fortSave} < DC {saveDC})");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("💥", $"🔔 {target.Stats.CharacterName} is stunned by Sound Burst! (Fort {fortResult.Total} vs DC {saveDC})"));
+            Debug.Log($"[SoundBurst] {target.Stats.CharacterName} STUNNED for 1 round (Fort {fortResult.Total} < DC {saveDC})");
         }
         else
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔔", $"{target.Stats.CharacterName} resists Sound Burst's stun (Fort {fortSave} vs DC {saveDC})."));
-            Debug.Log($"[SoundBurst] {target.Stats.CharacterName} resisted stun (Fort {fortSave} >= DC {saveDC})");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔔", $"{target.Stats.CharacterName} resists Sound Burst's stun (Fort {fortResult.Total} vs DC {saveDC})."));
+            Debug.Log($"[SoundBurst] {target.Stats.CharacterName} resisted stun (Fort {fortResult.Total} >= DC {saveDC})");
         }
 
         return false; // Let normal damage resolution continue

@@ -150,15 +150,15 @@ public partial class GameManager
 
         if (saveSuccess)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🌀", $"Dismissal: {targetName} resists being sent home! (Will {saveRoll} vs DC {saveDC})"));
-            Debug.Log($"[Dismissal] {casterName} -> {targetName}: Will save {saveRoll} vs DC {saveDC} — resisted");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🌀", $"Dismissal: {targetName} resists being sent home! (Will {saveResult.Total} vs DC {saveDC})"));
+            Debug.Log($"[Dismissal] {casterName} -> {targetName}: Will save {saveResult.Total} vs DC {saveDC} — resisted");
             return true;
         }
 
         // Dismissed! Kill/remove the creature
         target.Stats.TakeDamage(target.Stats.CurrentHP + 100); // Ensure death
         CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🌀✨", $"Dismissal! {casterName} sends {targetName} back to its home plane!"));
-        Debug.Log($"[Dismissal] {casterName} -> {targetName}: dismissed (Will {saveRoll} vs DC {saveDC})");
+        Debug.Log($"[Dismissal] {casterName} -> {targetName}: dismissed (Will {saveResult.Total} vs DC {saveDC})");
 
         result.TargetKilled = true;
         return true;

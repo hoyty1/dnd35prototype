@@ -44,6 +44,8 @@ public class NaturalAttackDefinition
     public int DamageCount = 1;
     public int Count = 1;
     public DamageBonusSource BonusDamageSource = DamageBonusSource.Strength;
+    /// <summary>Flat bonus damage added to this natural attack (e.g., magic fang).</summary>
+    public int BonusDamage;
     public int Range = 1;
     public bool IsPrimary = true;
     public string PoisonOnHitId;
@@ -862,6 +864,18 @@ public class CharacterStats
     /// Monk gains this at level 2. Rogue also gains at level 2.
     /// </summary>
     public bool HasEvasion => (IsMonk && GetClassLevel("Monk") >= 2) || (IsRogue && GetClassLevel("Rogue") >= 2) || (IsRanger && GetClassLevel("Ranger") >= 9) || RingGrantsEvasion;
+
+    /// <summary>
+    /// Improved Evasion: on successful Reflex save take no damage, on failure take half.
+    /// Monk 9+, Rogue (special — only via class feature at higher levels in some variants).
+    /// D&D 3.5e PHB p.42 (Monk), p.52 (Rogue).
+    /// </summary>
+    public bool HasImprovedEvasion => (IsMonk && GetClassLevel("Monk") >= 9);
+
+    /// <summary>
+    /// Convenience property for effective caster level (delegates to GetCasterLevel).
+    /// </summary>
+    public int CasterLevel => GetCasterLevel();
 
     /// <summary>
     /// Flurry of Blows attack bonuses at current level.

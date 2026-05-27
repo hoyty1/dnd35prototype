@@ -25,6 +25,11 @@ public sealed class CreatureImmunities
     public bool immuneToSneakAttack;
     public bool immuneToWeaponDamage;
 
+    // PascalCase aliases for object initializer convenience
+    public bool ImmuneToPoison { get { return immuneToPoison; } set { immuneToPoison = value; } }
+    public bool ImmuneToMindAffecting { get { return immuneToMindAffecting; } set { immuneToMindAffecting = value; } }
+    public bool ImmuneToCriticalHits { get { return immuneToCriticalHits; } set { immuneToCriticalHits = value; } }
+
     public bool IsImmuneTo(DamageType damageType)
     {
         switch (damageType)

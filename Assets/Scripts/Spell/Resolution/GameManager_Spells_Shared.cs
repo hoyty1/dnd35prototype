@@ -159,7 +159,7 @@ public partial class GameManager
         string saveStr = saveSuccess ? $"<color=#88FF88>saved (DC {saveDC})</color>" : $"<color=#FF8888>failed save (DC {saveDC})</color>";
         string alignStr = halfDamage ? "half (neutral)" : "full";
         CombatUI?.ShowCombatLog(CombatLogHelper.Special(emoji, $"{spellName}! {casterName} blasts {targetName} for {numDice}d8 = {damage} {alignmentDescriptor} damage ({alignStr}), {saveStr}{conditionMsg}!"));
-        Debug.Log($"[{spellName}] {casterName} -> {targetName}: {damage} damage, save {saveRoll} vs DC {saveDC}, alignment={targetAlignment}");
+        Debug.Log($"[{spellName}] {casterName} -> {targetName}: {damage} damage, save {saveResult.Total} vs DC {saveDC}, alignment={targetAlignment}");
 
         return true;
     }

@@ -146,8 +146,8 @@ public partial class GameManager
 
         if (saveSuccess)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Success("☠", $"Poison: {targetName} resists! (Fort {saveRoll} vs DC {saveDC})"));
-            Debug.Log($"[Poison] {casterName} -> {targetName}: Fort save {saveRoll} vs DC {saveDC} — resisted");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("☠", $"Poison: {targetName} resists! (Fort {saveResult.Total} vs DC {saveDC})"));
+            Debug.Log($"[Poison] {casterName} -> {targetName}: Fort save {saveResult.Total} vs DC {saveDC} — resisted");
             return true;
         }
 
@@ -159,8 +159,8 @@ public partial class GameManager
         if (!target.HasCondition(CombatConditionType.Poisoned))
             target.ApplyCondition(CombatConditionType.Poisoned, 10, "Poison");
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("☠", $"Poison! {casterName} poisons {targetName}! {conDamage} CON damage (Fort {saveRoll} vs DC {saveDC}). Secondary: 1d10 CON in 1 minute."));
-        Debug.Log($"[Poison] {casterName} -> {targetName}: {conDamage} CON damage, Fort save {saveRoll} vs DC {saveDC}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("☠", $"Poison! {casterName} poisons {targetName}! {conDamage} CON damage (Fort {saveResult.Total} vs DC {saveDC}). Secondary: 1d10 CON in 1 minute."));
+        Debug.Log($"[Poison] {casterName} -> {targetName}: {conDamage} CON damage, Fort save {saveResult.Total} vs DC {saveDC}");
 
         result.BuffApplied = true;
         result.BuffDescription = $"Poisoned ({conDamage} CON damage)";

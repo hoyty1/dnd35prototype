@@ -129,6 +129,7 @@ public class Skill
 /// </summary>
 public enum AbilityType
 {
+    None,
     STR,
     DEX,
     CON,

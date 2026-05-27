@@ -1549,7 +1549,7 @@ public static class ItemDatabase
         UnityEngine.Debug.Log($"[ItemDatabase] Registered {created} common enchanted items.");
     }
 
-    private static void Register(ItemData item)
+    public static void Register(ItemData item)
     {
         if (item == null || string.IsNullOrWhiteSpace(item.Id))
             return;
@@ -1685,6 +1685,9 @@ public static class ItemDatabase
         if (!_initialized) Init();
         return _items.TryGetValue(id, out var item) ? item : null;
     }
+
+    /// <summary>Alias for Get(string) — convenience accessor.</summary>
+    public static ItemData GetItem(string id) => Get(id);
 
     /// <summary>Create a copy of an item by enum ID (since items are reference types).</summary>
     public static ItemData CloneItem(ItemID id)

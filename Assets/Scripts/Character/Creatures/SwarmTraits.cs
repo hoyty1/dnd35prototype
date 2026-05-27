@@ -8,6 +8,7 @@ public class SwarmTraits
 {
     public bool IsSwarm;
     public int SwarmDamage;
+    public int SwarmDamageCount = 1;
     public string SwarmDamageDice = "1d6";
     public int DistractionDC = 11;
     public bool HasPoison;

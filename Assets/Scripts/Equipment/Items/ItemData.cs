@@ -56,7 +56,12 @@ public enum EquipSlot
     RightRing = 15,
     EitherRing = 16,
     Feet = 17,
-    Slotless = 18   // Wondrous items that don't occupy a body slot (Ioun Stones, bags, etc.)
+    Slotless = 18,  // Wondrous items that don't occupy a body slot (Ioun Stones, bags, etc.)
+
+    // Convenience aliases for creature equipment definitions
+    MainHand = 19,    // Primary weapon hand (equivalent to RightHand for creatures)
+    OffHand = 20,     // Off-hand weapon or shield (equivalent to LeftHand for creatures)
+    Ranged = 21       // Ranged weapon slot (bow, crossbow, etc.)
 }
 
 /// <summary>

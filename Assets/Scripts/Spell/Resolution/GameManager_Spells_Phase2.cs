@@ -165,7 +165,7 @@ public partial class GameManager
                 }
 
                 // Blindness on failed save (permanent)
-                if (!saved)
+                if (!saveResult.Saved)
                 {
                     target.Stats.ApplyCondition(CombatConditionType.Blinded, 9999, "Sunburst");
                     sb.AppendLine($"    👁 BLINDED permanently!");
@@ -519,6 +519,7 @@ public partial class GameManager
 
         if (isUndead || isConstruct)
         {
+            string ct = isUndead ? "undead" : "construct";
             sb.AppendLine($"  ✘ Cannot resurrect {ct} creatures!");
             sb.Append("═══════════════════════════════════");
             CombatUI?.ShowCombatLog(sb.ToString());

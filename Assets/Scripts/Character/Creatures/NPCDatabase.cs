@@ -308,7 +308,12 @@ public class EngulfDefinition
     }
 }
 
-public enum AuraEffectType { Sickened, Frightened, Fascinated, Confused, Wisdom_Drain, Petrified }
+public enum AuraEffectType { Sickened, Frightened, Fascinated, Confused, Wisdom_Drain, Petrified, Fear }
+
+/// <summary>
+/// Saving throw type for creature ability definitions (maps to D&D 3.5e save categories).
+/// </summary>
+public enum SavingThrowType { Fortitude, Reflex, Will }
 
 /// <summary>
 /// Supernatural aura ability (Allip babble, Cloaker moan, Troglodyte stench).
@@ -324,6 +329,19 @@ public class AuraAbilityDefinition
     public int DurationRounds = 4;
     /// <summary>For Wisdom drain aura (Allip): amount drained on failed save.</summary>
     public int AbilityDrainAmount;
+
+    /// <summary>Alias for RangeFeet — allows initializer shorthand.</summary>
+    public int Range { get { return RangeFeet; } set { RangeFeet = value; } }
+
+    /// <summary>Alias for Effect — allows initializer shorthand.</summary>
+    public AuraEffectType EffectType { get { return Effect; } set { Effect = value; } }
+
+    /// <summary>Save type alias — sets IsWillSave from a SavingThrowType enum value.</summary>
+    public SavingThrowType SaveType
+    {
+        get { return IsWillSave ? SavingThrowType.Will : SavingThrowType.Fortitude; }
+        set { IsWillSave = (value == SavingThrowType.Will); }
+    }
 
     public AuraAbilityDefinition Clone()
     {
@@ -370,6 +388,7 @@ public class NPCDefinition
     public bool HasPounce;
     public bool HasRake;
     public bool HasScent;
+    public bool HasTrample;
     public NaturalAttackDefinition RakeAttack;
     public int STR, DEX, CON, WIS, INT, CHA;
     public int BAB;
@@ -628,7 +647,9 @@ public enum NPCAIProfileArchetype
     Swarm,
     IndiscriminateSwarm,
     Dragon,
-    Brute
+    Brute,
+    Caster,
+    Undead
 }
 
 /// <summary>
@@ -644,7 +665,10 @@ public enum NPCAIBehavior
     RangedKiter,
 
     /// <summary>Advance cautiously, use Combat Expertise for extra AC, hold position.</summary>
-    DefensiveMelee
+    DefensiveMelee,
+
+    /// <summary>Prefer ranged attacks, switch to melee only when forced.</summary>
+    Ranged
 }
 
 /// <summary>
