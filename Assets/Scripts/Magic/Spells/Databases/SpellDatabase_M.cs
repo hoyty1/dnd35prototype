@@ -237,6 +237,51 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // MAGIC FANG  (PHB p.250)
+        // Transmutation
+        // Level: Drd 1, Rgr 1
+        // Components: V, S, DF
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Living creature touched
+        // Duration: 1 min./level
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        //
+        // Magic fang gives one natural weapon of the subject a +1
+        // enhancement bonus on attack and damage rolls. The spell
+        // can affect a slam attack, fist, bite, or other natural weapon.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MAGIC_FANG,
+                    Name = "Magic Fang",
+                    Description = "Transmutation. One natural weapon gains +1 enhancement bonus on attack and damage rolls. Duration 1 min/level. PHB p.250",
+                    SpellLevel = 1,
+                    School = "Transmutation",
+                    ClassList = new[] { "Druid", "Ranger" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    BuffAttackBonus = 1,
+                    BuffDamageBonus = 1,
+                    BuffType = "enhancement",
+                    BuffBonusType = BonusType.Enhancement,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = false, // Harmless
+                    SpellResistanceApplies = false, // Harmless
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.MAGIC_WEAPON,

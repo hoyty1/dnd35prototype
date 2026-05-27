@@ -441,6 +441,9 @@ namespace DND35e.Identifiers
         /// <summary>Magic Circle against Law (spell id: magic_circle_against_law)</summary>
         public const string MAGIC_CIRCLE_AGAINST_LAW = "magic_circle_against_law";
 
+        /// <summary>Magic Fang (spell id: magic_fang)</summary>
+        public const string MAGIC_FANG = "magic_fang";
+
         /// <summary>Magic Weapon (spell id: magic_weapon)</summary>
         public const string MAGIC_WEAPON = "magic_weapon";
 

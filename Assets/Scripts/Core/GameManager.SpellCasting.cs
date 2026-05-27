@@ -7738,6 +7738,13 @@ public partial class GameManager
             return ApplyMisleadEffect(caster, target, spell, spellComp);
         }
 
+        // ── Magic Fang (Phase 3) ──
+        // +1 enhancement bonus to natural weapon attack and damage
+        if (spell != null && spell.SpellId == SpellNames.MAGIC_FANG)
+        {
+            return ApplyMagicFangEffect(caster, target, spell, spellComp);
+        }
+
         // ── Utility Cantrips (Phase 2) ──
         // Simple cantrips that always succeed with a log message.
         if (spell != null && TryApplyUtilityCantrip(caster, target, spell, spellComp, out ActiveSpellEffect cantripEffect))
