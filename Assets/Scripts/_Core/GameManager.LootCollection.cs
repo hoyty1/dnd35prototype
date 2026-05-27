@@ -53,6 +53,16 @@ public partial class GameManager
         {
             Debug.Log("[LootFlow] No random treasure generated; loot window will show equipment only.");
         }
+
+        // === Auto-collect treasure coins into party gold ===
+        if (generatedTreasure != null && generatedTreasure.CoinsGPValue > 0)
+        {
+            int coinGP = generatedTreasure.CoinsGPValue;
+            int previousGold = PartyGold;
+            AddGold(coinGP);
+            Debug.Log($"[LootFlow] Treasure coins auto-collected: {coinGP} gp added to party gold ({previousGold} → {PartyGold})");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Special("🪙", $"{coinGP} gp in coins collected automatically. Party gold: {PartyGold} gp"));
+        }
         // === End Treasure Generation ===
 
         EnsurePartyStashInitialized();
