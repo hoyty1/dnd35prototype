@@ -68,7 +68,7 @@ public partial class GameManager
     {
         if (actor == null || enemy == null || actor.Stats == null || enemy.Stats == null)
             return false;
-        if (!IsEnemyTeam(actor, enemy) || enemy.Stats.IsDead)
+        if (!TeamUtility.IsEnemy(actor, enemy) || enemy.Stats.IsDead)
             return false;
 
         ItemData weapon = actor.GetEquippedWeapon();
@@ -88,7 +88,7 @@ public partial class GameManager
         {
             if (candidate == null || candidate == character || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsAllyTeam(character, candidate))
+            if (!TeamUtility.IsAlly(character, candidate))
                 continue;
 
             allies.Add(candidate);
@@ -133,7 +133,7 @@ public partial class GameManager
         {
             if (candidate == null || candidate == character || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(character, candidate))
+            if (!TeamUtility.IsEnemy(character, candidate))
                 continue;
 
             enemies.Add(candidate);
@@ -1026,7 +1026,7 @@ public partial class GameManager
             if (candidate == null || candidate == charger || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
 
-            if (!IsEnemyTeam(charger, candidate)) continue;
+            if (!TeamUtility.IsEnemy(charger, candidate)) continue;
 
             if (GetChargeStartingDistanceSquares(charger, candidate) <= ChargeBlockedDistanceSquares)
                 continue;
@@ -1062,7 +1062,7 @@ public partial class GameManager
         if (charger == null || target == null || charger == target) return false;
         if (charger.Stats == null || target.Stats == null || target.Stats.IsDead) return false;
 
-        if (!IsEnemyTeam(charger, target))
+        if (!TeamUtility.IsEnemy(charger, target))
         {
             if (logFailures) CombatUI?.ShowCombatLog("⚠ You can only charge an enemy target.");
             return false;

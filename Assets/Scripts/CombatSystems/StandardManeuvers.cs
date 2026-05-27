@@ -533,7 +533,7 @@ public partial class GameManager
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
 
-            if (!IsEnemyTeam(attacker, candidate))
+            if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
             int distance = attacker.GetMinimumDistanceToTarget(candidate, chebyshev: true);

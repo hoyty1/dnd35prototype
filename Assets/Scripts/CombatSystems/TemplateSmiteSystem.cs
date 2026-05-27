@@ -99,7 +99,7 @@ public partial class GameManager
         if (attacker == target || target.Stats.IsDead)
             return false;
 
-        if (!IsEnemyTeam(attacker, target))
+        if (!TeamUtility.IsEnemy(attacker, target))
             return false;
 
         bool smitesEvil = attacker.Stats.HasTemplateSmiteEvil;

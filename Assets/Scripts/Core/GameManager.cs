@@ -653,20 +653,13 @@ public partial class GameManager : MonoBehaviour
         return c.IsControllable;
     }
 
+        /// <summary>Delegates to <see cref="TeamUtility.IsEnemy"/>.</summary>
     private bool IsEnemyTeam(CharacterController source, CharacterController target)
-    {
-        if (source == null || target == null) return false;
+        => TeamUtility.IsEnemy(source, target);
 
-        return (source.Team == CharacterTeam.Player && target.Team == CharacterTeam.Enemy)
-            || (source.Team == CharacterTeam.Enemy && target.Team == CharacterTeam.Player);
-    }
-
+    /// <summary>Delegates to <see cref="TeamUtility.IsAlly"/>.</summary>
     private bool IsAllyTeam(CharacterController source, CharacterController target)
-    {
-        if (source == null || target == null) return false;
-        if (source.Team == CharacterTeam.Neutral || target.Team == CharacterTeam.Neutral) return false;
-        return source.Team == target.Team;
-    }
+        => TeamUtility.IsAlly(source, target);
 
     private List<CharacterController> GetTeamMembers(CharacterTeam teamFilter)
     {
@@ -703,7 +696,7 @@ public partial class GameManager : MonoBehaviour
         {
             if (candidate == null || candidate == source || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(source, candidate))
+            if (!TeamUtility.IsEnemy(source, candidate))
                 continue;
 
             int dist = SquareGridUtils.GetDistance(source.GridPosition, candidate.GridPosition);
@@ -3104,7 +3097,7 @@ public partial class GameManager : MonoBehaviour
             return;
 
         // Check if attacker is the caster or an ally of the caster
-        bool isCasterOrAlly = (attacker == controller) || !IsEnemyTeam(attacker, controller);
+        bool isCasterOrAlly = (attacker == controller) || !TeamUtility.IsEnemy(attacker, controller);
 
         if (isCasterOrAlly)
         {
@@ -3122,7 +3115,7 @@ public partial class GameManager : MonoBehaviour
         if (caster == null || spell == null)
             return false;
 
-        if (primaryTarget != null && primaryTarget.Stats != null && IsEnemyTeam(caster, primaryTarget))
+        if (primaryTarget != null && primaryTarget.Stats != null && TeamUtility.IsEnemy(caster, primaryTarget))
         {
             hostileTarget = primaryTarget;
             return true;
@@ -3137,7 +3130,7 @@ public partial class GameManager : MonoBehaviour
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
 
-            if (!IsEnemyTeam(caster, candidate))
+            if (!TeamUtility.IsEnemy(caster, candidate))
                 continue;
 
             hostileTarget = candidate;
@@ -3173,7 +3166,7 @@ public partial class GameManager : MonoBehaviour
             if (observer == null || observer == invisibleCharacter || observer.Stats == null || observer.Stats.IsDead)
                 continue;
 
-            if (!IsEnemyTeam(observer, invisibleCharacter))
+            if (!TeamUtility.IsEnemy(observer, invisibleCharacter))
                 continue;
 
             observer.UpdateLastKnownPosition(invisibleCharacter, incomingIsRangedAttack: observer.IsEquippedWeaponRanged());
@@ -3205,7 +3198,7 @@ public partial class GameManager : MonoBehaviour
             if (source == null || source.Stats == null)
                 continue;
 
-            bool hostileBySourceSide = attacker == source || IsAllyTeam(attacker, source);
+            bool hostileBySourceSide = attacker == source || TeamUtility.IsAlly(attacker, source);
             if (!hostileBySourceSide)
                 continue;
 
@@ -3308,7 +3301,7 @@ public partial class GameManager : MonoBehaviour
                 if (fascinationSource == null || fascinationSource.Stats == null)
                     continue;
 
-                bool fromSourceSide = noiseSource == fascinationSource || IsAllyTeam(noiseSource, fascinationSource);
+                bool fromSourceSide = noiseSource == fascinationSource || TeamUtility.IsAlly(noiseSource, fascinationSource);
                 if (!fromSourceSide)
                     continue;
 
@@ -7422,7 +7415,7 @@ public partial class GameManager : MonoBehaviour
         {
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(attacker, candidate))
+            if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
             bool inRange;
@@ -10524,7 +10517,7 @@ public partial class GameManager : MonoBehaviour
             CharacterController enemy = allCharacters[i];
             if (enemy == null || enemy == npc || enemy.Stats == null || enemy.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(npc, enemy))
+            if (!TeamUtility.IsEnemy(npc, enemy))
                 continue;
 
             if (npc.CanSee(enemy, incomingIsRangedAttack))
@@ -10580,7 +10573,7 @@ public partial class GameManager : MonoBehaviour
         => GetAllCharacters();
 
     public bool IsEnemyTeamForAI(CharacterController source, CharacterController target)
-        => IsEnemyTeam(source, target);
+        => TeamUtility.IsEnemy(source, target);
 
     public bool IsUndeadCharacterForAI(CharacterController character)
         => IsUndeadCharacter(character);

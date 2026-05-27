@@ -794,7 +794,7 @@ public partial class GameManager
             if (caster == null || caster.Stats == null || caster.Stats.IsDead)
                 continue;
 
-            if (!IsEnemyTeam(attacker, caster))
+            if (!TeamUtility.IsEnemy(attacker, caster))
                 continue;
 
             int casterDistance = SquareGridUtils.GetDistance(attacker.GridPosition, caster.GridPosition);

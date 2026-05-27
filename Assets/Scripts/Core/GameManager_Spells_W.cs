@@ -482,7 +482,7 @@ public partial class GameManager
         List<CharacterController> adjacentCreatures = GetCreaturesAdjacentToWallCells(aoeCells, caster);
 
         // Filter to only enemy creatures (only enemies attempt to disrupt the wall)
-        adjacentCreatures.RemoveAll(cc => !IsEnemyTeam(caster, cc));
+        adjacentCreatures.RemoveAll(cc => !TeamUtility.IsEnemy(caster, cc));
 
         Debug.Log($"[WallOfIce] Adjacent enemy creatures that can attempt Reflex save: {adjacentCreatures.Count} (DC {saveDC})");
 

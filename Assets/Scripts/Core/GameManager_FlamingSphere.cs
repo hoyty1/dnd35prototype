@@ -145,12 +145,12 @@ public partial class GameManager
         }
 
         CharacterController bestTarget = preferredTarget;
-        if (bestTarget == null || bestTarget.Stats == null || bestTarget.Stats.IsDead || !IsEnemyTeam(caster, bestTarget))
+        if (bestTarget == null || bestTarget.Stats == null || bestTarget.Stats.IsDead || !TeamUtility.IsEnemy(caster, bestTarget))
         {
             int bestDist = int.MaxValue;
             foreach (CharacterController c in GetAllCharacters())
             {
-                if (c == null || c.Stats == null || c.Stats.IsDead || !IsEnemyTeam(caster, c))
+                if (c == null || c.Stats == null || c.Stats.IsDead || !TeamUtility.IsEnemy(caster, c))
                     continue;
 
                 int dist = SquareGridUtils.GetDistance(sphere.GridPosition, c.GridPosition);

@@ -393,8 +393,8 @@ public partial class GameManager
         var sortedTargets = new List<CharacterController>(targets);
         sortedTargets.Sort((a, b) =>
         {
-            int aHd = a != null && a.Stats != null ? Mathf.Max(1, GetTargetHitDice(a)) : 0;
-            int bHd = b != null && b.Stats != null ? Mathf.Max(1, GetTargetHitDice(b)) : 0;
+            int aHd = a != null && a.Stats != null ? Mathf.Max(1, TeamUtility.GetHitDice(a)) : 0;
+            int bHd = b != null && b.Stats != null ? Mathf.Max(1, TeamUtility.GetHitDice(b)) : 0;
             return aHd.CompareTo(bHd);
         });
 
@@ -405,7 +405,7 @@ public partial class GameManager
                 continue;
 
             targetIndex++;
-            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            int targetHd = Mathf.Max(1, TeamUtility.GetHitDice(target));
             string targetName = target.Stats.CharacterName ?? "Unknown";
 
             sb.AppendLine($"  --- Target {targetIndex}: {targetName} ({targetHd} HD) ---");

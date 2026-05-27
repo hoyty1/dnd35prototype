@@ -144,7 +144,7 @@ public partial class GameManager
                 continue;
 
             _highlightedCells.Add(cell);
-            bool isAlly = IsAllyTeam(caster, cell.Occupant);
+            bool isAlly = TeamUtility.IsAlly(caster, cell.Occupant);
             cell.SetHighlight(isAlly ? HighlightType.AoEAlly : HighlightType.AttackRange);
         }
 
@@ -184,7 +184,7 @@ public partial class GameManager
 
             if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
             {
-                bool isAlly = IsAllyTeam(caster, cell.Occupant);
+                bool isAlly = TeamUtility.IsAlly(caster, cell.Occupant);
                 cell.SetHighlight(isAlly ? HighlightType.AoEAlly : HighlightType.AoETarget);
             }
             else

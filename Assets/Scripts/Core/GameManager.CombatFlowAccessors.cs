@@ -65,7 +65,7 @@ public partial class GameManager
     public void Combat_SetPhase(TurnPhase phase) => CurrentPhase = phase;
 
     public List<CharacterController> Combat_GetAllCharacters() => GetAllCharacters();
-    public bool Combat_IsEnemyTeam(CharacterController source, CharacterController target) => IsEnemyTeam(source, target);
+        public bool Combat_IsEnemyTeam(CharacterController source, CharacterController target) => TeamUtility.IsEnemy(source, target);
     public bool Combat_IsUsingThrownAttackMode(CharacterController attacker, ItemData weapon = null) => IsUsingThrownAttackMode(attacker, weapon);
     public bool Combat_IsAttackModeRanged(CharacterController attacker, ItemData weapon = null) => IsAttackModeRanged(attacker, weapon);
     public bool Combat_IsTargetInCurrentWeaponRange(CharacterController attacker, CharacterController target) => IsTargetInCurrentWeaponRange(attacker, target);

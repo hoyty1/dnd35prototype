@@ -375,7 +375,7 @@ public partial class GameManager
             if (occupant == null || occupant == attacker || occupant.Stats == null || occupant.Stats.IsDead)
                 continue;
 
-            if (IsEnemyTeam(attacker, occupant))
+            if (TeamUtility.IsEnemy(attacker, occupant))
                 return occupant;
         }
 
@@ -684,7 +684,7 @@ public partial class GameManager
             return false;
         }
 
-        if (!IsEnemyTeam(attacker, target))
+        if (!TeamUtility.IsEnemy(attacker, target))
         {
             reason = "Not enemy";
             return false;

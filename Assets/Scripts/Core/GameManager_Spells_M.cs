@@ -43,7 +43,7 @@ public partial class GameManager
         List<CharacterController> candidates = new List<CharacterController>();
 
         // Always include the primary target first
-        if (primaryTarget != null && primaryTarget.Stats != null && !primaryTarget.Stats.IsDead && IsHumanoid(primaryTarget))
+        if (primaryTarget != null && primaryTarget.Stats != null && !primaryTarget.Stats.IsDead && TeamUtility.IsHumanoid(primaryTarget))
         {
             candidates.Add(primaryTarget);
         }
@@ -54,10 +54,10 @@ public partial class GameManager
         {
             if (candidate == primaryTarget) continue;
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead) continue;
-            if (!IsHumanoid(candidate)) continue;
+            if (!TeamUtility.IsHumanoid(candidate)) continue;
 
             // Must be an ally of the caster (or the caster themselves)
-            if (candidate != caster && !IsAllyTeam(caster, candidate)) continue;
+            if (candidate != caster && !TeamUtility.IsAlly(caster, candidate)) continue;
 
             // Must be within 30 ft (6 squares) of the primary target
             if (primaryTarget != null)
@@ -86,7 +86,7 @@ public partial class GameManager
 
         foreach (var target in candidates)
         {
-            bool isAlly = target == caster || IsAllyTeam(caster, target);
+            bool isAlly = target == caster || TeamUtility.IsAlly(caster, target);
 
             // Spell Resistance check
             if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)

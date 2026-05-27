@@ -325,7 +325,7 @@ public class AIService : MonoBehaviour
                 CharacterController candidate = allCombatants[i];
                 if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                     continue;
-                if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+                if (!TeamUtility.IsEnemy(npc, candidate))
                     continue;
                 if (!tracker.HasLastKnownPosition(candidate))
                     continue;
@@ -1150,7 +1150,7 @@ public class AIService : MonoBehaviour
                 continue;
 
             // Skip friendly creatures unless this is an indiscriminate swarm
-            if (!indiscriminate && !_gameManager.IsEnemyTeamForAI(swarm, victim))
+            if (!indiscriminate && !TeamUtility.IsEnemy(swarm, victim))
                 continue;
 
             // ── Roll swarm damage ──
@@ -1275,7 +1275,7 @@ public class AIService : MonoBehaviour
 
             // Indiscriminate swarms (Summon Swarm) attack ALL creatures including caster
             // No friend/foe distinction - purely distance-based targeting
-            if (!indiscriminate && !_gameManager.IsEnemyTeamForAI(swarm, candidate))
+            if (!indiscriminate && !TeamUtility.IsEnemy(swarm, candidate))
                 continue;
 
             candidates.Add(candidate);
@@ -1317,7 +1317,7 @@ public class AIService : MonoBehaviour
             CharacterController candidate = allCombatants[i];
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+            if (!TeamUtility.IsEnemy(npc, candidate))
                 continue;
 
             if (ShouldExcludeTargetBecauseOfCharm(npc, candidate))
@@ -1600,7 +1600,7 @@ public class AIService : MonoBehaviour
             CharacterController candidate = allCombatants[i];
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+            if (!TeamUtility.IsEnemy(npc, candidate))
                 continue;
 
             enemyCandidates.Add(candidate);
@@ -1646,7 +1646,7 @@ public class AIService : MonoBehaviour
             CharacterController candidate = allCombatants[i];
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+            if (!TeamUtility.IsEnemy(npc, candidate))
                 continue;
 
             float score = GetTargetPriority(npc, candidate);
@@ -1681,7 +1681,7 @@ public class AIService : MonoBehaviour
             CharacterController candidate = allCombatants[i];
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+            if (!TeamUtility.IsEnemy(npc, candidate))
                 continue;
 
             int distance = SquareGridUtils.GetDistance(npc.GridPosition, candidate.GridPosition);
@@ -2447,7 +2447,7 @@ public class AIService : MonoBehaviour
             CharacterController candidate = all[i];
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+            if (!TeamUtility.IsEnemy(npc, candidate))
                 continue;
 
             if (candidate.Stats.CurrentHP < lowestHP)

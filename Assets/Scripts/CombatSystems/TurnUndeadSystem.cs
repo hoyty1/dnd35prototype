@@ -387,7 +387,7 @@ public partial class GameManager
         {
             if (candidate == null || candidate == turner || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(turner, candidate) || !IsUndeadCharacter(candidate))
+            if (!TeamUtility.IsEnemy(turner, candidate) || !IsUndeadCharacter(candidate))
                 continue;
 
             int distance = turner.GetMinimumDistanceToTarget(candidate, chebyshev: true);

@@ -1162,20 +1162,16 @@ public partial class GameManager
 
     private bool IsFriendlyTarget(CharacterController caster, CharacterController target)
     {
-        return IsAllyTeam(caster, target);
+        return TeamUtility.IsAlly(caster, target);
     }
 
+        /// <summary>Delegates to <see cref="TeamUtility.IsHumanoid"/>.</summary>
     private bool IsHumanoid(CharacterController target)
-    {
-        if (target?.Stats == null) return false;
-        return string.Equals(target.Stats.CreatureType, "Humanoid", StringComparison.OrdinalIgnoreCase);
-    }
+        => TeamUtility.IsHumanoid(target);
 
+    /// <summary>Delegates to <see cref="TeamUtility.GetHitDice"/>.</summary>
     private int GetTargetHitDice(CharacterController target)
-    {
-        if (target?.Stats == null) return 0;
-        return Mathf.Max(1, target.Stats.HitDice > 0 ? target.Stats.HitDice : target.Stats.Level);
-    }
+        => TeamUtility.GetHitDice(target);
 
     /// <summary>Delegates to <see cref="SpellUtilities.IsImmuneToMindAffecting"/>.</summary>
     private bool IsImmuneToMindAffecting(CharacterController target)
@@ -1212,15 +1208,15 @@ public partial class GameManager
         {
             // Person transmutations can target any humanoid creature (ally or enemy).
             // TARGETING OVERRIDE: Allow any character to be targeted regardless of faction.
-            return IsHumanoid(target);
+            return TeamUtility.IsHumanoid(target);
         }
 
         if (spell.SpellId == SpellNames.DAZE)
         {
             // D&D 3.5e Daze: one humanoid creature of 4 HD or less.
             // TARGETING OVERRIDE: Removed enemy-only restriction. Still requires humanoid and HD check.
-            if (!IsHumanoid(target)) return false;
-            if (!_isProtectionFromEvilTestEncounter && GetTargetHitDice(target) > 4) return false;
+            if (!TeamUtility.IsHumanoid(target)) return false;
+            if (!_isProtectionFromEvilTestEncounter && TeamUtility.GetHitDice(target) > 4) return false;
             if (IsImmuneToMindAffecting(target)) return false;
             return true;
         }
@@ -1229,8 +1225,8 @@ public partial class GameManager
         {
             // D&D 3.5e Charm Person: one humanoid creature.
             // TARGETING OVERRIDE: Removed enemy-only restriction. Still requires humanoid and HD check.
-            if (!IsHumanoid(target)) return false;
-            if (GetTargetHitDice(target) > 4) return false;
+            if (!TeamUtility.IsHumanoid(target)) return false;
+            if (TeamUtility.GetHitDice(target) > 4) return false;
             if (IsImmuneToMindAffecting(target)) return false;
             return true;
         }
@@ -1245,7 +1241,7 @@ public partial class GameManager
         // Dominate Person — one humanoid, no HD limit, mind-affecting (PHB p.224)
         if (spell.SpellId == SpellNames.DOMINATE_PERSON)
         {
-            if (!IsHumanoid(target)) return false;
+            if (!TeamUtility.IsHumanoid(target)) return false;
             if (IsImmuneToMindAffecting(target)) return false;
             return true;
         }
@@ -1268,7 +1264,7 @@ public partial class GameManager
         // See Invisible allows direct targeting of invisible enemies, but does not bypass
         // true visibility blockers or total concealment sources.
         // TARGETING OVERRIDE: Line-of-sight check still applies for enemies only.
-        if (IsEnemyTeam(caster, target))
+        if (TeamUtility.IsEnemy(caster, target))
         {
             bool isRangedTouch = spell.IsRangedTouchSpell();
             bool casterCanSeeInvisibleTarget = target.HasActiveInvisibilityEffect && caster.CanSeeInvisible(target);
@@ -1302,7 +1298,7 @@ public partial class GameManager
     {
         if (caster == null || target == null || spell == null) return false;
 
-        bool isAlly = target == caster || IsAllyTeam(caster, target);
+        bool isAlly = target == caster || TeamUtility.IsAlly(caster, target);
 
         // --- VOLUNTARY SAVE FAILURE (D&D 3.5e PHB p.177) ---
         // A willing creature can voluntarily forgo a saving throw and accept a spell's result.
@@ -2487,7 +2483,7 @@ public partial class GameManager
 
                 if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
                 {
-                    bool isAlly = IsAllyTeam(caster, cell.Occupant);
+                    bool isAlly = TeamUtility.IsAlly(caster, cell.Occupant);
                     cell.SetHighlight(isAlly ? HighlightType.AoEAlly : HighlightType.AoETarget);
                 }
                 else
@@ -2985,8 +2981,8 @@ public partial class GameManager
             if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
             {
                 CharacterController occupant = cell.Occupant;
-                bool isAlly = IsAllyTeam(pc, occupant);
-                bool isEnemy = IsEnemyTeam(pc, occupant);
+                bool isAlly = TeamUtility.IsAlly(pc, occupant);
+                bool isEnemy = TeamUtility.IsEnemy(pc, occupant);
 
                 if (_pendingSpell.AoEFilter == AoETargetFilter.AlliesOnly && isAlly)
                     cell.SetHighlight(HighlightType.AoEAlly);
@@ -4800,7 +4796,7 @@ public partial class GameManager
             CharacterController target = targets[i];
             if (target == null || target.Stats == null || target.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(caster, target))
+            if (!TeamUtility.IsEnemy(caster, target))
                 continue;
             if (IsImmuneToMindAffecting(target))
                 continue;
@@ -4815,8 +4811,8 @@ public partial class GameManager
 
         candidates.Sort((a, b) =>
         {
-            int aHd = GetTargetHitDice(a);
-            int bHd = GetTargetHitDice(b);
+            int aHd = TeamUtility.GetHitDice(a);
+            int bHd = TeamUtility.GetHitDice(b);
             int hdCompare = aHd.CompareTo(bHd);
             if (hdCompare != 0)
                 return hdCompare;
@@ -4859,7 +4855,7 @@ public partial class GameManager
         for (int i = 0; i < candidates.Count; i++)
         {
             CharacterController target = candidates[i];
-            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            int targetHd = Mathf.Max(1, TeamUtility.GetHitDice(target));
             if (targetHd > remainingPool)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName} ({targetHd} HD) exceeds remaining pool ({remainingPool}) — skipped.");
@@ -4983,7 +4979,7 @@ public partial class GameManager
             if (IsImmuneToSleepEffects(target))
                 continue;
 
-            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            int targetHd = Mathf.Max(1, TeamUtility.GetHitDice(target));
             if (targetHd > 4)
                 continue;
 
@@ -4992,8 +4988,8 @@ public partial class GameManager
 
         candidates.Sort((a, b) =>
         {
-            int aHd = GetTargetHitDice(a);
-            int bHd = GetTargetHitDice(b);
+            int aHd = TeamUtility.GetHitDice(a);
+            int bHd = TeamUtility.GetHitDice(b);
             int hdCompare = aHd.CompareTo(bHd);
             if (hdCompare != 0)
                 return hdCompare;
@@ -5016,7 +5012,7 @@ public partial class GameManager
         for (int i = 0; i < candidates.Count; i++)
         {
             CharacterController target = candidates[i];
-            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            int targetHd = Mathf.Max(1, TeamUtility.GetHitDice(target));
             if (targetHd > remainingPool)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName} ({targetHd} HD) exceeds remaining pool ({remainingPool}) — skipped.");
@@ -5114,8 +5110,8 @@ public partial class GameManager
         // Sort by HD ascending (lowest first), then by distance from caster
         candidates.Sort((a, b) =>
         {
-            int aHd = GetTargetHitDice(a);
-            int bHd = GetTargetHitDice(b);
+            int aHd = TeamUtility.GetHitDice(a);
+            int bHd = TeamUtility.GetHitDice(b);
             int hdCompare = aHd.CompareTo(bHd);
             if (hdCompare != 0)
                 return hdCompare;
@@ -5138,7 +5134,7 @@ public partial class GameManager
         for (int i = 0; i < candidates.Count; i++)
         {
             CharacterController target = candidates[i];
-            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            int targetHd = Mathf.Max(1, TeamUtility.GetHitDice(target));
             if (targetHd > remainingPool)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName} ({targetHd} HD) exceeds remaining pool ({remainingPool}) — skipped.");
@@ -5236,7 +5232,7 @@ public partial class GameManager
                 continue;
             }
 
-            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            int targetHd = Mathf.Max(1, TeamUtility.GetHitDice(target));
 
             if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
             {
@@ -5575,7 +5571,7 @@ public partial class GameManager
             return true;
         }
 
-        int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+        int targetHd = Mathf.Max(1, TeamUtility.GetHitDice(target));
         if (targetHd > 5)
         {
             if (result != null)
@@ -5679,7 +5675,7 @@ public partial class GameManager
             return true;
         }
 
-        if (!IsHumanoid(target))
+        if (!TeamUtility.IsHumanoid(target))
         {
             if (result != null)
             {
@@ -5841,7 +5837,7 @@ public partial class GameManager
         }
 
         // HD limit: 6+ HD are completely immune
-        int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+        int targetHd = Mathf.Max(1, TeamUtility.GetHitDice(target));
         if (ScareEffectData.IsImmuneByHD(targetHd))
         {
             if (result != null)
@@ -6554,7 +6550,7 @@ public partial class GameManager
                 return null;
 
             // Dominate Person only works on humanoids
-            if (!IsHumanoid(target))
+            if (!TeamUtility.IsHumanoid(target))
             {
                 CombatUI?.ShowCombatLog($"<color=#FF9966>🧠 {caster.Stats.CharacterName} casts Dominate Person on {target.Stats.CharacterName} — no effect (not a humanoid)!</color>");
                 return null;

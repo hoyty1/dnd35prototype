@@ -189,7 +189,7 @@ public partial class GameManager
         {
             if (candidate == null || candidate == summon || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(summon, candidate))
+            if (!TeamUtility.IsEnemy(summon, candidate))
                 continue;
             enemies.Add(candidate);
         }
@@ -749,7 +749,7 @@ public partial class GameManager
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
 
-            if (!IsEnemyTeam(attacker, candidate))
+            if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
             enemies.Add(candidate);
@@ -819,7 +819,7 @@ public partial class GameManager
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
 
-            if (!IsEnemyTeam(attacker, candidate))
+            if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
             enemies.Add(candidate);

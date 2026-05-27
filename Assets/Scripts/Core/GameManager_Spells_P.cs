@@ -52,7 +52,7 @@ public partial class GameManager
             int dist = SquareGridUtils.GetDistance(caster.GridPosition, ch.GridPosition);
             if (dist > radiusSquares) continue;
 
-            bool isAlly = ch == caster || IsAllyTeam(caster, ch);
+            bool isAlly = ch == caster || TeamUtility.IsAlly(caster, ch);
 
             if (isAlly)
             {

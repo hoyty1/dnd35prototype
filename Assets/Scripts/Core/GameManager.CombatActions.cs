@@ -95,7 +95,7 @@ public partial class GameManager
                 if (isRangedWeapon && !pc.CanSee(cell.Occupant, incomingIsRangedAttack: true))
                     continue;
 
-                bool isEnemy = IsEnemyTeam(pc, cell.Occupant);
+                bool isEnemy = TeamUtility.IsEnemy(pc, cell.Occupant);
 
                 // Check whether attacker can flank this target with any ally who actually threatens.
                 // Flanking only applies against enemies.
@@ -175,7 +175,7 @@ public partial class GameManager
             bool hasAnyFriendlyTarget = false;
             foreach (var hc in _highlightedCells)
             {
-                if (hc.IsOccupied && hc.Occupant != pc && !hc.Occupant.Stats.IsDead && !IsEnemyTeam(pc, hc.Occupant))
+                if (hc.IsOccupied && hc.Occupant != pc && !hc.Occupant.Stats.IsDead && !TeamUtility.IsEnemy(pc, hc.Occupant))
                 {
                     hasAnyFriendlyTarget = true;
                     break;
@@ -244,7 +244,7 @@ public partial class GameManager
             CharacterController candidate = cell.Occupant;
             if (candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(attacker, candidate))
+            if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
             if (!attacker.IsTargetInCurrentWeaponRange(candidate))
@@ -269,7 +269,7 @@ public partial class GameManager
         {
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(attacker, candidate))
+            if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
             if (attacker.IsTargetInCurrentWeaponRange(candidate))
@@ -314,7 +314,7 @@ public partial class GameManager
         {
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsEnemyTeam(attacker, candidate))
+            if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
             if (rangedMode)
@@ -1407,7 +1407,7 @@ public partial class GameManager
         foreach (var c in allCells)
         {
             if (!c.IsOccupied || c.Occupant == attacker || c.Occupant.Stats.IsDead) continue;
-            if (!IsEnemyTeam(attacker, c.Occupant)) continue;
+            if (!TeamUtility.IsEnemy(attacker, c.Occupant)) continue;
 
             int distance = attacker.GetMinimumDistanceToTarget(c.Occupant, chebyshev: true);
             bool inRange = (type == SpecialAttackType.Feint || type == SpecialAttackType.CoupDeGrace)
