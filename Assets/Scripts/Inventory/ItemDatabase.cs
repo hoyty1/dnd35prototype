@@ -49,214 +49,111 @@ public static class ItemDatabase
     private static void RegisterSimpleMeleeWeapons()
     {
         // Unarmed Strike: 1d3, 20/×2, bludgeoning
-        Register(new ItemData
-        {
-            Id = ItemIDs.UNARMED_STRIKE, Name = "Unarmed Strike", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A punch, kick, or other unarmed attack.",
-            DamageDice = 3, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            DamageType = "bludgeoning",
-            DmgModType = DamageModifierType.Strength,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 0f,
-            IconChar = "\u270A", IconColor = new Color(0.9f, 0.8f, 0.7f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.UNARMED_STRIKE)
+            .Named("Unarmed Strike").Desc("A punch, kick, or other unarmed attack.")
+            .Simple().Melee().OneHanded()
+            .Damage(1, 3, "bludgeoning").Crit(20, 2).Range(1)
+            .Weight(0f).Icon("\u270A", new Color(0.9f, 0.8f, 0.7f))
+            .Build());
 
         // Gauntlet: 1d3, 20/×2, bludgeoning (equipped in Hands slot)
-        Register(new ItemData
-        {
-            Id = ItemIDs.GAUNTLET, Name = "Gauntlet", Type = ItemType.Weapon,
-            Slot = EquipSlot.Hands,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            WeaponSize = WeaponSizeCategory.Light,
-            IsLightWeapon = true,
-            Description = "An armored glove worn in the hands slot. It allows unarmed strikes to deal lethal damage by default.",
-            DamageDice = 3, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            DamageType = "bludgeoning",
-            DmgModType = DamageModifierType.Strength,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 1f,
-            IconChar = "\u270A", IconColor = new Color(0.6f, 0.6f, 0.7f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.GAUNTLET)
+            .Named("Gauntlet").Desc("An armored glove worn in the hands slot. It allows unarmed strikes to deal lethal damage by default.")
+            .Simple().Melee().Light().Slot(EquipSlot.Hands)
+            .Damage(1, 3, "bludgeoning").Crit(20, 2).Range(1)
+            .Weight(1f).Icon("\u270A", new Color(0.6f, 0.6f, 0.7f))
+            .Build());
 
-        // Dagger: 1d4, 19-20/×2, piercing or slashing, light
-        Register(new ItemData
-        {
-            Id = ItemIDs.DAGGER, Name = "Dagger", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A small blade. Light and easy to conceal. Can be thrown.",
-            DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            IsLightWeapon = true,
-            DamageType = "piercing/slashing",
-            DmgModType = DamageModifierType.Strength,
-            IsThrown = true,
-            RangeIncrement = 10,
-            CritThreatMin = 19, CritMultiplier = 2,
-            WeightLbs = 1f,
-            IconChar = "\u2020", IconColor = new Color(0.8f, 0.8f, 0.7f)
-        });
+        // Dagger: 1d4, 19-20/×2, piercing or slashing, light, thrown
+        Register(ItemBuilder.Weapon(ItemIDs.DAGGER)
+            .Named("Dagger").Desc("A small blade. Light and easy to conceal. Can be thrown.")
+            .Simple().Melee().Light()
+            .Damage(1, 4, "piercing/slashing").Crit(19, 2).Range(1).Thrown(10)
+            .Weight(1f).Icon("\u2020", new Color(0.8f, 0.8f, 0.7f))
+            .Build());
 
         // Mace, Light: 1d6, 20/×2, bludgeoning, light
-        Register(new ItemData
-        {
-            Id = ItemIDs.MACE_LIGHT, Name = "Mace, Light", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A light bludgeoning weapon with a flanged metal head.",
-            DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            IsLightWeapon = true,
-            DamageType = "bludgeoning",
-            DmgModType = DamageModifierType.Strength,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 4f,
-            IconChar = "\u2692", IconColor = new Color(0.6f, 0.6f, 0.6f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.MACE_LIGHT)
+            .Named("Mace, Light").Desc("A light bludgeoning weapon with a flanged metal head.")
+            .Simple().Melee().Light()
+            .Damage(1, 6, "bludgeoning").Crit(20, 2).Range(1)
+            .Weight(4f).Icon("\u2692", new Color(0.6f, 0.6f, 0.6f))
+            .Build());
 
         // Sickle: 1d6, 20/×2, slashing, light
-        Register(new ItemData
-        {
-            Id = ItemIDs.SICKLE, Name = "Sickle", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A curved blade on a short handle. Favored by druids.",
-            DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            IsLightWeapon = true,
-            DamageType = "slashing",
-            DmgModType = DamageModifierType.Strength,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 2f,
-            IconChar = "\u262D", IconColor = new Color(0.5f, 0.6f, 0.4f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.SICKLE)
+            .Named("Sickle").Desc("A curved blade on a short handle. Favored by druids.")
+            .Simple().Melee().Light()
+            .Damage(1, 6, "slashing").Crit(20, 2).Range(1)
+            .Weight(2f).Icon("\u262D", new Color(0.5f, 0.6f, 0.4f))
+            .Build());
 
         // Club: 1d6, 20/×2, bludgeoning
-        Register(new ItemData
-        {
-            Id = ItemIDs.CLUB, Name = "Club", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A stout piece of wood, simple but effective.",
-            DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            DamageType = "bludgeoning",
-            DmgModType = DamageModifierType.Strength,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 3f,
-            IconChar = "\u2502", IconColor = new Color(0.5f, 0.4f, 0.2f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.CLUB)
+            .Named("Club").Desc("A stout piece of wood, simple but effective.")
+            .Simple().Melee().OneHanded()
+            .Damage(1, 6, "bludgeoning").Crit(20, 2).Range(1)
+            .Weight(3f).Icon("\u2502", new Color(0.5f, 0.4f, 0.2f))
+            .Build());
 
         // Mace, Heavy: 1d8, 20/×2, bludgeoning
-        Register(new ItemData
-        {
-            Id = ItemIDs.MACE_HEAVY, Name = "Mace, Heavy", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A heavy bludgeoning weapon effective against armored foes.",
-            DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            DamageType = "bludgeoning",
-            DmgModType = DamageModifierType.Strength,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 8f,
-            IconChar = "\u2692", IconColor = new Color(0.6f, 0.6f, 0.6f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.MACE_HEAVY)
+            .Named("Mace, Heavy").Desc("A heavy bludgeoning weapon effective against armored foes.")
+            .Simple().Melee().OneHanded()
+            .Damage(1, 8, "bludgeoning").Crit(20, 2).Range(1)
+            .Weight(8f).Icon("\u2692", new Color(0.6f, 0.6f, 0.6f))
+            .Build());
 
         // Morningstar: 1d8, 20/×2, bludgeoning and piercing
-        Register(new ItemData
-        {
-            Id = ItemIDs.MORNINGSTAR, Name = "Morningstar", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A spiked metal ball on the end of a handle. Deals bludgeoning and piercing.",
-            DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            DamageType = "bludgeoning/piercing",
-            DmgModType = DamageModifierType.Strength,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 6f,
-            IconChar = "\u2692", IconColor = new Color(0.5f, 0.5f, 0.5f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.MORNINGSTAR)
+            .Named("Morningstar").Desc("A spiked metal ball on the end of a handle. Deals bludgeoning and piercing.")
+            .Simple().Melee().OneHanded()
+            .Damage(1, 8, "bludgeoning/piercing").Crit(20, 2).Range(1)
+            .Weight(6f).Icon("\u2692", new Color(0.5f, 0.5f, 0.5f))
+            .Build());
 
-        // Shortspear: 1d6, 20/×2, piercing
-        Register(new ItemData
-        {
-            Id = ItemIDs.SHORTSPEAR, Name = "Shortspear", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A short thrusting spear. Can be thrown.",
-            DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            DamageType = "piercing",
-            DmgModType = DamageModifierType.Strength,
-            IsThrown = true,
-            RangeIncrement = 20,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 3f,
-            IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
-        });
+        // Shortspear: 1d6, 20/×2, piercing, thrown
+        Register(ItemBuilder.Weapon(ItemIDs.SHORTSPEAR)
+            .Named("Shortspear").Desc("A short thrusting spear. Can be thrown.")
+            .Simple().Melee().OneHanded()
+            .Damage(1, 6, "piercing").Crit(20, 2).Range(1).Thrown(20)
+            .Weight(3f).Icon("\u2191", new Color(0.6f, 0.5f, 0.3f))
+            .Build());
 
         // Quarterstaff: 1d6/1d6, 20/×2, bludgeoning, two-handed (double weapon)
-        Register(new ItemData
-        {
-            Id = ItemIDs.QUARTERSTAFF, Name = "Quarterstaff", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A simple wooden staff. Reliable, versatile, and can be used as a double weapon.",
-            DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            IsTwoHanded = true,
-            DamageType = "bludgeoning",
-            DmgModType = DamageModifierType.StrengthOneAndHalf,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 4f,
-            IconChar = "\u2502", IconColor = new Color(0.6f, 0.5f, 0.3f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.QUARTERSTAFF)
+            .Named("Quarterstaff").Desc("A simple wooden staff. Reliable, versatile, and can be used as a double weapon.")
+            .Simple().Melee().TwoHanded()
+            .Damage(1, 6, "bludgeoning").Crit(20, 2).Range(1)
+            .DamageModifier(DamageModifierType.StrengthOneAndHalf)
+            .Weight(4f).Icon("\u2502", new Color(0.6f, 0.5f, 0.3f))
+            .Build());
 
         // Spear: 1d8, 20/×3, piercing, two-handed (can be thrown)
-        Register(new ItemData
-        {
-            Id = ItemIDs.SPEAR, Name = "Spear", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A long thrusting weapon with a pointed tip. Two-handed. Can be thrown.",
-            DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            IsTwoHanded = true,
-            DamageType = "piercing",
-            DmgModType = DamageModifierType.StrengthOneAndHalf,
-            IsThrown = true,
-            RangeIncrement = 20,
-            CritThreatMin = 20, CritMultiplier = 3,
-            WeightLbs = 6f,
-            IconChar = "\u2191", IconColor = new Color(0.6f, 0.6f, 0.5f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.SPEAR)
+            .Named("Spear").Desc("A long thrusting weapon with a pointed tip. Two-handed. Can be thrown.")
+            .Simple().Melee().TwoHanded()
+            .Damage(1, 8, "piercing").Crit(20, 3).Range(1).Thrown(20)
+            .DamageModifier(DamageModifierType.StrengthOneAndHalf)
+            .Weight(6f).Icon("\u2191", new Color(0.6f, 0.6f, 0.5f))
+            .Build());
 
         // Longspear: 1d8, 20/×3, piercing, two-handed, reach (cannot attack adjacent)
-        Register(new ItemData
-        {
-            Id = ItemIDs.LONGSPEAR, Name = "Longspear", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A long spear with 10-ft reach. Cannot attack adjacent creatures.",
-            DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 2,
-            IsTwoHanded = true, HasReach = true,
-            ReachSquares = 2, CanAttackAdjacent = false, IsReachWeapon = true,
-            DamageType = "piercing",
-            DmgModType = DamageModifierType.StrengthOneAndHalf,
-            CritThreatMin = 20, CritMultiplier = 3,
-            WeightLbs = 9f,
-            IconChar = "\u2191", IconColor = new Color(0.65f, 0.55f, 0.4f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.LONGSPEAR)
+            .Named("Longspear").Desc("A long spear with 10-ft reach. Cannot attack adjacent creatures.")
+            .Simple().Melee().TwoHanded()
+            .Damage(1, 8, "piercing").Crit(20, 3).Range(2).Reach(2, false)
+            .DamageModifier(DamageModifierType.StrengthOneAndHalf)
+            .Weight(9f).Icon("\u2191", new Color(0.65f, 0.55f, 0.4f))
+            .Build());
 
         // Legacy alias: ItemIDs.MACE -> ItemIDs.MACE_HEAVY for backward compatibility
-        Register(new ItemData
-        {
-            Id = ItemIDs.MACE, Name = "Mace, Heavy", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
-            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A heavy bludgeoning weapon effective against armored foes.",
-            DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
-            DamageType = "bludgeoning",
-            DmgModType = DamageModifierType.Strength,
-            CritThreatMin = 20, CritMultiplier = 2,
-            WeightLbs = 8f,
-            IconChar = "\u2692", IconColor = new Color(0.6f, 0.6f, 0.6f)
-        });
+        Register(ItemBuilder.Weapon(ItemIDs.MACE)
+            .Named("Mace, Heavy").Desc("A heavy bludgeoning weapon effective against armored foes.")
+            .Simple().Melee().OneHanded()
+            .Damage(1, 8, "bludgeoning").Crit(20, 2).Range(1)
+            .Weight(8f).Icon("\u2692", new Color(0.6f, 0.6f, 0.6f))
+            .Build());
     }
 
     // ============================================================
@@ -929,52 +826,40 @@ public static class ItemDatabase
     private static void RegisterLightArmor()
     {
         // Padded: +1 AC, Max Dex +8, Check 0, Spell Failure 5%, 10 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.PADDED_ARMOR, Name = "Padded Armor", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.NonMetal,
-            Description = "Layers of quilted cloth. The lightest armor available.",
-            ArmorBonus = 1, MaxDexBonus = 8, ArmorCheckPenalty = 0,
-            ArcaneSpellFailure = 5, WeightLbs = 10f,
-            VisualTags = new HashSet<string> { "Light Armor", "Padded Armor" },
-            IconChar = "\u26E8", IconColor = new Color(0.7f, 0.7f, 0.6f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.PADDED_ARMOR)
+            .Named("Padded Armor").Desc("Layers of quilted cloth. The lightest armor available.")
+            .AC(1).MaxDex(8).CheckPenalty(0).SpellFailure(5)
+            .LightArmor().NonMetal()
+            .Weight(10f).Icon("\u26E8", new Color(0.7f, 0.7f, 0.6f))
+            .Tags("Light Armor", "Padded Armor")
+            .Build());
 
         // Leather: +2 AC, Max Dex +6, Check 0, Spell Failure 10%, 15 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.LEATHER_ARMOR, Name = "Leather Armor", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.NonMetal,
-            Description = "Light armor made from hardened leather.",
-            ArmorBonus = 2, MaxDexBonus = 6, ArmorCheckPenalty = 0,
-            ArcaneSpellFailure = 10, WeightLbs = 15f,
-            VisualTags = new HashSet<string> { "Light Armor", "Leather Armor" },
-            IconChar = "\u26E8", IconColor = new Color(0.6f, 0.4f, 0.2f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.LEATHER_ARMOR)
+            .Named("Leather Armor").Desc("Light armor made from hardened leather.")
+            .AC(2).MaxDex(6).CheckPenalty(0).SpellFailure(10)
+            .LightArmor().NonMetal()
+            .Weight(15f).Icon("\u26E8", new Color(0.6f, 0.4f, 0.2f))
+            .Tags("Light Armor", "Leather Armor")
+            .Build());
 
         // Studded Leather: +3 AC, Max Dex +5, Check -1, Spell Failure 15%, 20 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.STUDDED_LEATHER, Name = "Studded Leather", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.Mixed,
-            Description = "Leather armor reinforced with metal studs.",
-            ArmorBonus = 3, MaxDexBonus = 5, ArmorCheckPenalty = 1,
-            ArcaneSpellFailure = 15, WeightLbs = 20f,
-            VisualTags = new HashSet<string> { "Light Armor", "Studded Leather" },
-            IconChar = "\u26E8", IconColor = new Color(0.5f, 0.35f, 0.2f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.STUDDED_LEATHER)
+            .Named("Studded Leather").Desc("Leather armor reinforced with metal studs.")
+            .AC(3).MaxDex(5).CheckPenalty(1).SpellFailure(15)
+            .LightArmor().MixedMaterial()
+            .Weight(20f).Icon("\u26E8", new Color(0.5f, 0.35f, 0.2f))
+            .Tags("Light Armor", "Studded Leather")
+            .Build());
 
         // Chain Shirt: +4 AC, Max Dex +4, Check -2, Spell Failure 20%, 25 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.CHAIN_SHIRT, Name = "Chain Shirt", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.Metal,
-            Description = "A shirt of interlocking metal rings. Best light armor.",
-            ArmorBonus = 4, MaxDexBonus = 4, ArmorCheckPenalty = 2,
-            ArcaneSpellFailure = 20, WeightLbs = 25f,
-            VisualTags = new HashSet<string> { "Light Armor", "Chain Shirt" },
-            IconChar = "\u26E8", IconColor = new Color(0.6f, 0.6f, 0.7f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.CHAIN_SHIRT)
+            .Named("Chain Shirt").Desc("A shirt of interlocking metal rings. Best light armor.")
+            .AC(4).MaxDex(4).CheckPenalty(2).SpellFailure(20)
+            .LightArmor().Metal()
+            .Weight(25f).Icon("\u26E8", new Color(0.6f, 0.6f, 0.7f))
+            .Tags("Light Armor", "Chain Shirt")
+            .Build());
     }
 
     // ============================================================
@@ -983,52 +868,40 @@ public static class ItemDatabase
     private static void RegisterMediumArmor()
     {
         // Hide: +3 AC, Max Dex +4, Check -3, Spell Failure 20%, 25 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.HIDE_ARMOR, Name = "Hide Armor", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.NonMetal,
-            Description = "Thick furs and pelts of animals, crudely prepared.",
-            ArmorBonus = 3, MaxDexBonus = 4, ArmorCheckPenalty = 3,
-            ArcaneSpellFailure = 20, WeightLbs = 25f,
-            VisualTags = new HashSet<string> { "Medium Armor", "Hide Armor" },
-            IconChar = "\u26E8", IconColor = new Color(0.6f, 0.5f, 0.3f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.HIDE_ARMOR)
+            .Named("Hide Armor").Desc("Thick furs and pelts of animals, crudely prepared.")
+            .AC(3).MaxDex(4).CheckPenalty(3).SpellFailure(20)
+            .MediumArmor().NonMetal()
+            .Weight(25f).Icon("\u26E8", new Color(0.6f, 0.5f, 0.3f))
+            .Tags("Medium Armor", "Hide Armor")
+            .Build());
 
         // Scale Mail: +4 AC, Max Dex +3, Check -4, Spell Failure 25%, 30 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.SCALE_MAIL, Name = "Scale Mail", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.Metal,
-            Description = "Overlapping metal scales on a leather coat.",
-            ArmorBonus = 4, MaxDexBonus = 3, ArmorCheckPenalty = 4,
-            ArcaneSpellFailure = 25, WeightLbs = 30f,
-            VisualTags = new HashSet<string> { "Medium Armor", "Scale Mail" },
-            IconChar = "\u26E8", IconColor = new Color(0.5f, 0.6f, 0.5f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.SCALE_MAIL)
+            .Named("Scale Mail").Desc("Overlapping metal scales on a leather coat.")
+            .AC(4).MaxDex(3).CheckPenalty(4).SpellFailure(25)
+            .MediumArmor().Metal()
+            .Weight(30f).Icon("\u26E8", new Color(0.5f, 0.6f, 0.5f))
+            .Tags("Medium Armor", "Scale Mail")
+            .Build());
 
         // Chainmail: +5 AC, Max Dex +2, Check -5, Spell Failure 30%, 40 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.CHAINMAIL, Name = "Chainmail", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.Metal,
-            Description = "A full suit of interlocking metal rings covering the body.",
-            ArmorBonus = 5, MaxDexBonus = 2, ArmorCheckPenalty = 5,
-            ArcaneSpellFailure = 30, WeightLbs = 40f,
-            VisualTags = new HashSet<string> { "Medium Armor", "Chainmail" },
-            IconChar = "\u26E8", IconColor = new Color(0.5f, 0.5f, 0.6f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.CHAINMAIL)
+            .Named("Chainmail").Desc("A full suit of interlocking metal rings covering the body.")
+            .AC(5).MaxDex(2).CheckPenalty(5).SpellFailure(30)
+            .MediumArmor().Metal()
+            .Weight(40f).Icon("\u26E8", new Color(0.5f, 0.5f, 0.6f))
+            .Tags("Medium Armor", "Chainmail")
+            .Build());
 
         // Breastplate: +5 AC, Max Dex +3, Check -4, Spell Failure 25%, 30 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.BREASTPLATE, Name = "Breastplate", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.Metal,
-            Description = "A fitted metal chest plate. Best medium armor for most characters.",
-            ArmorBonus = 5, MaxDexBonus = 3, ArmorCheckPenalty = 4,
-            ArcaneSpellFailure = 25, WeightLbs = 30f,
-            VisualTags = new HashSet<string> { "Medium Armor", "Breastplate" },
-            IconChar = "\u26E8", IconColor = new Color(0.7f, 0.7f, 0.75f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.BREASTPLATE)
+            .Named("Breastplate").Desc("A fitted metal chest plate. Best medium armor for most characters.")
+            .AC(5).MaxDex(3).CheckPenalty(4).SpellFailure(25)
+            .MediumArmor().Metal()
+            .Weight(30f).Icon("\u26E8", new Color(0.7f, 0.7f, 0.75f))
+            .Tags("Medium Armor", "Breastplate")
+            .Build());
     }
 
     // ============================================================
@@ -1037,52 +910,40 @@ public static class ItemDatabase
     private static void RegisterHeavyArmor()
     {
         // Splint Mail: +6 AC, Max Dex +0, Check -7, Spell Failure 40%, 45 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.SPLINT_MAIL, Name = "Splint Mail", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
-            Description = "Strips of metal between layers of leather and chain.",
-            ArmorBonus = 6, MaxDexBonus = 0, ArmorCheckPenalty = 7,
-            ArcaneSpellFailure = 40, WeightLbs = 45f,
-            VisualTags = new HashSet<string> { "Heavy Armor", "Splint Mail" },
-            IconChar = "\u26E8", IconColor = new Color(0.5f, 0.5f, 0.55f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.SPLINT_MAIL)
+            .Named("Splint Mail").Desc("Strips of metal between layers of leather and chain.")
+            .AC(6).MaxDex(0).CheckPenalty(7).SpellFailure(40)
+            .Heavy().Metal()
+            .Weight(45f).Icon("\u26E8", new Color(0.5f, 0.5f, 0.55f))
+            .Tags("Heavy Armor", "Splint Mail")
+            .Build());
 
         // Banded Mail: +6 AC, Max Dex +1, Check -6, Spell Failure 35%, 35 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.BANDED_MAIL, Name = "Banded Mail", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
-            Description = "Overlapping strips of metal banded over chain and leather.",
-            ArmorBonus = 6, MaxDexBonus = 1, ArmorCheckPenalty = 6,
-            ArcaneSpellFailure = 35, WeightLbs = 35f,
-            VisualTags = new HashSet<string> { "Heavy Armor", "Banded Mail" },
-            IconChar = "\u26E8", IconColor = new Color(0.55f, 0.55f, 0.6f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.BANDED_MAIL)
+            .Named("Banded Mail").Desc("Overlapping strips of metal banded over chain and leather.")
+            .AC(6).MaxDex(1).CheckPenalty(6).SpellFailure(35)
+            .Heavy().Metal()
+            .Weight(35f).Icon("\u26E8", new Color(0.55f, 0.55f, 0.6f))
+            .Tags("Heavy Armor", "Banded Mail")
+            .Build());
 
         // Half-Plate: +7 AC, Max Dex +0, Check -7, Spell Failure 40%, 50 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.HALF_PLATE, Name = "Half-Plate", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
-            Description = "Plate armor covering most of the body with chain and leather.",
-            ArmorBonus = 7, MaxDexBonus = 0, ArmorCheckPenalty = 7,
-            ArcaneSpellFailure = 40, WeightLbs = 50f,
-            VisualTags = new HashSet<string> { "Heavy Armor", "Half-Plate" },
-            IconChar = "\u26E8", IconColor = new Color(0.6f, 0.6f, 0.65f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.HALF_PLATE)
+            .Named("Half-Plate").Desc("Plate armor covering most of the body with chain and leather.")
+            .AC(7).MaxDex(0).CheckPenalty(7).SpellFailure(40)
+            .Heavy().Metal()
+            .Weight(50f).Icon("\u26E8", new Color(0.6f, 0.6f, 0.65f))
+            .Tags("Heavy Armor", "Half-Plate")
+            .Build());
 
         // Full Plate: +8 AC, Max Dex +1, Check -6, Spell Failure 35%, 50 lbs
-        Register(new ItemData
-        {
-            Id = ItemIDs.FULL_PLATE, Name = "Full Plate", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
-            Description = "A complete suit of heavy plate armor. The finest protection available.",
-            ArmorBonus = 8, MaxDexBonus = 1, ArmorCheckPenalty = 6,
-            ArcaneSpellFailure = 35, WeightLbs = 50f,
-            VisualTags = new HashSet<string> { "Heavy Armor", "Full Plate" },
-            IconChar = "\u26E8", IconColor = new Color(0.7f, 0.7f, 0.75f)
-        });
+        Register(ItemBuilder.Armor(ItemIDs.FULL_PLATE)
+            .Named("Full Plate").Desc("A complete suit of heavy plate armor. The finest protection available.")
+            .AC(8).MaxDex(1).CheckPenalty(6).SpellFailure(35)
+            .Heavy().Metal()
+            .Weight(50f).Icon("\u26E8", new Color(0.7f, 0.7f, 0.75f))
+            .Tags("Heavy Armor", "Full Plate")
+            .Build());
     }
 
     // ============================================================
