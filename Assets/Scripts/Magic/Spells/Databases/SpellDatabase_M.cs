@@ -319,12 +319,9 @@ public static partial class SpellDatabase
                     ClassList = new[] { "Wizard" },
                     TargetType = SpellTargetType.Self,
                     RangeSquares = 2,
-                    EffectType = SpellEffectType.Healing,
-                    HealDice = 4, HealCount = 1,
+                    EffectType = SpellEffectType.Buff,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Object repair not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -339,9 +336,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 10,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Communication not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -601,6 +596,9 @@ public static partial class SpellDatabase
 
         // Mirror Image: Bard 2
         RegisterClassSpellAlias("mirror_image_brd", SpellNames.MIRROR_IMAGE, "Bard", 2);
+
+        // Message: Bard 0
+        RegisterClassSpellAlias("message_brd", SpellNames.MESSAGE, "Bard", 0);
 
         // ── MISLEAD — PHB p.254 ──
         Register(new SpellData

@@ -41,9 +41,7 @@ public static partial class SpellDatabase
                     SavingThrowType = "Will",
                     BuffDurationRounds = 3,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Illusion mechanics not implemented]"
+                    ProvokesAoO = true
                 });
 
         // ──────────────────────────────────────────────────────────────
@@ -267,6 +265,9 @@ public static partial class SpellDatabase
                 });
 
         RegisterClassSpellAlias("greater_invisibility_brd", SpellNames.GREATER_INVISIBILITY, "Bard", 4);
+
+        // Ghost Sound: Bard 0
+        RegisterClassSpellAlias("ghost_sound_brd", SpellNames.GHOST_SOUND, "Bard", 0);
 
         // ═══════════════════════════════════════════════════════════════
         // Glyph of Warding — PHB p.236

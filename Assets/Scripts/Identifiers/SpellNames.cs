@@ -402,6 +402,9 @@ namespace DND35e.Identifiers
         /// <summary>Knock (spell id: knock)</summary>
         public const string KNOCK = "knock";
 
+        /// <summary>Know Direction (spell id: know_direction)</summary>
+        public const string KNOW_DIRECTION = "know_direction";
+
         /// <summary>Lesser Restoration (spell id: lesser_restoration)</summary>
         public const string LESSER_RESTORATION = "lesser_restoration";
 
@@ -410,6 +413,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Light (spell id: light)</summary>
         public const string LIGHT = "light";
+
+        /// <summary>Lullaby (spell id: lullaby)</summary>
+        public const string LULLABY = "lullaby";
 
         /// <summary>Locate Object (spell id: locate_object)</summary>
         public const string LOCATE_OBJECT = "locate_object";

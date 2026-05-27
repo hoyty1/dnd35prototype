@@ -78,6 +78,39 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Light/illumination not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // LULLABY  (PHB p.249)
+        // Enchantment (Compulsion) [Mind-Affecting]
+        // Level: Brd 0
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Area: Living creatures within a 10-ft.-radius burst
+        // Duration: Concentration + 1 round/level (D)
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        //
+        // Target takes –5 penalty on Listen checks and –2 penalty on
+        // Will saves against sleep effects while the lullaby is in effect.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.LULLABY,
+                    Name = "Lullaby",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. Targets take –5 on Listen checks and –2 on Will saves against sleep effects. Will negates. PHB p.249",
+                    SpellLevel = 0, School = "Enchantment",
+                    ClassList = new[] { "Bard" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    BuffDurationRounds = 10,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.TEST_LINE_60,

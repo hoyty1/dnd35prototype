@@ -76,5 +76,31 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Lock/door mechanics not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // KNOW DIRECTION  (PHB p.246)
+        // Divination
+        // Level: Brd 0, Drd 0
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Personal
+        // Target: You
+        // Duration: Instantaneous
+        // You instantly know the direction of north from your current
+        // position.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.KNOW_DIRECTION,
+                    Name = "Know Direction",
+                    Description = "You instantly know the direction of north from your current position. PHB p.246",
+                    SpellLevel = 0, School = "Divination",
+                    ClassList = new[] { "Bard", "Druid" },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Personal,
+                    EffectType = SpellEffectType.Buff,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

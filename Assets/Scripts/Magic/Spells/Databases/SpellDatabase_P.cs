@@ -22,9 +22,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Utility effects not implemented]"
+                    ProvokesAoO = true
                 });
 
         // ──────────────────────────────────────────────────────────────
@@ -250,9 +248,7 @@ public static partial class SpellDatabase
                     RangeSquares = 2,
                     EffectType = SpellEffectType.Buff,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Food/water mechanics not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -367,6 +363,12 @@ public static partial class SpellDatabase
 
         // Phase 1: Paladin 1
         RegisterClassSpellAlias("protection_from_evil_pal", SpellNames.PROTECTION_FROM_EVIL, "Paladin", 1);
+
+        // Purify Food and Drink: Druid 0
+        RegisterClassSpellAlias("purify_food_drink_drd", SpellNames.PURIFY_FOOD_DRINK, "Druid", 0);
+
+        // Prestidigitation: Bard 0
+        RegisterClassSpellAlias("prestidigitation_brd", SpellNames.PRESTIDIGITATION, "Bard", 0);
 
         // ── Passwall (PHB p.259) ─────────────────────────────────────────
         Register(new SpellData

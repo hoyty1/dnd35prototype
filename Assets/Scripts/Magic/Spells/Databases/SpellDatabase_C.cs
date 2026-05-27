@@ -350,9 +350,7 @@ public static partial class SpellDatabase
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Buff,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Water creation not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -772,6 +770,9 @@ public static partial class SpellDatabase
 
         // Cure Critical Wounds: Bard 4
         RegisterClassSpellAlias("cure_critical_wounds_brd", SpellNames.CURE_CRITICAL_WOUNDS, "Bard", 4);
+
+        // Create Water: Druid 0
+        RegisterClassSpellAlias("create_water_drd", SpellNames.CREATE_WATER, "Druid", 0);
 
     }
 }
