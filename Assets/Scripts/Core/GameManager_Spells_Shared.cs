@@ -174,8 +174,8 @@ public partial class GameManager
 
         // Will save: DC = 10 + spell level (4) + WIS mod
         int saveDC = 10 + 4 + caster.Stats.WISMod;
-        int saveRoll = DiceRoller.D20() + target.Stats.WillSave;
-        bool saveSuccess = saveRoll >= saveDC;
+        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDC);
+        bool saveSuccess = saveResult.Saved;
 
         if (saveSuccess)
             damage = Mathf.Max(1, damage / 2);
@@ -383,20 +383,13 @@ public partial class GameManager
                 sb.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
 
                 // Check Spell Resistance
-                if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+                var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+                srResult.AppendToLog(sb);
+                if (!srResult.Overcame)
                 {
-                    int srCheckRoll = DiceRoller.D20();
-                    int srCheckTotal = srCheckRoll + casterLevel;
-                    bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
-
-                    sb.AppendLine($"  SR Check: d20({srCheckRoll}) + {casterLevel} = {srCheckTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
-
-                    if (!srOvercome)
-                    {
-                        sb.AppendLine($"  {target.Stats.CharacterName} resists {spellName} via Spell Resistance!");
-                        sb.AppendLine();
-                        continue;
-                    }
+                    sb.AppendLine($"  {target.Stats.CharacterName} resists {spellName} via Spell Resistance!");
+                    sb.AppendLine();
+                    continue;
                 }
 
                 // Roll damage

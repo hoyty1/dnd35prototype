@@ -148,25 +148,13 @@ public partial class GameManager
                     damage += DiceRoller.D6();
                 sb.AppendLine($"    Damage roll: {diceCount}d6 = {damage}{(isUndead ? " (Undead)" : "")}");
 
-                // Reflex save
-                int saveRoll = DiceRoller.D20();
-                int saveTotal = saveRoll + target.Stats.ReflexSave;
-                bool saved = saveTotal >= saveDc;
-                sb.AppendLine($"    Reflex: {saveRoll} + {target.Stats.ReflexSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
-
-                // Evasion
-                if (saved)
+                // Reflex save + Evasion
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc);
+                saveResult.AppendHalfDamageLog(sb);
+                if (saveResult.Saved)
                 {
-                    if (target.Stats.HasEvasion)
-                    {
-                        damage = 0;
-                        sb.AppendLine($"    Evasion! No damage.");
-                    }
-                    else
-                    {
-                        damage = Mathf.Max(1, damage / 2);
-                        sb.AppendLine($"    Half damage: {damage}");
-                    }
+                    damage = Mathf.Max(1, damage / 2);
+                    damage = SpellSaveResolver.ApplyEvasion(damage, target, true, sb);
                 }
 
                 if (damage > 0)
@@ -238,12 +226,10 @@ public partial class GameManager
                 idx++;
                 sb.AppendLine($"  --- Target {idx}: {target.Stats.CharacterName} ---");
 
-                int saveRoll = DiceRoller.D20();
-                int saveTotal = saveRoll + target.Stats.ReflexSave;
-                bool saved = saveTotal >= saveDc;
-                sb.AppendLine($"    Reflex: {saveRoll} + {target.Stats.ReflexSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc);
+                saveResult.AppendToLog(sb, "SAVED", "FAILED");
 
-                if (!saved)
+                if (!saveResult.Saved)
                 {
                     target.Stats.ApplyCondition(CombatConditionType.Prone, 1, "Earthquake");
                     sb.AppendLine($"    🔻 Knocked PRONE!");
@@ -444,11 +430,10 @@ public partial class GameManager
         {
             int damage = Mathf.Min(casterLevel * 10, 150);
             int saveDc = GetSpellSaveDC(caster, spell);
-            int saveRoll = DiceRoller.D20();
-            int saveTotal = saveRoll + target.Stats.WillSave;
-            bool saved = saveTotal >= saveDc;
+            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
             sb.AppendLine($"  ☠ Undead — positive energy deals damage!");
-            sb.AppendLine($"  Will Save: {saveRoll} + {target.Stats.WillSave} = {saveTotal} vs DC {saveDc} → {(saved ? "HALF" : "FULL")}");
+            saveResult.AppendHalfDamageLog(sb);
+            bool saved = saveResult.Saved;
 
             if (saved) damage = Mathf.Max(1, damage / 2);
             int hpBefore = target.Stats.CurrentHP;

@@ -94,13 +94,15 @@ public partial class GameManager
                 // Harmless SR — allies can voluntarily lower SR
                 if (!isAlly)
                 {
-                    int srCheckRoll = DiceService.D20();
-                    int srCheckTotal = srCheckRoll + casterLevel;
-                    bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
+                    var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+                    // Log SR check via CombatUI (no sb in this method)
+                    if (!srResult.Skipped)
+                    {
+                        string srLog = $"  SR Check ({target.Stats.CharacterName}): d20({srResult.Roll}) + {srResult.CasterLevel}{(srResult.PenetrationBonus > 0 ? $"+{srResult.PenetrationBonus}" : "")} = {srResult.Total} vs SR {srResult.TargetSR} → {(srResult.Overcame ? "OVERCAME SR" : "BLOCKED by SR")}";
+                        CombatUI?.ShowCombatLog(srLog);
+                    }
 
-                    CombatUI?.ShowCombatLog($"  SR Check ({target.Stats.CharacterName}): d20({srCheckRoll}) + {casterLevel} = {srCheckTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
-
-                    if (!srOvercome)
+                    if (!srResult.Overcame)
                     {
                         CombatUI?.ShowCombatLog($"<color=#AAAAFF>  {target.Stats.CharacterName} resists {spellName} via Spell Resistance!</color>");
                         continue;
@@ -119,13 +121,10 @@ public partial class GameManager
                 else
                 {
                     // Unwilling target — Fort save to negate
-                    int saveRoll = DiceService.D20();
-                    int saveTotal = saveRoll + target.Stats.FortitudeSave;
-                    bool saved = saveTotal >= saveDc;
+                    var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
+                    CombatUI?.ShowCombatLog($"  Fort Save ({target.Stats.CharacterName}): d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}");
 
-                    CombatUI?.ShowCombatLog($"  Fort Save ({target.Stats.CharacterName}): d20({saveRoll}) + {target.Stats.FortitudeSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
-
-                    if (saved)
+                    if (saveResult.Saved)
                     {
                         CombatUI?.ShowCombatLog($"<color=#88FF88>  {target.Stats.CharacterName} resists {spellName}!</color>");
                         continue;

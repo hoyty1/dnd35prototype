@@ -426,27 +426,21 @@ public partial class GameManager
                 continue;
             }
 
-            // SR check
-            if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            // SR check + Will save
+            var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+            srResult.AppendToLog(sb);
+            if (!srResult.Overcame)
             {
-                bool srOvercome = SpellResolutionService.TryOvercomeSpellResistance(
-                    casterLevel, target.Stats.SpellResistance, "Rainbow Pattern SR", out int srRoll, out int srTotal);
-
-                sb.AppendLine($"  SR Check: d20({srRoll}) + {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
-
-                if (!srOvercome)
-                {
-                    sb.AppendLine($"  {targetName} resists Rainbow Pattern via Spell Resistance!");
-                    sb.AppendLine();
-                    continue;
-                }
+                sb.AppendLine($"  {targetName} resists Rainbow Pattern via Spell Resistance!");
+                sb.AppendLine();
+                continue;
             }
 
             // Will save negates
-            SavingThrowResolver.SaveResult willSave = SavingThrowResolver.ResolveWillSave(target.Stats, saveDc, "Rainbow Pattern");
-            string saveStr = $"d20({willSave.Roll}) + {willSave.Modifier} = {willSave.Total} vs DC {saveDc}";
+            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+            string saveStr = $"d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc}";
 
-            if (willSave.Succeeded)
+            if (saveResult.Saved)
             {
                 sb.AppendLine($"  Will save: {saveStr} → SUCCESS! Not fascinated.");
                 sb.AppendLine();

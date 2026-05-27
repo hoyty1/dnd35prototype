@@ -795,20 +795,13 @@ public partial class GameManager
                 sb.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
 
                 // Check Spell Resistance
-                if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+                var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+                srResult.AppendToLog(sb);
+                if (!srResult.Overcame)
                 {
-                    int srCheckRoll = DiceRoller.D20();
-                    int srCheckTotal = srCheckRoll + casterLevel;
-                    bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
-
-                    sb.AppendLine($"  SR Check: d20({srCheckRoll}) + {casterLevel} = {srCheckTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
-
-                    if (!srOvercome)
-                    {
-                        sb.AppendLine($"  {target.Stats.CharacterName} resists Ice Storm via Spell Resistance!");
-                        sb.AppendLine();
-                        continue;
-                    }
+                    sb.AppendLine($"  {target.Stats.CharacterName} resists Ice Storm via Spell Resistance!");
+                    sb.AppendLine();
+                    continue;
                 }
 
                 // Roll 3d6 bludgeoning

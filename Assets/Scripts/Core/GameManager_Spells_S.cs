@@ -156,31 +156,25 @@ public partial class GameManager
         CombatUI?.ShowCombatLog($"<color=#CC88FF>🐌 {casterName} casts Slow on {target.Stats.CharacterName}!</color>");
 
         // Spell Resistance check
-        if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+        var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+        if (!srResult.Skipped)
         {
-            int srCheckRoll = DiceService.D20();
-            int srCheckTotal = srCheckRoll + casterLevel;
-            bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
-
-            CombatUI?.ShowCombatLog($"  SR Check: d20({srCheckRoll}) + {casterLevel} = {srCheckTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
-
-            if (!srOvercome)
-            {
-                CombatUI?.ShowCombatLog($"<color=#AAAAFF>  {target.Stats.CharacterName} resists Slow via Spell Resistance!</color>");
-                return null;
-            }
+            string srLog = $"  SR Check: d20({srResult.Roll}) + {srResult.CasterLevel}{(srResult.PenetrationBonus > 0 ? $"+{srResult.PenetrationBonus}" : "")} = {srResult.Total} vs SR {srResult.TargetSR} → {(srResult.Overcame ? "OVERCAME SR" : "BLOCKED by SR")}";
+            CombatUI?.ShowCombatLog(srLog);
+        }
+        if (!srResult.Overcame)
+        {
+            CombatUI?.ShowCombatLog($"<color=#AAAAFF>  {target.Stats.CharacterName} resists Slow via Spell Resistance!</color>");
+            return null;
         }
 
         // Will save
         if (spell.AllowsSavingThrow)
         {
-            int saveRoll = DiceService.D20();
-            int saveTotal = saveRoll + target.Stats.WillSave;
-            bool saved = saveTotal >= saveDc;
+            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+            CombatUI?.ShowCombatLog($"  Will Save: d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}");
 
-            CombatUI?.ShowCombatLog($"  Will Save: d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} vs DC {saveDc} → {(saved ? "SAVED" : "FAILED")}");
-
-            if (saved)
+            if (saveResult.Saved)
             {
                 CombatUI?.ShowCombatLog($"<color=#88FF88>  {target.Stats.CharacterName} resists the Slow spell!</color>");
                 return null;
@@ -291,20 +285,13 @@ public partial class GameManager
                 sb.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
 
                 // Check Spell Resistance
-                if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+                var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+                srResult.AppendToLog(sb);
+                if (!srResult.Overcame)
                 {
-                    int srCheckRoll = DiceRoller.D20();
-                    int srCheckTotal = srCheckRoll + casterLevel;
-                    bool srOvercome = srCheckTotal >= target.Stats.SpellResistance;
-
-                    sb.AppendLine($"  SR Check: d20({srCheckRoll}) + {casterLevel} = {srCheckTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
-
-                    if (!srOvercome)
-                    {
-                        sb.AppendLine($"  {target.Stats.CharacterName} resists Shout via Spell Resistance!");
-                        sb.AppendLine();
-                        continue;
-                    }
+                    sb.AppendLine($"  {target.Stats.CharacterName} resists Shout via Spell Resistance!");
+                    sb.AppendLine();
+                    continue;
                 }
 
                 // Roll 5d6 sonic damage
@@ -484,11 +471,11 @@ public partial class GameManager
         // Sound Burst damage is handled by normal spell damage resolution.
         // Here we check for the stun: Fort save or stunned for 1 round.
         int saveDC = 10 + spell.SpellLevel + GetSpellSaveAbilityModifier(caster, spell);
-        int fortSave = DiceService.D20("Sound Burst Fort save") + target.Stats.FortitudeSave;
+        var fortResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC);
 
-        Debug.Log($"[SoundBurst] Fort save: {target.Stats.CharacterName} rolled {fortSave} vs DC {saveDC}");
+        Debug.Log($"[SoundBurst] Fort save: {target.Stats.CharacterName} rolled {fortResult.Total} vs DC {saveDC}");
 
-        if (fortSave < saveDC)
+        if (!fortResult.Saved)
         {
             // Failed — stunned for 1 round
             if (_conditionService != null)
