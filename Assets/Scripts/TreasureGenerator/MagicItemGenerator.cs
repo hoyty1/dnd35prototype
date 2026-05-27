@@ -441,9 +441,14 @@ namespace DND35e.Treasure
 
         private static string PickScrollSpell(string type, int level)
         {
-            string key = $"{type}_{level}";
-            if (TreasureData.ScrollSpells.TryGetValue(key, out string[] spells) && spells.Length > 0)
-                return spells[UnityEngine.Random.Range(0, spells.Length)];
+            // Try the requested level first, then fall back to lower levels
+            // if no implemented spells exist at the rolled level.
+            for (int lv = level; lv >= 0; lv--)
+            {
+                string key = $"{type}_{lv}";
+                if (TreasureData.ScrollSpells.TryGetValue(key, out string[] spells) && spells.Length > 0)
+                    return spells[UnityEngine.Random.Range(0, spells.Length)];
+            }
             return $"{type} spell (level {level})";
         }
 
