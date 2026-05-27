@@ -36,7 +36,7 @@ public partial class GameManager
             return true;
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = casterLevel; // 1 round/level
         int radiusSquares = 8; // 40 ft = 8 squares
 
@@ -130,7 +130,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
         // Check if target has Neutralize Poison immunity
         if (target.Stats.NeutralizePoisonImmunityActive)

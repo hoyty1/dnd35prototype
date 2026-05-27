@@ -36,7 +36,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
         // Diseases are tracked via target.ActiveDiseases (populated by Contagion, etc.)
         if (target.ActiveDiseases == null || target.ActiveDiseases.Count == 0)
@@ -166,7 +166,7 @@ public partial class GameManager
         // Personal spell
         target = caster;
         string casterName = caster.Stats.CharacterName ?? "Unknown";
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = casterLevel * 100; // 10 min/level
         int radiusFeet = casterLevel * 10; // 10 ft/level
 
@@ -287,7 +287,7 @@ public partial class GameManager
         }
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // PHB: Fortitude partial. Failed save = Exhausted. Successful save = Fatigued.
         bool savePassed = result.RequiredSave && result.SaveSucceeded;
@@ -366,7 +366,7 @@ public partial class GameManager
         if (!IsRainbowPatternSpell(spell))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int saveDc = GetSpellSaveDC(caster, spell);
         int maxHDTotal = 24;
         int hdAffected = 0;

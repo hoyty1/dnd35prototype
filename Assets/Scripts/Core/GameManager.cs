@@ -9239,8 +9239,8 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int rounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int rounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
 
         var effect = new ItemSpellEffect(spell.SpellId, spell.Name, casterName, casterLevel, rounds)
@@ -9291,8 +9291,8 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         var conditionData = new AnimateRopeEntangledConditionData
         {

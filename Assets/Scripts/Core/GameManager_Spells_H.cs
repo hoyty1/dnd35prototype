@@ -27,7 +27,7 @@ public partial class GameManager
             return null;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int holdRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int holdRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         string sourceName = spell.Name;
 
         // Apply Paralyzed condition with the scaled duration
@@ -93,8 +93,8 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.HALT_UNDEAD, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         // Filter to undead only
@@ -270,7 +270,7 @@ public partial class GameManager
         recipientStatusMgr.Init(recipient.Stats);
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // If target has Slow, Haste dispels it
         if (recipient.HasActiveSlowEffect)

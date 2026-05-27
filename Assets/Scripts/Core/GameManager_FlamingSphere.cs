@@ -193,8 +193,8 @@ public partial class GameManager
             }
         }
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int maxRangeSquares = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(casterLevel));
 
         GameObject go = new GameObject($"FlamingSphere_{caster.Stats.CharacterName}");

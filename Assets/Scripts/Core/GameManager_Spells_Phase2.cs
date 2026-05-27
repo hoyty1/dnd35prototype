@@ -27,7 +27,7 @@ public partial class GameManager
     {
         if (caster == null || target == null || spell == null) return null;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
@@ -109,7 +109,7 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.SUNBURST, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
@@ -206,7 +206,7 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.EARTHQUAKE, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
@@ -279,7 +279,7 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.SHIELD_OF_LAW, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         string casterName = caster.Stats.CharacterName;
 
         var sb = new StringBuilder();
@@ -330,7 +330,7 @@ public partial class GameManager
     {
         if (caster == null || target == null || spell == null) return null;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         string casterName = caster.Stats.CharacterName;
 
         StatusEffectManager statusMgr = target.StatusEffectManager;
@@ -373,7 +373,7 @@ public partial class GameManager
         if (caster == null || spell == null) return null;
 
         target = caster; // Self-only
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int turningLevels = DiceRoller.D4() + 6; // 1d4+6
         string casterName = caster.Stats.CharacterName;
 
@@ -414,7 +414,7 @@ public partial class GameManager
     {
         if (caster == null || target == null || spell == null) return null;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -580,7 +580,7 @@ public partial class GameManager
     {
         if (caster == null || target == null || spell == null) return null;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = casterLevel * 10; // 1 min/level
         string casterName = caster.Stats.CharacterName;
 
@@ -624,7 +624,7 @@ public partial class GameManager
         if (caster == null || spell == null) return null;
 
         target = caster; // Self-only
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = casterLevel; // 1 round/level
         string casterName = caster.Stats.CharacterName;
 
@@ -679,7 +679,7 @@ public partial class GameManager
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
             statusMgr.Init(target.Stats);
         }
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         statusMgr.AddEffect(spell, casterName, casterLevel);
 
         var sb = new StringBuilder();
@@ -709,7 +709,7 @@ public partial class GameManager
     {
         if (caster == null || target == null || spell == null) return null;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
         string casterName = caster.Stats.CharacterName;
 
@@ -774,7 +774,7 @@ public partial class GameManager
 
         target = caster; // Self-only
         string casterName = caster.Stats.CharacterName;
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
         StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)

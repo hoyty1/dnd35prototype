@@ -32,7 +32,7 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.CONE_OF_COLD, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int diceCount = Mathf.Clamp(casterLevel, 1, 15); // 1d6/CL, max 15d6
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
@@ -125,7 +125,7 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.CHAIN_LIGHTNING, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int diceCount = Mathf.Clamp(casterLevel, 1, 20); // 1d6/CL, max 20d6
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
         int maxSecondary = Mathf.Min(casterLevel, 20);
@@ -224,7 +224,7 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.CIRCLE_OF_DEATH, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int hdDiceCount = Mathf.Clamp(casterLevel, 1, 20);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
@@ -331,8 +331,8 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.CRUSHING_DESPAIR, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
@@ -418,7 +418,7 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.MIND_FOG, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
         int fogDurationRounds = 300; // 30 minutes = 300 rounds
 
@@ -504,9 +504,9 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.MASS_SUGGESTION, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int maxTargets = casterLevel;
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
@@ -595,9 +595,9 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.INSECT_PLAGUE, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int numSwarms = Mathf.Clamp(casterLevel / 3, 1, 6);
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
@@ -690,8 +690,8 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.WALL_OF_THORNS, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -751,8 +751,8 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.PERSISTENT_IMAGE, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -783,7 +783,7 @@ public partial class GameManager
             return null;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int holdRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int holdRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         string sourceName = spell.Name;
 
         if (_conditionService != null)
@@ -825,7 +825,7 @@ public partial class GameManager
             return null;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int charmRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int charmRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         string sourceName = spell.Name;
 
         var charmData = new CharmedConditionData
@@ -872,8 +872,8 @@ public partial class GameManager
         if (!string.Equals(spell.SpellId, SpellNames.GLOBE_OF_INVULNERABILITY, StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // Create globe area effect (reusing Lesser Globe class with MaxBlockedSpellLevel = 4)
         var globeObj = new GameObject("GlobeOfInvulnerability");
@@ -957,7 +957,7 @@ public partial class GameManager
         statusMgr.Init(recipient.Stats);
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         ActiveSpellEffect effect = statusMgr.AddEffect(
             spell,
@@ -998,7 +998,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || spell == null)
             return null;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
         CombatUI?.ShowCombatLog($"<color=#CCCC88>📦 {caster.Stats.CharacterName} casts Shrink Item! An item is reduced to 1/16 its normal size. Duration: {casterLevel} day(s).</color>");
         Debug.Log($"[GameManager] Shrink Item cast (CL {casterLevel}, duration {casterLevel} days)");
@@ -1035,7 +1035,7 @@ public partial class GameManager
         if (casterLevel >= 9) natArmorBonus = 4;
         if (casterLevel >= 12) natArmorBonus = 5;
 
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         ActiveSpellEffect effect = statusMgr.AddEffect(
             spell,
@@ -1072,8 +1072,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || spell == null)
             return null;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int depthFt = 10 + (Mathf.Max(0, (casterLevel - 9)) / 3) * 5;
 
         CombatUI?.ShowCombatLog($"<color=#CCAA88>🚪 {caster.Stats.CharacterName} casts Passwall! A passage (5 ft × 8 ft × {depthFt} ft deep) opens through the wall. Duration: {durationRounds} rounds.</color>");

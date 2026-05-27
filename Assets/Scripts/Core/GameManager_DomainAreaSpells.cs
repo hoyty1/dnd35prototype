@@ -41,7 +41,7 @@ public partial class GameManager
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int saveDc = GetSpellSaveDC(caster, spell);
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // Calculate center position from AoE cells
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
@@ -143,7 +143,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         Vector3 centerPos = CalculateAreaCenter(aoeCells);
         CreateSpikeStoneArea(centerPos, durationRounds, caster, casterLevel);

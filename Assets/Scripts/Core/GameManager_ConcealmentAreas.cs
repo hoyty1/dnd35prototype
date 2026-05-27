@@ -315,8 +315,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || spell == null || !string.Equals(spell.SpellId, SpellNames.GLITTERDUST, System.StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int saveDc = GetSpellSaveDC(caster, spell);
 
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
@@ -419,8 +419,8 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || spell == null || !string.Equals(spell.SpellId, SpellNames.WEB, System.StringComparison.Ordinal))
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         int saveDc = GetSpellSaveDC(caster, spell);
 
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);

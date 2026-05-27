@@ -50,7 +50,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || aoeCells == null)
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
         // Remove any existing Desecrate areas that overlap
         RemoveOverlappingHolyAreas(aoeCells, SpellNames.DOMAIN_DESECRATE);
@@ -113,7 +113,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || aoeCells == null)
             return false;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
         // Remove any existing Consecrate areas that overlap
         RemoveOverlappingHolyAreas(aoeCells, SpellNames.CONSECRATE);

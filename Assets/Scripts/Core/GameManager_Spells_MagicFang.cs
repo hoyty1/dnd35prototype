@@ -63,7 +63,7 @@ public partial class GameManager
             ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell))
             : 1;
 
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // +1 enhancement bonus to attack and damage (Magic Fang is always +1)
         int enhancementBonus = 1;

@@ -55,7 +55,7 @@ public partial class GameManager
 
         // Apply Hold Person–style paralysis
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int holdRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int holdRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
         string sourceName = spell.Name;
 
         if (_conditionService != null)
@@ -145,7 +145,7 @@ public partial class GameManager
         }
 
         int hdSpent = 0;
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         foreach (var target in animalTargets)
         {
@@ -218,7 +218,7 @@ public partial class GameManager
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int saveDc = GetSpellSaveDC(caster, spell);
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -310,7 +310,7 @@ public partial class GameManager
         if (target == null || target.Stats == null || caster == null || caster.Stats == null)
             return true;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int bonusDamage = Mathf.Min(casterLevel, 5); // +1 per CL, max +5
 
         // Ranged touch attack
@@ -481,8 +481,8 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // Apply domination — reuse Command Undead pattern for side-switching
         var effectData = new CommandUndeadEffectData
@@ -536,7 +536,7 @@ public partial class GameManager
             return true;
         }
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int maxHD = casterLevel * 2; // 2 HD per caster level
         int targetHD = Mathf.Max(1, target.Stats.Level);
 
@@ -546,7 +546,7 @@ public partial class GameManager
             return true;
         }
 
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // Apply domination — reuse Command Undead pattern
         var effectData = new CommandUndeadEffectData

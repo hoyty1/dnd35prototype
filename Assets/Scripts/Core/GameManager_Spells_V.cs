@@ -53,7 +53,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null)
             return true;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
         // SR is already checked by the base spell pipeline (SpellCaster.cs).
         // If this method is called with result.Success = true, SR has already passed.

@@ -161,7 +161,7 @@ public partial class GameManager
         if (recipient == null || recipient.Stats == null)
             return true;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
         string casterName = caster.Stats.CharacterName ?? "Unknown";
 

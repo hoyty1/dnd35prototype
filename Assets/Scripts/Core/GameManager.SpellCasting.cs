@@ -4788,7 +4788,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || _pendingSpell == null)
             return;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
         int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
         int hdPool = DiceService.RollMultiple(2, 4, "Hypnotism HD pool 2d4"); // 2d4
@@ -4968,11 +4968,11 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || _pendingSpell == null)
             return;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
         int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
         int hdPool = DiceService.RollMultiple(4, 4, "Sleep HD pool 4d4"); // 4d4
-        int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(_pendingSpell, casterLevel));
+        int sleepRounds = SpellCastingHelper.CalculateDuration(_pendingSpell, casterLevel);
 
         List<CharacterController> candidates = new List<CharacterController>();
         for (int i = 0; i < targets.Count; i++)
@@ -5092,11 +5092,11 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || _pendingSpell == null)
             return;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
         int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
         int hdPool = 10; // Deep Slumber: flat 10 HD (no dice roll, unlike Sleep's 4d4)
-        int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(_pendingSpell, casterLevel));
+        int sleepRounds = SpellCastingHelper.CalculateDuration(_pendingSpell, casterLevel);
 
         // Gather eligible candidates — Deep Slumber has no per-creature HD cap (unlike Sleep's 4 HD limit)
         List<CharacterController> candidates = new List<CharacterController>();
@@ -5211,7 +5211,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || _pendingSpell == null)
             return;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
         int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
 
@@ -5943,7 +5943,7 @@ public partial class GameManager
         if (caster == null || caster.Stats == null || _pendingSpell == null)
             return;
 
-        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int saveDc = 10 + _pendingSpell.SpellLevel + caster.Stats.GetPrimaryCastingModifier();
         string casterName = caster.Stats.CharacterName;
 
@@ -6173,7 +6173,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         int intDamage = DiceService.D6("Touch of Idiocy INT damage");
         int wisDamage = DiceService.D6("Touch of Idiocy WIS damage");
@@ -6507,7 +6507,7 @@ public partial class GameManager
         if (spell != null && spell.SpellId == SpellNames.CHARM_PERSON)
         {
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-            int charmRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+            int charmRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
             string sourceName = spell.Name;
 
             var charmData = new CharmedConditionData
@@ -6563,7 +6563,7 @@ public partial class GameManager
             }
 
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-            int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+            int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
             // Apply domination using the command/dominate side-switching pattern
             var effectData = new CommandUndeadEffectData
@@ -8815,7 +8815,7 @@ public partial class GameManager
         statusMgr.Init(caster.Stats);
 
         // Add spell effect for duration tracking
-        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
 
         // Create detection data
