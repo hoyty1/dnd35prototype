@@ -104,7 +104,7 @@ public class SorcererClass : ICharacterClass
         {
             SpellNames.RAY_OF_FROST,      // Ranged attack cantrip
             SpellNames.ACID_SPLASH,       // Ranged touch attack
-            SpellNames.DETECT_MAGIC_WIZ,  // Utility
+            SpellNames.DETECT_MAGIC,  // Utility
             SpellNames.DAZE              // Crowd control
         });
 

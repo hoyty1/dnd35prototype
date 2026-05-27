@@ -4890,7 +4890,7 @@ public class CharacterController : MonoBehaviour
                 // Remove the spell effect since all charges are used
                 StatusEffectManager selfStatusMgr = StatusEffectManager;
                 if (selfStatusMgr != null)
-                    selfStatusMgr.RemoveEffectsBySpellId(SpellNames.DOMAIN_MAGIC_STONE);
+                    selfStatusMgr.RemoveEffectsBySpellId(SpellNames.MAGIC_STONE);
             }
             else
             {
@@ -5246,7 +5246,7 @@ public class CharacterController : MonoBehaviour
                     Debug.Log($"[MagicStone] {Stats.CharacterName}: All magic stones discharged during full attack, spell ends.");
                     StatusEffectManager selfStatusMgr = StatusEffectManager;
                     if (selfStatusMgr != null)
-                        selfStatusMgr.RemoveEffectsBySpellId(SpellNames.DOMAIN_MAGIC_STONE);
+                        selfStatusMgr.RemoveEffectsBySpellId(SpellNames.MAGIC_STONE);
                 }
             }
 

@@ -40,7 +40,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Knowledge",
             "Add all Knowledge skills to your list of class skills. You cast divination spells at +1 caster level.",
-            new Dictionary<int, string> { { 1, SpellNames.DOMAIN_DETECT_SECRET_DOORS }, { 2, SpellNames.DETECT_THOUGHTS } }));
+            new Dictionary<int, string> { { 1, SpellNames.DETECT_SECRET_DOORS }, { 2, SpellNames.DETECT_THOUGHTS } }));
 
         Register(new DomainData("Protection",
             "You can generate a protective ward as a supernatural ability. Grant +1 resistance bonus to next saving throw, 1/day.",
@@ -60,7 +60,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Evil",
             "Cast evil spells at +1 caster level.",
-            new Dictionary<int, string> { { 1, SpellNames.PROTECTION_FROM_GOOD }, { 2, SpellNames.DOMAIN_DESECRATE } }));
+            new Dictionary<int, string> { { 1, SpellNames.PROTECTION_FROM_GOOD }, { 2, SpellNames.DESECRATE } }));
 
         Register(new DomainData("Chaos",
             "Cast chaos spells at +1 caster level.",
@@ -72,7 +72,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Sun",
             "Once per day, you can perform a greater turning against undead. The undead so turned are destroyed.",
-            new Dictionary<int, string> { { 1, SpellNames.ENDURE_ELEMENTS }, { 2, SpellNames.DOMAIN_HEAT_METAL } }));
+            new Dictionary<int, string> { { 1, SpellNames.ENDURE_ELEMENTS }, { 2, SpellNames.HEAT_METAL } }));
 
         Register(new DomainData("Luck",
             "You gain the power of good fortune: reroll one roll per day before the DM declares success or failure. You must take the reroll result.",
@@ -80,23 +80,23 @@ public static class DomainDatabase
 
         Register(new DomainData("Air",
             "Turn or destroy earth creatures as a good cleric turns undead. Rebuke, command, or bolster air creatures as an evil cleric rebukes undead.",
-            new Dictionary<int, string> { { 1, SpellNames.OBSCURING_MIST }, { 2, SpellNames.DOMAIN_WIND_WALL } }));
+            new Dictionary<int, string> { { 1, SpellNames.OBSCURING_MIST }, { 2, SpellNames.WIND_WALL } }));
 
         Register(new DomainData("Animal",
             "You can use speak with animals once per day as a spell-like ability. Knowledge (nature) is a class skill.",
-            new Dictionary<int, string> { { 1, SpellNames.DOMAIN_CALM_ANIMALS }, { 2, SpellNames.DOMAIN_HOLD_ANIMAL } }));
+            new Dictionary<int, string> { { 1, SpellNames.CALM_ANIMALS }, { 2, SpellNames.HOLD_ANIMAL } }));
 
         Register(new DomainData("Earth",
             "Turn or destroy air creatures as a good cleric turns undead. Rebuke, command, or bolster earth creatures as an evil cleric rebukes undead.",
-            new Dictionary<int, string> { { 1, SpellNames.DOMAIN_MAGIC_STONE }, { 2, SpellNames.DOMAIN_SOFTEN_EARTH } }));
+            new Dictionary<int, string> { { 1, SpellNames.MAGIC_STONE }, { 2, SpellNames.SOFTEN_EARTH } }));
 
         Register(new DomainData("Fire",
             "Turn or destroy water creatures as a good cleric turns undead. Rebuke, command, or bolster fire creatures as an evil cleric rebukes undead.",
-            new Dictionary<int, string> { { 1, SpellNames.BURNING_HANDS }, { 2, SpellNames.DOMAIN_PRODUCE_FLAME } }));
+            new Dictionary<int, string> { { 1, SpellNames.BURNING_HANDS }, { 2, SpellNames.PRODUCE_FLAME } }));
 
         Register(new DomainData("Plant",
             "Rebuke or command plant creatures as an evil cleric rebukes or commands undead. Knowledge (nature) is a class skill.",
-            new Dictionary<int, string> { { 1, SpellNames.DOMAIN_ENTANGLE }, { 2, SpellNames.DOMAIN_BARKSKIN } }));
+            new Dictionary<int, string> { { 1, SpellNames.ENTANGLE }, { 2, SpellNames.BARKSKIN } }));
 
         Register(new DomainData("Water",
             "Turn or destroy fire creatures as a good cleric turns undead. Rebuke, command, or bolster water creatures as an evil cleric rebukes undead.",
@@ -104,7 +104,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Travel",
             "For a total time per day of 1 round per cleric level, you can act normally regardless of magical effects that impede movement. Survival is a class skill.",
-            new Dictionary<int, string> { { 1, SpellNames.DOMAIN_LONGSTRIDER }, { 2, SpellNames.LOCATE_OBJECT } }));
+            new Dictionary<int, string> { { 1, SpellNames.LONGSTRIDER }, { 2, SpellNames.LOCATE_OBJECT } }));
 
         Debug.Log($"[DomainDatabase] Initialized {_domains.Count} domains.");
     }

@@ -18,7 +18,7 @@ public class SoftenEarthAreaEffect : PersistentAreaEffect
         base.Awake();
 
         EffectName = "Soften Earth and Stone";
-        SpellId = SpellNames.DOMAIN_SOFTEN_EARTH;
+        SpellId = SpellNames.SOFTEN_EARTH;
         Shape = AreaShape.Circle;
         Radius = 3f; // 15-ft radius = 3 squares
         ShowVisual = false;

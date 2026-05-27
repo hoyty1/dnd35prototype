@@ -56,24 +56,7 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Long-range communication not implemented]"
                 });
 
-        Register(new SpellData
-                {
-                    SpellId = SpellNames.DOMAIN_WIND_WALL,
-                    Name = "Wind Wall",
-                    Description = "Deflects arrows, smaller creatures, and gases. Creates an invisible wall of wind.",
-                    SpellLevel = 2,
-                    School = "Evocation",
-                    ClassList = new string[] { "Cleric" },
-                    TargetType = SpellTargetType.Area,
-                    RangeSquares = 6,
-                    AreaRadius = 2,
-                    EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = 30,
-                    ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Wind wall deflection not implemented]"
-                });
+        // [CONSOLIDATED] domain_wind_wall merged into wind_wall — alias registered below
 
         // ──────────────────────────────────────────────────────────────
         // WIND WALL  (PHB p.302)
@@ -358,6 +341,9 @@ public static partial class SpellDatabase
                     HasSomaticComponent = true,
                     IsPlaceholder = false
                 });
+
+        // Backward-compatibility alias for consolidated domain spell ID
+        RegisterAlias("domain_wind_wall", SpellNames.WIND_WALL);
 
     }
 }

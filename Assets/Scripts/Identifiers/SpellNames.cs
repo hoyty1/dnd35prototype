@@ -52,16 +52,19 @@ namespace DND35e.Identifiers
         public const string BLESS_WEAPON = "bless_weapon";
 
         /// <summary>Blindness/Deafness - generic constant for any class variant.</summary>
-        public const string BLINDNESS_DEAFNESS = "blindness_deafness_wiz";
+        public const string BLINDNESS_DEAFNESS = "blindness_deafness";
 
         /// <summary>Blindness/Deafness (spell id: blindness_deafness_wiz)</summary>
-        public const string BLINDNESS_DEAFNESS_WIZ = "blindness_deafness_wiz";
+        /// <summary>[Deprecated alias] Use BLINDNESS_DEAFNESS instead</summary>
+        public const string BLINDNESS_DEAFNESS_WIZ = BLINDNESS_DEAFNESS;
 
         /// <summary>Blindness/Deafness - Cleric variant (spell id: blindness_deafness_clr)</summary>
-        public const string BLINDNESS_DEAFNESS_CLR = "blindness_deafness_clr";
+        /// <summary>[Deprecated alias] Use BLINDNESS_DEAFNESS instead</summary>
+        public const string BLINDNESS_DEAFNESS_CLR = BLINDNESS_DEAFNESS;
 
         /// <summary>Blindness/Deafness - Bard variant (spell id: blindness_deafness_brd)</summary>
-        public const string BLINDNESS_DEAFNESS_BRD = "blindness_deafness_brd";
+        /// <summary>[Deprecated alias] Use BLINDNESS_DEAFNESS instead</summary>
+        public const string BLINDNESS_DEAFNESS_BRD = BLINDNESS_DEAFNESS;
 
         /// <summary>Blink (spell id: blink)</summary>
         public const string BLINK = "blink";
@@ -184,10 +187,16 @@ namespace DND35e.Identifiers
         public const string DETECT_LAW = "detect_law";
 
         /// <summary>Detect Magic (spell id: detect_magic_wiz)</summary>
-        public const string DETECT_MAGIC_WIZ = "detect_magic_wiz";
+        public const string DETECT_MAGIC = "detect_magic";
+
+        /// <summary>[Deprecated alias] Use DETECT_MAGIC instead</summary>
+        public const string DETECT_MAGIC_WIZ = DETECT_MAGIC;
 
         /// <summary>Detect Poison (spell id: detect_poison_wiz)</summary>
-        public const string DETECT_POISON_WIZ = "detect_poison_wiz";
+        public const string DETECT_POISON = "detect_poison";
+
+        /// <summary>[Deprecated alias] Use DETECT_POISON instead</summary>
+        public const string DETECT_POISON_WIZ = DETECT_POISON;
 
         /// <summary>Detect Thoughts (spell id: detect_thoughts)</summary>
         public const string DETECT_THOUGHTS = "detect_thoughts";
@@ -217,40 +226,72 @@ namespace DND35e.Identifiers
         public const string DIVINE_POWER = "divine_power";
 
         /// <summary>Barkskin (spell id: domain_barkskin)</summary>
-        public const string DOMAIN_BARKSKIN = "domain_barkskin";
+        /// <summary>[Deprecated alias] Use BARKSKIN instead</summary>
+        public const string DOMAIN_BARKSKIN = BARKSKIN;
 
         /// <summary>Calm Animals (spell id: domain_calm_animals)</summary>
-        public const string DOMAIN_CALM_ANIMALS = "domain_calm_animals";
+        public const string CALM_ANIMALS = "calm_animals";
+
+        /// <summary>[Deprecated alias] Use CALM_ANIMALS instead</summary>
+        public const string DOMAIN_CALM_ANIMALS = CALM_ANIMALS;
 
         /// <summary>Desecrate (spell id: domain_desecrate)</summary>
-        public const string DOMAIN_DESECRATE = "domain_desecrate";
+        public const string DESECRATE = "desecrate";
+
+        /// <summary>[Deprecated alias] Use DESECRATE instead</summary>
+        public const string DOMAIN_DESECRATE = DESECRATE;
 
         /// <summary>Detect Secret Doors (spell id: domain_detect_secret_doors)</summary>
-        public const string DOMAIN_DETECT_SECRET_DOORS = "domain_detect_secret_doors";
+        public const string DETECT_SECRET_DOORS = "detect_secret_doors";
+
+        /// <summary>[Deprecated alias] Use DETECT_SECRET_DOORS instead</summary>
+        public const string DOMAIN_DETECT_SECRET_DOORS = DETECT_SECRET_DOORS;
 
         /// <summary>Entangle (spell id: domain_entangle)</summary>
-        public const string DOMAIN_ENTANGLE = "domain_entangle";
+        public const string ENTANGLE = "entangle";
+
+        /// <summary>[Deprecated alias] Use ENTANGLE instead</summary>
+        public const string DOMAIN_ENTANGLE = ENTANGLE;
 
         /// <summary>Heat Metal (spell id: domain_heat_metal)</summary>
-        public const string DOMAIN_HEAT_METAL = "domain_heat_metal";
+        public const string HEAT_METAL = "heat_metal";
+
+        /// <summary>[Deprecated alias] Use HEAT_METAL instead</summary>
+        public const string DOMAIN_HEAT_METAL = HEAT_METAL;
 
         /// <summary>Hold Animal (spell id: domain_hold_animal)</summary>
-        public const string DOMAIN_HOLD_ANIMAL = "domain_hold_animal";
+        public const string HOLD_ANIMAL = "hold_animal";
+
+        /// <summary>[Deprecated alias] Use HOLD_ANIMAL instead</summary>
+        public const string DOMAIN_HOLD_ANIMAL = HOLD_ANIMAL;
 
         /// <summary>Longstrider (spell id: domain_longstrider)</summary>
-        public const string DOMAIN_LONGSTRIDER = "domain_longstrider";
+        public const string LONGSTRIDER = "longstrider";
+
+        /// <summary>[Deprecated alias] Use LONGSTRIDER instead</summary>
+        public const string DOMAIN_LONGSTRIDER = LONGSTRIDER;
 
         /// <summary>Magic Stone (spell id: domain_magic_stone)</summary>
-        public const string DOMAIN_MAGIC_STONE = "domain_magic_stone";
+        public const string MAGIC_STONE = "magic_stone";
+
+        /// <summary>[Deprecated alias] Use MAGIC_STONE instead</summary>
+        public const string DOMAIN_MAGIC_STONE = MAGIC_STONE;
 
         /// <summary>Produce Flame (spell id: domain_produce_flame)</summary>
-        public const string DOMAIN_PRODUCE_FLAME = "domain_produce_flame";
+        public const string PRODUCE_FLAME = "produce_flame";
+
+        /// <summary>[Deprecated alias] Use PRODUCE_FLAME instead</summary>
+        public const string DOMAIN_PRODUCE_FLAME = PRODUCE_FLAME;
 
         /// <summary>Soften Earth and Stone (spell id: domain_soften_earth)</summary>
-        public const string DOMAIN_SOFTEN_EARTH = "domain_soften_earth";
+        public const string SOFTEN_EARTH = "soften_earth";
+
+        /// <summary>[Deprecated alias] Use SOFTEN_EARTH instead</summary>
+        public const string DOMAIN_SOFTEN_EARTH = SOFTEN_EARTH;
 
         /// <summary>Wind Wall (spell id: domain_wind_wall)</summary>
-        public const string DOMAIN_WIND_WALL = "domain_wind_wall";
+        /// <summary>[Deprecated alias] Use WIND_WALL instead</summary>
+        public const string DOMAIN_WIND_WALL = WIND_WALL;
 
         /// <summary>Dominate Animal (spell id: dominate_animal)</summary>
         public const string DOMINATE_ANIMAL = "dominate_animal";
@@ -592,7 +633,10 @@ namespace DND35e.Identifiers
         public const string REPEL_VERMIN = "repel_vermin";
 
         /// <summary>Resistance (spell id: resistance_wiz)</summary>
-        public const string RESISTANCE_WIZ = "resistance_wiz";
+        public const string RESISTANCE = "resistance";
+
+        /// <summary>[Deprecated alias] Use RESISTANCE instead</summary>
+        public const string RESISTANCE_WIZ = RESISTANCE;
 
         /// <summary>Restoration (spell id: restoration)</summary>
         public const string RESTORATION = "restoration";

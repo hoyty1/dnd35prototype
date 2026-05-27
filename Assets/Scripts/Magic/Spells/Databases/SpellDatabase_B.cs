@@ -30,38 +30,7 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
-        Register(new SpellData
-                {
-                    SpellId = SpellNames.DOMAIN_BARKSKIN,
-                    Name = "Barkskin",
-                    Description = "Transmutation. Barkskin toughens a creature's skin, granting a +2 enhancement bonus to natural "
-                        + "armor, which increases by 1 for every three caster levels above 3rd (max +5 at 12th). "
-                        + "Duration 10 min/level. Components: V, S, DF. PHB p.202",
-                    SpellLevel = 2,
-                    School = "Transmutation",
-                    ClassList = new string[] { "Cleric" },
-                    TargetType = SpellTargetType.SingleAlly,
-                    RangeCategory = SpellRangeCategory.Touch,
-                    IsTouch = true,
-                    IsMeleeTouch = true,
-                    EffectType = SpellEffectType.Buff,
-                    BuffACBonus = 2,
-                    BuffDurationRounds = 100, // Legacy fallback: 10 min/level
-                    BuffType = "natural_armor",
-                    BuffBonusType = BonusType.Enhancement,
-                    BonusTypeExplicitlySet = true,
-                    DurationType = DurationType.Minutes,
-                    DurationValue = 10,
-                    DurationScalesWithLevel = true,
-                    AllowsSavingThrow = false,
-                    SpellResistanceApplies = false,
-                    ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    HasVerbalComponent = true,
-                    HasSomaticComponent = true,
-                    HasDivineFocus = true,
-                    IsPlaceholder = false
-                });
+        // [CONSOLIDATED] domain_barkskin merged into barkskin — alias registered below
 
         // ── Barkskin — Druid/Ranger version (PHB p.202) ──────────────────
         Register(new SpellData
@@ -295,61 +264,28 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("break_enchantment_brd", SpellNames.BREAK_ENCHANTMENT, "Bard", 4);
         RegisterClassSpellAlias("break_enchantment_pal", SpellNames.BREAK_ENCHANTMENT, "Paladin", 4);
 
+        // Backward-compatibility aliases for consolidated blindness/deafness
+        RegisterAlias("blindness_deafness_wiz", SpellNames.BLINDNESS_DEAFNESS);
+        RegisterAlias("blindness_deafness_brd", SpellNames.BLINDNESS_DEAFNESS);
+        RegisterAlias("blindness_deafness_clr", SpellNames.BLINDNESS_DEAFNESS);
+
         // ── Blindness/Deafness (PHB p.206) ──
         // Necromancy. V only. Medium range. Fortitude negates. SR: Yes.
         // Permanent (D). Caster chooses blindness or deafness at cast time.
-        // Wizard/Sorcerer 2
+        // Level: Brd 2, Clr 3, Sor/Wiz 2
         Register(new SpellData
                 {
-                    SpellId = SpellNames.BLINDNESS_DEAFNESS_WIZ,
+                    SpellId = SpellNames.BLINDNESS_DEAFNESS,
                     Name = "Blindness/Deafness",
                     Description = "Makes subject blind or deaf. Fortitude negates. Permanent (D). Components: V. PHB p.206",
                     SpellLevel = 2, School = "Necromancy",
-                    ClassList = new[] { "Wizard", "Sorcerer" },
-                    TargetType = SpellTargetType.SingleEnemy,
-                    RangeCategory = SpellRangeCategory.Medium,
-                    EffectType = SpellEffectType.Debuff,
-                    AllowsSavingThrow = true,
-                    SavingThrowType = "Fortitude",
-                    SpellResistanceApplies = true,
-                    HasVerbalComponent = true,
-                    HasSomaticComponent = false,
-                    BuffDurationRounds = -1, // Permanent
-                    IsDismissible = true,
-                    ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
-                });
-
-        // Bard 2
-        Register(new SpellData
-                {
-                    SpellId = SpellNames.BLINDNESS_DEAFNESS_BRD,
-                    Name = "Blindness/Deafness",
-                    Description = "Makes subject blind or deaf. Fortitude negates. Permanent (D). Components: V. PHB p.206",
-                    SpellLevel = 2, School = "Necromancy",
-                    ClassList = new[] { "Bard" },
-                    TargetType = SpellTargetType.SingleEnemy,
-                    RangeCategory = SpellRangeCategory.Medium,
-                    EffectType = SpellEffectType.Debuff,
-                    AllowsSavingThrow = true,
-                    SavingThrowType = "Fortitude",
-                    SpellResistanceApplies = true,
-                    HasVerbalComponent = true,
-                    HasSomaticComponent = false,
-                    BuffDurationRounds = -1, // Permanent
-                    IsDismissible = true,
-                    ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
-                });
-
-        // Cleric 3
-        Register(new SpellData
-                {
-                    SpellId = SpellNames.BLINDNESS_DEAFNESS_CLR,
-                    Name = "Blindness/Deafness",
-                    Description = "Makes subject blind or deaf. Fortitude negates. Permanent (D). Components: V. PHB p.206",
-                    SpellLevel = 3, School = "Necromancy",
-                    ClassList = new[] { "Cleric" },
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Wizard", 2),
+                        new SpellAvailability("Sorcerer", 2),
+                        new SpellAvailability("Bard", 2),
+                        new SpellAvailability("Cleric", 3)
+                    },
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Debuff,
@@ -493,6 +429,7 @@ public static partial class SpellDatabase
 
         // Barkskin: Druid 2 (already Ranger 2 via domain)
         RegisterClassSpellAlias("barkskin_drd", SpellNames.BARKSKIN, "Druid", 2);
+        RegisterAlias("domain_barkskin", SpellNames.BARKSKIN);
 
         // Bless: Paladin 1
         RegisterClassSpellAlias("bless_pal", SpellNames.BLESS, "Paladin", 1);

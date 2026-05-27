@@ -537,7 +537,7 @@ public static class StaffDatabase
             {
                 StubSpell("charm_animal", "Charm Animal", 1, 1, "Charms one animal, Will negates"),
                 StubSpell("speak_with_animals", "Speak with Animals", 1, 1, "Communicate with animals"),
-                Spell(SpellNames.DOMAIN_BARKSKIN, "Barkskin", 2, 2),
+                Spell(SpellNames.BARKSKIN, "Barkskin", 2, 2),
                 Spell(SpellNames.WALL_OF_THORNS, "Wall of Thorns", 5, 3),
                 StubSpell("summon_natures_ally_vi", "Summon Nature's Ally VI", 6, 3, "Summons nature creature"),
                 StubSpell("animate_plants", "Animate Plants", 7, 4, "Animates trees to fight for caster")

@@ -167,7 +167,7 @@ public static partial class SpellDatabase
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_LONGSTRIDER,
+                    SpellId = SpellNames.LONGSTRIDER,
                     Name = "Longstrider",
                     Description = "Your base land speed increases by 10 feet (+2 squares movement). Enhancement bonus, 1 hour/level. PHB p.249",
                     SpellLevel = 1,
@@ -310,6 +310,10 @@ public static partial class SpellDatabase
         // Light: Bard 0, Druid 0
         RegisterClassSpellAlias("light_brd", SpellNames.LIGHT, "Bard", 0);
         RegisterClassSpellAlias("light_drd", SpellNames.LIGHT, "Druid", 0);
+
+
+        // Backward-compatibility aliases for consolidated domain spell IDs
+        RegisterAlias("domain_longstrider", SpellNames.LONGSTRIDER);
 
     }
 }

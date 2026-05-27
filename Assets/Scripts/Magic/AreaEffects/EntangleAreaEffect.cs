@@ -20,7 +20,7 @@ public class EntangleAreaEffect : PersistentAreaEffect
         base.Awake();
 
         EffectName = "Entangle";
-        SpellId = SpellNames.DOMAIN_ENTANGLE;
+        SpellId = SpellNames.ENTANGLE;
         Shape = AreaShape.Circle;
         Radius = 8f; // 40-ft radius = 8 squares
         ShowVisual = false;

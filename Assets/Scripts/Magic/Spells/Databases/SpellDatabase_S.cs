@@ -557,7 +557,7 @@ public static partial class SpellDatabase
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_SOFTEN_EARTH,
+                    SpellId = SpellNames.SOFTEN_EARTH,
                     Name = "Soften Earth and Stone",
                     Description = "Turns earth/stone into mud/sand creating difficult terrain. 10-ft square/level. Instantaneous. PHB p.280",
                     SpellLevel = 2,
@@ -1316,6 +1316,10 @@ public static partial class SpellDatabase
                     HasMaterialComponent = true,
                     IsPlaceholder = false
                 });
+
+
+        // Backward-compatibility aliases for consolidated domain spell IDs
+        RegisterAlias("domain_soften_earth", SpellNames.SOFTEN_EARTH);
 
     }
 }

@@ -151,7 +151,7 @@ public partial class GameManager
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            SpellNames.DETECT_MAGIC_WIZ, SpellNames.READ_MAGIC, SpellNames.GREASE, SpellNames.MAGE_ARMOR
+            SpellNames.DETECT_MAGIC, SpellNames.READ_MAGIC, SpellNames.GREASE, SpellNames.MAGE_ARMOR
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
@@ -927,12 +927,12 @@ public partial class GameManager
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            SpellNames.DETECT_MAGIC_WIZ, SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.READ_MAGIC,
+            SpellNames.DETECT_MAGIC, SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.READ_MAGIC,
             SpellNames.SHIELD, SpellNames.MAGIC_MISSILE, SpellNames.MAGE_ARMOR, SpellNames.MIRROR_IMAGE
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            SpellNames.DETECT_MAGIC_WIZ, SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.READ_MAGIC,
+            SpellNames.DETECT_MAGIC, SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.READ_MAGIC,
             SpellNames.SHIELD, SpellNames.MAGIC_MISSILE, SpellNames.MAGE_ARMOR,
             SpellNames.MIRROR_IMAGE, SpellNames.INVISIBILITY
         };
@@ -995,7 +995,7 @@ public partial class GameManager
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            SpellNames.DETECT_MAGIC_WIZ, SpellNames.READ_MAGIC, SpellNames.PROTECTION_FROM_EVIL, SpellNames.SHIELD, SpellNames.MAGIC_MISSILE
+            SpellNames.DETECT_MAGIC, SpellNames.READ_MAGIC, SpellNames.PROTECTION_FROM_EVIL, SpellNames.SHIELD, SpellNames.MAGIC_MISSILE
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
@@ -1346,7 +1346,7 @@ public partial class GameManager
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            SpellNames.DETECT_MAGIC_WIZ, SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.DISRUPT_UNDEAD, SpellNames.READ_MAGIC
+            SpellNames.DETECT_MAGIC, SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.DISRUPT_UNDEAD, SpellNames.READ_MAGIC
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
@@ -1534,7 +1534,7 @@ public partial class GameManager
         enchanterSpellComp.KnownSpells.Clear();
         enchanterSpellComp.SelectedSpellIds = new List<string>
         {
-            SpellNames.DETECT_MAGIC_WIZ, SpellNames.READ_MAGIC, SpellNames.CHARM_PERSON, SpellNames.MAGIC_MISSILE
+            SpellNames.DETECT_MAGIC, SpellNames.READ_MAGIC, SpellNames.CHARM_PERSON, SpellNames.MAGIC_MISSILE
         };
         enchanterSpellComp.PreparedSpellSlotIds = new List<string>
         {
@@ -1598,7 +1598,7 @@ public partial class GameManager
             spellComp.KnownSpells.Clear();
             spellComp.SelectedSpellIds = new List<string>
             {
-                SpellNames.DETECT_MAGIC_WIZ,
+                SpellNames.DETECT_MAGIC,
                 SpellNames.READ_MAGIC,
                 SpellNames.SLEEP,
                 SpellNames.MAGIC_MISSILE
@@ -1662,7 +1662,7 @@ public partial class GameManager
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            SpellNames.DETECT_MAGIC_WIZ,
+            SpellNames.DETECT_MAGIC,
             SpellNames.READ_MAGIC,
             SpellNames.MAGIC_MISSILE,
             SpellNames.MIRROR_IMAGE,

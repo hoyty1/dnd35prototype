@@ -36,7 +36,7 @@ public partial class GameManager
         out string log)
     {
         log = string.Empty;
-        if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMAIN_ENTANGLE, StringComparison.Ordinal))
+        if (spell == null || !string.Equals(spell.SpellId, SpellNames.ENTANGLE, StringComparison.Ordinal))
             return false;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
@@ -90,7 +90,7 @@ public partial class GameManager
         out string log)
     {
         log = string.Empty;
-        if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMAIN_SOFTEN_EARTH, StringComparison.Ordinal))
+        if (spell == null || !string.Equals(spell.SpellId, SpellNames.SOFTEN_EARTH, StringComparison.Ordinal))
             return false;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;

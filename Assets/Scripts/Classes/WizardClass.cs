@@ -136,7 +136,7 @@ public class WizardClass : ICharacterClass
         data.PreparedSpellSlotIds = new List<string>
         {
             // 4 cantrip slots (unlimited use)
-            SpellNames.RAY_OF_FROST, SpellNames.DETECT_MAGIC_WIZ, SpellNames.ACID_SPLASH, SpellNames.PRESTIDIGITATION,
+            SpellNames.RAY_OF_FROST, SpellNames.DETECT_MAGIC, SpellNames.ACID_SPLASH, SpellNames.PRESTIDIGITATION,
             // 3 1st-level slots (2 base + 1 INT bonus)
             SpellNames.MAGIC_MISSILE, SpellNames.ENLARGE_PERSON, SpellNames.REDUCE_PERSON,
             // 2 2nd-level slots (1 base + 1 INT bonus)

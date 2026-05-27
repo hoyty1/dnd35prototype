@@ -185,7 +185,7 @@ public static partial class SpellDatabase
         // If area contains altar/shrine of caster's deity, bonuses double.
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_DESECRATE,
+                    SpellId = SpellNames.DESECRATE,
                     Name = "Desecrate",
                     Description = "Fills area with negative energy. Undead gain +1 on attacks, damage, and saves. -3 profane penalty to turning checks. 20-ft radius. 2 hr/level. PHB p.218",
                     SpellLevel = 2,
@@ -313,7 +313,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DETECT_MAGIC_WIZ,
+                    SpellId = SpellNames.DETECT_MAGIC,
                     Name = "Detect Magic",
                     Description = "Detects spells and magic items within 60 ft cone. Concentration, up to 1 min/level.",
                     SpellLevel = 0, School = "Divination",
@@ -332,7 +332,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DETECT_POISON_WIZ,
+                    SpellId = SpellNames.DETECT_POISON,
                     Name = "Detect Poison",
                     Description = "Detects poison in one creature or small object.",
                     SpellLevel = 0, School = "Divination",
@@ -348,7 +348,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_DETECT_SECRET_DOORS,
+                    SpellId = SpellNames.DETECT_SECRET_DOORS,
                     Name = "Detect Secret Doors",
                     Description = "Reveals secret doors within 60 ft cone.",
                     SpellLevel = 1,
@@ -1015,6 +1015,15 @@ public static partial class SpellDatabase
                     HasMaterialComponent = true,
                     IsPlaceholder = false
                 });
+
+
+        // Backward-compatibility aliases for consolidated domain spell IDs
+        RegisterAlias("domain_desecrate", SpellNames.DESECRATE);
+        RegisterAlias("domain_detect_secret_doors", SpellNames.DETECT_SECRET_DOORS);
+
+        // Backward-compatibility aliases for consolidated _wiz spell IDs
+        RegisterAlias("detect_magic_wiz", SpellNames.DETECT_MAGIC);
+        RegisterAlias("detect_poison_wiz", SpellNames.DETECT_POISON);
 
     }
 }

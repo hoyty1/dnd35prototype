@@ -38,7 +38,7 @@ public partial class GameManager
         SpellData spell,
         SpellResult result)
     {
-        if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMAIN_HOLD_ANIMAL, StringComparison.Ordinal))
+        if (spell == null || !string.Equals(spell.SpellId, SpellNames.HOLD_ANIMAL, StringComparison.Ordinal))
             return false;
 
         if (target == null || target.Stats == null)
@@ -107,7 +107,7 @@ public partial class GameManager
         out string log)
     {
         log = string.Empty;
-        if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMAIN_CALM_ANIMALS, StringComparison.Ordinal))
+        if (spell == null || !string.Equals(spell.SpellId, SpellNames.CALM_ANIMALS, StringComparison.Ordinal))
             return false;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
@@ -304,7 +304,7 @@ public partial class GameManager
         SpellData spell,
         SpellResult result)
     {
-        if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMAIN_PRODUCE_FLAME, StringComparison.Ordinal))
+        if (spell == null || !string.Equals(spell.SpellId, SpellNames.PRODUCE_FLAME, StringComparison.Ordinal))
             return false;
 
         if (target == null || target.Stats == null || caster == null || caster.Stats == null)
@@ -369,7 +369,7 @@ public partial class GameManager
         SpellData spell,
         SpellResult result)
     {
-        if (spell == null || !string.Equals(spell.SpellId, SpellNames.DOMAIN_HEAT_METAL, StringComparison.Ordinal))
+        if (spell == null || !string.Equals(spell.SpellId, SpellNames.HEAT_METAL, StringComparison.Ordinal))
             return false;
 
         if (target == null || target.Stats == null)

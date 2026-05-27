@@ -106,7 +106,7 @@ public class BlindnessDeafnessEffectData
     public BlindDeafSourceType SourceType = BlindDeafSourceType.Spell;
 
     /// <summary>
-    /// The spell ID that created this effect (e.g., "blindness_deafness_wiz").
+    /// The spell ID that created this effect (e.g., "blindness_deafness").
     /// Empty/null for non-spell sources.
     /// </summary>
     public string SourceSpellId;

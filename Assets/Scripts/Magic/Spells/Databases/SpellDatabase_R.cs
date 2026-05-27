@@ -279,7 +279,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = SpellNames.RESISTANCE_WIZ,
+                    SpellId = SpellNames.RESISTANCE,
                     Name = "Resistance",
                     Description = "Subject gains +1 on saving throws for 1 minute.",
                     SpellLevel = 0, School = "Abjuration",
@@ -533,6 +533,9 @@ public static partial class SpellDatabase
                     HasMaterialComponent = true, // M: 10,000 gp diamond
                     IsPlaceholder = false
                 });
+
+        // Backward-compatibility alias for consolidated _wiz spell ID
+        RegisterAlias("resistance_wiz", SpellNames.RESISTANCE);
 
     }
 }

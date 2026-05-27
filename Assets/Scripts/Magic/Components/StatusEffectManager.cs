@@ -208,9 +208,7 @@ public class StatusEffectManager : MonoBehaviour
         // Blindness/Deafness spell: permanent condition effect.
         // The actual condition (Blinded/Deafened) is applied via CharacterController.ApplyBlindnessEffect/ApplyDeafnessEffect.
         // StatusEffectManager tracks the spell effect for dispel/duration management.
-        if (spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_WIZ
-            || spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_CLR
-            || spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_BRD)
+        if (spell.SpellId == SpellNames.BLINDNESS_DEAFNESS)
         {
             effect.RemainingRounds = -1; // Permanent until removed
         }
@@ -303,7 +301,7 @@ public class StatusEffectManager : MonoBehaviour
         }
 
         // D&D 3.5e: Clear Magic Stone when the spell effect expires or is removed.
-        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DOMAIN_MAGIC_STONE, System.StringComparison.Ordinal) && _stats != null)
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.MAGIC_STONE, System.StringComparison.Ordinal) && _stats != null)
         {
             _stats.MagicStoneActive = false;
             _stats.MagicStoneCharges = 0;

@@ -731,9 +731,9 @@ public class StatusEffectIndicator : MonoBehaviour
         }
 
         // ── Magic Stone ──
-        if (_character.Stats != null && _character.Stats.MagicStoneActive && _character.Stats.MagicStoneCharges > 0 && statusMgr != null && statusMgr.HasEffect(SpellNames.DOMAIN_MAGIC_STONE))
+        if (_character.Stats != null && _character.Stats.MagicStoneActive && _character.Stats.MagicStoneCharges > 0 && statusMgr != null && statusMgr.HasEffect(SpellNames.MAGIC_STONE))
         {
-            int msRounds = statusMgr.GetRemainingRounds(SpellNames.DOMAIN_MAGIC_STONE);
+            int msRounds = statusMgr.GetRemainingRounds(SpellNames.MAGIC_STONE);
             list.Add(new IconData
             {
                 Key = "MagicStone",

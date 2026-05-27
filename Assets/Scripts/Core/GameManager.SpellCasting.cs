@@ -6403,9 +6403,7 @@ public partial class GameManager
             return ApplyRageSpellBuff(caster, target, spell, spellComp);
         }
 
-        if (spell != null && (spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_WIZ
-            || spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_CLR
-            || spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_BRD))
+        if (spell != null && spell.SpellId == SpellNames.BLINDNESS_DEAFNESS)
         {
             int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
 
@@ -7507,7 +7505,7 @@ public partial class GameManager
         // ===== MAGIC STONE — D&D 3.5e PHB p.251 =====
         // Self buff: enchants up to 3 pebbles. +1 enhancement to attack, 1d6+1 damage, counts as magic.
         // Duration 30 minutes or until discharged.
-        if (spell != null && spell.SpellId == SpellNames.DOMAIN_MAGIC_STONE)
+        if (spell != null && spell.SpellId == SpellNames.MAGIC_STONE)
         {
             CharacterController recipient = caster ?? target;
             if (recipient == null || recipient.Stats == null)
@@ -7681,7 +7679,7 @@ public partial class GameManager
         }
 
         // Barkskin (Druid/Ranger) — natural armor enhancement
-        if (spell != null && (spell.SpellId == SpellNames.BARKSKIN || spell.SpellId == SpellNames.DOMAIN_BARKSKIN))
+        if (spell != null && (spell.SpellId == SpellNames.BARKSKIN))
         {
             return ApplyBarkskinEffect(caster, target, spell, spellComp);
         }

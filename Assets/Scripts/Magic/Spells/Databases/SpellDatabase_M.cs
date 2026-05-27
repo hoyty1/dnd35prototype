@@ -96,7 +96,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_MAGIC_STONE,
+                    SpellId = SpellNames.MAGIC_STONE,
                     Name = "Magic Stone",
                     Description = "Up to 3 pebbles gain +1 enhancement bonus to attack rolls and deal 1d6+1 damage. Used as sling ammunition. Counts as magic weapon. Duration 30 minutes or until discharged. PHB p.251",
                     SpellLevel = 1,
@@ -668,6 +668,10 @@ public static partial class SpellDatabase
                     HasSomaticComponent = true,
                     IsPlaceholder = false
                 });
+
+
+        // Backward-compatibility aliases for consolidated domain spell IDs
+        RegisterAlias("domain_magic_stone", SpellNames.MAGIC_STONE);
 
     }
 }

@@ -136,7 +136,7 @@ public static class SpellCategoryClassifier
         SpellNames.BESTOW_CURSE,
         SpellNames.COMMAND_UNDEAD,
         SpellNames.COMMAND_PLANTS,
-        SpellNames.DOMAIN_ENTANGLE,
+        SpellNames.ENTANGLE,
     };
 
     private static readonly HashSet<string> SummonSpells = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -182,7 +182,7 @@ public static class SpellCategoryClassifier
     private static readonly HashSet<string> DivinationSpells = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         SpellNames.DETECT_EVIL,
-        SpellNames.DETECT_MAGIC_WIZ,
+        SpellNames.DETECT_MAGIC,
         SpellNames.SEE_INVISIBILITY,
     };
 

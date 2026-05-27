@@ -26,7 +26,7 @@ public static partial class SpellDatabase
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_HEAT_METAL,
+                    SpellId = SpellNames.HEAT_METAL,
                     Name = "Heat Metal",
                     Description = "Heats metal equipment: escalating fire damage over 7 rounds (0/1d4/2d4/2d4/2d4/1d4/0). Will negates (object). PHB p.236",
                     SpellLevel = 2,
@@ -160,7 +160,7 @@ public static partial class SpellDatabase
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_HOLD_ANIMAL,
+                    SpellId = SpellNames.HOLD_ANIMAL,
                     Name = "Hold Animal",
                     Description = "Paralyzes one animal for 1 round/level. Will negates; new save each round with cumulative +2 bonus. PHB p.241",
                     SpellLevel = 2,
@@ -559,6 +559,11 @@ public static partial class SpellDatabase
 
         // Hold Person: Bard 2
         RegisterClassSpellAlias("hold_person_brd", SpellNames.HOLD_PERSON, "Bard", 2);
+
+
+        // Backward-compatibility aliases for consolidated domain spell IDs
+        RegisterAlias("domain_heat_metal", SpellNames.HEAT_METAL);
+        RegisterAlias("domain_hold_animal", SpellNames.HOLD_ANIMAL);
 
     }
 }

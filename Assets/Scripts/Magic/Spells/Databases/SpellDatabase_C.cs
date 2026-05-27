@@ -25,7 +25,7 @@ public static partial class SpellDatabase
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_CALM_ANIMALS,
+                    SpellId = SpellNames.CALM_ANIMALS,
                     Name = "Calm Animals",
                     Description = "Calms 2d4+CL HD of animals, rendering them docile and harmless. Will negates. Breaks if threatened. PHB p.207",
                     SpellLevel = 1,
@@ -835,6 +835,10 @@ public static partial class SpellDatabase
 
         // Create Water: Druid 0
         RegisterClassSpellAlias("create_water_drd", SpellNames.CREATE_WATER, "Druid", 0);
+
+
+        // Backward-compatibility aliases for consolidated domain spell IDs
+        RegisterAlias("domain_calm_animals", SpellNames.CALM_ANIMALS);
 
     }
 }

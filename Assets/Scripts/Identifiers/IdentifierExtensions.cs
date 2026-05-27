@@ -99,12 +99,12 @@ namespace DND35e.Identifiers
         private static readonly Dictionary<SpellID, string> SpellIdToString = new Dictionary<SpellID, string>
         {
             { SpellID.AcidSplash, SpellNames.ACID_SPLASH },
-            { SpellID.DetectMagic, SpellNames.DETECT_MAGIC_WIZ },
+            { SpellID.DetectMagic, SpellNames.DETECT_MAGIC },
             { SpellID.Light, SpellNames.LIGHT },
             { SpellID.MageHand, SpellNames.MAGE_HAND },
             { SpellID.RayOfFrost, SpellNames.RAY_OF_FROST },
             { SpellID.ReadMagic, SpellNames.READ_MAGIC },
-            { SpellID.Resistance, SpellNames.RESISTANCE_WIZ },
+            { SpellID.Resistance, SpellNames.RESISTANCE },
 
             { SpellID.BurningHands, SpellNames.BURNING_HANDS },
             { SpellID.CureLightWounds, SpellNames.CURE_LIGHT_WOUNDS },

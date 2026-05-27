@@ -20,7 +20,7 @@ public partial class GameManager
     /// <summary>Tracks a Consecrate or Desecrate area effect on the grid.</summary>
     private class HolyAreaEffect
     {
-        public string SpellId;           // SpellNames.CONSECRATE or DOMAIN_DESECRATE
+        public string SpellId;           // SpellNames.CONSECRATE or DESECRATE
         public CharacterController Caster;
         public int CasterLevel;
         public HashSet<Vector2Int> AffectedCells;
@@ -53,7 +53,7 @@ public partial class GameManager
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
         // Remove any existing Desecrate areas that overlap
-        RemoveOverlappingHolyAreas(aoeCells, SpellNames.DOMAIN_DESECRATE);
+        RemoveOverlappingHolyAreas(aoeCells, SpellNames.DESECRATE);
 
         // Create the area effect
         var area = new HolyAreaEffect
@@ -107,7 +107,7 @@ public partial class GameManager
         HashSet<Vector2Int> aoeCells, List<CharacterController> targets, out string log)
     {
         log = string.Empty;
-        if (spell == null || spell.SpellId != SpellNames.DOMAIN_DESECRATE)
+        if (spell == null || spell.SpellId != SpellNames.DESECRATE)
             return false;
 
         if (caster == null || caster.Stats == null || aoeCells == null)
@@ -121,7 +121,7 @@ public partial class GameManager
         // Create the area effect
         var area = new HolyAreaEffect
         {
-            SpellId = SpellNames.DOMAIN_DESECRATE,
+            SpellId = SpellNames.DESECRATE,
             Caster = caster,
             CasterLevel = casterLevel,
             AffectedCells = new HashSet<Vector2Int>(aoeCells),

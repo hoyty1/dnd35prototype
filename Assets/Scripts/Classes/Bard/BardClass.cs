@@ -114,7 +114,7 @@ public class BardClass : ICharacterClass
         // 6 cantrips + 3 first-level spells known
         // Use spells that exist in the database
         // Cantrips — pick from what's available
-        var cantrips = new List<string> { "detect_magic_wiz", "daze", "ghost_sound", "mage_hand", "prestidigitation", "read_magic_wiz" };
+        var cantrips = new List<string> { SpellNames.DETECT_MAGIC, "daze", "ghost_sound", "mage_hand", "prestidigitation", "read_magic_wiz" };
         var level1Spells = new List<string> { "charm_person", "cure_light_wounds", "sleep" };
 
         foreach (var id in cantrips)

@@ -41,7 +41,7 @@ public static partial class SpellDatabase
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_PRODUCE_FLAME,
+                    SpellId = SpellNames.PRODUCE_FLAME,
                     Name = "Produce Flame",
                     Description = "Conjures flame: 1d6 + min(CL,5) fire damage as melee touch or ranged touch (120 ft). Duration 1 min/level. PHB p.265",
                     SpellLevel = 2,
@@ -491,6 +491,10 @@ public static partial class SpellDatabase
                     HasMaterialComponent = true, // M: diamond worth 500 gp that is consumed
                     IsPlaceholder = false
                 });
+
+
+        // Backward-compatibility aliases for consolidated domain spell IDs
+        RegisterAlias("domain_produce_flame", SpellNames.PRODUCE_FLAME);
 
     }
 }

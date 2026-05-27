@@ -365,9 +365,7 @@ public partial class GameManager
         // No dedicated cleanup method needed.
 
         // --- Blindness/Deafness ---
-        if (spellId == SpellNames.BLINDNESS_DEAFNESS_WIZ ||
-            spellId == SpellNames.BLINDNESS_DEAFNESS_CLR ||
-            spellId == SpellNames.BLINDNESS_DEAFNESS_BRD)
+        if (spellId == SpellNames.BLINDNESS_DEAFNESS)
         {
             target.RemoveBlindnessDeafnessEffect();
             return;

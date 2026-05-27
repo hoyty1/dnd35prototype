@@ -188,7 +188,7 @@ public static partial class SpellDatabase
 
         // === [Evil] descriptor spells ===
         SetDescriptor(SpellNames.BANE, SpellDescriptor.Evil);
-        SetDescriptor(SpellNames.DOMAIN_DESECRATE, SpellDescriptor.Evil);
+        SetDescriptor(SpellNames.DESECRATE, SpellDescriptor.Evil);
         SetDescriptor("desecrate", SpellDescriptor.Evil);
         SetDescriptor("unholy_blight", SpellDescriptor.Evil);
         SetDescriptor(SpellNames.DEATH_KNELL, SpellDescriptor.Evil | SpellDescriptor.Death);

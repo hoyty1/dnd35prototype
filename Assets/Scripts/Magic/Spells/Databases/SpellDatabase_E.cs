@@ -98,7 +98,7 @@ public static partial class SpellDatabase
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
-                    SpellId = SpellNames.DOMAIN_ENTANGLE,
+                    SpellId = SpellNames.ENTANGLE,
                     Name = "Entangle",
                     Description = "Plants entangle creatures in 40-ft radius. Reflex partial. Entangled: -2 attack, -4 Dex, can't move. Break free: DC 20 Str/Escape Artist. PHB p.227",
                     SpellLevel = 1,
@@ -301,8 +301,8 @@ public static partial class SpellDatabase
         RegisterClassSpellAlias("endure_elements_drd", SpellNames.ENDURE_ELEMENTS, "Druid", 1);
 
         // Entangle: Druid 1, Ranger 1
-        RegisterClassSpellAlias("entangle_drd", SpellNames.DOMAIN_ENTANGLE, "Druid", 1);
-        RegisterClassSpellAlias("entangle_rgr", SpellNames.DOMAIN_ENTANGLE, "Ranger", 1);
+        RegisterClassSpellAlias("entangle_drd", SpellNames.ENTANGLE, "Druid", 1);
+        RegisterClassSpellAlias("entangle_rgr", SpellNames.ENTANGLE, "Ranger", 1);
 
         // ── EARTHQUAKE — PHB p.225 ──
         Register(new SpellData
@@ -333,6 +333,10 @@ public static partial class SpellDatabase
                     HasMaterialComponent = true,
                     IsPlaceholder = false
                 });
+
+
+        // Backward-compatibility aliases for consolidated domain spell IDs
+        RegisterAlias("domain_entangle", SpellNames.ENTANGLE);
 
     }
 }
