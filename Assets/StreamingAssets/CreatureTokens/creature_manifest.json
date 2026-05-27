@@ -1,0 +1,1342 @@
+{
+  "version": "1.0",
+  "description": "D&D 3.5e Monster Manual creature tokens",
+  "token_size": 256,
+  "total_tokens": 278,
+  "unique_creatures": 199,
+  "creatures": {
+    "Aasimar (planetouched)": {
+      "file": "aasimar.png",
+      "page": 209,
+      "source_size": "942x433",
+      "alternatives": [
+        "aasimar_2.png"
+      ]
+    },
+    "Aboleth": {
+      "file": "aboleth.png",
+      "page": 8,
+      "source_size": "1777x2359",
+      "alternatives": [
+        "aboleth_2.png"
+      ]
+    },
+    "Abomination (yuan-ti)": {
+      "file": "abomination.png",
+      "page": 264,
+      "source_size": "580x873",
+      "alternatives": []
+    },
+    "Abyssal greater basilisk": {
+      "file": "abyssal_greater_basilisk.png",
+      "page": 24,
+      "source_size": "1477x1044",
+      "alternatives": [
+        "abyssal_greater_basilisk_2.png"
+      ]
+    },
+    "Achaierai": {
+      "file": "achaierai.png",
+      "page": 9,
+      "source_size": "1777x2359",
+      "alternatives": [
+        "achaierai_2.png",
+        "achaierai_3.png"
+      ]
+    },
+    "Air elemental": {
+      "file": "air_elemental.png",
+      "page": 95,
+      "source_size": "912x849",
+      "alternatives": [
+        "air_elemental_2.png"
+      ]
+    },
+    "Air mephit": {
+      "file": "air_mephit.png",
+      "page": 181,
+      "source_size": "909x639",
+      "alternatives": []
+    },
+    "Allip": {
+      "file": "allip.png",
+      "page": 10,
+      "source_size": "1477x1103",
+      "alternatives": [
+        "allip_2.png"
+      ]
+    },
+    "Animated object": {
+      "file": "animated_object.png",
+      "page": 13,
+      "source_size": "746x831",
+      "alternatives": []
+    },
+    "Ankheg": {
+      "file": "ankheg.png",
+      "page": 14,
+      "source_size": "1477x853",
+      "alternatives": [
+        "ankheg_2.png"
+      ]
+    },
+    "Annis (hag)": {
+      "file": "annis.png",
+      "page": 143,
+      "source_size": "820x838",
+      "alternatives": []
+    },
+    "Ape, dire": {
+      "file": "ape_dire.png",
+      "page": 62,
+      "source_size": "648x488",
+      "alternatives": []
+    },
+    "Aquatic elf": {
+      "file": "aquatic_elf.png",
+      "page": 103,
+      "source_size": "1476x1101",
+      "alternatives": []
+    },
+    "Aranea": {
+      "file": "aranea.png",
+      "page": 15,
+      "source_size": "1476x887",
+      "alternatives": []
+    },
+    "Archon": {
+      "file": "archon.png",
+      "page": 16,
+      "source_size": "789x473",
+      "alternatives": []
+    },
+    "Arrowhawk": {
+      "file": "arrowhawk.png",
+      "page": 19,
+      "source_size": "879x754",
+      "alternatives": []
+    },
+    "Assassin vine": {
+      "file": "assassin_vine.png",
+      "page": 20,
+      "source_size": "1477x1237",
+      "alternatives": []
+    },
+    "Astral deva (angel)": {
+      "file": "astral_deva.png",
+      "page": 11,
+      "source_size": "480x728",
+      "alternatives": []
+    },
+    "Athach": {
+      "file": "athach.png",
+      "page": 21,
+      "source_size": "819x651",
+      "alternatives": [
+        "athach_2.png"
+      ]
+    },
+    "Avoral (guardinal)": {
+      "file": "avoral.png",
+      "page": 141,
+      "source_size": "790x568",
+      "alternatives": []
+    },
+    "Babau (demon)": {
+      "file": "babau.png",
+      "page": 40,
+      "source_size": "774x592",
+      "alternatives": []
+    },
+    "Barbed devil (hamatula)": {
+      "file": "barbed_devil.png",
+      "page": 51,
+      "source_size": "1509x1634",
+      "alternatives": [
+        "barbed_devil_2.png"
+      ]
+    },
+    "Barghest": {
+      "file": "barghest.png",
+      "page": 22,
+      "source_size": "675x618",
+      "alternatives": []
+    },
+    "Barghest, greater": {
+      "file": "barghest_greater.png",
+      "page": 23,
+      "source_size": "485x772",
+      "alternatives": [
+        "barghest_greater_2.png"
+      ]
+    },
+    "Bearded devil (barbazu)": {
+      "file": "bearded_devil.png",
+      "page": 52,
+      "source_size": "922x759",
+      "alternatives": []
+    },
+    "Bebilith (demon)": {
+      "file": "bebilith.png",
+      "page": 42,
+      "source_size": "1510x1631",
+      "alternatives": [
+        "bebilith_2.png"
+      ]
+    },
+    "Behir": {
+      "file": "behir.png",
+      "page": 25,
+      "source_size": "645x657",
+      "alternatives": []
+    },
+    "Belker": {
+      "file": "belker.png",
+      "page": 27,
+      "source_size": "791x842",
+      "alternatives": []
+    },
+    "Black dragon": {
+      "file": "black_dragon.png",
+      "page": 70,
+      "source_size": "1477x399",
+      "alternatives": [
+        "black_dragon_2.png",
+        "black_dragon_3.png"
+      ]
+    },
+    "Black pudding": {
+      "file": "black_pudding.png",
+      "page": 201,
+      "source_size": "575x811",
+      "alternatives": []
+    },
+    "Blink dog": {
+      "file": "blink_dog.png",
+      "page": 28,
+      "source_size": "369x513",
+      "alternatives": []
+    },
+    "Blue dragon": {
+      "file": "blue_dragon.png",
+      "page": 72,
+      "source_size": "1477x811",
+      "alternatives": [
+        "blue_dragon_2.png",
+        "blue_dragon_3.png"
+      ]
+    },
+    "Blue slaad": {
+      "file": "blue_slaad.png",
+      "page": 229,
+      "source_size": "585x738",
+      "alternatives": []
+    },
+    "Bralani (eladrin)": {
+      "file": "bralani.png",
+      "page": 93,
+      "source_size": "578x680",
+      "alternatives": []
+    },
+    "Brass dragon": {
+      "file": "brass_dragon.png",
+      "page": 79,
+      "source_size": "1476x816",
+      "alternatives": [
+        "brass_dragon_2.png"
+      ]
+    },
+    "Bronze dragon": {
+      "file": "bronze_dragon.png",
+      "page": 80,
+      "source_size": "1477x516",
+      "alternatives": [
+        "bronze_dragon_2.png",
+        "bronze_dragon_3.png"
+      ]
+    },
+    "Bugbear": {
+      "file": "bugbear.png",
+      "page": 29,
+      "source_size": "578x693",
+      "alternatives": [
+        "bugbear_2.png"
+      ]
+    },
+    "Bulette": {
+      "file": "bulette.png",
+      "page": 30,
+      "source_size": "557x776",
+      "alternatives": []
+    },
+    "Cauchemar (nightmare)": {
+      "file": "cauchemar.png",
+      "page": 195,
+      "source_size": "1476x998",
+      "alternatives": []
+    },
+    "Celestial creature": {
+      "file": "celestial_creature.png",
+      "page": 31,
+      "source_size": "887x507",
+      "alternatives": []
+    },
+    "Centaur": {
+      "file": "centaur.png",
+      "page": 32,
+      "source_size": "493x696",
+      "alternatives": []
+    },
+    "Chain devil (kyton)": {
+      "file": "chain_devil.png",
+      "page": 53,
+      "source_size": "899x673",
+      "alternatives": []
+    },
+    "Chaos beast": {
+      "file": "chaos_beast.png",
+      "page": 33,
+      "source_size": "532x705",
+      "alternatives": []
+    },
+    "Chimera": {
+      "file": "chimera.png",
+      "page": 34,
+      "source_size": "664x642",
+      "alternatives": []
+    },
+    "Chuul": {
+      "file": "chuul.png",
+      "page": 35,
+      "source_size": "651x438",
+      "alternatives": []
+    },
+    "Clay golem": {
+      "file": "clay_golem.png",
+      "page": 134,
+      "source_size": "608x754",
+      "alternatives": []
+    },
+    "Cloaker": {
+      "file": "cloaker.png",
+      "page": 36,
+      "source_size": "561x770",
+      "alternatives": [
+        "cloaker_2.png"
+      ]
+    },
+    "Cloud giant": {
+      "file": "cloud_giant.png",
+      "page": 120,
+      "source_size": "1477x813",
+      "alternatives": [
+        "cloud_giant_2.png"
+      ]
+    },
+    "Cockatrice": {
+      "file": "cockatrice.png",
+      "page": 37,
+      "source_size": "632x631",
+      "alternatives": []
+    },
+    "Copper dragon": {
+      "file": "copper_dragon.png",
+      "page": 82,
+      "source_size": "1477x842",
+      "alternatives": [
+        "copper_dragon_2.png",
+        "copper_dragon_3.png"
+      ]
+    },
+    "Criosphinx": {
+      "file": "criosphinx.png",
+      "page": 233,
+      "source_size": "545x515",
+      "alternatives": []
+    },
+    "Cryohydra": {
+      "file": "cryohydra.png",
+      "page": 157,
+      "source_size": "1476x910",
+      "alternatives": [
+        "cryohydra_2.png"
+      ]
+    },
+    "Dark naga": {
+      "file": "dark_naga.png",
+      "page": 191,
+      "source_size": "1476x899",
+      "alternatives": [
+        "dark_naga_2.png"
+      ]
+    },
+    "Darkmantle": {
+      "file": "darkmantle.png",
+      "page": 38,
+      "source_size": "788x543",
+      "alternatives": []
+    },
+    "Death slaad": {
+      "file": "death_slaad.png",
+      "page": 231,
+      "source_size": "1059x852",
+      "alternatives": []
+    },
+    "Deep dwarf": {
+      "file": "deep_dwarf.png",
+      "page": 92,
+      "source_size": "1477x1019",
+      "alternatives": []
+    },
+    "Deep halfling": {
+      "file": "deep_halfling.png",
+      "page": 150,
+      "source_size": "554x434",
+      "alternatives": []
+    },
+    "Deinonychus (dinosaur)": {
+      "file": "deinonychus.png",
+      "page": 60,
+      "source_size": "1054x537",
+      "alternatives": []
+    },
+    "Delver": {
+      "file": "delver.png",
+      "page": 39,
+      "source_size": "678x641",
+      "alternatives": [
+        "delver_2.png"
+      ]
+    },
+    "Derro": {
+      "file": "derro.png",
+      "page": 49,
+      "source_size": "641x859",
+      "alternatives": []
+    },
+    "Devourer": {
+      "file": "devourer.png",
+      "page": 58,
+      "source_size": "672x894",
+      "alternatives": []
+    },
+    "Digester": {
+      "file": "digester.png",
+      "page": 59,
+      "source_size": "409x1107",
+      "alternatives": []
+    },
+    "Djinni": {
+      "file": "djinni.png",
+      "page": 114,
+      "source_size": "549x823",
+      "alternatives": []
+    },
+    "Doppelganger": {
+      "file": "doppelganger.png",
+      "page": 67,
+      "source_size": "1476x818",
+      "alternatives": []
+    },
+    "Dragon turtle": {
+      "file": "dragon_turtle.png",
+      "page": 88,
+      "source_size": "1477x1375",
+      "alternatives": []
+    },
+    "Dragon, true": {
+      "file": "dragon_true.png",
+      "page": 68,
+      "source_size": "741x570",
+      "alternatives": [
+        "dragon_true_2.png"
+      ]
+    },
+    "Dragonne": {
+      "file": "dragonne.png",
+      "page": 89,
+      "source_size": "584x457",
+      "alternatives": [
+        "dragonne_2.png"
+      ]
+    },
+    "Dread wraith": {
+      "file": "dread_wraith.png",
+      "page": 258,
+      "source_size": "1029x808",
+      "alternatives": []
+    },
+    "Dryad": {
+      "file": "dryad.png",
+      "page": 90,
+      "source_size": "648x876",
+      "alternatives": []
+    },
+    "Dwarf": {
+      "file": "dwarf.png",
+      "page": 91,
+      "source_size": "393x1137",
+      "alternatives": []
+    },
+    "Earth elemental": {
+      "file": "earth_elemental.png",
+      "page": 98,
+      "source_size": "1477x1763",
+      "alternatives": [
+        "earth_elemental_2.png",
+        "earth_elemental_3.png"
+      ]
+    },
+    "Earth mephit": {
+      "file": "earth_mephit.png",
+      "page": 182,
+      "source_size": "587x854",
+      "alternatives": []
+    },
+    "Elf": {
+      "file": "elf.png",
+      "page": 101,
+      "source_size": "1476x1795",
+      "alternatives": []
+    },
+    "Erinyes (devil)": {
+      "file": "erinyes.png",
+      "page": 54,
+      "source_size": "482x689",
+      "alternatives": []
+    },
+    "Ethereal filcher": {
+      "file": "ethereal_filcher.png",
+      "page": 104,
+      "source_size": "650x790",
+      "alternatives": []
+    },
+    "Ethereal marauder": {
+      "file": "ethereal_marauder.png",
+      "page": 105,
+      "source_size": "726x713",
+      "alternatives": []
+    },
+    "Ettercap": {
+      "file": "ettercap.png",
+      "page": 106,
+      "source_size": "745x681",
+      "alternatives": []
+    },
+    "Fiendish creature": {
+      "file": "fiendish_creature.png",
+      "page": 107,
+      "source_size": "587x786",
+      "alternatives": []
+    },
+    "Fire giant": {
+      "file": "fire_giant.png",
+      "page": 121,
+      "source_size": "1509x1340",
+      "alternatives": []
+    },
+    "Forest gnome": {
+      "file": "forest_gnome.png",
+      "page": 132,
+      "source_size": "519x913",
+      "alternatives": []
+    },
+    "Formian": {
+      "file": "formian.png",
+      "page": 108,
+      "source_size": "565x807",
+      "alternatives": [
+        "formian_2.png",
+        "formian_3.png"
+      ]
+    },
+    "Frost giant": {
+      "file": "frost_giant.png",
+      "page": 122,
+      "source_size": "597x832",
+      "alternatives": []
+    },
+    "Frost giant jarl": {
+      "file": "frost_giant_jarl.png",
+      "page": 123,
+      "source_size": "1476x1222",
+      "alternatives": []
+    },
+    "Frost worm": {
+      "file": "frost_worm.png",
+      "page": 111,
+      "source_size": "1476x1104",
+      "alternatives": []
+    },
+    "Fungus": {
+      "file": "fungus.png",
+      "page": 112,
+      "source_size": "634x837",
+      "alternatives": []
+    },
+    "Gargoyle": {
+      "file": "gargoyle.png",
+      "page": 113,
+      "source_size": "1476x764",
+      "alternatives": [
+        "gargoyle_2.png"
+      ]
+    },
+    "Gauth (beholder)": {
+      "file": "gauth.png",
+      "page": 26,
+      "source_size": "594x416",
+      "alternatives": []
+    },
+    "Ghaele (eladrin)": {
+      "file": "ghaele.png",
+      "page": 94,
+      "source_size": "718x592",
+      "alternatives": []
+    },
+    "Ghost": {
+      "file": "ghost.png",
+      "page": 116,
+      "source_size": "803x1000",
+      "alternatives": []
+    },
+    "Ghoul": {
+      "file": "ghoul.png",
+      "page": 118,
+      "source_size": "730x770",
+      "alternatives": []
+    },
+    "Giant constrictor snake": {
+      "file": "giant_constrictor_snake.png",
+      "page": 280,
+      "source_size": "1477x760",
+      "alternatives": []
+    },
+    "Giant fire beetle": {
+      "file": "giant_fire_beetle.png",
+      "page": 285,
+      "source_size": "1476x786",
+      "alternatives": []
+    },
+    "Giant owl": {
+      "file": "giant_owl.png",
+      "page": 205,
+      "source_size": "744x551",
+      "alternatives": []
+    },
+    "Giant squid": {
+      "file": "giant_squid.png",
+      "page": 281,
+      "source_size": "1476x1547",
+      "alternatives": []
+    },
+    "Githyanki": {
+      "file": "githyanki.png",
+      "page": 127,
+      "source_size": "744x501",
+      "alternatives": [
+        "githyanki_2.png"
+      ]
+    },
+    "Githzerai": {
+      "file": "githzerai.png",
+      "page": 129,
+      "source_size": "560x1042",
+      "alternatives": []
+    },
+    "Glabrezu (demon)": {
+      "file": "glabrezu.png",
+      "page": 43,
+      "source_size": "830x603",
+      "alternatives": []
+    },
+    "Gnoll": {
+      "file": "gnoll.png",
+      "page": 130,
+      "source_size": "722x874",
+      "alternatives": []
+    },
+    "Gnome": {
+      "file": "gnome.png",
+      "page": 131,
+      "source_size": "599x766",
+      "alternatives": []
+    },
+    "Goblin": {
+      "file": "goblin.png",
+      "page": 133,
+      "source_size": "1476x958",
+      "alternatives": []
+    },
+    "Gold dragon": {
+      "file": "gold_dragon.png",
+      "page": 84,
+      "source_size": "1477x1343",
+      "alternatives": [
+        "gold_dragon_2.png",
+        "gold_dragon_3.png"
+      ]
+    },
+    "Gray ooze": {
+      "file": "gray_ooze.png",
+      "page": 202,
+      "source_size": "1477x765",
+      "alternatives": [
+        "gray_ooze_2.png"
+      ]
+    },
+    "Gray render": {
+      "file": "gray_render.png",
+      "page": 138,
+      "source_size": "905x628",
+      "alternatives": []
+    },
+    "Green dragon": {
+      "file": "green_dragon.png",
+      "page": 74,
+      "source_size": "1477x1352",
+      "alternatives": []
+    },
+    "Green slaad": {
+      "file": "green_slaad.png",
+      "page": 230,
+      "source_size": "667x758",
+      "alternatives": []
+    },
+    "Grick": {
+      "file": "grick.png",
+      "page": 139,
+      "source_size": "640x816",
+      "alternatives": []
+    },
+    "Grig": {
+      "file": "grig.png",
+      "page": 235,
+      "source_size": "329x514",
+      "alternatives": []
+    },
+    "Grimlock": {
+      "file": "grimlock.png",
+      "page": 140,
+      "source_size": "694x629",
+      "alternatives": []
+    },
+    "Guardian naga": {
+      "file": "guardian_naga.png",
+      "page": 192,
+      "source_size": "636x822",
+      "alternatives": []
+    },
+    "Half-celestial": {
+      "file": "half-celestial.png",
+      "page": 144,
+      "source_size": "418x592",
+      "alternatives": []
+    },
+    "Half-elf": {
+      "file": "half-elf.png",
+      "page": 102,
+      "source_size": "532x729",
+      "alternatives": []
+    },
+    "Half-fiend": {
+      "file": "half-fiend.png",
+      "page": 148,
+      "source_size": "834x712",
+      "alternatives": []
+    },
+    "Half-orc": {
+      "file": "half-orc.png",
+      "page": 204,
+      "source_size": "618x842",
+      "alternatives": []
+    },
+    "Hell hound": {
+      "file": "hell_hound.png",
+      "page": 151,
+      "source_size": "600x769",
+      "alternatives": []
+    },
+    "Hezrou (demon)": {
+      "file": "hezrou.png",
+      "page": 44,
+      "source_size": "719x838",
+      "alternatives": []
+    },
+    "Hieracosphinx": {
+      "file": "hieracosphinx.png",
+      "page": 234,
+      "source_size": "762x641",
+      "alternatives": []
+    },
+    "Hippogriff": {
+      "file": "hippogriff.png",
+      "page": 152,
+      "source_size": "1477x902",
+      "alternatives": [
+        "hippogriff_2.png"
+      ]
+    },
+    "Hobgoblin": {
+      "file": "hobgoblin.png",
+      "page": 153,
+      "source_size": "1476x973",
+      "alternatives": []
+    },
+    "Homunculus": {
+      "file": "homunculus.png",
+      "page": 154,
+      "source_size": "675x752",
+      "alternatives": [
+        "homunculus_2.png"
+      ]
+    },
+    "Hound archon hero": {
+      "file": "hound_archon_hero.png",
+      "page": 17,
+      "source_size": "485x337",
+      "alternatives": []
+    },
+    "Hydra": {
+      "file": "hydra.png",
+      "page": 155,
+      "source_size": "569x523",
+      "alternatives": []
+    },
+    "Ice devil (gelugon)": {
+      "file": "ice_devil.png",
+      "page": 56,
+      "source_size": "664x463",
+      "alternatives": []
+    },
+    "Inevitable": {
+      "file": "inevitable.png",
+      "page": 158,
+      "source_size": "1477x1747",
+      "alternatives": []
+    },
+    "Iron golem": {
+      "file": "iron_golem.png",
+      "page": 136,
+      "source_size": "651x884",
+      "alternatives": []
+    },
+    "Kolyarut (inevitable)": {
+      "file": "kolyarut.png",
+      "page": 159,
+      "source_size": "809x952",
+      "alternatives": []
+    },
+    "Kraken": {
+      "file": "kraken.png",
+      "page": 162,
+      "source_size": "476x648",
+      "alternatives": [
+        "kraken_2.png"
+      ]
+    },
+    "Krenshar": {
+      "file": "krenshar.png",
+      "page": 163,
+      "source_size": "1010x665",
+      "alternatives": [
+        "krenshar_2.png"
+      ]
+    },
+    "Lamia": {
+      "file": "lamia.png",
+      "page": 165,
+      "source_size": "617x688",
+      "alternatives": [
+        "lamia_2.png"
+      ]
+    },
+    "Leonal": {
+      "file": "leonal.png",
+      "page": 142,
+      "source_size": "507x926",
+      "alternatives": []
+    },
+    "Lich": {
+      "file": "lich.png",
+      "page": 166,
+      "source_size": "904x480",
+      "alternatives": [
+        "lich_2.png"
+      ]
+    },
+    "Lillend": {
+      "file": "lillend.png",
+      "page": 168,
+      "source_size": "578x796",
+      "alternatives": []
+    },
+    "Lizardfolk": {
+      "file": "lizardfolk.png",
+      "page": 169,
+      "source_size": "607x781",
+      "alternatives": []
+    },
+    "Lycanthrope": {
+      "file": "lycanthrope.png",
+      "page": 170,
+      "source_size": "592x588",
+      "alternatives": []
+    },
+    "Medusa": {
+      "file": "medusa.png",
+      "page": 180,
+      "source_size": "751x798",
+      "alternatives": []
+    },
+    "Mimic": {
+      "file": "mimic.png",
+      "page": 186,
+      "source_size": "542x809",
+      "alternatives": []
+    },
+    "Mind flayer sorcerer": {
+      "file": "mind_flayer_sorcerer.png",
+      "page": 187,
+      "source_size": "604x378",
+      "alternatives": []
+    },
+    "Minotaur": {
+      "file": "minotaur.png",
+      "page": 188,
+      "source_size": "1477x1025",
+      "alternatives": [
+        "minotaur_2.png"
+      ]
+    },
+    "Mohrg": {
+      "file": "mohrg.png",
+      "page": 189,
+      "source_size": "535x700",
+      "alternatives": []
+    },
+    "Monstrous centipede": {
+      "file": "monstrous_centipede.png",
+      "page": 287,
+      "source_size": "1476x2046",
+      "alternatives": []
+    },
+    "Monstrous spider": {
+      "file": "monstrous_spider.png",
+      "page": 288,
+      "source_size": "1477x1515",
+      "alternatives": []
+    },
+    "Mummy": {
+      "file": "mummy.png",
+      "page": 190,
+      "source_size": "429x650",
+      "alternatives": [
+        "mummy_2.png"
+      ]
+    },
+    "Night hag": {
+      "file": "night_hag.png",
+      "page": 193,
+      "source_size": "816x443",
+      "alternatives": []
+    },
+    "Nightmare": {
+      "file": "nightmare.png",
+      "page": 194,
+      "source_size": "581x801",
+      "alternatives": []
+    },
+    "Nightwalker": {
+      "file": "nightwalker.png",
+      "page": 196,
+      "source_size": "741x665",
+      "alternatives": []
+    },
+    "Nightwing": {
+      "file": "nightwing.png",
+      "page": 197,
+      "source_size": "835x1383",
+      "alternatives": []
+    },
+    "Ogre": {
+      "file": "ogre.png",
+      "page": 199,
+      "source_size": "541x867",
+      "alternatives": []
+    },
+    "Ogre mage": {
+      "file": "ogre_mage.png",
+      "page": 200,
+      "source_size": "1477x876",
+      "alternatives": [
+        "ogre_mage_2.png"
+      ]
+    },
+    "Owlbear": {
+      "file": "owlbear.png",
+      "page": 206,
+      "source_size": "582x870",
+      "alternatives": []
+    },
+    "Phantom fungus": {
+      "file": "phantom_fungus.png",
+      "page": 207,
+      "source_size": "569x681",
+      "alternatives": []
+    },
+    "Phasm": {
+      "file": "phasm.png",
+      "page": 208,
+      "source_size": "758x531",
+      "alternatives": [
+        "phasm_2.png"
+      ]
+    },
+    "Pixie": {
+      "file": "pixie.png",
+      "page": 236,
+      "source_size": "385x530",
+      "alternatives": []
+    },
+    "Pseudodragon": {
+      "file": "pseudodragon.png",
+      "page": 210,
+      "source_size": "646x1058",
+      "alternatives": []
+    },
+    "Pureblood (yuan-ti)": {
+      "file": "pureblood.png",
+      "page": 263,
+      "source_size": "974x649",
+      "alternatives": []
+    },
+    "Purple worm": {
+      "file": "purple_worm.png",
+      "page": 211,
+      "source_size": "752x535",
+      "alternatives": [
+        "purple_worm_2.png"
+      ]
+    },
+    "Pyrohydra": {
+      "file": "pyrohydra.png",
+      "page": 156,
+      "source_size": "675x540",
+      "alternatives": []
+    },
+    "Quasit (demon)": {
+      "file": "quasit.png",
+      "page": 46,
+      "source_size": "684x869",
+      "alternatives": []
+    },
+    "Rast": {
+      "file": "rast.png",
+      "page": 213,
+      "source_size": "575x830",
+      "alternatives": []
+    },
+    "Rat, dire": {
+      "file": "rat_dire.png",
+      "page": 64,
+      "source_size": "607x685",
+      "alternatives": []
+    },
+    "Red dragon": {
+      "file": "red_dragon.png",
+      "page": 75,
+      "source_size": "1476x1322",
+      "alternatives": [
+        "red_dragon_2.png",
+        "red_dragon_3.png"
+      ]
+    },
+    "Remorhaz": {
+      "file": "remorhaz.png",
+      "page": 214,
+      "source_size": "788x604",
+      "alternatives": []
+    },
+    "Roc": {
+      "file": "roc.png",
+      "page": 215,
+      "source_size": "823x670",
+      "alternatives": [
+        "roc_2.png"
+      ]
+    },
+    "Rust monster": {
+      "file": "rust_monster.png",
+      "page": 216,
+      "source_size": "782x558",
+      "alternatives": [
+        "rust_monster_2.png"
+      ]
+    },
+    "Sahuagin": {
+      "file": "sahuagin.png",
+      "page": 217,
+      "source_size": "730x609",
+      "alternatives": []
+    },
+    "Salamander": {
+      "file": "salamander.png",
+      "page": 218,
+      "source_size": "630x822",
+      "alternatives": []
+    },
+    "Salt mephit": {
+      "file": "salt_mephit.png",
+      "page": 184,
+      "source_size": "563x756",
+      "alternatives": []
+    },
+    "Satyr": {
+      "file": "satyr.png",
+      "page": 219,
+      "source_size": "710x589",
+      "alternatives": []
+    },
+    "Sea cat": {
+      "file": "sea_cat.png",
+      "page": 220,
+      "source_size": "1477x1263",
+      "alternatives": []
+    },
+    "Shadow": {
+      "file": "shadow.png",
+      "page": 221,
+      "source_size": "715x763",
+      "alternatives": []
+    },
+    "Shadow mastiff": {
+      "file": "shadow_mastiff.png",
+      "page": 222,
+      "source_size": "1477x792",
+      "alternatives": [
+        "shadow_mastiff_2.png"
+      ]
+    },
+    "Shield guardian": {
+      "file": "shield_guardian.png",
+      "page": 223,
+      "source_size": "490x775",
+      "alternatives": [
+        "shield_guardian_2.png"
+      ]
+    },
+    "Shocker lizard": {
+      "file": "shocker_lizard.png",
+      "page": 224,
+      "source_size": "573x725",
+      "alternatives": [
+        "shocker_lizard_2.png"
+      ]
+    },
+    "Silver dragon": {
+      "file": "silver_dragon.png",
+      "page": 86,
+      "source_size": "1477x838",
+      "alternatives": [
+        "silver_dragon_2.png"
+      ]
+    },
+    "Skeleton": {
+      "file": "skeleton.png",
+      "page": 225,
+      "source_size": "821x684",
+      "alternatives": [
+        "skeleton_2.png",
+        "skeleton_3.png"
+      ]
+    },
+    "Stone giant": {
+      "file": "stone_giant.png",
+      "page": 124,
+      "source_size": "781x922",
+      "alternatives": []
+    },
+    "Swarm": {
+      "file": "swarm.png",
+      "page": 238,
+      "source_size": "593x522",
+      "alternatives": []
+    },
+    "Tendriculos": {
+      "file": "tendriculos.png",
+      "page": 241,
+      "source_size": "779x576",
+      "alternatives": []
+    },
+    "Thoqqua": {
+      "file": "thoqqua.png",
+      "page": 242,
+      "source_size": "560x711",
+      "alternatives": []
+    },
+    "Tojanida": {
+      "file": "tojanida.png",
+      "page": 243,
+      "source_size": "539x758",
+      "alternatives": [
+        "tojanida_2.png"
+      ]
+    },
+    "Treant": {
+      "file": "treant.png",
+      "page": 244,
+      "source_size": "824x597",
+      "alternatives": []
+    },
+    "Triton": {
+      "file": "triton.png",
+      "page": 245,
+      "source_size": "1476x1193",
+      "alternatives": []
+    },
+    "Troglodyte": {
+      "file": "troglodyte.png",
+      "page": 246,
+      "source_size": "591x855",
+      "alternatives": []
+    },
+    "Troll": {
+      "file": "troll.png",
+      "page": 247,
+      "source_size": "504x895",
+      "alternatives": [
+        "troll_2.png"
+      ]
+    },
+    "Troll hunter": {
+      "file": "troll_hunter.png",
+      "page": 248,
+      "source_size": "1477x1056",
+      "alternatives": []
+    },
+    "Truly horrid umber hulk": {
+      "file": "truly_horrid_umber_hulk.png",
+      "page": 249,
+      "source_size": "740x653",
+      "alternatives": [
+        "truly_horrid_umber_hulk_2.png"
+      ]
+    },
+    "Trumpet archon": {
+      "file": "trumpet_archon.png",
+      "page": 18,
+      "source_size": "1477x1137",
+      "alternatives": []
+    },
+    "Vampire": {
+      "file": "vampire.png",
+      "page": 250,
+      "source_size": "1477x781",
+      "alternatives": [
+        "vampire_2.png",
+        "vampire_3.png",
+        "vampire_4.png"
+      ]
+    },
+    "Vargouille": {
+      "file": "vargouille.png",
+      "page": 254,
+      "source_size": "577x908",
+      "alternatives": []
+    },
+    "Vrock (demon)": {
+      "file": "vrock.png",
+      "page": 48,
+      "source_size": "482x617",
+      "alternatives": []
+    },
+    "Wereboar (lycanthrope)": {
+      "file": "wereboar.png",
+      "page": 171,
+      "source_size": "620x762",
+      "alternatives": []
+    },
+    "Weretiger (lycanthrope)": {
+      "file": "weretiger.png",
+      "page": 172,
+      "source_size": "1477x1099",
+      "alternatives": []
+    },
+    "Werewolf (lycanthrope)": {
+      "file": "werewolf.png",
+      "page": 173,
+      "source_size": "1476x1109",
+      "alternatives": [
+        "werewolf_2.png",
+        "werewolf_3.png",
+        "werewolf_4.png",
+        "werewolf_5.png",
+        "werewolf_6.png",
+        "werewolf_7.png"
+      ]
+    },
+    "White dragon": {
+      "file": "white_dragon.png",
+      "page": 77,
+      "source_size": "1476x839",
+      "alternatives": [
+        "white_dragon_2.png",
+        "white_dragon_3.png"
+      ]
+    },
+    "Wight": {
+      "file": "wight.png",
+      "page": 255,
+      "source_size": "681x867",
+      "alternatives": []
+    },
+    "Winter wolf": {
+      "file": "winter_wolf.png",
+      "page": 256,
+      "source_size": "525x752",
+      "alternatives": [
+        "winter_wolf_2.png"
+      ]
+    },
+    "Wraith": {
+      "file": "wraith.png",
+      "page": 257,
+      "source_size": "640x762",
+      "alternatives": []
+    },
+    "Wyvern": {
+      "file": "wyvern.png",
+      "page": 259,
+      "source_size": "1476x1025",
+      "alternatives": [
+        "wyvern_2.png"
+      ]
+    },
+    "Xorn": {
+      "file": "xorn.png",
+      "page": 260,
+      "source_size": "821x724",
+      "alternatives": [
+        "xorn_2.png",
+        "xorn_3.png"
+      ]
+    },
+    "Yrthak": {
+      "file": "yrthak.png",
+      "page": 262,
+      "source_size": "1477x1228",
+      "alternatives": [
+        "yrthak_2.png"
+      ]
+    },
+    "Zombie": {
+      "file": "zombie.png",
+      "page": 266,
+      "source_size": "580x822",
+      "alternatives": [
+        "zombie_2.png"
+      ]
+    }
+  }
+}
