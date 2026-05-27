@@ -297,10 +297,10 @@ public partial class GameManager
 
         // Melee touch attack
         int attackRoll = DiceRoller.D20();
-        int attackMod = cleric.Stats.BaseAttackBonus + cleric.Stats.STRMod;
+        int attackMod = CombatCalculationService.MeleeTouchAttackBonus(cleric.Stats);
         int attackTotal = attackRoll + attackMod;
         int targetTouchAC = target.Stats.TouchArmorClass;
-        bool hit = (attackRoll == 20) || (attackRoll != 1 && attackTotal >= targetTouchAC);
+        bool hit = CombatCalculationService.IsHit(attackRoll, attackTotal, targetTouchAC);
 
         var sb = new StringBuilder();
         sb.AppendLine($"<color=#8B008B>💀 {cleric.Stats.CharacterName} reaches out with Death Touch against {target.Stats.CharacterName}!</color>");

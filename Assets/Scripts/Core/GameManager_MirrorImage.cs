@@ -233,7 +233,7 @@ public partial class GameManager
         else if (resolved.DieRoll > 0)
         {
             int total = resolved.TotalRoll;
-            bool hit = resolved.DieRoll == 20 || (resolved.DieRoll != 1 && total >= touchArmorClass);
+            bool hit = CombatCalculationService.IsHit(resolved.DieRoll, total, touchArmorClass);
             resolved.Hit = hit;
             resolved.NaturalTwenty = resolved.DieRoll == 20;
             resolved.NaturalOne = resolved.DieRoll == 1;

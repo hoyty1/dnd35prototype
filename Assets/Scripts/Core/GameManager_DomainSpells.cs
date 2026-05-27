@@ -313,10 +313,10 @@ public partial class GameManager
 
         // Ranged touch attack
         int attackRoll = DiceRoller.D20();
-        int attackMod = caster.Stats.BaseAttackBonus + caster.Stats.DEXMod;
+        int attackMod = CombatCalculationService.RangedTouchAttackBonus(caster.Stats);
         int attackTotal = attackRoll + attackMod;
         int targetTouchAC = target.Stats.TouchArmorClass;
-        bool hit = (attackRoll == 20) || (attackRoll != 1 && attackTotal >= targetTouchAC);
+        bool hit = CombatCalculationService.IsHit(attackRoll, attackTotal, targetTouchAC);
 
         string casterName = caster.Stats.CharacterName;
         var sb = new StringBuilder();

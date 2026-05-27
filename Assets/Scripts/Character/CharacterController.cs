@@ -4769,7 +4769,7 @@ public class CharacterController : MonoBehaviour
         int proneAttackPenalty = GetProneAttackModifier(isMelee);
 
         // Fighting Defensively: -4 attack rolls while stance is active.
-        int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
+        int fightingDefensivelyPenalty = IsFightingDefensively ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0;
 
         // Shooting into melee: -4 for ranged attacks against targets engaged with attacker allies.
         bool preciseShotNegated = false;
@@ -5039,7 +5039,7 @@ public class CharacterController : MonoBehaviour
         int proneAttackPenalty = GetProneAttackModifier(isMelee);
 
         // Fighting Defensively: -4 attack while active.
-        int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
+        int fightingDefensivelyPenalty = IsFightingDefensively ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0;
 
         // Shooting into melee: -4 unless Precise Shot negates it.
         bool preciseShotNegated = false;
@@ -5597,7 +5597,7 @@ public class CharacterController : MonoBehaviour
         int combatExpertisePenalty = AttackCalculator.CalculateCombatExpertisePenalty(Stats, isMelee);
 
         int proneAttackPenalty = GetProneAttackModifier(isMelee);
-        int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
+        int fightingDefensivelyPenalty = IsFightingDefensively ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0;
         bool preciseShotNegated = false;
         int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
         int solidFogAtkPenalty = isMelee ? Stats.SolidFogMeleeAttackPenalty : 0;
@@ -5862,7 +5862,7 @@ public class CharacterController : MonoBehaviour
         targetAC += target.GetInvisibilityArmorClassBonusAgainst(attacker);
 
         if (target.HasCondition(CombatConditionType.Prone))
-            targetAC += isRangedAttack ? 4 : -4;
+            targetAC += CombatCalculationService.ProneACModifier(isRangedAttack);
 
         // D&D 3.5 Pinned AC rule:
         // Pinned creatures take a -4 AC penalty against opponents other than the creature pinning them.
@@ -5871,11 +5871,11 @@ public class CharacterController : MonoBehaviour
             bool attackerIsGrappleOpponent = target.TryGetGrappleState(out CharacterController grappleOpponent, out _, out _, out _)
                 && grappleOpponent == attacker;
             if (!attackerIsGrappleOpponent)
-                targetAC -= 4;
+                targetAC += CombatCalculationService.PinnedACPenalty;
         }
 
         if (target.IsFightingDefensively)
-            targetAC += 2; // Dodge bonus
+            targetAC += CombatCalculationService.FightingDefensivelyACBonus; // Dodge bonus
 
         // Mounted AC bonus: +1 vs opponents on foot (higher ground, PHB p.157)
         int mountedACBonus = MountSystem.GetMountedACBonus(target, attacker);
@@ -6590,7 +6590,7 @@ public class CharacterController : MonoBehaviour
         if (hit)
         {
             int targetMissChance = target.GetMissChance(this, isRangedAttack);
-            int blindedAttackerMissChance = HasCondition(CombatConditionType.Blinded) ? 50 : 0;
+            int blindedAttackerMissChance = HasCondition(CombatConditionType.Blinded) ? CombatCalculationService.BlindedAttackerMissChance : 0;
             int missChance = Mathf.Max(targetMissChance, blindedAttackerMissChance);
 
             if (target.HasActiveInvisibilityEffect && CanSeeInvisible(target) && targetMissChance <= 0)
@@ -6748,7 +6748,7 @@ public class CharacterController : MonoBehaviour
                         int counterTotal = counterAttackRoll + counterAttackBonus;
                         int snatchTargetAC = this.Stats.ArmorClass;
 
-                        if (counterAttackRoll == 20 || (counterAttackRoll != 1 && counterTotal >= snatchTargetAC))
+                        if (CombatCalculationService.IsHit(counterAttackRoll, counterTotal, snatchTargetAC))
                         {
                             // Hit: deal 1d4 + STR damage (thrown projectile)
                             int snatchDamage = DiceRoller.D4() + target.Stats.STRMod;
@@ -6859,7 +6859,7 @@ public class CharacterController : MonoBehaviour
             }
             // D&D 3.5e PHB p.284: Alchemical silver weapons take -1 penalty to damage rolls.
             rawWeaponDamage += materialDamageModifier;
-            rawWeaponDamage = Mathf.Max(1, rawWeaponDamage); // Weapon hit always deals at least 1 before mitigation
+            rawWeaponDamage = CombatCalculationService.ClampMinimumDamage(rawWeaponDamage); // Weapon hit always deals at least 1 before mitigation
             result.Damage = rawWeaponDamage;
             result.BaseDamageRoll = baseDmgRoll;
 
@@ -10683,7 +10683,7 @@ public class CharacterController : MonoBehaviour
         int touchSize = Stats.SizeModifier;
         int touchCondition = Stats.ConditionAttackPenalty;
         int touchTotal = touchRoll + attackBab + touchStr + touchSize + touchCondition;
-        int touchAC = 10 + target.Stats.DEXMod + target.Stats.SizeModifier;
+        int touchAC = CombatCalculationService.SimpleTouchAC(target.Stats);
 
         var touchBuilder = new StringBuilder();
         touchBuilder.AppendLine("Touch attack:");

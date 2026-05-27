@@ -143,7 +143,7 @@ public partial class GameManager
         }
 
         // Will save with -5 penalty (D&D 3.5e)
-        int saveDC = 10 + 4 + caster.Stats.WISMod;
+        int saveDC = CombatCalculationService.SpellSaveDC(4, caster.Stats.WISMod);
         // Note: -5 penalty baked into the DC for resolver (DC+5 equivalent to save-5)
         var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDC + 5);
         bool saveSuccess = saveResult.Saved;

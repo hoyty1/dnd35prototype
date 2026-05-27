@@ -140,7 +140,7 @@ public partial class GameManager
         }
 
         // Fort save: DC = 10 + spell level (4) + WIS mod
-        int saveDC = 10 + 4 + caster.Stats.WISMod;
+        int saveDC = CombatCalculationService.SpellSaveDC(4, caster.Stats.WISMod);
         var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC);
         bool saveSuccess = saveResult.Saved;
 

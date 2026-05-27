@@ -178,7 +178,7 @@ public static class MountedCombatSystem
         int totalAttack = roll + hoof.AttackBonus + 4; // +4 vs prone
         int targetAC = target.Stats.ArmorClass;
 
-        bool hit = (roll == 20) || (roll != 1 && totalAttack >= targetAC);
+        bool hit = CombatCalculationService.IsHit(roll, totalAttack, targetAC);
         int damage = 0;
         string log;
 
@@ -260,7 +260,7 @@ public static class MountedCombatSystem
             int roll = DiceRoller.D20();
             int totalAttack = roll + attack.AttackBonus;
             int targetAC = target.Stats.ArmorClass;
-            bool hit = (roll == 20) || (roll != 1 && totalAttack >= targetAC);
+            bool hit = CombatCalculationService.IsHit(roll, totalAttack, targetAC);
 
             if (hit)
             {

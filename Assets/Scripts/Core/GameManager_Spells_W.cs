@@ -372,7 +372,7 @@ public partial class GameManager
     {
         int abilityMod = GetSpellSaveAbilityModifier(caster, spell);
         int spellLevel = spell != null ? spell.SpellLevel : 4;
-        return 10 + spellLevel + abilityMod;
+        return CombatCalculationService.SpellSaveDC(spellLevel, abilityMod);
     }
 
     /// <summary>

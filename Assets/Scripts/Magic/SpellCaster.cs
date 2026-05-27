@@ -125,9 +125,7 @@ public static class SpellCaster
             bool isRanged = spell.IsRangedTouchSpell();
             result.IsRangedTouch = isRanged;
 
-            int atkBonus = isRanged
-                ? casterStats.BaseAttackBonus + casterStats.DEXMod + casterStats.SizeModifier
-                : casterStats.BaseAttackBonus + casterStats.STRMod + casterStats.SizeModifier;
+            int atkBonus = CombatCalculationService.TouchAttackBonus(casterStats, isRanged);
 
             int situationalSpellAttackBonus = 0;
             string situationalSpellAttackSource = string.Empty;
@@ -137,7 +135,7 @@ public static class SpellCaster
                 situationalSpellAttackSource = shockingGraspBonusSource;
             }
 
-            int fightingDefensivelyPenalty = (casterController != null && casterController.IsFightingDefensively) ? -4 : 0;
+            int fightingDefensivelyPenalty = (casterController != null && casterController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0;
             bool preciseShotNegated = false;
             int shootingIntoMeleePenalty = 0;
             if (isRanged)
@@ -146,7 +144,7 @@ public static class SpellCaster
             }
 
             int touchAC = SpellcastingComponent.GetTouchAC(targetStats)
-                + ((targetController != null && targetController.IsFightingDefensively) ? 2 : 0);
+                + ((targetController != null && targetController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyACBonus : 0);
 
             if (protection.DeflectionAcBonus > 0)
             {
@@ -190,16 +188,11 @@ public static class SpellCaster
             result.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
             result.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
             result.PreciseShotNegated = preciseShotNegated;
-            result.TargetFightingDefensivelyACBonus = (targetController != null && targetController.IsFightingDefensively) ? 2 : 0;
+            result.TargetFightingDefensivelyACBonus = (targetController != null && targetController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyACBonus : 0;
             result.RangeIncrementNumber = animateRopeIncrement;
             result.RangeIncrementPenalty = animateRopeRangePenalty;
 
-            if (roll == 20)
-                result.AttackHit = true;
-            else if (roll == 1)
-                result.AttackHit = false;
-            else
-                result.AttackHit = total >= touchAC;
+            result.AttackHit = CombatCalculationService.IsHit(roll, total, touchAC);
 
             if (!result.AttackHit)
             {
@@ -221,13 +214,13 @@ public static class SpellCaster
         if (result.AttackHit && result.RequiredAttackRoll && casterController != null && targetController != null)
         {
             int targetMissChance = targetController.GetMissChance(casterController, result.IsRangedTouch);
-            int blindedCasterMissChance = casterController.HasCondition(CombatConditionType.Blinded) ? 50 : 0;
+            int blindedCasterMissChance = casterController.HasCondition(CombatConditionType.Blinded) ? CombatCalculationService.BlindedAttackerMissChance : 0;
             int missChance = Mathf.Max(targetMissChance, blindedCasterMissChance);
 
             if (missChance > 0)
             {
                 int concealmentRoll = DiceRoller.D100();
-                if (concealmentRoll <= missChance)
+                if (CombatCalculationService.ConcealmentMiss(concealmentRoll, missChance))
                 {
                     result.AttackHit = false;
                     result.Success = false;
