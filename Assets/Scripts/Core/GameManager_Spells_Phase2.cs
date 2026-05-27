@@ -139,8 +139,7 @@ public partial class GameManager
                 if (!srResult.Overcame) { sb.AppendLine(); continue; }
 
                 // Determine damage dice: undead get 1d6/CL (max 25d6), others 6d6
-                bool isUndead = !string.IsNullOrEmpty(target.Stats.CreatureType) &&
-                    string.Equals(target.Stats.CreatureType, "Undead", StringComparison.OrdinalIgnoreCase);
+                bool isUndead = SpellTargetingService.IsUndead(target);
                 int diceCount = isUndead ? Mathf.Clamp(casterLevel, 1, 25) : 6;
 
                 int damage = 0;
@@ -423,8 +422,7 @@ public partial class GameManager
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
         // Check undead — Heal damages undead (like Harm)
-        bool isUndead = !string.IsNullOrEmpty(target.Stats.CreatureType) &&
-            string.Equals(target.Stats.CreatureType, "Undead", StringComparison.OrdinalIgnoreCase);
+        bool isUndead = SpellTargetingService.IsUndead(target);
 
         if (isUndead)
         {
@@ -516,9 +514,8 @@ public partial class GameManager
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
         // Check creature type restrictions
-        string ct = target.Stats.CreatureType ?? "";
-        bool isUndead = string.Equals(ct, "Undead", StringComparison.OrdinalIgnoreCase);
-        bool isConstruct = string.Equals(ct, "Construct", StringComparison.OrdinalIgnoreCase);
+        bool isUndead = SpellTargetingService.IsUndead(target);
+        bool isConstruct = SpellTargetingService.IsConstruct(target);
 
         if (isUndead || isConstruct)
         {

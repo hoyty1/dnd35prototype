@@ -44,12 +44,11 @@ public partial class GameManager
         if (target == null || target.Stats == null)
             return true;
 
-        // Must be an Animal creature type
-        string creatureType = target.Stats.CreatureType ?? "";
-        if (!string.Equals(creatureType.Trim(), "Animal", StringComparison.OrdinalIgnoreCase))
+        // Must be an Animal creature type (PHB p.238)
+        if (!SpellTargetingService.IsAnimal(target))
         {
             string casterName = caster?.Stats?.CharacterName ?? "Caster";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("⛓", $"{casterName} casts Hold Animal on {target.Stats.CharacterName} — no effect (not an animal, creature type: {creatureType})!"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("⛓", $"{casterName} casts Hold Animal on {target.Stats.CharacterName} — no effect (not an animal, creature type: {SpellTargetingService.GetCreatureType(target)})!"));
             return true;
         }
 
@@ -130,8 +129,7 @@ public partial class GameManager
             foreach (var t in targets)
             {
                 if (t == null || t.Stats == null || t.Stats.IsDead) continue;
-                string ct = t.Stats.CreatureType ?? "";
-                if (string.Equals(ct.Trim(), "Animal", StringComparison.OrdinalIgnoreCase))
+                if (SpellTargetingService.IsAnimal(t))
                     animalTargets.Add(t);
             }
         }
@@ -473,11 +471,10 @@ public partial class GameManager
         if (target == null || target.Stats == null || caster == null || caster.Stats == null)
             return true;
 
-        // Must be Animal
-        string creatureType = target.Stats.CreatureType ?? "";
-        if (!string.Equals(creatureType.Trim(), "Animal", StringComparison.OrdinalIgnoreCase))
+        // Must be Animal creature type (PHB p.224)
+        if (!SpellTargetingService.IsAnimal(target))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🧠", $"{caster.Stats.CharacterName} casts Dominate Animal on {target.Stats.CharacterName} — no effect (not an animal, type: {creatureType})!"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🧠", $"{caster.Stats.CharacterName} casts Dominate Animal on {target.Stats.CharacterName} — no effect (not an animal, type: {SpellTargetingService.GetCreatureType(target)})!"));
             return true;
         }
 
@@ -528,11 +525,10 @@ public partial class GameManager
         if (target == null || target.Stats == null || caster == null || caster.Stats == null)
             return true;
 
-        // Must be Plant
-        string creatureType = target.Stats.CreatureType ?? "";
-        if (!string.Equals(creatureType.Trim(), "Plant", StringComparison.OrdinalIgnoreCase))
+        // Must be Plant creature type (PHB p.211)
+        if (!SpellTargetingService.IsPlant(target))
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌿", $"{caster.Stats.CharacterName} casts Command Plants on {target.Stats.CharacterName} — no effect (not a plant creature, type: {creatureType})!"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌿", $"{caster.Stats.CharacterName} casts Command Plants on {target.Stats.CharacterName} — no effect (not a plant creature, type: {SpellTargetingService.GetCreatureType(target)})!"));
             return true;
         }
 

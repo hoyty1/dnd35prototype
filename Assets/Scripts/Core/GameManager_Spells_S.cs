@@ -39,12 +39,9 @@ public partial class GameManager
         string targetName = target.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
 
-        // Determine creature type
-        string creatureType = target.Stats.CreatureType ?? "Humanoid";
-        creatureType = creatureType.Trim().ToLowerInvariant();
-
-        bool isUndead = creatureType == "undead";
-        bool isConstruct = creatureType == "construct";
+        // Determine creature type via SpellTargetingService
+        bool isUndead = SpellTargetingService.IsUndead(target);
+        bool isConstruct = SpellTargetingService.IsConstruct(target);
 
         // Calculate number of dice: 1 die per 2 caster levels, max 5 dice
         int numDice = Mathf.Clamp(casterLevel / 2, 1, 5);

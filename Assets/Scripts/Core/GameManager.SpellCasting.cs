@@ -1208,56 +1208,47 @@ public partial class GameManager
         {
             // Person transmutations can target any humanoid creature (ally or enemy).
             // TARGETING OVERRIDE: Allow any character to be targeted regardless of faction.
-            return TeamUtility.IsHumanoid(target);
+            return SpellTargetingService.IsHumanoid(target);
         }
 
         if (spell.SpellId == SpellNames.DAZE)
         {
-            // D&D 3.5e Daze: one humanoid creature of 4 HD or less.
-            // TARGETING OVERRIDE: Removed enemy-only restriction. Still requires humanoid and HD check.
-            if (!TeamUtility.IsHumanoid(target)) return false;
-            if (!_isProtectionFromEvilTestEncounter && TeamUtility.GetHitDice(target) > 4) return false;
-            if (IsImmuneToMindAffecting(target)) return false;
+            // D&D 3.5e Daze: one humanoid creature of 4 HD or less (PHB p.217).
+            if (!_isProtectionFromEvilTestEncounter && !SpellTargetingService.IsValidHumanoidMindAffectingTarget(target, 4))
+                return false;
+            if (_isProtectionFromEvilTestEncounter && !SpellTargetingService.IsValidHumanoidMindAffectingTarget(target, 0))
+                return false;
             return true;
         }
 
         if (spell.SpellId == SpellNames.CHARM_PERSON)
         {
-            // D&D 3.5e Charm Person: one humanoid creature.
-            // TARGETING OVERRIDE: Removed enemy-only restriction. Still requires humanoid and HD check.
-            if (!TeamUtility.IsHumanoid(target)) return false;
-            if (TeamUtility.GetHitDice(target) > 4) return false;
-            if (IsImmuneToMindAffecting(target)) return false;
-            return true;
+            // D&D 3.5e Charm Person: one humanoid creature (PHB p.209).
+            return SpellTargetingService.IsValidHumanoidMindAffectingTarget(target, 4);
         }
 
-        // Charm Monster — any living creature, no HD limit, mind-affecting
+        // Charm Monster — any living creature, no HD limit, mind-affecting (PHB p.209)
         if (spell.SpellId == SpellNames.CHARM_MONSTER)
         {
-            if (IsImmuneToMindAffecting(target)) return false;
-            return true;
+            return SpellTargetingService.IsValidMindAffectingTarget(target);
         }
 
         // Dominate Person — one humanoid, no HD limit, mind-affecting (PHB p.224)
         if (spell.SpellId == SpellNames.DOMINATE_PERSON)
         {
-            if (!TeamUtility.IsHumanoid(target)) return false;
-            if (IsImmuneToMindAffecting(target)) return false;
-            return true;
+            return SpellTargetingService.IsValidHumanoidMindAffectingTarget(target, 0);
         }
 
-        // Hold Monster — any living creature, mind-affecting
+        // Hold Monster — any living creature, mind-affecting (PHB p.241)
         if (spell.SpellId == SpellNames.HOLD_MONSTER)
         {
-            if (IsImmuneToMindAffecting(target)) return false;
-            return true;
+            return SpellTargetingService.IsValidMindAffectingTarget(target);
         }
 
         if (spell.SpellId == SpellNames.TOUCH_OF_IDIOCY)
         {
             // TARGETING OVERRIDE: Removed enemy-only restriction. Still requires living creature.
-            if (!IsLivingCreatureForFearSpell(target)) return false;
-            return true;
+            return SpellTargetingService.IsValidLivingTarget(target);
         }
 
         // Direct targeting requires line of sight for enemies.
@@ -5559,7 +5550,7 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog($"✨ {casterName} casts Cause Fear on {targetName}.");
 
-        if (!IsLivingCreatureForFearSpell(target))
+        if (!SpellTargetingService.IsLivingCreature(target))
         {
             if (result != null)
             {
@@ -5663,8 +5654,8 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog($"✨ {casterName} casts Ghoul Touch on {targetName}.");
 
-        // Ghoul Touch only works on living humanoids
-        if (!IsLivingCreatureForFearSpell(target))
+        // Ghoul Touch only works on living humanoids (PHB p.235)
+        if (!SpellTargetingService.IsLivingCreature(target))
         {
             if (result != null)
             {
@@ -5675,7 +5666,7 @@ public partial class GameManager
             return true;
         }
 
-        if (!TeamUtility.IsHumanoid(target))
+        if (!SpellTargetingService.IsHumanoid(target))
         {
             if (result != null)
             {
@@ -5825,7 +5816,7 @@ public partial class GameManager
             return true;
 
         // Must be a living creature
-        if (!IsLivingCreatureForFearSpell(target))
+        if (!SpellTargetingService.IsLivingCreature(target))
         {
             if (result != null)
             {
@@ -5962,7 +5953,7 @@ public partial class GameManager
             string targetName = target.Stats.CharacterName;
 
             // Check living creature (undead, constructs immune)
-            if (!IsLivingCreatureForFearSpell(target))
+            if (!SpellTargetingService.IsLivingCreature(target))
             {
                 logBuilder.AppendLine($"  • {targetName}: Immune (not a living creature).");
                 immuneCount++;
@@ -6549,8 +6540,8 @@ public partial class GameManager
             if (target == null || target.Stats == null)
                 return null;
 
-            // Dominate Person only works on humanoids
-            if (!TeamUtility.IsHumanoid(target))
+            // Dominate Person only works on humanoids (PHB p.224)
+            if (!SpellTargetingService.IsHumanoid(target))
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🧠", $"{caster.Stats.CharacterName} casts Dominate Person on {target.Stats.CharacterName} — no effect (not a humanoid)!"));
                 return null;

@@ -215,7 +215,7 @@ public partial class GameManager
         }
 
         // Fear immunity check (undead, constructs, etc. are immune to fear)
-        if (!IsLivingCreatureForFearSpell(target))
+        if (!SpellTargetingService.IsLivingCreature(target))
         {
             result.Success = false;
             result.NoEffectReason = $"{targetName} is immune to fear effects (not a living creature).";

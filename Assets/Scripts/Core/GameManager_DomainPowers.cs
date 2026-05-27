@@ -276,8 +276,7 @@ public partial class GameManager
         }
 
         // Death effect: does not affect undead, constructs, or creatures immune to death effects
-        string creatureType = target.Stats.CreatureType ?? "";
-        if (creatureType == "Undead" || creatureType == "Construct")
+        if (SpellTargetingService.IsUndead(target) || SpellTargetingService.IsConstruct(target))
         {
             CombatUI?.ShowCombatLog($"⚠ Death Touch has no effect on {target.Stats.CharacterName} ({creatureType} creatures are immune to death effects).");
             return;

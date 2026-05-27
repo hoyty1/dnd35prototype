@@ -43,7 +43,7 @@ public partial class GameManager
         List<CharacterController> candidates = new List<CharacterController>();
 
         // Always include the primary target first
-        if (primaryTarget != null && primaryTarget.Stats != null && !primaryTarget.Stats.IsDead && TeamUtility.IsHumanoid(primaryTarget))
+        if (SpellTargetingService.IsValidPersonSpellTarget(primaryTarget))
         {
             candidates.Add(primaryTarget);
         }
@@ -54,7 +54,7 @@ public partial class GameManager
         {
             if (candidate == primaryTarget) continue;
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead) continue;
-            if (!TeamUtility.IsHumanoid(candidate)) continue;
+            if (!SpellTargetingService.IsHumanoid(candidate)) continue;
 
             // Must be an ally of the caster (or the caster themselves)
             if (candidate != caster && !TeamUtility.IsAlly(caster, candidate)) continue;

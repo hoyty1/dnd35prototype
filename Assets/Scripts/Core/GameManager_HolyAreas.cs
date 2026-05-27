@@ -76,7 +76,7 @@ public partial class GameManager
             foreach (var t in targets)
             {
                 if (t?.Stats == null) continue;
-                if (IsUndead(t))
+                if (SpellTargetingService.IsUndead(t))
                 {
                     ApplyConsecrateDebuffs(t);
                     affectedCount++;
@@ -139,7 +139,7 @@ public partial class GameManager
             foreach (var t in targets)
             {
                 if (t?.Stats == null) continue;
-                if (IsUndead(t))
+                if (SpellTargetingService.IsUndead(t))
                 {
                     ApplyDesecrateBuffs(t);
                     affectedCount++;
@@ -228,14 +228,10 @@ public partial class GameManager
 
     /// <summary>
     /// Checks whether a character is undead based on their CreatureType.
+    /// Delegates to <see cref="SpellTargetingService.IsUndead"/>.
     /// </summary>
     private bool IsUndead(CharacterController character)
-    {
-        if (character?.Stats == null) return false;
-        string ct = character.Stats.CreatureType;
-        return !string.IsNullOrWhiteSpace(ct) &&
-               ct.Trim().Equals("Undead", StringComparison.OrdinalIgnoreCase);
-    }
+        => SpellTargetingService.IsUndead(character);
 
     /// <summary>
     /// Called when a character moves to update Consecrate/Desecrate area effects.
@@ -260,7 +256,7 @@ public partial class GameManager
         }
 
         // Apply/remove Consecrate effects for undead
-        if (IsUndead(character))
+        if (SpellTargetingService.IsUndead(character))
         {
             if (inConsecrate && !character.Stats.ConsecrateActive)
             {
