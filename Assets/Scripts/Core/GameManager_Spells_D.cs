@@ -42,7 +42,7 @@ public partial class GameManager
             if (effect != null) effect.RemainingRounds = durationRounds;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#CCFFCC>🛡✨ Death Ward! {casterName} wards {targetName} against death effects for {durationRounds} rounds.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("🛡✨", $"Death Ward! {casterName} wards {targetName} against death effects for {durationRounds} rounds."));
         Debug.Log($"[DeathWard] {casterName} -> {targetName}: duration {durationRounds} rounds");
 
         result.BuffApplied = true;
@@ -157,7 +157,7 @@ public partial class GameManager
 
         // Dismissed! Kill/remove the creature
         target.Stats.TakeDamage(target.Stats.CurrentHP + 100); // Ensure death
-        CombatUI?.ShowCombatLog($"<color=#FF8800>🌀✨ Dismissal! {casterName} sends {targetName} back to its home plane!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🌀✨", $"Dismissal! {casterName} sends {targetName} back to its home plane!"));
         Debug.Log($"[Dismissal] {casterName} -> {targetName}: dismissed (Will {saveRoll} vs DC {saveDC})");
 
         result.TargetKilled = true;
@@ -279,8 +279,8 @@ public partial class GameManager
                 : $"<color=#88FFEE>👻 {casterName} casts Displacement on {recipient.Stats.CharacterName}!</color>";
 
             CombatUI?.ShowCombatLog(castLine);
-            CombatUI?.ShowCombatLog($"<color=#A6F3FF>   {recipient.Stats.CharacterName}'s outline shimmers and shifts about 2 ft from its true position.</color>");
-            CombatUI?.ShowCombatLog($"<color=#A6F3FF>   Attacks against {recipient.Stats.CharacterName} have 50% miss chance ({effect.GetDurationDisplayString()}, {Mathf.Max(0, effect.RemainingRounds)} rounds). True Seeing negates.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("", $"  {recipient.Stats.CharacterName}'s outline shimmers and shifts about 2 ft from its true position."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("", $"  Attacks against {recipient.Stats.CharacterName} have 50% miss chance ({effect.GetDurationDisplayString()}, {Mathf.Max(0, effect.RemainingRounds)} rounds). True Seeing negates."));
         }
 
         UpdateAllStatsUI();
@@ -377,7 +377,7 @@ public partial class GameManager
             }
         }
 
-        CombatUI?.ShowCombatLog($"<color=#CC33FF>☠ Death Knell! {caster.Stats.CharacterName} kills {target.Stats.CharacterName} and gains {tempHP} temp HP, +2 STR, +1 caster level for {buffRounds} rounds ({targetHD * 10} minutes)!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"☠ Death Knell! {caster.Stats.CharacterName} kills {target.Stats.CharacterName} and gains {tempHP} temp HP, +2 STR, +1 caster level for {buffRounds} rounds ({targetHD * 10} minutes)!", "CC33FF"));
         Debug.Log($"[DeathKnell] {caster.Stats.CharacterName} gains {tempHP} temp HP, +2 STR, +1 CL for {buffRounds} rounds");
 
         return true;
@@ -426,7 +426,7 @@ public partial class GameManager
                 ?? "Extradimensional travel is blocked";
 
             CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("🚫", $"{casterName} attempts Dimension Door, but {reason}!"));
-            CombatUI?.ShowCombatLog($"<color=#FF6666>   The spell fizzles. The spell slot is consumed.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", "  The spell fizzles. The spell slot is consumed."));
 
             // Increment blocked counter on Dimensional Anchor
             DimensionalAnchorEffectData anchor = caster.Stats.ActiveDimensionalAnchorEffect;
@@ -492,8 +492,8 @@ public partial class GameManager
 
         // ── Combat log ──
         int distanceFeet = distance * 5;
-        CombatUI?.ShowCombatLog($"<color=#00CCFF>🌀 {casterName} vanishes in a flash and reappears {distanceFeet} ft away!</color>");
-        CombatUI?.ShowCombatLog($"<color=#66DDFF>   Dimension Door: teleported from ({casterPos.x},{casterPos.y}) to ({dest.x},{dest.y}). No further actions this turn.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🌀 {casterName} vanishes in a flash and reappears {distanceFeet} ft away!", "00CCFF"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"   Dimension Door: teleported from ({casterPos.x},{casterPos.y}) to ({dest.x},{dest.y}). No further actions this turn.", "66DDFF"));
 
         result.BuffApplied = true;
         result.BuffDescription = $"Dimension Door: teleported {distanceFeet} ft. Turn ends.";

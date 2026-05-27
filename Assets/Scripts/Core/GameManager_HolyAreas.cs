@@ -265,7 +265,7 @@ public partial class GameManager
             if (inConsecrate && !character.Stats.ConsecrateActive)
             {
                 ApplyConsecrateDebuffs(character);
-                CombatUI?.ShowCombatLog($"<color=#FFFF99>✨ {character.Stats.CharacterName} enters consecrated ground (undead: -1 attacks/damage/saves).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Color($"✨ {character.Stats.CharacterName} enters consecrated ground (undead: -1 attacks/damage/saves).", "FFFF99"));
             }
             else if (!inConsecrate && character.Stats.ConsecrateActive)
             {
@@ -276,7 +276,7 @@ public partial class GameManager
             if (inDesecrate && !character.Stats.DesecrateActive)
             {
                 ApplyDesecrateBuffs(character);
-                CombatUI?.ShowCombatLog($"<color=#CC66FF>💀 {character.Stats.CharacterName} enters desecrated ground (undead: +1 attacks/damage/saves).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Color($"💀 {character.Stats.CharacterName} enters desecrated ground (undead: +1 attacks/damage/saves).", "CC66FF"));
             }
             else if (!inDesecrate && character.Stats.DesecrateActive)
             {

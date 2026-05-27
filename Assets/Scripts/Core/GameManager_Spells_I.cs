@@ -68,7 +68,7 @@ public partial class GameManager
         var transferableSlots = ImbueWithSpellAbilityManager.GetTransferableSlots(caster, maxLevel);
         if (transferableSlots.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Imbue with Spell Ability: {casterName} has no prepared 1st{(maxLevel >= 2 ? "/2nd" : "")}-level spells to transfer.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("✖", $"Imbue with Spell Ability: {casterName} has no prepared 1st{(maxLevel >= 2 ? "/2nd" : "")}-level spells to transfer."));
             Debug.Log($"[ImbueWithSpellAbility] No transferable slots for {casterName}");
             return true;
         }
@@ -367,9 +367,9 @@ public partial class GameManager
 
         int remaining = target.Stats.ImbuedSpells.Count;
         if (remaining > 0)
-            CombatUI?.ShowCombatLog($"<color=#AADDFF>  {remaining} imbued spell(s) remaining.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.PaleBlue("", $" {remaining} imbued spell(s) remaining."));
         else
-            CombatUI?.ShowCombatLog($"<color=#AADDFF>  All imbued spells discharged. Imbue with Spell Ability ends.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.PaleBlue("", " All imbued spells discharged. Imbue with Spell Ability ends."));
 
         UpdateAllStatsUI();
     }
@@ -557,11 +557,11 @@ public partial class GameManager
             {
                 ch.RemoveCondition(CombatConditionType.Invisible);
                 purgeCount++;
-                CombatUI?.ShowCombatLog($"<color=#CCDDFF>  👁 {ch.Stats.CharacterName}'s invisibility is dispelled!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Color($"  👁 {ch.Stats.CharacterName}'s invisibility is dispelled!", "CCDDFF"));
             }
         }
 
-        CombatUI?.ShowCombatLog($"<color=#AADDFF>👁✨ Invisibility Purge! {casterName} radiates a {radiusSquares * 5}-ft anti-invisibility field for {durationRounds} rounds. {purgeCount} creature(s) revealed.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.PaleBlue("👁✨", $"Invisibility Purge! {casterName} radiates a {radiusSquares * 5}-ft anti-invisibility field for {durationRounds} rounds. {purgeCount} creature(s) revealed."));
         Debug.Log($"[InvisibilityPurge] {casterName}: radius {radiusSquares} sq, duration {durationRounds} rounds, purged {purgeCount}");
 
         return true;
@@ -632,7 +632,7 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(castLine);
 
         int affectedCount = sphere.InitiallyAffectedCreatures != null ? sphere.InitiallyAffectedCreatures.Count : 0;
-        CombatUI?.ShowCombatLog($"<color=#A6F3FF>   A 10-ft emanation forms around {recipient.Stats.CharacterName}; {affectedCount} creature(s) become invisible.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("", $"  A 10-ft emanation forms around {recipient.Stats.CharacterName}; {affectedCount} creature(s) become invisible."));
 
         if (affectedCount > 0)
         {
@@ -647,7 +647,7 @@ public partial class GameManager
             CombatUI?.ShowCombatLog(sb.ToString());
         }
 
-        CombatUI?.ShowCombatLog($"<color=#A6F3FF>   Duration: {effect.GetDurationDisplayString()}. Leaving the sphere or attacking ends invisibility.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("", $"  Duration: {effect.GetDurationDisplayString()}. Leaving the sphere or attacking ends invisibility."));
 
         UpdateEnemyLastKnownPositionForInvisibility(recipient);
         UpdateAllStatsUI();

@@ -97,7 +97,7 @@ public partial class GameManager
 
             caster.ApplyFalseLifeEffect(vampiricTempHP);
 
-            CombatUI?.ShowCombatLog($"<color=#FF6666>🩸 {caster.Stats.CharacterName} drains {tempHP} temporary HP from {target.Stats.CharacterName} (lasts 1 hour).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("🩸", $"{caster.Stats.CharacterName} drains {tempHP} temporary HP from {target.Stats.CharacterName} (lasts 1 hour)."));
         }
 
         if (target.Stats.IsDead)

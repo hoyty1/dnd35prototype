@@ -91,7 +91,7 @@ public partial class GameManager
         if (spellComp != null)
             spellComp.ActiveBuffs[SpellNames.MIRROR_IMAGE] = effect.RemainingRounds;
 
-        CombatUI?.ShowCombatLog($"<color=#B7A8FF>🪞 {recipient.Stats.CharacterName} casts Mirror Image: {state.Clones.Count} clone(s) appear (rolled {intendedCloneCount}).</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {recipient.Stats.CharacterName} casts Mirror Image: {state.Clones.Count} clone(s) appear (rolled {intendedCloneCount}).", "B7A8FF"));
 
         if (state.Clones.Count < intendedCloneCount)
             CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚠", $"Only {state.Clones.Count}/{intendedCloneCount} images could be placed due to blocked adjacent cells."));
@@ -333,7 +333,7 @@ public partial class GameManager
             Grid.ClearCreatureOccupancy(clone);
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "caster";
-        CombatUI?.ShowCombatLog($"<color=#D5C8FF>🪞 A Mirror Image of {casterName} dissipates ({reason}).</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 A Mirror Image of {casterName} dissipates ({reason}).", "D5C8FF"));
 
         Destroy(clone.gameObject);
     }
@@ -495,11 +495,11 @@ public partial class GameManager
             _mirrorImageFollowSuppression.Remove(caster);
             selectedClone.MoveToCell(cloneDest, markAsMoved: false);
 
-            CombatUI?.ShowCombatLog($"<color=#B7A8FF>🪞 {caster.Stats.CharacterName} swaps positions with a Mirror Image ({casterPos.x},{casterPos.y}) ↔ ({clonePos.x},{clonePos.y}).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {caster.Stats.CharacterName} swaps positions with a Mirror Image ({casterPos.x},{casterPos.y}) ↔ ({clonePos.x},{clonePos.y}).", "B7A8FF"));
         }
         else if (caster != null)
         {
-            CombatUI?.ShowCombatLog($"<color=#B7A8FF>🪞 {caster.Stats.CharacterName} keeps current position (Mirror Image swap skipped).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {caster.Stats.CharacterName} keeps current position (Mirror Image swap skipped).", "B7A8FF"));
         }
 
         _isSelectingMirrorImageSwap = false;
@@ -676,14 +676,14 @@ public partial class GameManager
         if (movePlans.Count > 0)
         {
             string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-            CombatUI?.ShowCombatLog($"<color=#B7A8FF>🪞 Mirror images shift to follow {casterName}.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 Mirror images shift to follow {casterName}.", "B7A8FF"));
         }
 
         if (fallbackMoves > 0)
-            CombatUI?.ShowCombatLog($"<color=#C7B9FF>🪞 {fallbackMoves} image(s) adjust position around obstacles.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {fallbackMoves} image(s) adjust position around obstacles.", "C7B9FF"));
 
         if (dissipatedClones.Count > 0)
-            CombatUI?.ShowCombatLog($"<color=#D5C8FF>🪞 {dissipatedClones.Count} image(s) dissipate while trying to keep up.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🪞 {dissipatedClones.Count} image(s) dissipate while trying to keep up.", "D5C8FF"));
     }
 
     private bool TryReserveMirrorImageDestination(CharacterController clone, Vector2Int destination, HashSet<Vector2Int> reservedCells, out SquareCell cell)

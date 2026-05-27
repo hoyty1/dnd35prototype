@@ -178,9 +178,9 @@ public partial class GameManager
         result.BuffApplied = true;
         result.BuffDescription = $"Buff: Greater Invisibility for {durationRounds} round(s). Does NOT break on attack.";
 
-        CombatUI?.ShowCombatLog($"<color=#9966FF>✨ {recipient.Stats.CharacterName} becomes invisible (Greater Invisibility)!</color>");
-        CombatUI?.ShowCombatLog($"<color=#AA88FF>   Duration: {durationRounds} round(s). Does NOT break on attack.</color>");
-        CombatUI?.ShowCombatLog($"<color=#AA88FF>   +2 attack bonus, enemies denied Dex to AC, 50% miss chance.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"✨ {recipient.Stats.CharacterName} becomes invisible (Greater Invisibility)!", "9966FF"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"   Duration: {durationRounds} round(s). Does NOT break on attack.", "AA88FF"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color("   +2 attack bonus, enemies denied Dex to AC, 50% miss chance.", "AA88FF"));
 
         Debug.Log($"[GreaterInvisibility] {casterName} -> {recipient.Stats.CharacterName}: {durationRounds} rounds, breaksOnAttack=false");
         return true;

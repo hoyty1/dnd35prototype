@@ -231,4 +231,56 @@ public static class CombatLogHelper
     /// <summary>Defensive/concentration action (light blue).</summary>
     public static string Defensive(string emoji, string message)
         => Color($"{emoji} {message}", ColorLightBlue);
+
+    // ─────────────────────────────────────────────
+    //  Dark crimson / curse / necrotic  (#8B0000)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Curse or dark-magic effect (dark crimson).</summary>
+    public static string Curse(string emoji, string message)
+        => Color($"{emoji} {message}", ColorDarkCrimson);
+
+    // ─────────────────────────────────────────────
+    //  Deep red / death / kill  (#FF0000)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Death or kill event (deep red).</summary>
+    public static string Death(string emoji, string message)
+        => Color($"{emoji} {message}", ColorDeepRed);
+
+    // ─────────────────────────────────────────────
+    //  Dim gray / stub / de-emphasised  (#888888)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Stub or de-emphasised message (dim gray).</summary>
+    public static string Stub(string emoji, string message)
+        => Color($"{emoji} {message}", ColorDimGray);
+
+    /// <summary>Stub/dim message (no emoji prefix — for pre-formatted strings).</summary>
+    public static string StubRaw(string message)
+        => Color(message, ColorDimGray);
+
+    // ─────────────────────────────────────────────
+    //  Steel-blue / condition-end / status  (#99CCFF)
+    // ─────────────────────────────────────────────
+
+    /// <summary>Condition ending / status update (steel blue).</summary>
+    public static string StatusEnd(string message)
+        => Color(message, ColorSteelBlue);
+
+    // ─────────────────────────────────────────────
+    //  Misc colour pass-through helpers
+    // ─────────────────────────────────────────────
+
+    /// <summary>Pale-blue informational line (#AADDFF).</summary>
+    public static string PaleBlue(string emoji, string message)
+        => Color($"{emoji} {message}", ColorPaleBlue);
+
+    /// <summary>Ice-blue informational line (#A6F3FF).</summary>
+    public static string IceBlue(string emoji, string message)
+        => Color($"{emoji} {message}", ColorIceBlue);
+
+    /// <summary>Royal-blue line (#4169E1).</summary>
+    public static string RoyalBlue(string emoji, string message)
+        => Color($"{emoji} {message}", ColorRoyalBlue);
 }

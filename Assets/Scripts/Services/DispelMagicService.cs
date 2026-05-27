@@ -228,7 +228,7 @@ public class DispelMagicService : MonoBehaviour
 
         if (!dispelledSomething)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF8888>❌ Dispel Magic fails — could not overcome any spell on {targetName}.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("❌", $"Dispel Magic fails — could not overcome any spell on {targetName}."));
             Debug.Log($"[DispelMagic] All dispel checks failed on {targetName}");
         }
 
@@ -278,7 +278,7 @@ public class DispelMagicService : MonoBehaviour
         string spellId = effect.Spell.SpellId;
         string targetName = target.Stats != null ? target.Stats.CharacterName : "Unknown";
 
-        CombatUI?.ShowCombatLog($"<color=#88FF88>✅ Dispel Magic succeeds — {spellName} dispelled from {targetName} {checkDetail}</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"Dispel Magic succeeds — {spellName} dispelled from {targetName} {checkDetail}"));
         Debug.Log($"[DispelMagic] Dispelled {spellName} (CL {effect.CasterLevel}) from {targetName} {checkDetail}");
 
         // Handle special effect cleanup before removing the tracked effect
@@ -318,7 +318,7 @@ public class DispelMagicService : MonoBehaviour
             bool causedDeath = target.RemoveAttributeEnhancement(ability);
             if (causedDeath && target.Stats != null)
             {
-                CombatUI?.ShowCombatLog($"<color=#FF4444>💀 Dispelling {effect.Spell.Name} killed {target.Stats.CharacterName}! (HP loss from {abilityName} reduction)</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("💀", $"Dispelling {effect.Spell.Name} killed {target.Stats.CharacterName}! (HP loss from {abilityName} reduction)"));
                 target.OnDeath();
                 _handleSummonDeathCleanup?.Invoke(target);
             }
@@ -354,7 +354,7 @@ public class DispelMagicService : MonoBehaviour
             if (target.ActiveCommandUndeadEffect != null)
             {
                 target.RemoveCommandUndeadEffect();
-                CombatUI?.ShowCombatLog($"<color=#FF8888>💀 Command Undead control broken on {target.Stats?.CharacterName}!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("💀", $"Command Undead control broken on {target.Stats?.CharacterName}!"));
             }
             return;
         }
@@ -446,13 +446,13 @@ public class DispelMagicService : MonoBehaviour
             if (target.Stats.ImbueWithSpellAbilityCasterActive)
             {
                 ImbueWithSpellAbilityManager.EndImbueEffect(target, target.Stats.ImbueTarget, "dispelled from caster");
-                CombatUI?.ShowCombatLog($"<color=#FF8888>✨ Imbue with Spell Ability dispelled — {target.Stats?.CharacterName}'s locked spell slots freed.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("✨", $"Imbue with Spell Ability dispelled — {target.Stats?.CharacterName}'s locked spell slots freed."));
             }
             // If dispelled from the target, end the entire imbue link
             else if (target.Stats.ImbueWithSpellAbilityTargetActive)
             {
                 ImbueWithSpellAbilityManager.EndImbueEffect(target.Stats.ImbueCaster, target, "dispelled from target");
-                CombatUI?.ShowCombatLog($"<color=#FF8888>✨ Imbue with Spell Ability dispelled — imbued spells lost.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("✨", "Imbue with Spell Ability dispelled — imbued spells lost."));
             }
             return;
         }

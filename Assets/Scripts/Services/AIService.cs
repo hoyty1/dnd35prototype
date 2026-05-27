@@ -1070,9 +1070,9 @@ public class AIService : MonoBehaviour
         {
             CharacterController summonCaster = _gameManager.GetSummonCasterForAI(swarm);
             if (summonCaster != null && target == summonCaster)
-                _gameManager.CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ {swarm.Stats.CharacterName} is uncontrolled and attacks its summoner {target.Stats.CharacterName}!</color>");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{swarm.Stats.CharacterName} is uncontrolled and attacks its summoner {target.Stats.CharacterName}!"));
             else
-                _gameManager.CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ {swarm.Stats.CharacterName} is uncontrolled and attacks ally {target.Stats.CharacterName}!</color>");
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{swarm.Stats.CharacterName} is uncontrolled and attacks ally {target.Stats.CharacterName}!"));
         }
 
         if (!swarm.IsTargetInCurrentWeaponRange(target) && swarm.Actions.HasMoveAction)

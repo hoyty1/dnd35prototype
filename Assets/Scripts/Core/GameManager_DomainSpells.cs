@@ -446,7 +446,7 @@ public partial class GameManager
         {
             target.OnDeath();
             HandleSummonDeathCleanup(target);
-            CombatUI?.ShowCombatLog($"<color=#FF0000>  💀 {target.Stats.CharacterName} has been slain by Heat Metal!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{target.Stats.CharacterName} has been slain by Heat Metal!"));
         }
 
         UpdateAllStatsUI();

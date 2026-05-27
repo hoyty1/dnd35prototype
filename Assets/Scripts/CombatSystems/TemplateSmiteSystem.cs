@@ -214,7 +214,7 @@ public partial class GameManager
         attacker.Stats.TemplateSmiteUsed = true;
 
         string axisLabel = GetTemplateSmiteAxisLabel(attacker);
-        CombatUI?.ShowCombatLog($"<color=#FFD280>✦ {attacker.Stats.CharacterName} uses Smite {axisLabel}! (+{attackBonus} attack, +{damageBonus} damage)</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"✦ {attacker.Stats.CharacterName} uses Smite {axisLabel}! (+{attackBonus} attack, +{damageBonus} damage)", "FFD280"));
         if (result != null)
             CombatUI?.ShowCombatLog(result.GetDetailedSummary());
 

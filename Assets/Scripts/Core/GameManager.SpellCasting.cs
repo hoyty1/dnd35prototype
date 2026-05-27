@@ -1672,7 +1672,7 @@ public partial class GameManager
         {
             if (!SpellComponentRegistry.ValidatePouchRequirement(_pendingSpell.SpellId, _pendingSpell, caster, out string pouchFailure))
             {
-                CombatUI?.ShowCombatLog($"<color=#FF6666>❌ {caster.Stats?.CharacterName} cannot cast {_pendingSpell.Name} — requires a {pouchFailure} for material components! Purchase one from the store (5 gp).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{caster.Stats?.CharacterName} cannot cast {_pendingSpell.Name} — requires a {pouchFailure} for material components! Purchase one from the store (5 gp)."));
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
@@ -5722,7 +5722,7 @@ public partial class GameManager
             result.BuffDescription = $"Debuff: Paralyzed for {ghoulEffect.ParalysisDurationRounds} rounds (stench aura active).";
         }
 
-        CombatUI?.ShowCombatLog($"<color=#FF6666>⛓ {targetName} is paralyzed by Ghoul Touch for {ghoulEffect.ParalysisDurationRounds} rounds!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Failure("⛓", $"{targetName} is paralyzed by Ghoul Touch for {ghoulEffect.ParalysisDurationRounds} rounds!"));
         CombatUI?.ShowCombatLog($"<color=#99CC66>☠ Carrion stench emanates from {targetName} (10-ft radius, sickens living creatures).</color>");
 
         // Apply stench to nearby creatures immediately
@@ -7096,7 +7096,7 @@ public partial class GameManager
                     // Inventory-based component check
                     if (!SpellComponentRegistry.HasRequiredInventoryComponents(spell.SpellId, caster, out string missingComponent))
                     {
-                        CombatUI?.ShowCombatLog($"<color=#FF6666>❌ {casterStats.CharacterName} cannot cast Stoneskin — missing required component: {missingComponent}! Purchase it from the store and carry it in your inventory.</color>");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{casterStats.CharacterName} cannot cast Stoneskin — missing required component: {missingComponent}! Purchase it from the store and carry it in your inventory."));
                         return null;
                     }
                     SpellComponentRegistry.ConsumeInventoryComponents(spell.SpellId, caster);
@@ -7108,7 +7108,7 @@ public partial class GameManager
                     if (!SpellComponentRegistry.CanAffordComponents(spell.SpellId, casterStats))
                     {
                         string summary = SpellComponentRegistry.GetConsumptionSummary(spell.SpellId);
-                        CombatUI?.ShowCombatLog($"<color=#FF6666>❌ {casterStats.CharacterName} cannot cast Stoneskin — insufficient material components! {summary ?? ""} (has {casterStats.ComponentGold} gp)</color>");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{casterStats.CharacterName} cannot cast Stoneskin — insufficient material components! {summary ?? ""} (has {casterStats.ComponentGold} gp)"));
                         return null;
                     }
                     SpellComponentRegistry.ConsumeComponents(spell.SpellId, casterStats);
@@ -7207,7 +7207,7 @@ public partial class GameManager
             // Check if caster has enough HP (must have at least 1 HP after loss)
             if (recipient.Stats.CurrentHP <= handHP)
             {
-                CombatUI?.ShowCombatLog($"<color=#FF8888>👻 {recipient.Stats.CharacterName} does not have enough HP to create Spectral Hand (needs >{handHP} HP).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("👻", $"{recipient.Stats.CharacterName} does not have enough HP to create Spectral Hand (needs >{handHP} HP)."));
                 return null;
             }
 

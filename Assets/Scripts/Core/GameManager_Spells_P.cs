@@ -272,8 +272,8 @@ public partial class GameManager
             // Fort failed: TARGET DIES
             result.TargetKilled = true;
 
-            CombatUI?.ShowCombatLog($"<color=#FF0000>   Fort save: {fortRollStr} → FAILED!</color>");
-            CombatUI?.ShowCombatLog($"<color=#FF0000>💀 {targetName} DIES FROM FEAR! The phantasm's terror stops their heart!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("", $"  Fort save: {fortRollStr} → FAILED!"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{targetName} DIES FROM FEAR! The phantasm's terror stops their heart!"));
 
             Debug.Log($"[PhantasmalKiller] {casterName} -> {targetName}: Will failed, Fort failed. TARGET DIES.");
         }

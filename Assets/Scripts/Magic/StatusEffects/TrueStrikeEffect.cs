@@ -54,7 +54,7 @@ public class TrueStrikeEffect : MonoBehaviour
         _consumed = true;
 
         string casterName = _caster != null && _caster.Stats != null ? _caster.Stats.CharacterName : "Unknown";
-        _gameManager?.CombatUI?.ShowCombatLog($"<color=#FFD27F>🎯 {casterName}'s True Strike is consumed (+20 insight, concealment ignored).</color>");
+        _gameManager?.CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🎯 {casterName}'s True Strike is consumed (+20 insight, concealment ignored).", "FFD27F"));
         Debug.Log($"[TrueStrike] Consumed on attack roll by {casterName}.");
 
         Destroy(this);
@@ -75,7 +75,7 @@ public class TrueStrikeEffect : MonoBehaviour
         {
             _consumed = true;
             string casterName = _caster != null && _caster.Stats != null ? _caster.Stats.CharacterName : "Unknown";
-            _gameManager?.CombatUI?.ShowCombatLog($"<color=#FFAA66>⏱ {casterName}'s True Strike expires unused.</color>");
+            _gameManager?.CombatUI?.ShowCombatLog(CombatLogHelper.Color($"⏱ {casterName}'s True Strike expires unused.", "FFAA66"));
             Debug.Log($"[TrueStrike] Expired unused for {casterName} at end of round {currentRound}.");
             Destroy(this);
         }

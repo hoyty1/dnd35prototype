@@ -292,7 +292,7 @@ public partial class GameManager
         summon.Stats.TemplateSmiteUsed = true;
 
         string targetAxis = smiteEvil ? "Evil" : "Good";
-        CombatUI.ShowCombatLog($"<color=#FFD280>✦ {GetSummonDisplayName(summon)} uses Smite {targetAxis}! {result.GetDetailedSummary()}</color>");
+        CombatUI.ShowCombatLog(CombatLogHelper.Color($"✦ {GetSummonDisplayName(summon)} uses Smite {targetAxis}! {result.GetDetailedSummary()}", "FFD280"));
 
         if (result.TargetKilled)
             HandleSummonDeathCleanup(target);

@@ -273,7 +273,7 @@ public partial class GameManager : MonoBehaviour
         PlaneType previous = _currentPlane;
         _currentPlane = plane;
         Debug.Log($"[PlaneSystem] Plane changed: {PlaneHelper.GetDisplayName(previous)} → {PlaneHelper.GetDisplayName(plane)}");
-        CombatUI?.ShowCombatLog($"<color=#9370DB>🌌 The party is now on the {PlaneHelper.GetDisplayName(plane)}.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🌌 The party is now on the {PlaneHelper.GetDisplayName(plane)}.", "9370DB"));
     }
 
     /// <summary>Returns the PC whose turn it currently is (null during NPC turns).</summary>
@@ -3015,7 +3015,7 @@ public partial class GameManager : MonoBehaviour
 
             string wakeMsg = $"⏱ {character.Stats.CharacterName} wakes as sleep duration expires.";
             Debug.Log($"[Condition] {wakeMsg}");
-            CombatUI?.ShowCombatLog($"<color=#99CCFF>{wakeMsg}</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.StatusEnd(wakeMsg));
             return;
         }
 
@@ -3037,14 +3037,14 @@ public partial class GameManager : MonoBehaviour
         {
             string fearEnd = $"⏱ {character.Stats.CharacterName} is no longer frightened.";
             Debug.Log($"[Condition] {fearEnd}");
-            CombatUI?.ShowCombatLog($"<color=#99CCFF>{fearEnd}</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.StatusEnd(fearEnd));
             return;
         }
 
         string conditionLabel = condition.Type.ToString();
         string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
         Debug.Log($"[Condition] {msg}");
-        CombatUI?.ShowCombatLog($"<color=#99CCFF>{msg}</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.StatusEnd(msg));
     }
 
     public void BreakCharmOnHostileAction(CharacterController attacker, CharacterController target)
@@ -3110,8 +3110,8 @@ public partial class GameManager : MonoBehaviour
         if (isCasterOrAlly)
         {
             string attackerName = attacker.Stats != null ? attacker.Stats.CharacterName : "Unknown";
-            CombatUI?.ShowCombatLog($"<color=#FF6666>💔 {target.Stats.CharacterName} is no longer commanded! " +
-                $"Threatening act by {attackerName} broke the Command Undead spell.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("💔", $"{target.Stats.CharacterName} is no longer commanded! " +
+                $"Threatening act by {attackerName} broke the Command Undead spell."));
             target.BreakCommandUndeadControl($"Threatening act by {attackerName}");
         }
     }
@@ -5978,7 +5978,7 @@ public partial class GameManager : MonoBehaviour
         if (spellEntry.IsStub)
         {
             // Stub spell — just log the description
-            CombatUI?.ShowCombatLog($"⚡ <color=#888888>{spellEntry.SpellName} effect (stub): {spellEntry.StubDescription ?? "Not yet implemented"}</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.StubRaw($"⚡ {spellEntry.SpellName} effect (stub): {spellEntry.StubDescription ?? "Not yet implemented"}"));
         }
         else
         {
@@ -6037,21 +6037,21 @@ public partial class GameManager : MonoBehaviour
             }
             else
             {
-                CombatUI?.ShowCombatLog($"⚡ <color=#888888>Spell '{spellEntry.SpellName}' not found in SpellDatabase — effect not applied.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.StubRaw($"⚡ Spell '{spellEntry.SpellName}' not found in SpellDatabase — effect not applied."));
             }
         }
 
         // Low charge warning
         if (staffItem.StaffCharges > 0 && staffItem.StaffCharges <= 5)
         {
-            CombatUI?.ShowCombatLog($"<color=#FFAA00>⚠ WARNING: {staffName} running low on charges! ({staffItem.StaffCharges} remaining)</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"WARNING: {staffName} running low on charges! ({staffItem.StaffCharges} remaining)"));
         }
 
         // Check if expended
         if (staffItem.StaffCharges <= 0)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF4444>⚡ {staffName} expends its final charge and becomes inert!</color>");
-            CombatUI?.ShowCombatLog($"<color=#FF4444>⚡ The staff is now a non-magical quarterstaff and worthless.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⚡", $"{staffName} expends its final charge and becomes inert!"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⚡", "The staff is now a non-magical quarterstaff and worthless."));
             ConvertStaffToMundane(staffItem);
         }
 

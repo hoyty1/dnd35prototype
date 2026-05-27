@@ -132,7 +132,7 @@ public partial class GameManager
             totalEnchanted += toEnchant;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#FF8844>🔥 {casterName} casts Flame Arrow — {totalEnchanted} projectiles now deal +1d6 fire damage [{durationRounds} rounds].</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🔥", $"{casterName} casts Flame Arrow — {totalEnchanted} projectiles now deal +1d6 fire damage [{durationRounds} rounds]."));
         Debug.Log($"[GameManager] Flame Arrow: {casterName} enchanted {totalEnchanted} projectiles with +1d6 fire, CL {casterLevel}, {durationRounds} rounds");
 
         UpdateAllStatsUI();

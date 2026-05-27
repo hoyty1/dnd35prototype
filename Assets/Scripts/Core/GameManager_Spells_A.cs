@@ -58,7 +58,7 @@ public partial class GameManager
                 effect.RemainingRounds = durationRounds;
         }
 
-        CombatUI?.ShowCombatLog($"<color=#FFCC33>⚔✨ Align Weapon! {target.Stats.CharacterName}'s weapon is now {alignment}-aligned for {durationRounds} rounds ({casterLevel} minutes). Bypasses DR/{alignment}.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔✨", $"Align Weapon! {target.Stats.CharacterName}'s weapon is now {alignment}-aligned for {durationRounds} rounds ({casterLevel} minutes). Bypasses DR/{alignment}."));
         Debug.Log($"[AlignWeapon] {target.Stats.CharacterName}'s weapon aligned as '{alignment}' for {durationRounds} rounds");
 
         return true;

@@ -65,9 +65,9 @@ public partial class GameManager
 
             string casterName = caster.Stats.CharacterName;
             CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("✨", $"{casterName} casts Blink!"));
-            CombatUI?.ShowCombatLog($"<color=#A6D4FF>   {casterName} begins blinking between the Material and Ethereal Planes.</color>");
-            CombatUI?.ShowCombatLog($"<color=#A6D4FF>   Defensive: 50% miss chance vs attacks ({effect.GetDurationDisplayString()}).</color>");
-            CombatUI?.ShowCombatLog($"<color=#A6D4FF>   Offensive: 20% miss chance, but +2 attack & deny Dex to AC.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.PaleBlue("", $"  {casterName} begins blinking between the Material and Ethereal Planes."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.PaleBlue("", $"  Defensive: 50% miss chance vs attacks ({effect.GetDurationDisplayString()})."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.PaleBlue("", "  Offensive: 20% miss chance, but +2 attack & deny Dex to AC."));
         }
 
         UpdateAllStatsUI();
@@ -166,8 +166,8 @@ public partial class GameManager
                     Type = CurseType.BestowCurseAbilityPenalty
                 });
 
-                CombatUI?.ShowCombatLog($"<color=#8B0000>🔮 {target.Stats.CharacterName} is cursed! {curseDescription} (permanent).</color>");
-                CombatUI?.ShowCombatLog($"<color=#AA5555>   Ability reduced by {penalty} (minimum effective score of 1).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Curse("🔮", $"{target.Stats.CharacterName} is cursed! {curseDescription} (permanent)."));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Color($"   Ability reduced by {penalty} (minimum effective score of 1).", "AA5555"));
                 break;
             }
 
@@ -189,7 +189,7 @@ public partial class GameManager
                     Type = CurseType.BestowCurseGeneralPenalty
                 });
 
-                CombatUI?.ShowCombatLog($"<color=#8B0000>🔮 {target.Stats.CharacterName} is cursed! {curseDescription} (permanent).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Curse("🔮", $"{target.Stats.CharacterName} is cursed! {curseDescription} (permanent)."));
                 break;
             }
 
@@ -209,7 +209,7 @@ public partial class GameManager
                     Type = CurseType.BestowCurseActionLoss
                 });
 
-                CombatUI?.ShowCombatLog($"<color=#8B0000>🔮 {target.Stats.CharacterName} is cursed! {curseDescription} (permanent).</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Curse("🔮", $"{target.Stats.CharacterName} is cursed! {curseDescription} (permanent)."));
                 break;
             }
         }

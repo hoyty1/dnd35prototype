@@ -285,7 +285,7 @@ public partial class GameManager
             recipientStatusMgr.RemoveEffectsBySpellId(SpellNames.SLOW);
 
             string casterName2 = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-            CombatUI?.ShowCombatLog($"<color=#88FF88>⚡ {casterName2}'s Haste dispels Slow on {recipient.Stats.CharacterName}!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("⚡", $"{casterName2}'s Haste dispels Slow on {recipient.Stats.CharacterName}!"));
         }
 
         ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
@@ -314,8 +314,8 @@ public partial class GameManager
                 : $"<color=#88FF88>⚡ {casterName} casts Haste on {recipient.Stats.CharacterName}!</color>";
 
             CombatUI?.ShowCombatLog(castLine);
-            CombatUI?.ShowCombatLog($"<color=#AAFFAA>   +1 attack, +1 dodge AC, +1 Reflex, +30 ft speed, extra attack on full attack</color>");
-            CombatUI?.ShowCombatLog($"<color=#AAFFAA>   Duration: {durationRounds} rounds (CL {casterLevel})</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color("   +1 attack, +1 dodge AC, +1 Reflex, +30 ft speed, extra attack on full attack", "AAFFAA"));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color($"   Duration: {durationRounds} rounds (CL {casterLevel})", "AAFFAA"));
         }
 
         UpdateAllStatsUI();

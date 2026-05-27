@@ -70,14 +70,14 @@ public partial class GameManager
         result.BuffDescription = $"Debuff: {negativeLevels} negative level(s) for {casterLevel} hour(s).";
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-        CombatUI?.ShowCombatLog($"<color=#9933CC>💀 {target.Stats.CharacterName} gains {negativeLevels} negative level{(negativeLevels > 1 ? "s" : "")} from Enervation!</color>");
-        CombatUI?.ShowCombatLog($"<color=#AA77CC>   Each negative level: -1 attack/saves/skills, -5 HP, -1 effective level</color>");
-        CombatUI?.ShowCombatLog($"<color=#AA77CC>   Duration: {casterLevel} hour{(casterLevel > 1 ? "s" : "")} ({durationRounds} rounds)</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"💀 {target.Stats.CharacterName} gains {negativeLevels} negative level{(negativeLevels > 1 ? "s" : "")} from Enervation!", "9933CC"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color("   Each negative level: -1 attack/saves/skills, -5 HP, -1 effective level", "AA77CC"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"   Duration: {casterLevel} hour{(casterLevel > 1 ? "s" : "")} ({durationRounds} rounds)", "AA77CC"));
 
         // Check if target dies from negative levels (HD reduced to 0)
         if (NegativeLevelSystem.IsDeadFromNegativeLevels(target))
         {
-            CombatUI?.ShowCombatLog($"<color=#FF3333>☠ {target.Stats.CharacterName} is slain by negative levels! (negative levels ≥ HD)</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("☠", $"{target.Stats.CharacterName} is slain by negative levels! (negative levels ≥ HD)"));
             result.TargetKilled = true;
         }
 

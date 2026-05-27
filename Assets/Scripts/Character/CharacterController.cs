@@ -6366,7 +6366,7 @@ public class CharacterController : MonoBehaviour
                 string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
                 result.SpecialAttackNote = $"Brilliant Energy weapon passes harmlessly through {targetName} ({targetCT}) — cannot harm undead or constructs.";
                 if (GameManager.Instance?.CombatUI != null)
-                    GameManager.Instance.CombatUI.ShowCombatLog($"<color=#FFDD44>✦ {attackerName}'s Brilliant Energy weapon passes harmlessly through {targetName} ({targetCT})!</color>");
+                    GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Color($"✦ {attackerName}'s Brilliant Energy weapon passes harmlessly through {targetName} ({targetCT})!", CombatLogHelper.ColorSoftYellow));
                 return result;
             }
         }
@@ -6597,7 +6597,7 @@ public class CharacterController : MonoBehaviour
             {
                 string attackerName = Stats != null ? Stats.CharacterName : name;
                 string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-                GameManager.Instance?.CombatUI?.ShowCombatLog($"<color=#A6F3FF>👁 {attackerName} sees invisible {targetName} clearly (no concealment).</color>");
+                GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.IceBlue("👁", $"{attackerName} sees invisible {targetName} clearly (no concealment)."));
             }
 
             if (targetMissChance > 0 && CanSeeInvisible(target) && target.HasActiveBlurEffect)

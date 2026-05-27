@@ -56,7 +56,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
 
-        CombatUI?.ShowCombatLog($"<color=#44AAFF>🛡 {casterName} casts Lesser Globe of Invulnerability!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🛡 {casterName} casts Lesser Globe of Invulnerability!", "44AAFF"));
         CombatUI?.ShowCombatLog($"  A 10-ft radius emanation of shimmering protection forms around {casterName}.");
         CombatUI?.ShowCombatLog($"  Blocks all spell effects of 3rd level or lower.");
         CombatUI?.ShowCombatLog($"  Spells of 4th level and higher pass through normally.");

@@ -44,7 +44,7 @@ public static class CounterspellManager
         {
             Debug.Log($"[RingCounterspell] Cannot store level {spellLevel} spell — max is {MAX_COUNTERSPELL_LEVEL}.");
             if (GameManager.Instance != null)
-                GameManager.Instance.CombatUI?.ShowCombatLog($"<color=#FF6666>❌ {spellName} (level {spellLevel}) is too high for Ring of Counterspells (max level {MAX_COUNTERSPELL_LEVEL}).</color>");
+                GameManager.Instance.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"{spellName} (level {spellLevel}) is too high for Ring of Counterspells (max level {MAX_COUNTERSPELL_LEVEL})."));
             return false;
         }
 
@@ -52,7 +52,7 @@ public static class CounterspellManager
         {
             Debug.Log($"[RingCounterspell] Ring already holds a counterspell: {ring.RingCounterspellStoredName}");
             if (GameManager.Instance != null)
-                GameManager.Instance.CombatUI?.ShowCombatLog($"<color=#FF6666>❌ Ring of Counterspells already holds {ring.RingCounterspellStoredName}. Remove it first.</color>");
+                GameManager.Instance.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"Ring of Counterspells already holds {ring.RingCounterspellStoredName}. Remove it first."));
             return false;
         }
 

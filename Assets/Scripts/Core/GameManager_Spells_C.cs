@@ -112,7 +112,7 @@ public partial class GameManager
 
             if (damageReport.Length > 0)
             {
-                CombatUI?.ShowCombatLog($"<color=#CC6633>   Immediate effect: {damageReport}</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Color($"   Immediate effect: {damageReport}", "CC6633"));
             }
         }
 
@@ -120,8 +120,8 @@ public partial class GameManager
         result.BuffDescription = $"Disease: {diseaseData.Name} contracted (immediate onset).";
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-        CombatUI?.ShowCombatLog($"<color=#CC6633>🦠 {target.Stats.CharacterName} contracts {diseaseData.Name} from Contagion!</color>");
-        CombatUI?.ShowCombatLog($"<color=#CC9966>   Fort DC {diseaseData.FortitudeDC} daily to resist. 2 consecutive saves = cured.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"🦠 {target.Stats.CharacterName} contracts {diseaseData.Name} from Contagion!", "CC6633"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"   Fort DC {diseaseData.FortitudeDC} daily to resist. 2 consecutive saves = cured.", "CC9966"));
 
         // Check if ability damage killed the target
         target.CheckAbilityScoreZeroEffects();

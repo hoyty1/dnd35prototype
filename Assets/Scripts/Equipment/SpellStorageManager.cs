@@ -70,7 +70,7 @@ public static class SpellStorageManager
         {
             Debug.Log("[SpellStorage] Cannot store cantrips (level 0).");
             if (GameManager.Instance != null)
-                GameManager.Instance.CombatUI?.ShowCombatLog("<color=#FF6666>❌ Cannot store cantrips in Ring of Spell Storing.</color>");
+                GameManager.Instance.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", "Cannot store cantrips in Ring of Spell Storing."));
             return false;
         }
 
@@ -79,7 +79,7 @@ public static class SpellStorageManager
             int available = GetAvailableSpellLevels(ring);
             Debug.Log($"[SpellStorage] Not enough capacity: need {spellLevel}, have {available}.");
             if (GameManager.Instance != null)
-                GameManager.Instance.CombatUI?.ShowCombatLog($"<color=#FF6666>❌ Ring has {available} spell level(s) free, but {spell.Name} requires {spellLevel}.</color>");
+                GameManager.Instance.CombatUI?.ShowCombatLog(CombatLogHelper.Failure("❌", $"Ring has {available} spell level(s) free, but {spell.Name} requires {spellLevel}."));
             return false;
         }
 
