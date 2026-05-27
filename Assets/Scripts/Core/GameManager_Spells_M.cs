@@ -75,7 +75,7 @@ public partial class GameManager
 
         if (candidates.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF8888>  No valid humanoid targets found for {spellName}.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("", $" No valid humanoid targets found for {spellName}."));
             return null;
         }
 
@@ -126,7 +126,7 @@ public partial class GameManager
 
                     if (saveResult.Saved)
                     {
-                        CombatUI?.ShowCombatLog($"<color=#88FF88>  {target.Stats.CharacterName} resists {spellName}!</color>");
+                        CombatUI?.ShowCombatLog(CombatLogHelper.SpellResisted(target.Stats.CharacterName, spellName));
                         continue;
                     }
                 }
@@ -240,7 +240,7 @@ public partial class GameManager
         bool selfCast = recipient == caster;
         string targetName = selfCast ? "self" : recipient.Stats.CharacterName;
 
-        CombatUI?.ShowCombatLog($"<color=#88FF88>🛡 {casterName} casts Magic Vestment on {targetName}!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("🛡", $"{casterName} casts Magic Vestment on {targetName}!"));
         CombatUI?.ShowCombatLog($"<color=#AAFFAA>   +{enhBonus} enhancement bonus to armor (CL {casterLevel})</color>");
         CombatUI?.ShowCombatLog($"<color=#AAFFAA>   Duration: {durationRounds} rounds ({durationRounds / 600} hours)</color>");
 

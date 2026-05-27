@@ -438,7 +438,7 @@ public partial class GameManager
         target.Stats.CurrentHP -= totalDamage;
         int hpAfter = target.Stats.CurrentHP;
 
-        CombatUI?.ShowCombatLog($"<color=#FF4444>🔥 Heat Metal on {target.Stats.CharacterName}: {phase} — {diceCount}d4 = {totalDamage} fire [{hpBefore}→{hpAfter} HP]</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("🔥", $"Heat Metal on {target.Stats.CharacterName}: {phase} — {diceCount}d4 = {totalDamage} fire [{hpBefore}→{hpAfter} HP]"));
 
         CheckConcentrationOnDamage(target, totalDamage);
 

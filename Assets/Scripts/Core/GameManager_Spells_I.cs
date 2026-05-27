@@ -39,13 +39,13 @@ public partial class GameManager
 
         if (!result.Success)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Imbue with Spell Ability failed (spell did not succeed).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("✖", "Imbue with Spell Ability failed (spell did not succeed)."));
             return true;
         }
 
         if (target == null || target.Stats == null)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Imbue with Spell Ability: No valid target.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("✖", "Imbue with Spell Ability: No valid target."));
             return true;
         }
 
@@ -56,7 +56,7 @@ public partial class GameManager
         var (isValid, reason) = ImbueWithSpellAbilityManager.ValidateTarget(caster, target);
         if (!isValid)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Imbue with Spell Ability failed: {reason}</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("✖", $"Imbue with Spell Ability failed: {reason}"));
             Debug.Log($"[ImbueWithSpellAbility] Validation failed for {targetName}: {reason}");
             return true;
         }
@@ -321,7 +321,7 @@ public partial class GameManager
         // Wire cancel button
         cancelButton?.onClick.AddListener(() =>
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAAA>Imbue with Spell Ability cancelled.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Imbue with Spell Ability cancelled."));
             Debug.Log("[ImbueWithSpellAbility] Spell selection cancelled by user.");
             Destroy(panelGO);
         });
@@ -345,7 +345,7 @@ public partial class GameManager
             e => e.Spell != null && e.Spell.SpellId == spellId);
         if (entry == null)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF8888>✖ Failed to cast imbued spell — not found.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("✖", "Failed to cast imbued spell — not found."));
             return;
         }
 
@@ -423,7 +423,7 @@ public partial class GameManager
 
         if (!ImbueWithSpellAbilityManager.HasImbuedSpells(pc))
         {
-            CombatUI?.ShowCombatLog("<color=#FF8888>No imbued spells available.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Color("No imbued spells available.", CombatLogHelper.ColorBrightRed));
             return;
         }
 

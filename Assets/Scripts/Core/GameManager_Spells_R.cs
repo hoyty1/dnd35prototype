@@ -41,7 +41,7 @@ public partial class GameManager
         // Diseases are tracked via target.ActiveDiseases (populated by Contagion, etc.)
         if (target.ActiveDiseases == null || target.ActiveDiseases.Count == 0)
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAAA>✦ {casterName} casts Remove Disease on {targetName}, but no diseases are found.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✦", $"{casterName} casts Remove Disease on {targetName}, but no diseases are found."));
             result.BuffApplied = true;
             result.BuffDescription = "No diseases to remove.";
             return true;
@@ -70,18 +70,18 @@ public partial class GameManager
             }
             else
             {
-                CombatUI?.ShowCombatLog($"<color=#FF8888>  Failed to remove {diseaseName} (check {check} vs DC {diseaseDC})</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("", $" Failed to remove {diseaseName} (check {check} vs DC {diseaseDC})"));
                 Debug.Log($"[RemoveDisease] Failed to remove {diseaseName} from {targetName} (check {check} vs DC {diseaseDC})");
             }
         }
 
         if (removedCount > 0)
         {
-            CombatUI?.ShowCombatLog($"<color=#88FF88>🌿 Remove Disease! {casterName} cures {targetName} of {removedCount} disease(s): {removedList}</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🌿", $"Remove Disease! {casterName} cures {targetName} of {removedCount} disease(s): {removedList}"));
         }
         else
         {
-            CombatUI?.ShowCombatLog($"<color=#FF8888>🌿 Remove Disease: {casterName} attempts to cure {targetName} but all caster level checks fail!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("🌿", $"Remove Disease: {casterName} attempts to cure {targetName} but all caster level checks fail!"));
         }
 
         result.BuffApplied = true;
@@ -119,7 +119,7 @@ public partial class GameManager
 
         if (!wasBlinded && !wasDeafened)
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAAA>✦ {casterName} casts Remove Blindness/Deafness on {targetName}, but they are neither blind nor deaf.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✦", $"{casterName} casts Remove Blindness/Deafness on {targetName}, but they are neither blind nor deaf."));
             result.BuffApplied = true;
             result.BuffDescription = "No blindness or deafness to remove.";
             return true;
@@ -140,7 +140,7 @@ public partial class GameManager
             removedList.Append("Deafness");
         }
 
-        CombatUI?.ShowCombatLog($"<color=#88FF88>👁✨ Remove Blindness/Deafness! {casterName} cures {targetName}'s {removedList}!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("👁✨", $"Remove Blindness/Deafness! {casterName} cures {targetName}'s {removedList}!"));
         Debug.Log($"[RemoveBlindnessDeafness] {casterName} -> {targetName}: removed {removedList}");
 
         result.BuffApplied = true;
@@ -524,7 +524,7 @@ public partial class GameManager
 
         if (!hasAnyCurse)
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAAA>✦ {casterName} casts Remove Curse on {targetName}, but no curses are found.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✦", $"{casterName} casts Remove Curse on {targetName}, but no curses are found."));
             result.BuffApplied = true;
             result.BuffDescription = "No curses to remove.";
             return true;

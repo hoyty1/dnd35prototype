@@ -246,7 +246,7 @@ public partial class GameManager
         cleric.Stats.DestructionDomainUsesToday++;
         cleric.Stats.DestructionSmiteActive = true;
 
-        CombatUI?.ShowCombatLog($"<color=#FF4444>⚔️ {cleric.Stats.CharacterName} invokes Destruction Smite!</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⚔️", $"{cleric.Stats.CharacterName} invokes Destruction Smite!"));
         CombatUI?.ShowCombatLog($"   Next melee attack: +4 attack, +{cleric.Stats.GetClassLevel("Cleric")} damage");
     }
 

@@ -135,7 +135,7 @@ public partial class GameManager
         // Check if target has Neutralize Poison immunity
         if (target.Stats.NeutralizePoisonImmunityActive)
         {
-            CombatUI?.ShowCombatLog($"<color=#88FF88>🛡 {targetName} is immune to poison (Neutralize Poison)!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🛡", $"{targetName} is immune to poison (Neutralize Poison)!"));
             return true;
         }
 
@@ -146,7 +146,7 @@ public partial class GameManager
 
         if (saveSuccess)
         {
-            CombatUI?.ShowCombatLog($"<color=#88FF88>☠ Poison: {targetName} resists! (Fort {saveRoll} vs DC {saveDC})</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("☠", $"Poison: {targetName} resists! (Fort {saveRoll} vs DC {saveDC})"));
             Debug.Log($"[Poison] {casterName} -> {targetName}: Fort save {saveRoll} vs DC {saveDC} — resisted");
             return true;
         }

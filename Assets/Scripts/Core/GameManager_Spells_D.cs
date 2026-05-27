@@ -138,7 +138,7 @@ public partial class GameManager
 
         if (!isExtraplanar && !isSummon)
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAAA>  ✦ Dismissal: {targetName} is not an extraplanar creature — spell has no effect.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✦", $"Dismissal: {targetName} is not an extraplanar creature — spell has no effect."));
             return true;
         }
 
@@ -150,7 +150,7 @@ public partial class GameManager
 
         if (saveSuccess)
         {
-            CombatUI?.ShowCombatLog($"<color=#88FF88>🌀 Dismissal: {targetName} resists being sent home! (Will {saveRoll} vs DC {saveDC})</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Success("🌀", $"Dismissal: {targetName} resists being sent home! (Will {saveRoll} vs DC {saveDC})"));
             Debug.Log($"[Dismissal] {casterName} -> {targetName}: Will save {saveRoll} vs DC {saveDC} — resisted");
             return true;
         }
@@ -335,7 +335,7 @@ public partial class GameManager
         if (!isDying)
         {
             // Target is not dying — spell has no valid target
-            CombatUI?.ShowCombatLog($"<color=#FF6666>☠ Death Knell fizzles — {target.Stats.CharacterName} is not dying (HP: {targetHP}).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("☠", $"Death Knell fizzles — {target.Stats.CharacterName} is not dying (HP: {targetHP})."));
             Debug.Log($"[DeathKnell] Target {target.Stats.CharacterName} HP={targetHP}, not in dying range (-1 to -9)");
             return true; // Handled, but no effect
         }
@@ -425,7 +425,7 @@ public partial class GameManager
             string reason = TeleportationBlocker.GetBlockedReason(caster, TeleportationType.Teleportation)
                 ?? "Extradimensional travel is blocked";
 
-            CombatUI?.ShowCombatLog($"<color=#FF4444>🚫 {casterName} attempts Dimension Door, but {reason}!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("🚫", $"{casterName} attempts Dimension Door, but {reason}!"));
             CombatUI?.ShowCombatLog($"<color=#FF6666>   The spell fizzles. The spell slot is consumed.</color>");
 
             // Increment blocked counter on Dimensional Anchor
@@ -448,7 +448,7 @@ public partial class GameManager
         SquareGrid grid = Grid;
         if (grid == null)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF4444>❌ Dimension Door fails: no grid available.</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("❌", "Dimension Door fails: no grid available."));
             return true;
         }
 
@@ -462,7 +462,7 @@ public partial class GameManager
 
         if (!destination.HasValue)
         {
-            CombatUI?.ShowCombatLog($"<color=#FF4444>❌ {casterName}'s Dimension Door fails — no valid destination found within range!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("❌", $"{casterName}'s Dimension Door fails — no valid destination found within range!"));
             result.BuffApplied = false;
             result.BuffDescription = "Dimension Door failed: no valid destination.";
             Debug.Log($"[DimensionDoor] {casterName}: no valid destination found within {rangeSquares} squares");

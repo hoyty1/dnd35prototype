@@ -270,7 +270,7 @@ public partial class GameManager
             else if (!inConsecrate && character.Stats.ConsecrateActive)
             {
                 RemoveConsecrateDebuffs(character);
-                CombatUI?.ShowCombatLog($"<color=#AAAAAA>✨ {character.Stats.CharacterName} leaves consecrated ground.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("✨", $"{character.Stats.CharacterName} leaves consecrated ground."));
             }
 
             if (inDesecrate && !character.Stats.DesecrateActive)
@@ -281,7 +281,7 @@ public partial class GameManager
             else if (!inDesecrate && character.Stats.DesecrateActive)
             {
                 RemoveDesecrateBuffs(character);
-                CombatUI?.ShowCombatLog($"<color=#AAAAAA>💀 {character.Stats.CharacterName} leaves desecrated ground.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("💀", $"{character.Stats.CharacterName} leaves desecrated ground."));
             }
         }
     }

@@ -987,19 +987,19 @@ public partial class GameManager
         switch (destructionType)
         {
             case SphereDestructionType.Disintegrate:
-                CombatUI?.ShowCombatLog($"<color=#FF4444>💥 Resilient Sphere at {targetName}'s position is destroyed by Disintegrate!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("💥", $"Resilient Sphere at {targetName}'s position is destroyed by Disintegrate!"));
                 Debug.Log($"[ResilientSphere] Destroyed by Disintegrate near {targetName}");
                 sphere.ExpireEffect();
                 break;
 
             case SphereDestructionType.RodOfCancellation:
-                CombatUI?.ShowCombatLog($"<color=#FF4444>💥 Resilient Sphere at {targetName}'s position is destroyed by Rod of Cancellation!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("💥", $"Resilient Sphere at {targetName}'s position is destroyed by Rod of Cancellation!"));
                 Debug.Log($"[ResilientSphere] Destroyed by Rod of Cancellation near {targetName}");
                 sphere.ExpireEffect();
                 break;
 
             case SphereDestructionType.RodOfNegation:
-                CombatUI?.ShowCombatLog($"<color=#FF4444>💥 Resilient Sphere at {targetName}'s position is destroyed by Rod of Negation!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("💥", $"Resilient Sphere at {targetName}'s position is destroyed by Rod of Negation!"));
                 Debug.Log($"[ResilientSphere] Destroyed by Rod of Negation near {targetName}");
                 sphere.ExpireEffect();
                 break;
@@ -1066,7 +1066,7 @@ public partial class GameManager
                 if (success)
                     CombatUI?.ShowCombatLog($"<color=#FFD700>✨ {caster.Stats.CharacterName}'s Wish is granted!</color>");
                 else
-                    CombatUI?.ShowCombatLog($"<color=#FF6666>✨ {caster.Stats.CharacterName}'s Wish fails.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", $"{caster.Stats.CharacterName}'s Wish fails."));
 
                 _pendingSpell = null;
                 _pendingMetamagic = null;
@@ -1096,7 +1096,7 @@ public partial class GameManager
             if (success)
                 CombatUI?.ShowCombatLog($"<color=#FFD700>✨ {caster.Stats.CharacterName}'s Wish is granted!</color>");
             else
-                CombatUI?.ShowCombatLog($"<color=#FF6666>✨ {caster.Stats.CharacterName}'s Wish fails.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", $"{caster.Stats.CharacterName}'s Wish fails."));
 
             _pendingSpell = null;
             _pendingMetamagic = null;
@@ -1130,7 +1130,7 @@ public partial class GameManager
                 if (success)
                     CombatUI?.ShowCombatLog($"<color=#FFD700>✨ The Luck Blade grants {caster.Stats.CharacterName}'s Wish!</color>");
                 else
-                    CombatUI?.ShowCombatLog($"<color=#FF6666>✨ The Wish from the Luck Blade fails.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", "The Wish from the Luck Blade fails."));
 
                 ShowActionChoices();
             };
@@ -1153,7 +1153,7 @@ public partial class GameManager
             if (success)
                 CombatUI?.ShowCombatLog($"<color=#FFD700>✨ The Luck Blade grants {caster.Stats.CharacterName}'s Wish!</color>");
             else
-                CombatUI?.ShowCombatLog($"<color=#FF6666>✨ The Wish from the Luck Blade fails.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Failure("✨", "The Wish from the Luck Blade fails."));
         }
     }
 

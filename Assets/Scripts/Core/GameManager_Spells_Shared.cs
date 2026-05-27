@@ -37,7 +37,7 @@ public partial class GameManager
                     // ActiveSpellEffect expires, but we clean up the flag here.
                     character.Stats.PrayerActive = false;
 
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>🙏 {character.Stats.CharacterName}'s Prayer effect fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🙏", character.Stats.CharacterName, "Prayer effect"));
                     Debug.Log($"[Prayer] Expired on {character.Stats.CharacterName}");
                 }
             }
@@ -52,7 +52,7 @@ public partial class GameManager
                 if (character.Stats.InvisibilityPurgeRoundsRemaining <= 0)
                 {
                     character.Stats.InvisibilityPurgeActive = false;
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>👁 {character.Stats.CharacterName}'s Invisibility Purge fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("👁", character.Stats.CharacterName, "Invisibility Purge"));
                     Debug.Log($"[InvisibilityPurge] Expired on {character.Stats.CharacterName}");
                 }
             }
@@ -158,7 +158,7 @@ public partial class GameManager
         if (!fullDamage && !halfDamage)
         {
             // Target's alignment is same as or not affected by this spell
-            CombatUI?.ShowCombatLog($"<color=#AAAAAA>  {emoji} {spellName}: {targetName} is unaffected (alignment: {targetAlignment}).</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.NoEffect(emoji, spellName, targetName, $"alignment: {targetAlignment}"));
             return true;
         }
 
@@ -223,7 +223,7 @@ public partial class GameManager
                 if (character.Stats.DeathWardRoundsRemaining <= 0)
                 {
                     character.Stats.DeathWardActive = false;
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>🛡 {character.Stats.CharacterName}'s Death Ward fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🛡", character.Stats.CharacterName, "Death Ward"));
                     Debug.Log($"[DeathWard] Expired on {character.Stats.CharacterName}");
                 }
             }
@@ -247,7 +247,7 @@ public partial class GameManager
                     character.Stats.DivinePowerTempHP = 0;
                     character.Stats.DivinePowerBABBonus = 0;
 
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>⚔ {character.Stats.CharacterName}'s Divine Power fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("⚔", character.Stats.CharacterName, "Divine Power"));
                     Debug.Log($"[DivinePower] Expired on {character.Stats.CharacterName}");
                 }
             }
@@ -262,7 +262,7 @@ public partial class GameManager
                 if (character.Stats.FreedomOfMovementRoundsRemaining <= 0)
                 {
                     character.Stats.FreedomOfMovementActive = false;
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>🦅 {character.Stats.CharacterName}'s Freedom of Movement fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🦅", character.Stats.CharacterName, "Freedom of Movement"));
                     Debug.Log($"[FreedomOfMovement] Expired on {character.Stats.CharacterName}");
                 }
             }
@@ -278,7 +278,7 @@ public partial class GameManager
                 {
                     character.Stats.SpellImmunityActive = false;
                     character.Stats.SpellImmunitySpellId = null;
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>🛡🔮 {character.Stats.CharacterName}'s Spell Immunity fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🛡🔮", character.Stats.CharacterName, "Spell Immunity"));
                     Debug.Log($"[SpellImmunity] Expired on {character.Stats.CharacterName}");
                 }
             }
@@ -293,7 +293,7 @@ public partial class GameManager
                 if (character.Stats.RepelVerminRoundsRemaining <= 0)
                 {
                     character.Stats.RepelVerminActive = false;
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>🐛 {character.Stats.CharacterName}'s Repel Vermin fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🐛", character.Stats.CharacterName, "Repel Vermin"));
                     Debug.Log($"[RepelVermin] Expired on {character.Stats.CharacterName}");
                 }
             }
@@ -308,7 +308,7 @@ public partial class GameManager
                 if (character.Stats.NeutralizePoisonImmunityRoundsRemaining <= 0)
                 {
                     character.Stats.NeutralizePoisonImmunityActive = false;
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>🌿 {character.Stats.CharacterName}'s poison immunity fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🌿", character.Stats.CharacterName, "poison immunity"));
                     Debug.Log($"[NeutralizePoison] Immunity expired on {character.Stats.CharacterName}");
                 }
             }
@@ -502,7 +502,7 @@ public partial class GameManager
                     character.Stats.DeathKnellStrBonus = 0;
                     character.Stats.DeathKnellCLBonus = 0;
 
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>☠ {character.Stats.CharacterName}'s Death Knell buff fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("☠", character.Stats.CharacterName, "Death Knell buff"));
                     Debug.Log($"[DeathKnell] Buff expired on {character.Stats.CharacterName}");
                 }
             }
@@ -535,7 +535,7 @@ public partial class GameManager
                 {
                     character.Stats.AlignWeaponActive = false;
                     character.Stats.AlignWeaponAlignment = null;
-                    CombatUI?.ShowCombatLog($"<color=#AAAAAA>⚔ {character.Stats.CharacterName}'s Align Weapon fades.</color>");
+                    CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("⚔", character.Stats.CharacterName, "Align Weapon"));
                     Debug.Log($"[AlignWeapon] Expired on {character.Stats.CharacterName}");
                 }
             }

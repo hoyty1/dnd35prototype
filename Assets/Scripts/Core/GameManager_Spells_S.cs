@@ -176,7 +176,7 @@ public partial class GameManager
 
             if (saveResult.Saved)
             {
-                CombatUI?.ShowCombatLog($"<color=#88FF88>  {target.Stats.CharacterName} resists the Slow spell!</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.SpellResisted(target.Stats.CharacterName, "Slow"));
                 return null;
             }
         }
@@ -421,7 +421,7 @@ public partial class GameManager
 
         if (!result.Success)
         {
-            CombatUI?.ShowCombatLog($"<color=#AAAAAA>🔇 {target.Stats.CharacterName} resists {caster.Stats.CharacterName}'s Silence!</color>");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔇", $"{target.Stats.CharacterName} resists {caster.Stats.CharacterName}'s Silence!"));
             return true;
         }
 
@@ -620,7 +620,7 @@ public partial class GameManager
                 character.Stats.SpiritualWeaponActive = false;
                 character.Stats.SpiritualWeaponTarget = null;
                 character.Stats.SpiritualWeaponCasterLevel = 0;
-                CombatUI?.ShowCombatLog($"<color=#AAAAAA>🌟 {character.Stats.CharacterName}'s Spiritual Weapon fades away.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.ConditionFaded("🌟", character.Stats.CharacterName, "Spiritual Weapon"));
                 Debug.Log($"[SpiritualWeapon] Expired for {character.Stats.CharacterName}");
                 return;
             }
@@ -641,7 +641,7 @@ public partial class GameManager
             }
             else
             {
-                CombatUI?.ShowCombatLog($"<color=#AAAAAA>🌟 {character.Stats.CharacterName}'s Spiritual Weapon has no valid target.</color>");
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🌟", $"{character.Stats.CharacterName}'s Spiritual Weapon has no valid target."));
                 return;
             }
         }

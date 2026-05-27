@@ -49,7 +49,7 @@ public partial class GameManager
         }
 
         string curedMsg = wasPoisoned ? " Poison cured!" : "";
-        CombatUI?.ShowCombatLog($"<color=#88FF88>🌿✨ Neutralize Poison! {casterName} neutralizes poison on {targetName}.{curedMsg} Poison immunity for {durationRounds} rounds.</color>");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("🌿✨", $"Neutralize Poison! {casterName} neutralizes poison on {targetName}.{curedMsg} Poison immunity for {durationRounds} rounds."));
         Debug.Log($"[NeutralizePoison] {casterName} -> {targetName}: cured={wasPoisoned}, immunity {durationRounds} rounds");
 
         result.BuffApplied = true;
