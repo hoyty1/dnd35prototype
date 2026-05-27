@@ -479,66 +479,99 @@ public static class SummonMonsterLists
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Summon Nature's Ally I — 1st-level nature summons (small animals).
+    /// Summon Nature's Ally I — 1st-level druid/ranger summons (PHB p.288).
+    /// Animals are summoned as-is (no celestial/fiendish template).
     /// </summary>
     private static List<SummonMonsterOption> GetSummonNaturesAllyIOptions()
     {
         return new List<SummonMonsterOption>
         {
-            new SummonMonsterOption { DisplayName = "Dog", NpcDefinitionId = "dog" },
-            new SummonMonsterOption { DisplayName = "Owl", NpcDefinitionId = "owl" },
-            new SummonMonsterOption { DisplayName = "Hawk", NpcDefinitionId = "hawk" },
-            new SummonMonsterOption { DisplayName = "Badger", NpcDefinitionId = "badger" },
+            new SummonMonsterOption { DisplayName = "Dire Rat", NpcDefinitionId = "dire_rat" },
+            new SummonMonsterOption { DisplayName = "Eagle", NpcDefinitionId = "eagle" },
             new SummonMonsterOption { DisplayName = "Monkey", NpcDefinitionId = "monkey" },
+            new SummonMonsterOption { DisplayName = "Octopus", NpcDefinitionId = "octopus" },              // Aquatic
+            new SummonMonsterOption { DisplayName = "Owl", NpcDefinitionId = "owl" },                       // Note: owl alias uses eagle stats — fix in Phase 6
+            // MISSING: Porpoise — needs NPCDatabase entry (aquatic, swim-only)
             new SummonMonsterOption { DisplayName = "Snake, Small Viper", NpcDefinitionId = "viper_small" },
-            new SummonMonsterOption { DisplayName = "Dire Rat", NpcDefinitionId = "dire_rat" }
+            new SummonMonsterOption { DisplayName = "Wolf", NpcDefinitionId = "wolf" },                     // Alias → wolf_pack_hunter
         };
     }
 
     /// <summary>
-    /// Summon Nature's Ally II — 2nd-level nature summons (medium animals).
+    /// Summon Nature's Ally II — 2nd-level druid summons (PHB p.288).
+    /// Includes first elemental options (Small elementals).
     /// </summary>
     private static List<SummonMonsterOption> GetSummonNaturesAllyIIOptions()
     {
         return new List<SummonMonsterOption>
         {
-            new SummonMonsterOption { DisplayName = "Wolf", NpcDefinitionId = "wolf" },
-            new SummonMonsterOption { DisplayName = "Eagle", NpcDefinitionId = "eagle" },
-            new SummonMonsterOption { DisplayName = "Boar", NpcDefinitionId = "boar" },
+            new SummonMonsterOption { DisplayName = "Bear, Black", NpcDefinitionId = "black_bear" },
+            new SummonMonsterOption { DisplayName = "Crocodile", NpcDefinitionId = "crocodile" },
+            new SummonMonsterOption { DisplayName = "Dire Badger", NpcDefinitionId = "dire_badger" },
+            new SummonMonsterOption { DisplayName = "Dire Bat", NpcDefinitionId = "dire_bat" },
+            new SummonMonsterOption { DisplayName = "Elemental, Small Air", NpcDefinitionId = "small_air_elemental" },
+            new SummonMonsterOption { DisplayName = "Elemental, Small Earth", NpcDefinitionId = "small_earth_elemental" },
+            new SummonMonsterOption { DisplayName = "Elemental, Small Fire", NpcDefinitionId = "small_fire_elemental" },
+            new SummonMonsterOption { DisplayName = "Elemental, Small Water", NpcDefinitionId = "small_water_elemental" },
+            new SummonMonsterOption { DisplayName = "Hippogriff", NpcDefinitionId = "hippogriff" },
+            // MISSING: Shark, Medium — needs NPCDatabase entry (aquatic, swim-only)
             new SummonMonsterOption { DisplayName = "Snake, Medium Viper", NpcDefinitionId = "viper_medium" },
-            new SummonMonsterOption { DisplayName = "Giant Bee", NpcDefinitionId = "giant_bee" },
-            new SummonMonsterOption { DisplayName = "Riding Dog", NpcDefinitionId = "riding_dog" }
+            // MISSING: Squid — needs NPCDatabase entry (aquatic, swim-only)
+            new SummonMonsterOption { DisplayName = "Wolverine", NpcDefinitionId = "wolverine" },
         };
     }
 
     /// <summary>
-    /// Summon Nature's Ally III — 3rd-level nature summons (large animals).
+    /// Summon Nature's Ally III — 3rd-level druid summons (PHB p.288).
+    /// Includes fey (Satyr) and elemental creatures (Thoqqua).
+    /// Giant Eagle and Giant Owl have alignment restrictions (NG only).
     /// </summary>
     private static List<SummonMonsterOption> GetSummonNaturesAllyIIIOptions()
     {
         return new List<SummonMonsterOption>
         {
-            new SummonMonsterOption { DisplayName = "Black Bear", NpcDefinitionId = "black_bear" },
-            new SummonMonsterOption { DisplayName = "Dire Badger", NpcDefinitionId = "dire_badger" },
-            new SummonMonsterOption { DisplayName = "Crocodile", NpcDefinitionId = "crocodile" },
-            new SummonMonsterOption { DisplayName = "Wolverine", NpcDefinitionId = "wolverine" },
-            new SummonMonsterOption { DisplayName = "Dire Bat", NpcDefinitionId = "dire_bat" },
-            new SummonMonsterOption { DisplayName = "Constrictor Snake", NpcDefinitionId = "constrictor_snake" }
+            new SummonMonsterOption { DisplayName = "Ape", NpcDefinitionId = "ape" },
+            new SummonMonsterOption { DisplayName = "Dire Weasel", NpcDefinitionId = "dire_weasel" },
+            new SummonMonsterOption { DisplayName = "Dire Wolf", NpcDefinitionId = "dire_wolf" },
+            new SummonMonsterOption { DisplayName = "Eagle, Giant", NpcDefinitionId = "giant_eagle" },      // PHB: NG alignment restriction
+            new SummonMonsterOption { DisplayName = "Lion", NpcDefinitionId = "lion" },
+            new SummonMonsterOption { DisplayName = "Owl, Giant", NpcDefinitionId = "giant_owl" },          // PHB: NG alignment restriction
+            // MISSING: Satyr (without pipes) — needs NPCDatabase entry (Fey, CR 2, CN)
+            new SummonMonsterOption { DisplayName = "Shark, Large", NpcDefinitionId = "large_shark" },      // Aquatic
+            new SummonMonsterOption { DisplayName = "Snake, Constrictor", NpcDefinitionId = "constrictor_snake" },
+            new SummonMonsterOption { DisplayName = "Snake, Large Viper", NpcDefinitionId = "viper_large" },
+            new SummonMonsterOption { DisplayName = "Thoqqua", NpcDefinitionId = "thoqqua" },
         };
     }
 
     /// <summary>
-    /// Summon Nature's Ally IV — 4th-level nature summons (dire animals, large predators).
+    /// Summon Nature's Ally IV — 4th-level druid summons (PHB p.289).
+    /// Includes Medium elementals, outsiders, and magical beasts.
+    /// Unicorn has CG alignment restriction.
     /// </summary>
     private static List<SummonMonsterOption> GetSummonNaturesAllyIVOptions()
     {
         return new List<SummonMonsterOption>
         {
-            new SummonMonsterOption { DisplayName = "Dire Wolf", NpcDefinitionId = "dire_wolf" },
-            new SummonMonsterOption { DisplayName = "Lion", NpcDefinitionId = "lion" },
-            new SummonMonsterOption { DisplayName = "Giant Eagle", NpcDefinitionId = "giant_eagle" },
-            new SummonMonsterOption { DisplayName = "Giant Owl", NpcDefinitionId = "giant_owl" },
-            new SummonMonsterOption { DisplayName = "Brown Bear", NpcDefinitionId = "dire_bear" }
+            // MISSING: Arrowhawk, Juvenile — needs NPCDatabase entry (Outsider [Air], CR 3)
+            new SummonMonsterOption { DisplayName = "Bear, Brown (Grizzly)", NpcDefinitionId = "brown_bear" },
+            // MISSING: Crocodile, Giant — needs NPCDatabase entry (Animal, CR 4, Huge)
+            // MISSING: Deinonychus — needs NPCDatabase entry (Animal [Dinosaur], CR 3, Medium)
+            // MISSING: Dire Ape — needs NPCDatabase entry (Animal, CR 3, Large)
+            new SummonMonsterOption { DisplayName = "Dire Boar", NpcDefinitionId = "dire_boar" },
+            // MISSING: Dire Wolverine — needs NPCDatabase entry (Animal, CR 4, Large)
+            // MISSING: Elemental, Medium Air — needs NPCDatabase entry (Elemental, CR 3)
+            // MISSING: Elemental, Medium Earth — needs NPCDatabase entry (Elemental, CR 3)
+            // MISSING: Elemental, Medium Fire — needs NPCDatabase entry (Elemental, CR 3)
+            // MISSING: Elemental, Medium Water — needs NPCDatabase entry (Elemental, CR 3)
+            new SummonMonsterOption { DisplayName = "Salamander, Flamebrother", NpcDefinitionId = "flamebrother_salamander" },
+            // MISSING: Sea Cat — needs NPCDatabase entry (Magical Beast [Aquatic], CR 4)
+            // MISSING: Shark, Huge — needs NPCDatabase entry (Animal [Aquatic], CR 4)
+            new SummonMonsterOption { DisplayName = "Snake, Huge Viper", NpcDefinitionId = "viper_huge" },
+            new SummonMonsterOption { DisplayName = "Tiger", NpcDefinitionId = "tiger" },
+            // MISSING: Tojanida, Juvenile — needs NPCDatabase entry (Outsider [Water], CR 3, aquatic)
+            // MISSING: Unicorn — needs NPCDatabase entry (Magical Beast, CR 3, CG alignment restriction)
+            new SummonMonsterOption { DisplayName = "Xorn, Minor", NpcDefinitionId = "minor_xorn" },
         };
     }
 }
