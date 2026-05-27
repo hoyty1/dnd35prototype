@@ -101,6 +101,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.95f, 0.84f, 0.75f),
             Description = "Ape. 2 claws +7 (1d6+5), bite +2 (1d6+2). +8 racial Climb. 10 ft. reach. MM 3.5e p.268."
         });
+    }
     private static void RegisterAboleth()
     {
         Register(new NPCDefinition
@@ -340,5 +341,4 @@ public static partial class NPCDatabase
         });
     }
 
-    }
 }

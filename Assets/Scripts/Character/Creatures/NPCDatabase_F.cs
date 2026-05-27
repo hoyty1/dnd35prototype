@@ -48,6 +48,7 @@ public static partial class NPCDatabase
             NameColor = new Color(1f, 0.78f, 0.64f),
             Description = "Monster Manual giant fire beetle. Small vermin with hard shell, strong bite, and bioluminescent glands."
         });
+    }
     
     private static void RegisterFiendishDireRat()
     {
@@ -339,6 +340,5 @@ public static partial class NPCDatabase
             Description = "Fire Giant (CR 10). Fire-immune giant with greatsword and rock throwing. MM 3.5e p.121."
         });
     }
-}
 
 }

@@ -90,6 +90,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.9f, 0.82f, 0.7f),
             Description = "Wolverine with rage when wounded (+4 Str/Con, −2 AC). +8 racial Climb. MM 3.5e p.283."
         });
+    }
     private static void RegisterWillOWisp()
     {
         Register(new NPCDefinition
@@ -274,5 +275,4 @@ public static partial class NPCDatabase
         });
     }
 
-    }
 }

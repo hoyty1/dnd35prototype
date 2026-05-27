@@ -224,6 +224,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.9f, 0.72f, 0.65f),
             Description = "Huge monstrous centipede. Bite +5 (2d6+4 + poison Fort DC 14, 1d6 Dex). 15 ft. space, 10 ft. reach. MM 3.5e p.286."
         });
+    }
     
     private static void RegisterHalflingWarrior()
     {
@@ -871,6 +872,5 @@ public static partial class NPCDatabase
             Description = "Nine-Headed Hydra (CR 8). Huge reptilian beast with 9 biting heads. Most dangerous standard hydra. MM 3.5e p.155."
         });
     }
-}
 
 }

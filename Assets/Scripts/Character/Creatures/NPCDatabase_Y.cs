@@ -67,6 +67,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.78f, 0.75f, 0.9f),
             Description = "Monster Manual yeth hound (CR 3). Bite +6 (1d6+4), trip +3, bay (fear), fly 60 ft. (good), DR 5/silver. Outsider hunting hound. MM 3.5e p.260."
         });
+    }
     private static void RegisterYuantiAbomination()
     {
         Register(new NPCDefinition
@@ -190,5 +191,4 @@ public static partial class NPCDatabase
         });
     }
 
-    }
 }

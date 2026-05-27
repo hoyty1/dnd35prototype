@@ -134,6 +134,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.88f, 0.8f, 0.95f),
             Description = "Summon Monster baseline octopus with improved-grab style control attack."
         });
+    }
     
     private static void RegisterOgre()
     {
@@ -326,6 +327,5 @@ public static partial class NPCDatabase
             Description = "Orc Warrior (CR 1/2). Aggressive humanoid with greataxe and light sensitivity. MM 3.5e p.203."
         });
     }
-}
 
 }

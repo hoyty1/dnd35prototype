@@ -183,6 +183,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.76f, 0.86f, 0.7f),
             Description = "Monster Manual huge viper. High-HD giant serpent with potent Constitution poison and long reach."
         });
+    }
     
     private static void RegisterVampireSpawn()
     {
@@ -309,6 +310,5 @@ public static partial class NPCDatabase
             Description = "Violet Fungus (CR 3). Poisonous plant with long tentacles. MM 3.5e p.112."
         });
     }
-}
 
 }

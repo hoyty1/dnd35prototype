@@ -99,6 +99,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.84f, 0.84f, 0.9f),
             Description = "Monster Manual raven. Tiny aerial scavenger with agile claws and perceptive vision."
         });
+    }
     
     private static void RegisterRedSlaad()
     {
@@ -239,6 +240,5 @@ public static partial class NPCDatabase
             Description = "Rakshasa (CR 10). Shapeshifting tiger-headed outsider with sorcerer spells. DR 15/good+piercing, SR 27. MM 3.5e p.211."
         });
     }
-}
 
 }

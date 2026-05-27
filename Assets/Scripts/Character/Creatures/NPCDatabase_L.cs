@@ -307,6 +307,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.88f, 0.94f, 0.72f),
             Description = "Large viper snake. Bite +4 (1d4 + poison Fort DC 11, 1d6 Con/1d6 Con). Weapon Finesse. MM 3.5e p.280."
         });
+    }
     
     private static void RegisterLizardfolk()
     {
@@ -430,6 +431,5 @@ public static partial class NPCDatabase
             Description = "Leopard (CR 2). Stealthy cat with pounce, improved grab, and rake. MM 3.5e p.274."
         });
     }
-}
 
 }

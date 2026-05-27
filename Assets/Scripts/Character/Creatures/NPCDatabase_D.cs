@@ -291,6 +291,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.85f, 0.75f, 0.92f),
             Description = "Dretch demon. 2 claws +4 (1d6+1), bite +2 (1d4). DR 5/cold iron or good. SR 5. Immune electricity/poison. Resist acid/cold/fire 10. MM 3.5e p.42."
         });
+    }
     
     private static void RegisterDarkNaga()
     {
@@ -997,6 +998,5 @@ public static partial class NPCDatabase
             Description = "Deinonychus (CR 3). Swift predatory dinosaur with pounce—full attack on charge. 60 ft. speed. MM 3.5e p.60."
         });
     }
-}
 
 }

@@ -339,6 +339,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.9f, 0.8f, 0.72f),
             Description = "Boar with ferocity — continues fighting below 0 HP until −10. Gore +4 (1d8+3). MM 3.5e p.270."
         });
+    }
     
     private static void RegisterBabau()
     {
@@ -898,6 +899,5 @@ public static partial class NPCDatabase
             Description = "Bulette (CR 7). Land shark that burrows and leaps on prey. Tremorsense. MM 3.5e p.30."
         });
     }
-}
 
 }

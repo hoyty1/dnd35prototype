@@ -335,6 +335,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.84f, 0.94f, 0.8f),
             Description = "Summon Monster baseline Small Viper."
         });
+    }
     
     private static void RegisterShadowMastiff()
     {
@@ -695,6 +696,5 @@ public static partial class NPCDatabase
             Description = "Satyr without pipes (CR 2). Goat-legged fey with DR 5/cold iron. Summoned version has no charming pipes. MM 3.5e p.219."
         });
     }
-}
 
 }

@@ -250,6 +250,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.9f, 0.95f, 0.74f),
             Description = "Constrictor snake. Bite +5 (1d3+4), improved grab, constrict 1d3+4. MM 3.5e p.280."
         });
+    }
     
     private static void RegisterCarrionCrawler()
     {
@@ -704,6 +705,5 @@ public static partial class NPCDatabase
             Description = "Couatl (CR 10). Winged serpent outsider. Constricts, poisons, and casts divine spells. Telepathic. MM 3.5e p.37."
         });
     }
-}
 
 }

@@ -498,6 +498,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.8f, 0.95f, 0.72f),
             Description = "Monster Manual giant praying mantis (CR 3). Claws +6 (1d8+4), improved grab, squeeze. Ambush predator with camouflage. MM 3.5e p.285."
         });
+    }
     private static void RegisterGhast()
     {
         Register(new NPCDefinition
@@ -1239,5 +1240,4 @@ public static partial class NPCDatabase
         });
     }
 
-    }
 }

@@ -443,6 +443,7 @@ public static partial class NPCDatabase
             NameColor = new Color(0.82f, 0.82f, 0.82f),
             Description = "Summon Monster baseline Monstrous Spider (Small)."
         });
+    }
     
     private static void RegisterManticore()
     {
@@ -944,6 +945,5 @@ public static partial class NPCDatabase
             Description = "Human Monk 7 (CR 7). Master martial artist with Improved Evasion and Wholeness of Body. 2× unarmed 1d8. Speed 50 ft. PHB 3.5e."
         });
     }
-}
 
 }
