@@ -9661,7 +9661,8 @@ public partial class GameManager : MonoBehaviour
         if (spell == null || caster == null || caster.Stats == null || listLevel <= 0)
             return new List<SummonMonsterOption>();
 
-        return SummonMonsterLists.GetFilteredOptionsForListLevel(listLevel, caster.Stats);
+        bool isSNA = SummonMonsterLists.IsSummonNaturesAllySpell(spell.SpellId);
+        return SummonMonsterLists.GetFilteredOptionsForListLevel(listLevel, caster.Stats, isSNA);
     }
 
     private string BuildSummonCountRangeText(SpellData spell, int selectedListLevel)

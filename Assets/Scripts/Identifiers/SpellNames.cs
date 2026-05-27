@@ -48,6 +48,9 @@ namespace DND35e.Identifiers
         /// <summary>Bless (spell id: bless)</summary>
         public const string BLESS = "bless";
 
+        /// <summary>Bless Weapon (spell id: bless_weapon)</summary>
+        public const string BLESS_WEAPON = "bless_weapon";
+
         /// <summary>Blindness/Deafness - generic constant for any class variant.</summary>
         public const string BLINDNESS_DEAFNESS = "blindness_deafness_wiz";
 
@@ -62,6 +65,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Blink (spell id: blink)</summary>
         public const string BLINK = "blink";
+
+        /// <summary>Break Enchantment (spell id: break_enchantment)</summary>
+        public const string BREAK_ENCHANTMENT = "break_enchantment";
 
         /// <summary>Blur (spell id: blur)</summary>
         public const string BLUR = "blur";
@@ -248,6 +254,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Dominate Animal (spell id: dominate_animal)</summary>
         public const string DOMINATE_ANIMAL = "dominate_animal";
+
+        /// <summary>Dominate Person (spell id: dominate_person)</summary>
+        public const string DOMINATE_PERSON = "dominate_person";
 
         /// <summary>Doom (spell id: doom)</summary>
         public const string DOOM = "doom";
@@ -680,6 +689,18 @@ namespace DND35e.Identifiers
 
         /// <summary>Summon Monster IV (spell id: summon_monster_4)</summary>
         public const string SUMMON_MONSTER_4 = "summon_monster_4";
+
+        /// <summary>Summon Nature's Ally I (spell id: summon_natures_ally_1)</summary>
+        public const string SUMMON_NATURES_ALLY_1 = "summon_natures_ally_1";
+
+        /// <summary>Summon Nature's Ally II (spell id: summon_natures_ally_2)</summary>
+        public const string SUMMON_NATURES_ALLY_2 = "summon_natures_ally_2";
+
+        /// <summary>Summon Nature's Ally III (spell id: summon_natures_ally_3)</summary>
+        public const string SUMMON_NATURES_ALLY_3 = "summon_natures_ally_3";
+
+        /// <summary>Summon Nature's Ally IV (spell id: summon_natures_ally_4)</summary>
+        public const string SUMMON_NATURES_ALLY_4 = "summon_natures_ally_4";
 
         /// <summary>Summon Swarm (spell id: summon_swarm)</summary>
         public const string SUMMON_SWARM = "summon_swarm";

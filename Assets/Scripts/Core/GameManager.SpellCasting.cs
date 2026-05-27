@@ -1272,6 +1272,14 @@ public partial class GameManager
             return true;
         }
 
+        // Dominate Person — one humanoid, no HD limit, mind-affecting (PHB p.224)
+        if (spell.SpellId == SpellNames.DOMINATE_PERSON)
+        {
+            if (!IsHumanoid(target)) return false;
+            if (IsImmuneToMindAffecting(target)) return false;
+            return true;
+        }
+
         // Hold Monster — any living creature, mind-affecting
         if (spell.SpellId == SpellNames.HOLD_MONSTER)
         {
@@ -6591,6 +6599,46 @@ public partial class GameManager
             return ApplyCharmMonsterEffect(caster, target, spell, spellComp);
         }
 
+        // ── Dominate Person (PHB p.224) ──
+        // Enchantment (Compulsion) [Mind-Affecting]. Control one humanoid via telepathic link.
+        // Uses CommandUndeadEffectData for side-switching (same pattern as Dominate Animal).
+        if (spell != null && spell.SpellId == SpellNames.DOMINATE_PERSON)
+        {
+            if (target == null || target.Stats == null)
+                return null;
+
+            // Dominate Person only works on humanoids
+            if (!IsHumanoid(target))
+            {
+                CombatUI?.ShowCombatLog($"<color=#FF9966>🧠 {caster.Stats.CharacterName} casts Dominate Person on {target.Stats.CharacterName} — no effect (not a humanoid)!</color>");
+                return null;
+            }
+
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
+            int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+            // Apply domination using the command/dominate side-switching pattern
+            var effectData = new CommandUndeadEffectData
+            {
+                IsActive = true,
+                IsIntelligent = true, // Humanoids are intelligent — they get a new save if ordered to act against nature
+                DurationRemainingRounds = durationRounds,
+                CasterLevel = casterLevel,
+                SourceSpellId = SpellNames.DOMINATE_PERSON,
+                SourceName = "Dominate Person"
+            };
+            effectData.SetCaster(caster);
+            effectData.SetControlledUndead(target); // Reuse field for "controlled creature"
+
+            target.ApplyCommandUndeadEffect(effectData);
+
+            CombatUI?.ShowCombatLog($"<color=#CC66FF>🧠 {caster.Stats.CharacterName} dominates {target.Stats.CharacterName}!</color>");
+            CombatUI?.ShowCombatLog($"<color=#CC99FF>   The target is under {caster.Stats.CharacterName}'s telepathic control for {durationRounds} round(s).</color>");
+
+            Debug.Log($"[GameManager] Dominate Person: {target.Stats.CharacterName} controlled by {caster.Stats.CharacterName} for {durationRounds} rounds");
+            return null;
+        }
+
         if (spell != null && spell.SpellId == SpellNames.ENERVATION)
         {
             string sourceName = spell.Name;
@@ -7593,6 +7641,16 @@ public partial class GameManager
         {
             PerformTargetedDispel(caster, target);
             return null; // Dispel Magic is instantaneous — no ongoing effect to track
+        }
+
+        // ── Break Enchantment (PHB p.207) ──
+        // Frees victims from enchantments, transmutations, and curses.
+        // Reuses PerformTargetedDispel (same CL check mechanic).
+        if (spell != null && spell.SpellId == SpellNames.BREAK_ENCHANTMENT)
+        {
+            PerformTargetedDispel(caster, target);
+            CombatUI?.ShowCombatLog($"<color=#99FFCC>✨ {caster.Stats.CharacterName} attempts to break enchantments on {target.Stats.CharacterName}!</color>");
+            return null; // Break Enchantment is instantaneous
         }
 
         // Use StatusEffectManager for tracked buff application

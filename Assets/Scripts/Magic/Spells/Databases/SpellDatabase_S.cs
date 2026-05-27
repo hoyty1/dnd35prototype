@@ -858,6 +858,132 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // SUMMON NATURE'S ALLY I–IV  (PHB p.288-289)
+        // Conjuration (Summoning)
+        // Druid 1–4, Ranger 1
+        // Casting Time: 1 full round
+        // Range: Close
+        // Duration: 1 round/level (D)
+        //
+        // Summons a natural creature (animal, vermin, or at higher levels
+        // fey/elemental) that fights for the caster. Uses the same
+        // summoning infrastructure as Summon Monster but draws from the
+        // Nature's Ally creature tables instead. No alignment restrictions.
+        // ═══════════════════════════════════════════════════════════════
+
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SUMMON_NATURES_ALLY_1,
+                    Name = "Summon Nature's Ally I",
+                    Description = "Conjuration (Summoning). Summons a natural creature to fight for you. "
+                        + "Duration 1 round/level (D). Components: V, S, DF. PHB p.288",
+                    SpellLevel = 1,
+                    School = "Conjuration (Summoning)",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 1),
+                        new SpellAvailability("Ranger", 1)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Summon,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 5,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SUMMON_NATURES_ALLY_2,
+                    Name = "Summon Nature's Ally II",
+                    Description = "Conjuration (Summoning). Summons a natural creature to fight for you. "
+                        + "Choose from SNA II list, or 1d3 from SNA I list. Duration 1 round/level (D). PHB p.289",
+                    SpellLevel = 2,
+                    School = "Conjuration (Summoning)",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 2)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Summon,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 5,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SUMMON_NATURES_ALLY_3,
+                    Name = "Summon Nature's Ally III",
+                    Description = "Conjuration (Summoning). Summons a natural creature to fight for you. "
+                        + "Choose from SNA III list, or 1d3 from SNA II, or 1d4+1 from SNA I. Duration 1 round/level (D). PHB p.289",
+                    SpellLevel = 3,
+                    School = "Conjuration (Summoning)",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 3)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Summon,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 5,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SUMMON_NATURES_ALLY_4,
+                    Name = "Summon Nature's Ally IV",
+                    Description = "Conjuration (Summoning). Summons a natural creature to fight for you. "
+                        + "Choose from SNA IV list, or 1d3 from SNA III, or 1d4+1 from SNA II/I. Duration 1 round/level (D). PHB p.289",
+                    SpellLevel = 4,
+                    School = "Conjuration (Summoning)",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Druid", 4)
+                    },
+                    TargetType = SpellTargetType.Self,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Summon,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 5,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // Summon Nature's Ally class aliases
+        RegisterClassSpellAlias("summon_natures_ally_1_drd", SpellNames.SUMMON_NATURES_ALLY_1, "Druid", 1);
+        RegisterClassSpellAlias("summon_natures_ally_1_rgr", SpellNames.SUMMON_NATURES_ALLY_1, "Ranger", 1);
+        RegisterClassSpellAlias("summon_natures_ally_2_drd", SpellNames.SUMMON_NATURES_ALLY_2, "Druid", 2);
+        RegisterClassSpellAlias("summon_natures_ally_3_drd", SpellNames.SUMMON_NATURES_ALLY_3, "Druid", 3);
+        RegisterClassSpellAlias("summon_natures_ally_4_drd", SpellNames.SUMMON_NATURES_ALLY_4, "Druid", 4);
+
         // ──────────────────────────────────────────────────────────────
         // SHOUT  (PHB p.275)
         // Evocation [Sonic]

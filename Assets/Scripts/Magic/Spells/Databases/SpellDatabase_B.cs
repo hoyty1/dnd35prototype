@@ -183,6 +183,118 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Bless Weapon (PHB p.205) ────────────────────────────────────
+        // Transmutation
+        // Level: Paladin 1
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Weapon touched
+        // Duration: 1 min./level
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // This transmutation makes a weapon strike true against evil
+        // foes. The weapon is treated as having a +1 enhancement bonus
+        // for the purpose of bypassing the DR of evil creatures or
+        // striking evil incorporeal creatures. The weapon also becomes
+        // good-aligned for the purpose of overcoming DR/good.
+        // Against evil targets, all critical threat rolls are auto-confirmed.
+        //
+        // NOTE: Prototype implements this as a self-targeting weapon buff
+        //       that grants +1 sacred bonus to attack vs evil creatures,
+        //       auto-confirms crits vs evil, and treats weapon as good-aligned.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.BLESS_WEAPON,
+                    Name = "Bless Weapon",
+                    Description = "Transmutation. Your weapon strikes true against evil foes. Treated as +1 enhancement for bypassing DR, "
+                        + "good-aligned for overcoming DR/good. Auto-confirms critical threats vs evil. Duration 1 min./level. "
+                        + "No save. No SR. Components: V, S. PHB p.205",
+                    SpellLevel = 1,
+                    School = "Transmutation",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Paladin", 1)
+                    },
+                    TargetType = SpellTargetType.Self, // Affects caster's weapon
+                    RangeSquares = 0,
+                    EffectType = SpellEffectType.Buff,
+                    BuffAttackBonus = 1, // +1 enhancement vs evil (simplified as general +1 sacred)
+                    BuffDurationRounds = 30, // Legacy fallback: ~30 rounds at CL 3
+                    BuffType = "sacred",
+                    BuffBonusType = BonusType.Sacred,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // Bless Weapon: Paladin 1
+        RegisterClassSpellAlias("bless_weapon_pal", SpellNames.BLESS_WEAPON, "Paladin", 1);
+
+        // ── Break Enchantment (PHB p.207) ────────────────────────────────
+        // Abjuration
+        // Level: Bard 4, Clr 5, Pal 4, Sor/Wiz 5
+        // Components: V, S
+        // Casting Time: 1 minute
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Targets: Up to one creature per level, all within 30 ft. of each other
+        // Duration: Instantaneous
+        // Saving Throw: None (see text)
+        // Spell Resistance: No
+        //
+        // This spell frees victims from enchantments, transmutations,
+        // and curses. Break Enchantment can reverse even an instantaneous
+        // effect. For each such effect, you make a caster level check
+        // (1d20 + CL, max +15) against DC 11 + caster level of the effect.
+        //
+        // NOTE: Prototype implementation uses PerformTargetedDispel with
+        //       a +15 CL cap, targeting enchantment/transmutation/curse
+        //       effects. Simplified to single-target for now.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.BREAK_ENCHANTMENT,
+                    Name = "Break Enchantment",
+                    Description = "Abjuration. Frees victims from enchantments, transmutations, and curses. "
+                        + "Caster level check (1d20 + CL, max +15) vs DC 11 + effect's CL. Instantaneous. "
+                        + "No save, no SR. Components: V, S. PHB p.207",
+                    SpellLevel = 5,
+                    School = "Abjuration",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Cleric", 5),
+                        new SpellAvailability("Sorcerer", 5),
+                        new SpellAvailability("Wizard", 5),
+                        new SpellAvailability("Paladin", 4),
+                        new SpellAvailability("Bard", 4)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Dispel,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard, // Simplified from 1 minute for prototype
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // Break Enchantment: Bard 4, Paladin 4  (Clr 5, Sor/Wiz 5 already in AvailableFor)
+        RegisterClassSpellAlias("break_enchantment_brd", SpellNames.BREAK_ENCHANTMENT, "Bard", 4);
+        RegisterClassSpellAlias("break_enchantment_pal", SpellNames.BREAK_ENCHANTMENT, "Paladin", 4);
+
         // ── Blindness/Deafness (PHB p.206) ──
         // Necromancy. V only. Medium range. Fortitude negates. SR: Yes.
         // Permanent (D). Caster chooses blindness or deafness at cast time.

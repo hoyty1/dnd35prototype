@@ -96,6 +96,9 @@ public static class SummonMonsterLists
     private static readonly Regex SummonMonsterLevelRegex =
         new Regex(@"summon_monster_(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex SummonNaturesAllyLevelRegex =
+        new Regex(@"summon_natures_ally_(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Dictionary<int, List<SummonMonsterOption>> OptionsByLevel =
         new Dictionary<int, List<SummonMonsterOption>>
         {
@@ -106,6 +109,18 @@ public static class SummonMonsterLists
             // Higher level list definitions can be added incrementally.
             // Keeping empty entries allows UI level selection rules to stay consistent.
             { 5, new List<SummonMonsterOption>() }
+        };
+
+    // ── Summon Nature's Ally creature tables (D&D 3.5e SRD/PHB p.288) ──
+    // SNA summons regular animals (no celestial/fiendish template) plus some
+    // fey and elementals at higher levels. No alignment restrictions.
+    private static readonly Dictionary<int, List<SummonMonsterOption>> NaturesAllyOptionsByLevel =
+        new Dictionary<int, List<SummonMonsterOption>>
+        {
+            { 1, GetSummonNaturesAllyIOptions() },
+            { 2, GetSummonNaturesAllyIIOptions() },
+            { 3, GetSummonNaturesAllyIIIOptions() },
+            { 4, GetSummonNaturesAllyIVOptions() }
         };
 
     /// <summary>
@@ -261,12 +276,15 @@ public static class SummonMonsterLists
     public static List<SummonMonsterOption> GetFilteredOptions(string spellId, CharacterStats caster)
     {
         int level = GetSummonMonsterSpellLevel(spellId);
-        return GetFilteredOptionsForListLevel(level, caster);
+        bool isSNA = IsSummonNaturesAllySpell(spellId);
+        return GetFilteredOptionsForListLevel(level, caster, isSNA);
     }
 
-    public static List<SummonMonsterOption> GetFilteredOptionsForListLevel(int listLevel, CharacterStats caster)
+    public static List<SummonMonsterOption> GetFilteredOptionsForListLevel(int listLevel, CharacterStats caster, bool isNaturesAlly = false)
     {
-        if (listLevel <= 0 || !OptionsByLevel.TryGetValue(listLevel, out var rawOptions) || rawOptions == null)
+        var lookupDict = isNaturesAlly ? NaturesAllyOptionsByLevel : OptionsByLevel;
+
+        if (listLevel <= 0 || !lookupDict.TryGetValue(listLevel, out var rawOptions) || rawOptions == null)
             return new List<SummonMonsterOption>();
 
         return rawOptions
@@ -311,7 +329,22 @@ public static class SummonMonsterLists
         if (match.Success && int.TryParse(match.Groups[1].Value, out int parsedLevel))
             return Mathf.Max(0, parsedLevel);
 
+        // Also check Summon Nature's Ally pattern
+        Match snaMatch = SummonNaturesAllyLevelRegex.Match(spellId);
+        if (snaMatch.Success && int.TryParse(snaMatch.Groups[1].Value, out int snaLevel))
+            return Mathf.Max(0, snaLevel);
+
         return 0;
+    }
+
+    /// <summary>
+    /// Returns true if the spell ID matches a Summon Nature's Ally pattern.
+    /// </summary>
+    public static bool IsSummonNaturesAllySpell(string spellId)
+    {
+        if (string.IsNullOrWhiteSpace(spellId))
+            return false;
+        return SummonNaturesAllyLevelRegex.IsMatch(spellId);
     }
 
     public static string ToRomanLevel(int level)
@@ -435,6 +468,77 @@ public static class SummonMonsterLists
             ClericOnly = source.ClericOnly,
             AlignmentRequirement = source.AlignmentRequirement,
             SummonedCreatureAlignment = source.SummonedCreatureAlignment
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SUMMON NATURE'S ALLY creature tables (D&D 3.5e PHB p.288-289)
+    //  Animals are summoned as-is (no celestial/fiendish template).
+    //  No alignment restrictions apply.
+    //  Reuses existing NPCDatabase creature definitions where available.
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Summon Nature's Ally I — 1st-level nature summons (small animals).
+    /// </summary>
+    private static List<SummonMonsterOption> GetSummonNaturesAllyIOptions()
+    {
+        return new List<SummonMonsterOption>
+        {
+            new SummonMonsterOption { DisplayName = "Dog", NpcDefinitionId = "dog" },
+            new SummonMonsterOption { DisplayName = "Owl", NpcDefinitionId = "owl" },
+            new SummonMonsterOption { DisplayName = "Hawk", NpcDefinitionId = "hawk" },
+            new SummonMonsterOption { DisplayName = "Badger", NpcDefinitionId = "badger" },
+            new SummonMonsterOption { DisplayName = "Monkey", NpcDefinitionId = "monkey" },
+            new SummonMonsterOption { DisplayName = "Snake, Small Viper", NpcDefinitionId = "viper_small" },
+            new SummonMonsterOption { DisplayName = "Dire Rat", NpcDefinitionId = "dire_rat" }
+        };
+    }
+
+    /// <summary>
+    /// Summon Nature's Ally II — 2nd-level nature summons (medium animals).
+    /// </summary>
+    private static List<SummonMonsterOption> GetSummonNaturesAllyIIOptions()
+    {
+        return new List<SummonMonsterOption>
+        {
+            new SummonMonsterOption { DisplayName = "Wolf", NpcDefinitionId = "wolf" },
+            new SummonMonsterOption { DisplayName = "Eagle", NpcDefinitionId = "eagle" },
+            new SummonMonsterOption { DisplayName = "Boar", NpcDefinitionId = "boar" },
+            new SummonMonsterOption { DisplayName = "Snake, Medium Viper", NpcDefinitionId = "viper_medium" },
+            new SummonMonsterOption { DisplayName = "Giant Bee", NpcDefinitionId = "giant_bee" },
+            new SummonMonsterOption { DisplayName = "Riding Dog", NpcDefinitionId = "riding_dog" }
+        };
+    }
+
+    /// <summary>
+    /// Summon Nature's Ally III — 3rd-level nature summons (large animals).
+    /// </summary>
+    private static List<SummonMonsterOption> GetSummonNaturesAllyIIIOptions()
+    {
+        return new List<SummonMonsterOption>
+        {
+            new SummonMonsterOption { DisplayName = "Black Bear", NpcDefinitionId = "black_bear" },
+            new SummonMonsterOption { DisplayName = "Dire Badger", NpcDefinitionId = "dire_badger" },
+            new SummonMonsterOption { DisplayName = "Crocodile", NpcDefinitionId = "crocodile" },
+            new SummonMonsterOption { DisplayName = "Wolverine", NpcDefinitionId = "wolverine" },
+            new SummonMonsterOption { DisplayName = "Dire Bat", NpcDefinitionId = "dire_bat" },
+            new SummonMonsterOption { DisplayName = "Constrictor Snake", NpcDefinitionId = "constrictor_snake" }
+        };
+    }
+
+    /// <summary>
+    /// Summon Nature's Ally IV — 4th-level nature summons (dire animals, large predators).
+    /// </summary>
+    private static List<SummonMonsterOption> GetSummonNaturesAllyIVOptions()
+    {
+        return new List<SummonMonsterOption>
+        {
+            new SummonMonsterOption { DisplayName = "Dire Wolf", NpcDefinitionId = "dire_wolf" },
+            new SummonMonsterOption { DisplayName = "Lion", NpcDefinitionId = "lion" },
+            new SummonMonsterOption { DisplayName = "Giant Eagle", NpcDefinitionId = "giant_eagle" },
+            new SummonMonsterOption { DisplayName = "Giant Owl", NpcDefinitionId = "giant_owl" },
+            new SummonMonsterOption { DisplayName = "Brown Bear", NpcDefinitionId = "dire_bear" }
         };
     }
 }

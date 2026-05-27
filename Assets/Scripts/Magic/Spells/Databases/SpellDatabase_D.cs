@@ -909,6 +909,57 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── DOMINATE PERSON (PHB p.224) ──────────────────────────────
+        // Enchantment (Compulsion) [Mind-Affecting]
+        // Level: Bard 4, Sor/Wiz 5
+        // Components: V, S
+        // Casting Time: 1 round
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Target: One humanoid
+        // Duration: 1 day/level
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        //
+        // You can control the actions of any humanoid creature through
+        // a telepathic link that you establish with the subject's mind.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DOMINATE_PERSON,
+                    Name = "Dominate Person",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. You control the actions of one humanoid creature "
+                        + "through a telepathic link. Will negates. Duration 1 day/level. SR: Yes. Components: V, S. PHB p.224",
+                    SpellLevel = 5,
+                    School = "Enchantment",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 5),
+                        new SpellAvailability("Wizard", 5),
+                        new SpellAvailability("Bard", 4)
+                    },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Control,
+                    IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Days,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    // Legacy fallback: 1 day/level in rounds (at CL 9 ≈ 9 days = 12960 rounds)
+                    BuffDurationRounds = 1440,
+                    ActionType = SpellActionType.FullRound,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // Dominate Person: Bard 4  (Sor/Wiz 5 already in AvailableFor)
+        RegisterClassSpellAlias("dominate_person_brd", SpellNames.DOMINATE_PERSON, "Bard", 4);
+
         // Aliases
         RegisterClassSpellAlias("detect_magic_clr", SpellNames.DETECT_MAGIC_WIZ, "Cleric", 0);
         RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);
