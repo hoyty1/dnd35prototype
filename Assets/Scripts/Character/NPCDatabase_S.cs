@@ -23,6 +23,7 @@ public static partial class NPCDatabase
         RegisterStoneGiant();
         RegisterSuccubus();
         RegisterSvirfneblin();
+        RegisterSatyr();
 
     }
 
@@ -683,6 +684,56 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.18f, 0.16f, 0.22f, 0.85f),
             NameColor = new Color(0.75f, 0.7f, 0.85f),
             Description = "Svirfneblin (CR 1). Deep gnome with spell resistance and nondetection. MM 3.5e p.132."
+        });
+    }
+
+    /// <summary>
+    /// Satyr (without pipes) (CR 2) — MM 3.5e p.219. Medium Fey, Chaotic Neutral.
+    /// 5d6+5 HP (22), head butt +2 (1d6), DR 5/cold iron. 40 ft. speed.
+    /// AC 15 (DEX +1, natural +4). Low-light vision. Summoned version has no pipes.
+    /// </summary>
+    private static void RegisterSatyr()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "satyr",
+            Name = "Satyr",
+            ChallengeRating = "2",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Fey",
+            CharacterAlignment = Alignment.ChaoticNeutral,
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 10, DEX = 13, CON = 12, WIS = 13, INT = 12, CHA = 13,
+            BAB = 2,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 22, // 5d6+5 = 5*3.5+5 = 22.5 → 22
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.ColdIron,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Head butt", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Fey", "MM35", "SummonBase" },
+            Feats = new List<string> { "Alertness", "Dodge" },
+            SpecialAbilities = new List<string>
+            {
+                "Damage reduction 5/cold iron",
+                "Low-light vision",
+                "Skills: Bluff +9, Hide +13, Knowledge (nature) +9, Listen +11, Move Silently +13, Perform +9, Spot +11",
+                "No pipes (summoned version)"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.65f, 0.55f, 0.35f, 1f),
+            PanelColor = new Color(0.22f, 0.18f, 0.1f, 0.85f),
+            NameColor = new Color(0.85f, 0.75f, 0.5f),
+            Description = "Satyr without pipes (CR 2). Goat-legged fey with DR 5/cold iron. Summoned version has no charming pipes. MM 3.5e p.219."
         });
     }
 }

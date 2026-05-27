@@ -536,7 +536,7 @@ public static class SummonMonsterLists
             new SummonMonsterOption { DisplayName = "Eagle, Giant", NpcDefinitionId = "giant_eagle" },      // PHB: NG alignment restriction
             new SummonMonsterOption { DisplayName = "Lion", NpcDefinitionId = "lion" },
             new SummonMonsterOption { DisplayName = "Owl, Giant", NpcDefinitionId = "giant_owl" },          // PHB: NG alignment restriction
-            // MISSING: Satyr (without pipes) — needs NPCDatabase entry (Fey, CR 2, CN)
+            new SummonMonsterOption { DisplayName = "Satyr (without pipes)", NpcDefinitionId = "satyr" },
             new SummonMonsterOption { DisplayName = "Shark, Large", NpcDefinitionId = "large_shark" },      // Aquatic
             new SummonMonsterOption { DisplayName = "Snake, Constrictor", NpcDefinitionId = "constrictor_snake" },
             new SummonMonsterOption { DisplayName = "Snake, Large Viper", NpcDefinitionId = "viper_large" },
@@ -553,7 +553,7 @@ public static class SummonMonsterLists
     {
         return new List<SummonMonsterOption>
         {
-            // MISSING: Arrowhawk, Juvenile — needs NPCDatabase entry (Outsider [Air], CR 3)
+            new SummonMonsterOption { DisplayName = "Arrowhawk, Juvenile", NpcDefinitionId = "arrowhawk_juvenile" },
             new SummonMonsterOption { DisplayName = "Bear, Brown (Grizzly)", NpcDefinitionId = "brown_bear" },
             new SummonMonsterOption { DisplayName = "Crocodile, Giant", NpcDefinitionId = "giant_crocodile" },
             new SummonMonsterOption { DisplayName = "Deinonychus", NpcDefinitionId = "deinonychus" },
@@ -570,7 +570,7 @@ public static class SummonMonsterLists
             new SummonMonsterOption { DisplayName = "Snake, Huge Viper", NpcDefinitionId = "viper_huge" },
             new SummonMonsterOption { DisplayName = "Tiger", NpcDefinitionId = "tiger" },
             // MISSING: Tojanida, Juvenile — needs NPCDatabase entry (Outsider [Water], CR 3, aquatic)
-            // MISSING: Unicorn — needs NPCDatabase entry (Magical Beast, CR 3, CG alignment restriction)
+            new SummonMonsterOption { DisplayName = "Unicorn", NpcDefinitionId = "unicorn", SummonedCreatureAlignment = Alignment.ChaoticGood },  // CG alignment restriction
             new SummonMonsterOption { DisplayName = "Xorn, Minor", NpcDefinitionId = "minor_xorn" },
         };
     }

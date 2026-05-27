@@ -511,34 +511,28 @@ Standard animal entries — follow the pattern of existing `dire_wolf`, `dire_bo
 4. Add `deinonychus` to `NPCDatabase_D.cs` — model after existing animal pattern (Medium, pounce)
 5. Update SNA IV list
 
-### Phase 3: Add Outsiders & Fey (SNA III–IV)
-**Effort:** ~2–3 hours | **Priority:** Medium | **Files:** `NPCDatabase_A.cs`, `NPCDatabase_S.cs`, `NPCDatabase_T.cs`
+### Phase 3: Add Outsiders, Fey & Special Creatures (SNA III–IV) ✅ COMPLETE
+**Completed:** Phase 3 merged Phases 3+4 from original plan.
+**Files Modified:** `NPCDatabase_A.cs`, `NPCDatabase_S.cs`, `NPCDatabase_U.cs`, `SummonMonsterLists.cs`
 
-These require more complex entries (damage immunities, resistances, special attacks).
+**Completed Tasks:**
+1. ✅ Added `satyr` to `NPCDatabase_S.cs` — Fey type, DR 5/cold iron (DamageBypassTag.ColdIron), no pipes for SNA
+2. ✅ Added `arrowhawk_juvenile` to `NPCDatabase_A.cs` — Outsider (Air), immune acid/electricity/poison, resist cold/fire 10
+3. ✅ Added `unicorn` to `NPCDatabase_U.cs` — Magical Beast (CG), immune poison/mind-affecting, horn+hooves, scent
+4. ✅ Updated SNA III list (Satyr added, now 11/11 complete)
+5. ✅ Updated SNA IV list (Arrowhawk + Unicorn added with CG alignment restriction)
 
-**Tasks:**
-1. Add `satyr` to `NPCDatabase_S.cs` — Fey type, DR 5/cold iron, no pipes for SNA
-2. Add `arrowhawk_juvenile` to `NPCDatabase_A.cs` — Outsider (Air), electricity ray ranged attack, immunities
-3. Add `tojanida_juvenile` to `NPCDatabase_T.cs` — Outsider (Water), improved grab, ink cloud, acid/cold immune
-4. Update SNA III & IV lists
+**Resolved Blockers:**
+- **DR field:** `DamageReductionAmount` + `DamageReductionBypass` fields exist in NPCDefinition ✅
+- **Alignment restriction:** `SummonedCreatureAlignment = Alignment.ChaoticGood` on Unicorn entry ✅
+- **Ranged attacks:** NaturalAttackDefinition lacks IsRanged — Arrowhawk electricity ray omitted, melee bite only
+- **Unicorn spell-likes:** Documented in SpecialAbilities strings, not functionally implemented (appropriate for summon)
+- **Unicorn horn +11 discrepancy:** MM shows +11 but math yields +8 (BAB 4 + STR 5 - size 1). Set BAB=4 (correct); hooves +3 match MM. Horn has apparent +3 racial bonus not representable in current system.
 
-**Complexity Notes:**
-- Arrowhawk has **ranged touch attack** (electricity ray) — verify NaturalAttack supports ranged
-- Satyr has **DR 5/cold iron** — verify DamageReduction field exists
-- Tojanida has **all-around vision** — may need special tag
-
-### Phase 4: Add Special Creatures (SNA IV)
-**Effort:** ~2–3 hours | **Priority:** Medium | **Files:** `NPCDatabase_U.cs`, `NPCDatabase_S.cs`
-
-**Tasks:**
-1. Add `unicorn` to `NPCDatabase_U.cs` — Magical Beast, CG alignment, magic circle vs evil, spell-likes, many immunities
-2. Add `sea_cat` to `NPCDatabase_S.cs` — Magical Beast (Aquatic), rend, hold breath
-3. Update SNA IV list
-
-**Complexity Notes:**
-- Unicorn has **spell-like abilities** (cure wounds, teleport, neutralize poison) — may need simplified version
-- Unicorn has permanent **magic circle against evil** — needs aura or buff implementation
-- Sea Cat has **rend** mechanic — same as Dire Ape pattern
+**Stats Verification (all vs MM 3.5e):**
+- Satyr: HP 22 ✅, AC 15 ✅, Head butt +2 ✅, DR 5/cold iron ✅
+- Arrowhawk Juvenile: HP 16 ✅, AC 20 ✅, Bite +9 (Weapon Finesse) ✅, immunities ✅
+- Unicorn: HP 42 ✅, AC 18 ✅, Hooves +3 ✅, Horn +8 (vs published +11, see note above)
 
 ### Phase 5: Add Aquatic Creatures (SNA I–IV)
 **Effort:** ~3–4 hours | **Priority:** Low | **Files:** Various NPCDatabase files

@@ -14,6 +14,7 @@ public static partial class NPCDatabase
         RegisterAverageSalamander();
         RegisterAnnis();
         RegisterAnkheg();
+        RegisterArrowhawkJuvenile();
 
     }
 
@@ -294,6 +295,68 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.15f, 0.2f, 0.08f, 0.85f),
             NameColor = new Color(0.7f, 0.85f, 0.45f),
             Description = "Ankheg (CR 3). Burrowing insect with acid spit and improved grab. MM 3.5e p.14."
+        });
+    }
+
+    /// <summary>
+    /// Arrowhawk, Juvenile (CR 3) — MM 3.5e p.19. Small Outsider (Air, Extraplanar).
+    /// 3d8+3 HP (16), bite +9 (1d6+1). AC 20 (size +1, DEX +5, natural +4).
+    /// Fly 60 ft. (perfect). Immune acid, electricity, poison. Resist cold 10, fire 10.
+    /// Electricity ray omitted (ranged touch not supported); melee bite only.
+    /// </summary>
+    private static void RegisterArrowhawkJuvenile()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "arrowhawk_juvenile",
+            Name = "Arrowhawk, Juvenile",
+            ChallengeRating = "3",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Outsider",
+            CharacterAlignment = Alignment.TrueNeutral,
+            HitDice = 3,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 12, DEX = 21, CON = 12, WIS = 13, INT = 10, CHA = 13,
+            BAB = 3,
+            NaturalArmorBonus = 4,
+            BaseSpeed = 12, // fly 60 ft. (perfect), no land speed
+            BaseHitDieHP = 16, // 3d8+3 = 3*4.5+3 = 16.5 → 16
+            Immunities = new CreatureImmunities
+            {
+                immuneToAcid = true,
+                immuneToElectricity = true,
+                immuneToPoison = true
+            },
+            DamageImmunities = new List<DamageType> { DamageType.Acid, DamageType.Electricity },
+            DamageResistances = new List<DamageResistanceEntry>
+            {
+                new DamageResistanceEntry { Type = DamageType.Cold, Amount = 10 },
+                new DamageResistanceEntry { Type = DamageType.Fire, Amount = 10 }
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+            },
+            CreatureTags = new List<string> { "Outsider", "Air", "Extraplanar", "Fly", "MM35", "SummonBase" },
+            Feats = new List<string> { "Dodge", "Weapon Finesse" },
+            SpecialAbilities = new List<string>
+            {
+                "Fly 60 ft. (perfect)",
+                "Immunity to acid, electricity, poison",
+                "Resistance to cold 10, fire 10",
+                "Electricity ray (50 ft., 2d6 electricity — not implemented, melee only)",
+                "Darkvision 60 ft."
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Brute,
+            SpriteColor = new Color(0.6f, 0.7f, 0.9f, 1f),
+            PanelColor = new Color(0.15f, 0.2f, 0.3f, 0.85f),
+            NameColor = new Color(0.7f, 0.8f, 1f),
+            Description = "Arrowhawk, Juvenile (CR 3). Flying outsider immune to acid and electricity. Electricity ray not implemented. MM 3.5e p.19."
         });
     }
 
