@@ -534,6 +534,14 @@ public partial class GameManager : MonoBehaviour
         _spellApplicationService ??= gameObject.GetComponent<SpellApplicationService>() ?? gameObject.AddComponent<SpellApplicationService>();
         _spellApplicationService.Initialize(this, () => CombatUI, _conditionService);
 
+        _dispelMagicService ??= gameObject.GetComponent<DispelMagicService>() ?? gameObject.AddComponent<DispelMagicService>();
+        _dispelMagicService.Initialize(
+            () => CombatUI,
+            () => GetAllCharacters(),
+            () => UpdateAllStatsUI(),
+            (target) => ClearResilientSphereState(target),
+            (target) => HandleSummonDeathCleanup(target));
+
         _confusedBehaviorController ??= new ConfusedBehaviorController();
         _charmedBehaviorController ??= new CharmedBehaviorController();
         _fascinatedBehaviorController ??= new FascinatedBehaviorController();
