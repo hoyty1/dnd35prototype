@@ -330,6 +330,24 @@ public class AuraAbilityDefinition
     /// <summary>For Wisdom drain aura (Allip): amount drained on failed save.</summary>
     public int AbilityDrainAmount;
 
+    /// <summary>
+    /// If > 0, duration is rolled as 1d(DurationDice) instead of using fixed DurationRounds.
+    /// E.g., DurationDice=2 means 1d2 rounds. Set to 0 to use fixed DurationRounds.
+    /// </summary>
+    public int DurationDice = 0;
+
+    /// <summary>
+    /// If true, a successful save grants 24-hour immunity to this aura (per MM rules for
+    /// gibbering mouther, frightful presence, etc.). Tracked per-source on the target.
+    /// </summary>
+    public bool GrantsImmunityOnSave = false;
+
+    /// <summary>
+    /// If true, this aura is a mind-affecting effect and creatures with immuneToMindAffecting
+    /// are automatically immune. D&D 3.5e: Gibbering is a sonic mind-affecting compulsion.
+    /// </summary>
+    public bool IsMindAffecting = false;
+
     /// <summary>Alias for RangeFeet — allows initializer shorthand.</summary>
     public int Range { get { return RangeFeet; } set { RangeFeet = value; } }
 
@@ -372,6 +390,16 @@ public class RangedSpecialAttackDefinition
     public int OnHitDurationRounds;
     /// <summary>True if on-hit effect triggers only on critical hit, false if always.</summary>
     public bool OnHitOnCritOnly = false;
+    /// <summary>
+    /// If true, on-hit save uses Fortitude instead of Will. Default false (Will).
+    /// MM p.126: Spittle blindness uses Fort save DC 18 (Constitution-based).
+    /// </summary>
+    public bool OnHitSaveIsFortitude = false;
+    /// <summary>
+    /// If > 0, on-hit duration is rolled as 1d(OnHitDurationDice) instead of fixed OnHitDurationRounds.
+    /// E.g., OnHitDurationDice=4 means 1d4 rounds. Set to 0 to use fixed OnHitDurationRounds.
+    /// </summary>
+    public int OnHitDurationDice = 0;
     
     /// <summary>If true, attack affects cone area; if false, single target ranged touch.</summary>
     public bool IsCone = false;
@@ -390,10 +418,17 @@ public class RangedSpecialAttackDefinition
 public class BloodDrainDefinition
 {
     public string Name = "Blood Drain";
-    public int AbilityDrainAmount = 1;       // CON, STR, etc. drained per round
+    public int AbilityDrainAmount = 1;       // CON, STR, etc. drained per round (fixed amount)
     public string AbilityType = "Constitution"; // "Strength", "Dexterity", "Constitution", etc.
     public int DamagePerRound = 0;           // Optional physical damage (0 = none)
     public DamageType DamageType = DamageType.Piercing;
+
+    /// <summary>
+    /// If > 0, ability drain is rolled as 1d(AbilityDrainDice) instead of fixed AbilityDrainAmount.
+    /// E.g., AbilityDrainDice=4 means 1d4 CON drain. Set to 0 to use fixed AbilityDrainAmount.
+    /// MM p.126: Gibbering mouther drains 1d4 CON per round from swallowed opponents.
+    /// </summary>
+    public int AbilityDrainDice = 0;
     
     public BloodDrainDefinition Clone()
     {

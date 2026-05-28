@@ -3112,6 +3112,7 @@ public class AIService : MonoBehaviour
     /// Process a creature's supernatural aura ability at the start of its turn.
     /// Per D&D 3.5e, abilities like Gibbering (Su) affect all creatures within range
     /// each round as a free action. Targets must make a saving throw or be affected.
+    /// Supports: random duration (1d2, 1d4, etc.), 24-hour save immunity, mind-affecting immunity.
     /// </summary>
     private void ProcessAuraAbility(CharacterController npc)
     {
@@ -3126,7 +3127,7 @@ public class AIService : MonoBehaviour
         SaveType saveType = aura.IsWillSave ? SaveType.Will : SaveType.Fortitude;
         string saveTypeName = aura.IsWillSave ? "Will" : "Fort";
 
-        Debug.Log($"[AI][Aura] {npcName} activating {aura.Name} (DC {aura.SaveDC}, {saveTypeName}, range {aura.RangeFeet} ft, effect {aura.Effect})");
+        Debug.Log($"[AI][Aura] {npcName} activating {aura.Name} (DC {aura.SaveDC}, {saveTypeName}, range {aura.RangeFeet} ft, effect {aura.Effect}, mind-affecting={aura.IsMindAffecting})");
 
         _gameManager.CombatUI?.ShowCombatLog(
             CombatLogHelper.Special("🔊", $"{npcName}'s {aura.Name} echoes across the battlefield!"));
@@ -3143,6 +3144,14 @@ public class AIService : MonoBehaviour
             if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
                 continue;
 
+            // Mind-affecting immunity check (D&D 3.5e: Gibbering is sonic mind-affecting compulsion)
+            if (aura.IsMindAffecting && candidate.Stats.Immunities != null
+                && candidate.Stats.Immunities.immuneToMindAffecting)
+            {
+                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} is immune to mind-affecting effects — skipping {aura.Name}");
+                continue;
+            }
+
             int distance = SquareGridUtils.GetDistance(npc.GridPosition, candidate.GridPosition);
             if (distance > rangeSquares)
             {
@@ -3158,6 +3167,13 @@ public class AIService : MonoBehaviour
                 continue;
             }
 
+            // 24-hour save immunity check (per MM: successful save = immune for 24 hours)
+            if (aura.GrantsImmunityOnSave && HasAuraSaveImmunity(candidate, npc, aura.Name))
+            {
+                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} has 24-hour immunity to {npc.Stats.CharacterName}'s {aura.Name} — skipping");
+                continue;
+            }
+
             // Roll saving throw
             SaveResult saveResult = SpellSaveResolver.RollSave(candidate, saveType, aura.SaveDC);
 
@@ -3166,19 +3182,62 @@ public class AIService : MonoBehaviour
                 Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} saves vs {aura.Name} ({saveTypeName} {saveResult.Total} >= DC {aura.SaveDC})");
                 _gameManager.CombatUI?.ShowCombatLog(
                     CombatLogHelper.Success("💪", $"{candidate.Stats.CharacterName} resists {aura.Name} ({saveTypeName} {saveResult.Total} vs DC {aura.SaveDC})."));
+                
+                // Grant 24-hour save immunity if applicable
+                if (aura.GrantsImmunityOnSave)
+                {
+                    GrantAuraSaveImmunity(candidate, npc, aura.Name);
+                    _gameManager.CombatUI?.ShowCombatLog(
+                        CombatLogHelper.Info("🛡", $"{candidate.Stats.CharacterName} is now immune to {npcName}'s {aura.Name} for 24 hours."));
+                }
             }
             else
             {
-                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} fails vs {aura.Name} ({saveTypeName} {saveResult.Total} < DC {aura.SaveDC}) — applying {aura.Effect} for {aura.DurationRounds} rounds");
-                candidate.ApplyCondition(conditionType, aura.DurationRounds, npcName);
+                // Roll random duration if DurationDice is set, otherwise use fixed DurationRounds
+                int duration = aura.DurationDice > 0
+                    ? Random.Range(1, aura.DurationDice + 1)  // 1d(DurationDice)
+                    : aura.DurationRounds;
+
+                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} fails vs {aura.Name} ({saveTypeName} {saveResult.Total} < DC {aura.SaveDC}) — applying {aura.Effect} for {duration} round(s)");
+                candidate.ApplyCondition(conditionType, duration, npcName);
                 _gameManager.CombatUI?.ShowCombatLog(
-                    CombatLogHelper.Debuff("🌀", $"{candidate.Stats.CharacterName} succumbs to {aura.Name}! ({saveTypeName} {saveResult.Total} vs DC {aura.SaveDC}) — {aura.Effect} for {aura.DurationRounds} round(s)!"));
+                    CombatLogHelper.Debuff("🌀", $"{candidate.Stats.CharacterName} succumbs to {aura.Name}! ({saveTypeName} {saveResult.Total} vs DC {aura.SaveDC}) — {aura.Effect} for {duration} round(s)!"));
                 affected++;
             }
         }
 
         if (affected > 0)
             Debug.Log($"[AI][Aura] {npcName}'s {aura.Name} affected {affected} creature(s)");
+    }
+
+    // ── Aura Save Immunity Tracking ──
+    // Per MM rules (e.g., Gibbering, Frightful Presence): successful save = 24-hour immunity.
+    // Key format: "AuraImmunity_{targetInstanceId}_{sourceInstanceId}_{auraName}"
+    // We track this as a simple HashSet since combat encounters don't last 24 hours;
+    // immunity persists for the remainder of the encounter.
+
+    private static readonly HashSet<string> _auraSaveImmunities = new HashSet<string>();
+
+    private static string GetAuraImmunityKey(CharacterController target, CharacterController source, string auraName)
+    {
+        return $"AuraImmunity_{target.GetInstanceID()}_{source.GetInstanceID()}_{auraName}";
+    }
+
+    private static bool HasAuraSaveImmunity(CharacterController target, CharacterController source, string auraName)
+    {
+        return _auraSaveImmunities.Contains(GetAuraImmunityKey(target, source, auraName));
+    }
+
+    private static void GrantAuraSaveImmunity(CharacterController target, CharacterController source, string auraName)
+    {
+        _auraSaveImmunities.Add(GetAuraImmunityKey(target, source, auraName));
+        Debug.Log($"[AI][Aura] Granted 24-hr immunity: {target.Stats.CharacterName} vs {source.Stats.CharacterName}'s {auraName}");
+    }
+
+    /// <summary>Call at encounter end or scene load to clear aura immunities.</summary>
+    public static void ClearAuraSaveImmunities()
+    {
+        _auraSaveImmunities.Clear();
     }
 
     /// <summary>
@@ -3233,6 +3292,8 @@ public class AIService : MonoBehaviour
 
     /// <summary>
     /// Apply a status effect from a special attack (blinding, sickening, etc.).
+    /// Uses Fortitude or Will save depending on attack definition.
+    /// Supports random duration via OnHitDurationDice.
     /// </summary>
     private void ApplyStatusEffectFromSpecialAttack(CharacterController target, RangedSpecialAttackDefinition attack)
     {
@@ -3242,28 +3303,46 @@ public class AIService : MonoBehaviour
         // Only apply if target fails a save (if DC > 0)
         if (attack.OnHitSaveDC > 0)
         {
-            var saveResult = SavingThrowResolver.ResolveWillSave(target.Stats, attack.OnHitSaveDC, attack.OnHitStatusEffectType);
+            SavingThrowResolver.SaveResult saveResult;
+            string saveTypeName;
+
+            if (attack.OnHitSaveIsFortitude)
+            {
+                saveResult = SavingThrowResolver.ResolveFortitudeSave(target.Stats, attack.OnHitSaveDC, attack.OnHitStatusEffectType);
+                saveTypeName = "Fort";
+            }
+            else
+            {
+                saveResult = SavingThrowResolver.ResolveWillSave(target.Stats, attack.OnHitSaveDC, attack.OnHitStatusEffectType);
+                saveTypeName = "Will";
+            }
+
             if (saveResult.Succeeded)
             {
                 _gameManager.CombatUI?.ShowCombatLog(
-                    CombatLogHelper.Success("💪", $"{target.Stats.CharacterName} resists {attack.OnHitStatusEffectType} (Will {saveResult.Total} vs DC {attack.OnHitSaveDC})!"));
+                    CombatLogHelper.Success("💪", $"{target.Stats.CharacterName} resists {attack.OnHitStatusEffectType} ({saveTypeName} {saveResult.Total} vs DC {attack.OnHitSaveDC})!"));
                 return;
             }
         }
+
+        // Determine duration: random 1d(OnHitDurationDice) if set, otherwise fixed OnHitDurationRounds
+        int duration = attack.OnHitDurationDice > 0
+            ? Random.Range(1, attack.OnHitDurationDice + 1)
+            : attack.OnHitDurationRounds;
 
         // Apply the effect
         switch (attack.OnHitStatusEffectType.ToLower())
         {
             case "blinded":
-                target.ApplyBlindedCondition(attack.OnHitDurationRounds, "Special Attack");
+                target.ApplyBlindedCondition(duration, "Special Attack");
                 _gameManager.CombatUI?.ShowCombatLog(
-                    CombatLogHelper.Debuff("🌑", $"{target.Stats.CharacterName} is blinded for {attack.OnHitDurationRounds} rounds!"));
+                    CombatLogHelper.Debuff("🌑", $"{target.Stats.CharacterName} is blinded for {duration} round(s)!"));
                 break;
             
             case "sickened":
-                target.ApplySickenedCondition(attack.OnHitDurationRounds, "Special Attack");
+                target.ApplySickenedCondition(duration, "Special Attack");
                 _gameManager.CombatUI?.ShowCombatLog(
-                    CombatLogHelper.Debuff("🤢", $"{target.Stats.CharacterName} is sickened for {attack.OnHitDurationRounds} rounds!"));
+                    CombatLogHelper.Debuff("🤢", $"{target.Stats.CharacterName} is sickened for {duration} round(s)!"));
                 break;
             
             default:

@@ -707,7 +707,10 @@ public static partial class NPCDatabase
             HasImprovedGrab = true,
             ImprovedGrabTriggerAttackName = "Bite",
             
-            // ── Aura: Gibbering (confusion) ──
+            // ── Aura: Gibbering (Su) — MM p.126 ──
+            // 60-ft spread, Will DC 13 (Cha-based: 10 + 2 HD + 1 CHA mod = 13)
+            // Confusion for 1d2 rounds. Sonic mind-affecting compulsion.
+            // Successful save grants 24-hour immunity.
             AuraAbility = new AuraAbilityDefinition
             {
                 Name = "Gibbering",
@@ -715,52 +718,68 @@ public static partial class NPCDatabase
                 IsWillSave = true,
                 RangeFeet = 60,
                 Effect = AuraEffectType.Confused,
-                DurationRounds = 1
+                DurationRounds = 1,        // Fallback; overridden by DurationDice
+                DurationDice = 2,           // 1d2 rounds per MM
+                GrantsImmunityOnSave = true, // 24-hour immunity on successful save
+                IsMindAffecting = true       // Sonic mind-affecting compulsion
             },
             
-            // ── Ranged Special: Spittle ──
+            // ── Ranged Special: Spittle (Ex) — MM p.126 ──
+            // Free action each round, one target within 30 ft.
+            // Ranged touch attack, 1d4 acid damage.
+            // On EVERY hit: Fort DC 18 (Con-based: 10 + 2 HD + 6 CON mod = 18) or blinded 1d4 rounds.
+            // Eyeless creatures immune to blindness but not acid.
             RangedSpecialAttack = new RangedSpecialAttackDefinition
             {
                 Name = "Spittle",
                 RangeFeet = 30,
                 IsRangedTouchAttack = true,
-                DamageDice = 4,
+                DamageDice = 4,             // 1d4 acid
                 DamageCount = 1,
                 DamageType = DamageType.Acid,
-                CooldownRounds = 0,  // At-will
+                CooldownRounds = 0,         // Free action each round
                 OnHitStatusEffectType = "Blinded",
-                OnHitSaveDC = 13,
-                OnHitDurationRounds = 4,  // Blinded 1d4 rounds, avg ~2.5 rounded to 4
-                OnHitOnCritOnly = true     // Blinding only on critical hit
+                OnHitSaveDC = 18,           // Fort DC 18 (Constitution-based)
+                OnHitDurationRounds = 2,    // Fallback; overridden by OnHitDurationDice
+                OnHitDurationDice = 4,      // 1d4 rounds per MM
+                OnHitOnCritOnly = false,    // Blindness on EVERY hit, not just crits
+                OnHitSaveIsFortitude = true  // Fortitude save, not Will
             },
             
-            // ── Terrain: Ground Manipulation ──
+            // ── Terrain: Ground Manipulation (Su) — MM p.126 ──
+            // At will, standard action. Adjacent squares only (5 ft).
+            // Ground becomes quicksand-like. Others must take move-equivalent action or become mired.
             TerrainManipulation = new TerrainManipulationDefinition
             {
                 Name = "Ground Manipulation",
-                RadiusFeet = 10,
+                RadiusFeet = 5,             // Adjacent squares only per MM (was incorrectly 10)
                 EffectType = TerrainEffectType.DifficultTerrain,
                 DamagePerRound = 0,
-                SetupRounds = 0,  // Instant
+                SetupRounds = 0,            // Instant on earth/sand; stone takes 2 rounds (not modeled)
                 DurationRounds = 10,
                 FollowsCaster = true
             },
             
-            // ── Grapple effect: Blood Drain ──
+            // ── Blood Drain (Ex) — MM p.126 ──
+            // Swallowed opponents only. 1d4 Constitution damage each round (AUTOMATIC).
             BloodDrain = new BloodDrainDefinition
             {
                 Name = "Blood Drain",
-                AbilityDrainAmount = 1,
+                AbilityDrainAmount = 1,     // Fallback; overridden by AbilityDrainDice
+                AbilityDrainDice = 4,       // 1d4 CON drain per MM
                 AbilityType = "Constitution"
             },
             
-            // ── Engulf ability ──
+            // ── Engulf (Ex) — MM p.126 ──
+            // Successful grapple check required. Medium or smaller.
+            // Engulfs within amorphous body, enables Blood Drain.
+            // Can cut out with 5 damage to mouther (light/1-handed piercing/slashing).
             Engulf = new EngulfDefinition
             {
                 ReflexSaveDC = 13,
-                DamagePerRound = 6,  // 6 automatic bite hits per round
+                DamagePerRound = 6,         // 6 automatic bite hits per round
                 DamageType = DamageType.Piercing,
-                EscapeDC = 17  // 10 + 3 BAB + 4 size bonus or grapple bonus
+                EscapeDC = 17               // 10 + 3 BAB + 4 size bonus
             },
             
             NaturalAttacks = new List<NaturalAttackDefinition>
@@ -770,17 +789,21 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Aberration", "Amorphous", "Darkvision60", "MM35" },
             Feats = new List<string> { "Lightning Reflexes" },
             SpecialAbilities = new List<string> { 
-                "Gibbering (Su): 60 ft., Will DC 13 or confused 1 round", 
-                "Spittle (Ex): 30 ft. ranged touch, 1d4 acid, blinded 1d4 rounds on crit", 
-                "Ground Manipulation (Su): 10 ft. radius difficult terrain", 
-                "Improved Grab (triggered by bite)",
-                "Blood Drain (Su): 1 CON/round while grappling", 
-                "Engulf (Ex): Reflex DC 13 to avoid, 6 automatic bite hits/round while engulfed",
+                "Gibbering (Su): 60 ft. spread, Will DC 13 or confused 1d2 rounds; sonic mind-affecting compulsion; 24-hr immunity on save", 
+                "Spittle (Ex): 30 ft. ranged touch, 1d4 acid; Fort DC 18 or blinded 1d4 rounds (every hit)", 
+                "Ground Manipulation (Su): adjacent squares, quicksand-like; move action or mired (pinned)", 
+                "Improved Grab (Ex): on bite hit vs Medium or smaller, free action grapple",
+                "Blood Drain (Ex): 1d4 CON damage/round (swallowed opponents only)", 
+                "Engulf (Ex): grapple check, Medium or smaller; 6 auto bite hits/round; cut out with 5 dmg",
                 "DR 5/bludgeoning", 
-                "Amorphous (immune to critical hits)", 
+                "Amorphous (Ex): immune to critical hits, cannot be flanked", 
                 "Darkvision 60 ft." 
             },
-            Immunities = new CreatureImmunities { immuneToCriticalHits = true },
+            Immunities = new CreatureImmunities 
+            { 
+                immuneToCriticalHits = true,
+                immuneToSneakAttack = true   // Amorphous: no discernible anatomy, cannot be flanked
+            },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.55f, 0.35f, 0.4f, 1f),
             PanelColor = new Color(0.2f, 0.1f, 0.12f, 0.85f),
