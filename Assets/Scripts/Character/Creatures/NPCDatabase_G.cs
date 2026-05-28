@@ -704,6 +704,10 @@ public static partial class NPCDatabase
             BaseSpeed = 2, // 10 ft, swim 20 ft
             BaseHitDieHP = 42,
             BAB = 3,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            
+            // ── Aura: Gibbering (confusion) ──
             AuraAbility = new AuraAbilityDefinition
             {
                 Name = "Gibbering",
@@ -713,19 +717,75 @@ public static partial class NPCDatabase
                 Effect = AuraEffectType.Confused,
                 DurationRounds = 1
             },
+            
+            // ── Ranged Special: Spittle ──
+            RangedSpecialAttack = new RangedSpecialAttackDefinition
+            {
+                Name = "Spittle",
+                RangeFeet = 30,
+                IsRangedTouchAttack = true,
+                DamageDice = 4,
+                DamageCount = 1,
+                DamageType = DamageType.Acid,
+                CooldownRounds = 0,  // At-will
+                OnHitStatusEffectType = "Blinded",
+                OnHitSaveDC = 13,
+                OnHitDurationRounds = 4,  // Blinded 1d4 rounds, avg ~2.5 rounded to 4
+                OnHitOnCritOnly = true     // Blinding only on critical hit
+            },
+            
+            // ── Terrain: Ground Manipulation ──
+            TerrainManipulation = new TerrainManipulationDefinition
+            {
+                Name = "Ground Manipulation",
+                RadiusFeet = 10,
+                EffectType = TerrainEffectType.DifficultTerrain,
+                DamagePerRound = 0,
+                SetupRounds = 0,  // Instant
+                DurationRounds = 10,
+                FollowsCaster = true
+            },
+            
+            // ── Grapple effect: Blood Drain ──
+            BloodDrain = new BloodDrainDefinition
+            {
+                Name = "Blood Drain",
+                AbilityDrainAmount = 1,
+                AbilityType = "Constitution"
+            },
+            
+            // ── Engulf ability ──
+            Engulf = new EngulfDefinition
+            {
+                ReflexSaveDC = 13,
+                DamagePerRound = 6,  // 6 automatic bite hits per round
+                DamageType = DamageType.Piercing,
+                EscapeDC = 17  // 10 + 3 BAB + 4 size bonus or grapple bonus
+            },
+            
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 1, DamageCount = 1, Count = 6, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true }
             },
             CreatureTags = new List<string> { "Aberration", "Amorphous", "Darkvision60", "MM35" },
             Feats = new List<string> { "Lightning Reflexes" },
-            SpecialAbilities = new List<string> { "Gibbering (Su): 60 ft., Will DC 13 or confused 1 round", "Spittle (Ex): 30 ft. ranged touch, 1d4 acid, blinding 1d4 rounds on crit", "Ground Manipulation (Su): 10 ft. radius becomes bog-like", "Improved Grab", "Blood Drain: 1 CON/round", "Engulf", "DR 5/bludgeoning", "Amorphous (immune to critical hits)", "Darkvision 60 ft." },
+            SpecialAbilities = new List<string> { 
+                "Gibbering (Su): 60 ft., Will DC 13 or confused 1 round", 
+                "Spittle (Ex): 30 ft. ranged touch, 1d4 acid, blinded 1d4 rounds on crit", 
+                "Ground Manipulation (Su): 10 ft. radius difficult terrain", 
+                "Improved Grab (triggered by bite)",
+                "Blood Drain (Su): 1 CON/round while grappling", 
+                "Engulf (Ex): Reflex DC 13 to avoid, 6 automatic bite hits/round while engulfed",
+                "DR 5/bludgeoning", 
+                "Amorphous (immune to critical hits)", 
+                "Darkvision 60 ft." 
+            },
             Immunities = new CreatureImmunities { immuneToCriticalHits = true },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.55f, 0.35f, 0.4f, 1f),
             PanelColor = new Color(0.2f, 0.1f, 0.12f, 0.85f),
             NameColor = new Color(0.82f, 0.55f, 0.6f),
-            Description = "Gibbering Mouther (CR 5). Mass of eyes and mouths that confuses and engulfs prey. MM 3.5e p.126."
+            Description = "Gibbering Mouther (CR 5). Mass of eyes and mouths that confuses and engulfs prey. MM 3.5e p.126. Uses spittle ranged attacks, creates bog terrain, and drains CON while grappling."
         });
     }
 

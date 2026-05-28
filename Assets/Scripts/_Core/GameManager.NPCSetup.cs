@@ -607,6 +607,12 @@ public partial class GameManager
             npc.ConfigureFrightfulPresence(def.FrightfulPresence);
         if (def.Engulf != null)
             npc.ConfigureEngulf(def.Engulf);
+        if (def.RangedSpecialAttack != null)
+            npc.ConfigureRangedSpecialAttack(def.RangedSpecialAttack);
+        if (def.BloodDrain != null)
+            npc.ConfigureBloodDrain(def.BloodDrain);
+        if (def.TerrainManipulation != null)
+            npc.ConfigureTerrainManipulation(def.TerrainManipulation);
         if (def.StenchAuraDC > 0)
             npc.ConfigureStenchAura(def.StenchAuraDC, def.StenchAuraRange);
         if (def.AuraAbility != null)

@@ -503,6 +503,7 @@ public class CharacterController : MonoBehaviour
     // Engulf tracking
     [SerializeField] private EngulfDefinition _engulf;
     public bool HasEngulf => _engulf != null;
+    public EngulfDefinition GetEngulfDefinition() => _engulf;
 
     // Stench aura
     [SerializeField] private int _stenchAuraDC;
@@ -512,6 +513,24 @@ public class CharacterController : MonoBehaviour
     // Supernatural aura (babble, moan)
     [SerializeField] private AuraAbilityDefinition _auraAbility;
     public bool HasAuraAbility => _auraAbility != null;
+
+    // Ranged special attack (Spittle, Web, Acid Spray)
+    [SerializeField] private RangedSpecialAttackDefinition _rangedSpecialAttack;
+    [SerializeField] private int _rangedSpecialAttackCooldownRounds;
+    public bool HasRangedSpecialAttack => _rangedSpecialAttack != null;
+    public bool IsRangedSpecialAttackReady => _rangedSpecialAttack != null && _rangedSpecialAttackCooldownRounds <= 0;
+    public RangedSpecialAttackDefinition GetRangedSpecialAttackDefinition() => _rangedSpecialAttack;
+
+    // Blood drain (CON drain while grappling)
+    [SerializeField] private BloodDrainDefinition _bloodDrain;
+    public bool HasBloodDrain => _bloodDrain != null;
+    public BloodDrainDefinition GetBloodDrainDefinition() => _bloodDrain;
+
+    // Terrain manipulation (Ground Manipulation, Caltrops)
+    [SerializeField] private TerrainManipulationDefinition _terrainManipulation;
+    [SerializeField] private int _terrainManipulationDurationRemaining;
+    public bool HasTerrainManipulation => _terrainManipulation != null;
+    public TerrainManipulationDefinition GetTerrainManipulationDefinition() => _terrainManipulation;
 
     public int BombardierAcidSprayCooldownRounds => Mathf.Max(0, _bombardierAcidSprayCooldownRounds);
     public bool HasBombardierAcidSprayReady => _bombardierAcidSprayCooldownRounds <= 0;
@@ -2662,6 +2681,39 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// Apply the blinded condition for a specified number of rounds.
+    /// </summary>
+    public void ApplyBlindedCondition(int rounds, string sourceName = "Blinded")
+    {
+        ApplyCondition(CombatConditionType.Blinded, rounds, sourceName);
+    }
+
+    /// <summary>
+    /// Apply the sickened condition for a specified number of rounds.
+    /// </summary>
+    public void ApplySickenedCondition(int rounds, string sourceName = "Sickened")
+    {
+        ApplyCondition(CombatConditionType.Sickened, rounds, sourceName);
+    }
+
+    /// <summary>
+    /// Apply the engulfed condition (target is inside a creature and takes automatic damage).
+    /// </summary>
+    public void ApplyEngulfedCondition(CharacterController engulfingCreature, EngulfDefinition engulfDef)
+    {
+        if (engulfingCreature == null || engulfDef == null)
+            return;
+
+        // Track the engulfing creature
+        // The actual damage/duration will be handled during monster turns
+        // For now, apply a status condition marker
+        ApplyCondition(CombatConditionType.Helpless, -1, $"Engulfed by {engulfingCreature.Stats?.CharacterName ?? "creature"}");
+        
+        Debug.Log($"[Status] {Stats?.CharacterName ?? name} is engulfed by {engulfingCreature.Stats?.CharacterName ?? "creature"}");
+        // TODO: Implement ongoing engulf damage tracking
+    }
+
+    /// <summary>
     /// Check if creature is in any active Sleet Storm area (for movement/attack modifiers).
     /// </summary>
     public bool IsInSleetStorm => SleetStormAreaEffect.IsCreatureInAnySleetStorm(this);
@@ -3723,6 +3775,53 @@ public class CharacterController : MonoBehaviour
     public void ConfigureAuraAbility(AuraAbilityDefinition aura)
     {
         _auraAbility = aura?.Clone();
+    }
+
+    /// <summary>Configure ranged special attack (Spittle, Web, Acid Spray).</summary>
+    public void ConfigureRangedSpecialAttack(RangedSpecialAttackDefinition rangedAttack)
+    {
+        _rangedSpecialAttack = rangedAttack?.Clone();
+        _rangedSpecialAttackCooldownRounds = 0;
+    }
+
+    /// <summary>Configure blood drain ability (triggered while grappling).</summary>
+    public void ConfigureBloodDrain(BloodDrainDefinition bloodDrain)
+    {
+        _bloodDrain = bloodDrain?.Clone();
+    }
+
+    /// <summary>Configure terrain manipulation ability (Ground Manipulation bog, Caltrops).</summary>
+    public void ConfigureTerrainManipulation(TerrainManipulationDefinition terrainManip)
+    {
+        _terrainManipulation = terrainManip?.Clone();
+        _terrainManipulationDurationRemaining = terrainManip?.DurationRounds ?? 0;
+    }
+
+    /// <summary>Tick ranged special attack cooldown at start of turn.</summary>
+    public void TickRangedSpecialAttackCooldown()
+    {
+        if (_rangedSpecialAttackCooldownRounds > 0)
+            _rangedSpecialAttackCooldownRounds--;
+    }
+
+    /// <summary>Apply ranged special attack cooldown after use.</summary>
+    public void ApplyRangedSpecialAttackCooldown()
+    {
+        if (_rangedSpecialAttack != null && _rangedSpecialAttack.CooldownRounds > 0)
+            _rangedSpecialAttackCooldownRounds = _rangedSpecialAttack.CooldownRounds;
+    }
+
+    /// <summary>Tick terrain manipulation duration (for non-caster-following effects).</summary>
+    public void TickTerrainManipulationDuration()
+    {
+        if (_terrainManipulation != null && _terrainManipulationDurationRemaining > 0)
+            _terrainManipulationDurationRemaining--;
+    }
+
+    /// <summary>Check if terrain manipulation is still active.</summary>
+    public bool IsTerrainManipulationActive()
+    {
+        return _terrainManipulation != null && (_terrainManipulation.FollowsCaster || _terrainManipulationDurationRemaining > 0);
     }
 
     /// <summary>Tick breath weapon cooldown at start of turn.</summary>

@@ -459,14 +459,32 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        AIProfile profile = GetProfile(npc);
+
+        // ── Special ability priorities before movement ──
+        // If we have a ranged special attack (Spittle, Web) and target is in range, try it first
+        if (npc.HasRangedSpecialAttack)
+        {
+            int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+            int rangeSquares = npc.GetRangedSpecialAttackDefinition().RangeFeet / 5;
+            
+            if (distance <= rangeSquares && distance > 1)
+            {
+                Debug.Log($"[AI] {npc.Stats.CharacterName} attempting ranged special attack (distance {distance} squares, range {rangeSquares} squares)");
+                if (TryExecuteRangedSpecialAttack(npc, target))
+                {
+                    yield return new WaitForSeconds(0.8f);
+                    yield break;
+                }
+            }
+        }
+
         AIActionType action = SelectBestAction(npc, target, preferAggression: true);
         if (action == AIActionType.Charge)
         {
             yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target));
             yield break;
         }
-
-        AIProfile profile = GetProfile(npc);
 
         if (!npc.IsTargetInCurrentWeaponRange(target))
         {
@@ -485,6 +503,11 @@ public class AIService : MonoBehaviour
                 }
 
                 npc.Actions.UseMoveAction();
+                
+                // Activate terrain manipulation after moving closer
+                if (npc.HasTerrainManipulation)
+                    ActivateTerrainManipulation(npc);
+                
                 _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances toward {target.Stats.CharacterName}!"));
                 yield return new WaitForSeconds(0.5f);
             }
@@ -503,6 +526,18 @@ public class AIService : MonoBehaviour
 
         if (npc.IsTargetInCurrentWeaponRange(target) && !target.Stats.IsDead)
         {
+            // ── Try Engulf attack if adjacent and available ──
+            if (npc.HasEngulf && SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition) == 1)
+            {
+                Debug.Log($"[AI] {npc.Stats.CharacterName} attempting engulf");
+                if (TryExecuteEngulf(npc, target))
+                {
+                    yield return new WaitForSeconds(0.8f);
+                    yield break;
+                }
+            }
+
+            // Fall back to normal melee attacks
             bool usedSpecial = ShouldUseManeuver(npc, target) && TryExecutePreferredManeuver(npc, target, profile);
             if (!usedSpecial)
                 yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, target));
@@ -2905,6 +2940,209 @@ public class AIService : MonoBehaviour
     {
         if (npc?.Stats == null) return false;
         return string.Equals(npc.Stats.SourceNpcDefinitionId, "giant_bombardier_beetle", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Special Ability Execution Methods
+    // ══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Attempt to execute a ranged special attack (Spittle, Web, Acid Spray).
+    /// Returns true if the attack was performed, false otherwise.
+    /// </summary>
+    public bool TryExecuteRangedSpecialAttack(CharacterController npc, CharacterController target)
+    {
+        if (_gameManager == null || npc == null || target == null || npc.Stats == null)
+            return false;
+
+        if (!npc.IsRangedSpecialAttackReady)
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName}'s ranged special attack not ready (cooldown remaining).");
+            return false;
+        }
+
+        RangedSpecialAttackDefinition attack = npc.GetRangedSpecialAttackDefinition();
+        if (attack == null)
+            return false;
+
+        int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+        if (distance > attack.RangeFeet / 5)  // Convert feet to squares (5 ft = 1 square)
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName}'s target is too far ({distance} squares) for {attack.Name} (range {attack.RangeFeet} ft).");
+            return false;
+        }
+
+        // Log the attack
+        _gameManager.CombatUI?.ShowCombatLog(
+            CombatLogHelper.Info("", $"{npc.Stats.CharacterName} uses {attack.Name} against {target.Stats.CharacterName}!"));
+
+        // Apply cooldown
+        npc.ApplyRangedSpecialAttackCooldown();
+
+        // Determine hit/miss and apply damage
+        bool isHit = RollRangedTouchAttack(npc, target);
+        
+        if (isHit)
+        {
+            int damage = RollDamage(attack.DamageDice, attack.DamageCount);
+            target.Stats.TakeDamage(damage);
+            _gameManager.CombatUI?.ShowCombatLog(
+                CombatLogHelper.Hit("💥", $"{npc.Stats.CharacterName}'s {attack.Name} hits for {damage} {attack.DamageType} damage!"));
+
+            // Check for on-hit effects (blinding on crit, etc.)
+            if (!string.IsNullOrEmpty(attack.OnHitStatusEffectType) && !attack.OnHitOnCritOnly)
+            {
+                ApplyStatusEffectFromSpecialAttack(target, attack);
+            }
+        }
+        else
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                CombatLogHelper.Miss("❌", $"{npc.Stats.CharacterName}'s {attack.Name} misses!"));
+        }
+
+        if (target.Stats.IsDead)
+            target.OnDeath();
+
+        return true;
+    }
+
+    /// <summary>
+    /// Attempt to execute an Engulf attack. Returns true if engulf was attempted.
+    /// </summary>
+    public bool TryExecuteEngulf(CharacterController npc, CharacterController target)
+    {
+        if (_gameManager == null || npc == null || target == null || npc.Stats == null)
+            return false;
+
+        EngulfDefinition engulf = npc.GetEngulfDefinition();
+        if (engulf == null)
+            return false;
+
+        // Must be adjacent
+        int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+        if (distance != 1)
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName} cannot engulf — target is {distance} squares away (must be adjacent).");
+            return false;
+        }
+
+        _gameManager.CombatUI?.ShowCombatLog(
+            CombatLogHelper.Info("", $"{npc.Stats.CharacterName} attempts to engulf {target.Stats.CharacterName}!"));
+
+        // Target makes Reflex save to avoid
+        var saveResult = SavingThrowResolver.ResolveReflexSave(target.Stats, engulf.ReflexSaveDC, "Engulf");
+        
+        if (saveResult.Succeeded)
+        {
+            _gameManager.CombatUI?.ShowCombatLog(
+                CombatLogHelper.Success("💨", $"{target.Stats.CharacterName} evades engulf (Reflex {saveResult.Total} vs DC {engulf.ReflexSaveDC})!"));
+            return true;
+        }
+
+        _gameManager.CombatUI?.ShowCombatLog(
+            CombatLogHelper.Damage("⚠", $"{target.Stats.CharacterName} is engulfed (Reflex {saveResult.Total} vs DC {engulf.ReflexSaveDC})!"));
+        
+        // Apply engulfed condition
+        target.ApplyEngulfedCondition(npc, engulf);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Activate terrain manipulation (Ground Manipulation bog, etc.).
+    /// This creates difficult terrain around the NPC.
+    /// </summary>
+    public void ActivateTerrainManipulation(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || !npc.HasTerrainManipulation)
+            return;
+
+        TerrainManipulationDefinition terrain = npc.GetTerrainManipulationDefinition();
+        if (terrain == null)
+            return;
+
+        _gameManager.CombatUI?.ShowCombatLog(
+            CombatLogHelper.Info("", $"{npc.Stats.CharacterName} activates {terrain.Name} in a {terrain.RadiusFeet}-ft radius!"));
+
+        // Mark terrain as difficult in the area around the NPC
+        // This would typically interact with the GridSystem to mark affected cells
+        // For now, we just log it and track the state
+        Debug.Log($"[AI] {npc.Stats.CharacterName} activates {terrain.Name} around {npc.GridPosition} (radius {terrain.RadiusFeet} ft)");
+    }
+
+    /// <summary>
+    /// Roll a ranged touch attack against a target.
+    /// Returns true if the attack hits.
+    /// </summary>
+    private bool RollRangedTouchAttack(CharacterController attacker, CharacterController target)
+    {
+        if (attacker?.Stats == null || target?.Stats == null)
+            return false;
+
+        int attackBonus = attacker.Stats.BaseAttackBonus + attacker.Stats.DEXMod;
+        int targetAC = target.GetTargetAC(includeShield: false);  // Ranged touch ignores armor/shield
+
+        int roll = UnityEngine.Random.Range(1, 21);
+        int total = roll + attackBonus;
+
+        Debug.Log($"[AI] Ranged touch attack: d20({roll}) + {attackBonus} = {total} vs AC {targetAC}");
+
+        return total >= targetAC;
+    }
+
+    /// <summary>
+    /// Roll damage for a special attack based on dice type and count.
+    /// </summary>
+    private int RollDamage(int damageDice, int damageCount)
+    {
+        int total = 0;
+        for (int i = 0; i < damageCount; i++)
+        {
+            total += UnityEngine.Random.Range(1, damageDice + 1);
+        }
+        return Mathf.Max(1, total);
+    }
+
+    /// <summary>
+    /// Apply a status effect from a special attack (blinding, sickening, etc.).
+    /// </summary>
+    private void ApplyStatusEffectFromSpecialAttack(CharacterController target, RangedSpecialAttackDefinition attack)
+    {
+        if (target == null || string.IsNullOrEmpty(attack.OnHitStatusEffectType))
+            return;
+
+        // Only apply if target fails a save (if DC > 0)
+        if (attack.OnHitSaveDC > 0)
+        {
+            var saveResult = SavingThrowResolver.ResolveWillSave(target.Stats, attack.OnHitSaveDC, attack.OnHitStatusEffectType);
+            if (saveResult.Succeeded)
+            {
+                _gameManager.CombatUI?.ShowCombatLog(
+                    CombatLogHelper.Success("💪", $"{target.Stats.CharacterName} resists {attack.OnHitStatusEffectType} (Will {saveResult.Total} vs DC {attack.OnHitSaveDC})!"));
+                return;
+            }
+        }
+
+        // Apply the effect
+        switch (attack.OnHitStatusEffectType.ToLower())
+        {
+            case "blinded":
+                target.ApplyBlindedCondition(attack.OnHitDurationRounds, "Special Attack");
+                _gameManager.CombatUI?.ShowCombatLog(
+                    CombatLogHelper.Debuff("🌑", $"{target.Stats.CharacterName} is blinded for {attack.OnHitDurationRounds} rounds!"));
+                break;
+            
+            case "sickened":
+                target.ApplySickenedCondition(attack.OnHitDurationRounds, "Special Attack");
+                _gameManager.CombatUI?.ShowCombatLog(
+                    CombatLogHelper.Debuff("🤢", $"{target.Stats.CharacterName} is sickened for {attack.OnHitDurationRounds} rounds!"));
+                break;
+            
+            default:
+                Debug.LogWarning($"[AI] Unknown status effect type: {attack.OnHitStatusEffectType}");
+                break;
+        }
     }
 
 }

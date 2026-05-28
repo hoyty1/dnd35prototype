@@ -350,6 +350,88 @@ public class AuraAbilityDefinition
 }
 
 /// <summary>
+/// Ranged special attack (Spittle, Web, Acid Spray, etc.).
+/// Used by creatures that need tactical ranged abilities distinct from standard weapons.
+/// </summary>
+[System.Serializable]
+public class RangedSpecialAttackDefinition
+{
+    public string Name = "Spittle";
+    public int RangeFeet = 30;
+    public bool IsRangedTouchAttack = true;  // true = ranged touch AC, false = standard AC
+    public int DamageDice = 4;
+    public int DamageCount = 1;
+    public DamageType DamageType = DamageType.Acid;
+    public int SaveDC;                       // 0 = no save, otherwise Reflex or Will
+    public bool IsSaveReflex = true;         // true = Reflex, false = Will
+    public int CooldownRounds = 0;           // 0 = at-will, X = must wait X rounds between uses
+    
+    /// <summary>On-hit status effect (blinding, sickening, etc.). Can be null.</summary>
+    public string OnHitStatusEffectType;     // e.g., "Blinded"
+    public int OnHitSaveDC;                  // Save DC for the on-hit effect
+    public int OnHitDurationRounds;
+    /// <summary>True if on-hit effect triggers only on critical hit, false if always.</summary>
+    public bool OnHitOnCritOnly = false;
+    
+    /// <summary>If true, attack affects cone area; if false, single target ranged touch.</summary>
+    public bool IsCone = false;
+    public int ConeLengthFeet = 30;          // Length of cone in feet
+    
+    public RangedSpecialAttackDefinition Clone()
+    {
+        return (RangedSpecialAttackDefinition)MemberwiseClone();
+    }
+}
+
+/// <summary>
+/// Passive ongoing ability triggered while grappling (Blood Drain, Constrict drain, etc.).
+/// </summary>
+[System.Serializable]
+public class BloodDrainDefinition
+{
+    public string Name = "Blood Drain";
+    public int AbilityDrainAmount = 1;       // CON, STR, etc. drained per round
+    public string AbilityType = "Constitution"; // "Strength", "Dexterity", "Constitution", etc.
+    public int DamagePerRound = 0;           // Optional physical damage (0 = none)
+    public DamageType DamageType = DamageType.Piercing;
+    
+    public BloodDrainDefinition Clone()
+    {
+        return (BloodDrainDefinition)MemberwiseClone();
+    }
+}
+
+/// <summary>
+/// Terrain manipulation ability (Ground Manipulation bog, Spike Growth, Caltrops, etc.).
+/// Creates difficult terrain or hazardous areas in a radius.
+/// </summary>
+[System.Serializable]
+public class TerrainManipulationDefinition
+{
+    public string Name = "Ground Manipulation";
+    public int RadiusFeet = 10;              // Affected area radius in feet
+    public TerrainEffectType EffectType = TerrainEffectType.DifficultTerrain;
+    public int DamagePerRound = 0;           // 0 = no damage, X = X damage each round standing in it
+    public DamageType DamageType = DamageType.Piercing;
+    public int SetupRounds = 0;              // 0 = instant, X = X rounds to manifest
+    public int DurationRounds = 10;          // How long effect persists
+    /// <summary>If true, effect is centered on caster and moves with them. If false, fixed location.</summary>
+    public bool FollowsCaster = true;
+    
+    public TerrainManipulationDefinition Clone()
+    {
+        return (TerrainManipulationDefinition)MemberwiseClone();
+    }
+}
+
+public enum TerrainEffectType
+{
+    DifficultTerrain,
+    Dangerous,
+    Slippery
+}
+
+/// <summary>
 /// Complete definition of an NPC type — everything needed to instantiate
 /// a fully configured CharacterStats, equip items, and choose AI behavior.
 /// </summary>
@@ -433,6 +515,18 @@ public class NPCDefinition
     // --- Engulf ---
     /// <summary>Engulf ability (Gelatinous Cube, Cloaker). Reflex save or engulfed; auto-damage per round.</summary>
     public EngulfDefinition Engulf;
+
+    // --- Ranged Special Attack ---
+    /// <summary>Ranged special ability (Spittle, Web, Acid Spray). Used by creatures with tactical ranged abilities.</summary>
+    public RangedSpecialAttackDefinition RangedSpecialAttack;
+
+    // --- Blood Drain ---
+    /// <summary>Passive ability triggered while grappling (Blood Drain, Constrict drain).</summary>
+    public BloodDrainDefinition BloodDrain;
+
+    // --- Terrain Manipulation ---
+    /// <summary>Ability to create difficult/hazardous terrain (Ground Manipulation bog, Caltrops, Spike Growth).</summary>
+    public TerrainManipulationDefinition TerrainManipulation;
 
     // --- Stench/Aura ---
     /// <summary>Stench aura (Troglodyte). Fort save or sickened.</summary>
