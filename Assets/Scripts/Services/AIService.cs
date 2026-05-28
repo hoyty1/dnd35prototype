@@ -656,40 +656,127 @@ public class AIService : MonoBehaviour
             }
         }
 
-        // ── Priority 5: Evaluate breath weapon ──
-        bool breathReady = dragonProfile.EvaluateBreathWeapon(npc, allCombatants, _gameManager);
-
-        if (breathReady && dragonProfile.BreathWeaponAimTarget != null)
+        // ── Priority 5: Tactical Breath Weapon Positioning ──
+        // When breath weapon is available, evaluate ALL reachable positions to find
+        // the optimal spot that maximizes enemy hits. Move there, then fire.
+        if (npc.HasBreathWeapon && npc.IsBreathWeaponReady)
         {
-            // Use breath weapon — this is a standard action
-            Debug.Log($"[AI][Dragon] {npc.Stats.CharacterName} uses breath weapon (hits {dragonProfile.BreathWeaponExpectedHits} enemies)!");
-            yield return _gameManager.StartCoroutine(
-                _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget));
+            Debug.Log($"🐉 [AI][Dragon] {npc.Stats.CharacterName} — breath weapon READY, initiating tactical positioning...");
 
-            // After breath weapon, dragon may still have move action for positioning
-            if (npc.Stats.CurrentHP > 0 && npc.Actions.HasMoveAction)
+            var bestBreathPos = dragonProfile.FindBestBreathPosition(npc, allCombatants, _gameManager);
+
+            if (bestBreathPos.HasValue)
             {
-                // Try to step away from melee threats (AoO avoidance — priority 3)
-                CharacterController closestEnemy = SelectBestTarget(npc, allCombatants);
-                if (closestEnemy != null)
+                var bp = bestBreathPos.Value;
+
+                // ── Step 1: Move to optimal position if needed ──
+                if (bp.RequiresMove && npc.Actions.HasMoveAction)
                 {
-                    int dist = SquareGridUtils.GetDistance(npc.GridPosition, closestEnemy.GridPosition);
-                    if (dist <= 1)
+                    Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName} moving from {npc.GridPosition} → {bp.Position} " +
+                              $"for breath weapon ({bp.EnemyHits} targets)");
+
+                    yield return _gameManager.StartCoroutine(
+                        _gameManager.MoveCharacterAlongComputedPathForAI(npc, bp.Position, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+
+                    if (npc.Stats.CurrentHP <= 0)
                     {
-                        SquareCell retreatCell = EvaluateMovementOptions(npc, closestEnemy.GridPosition, retreat: true, profile: dragonProfile);
-                        if (retreatCell != null && retreatCell.Coords != npc.GridPosition)
+                        Debug.Log($"🔥 [AI][Dragon] {npc.Stats.CharacterName} killed during breath positioning move — turn ended");
+                        yield break;
+                    }
+
+                    npc.Actions.UseMoveAction();
+                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
+                        $"{npc.Stats.CharacterName} maneuvers into optimal breath weapon position!"));
+                    yield return new WaitForSeconds(0.4f);
+                }
+                else if (bp.RequiresMove && !npc.Actions.HasMoveAction)
+                {
+                    // Can't move — fall back to evaluating breath from current position only
+                    Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName} wants to reposition but has no move action — using current position");
+                }
+
+                // ── Step 2: Fire breath weapon ──
+                // Re-evaluate from actual current position (may have moved or stayed)
+                bool breathReady = dragonProfile.EvaluateBreathWeapon(npc, allCombatants, _gameManager);
+                if (breathReady && dragonProfile.BreathWeaponAimTarget != null)
+                {
+                    Debug.Log($"🐉 [AI][Dragon] {npc.Stats.CharacterName} FIRES breath weapon from {npc.GridPosition} " +
+                              $"aimed at {dragonProfile.BreathWeaponAimTarget.Stats.CharacterName} " +
+                              $"(hits {dragonProfile.BreathWeaponExpectedHits} enemies)!");
+
+                    yield return _gameManager.StartCoroutine(
+                        _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget));
+
+                    // After breath weapon, dragon may still have move action for repositioning
+                    if (npc.Stats.CurrentHP > 0 && npc.Actions.HasMoveAction)
+                    {
+                        CharacterController closestEnemy = SelectBestTarget(npc, allCombatants);
+                        if (closestEnemy != null)
                         {
-                            yield return _gameManager.StartCoroutine(
-                                _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
-                            npc.Actions.UseMoveAction();
-                            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} repositions after breath weapon."));
-                            yield return new WaitForSeconds(0.3f);
+                            int dist = SquareGridUtils.GetDistance(npc.GridPosition, closestEnemy.GridPosition);
+                            if (dist <= 1)
+                            {
+                                SquareCell retreatCell = EvaluateMovementOptions(npc, closestEnemy.GridPosition, retreat: true, profile: dragonProfile);
+                                if (retreatCell != null && retreatCell.Coords != npc.GridPosition)
+                                {
+                                    yield return _gameManager.StartCoroutine(
+                                        _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                                    npc.Actions.UseMoveAction();
+                                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
+                                        $"{npc.Stats.CharacterName} repositions after breath weapon."));
+                                    yield return new WaitForSeconds(0.3f);
+                                }
+                            }
                         }
                     }
+
+                    yield break;
+                }
+                else
+                {
+                    Debug.Log($"🐉 [AI][DragonBreath] {npc.Stats.CharacterName} — breath evaluation failed after move " +
+                              $"(breathReady={breathReady}, aimTarget={dragonProfile.BreathWeaponAimTarget?.Stats?.CharacterName ?? "null"})");
+                    // Fall through to melee — the move was already used for positioning
+                }
+            }
+            else
+            {
+                // No viable breath position found — try from current position as fallback
+                bool breathReady = dragonProfile.EvaluateBreathWeapon(npc, allCombatants, _gameManager);
+                if (breathReady && dragonProfile.BreathWeaponAimTarget != null)
+                {
+                    Debug.Log($"🐉 [AI][Dragon] {npc.Stats.CharacterName} uses breath weapon from current position " +
+                              $"(hits {dragonProfile.BreathWeaponExpectedHits} enemies)!");
+                    yield return _gameManager.StartCoroutine(
+                        _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget));
+
+                    if (npc.Stats.CurrentHP > 0 && npc.Actions.HasMoveAction)
+                    {
+                        CharacterController closestEnemy = SelectBestTarget(npc, allCombatants);
+                        if (closestEnemy != null)
+                        {
+                            int dist = SquareGridUtils.GetDistance(npc.GridPosition, closestEnemy.GridPosition);
+                            if (dist <= 1)
+                            {
+                                SquareCell retreatCell = EvaluateMovementOptions(npc, closestEnemy.GridPosition, retreat: true, profile: dragonProfile);
+                                if (retreatCell != null && retreatCell.Coords != npc.GridPosition)
+                                {
+                                    yield return _gameManager.StartCoroutine(
+                                        _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                                    npc.Actions.UseMoveAction();
+                                    _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
+                                        $"{npc.Stats.CharacterName} repositions after breath weapon."));
+                                    yield return new WaitForSeconds(0.3f);
+                                }
+                            }
+                        }
+                    }
+
+                    yield break;
                 }
             }
 
-            yield break;
+            Debug.Log($"🐉 [AI][Dragon] {npc.Stats.CharacterName} — breath weapon available but no viable targets. Proceeding to melee.");
         }
 
         // ── Priority 3 & 4 & 6: Movement + melee attack ──

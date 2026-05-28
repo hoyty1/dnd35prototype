@@ -330,11 +330,183 @@ namespace DND35.AI.Profiles
             return 0.85f;
         }
 
+        // ── Tactical Breath Weapon Positioning ─────────────────────────
+
+        /// <summary>Result of evaluating a candidate position for breath weapon usage.</summary>
+        public struct BreathPositionCandidate
+        {
+            public Vector2Int Position;
+            public CharacterController AimTarget;
+            public int EnemyHits;
+            public int AllyHits;
+            public bool RequiresMove; // true if position != current position
+        }
+
+        /// <summary>
+        /// Finds the best position within the dragon's movement range to maximize
+        /// breath weapon effectiveness. Evaluates the current position plus all
+        /// reachable cells, scoring each by enemy hits and ally avoidance.
+        /// </summary>
+        /// <returns>Best candidate, or null if no valid breath position exists.</returns>
+        public BreathPositionCandidate? FindBestBreathPosition(
+            CharacterController self,
+            List<CharacterController> allCombatants,
+            GameManager gameManager)
+        {
+            if (self == null || !self.HasBreathWeapon || !self.IsBreathWeaponReady)
+                return null;
+
+            BreathWeaponDefinition bw = self.GetBreathWeaponDefinition();
+            if (bw == null)
+                return null;
+
+            int rangeSquares = Mathf.Max(1, bw.RangeFeet / 5);
+
+            // Gather enemies and allies
+            var enemies = new List<CharacterController>();
+            var allies = new List<CharacterController>();
+            for (int i = 0; i < allCombatants.Count; i++)
+            {
+                CharacterController c = allCombatants[i];
+                if (c == null || c.Stats == null || c.Stats.IsDead || c == self)
+                    continue;
+
+                if (gameManager.IsEnemyTeamForAI(self, c))
+                    enemies.Add(c);
+                else
+                    allies.Add(c);
+            }
+
+            if (enemies.Count == 0)
+                return null;
+
+            // Build list of candidate positions: current + all reachable cells
+            var candidatePositions = new List<Vector2Int>();
+            candidatePositions.Add(self.GridPosition); // Always evaluate current position first
+
+            int moveRange = gameManager.GetCurrentMoveRangeSquares(self);
+            if (moveRange > 0 && gameManager.Grid != null)
+            {
+                List<SquareCell> moveCells = gameManager.Grid.GetCellsInRange(self.GridPosition, moveRange);
+                int moverSize = self.GetVisualSquaresOccupied();
+
+                for (int i = 0; i < moveCells.Count; i++)
+                {
+                    SquareCell cell = moveCells[i];
+                    if (cell == null || cell.Coords == self.GridPosition)
+                        continue;
+
+                    if (!gameManager.Grid.CanPlaceCreature(cell.Coords, moverSize, self))
+                        continue;
+
+                    candidatePositions.Add(cell.Coords);
+                }
+            }
+
+            Debug.Log($"🐉 [AI][DragonBreath] {self.Stats.CharacterName} evaluating {candidatePositions.Count} positions " +
+                      $"for {bw.Shape} breath (range={bw.RangeFeet}ft/{rangeSquares}sq, enemies={enemies.Count})");
+
+            BreathPositionCandidate? bestCandidate = null;
+            int bestEnemyHits = 0;
+            int bestAllyHits = int.MaxValue;
+            int candidatesEvaluated = 0;
+            int candidatesWithHits = 0;
+
+            for (int p = 0; p < candidatePositions.Count; p++)
+            {
+                Vector2Int candidatePos = candidatePositions[p];
+                bool requiresMove = (candidatePos != self.GridPosition);
+
+                // If this position requires movement, verify a path exists
+                if (requiresMove)
+                {
+                    AoOPathResult pathResult = gameManager.FindPath(self, candidatePos, avoidThreats: false, maxRangeOverride: moveRange);
+                    if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
+                        continue;
+                }
+
+                candidatesEvaluated++;
+
+                // For each enemy, simulate aiming breath weapon from this position
+                for (int e = 0; e < enemies.Count; e++)
+                {
+                    CharacterController aimTarget = enemies[e];
+                    HashSet<Vector2Int> cells = GetBreathCellsFromPosition(
+                        candidatePos, aimTarget.GridPosition, bw, rangeSquares, gameManager);
+
+                    if (cells == null || cells.Count == 0)
+                        continue;
+
+                    int enemyHits = 0;
+                    int allyHits = 0;
+
+                    for (int i = 0; i < enemies.Count; i++)
+                    {
+                        if (cells.Contains(enemies[i].GridPosition))
+                            enemyHits++;
+                    }
+
+                    for (int i = 0; i < allies.Count; i++)
+                    {
+                        if (cells.Contains(allies[i].GridPosition))
+                            allyHits++;
+                    }
+
+                    // Skip configurations that hit too many allies
+                    if (allyHits > MaxAcceptableAllyHits)
+                        continue;
+
+                    if (enemyHits > 0)
+                        candidatesWithHits++;
+
+                    // Scoring: prioritize enemy hits, then fewer ally hits, then prefer no-move
+                    bool isBetter = enemyHits > bestEnemyHits
+                        || (enemyHits == bestEnemyHits && allyHits < bestAllyHits)
+                        || (enemyHits == bestEnemyHits && allyHits == bestAllyHits && !requiresMove);
+
+                    if (isBetter && enemyHits >= MinEnemiesForBreath)
+                    {
+                        bestCandidate = new BreathPositionCandidate
+                        {
+                            Position = candidatePos,
+                            AimTarget = aimTarget,
+                            EnemyHits = enemyHits,
+                            AllyHits = allyHits,
+                            RequiresMove = requiresMove
+                        };
+                        bestEnemyHits = enemyHits;
+                        bestAllyHits = allyHits;
+                    }
+                }
+            }
+
+            if (bestCandidate.HasValue)
+            {
+                var bc = bestCandidate.Value;
+                Debug.Log($"🐉 [AI][DragonBreath] {self.Stats.CharacterName} BEST position: {bc.Position} " +
+                          $"(hits={bc.EnemyHits} enemies, {bc.AllyHits} allies, " +
+                          $"move={bc.RequiresMove}, aim={bc.AimTarget.Stats.CharacterName}) " +
+                          $"[evaluated {candidatesEvaluated} positions, {candidatesWithHits} had hits]");
+            }
+            else
+            {
+                Debug.Log($"🐉 [AI][DragonBreath] {self.Stats.CharacterName} found no viable breath position " +
+                          $"(evaluated {candidatesEvaluated}, {candidatesWithHits} had hits, " +
+                          $"minEnemies={MinEnemiesForBreath})");
+            }
+
+            return bestCandidate;
+        }
+
         // ── Helpers ────────────────────────────────────────────────────
 
-        private static HashSet<Vector2Int> GetBreathCells(
-            CharacterController self,
-            CharacterController aimTarget,
+        /// <summary>
+        /// Get breath weapon cells from an arbitrary origin position (not necessarily self's position).
+        /// Used by tactical positioning to simulate breath from candidate positions.
+        /// </summary>
+        private static HashSet<Vector2Int> GetBreathCellsFromPosition(
+            Vector2Int origin,
+            Vector2Int aimTargetPos,
             BreathWeaponDefinition bw,
             int rangeSquares,
             GameManager gameManager)
@@ -346,21 +518,32 @@ namespace DND35.AI.Profiles
             {
                 case BreathWeaponShape.Cone:
                     return AoESystem.GetConeCells(
-                        self.GridPosition,
-                        aimTarget.GridPosition,
+                        origin,
+                        aimTargetPos,
                         rangeSquares,
                         gameManager.Grid);
 
                 case BreathWeaponShape.Line:
                     return AoESystem.GetLineCellsToTarget(
-                        self.GridPosition,
-                        aimTarget.GridPosition,
+                        origin,
+                        aimTargetPos,
                         rangeSquares,
                         gameManager.Grid);
 
                 default:
                     return null;
             }
+        }
+
+        private static HashSet<Vector2Int> GetBreathCells(
+            CharacterController self,
+            CharacterController aimTarget,
+            BreathWeaponDefinition bw,
+            int rangeSquares,
+            GameManager gameManager)
+        {
+            return GetBreathCellsFromPosition(
+                self.GridPosition, aimTarget.GridPosition, bw, rangeSquares, gameManager);
         }
 
         private static bool IsCasterOrHealer(CharacterController target)
