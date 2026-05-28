@@ -142,6 +142,14 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        // ── Supernatural Aura (free action): Gibbering, Frightful Presence, etc. ──
+        // Per D&D 3.5e, supernatural auras activate automatically each round.
+        // Process before other actions since it's a free action.
+        if (npc.HasAuraAbility)
+        {
+            ProcessAuraAbility(npc);
+        }
+
         // ── Resilient Sphere: NPC inside sphere can move within it but attacks/spells
         // cannot pass the boundary (PHB p.263). The sphere is now a stationary area effect.
         if (ResilientSphereAreaEffect.IsCharacterInAnySphere(npc))
@@ -461,6 +469,14 @@ public class AIService : MonoBehaviour
 
         AIProfile profile = GetProfile(npc);
 
+        // ── Debug: log special ability status ──
+        if (npc.HasRangedSpecialAttack || npc.HasAuraAbility || npc.HasEngulf || npc.HasTerrainManipulation)
+        {
+            Debug.Log($"[AI][SpecialAbilities] {npc.Stats.CharacterName}: " +
+                $"RangedSpecial={npc.HasRangedSpecialAttack} (ready={npc.IsRangedSpecialAttackReady}), " +
+                $"Aura={npc.HasAuraAbility}, Engulf={npc.HasEngulf}, Terrain={npc.HasTerrainManipulation}");
+        }
+
         // ── Special ability priorities before movement ──
         // If we have a ranged special attack (Spittle, Web) and target is in range, try it first
         if (npc.HasRangedSpecialAttack)
@@ -546,6 +562,23 @@ public class AIService : MonoBehaviour
         }
         else
         {
+            // ── Post-movement ranged special attack (Spittle, etc.) ──
+            // If we moved but still can't reach melee range, try ranged special attack
+            if (npc.HasRangedSpecialAttack && npc.IsRangedSpecialAttackReady)
+            {
+                int postMoveDistance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+                int rangeSquares = npc.GetRangedSpecialAttackDefinition().RangeFeet / 5;
+                if (postMoveDistance <= rangeSquares)
+                {
+                    Debug.Log($"[AI] {npc.Stats.CharacterName} attempting post-movement ranged special attack (distance {postMoveDistance} squares, range {rangeSquares} squares)");
+                    if (TryExecuteRangedSpecialAttack(npc, target))
+                    {
+                        yield return new WaitForSeconds(0.8f);
+                        yield break;
+                    }
+                }
+            }
+
             // ── AI: Wall of Ice interaction ──
             // If the NPC cannot reach the target but is adjacent to a Wall of Ice,
             // try to attack or break through the wall to clear the path.
@@ -3069,6 +3102,100 @@ public class AIService : MonoBehaviour
         // This would typically interact with the GridSystem to mark affected cells
         // For now, we just log it and track the state
         Debug.Log($"[AI] {npc.Stats.CharacterName} activates {terrain.Name} around {npc.GridPosition} (radius {terrain.RadiusFeet} ft)");
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  Aura Ability Processing (Gibbering, Frightful Presence, etc.)
+    // ══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Process a creature's supernatural aura ability at the start of its turn.
+    /// Per D&D 3.5e, abilities like Gibbering (Su) affect all creatures within range
+    /// each round as a free action. Targets must make a saving throw or be affected.
+    /// </summary>
+    private void ProcessAuraAbility(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || !npc.HasAuraAbility)
+            return;
+
+        AuraAbilityDefinition aura = npc.GetAuraAbilityDefinition();
+        if (aura == null) return;
+
+        string npcName = npc.Stats.CharacterName;
+        int rangeSquares = aura.RangeFeet / 5;
+        SaveType saveType = aura.IsWillSave ? SaveType.Will : SaveType.Fortitude;
+        string saveTypeName = aura.IsWillSave ? "Will" : "Fort";
+
+        Debug.Log($"[AI][Aura] {npcName} activating {aura.Name} (DC {aura.SaveDC}, {saveTypeName}, range {aura.RangeFeet} ft, effect {aura.Effect})");
+
+        _gameManager.CombatUI?.ShowCombatLog(
+            CombatLogHelper.Special("🔊", $"{npcName}'s {aura.Name} echoes across the battlefield!"));
+
+        List<CharacterController> allChars = _gameManager.GetAllCharactersForAI();
+        int affected = 0;
+
+        foreach (CharacterController candidate in allChars)
+        {
+            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            // Only affect enemies
+            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+                continue;
+
+            int distance = SquareGridUtils.GetDistance(npc.GridPosition, candidate.GridPosition);
+            if (distance > rangeSquares)
+            {
+                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} out of range ({distance} > {rangeSquares} squares)");
+                continue;
+            }
+
+            // Already affected by this condition? Skip re-application
+            CombatConditionType conditionType = AuraEffectToCondition(aura.Effect);
+            if (candidate.HasCondition(conditionType))
+            {
+                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} already has {conditionType}, skipping");
+                continue;
+            }
+
+            // Roll saving throw
+            SaveResult saveResult = SpellSaveResolver.RollSave(candidate, saveType, aura.SaveDC);
+
+            if (saveResult.Saved)
+            {
+                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} saves vs {aura.Name} ({saveTypeName} {saveResult.Total} >= DC {aura.SaveDC})");
+                _gameManager.CombatUI?.ShowCombatLog(
+                    CombatLogHelper.Success("💪", $"{candidate.Stats.CharacterName} resists {aura.Name} ({saveTypeName} {saveResult.Total} vs DC {aura.SaveDC})."));
+            }
+            else
+            {
+                Debug.Log($"[AI][Aura] {candidate.Stats.CharacterName} fails vs {aura.Name} ({saveTypeName} {saveResult.Total} < DC {aura.SaveDC}) — applying {aura.Effect} for {aura.DurationRounds} rounds");
+                candidate.ApplyCondition(conditionType, aura.DurationRounds, npcName);
+                _gameManager.CombatUI?.ShowCombatLog(
+                    CombatLogHelper.Debuff("🌀", $"{candidate.Stats.CharacterName} succumbs to {aura.Name}! ({saveTypeName} {saveResult.Total} vs DC {aura.SaveDC}) — {aura.Effect} for {aura.DurationRounds} round(s)!"));
+                affected++;
+            }
+        }
+
+        if (affected > 0)
+            Debug.Log($"[AI][Aura] {npcName}'s {aura.Name} affected {affected} creature(s)");
+    }
+
+    /// <summary>
+    /// Map an AuraEffectType to the corresponding CombatConditionType.
+    /// </summary>
+    private static CombatConditionType AuraEffectToCondition(AuraEffectType effect)
+    {
+        return effect switch
+        {
+            AuraEffectType.Confused    => CombatConditionType.Confused,
+            AuraEffectType.Frightened  => CombatConditionType.Frightened,
+            AuraEffectType.Sickened    => CombatConditionType.Sickened,
+            AuraEffectType.Fascinated  => CombatConditionType.Fascinated,
+            AuraEffectType.Fear        => CombatConditionType.Frightened,
+            AuraEffectType.Petrified   => CombatConditionType.Petrified,
+            _                          => CombatConditionType.Confused,
+        };
     }
 
     /// <summary>

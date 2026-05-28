@@ -513,6 +513,7 @@ public class CharacterController : MonoBehaviour
     // Supernatural aura (babble, moan)
     [SerializeField] private AuraAbilityDefinition _auraAbility;
     public bool HasAuraAbility => _auraAbility != null;
+    public AuraAbilityDefinition GetAuraAbilityDefinition() => _auraAbility;
 
     // Ranged special attack (Spittle, Web, Acid Spray)
     [SerializeField] private RangedSpecialAttackDefinition _rangedSpecialAttack;
