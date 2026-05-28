@@ -30,8 +30,8 @@ public class CustomEncounterBuilderUI : MonoBehaviour
     private static readonly Color ELLowColor     = new Color(0.4f, 0.9f, 0.5f, 1f);
     private static readonly Color ELNeutralColor = new Color(0.85f, 0.89f, 0.95f, 1f);
 
-    /// <summary>Maximum quantity allowed per individual creature type.</summary>
-    private const int MaxPerCreature = 8;
+    /// <summary>Hard cap on the total number of creatures across all types.</summary>
+    private const int MaxTotalCreatures = 8;
 
     // ═══════════════════════════════════════════════════════════════════
     //  STATE
@@ -89,7 +89,8 @@ public class CustomEncounterBuilderUI : MonoBehaviour
     {
         _onStartCombat = onStartCombat;
         _onBack = onBack;
-        _maxTotalCreatures = Mathf.Max(1, maxSlots);
+        // Use the lower of the hard cap (8) and available NPC slots
+        _maxTotalCreatures = Mathf.Max(1, Mathf.Min(MaxTotalCreatures, maxSlots));
         _selectedCounts.Clear();
 
         EnsureBuilt();
@@ -518,28 +519,23 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         CreateSmallButton(row.transform, "−", new Vector2(0.72f, 0.1f), new Vector2(0.78f, 0.9f),
             CounterBtnColor, () => AdjustQuantity(capturedId, -1));
 
-        // Quantity label (show "MAX" indicator when at limit)
+        // Quantity label — simple count, green when > 0
         Text qtyLabel;
-        string qtyText = currentQty >= MaxPerCreature ? $"{currentQty} ★" : currentQty.ToString();
-        Color qtyColor = currentQty >= MaxPerCreature
-            ? new Color(1f, 0.6f, 0.2f, 1f)   // Orange when at max
-            : currentQty > 0
-                ? new Color(0.4f, 1f, 0.5f, 1f) // Green when selected
-                : Color.white;
-        CreateLabel(row.transform, qtyText, 18, FontStyle.Bold, qtyColor,
+        Color qtyColor = currentQty > 0 ? new Color(0.4f, 1f, 0.5f, 1f) : Color.white;
+        CreateLabel(row.transform, currentQty.ToString(), 18, FontStyle.Bold, qtyColor,
             new Vector2(0.79f, 0f), new Vector2(0.89f, 1f), new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, out qtyLabel);
         _quantityLabels[entry.Id] = qtyLabel;
 
-        // Plus button (disabled when at per-creature max or total max)
+        // Plus button (disabled when global total cap reached)
         Button plusBtn;
         CreateSmallButtonWithRef(row.transform, "+", new Vector2(0.90f, 0.1f), new Vector2(0.96f, 0.9f),
             CounterBtnColor, () => AdjustQuantity(capturedId, +1), out plusBtn);
         _plusButtons[entry.Id] = plusBtn;
 
-        // Disable + button if at per-creature max or total max reached
+        // Disable + button if global total cap reached
         int totalSelected = GetTotalSelectedCount();
-        if (currentQty >= MaxPerCreature || totalSelected >= _maxTotalCreatures)
+        if (totalSelected >= _maxTotalCreatures)
             plusBtn.interactable = false;
     }
 
@@ -590,21 +586,14 @@ public class CustomEncounterBuilderUI : MonoBehaviour
 
         int totalSelected = GetTotalSelectedCount();
 
-        // Enforce per-creature max
-        if (delta > 0 && current >= MaxPerCreature)
-        {
-            ShowError($"Maximum {MaxPerCreature} of each creature type allowed.");
-            return;
-        }
-
-        // Enforce total cap
+        // Enforce global total cap
         if (delta > 0 && totalSelected >= _maxTotalCreatures)
         {
-            ShowError($"Maximum {_maxTotalCreatures} creatures allowed (limited by NPC slots).");
+            ShowError($"Maximum {_maxTotalCreatures} creatures total. Remove some before adding more.");
             return;
         }
 
-        int newVal = Mathf.Clamp(current + delta, 0, MaxPerCreature);
+        int newVal = Mathf.Max(0, current + delta);
 
         if (newVal <= 0)
             _selectedCounts.Remove(creatureId);
@@ -619,13 +608,8 @@ public class CustomEncounterBuilderUI : MonoBehaviour
             int qty = 0;
             _selectedCounts.TryGetValue(creatureId, out qty);
 
-            // Show star indicator when at max
-            label.text = qty >= MaxPerCreature ? $"{qty} ★" : qty.ToString();
-            label.color = qty >= MaxPerCreature
-                ? new Color(1f, 0.6f, 0.2f, 1f)   // Orange at max
-                : qty > 0
-                    ? new Color(0.4f, 1f, 0.5f, 1f) // Green
-                    : Color.white;
+            label.text = qty.ToString();
+            label.color = qty > 0 ? new Color(0.4f, 1f, 0.5f, 1f) : Color.white;
 
             // Update row background
             Image rowImage = label.transform.parent.GetComponent<Image>();
@@ -633,14 +617,14 @@ public class CustomEncounterBuilderUI : MonoBehaviour
                 rowImage.color = qty > 0 ? RowSelected : RowNormal;
         }
 
-        // Update all + button interactability (per-creature max + total max)
+        // Update all + button interactability based on global total
         UpdatePlusButtonStates();
 
         UpdateSummary();
     }
 
     /// <summary>
-    /// Enable/disable all + buttons based on per-creature max and total max.
+    /// Enable/disable ALL + buttons based on whether the global total cap is reached.
     /// </summary>
     private void UpdatePlusButtonStates()
     {
@@ -650,9 +634,7 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         foreach (var kv in _plusButtons)
         {
             if (kv.Value == null) continue;
-            int qty = 0;
-            _selectedCounts.TryGetValue(kv.Key, out qty);
-            kv.Value.interactable = qty < MaxPerCreature && !totalMaxReached;
+            kv.Value.interactable = !totalMaxReached;
         }
     }
 
@@ -673,7 +655,7 @@ public class CustomEncounterBuilderUI : MonoBehaviour
 
         if (totalCount == 0)
         {
-            _summaryText.text = "No creatures selected. Use + buttons to add creatures.";
+            _summaryText.text = $"0 / {_maxTotalCreatures} Total Creatures — Use + buttons to add creatures.";
             if (_startButton != null) _startButton.interactable = false;
             UpdateELDisplay(0f, "");
             return;
@@ -689,7 +671,8 @@ public class CustomEncounterBuilderUI : MonoBehaviour
             parts.Add(kv.Value > 1 ? $"{kv.Value}× {name}" : name);
         }
 
-        _summaryText.text = $"{totalCount} creature{(totalCount != 1 ? "s" : "")} ({uniqueTypes} type{(uniqueTypes != 1 ? "s" : "")}) — {string.Join(", ", parts)}";
+        string limitTag = totalCount >= _maxTotalCreatures ? " (FULL)" : "";
+        _summaryText.text = $"{totalCount} / {_maxTotalCreatures} Total Creatures{limitTag} — {string.Join(", ", parts)}";
         if (_startButton != null) _startButton.interactable = true;
 
         // Calculate and display EL
