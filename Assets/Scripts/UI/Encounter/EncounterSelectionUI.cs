@@ -24,6 +24,7 @@ public class EncounterSelectionUI : MonoBehaviour
 
     private RandomEncounterGeneratorUI _randomEncounterGeneratorUI;
     private DungeonEncounterGeneratorUI _dungeonEncounterGeneratorUI;
+    private CustomEncounterBuilderUI _customEncounterBuilderUI;
 
     private readonly Dictionary<string, Image> _cardImages = new Dictionary<string, Image>();
     private readonly Dictionary<string, Outline> _cardOutlines = new Dictionary<string, Outline>();
@@ -90,6 +91,7 @@ public class EncounterSelectionUI : MonoBehaviour
 
         _randomEncounterGeneratorUI?.Close();
         _dungeonEncounterGeneratorUI?.Close();
+        _customEncounterBuilderUI?.Close();
     }
 
     private void EnsureBuilt()
@@ -293,6 +295,7 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateFooterButton(footer.transform, "Cancel", new Color(0.45f, 0.2f, 0.2f, 1f), OnCancelPressed, out _);
         CreateFooterButton(footer.transform, "Random Encounter", new Color(0.3f, 0.38f, 0.62f, 1f), OnRandomEncounterPressed, out _randomEncounterButton);
         CreateFooterButton(footer.transform, "DMG Tables", new Color(0.42f, 0.28f, 0.58f, 1f), OnDMGTablesPressed, out _);
+        CreateFooterButton(footer.transform, "Custom Encounter", new Color(0.52f, 0.36f, 0.18f, 1f), OnCustomEncounterPressed, out _);
         CreateFooterButton(footer.transform, "Select", new Color(0.2f, 0.45f, 0.28f, 1f), OnConfirmPressed, out _confirmButton);
         _confirmButton.interactable = false;
     }
@@ -696,6 +699,57 @@ public class EncounterSelectionUI : MonoBehaviour
         _dungeonEncounterGeneratorUI = gameObject.GetComponent<DungeonEncounterGeneratorUI>();
         if (_dungeonEncounterGeneratorUI == null)
             _dungeonEncounterGeneratorUI = gameObject.AddComponent<DungeonEncounterGeneratorUI>();
+    }
+
+    /// <summary>
+    /// Open the custom encounter builder UI.
+    /// Hides the encounter selection panel and shows the creature picker.
+    /// </summary>
+    private void OnCustomEncounterPressed()
+    {
+        EnsureCustomEncounterBuilderUI();
+        if (_customEncounterBuilderUI == null)
+            return;
+
+        if (_panel != null)
+            _panel.SetActive(false);
+
+        // Determine max NPC slots from GameManager
+        int maxSlots = 15;
+        GameManager gm = FindObjectOfType<GameManager>();
+        if (gm != null && gm.NPCs != null && gm.NPCs.Count > 0)
+            maxSlots = gm.NPCs.Count;
+
+        _customEncounterBuilderUI.Open(
+            maxSlots: maxSlots,
+            onStartCombat: (enemyIds) =>
+            {
+                Close();
+                // Pass a marker GeneratedRandomEncounter so GameManager can detect custom encounter
+                var customMarker = new GeneratedRandomEncounter
+                {
+                    EncounterName = "Custom Encounter",
+                    TotalXP = 0,
+                    IsCustomEncounter = true
+                };
+                _onStartRandomEncounter?.Invoke(enemyIds, customMarker);
+            },
+            onBack: () =>
+            {
+                _customEncounterBuilderUI.Close();
+                if (_panel != null)
+                    _panel.SetActive(true);
+            });
+    }
+
+    private void EnsureCustomEncounterBuilderUI()
+    {
+        if (_customEncounterBuilderUI != null)
+            return;
+
+        _customEncounterBuilderUI = gameObject.GetComponent<CustomEncounterBuilderUI>();
+        if (_customEncounterBuilderUI == null)
+            _customEncounterBuilderUI = gameObject.AddComponent<CustomEncounterBuilderUI>();
     }
 
     private void OnCancelPressed()

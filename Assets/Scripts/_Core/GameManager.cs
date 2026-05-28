@@ -142,6 +142,8 @@ public partial class GameManager : MonoBehaviour
     private bool _isCharmPersonTestEncounter;
     private bool _isSleepSpellTestEncounter;
     private bool _isMirrorImageTestEncounter;
+    private bool _isCustomEncounter;
+    private Vector2Int[] _customEncounterSpawnPositions;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
     private bool _partyStashSeeded;
 
@@ -1709,6 +1711,27 @@ public partial class GameManager : MonoBehaviour
         _isSleepSpellTestEncounter = false;
         _isMirrorImageTestEncounter = false;
 
+        // Detect custom encounters via the IsCustomEncounter marker from the builder UI
+        _isCustomEncounter = (generated != null && generated.IsCustomEncounter);
+        if (_isCustomEncounter && _activeEncounterEnemyIds.Count > 0)
+        {
+            List<Vector2Int> pcPositions = new List<Vector2Int>();
+            if (PCs != null)
+            {
+                foreach (var pc in PCs)
+                {
+                    if (pc != null) pcPositions.Add(pc.GridPosition);
+                }
+            }
+            _customEncounterSpawnPositions = CustomEncounterBuilderUI.CalculateSpawnPositions(
+                _activeEncounterEnemyIds.Count, pcPositions);
+            Debug.Log($"[CustomEncounter] Computed {_customEncounterSpawnPositions.Length} non-overlapping spawn positions for {_activeEncounterEnemyIds.Count} creatures.");
+        }
+        else
+        {
+            _customEncounterSpawnPositions = null;
+        }
+
         RestoreStandardPartyLayout();
         SetupEnemyEncounter(_activeEncounterEnemyIds);
         SetupNPCIcons();
@@ -1716,6 +1739,8 @@ public partial class GameManager : MonoBehaviour
 
         if (generated != null)
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎲", $"Random encounter loaded: {generated.BuildHeaderLine()} • XP {generated.TotalXP}"));
+        else if (_isCustomEncounter)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("⚔️", $"Custom encounter loaded with {_activeEncounterEnemyIds.Count} creatures."));
         else
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎲", "Random encounter loaded."));
     }

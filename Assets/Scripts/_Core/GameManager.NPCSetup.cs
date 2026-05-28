@@ -147,6 +147,11 @@ public partial class GameManager
                 // Cardinal ring around the central wizard (≈25 ft) keeps all archers in LOS for clone-target validation.
                 pos = MirrorImageTestSpawnPositions[i];
             }
+            else if (_isCustomEncounter && _customEncounterSpawnPositions != null && i < _customEncounterSpawnPositions.Length)
+            {
+                // Custom encounter: use pre-computed non-overlapping spawn positions.
+                pos = _customEncounterSpawnPositions[i];
+            }
             else
             {
                 pos = (i < EncounterSpawnPositions.Length)

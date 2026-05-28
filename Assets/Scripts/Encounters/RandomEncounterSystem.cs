@@ -46,6 +46,12 @@ public class GeneratedRandomEncounter
     public float ActualEL;
     public int TotalXP;
 
+    /// <summary>Display name for the encounter.</summary>
+    public string EncounterName;
+
+    /// <summary>True when this encounter was built via the Custom Encounter Builder.</summary>
+    public bool IsCustomEncounter;
+
     public int TotalCreatureCount
     {
         get
