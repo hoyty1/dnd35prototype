@@ -446,8 +446,11 @@ public static class AoESystem
         if (targetPos == origin)
             return result;
 
-        if (SquareGridUtils.GetDistance(origin, targetPos) > lengthSquares)
-            return result;
+        // NOTE: Do NOT early-exit when target is beyond lengthSquares.
+        // The target only provides DIRECTION for the line — the line always extends
+        // from origin toward the target for exactly lengthSquares cells.
+        // This is critical for breath weapons: a 60-ft line breath should fire
+        // toward a target 100 ft away, hitting anything in the first 60 ft.
 
         Vector2 direction = new Vector2(targetPos.x - origin.x, targetPos.y - origin.y);
         if (direction.sqrMagnitude < 1e-6f)
