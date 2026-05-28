@@ -24,6 +24,14 @@ public class CustomEncounterBuilderUI : MonoBehaviour
     private static readonly Color BtnRed         = new Color(0.50f, 0.2f, 0.2f, 1f);
     private static readonly Color BtnBlue        = new Color(0.3f, 0.38f, 0.62f, 1f);
     private static readonly Color CounterBtnColor = new Color(0.28f, 0.34f, 0.52f, 1f);
+    private static readonly Color ELPanelBg      = new Color(0.12f, 0.14f, 0.22f, 0.98f);
+    private static readonly Color ELHighColor    = new Color(1f, 0.35f, 0.3f, 1f);
+    private static readonly Color ELMedColor     = new Color(1f, 0.75f, 0.25f, 1f);
+    private static readonly Color ELLowColor     = new Color(0.4f, 0.9f, 0.5f, 1f);
+    private static readonly Color ELNeutralColor = new Color(0.85f, 0.89f, 0.95f, 1f);
+
+    /// <summary>Maximum quantity allowed per individual creature type.</summary>
+    private const int MaxPerCreature = 8;
 
     // ═══════════════════════════════════════════════════════════════════
     //  STATE
@@ -33,6 +41,8 @@ public class CustomEncounterBuilderUI : MonoBehaviour
     private ScrollRect _scrollRect;
     private Text _summaryText;
     private Text _errorText;
+    private Text _elDisplayText;
+    private Text _elBreakdownText;
     private Button _startButton;
     private Dropdown _crFilterDropdown;
     private InputField _crValueInput;
@@ -46,6 +56,8 @@ public class CustomEncounterBuilderUI : MonoBehaviour
     private readonly List<CreatureEntry> _allCreatures = new List<CreatureEntry>();
     /// <summary>Row GameObjects keyed by creature ID for quantity label updates.</summary>
     private readonly Dictionary<string, Text> _quantityLabels = new Dictionary<string, Text>();
+    /// <summary>Plus buttons keyed by creature ID for disabling at max quantity.</summary>
+    private readonly Dictionary<string, Button> _plusButtons = new Dictionary<string, Button>();
 
     private int _maxTotalCreatures = 15; // Hard cap based on NPC slot availability
 
@@ -130,13 +142,16 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         // ── Scroll area ──
         BuildScrollArea();
 
+        // ── EL display panel (right side, prominent) ──
+        BuildELDisplay();
+
         // ── Summary + error ──
-        CreateLabel(_panel.transform, "", 18, FontStyle.Normal, new Color(0.85f, 0.89f, 0.95f, 1f),
-            new Vector2(0.08f, 0.12f), new Vector2(0.7f, 0.17f), new Vector2(0f, 0.5f),
+        CreateLabel(_panel.transform, "", 16, FontStyle.Normal, new Color(0.85f, 0.89f, 0.95f, 1f),
+            new Vector2(0.08f, 0.12f), new Vector2(0.62f, 0.17f), new Vector2(0f, 0.5f),
             Vector2.zero, Vector2.zero, TextAnchor.MiddleLeft, out _summaryText);
 
-        CreateLabel(_panel.transform, "", 16, FontStyle.Italic, new Color(1f, 0.4f, 0.4f, 1f),
-            new Vector2(0.08f, 0.07f), new Vector2(0.7f, 0.12f), new Vector2(0f, 0.5f),
+        CreateLabel(_panel.transform, "", 15, FontStyle.Italic, new Color(1f, 0.4f, 0.4f, 1f),
+            new Vector2(0.08f, 0.07f), new Vector2(0.62f, 0.12f), new Vector2(0f, 0.5f),
             Vector2.zero, Vector2.zero, TextAnchor.MiddleLeft, out _errorText);
 
         // ── Footer buttons ──
@@ -279,13 +294,46 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         _scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
     }
 
+    private void BuildELDisplay()
+    {
+        // ── EL indicator panel — positioned at lower-right, prominent ──
+        GameObject elPanel = new GameObject("ELPanel", typeof(RectTransform), typeof(Image), typeof(Outline));
+        elPanel.transform.SetParent(_panel.transform, false);
+        RectTransform elRect = elPanel.GetComponent<RectTransform>();
+        elRect.anchorMin = new Vector2(0.64f, 0.03f);
+        elRect.anchorMax = new Vector2(0.92f, 0.17f);
+        elRect.offsetMin = Vector2.zero;
+        elRect.offsetMax = Vector2.zero;
+        elPanel.GetComponent<Image>().color = ELPanelBg;
+        Outline elOutline = elPanel.GetComponent<Outline>();
+        elOutline.effectColor = new Color(0.4f, 0.5f, 0.8f, 0.6f);
+        elOutline.effectDistance = new Vector2(2f, -2f);
+
+        // EL header label
+        CreateLabel(elPanel.transform, "ENCOUNTER LEVEL", 12, FontStyle.Bold,
+            new Color(0.7f, 0.75f, 0.85f, 1f),
+            new Vector2(0.05f, 0.65f), new Vector2(0.95f, 0.95f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter);
+
+        // Main EL value
+        CreateLabel(elPanel.transform, "—", 30, FontStyle.Bold, ELNeutralColor,
+            new Vector2(0.05f, 0.25f), new Vector2(0.95f, 0.70f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, out _elDisplayText);
+
+        // Breakdown text (smaller, below the EL value)
+        CreateLabel(elPanel.transform, "", 11, FontStyle.Italic,
+            new Color(0.6f, 0.65f, 0.75f, 1f),
+            new Vector2(0.05f, 0.02f), new Vector2(0.95f, 0.28f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, out _elBreakdownText);
+    }
+
     private void BuildFooterButtons()
     {
         GameObject footer = new GameObject("Footer", typeof(RectTransform), typeof(HorizontalLayoutGroup));
         footer.transform.SetParent(_panel.transform, false);
         RectTransform footerRect = footer.GetComponent<RectTransform>();
-        footerRect.anchorMin = new Vector2(0.55f, 0.03f);
-        footerRect.anchorMax = new Vector2(0.92f, 0.10f);
+        footerRect.anchorMin = new Vector2(0.08f, 0.03f);
+        footerRect.anchorMax = new Vector2(0.62f, 0.10f);
         footerRect.offsetMin = Vector2.zero;
         footerRect.offsetMax = Vector2.zero;
 
@@ -385,6 +433,7 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         if (_contentContainer == null) return;
 
         _quantityLabels.Clear();
+        _plusButtons.Clear();
 
         // Clear existing children
         for (int i = _contentContainer.childCount - 1; i >= 0; i--)
@@ -469,17 +518,29 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         CreateSmallButton(row.transform, "−", new Vector2(0.72f, 0.1f), new Vector2(0.78f, 0.9f),
             CounterBtnColor, () => AdjustQuantity(capturedId, -1));
 
-        // Quantity label
+        // Quantity label (show "MAX" indicator when at limit)
         Text qtyLabel;
-        CreateLabel(row.transform, currentQty.ToString(), 18, FontStyle.Bold,
-            currentQty > 0 ? new Color(0.4f, 1f, 0.5f, 1f) : Color.white,
+        string qtyText = currentQty >= MaxPerCreature ? $"{currentQty} ★" : currentQty.ToString();
+        Color qtyColor = currentQty >= MaxPerCreature
+            ? new Color(1f, 0.6f, 0.2f, 1f)   // Orange when at max
+            : currentQty > 0
+                ? new Color(0.4f, 1f, 0.5f, 1f) // Green when selected
+                : Color.white;
+        CreateLabel(row.transform, qtyText, 18, FontStyle.Bold, qtyColor,
             new Vector2(0.79f, 0f), new Vector2(0.89f, 1f), new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, out qtyLabel);
         _quantityLabels[entry.Id] = qtyLabel;
 
-        // Plus button
-        CreateSmallButton(row.transform, "+", new Vector2(0.90f, 0.1f), new Vector2(0.96f, 0.9f),
-            CounterBtnColor, () => AdjustQuantity(capturedId, +1));
+        // Plus button (disabled when at per-creature max or total max)
+        Button plusBtn;
+        CreateSmallButtonWithRef(row.transform, "+", new Vector2(0.90f, 0.1f), new Vector2(0.96f, 0.9f),
+            CounterBtnColor, () => AdjustQuantity(capturedId, +1), out plusBtn);
+        _plusButtons[entry.Id] = plusBtn;
+
+        // Disable + button if at per-creature max or total max reached
+        int totalSelected = GetTotalSelectedCount();
+        if (currentQty >= MaxPerCreature || totalSelected >= _maxTotalCreatures)
+            plusBtn.interactable = false;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -528,7 +589,13 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         _selectedCounts.TryGetValue(creatureId, out current);
 
         int totalSelected = GetTotalSelectedCount();
-        int newVal = Mathf.Clamp(current + delta, 0, _maxTotalCreatures);
+
+        // Enforce per-creature max
+        if (delta > 0 && current >= MaxPerCreature)
+        {
+            ShowError($"Maximum {MaxPerCreature} of each creature type allowed.");
+            return;
+        }
 
         // Enforce total cap
         if (delta > 0 && totalSelected >= _maxTotalCreatures)
@@ -536,6 +603,8 @@ public class CustomEncounterBuilderUI : MonoBehaviour
             ShowError($"Maximum {_maxTotalCreatures} creatures allowed (limited by NPC slots).");
             return;
         }
+
+        int newVal = Mathf.Clamp(current + delta, 0, MaxPerCreature);
 
         if (newVal <= 0)
             _selectedCounts.Remove(creatureId);
@@ -549,8 +618,14 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         {
             int qty = 0;
             _selectedCounts.TryGetValue(creatureId, out qty);
-            label.text = qty.ToString();
-            label.color = qty > 0 ? new Color(0.4f, 1f, 0.5f, 1f) : Color.white;
+
+            // Show star indicator when at max
+            label.text = qty >= MaxPerCreature ? $"{qty} ★" : qty.ToString();
+            label.color = qty >= MaxPerCreature
+                ? new Color(1f, 0.6f, 0.2f, 1f)   // Orange at max
+                : qty > 0
+                    ? new Color(0.4f, 1f, 0.5f, 1f) // Green
+                    : Color.white;
 
             // Update row background
             Image rowImage = label.transform.parent.GetComponent<Image>();
@@ -558,7 +633,27 @@ public class CustomEncounterBuilderUI : MonoBehaviour
                 rowImage.color = qty > 0 ? RowSelected : RowNormal;
         }
 
+        // Update all + button interactability (per-creature max + total max)
+        UpdatePlusButtonStates();
+
         UpdateSummary();
+    }
+
+    /// <summary>
+    /// Enable/disable all + buttons based on per-creature max and total max.
+    /// </summary>
+    private void UpdatePlusButtonStates()
+    {
+        int totalSelected = GetTotalSelectedCount();
+        bool totalMaxReached = totalSelected >= _maxTotalCreatures;
+
+        foreach (var kv in _plusButtons)
+        {
+            if (kv.Value == null) continue;
+            int qty = 0;
+            _selectedCounts.TryGetValue(kv.Key, out qty);
+            kv.Value.interactable = qty < MaxPerCreature && !totalMaxReached;
+        }
     }
 
     private int GetTotalSelectedCount()
@@ -580,6 +675,7 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         {
             _summaryText.text = "No creatures selected. Use + buttons to add creatures.";
             if (_startButton != null) _startButton.interactable = false;
+            UpdateELDisplay(0f, "");
             return;
         }
 
@@ -593,8 +689,201 @@ public class CustomEncounterBuilderUI : MonoBehaviour
             parts.Add(kv.Value > 1 ? $"{kv.Value}× {name}" : name);
         }
 
-        _summaryText.text = $"Selected: {totalCount} creature{(totalCount != 1 ? "s" : "")} ({uniqueTypes} type{(uniqueTypes != 1 ? "s" : "")}) — {string.Join(", ", parts)}";
+        _summaryText.text = $"{totalCount} creature{(totalCount != 1 ? "s" : "")} ({uniqueTypes} type{(uniqueTypes != 1 ? "s" : "")}) — {string.Join(", ", parts)}";
         if (_startButton != null) _startButton.interactable = true;
+
+        // Calculate and display EL
+        string breakdown;
+        float el = CalculateEncounterLevel(out breakdown);
+        UpdateELDisplay(el, breakdown);
+    }
+
+    /// <summary>
+    /// Update the EL display panel with the calculated encounter level.
+    /// </summary>
+    private void UpdateELDisplay(float el, string breakdown)
+    {
+        if (_elDisplayText == null) return;
+
+        if (GetTotalSelectedCount() == 0)
+        {
+            _elDisplayText.text = "—";
+            _elDisplayText.color = ELNeutralColor;
+            if (_elBreakdownText != null) _elBreakdownText.text = "Select creatures to calculate";
+            return;
+        }
+
+        // Format EL — show half values as fractions
+        string elStr;
+        float rounded = Mathf.Round(el * 2f) / 2f; // Round to nearest 0.5
+        if (Mathf.Approximately(rounded % 1f, 0.5f))
+            elStr = $"EL {Mathf.FloorToInt(rounded)}½";
+        else
+            elStr = $"EL {Mathf.RoundToInt(rounded)}";
+
+        _elDisplayText.text = elStr;
+
+        // Color based on estimated difficulty (assuming APL ~3)
+        if (el >= 7f)
+            _elDisplayText.color = ELHighColor;
+        else if (el >= 4f)
+            _elDisplayText.color = ELMedColor;
+        else if (el >= 1f)
+            _elDisplayText.color = ELLowColor;
+        else
+            _elDisplayText.color = ELNeutralColor;
+
+        if (_elBreakdownText != null)
+            _elBreakdownText.text = breakdown;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  D&D 3.5e ENCOUNTER LEVEL CALCULATION (DMG pp. 48-49)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Calculate the effective Encounter Level (EL) for the currently selected creatures
+    /// using D&D 3.5e DMG rules.
+    /// 
+    /// Rules:
+    /// - 1 creature of CR X → EL X
+    /// - 2 creatures of same CR → EL = CR + 2
+    /// - 3–4 creatures of same CR → EL = CR + 3
+    /// - 5–8 creatures of same CR → EL = CR + 4
+    /// 
+    /// For mixed CRs, group by CR, calculate each group's EL, then combine:
+    /// - Start with highest group EL as base
+    /// - For each lower group EL:
+    ///   - Difference 0: +1
+    ///   - Difference 1: +1
+    ///   - Difference 2: +0.5 (round down at end)
+    ///   - Difference 3+: ignored
+    /// </summary>
+    private float CalculateEncounterLevel(out string breakdown)
+    {
+        breakdown = "";
+
+        if (_selectedCounts.Count == 0) return 0f;
+
+        // Step 1: Group creatures by their CR and compute group EL
+        // Map: CR numeric value → (count, group EL, CR display string)
+        Dictionary<float, CRGroup> crGroups = new Dictionary<float, CRGroup>();
+
+        foreach (var kv in _selectedCounts)
+        {
+            if (kv.Value <= 0) continue;
+
+            NPCDefinition def = NPCDatabase.Get(kv.Key);
+            float crNumeric = def != null ? ParseCRToFloat(def.ChallengeRating) : 0f;
+            string crDisplay = def != null ? (def.ChallengeRating ?? "0") : "0";
+
+            if (!crGroups.ContainsKey(crNumeric))
+                crGroups[crNumeric] = new CRGroup { CR = crNumeric, CRDisplay = crDisplay, Count = 0 };
+
+            CRGroup grp = crGroups[crNumeric];
+            grp.Count += kv.Value;
+            crGroups[crNumeric] = grp;
+        }
+
+        // Step 2: Calculate group EL for each CR group
+        List<GroupEL> groupELs = new List<GroupEL>();
+
+        foreach (var kv in crGroups)
+        {
+            float cr = kv.Key;
+            int count = kv.Value.Count;
+            float groupEL = CalculateGroupEL(cr, count);
+            groupELs.Add(new GroupEL
+            {
+                CR = cr,
+                CRDisplay = kv.Value.CRDisplay,
+                Count = count,
+                EL = groupEL
+            });
+        }
+
+        // Sort descending by EL
+        groupELs.Sort((a, b) => b.EL.CompareTo(a.EL));
+
+        if (groupELs.Count == 0) return 0f;
+
+        // Step 3: Combine group ELs (DMG mixed encounter rules)
+        float finalEL = groupELs[0].EL;
+
+        // Build breakdown string
+        List<string> bdParts = new List<string>();
+        bdParts.Add($"{groupELs[0].Count}×CR {groupELs[0].CRDisplay}=EL {FormatEL(groupELs[0].EL)}");
+
+        for (int i = 1; i < groupELs.Count; i++)
+        {
+            float diff = finalEL - groupELs[i].EL;
+            float contribution = 0f;
+
+            if (diff <= 0f)
+            {
+                // Equal or higher — full +1
+                contribution = 1f;
+            }
+            else if (diff <= 1.01f)
+            {
+                // Difference of 1 — adds +1
+                contribution = 1f;
+            }
+            else if (diff <= 2.01f)
+            {
+                // Difference of 2 — adds +0.5
+                contribution = 0.5f;
+            }
+            // Difference of 3+ — ignored (contribution = 0)
+
+            finalEL += contribution;
+
+            string contribStr = contribution > 0f ? $"+{FormatEL(contribution)}" : "ignored";
+            bdParts.Add($"{groupELs[i].Count}×CR {groupELs[i].CRDisplay} ({contribStr})");
+        }
+
+        breakdown = string.Join(" • ", bdParts);
+
+        return finalEL;
+    }
+
+    /// <summary>
+    /// Calculate the EL for a group of creatures all sharing the same CR.
+    /// DMG Table 3-1: Encounter Levels (1=CR, 2=CR+2, 3-4=CR+3, 5-8=CR+4).
+    /// For counts beyond 8, continues the pattern (9-16=CR+5, etc).
+    /// </summary>
+    private static float CalculateGroupEL(float cr, int count)
+    {
+        if (count <= 0) return 0f;
+        if (count == 1) return cr;
+        if (count == 2) return cr + 2f;
+        if (count <= 4) return cr + 3f;
+        if (count <= 8) return cr + 4f;
+        if (count <= 16) return cr + 5f;
+        return cr + 6f; // 17+ (unlikely but safe)
+    }
+
+    private static string FormatEL(float el)
+    {
+        float rounded = Mathf.Round(el * 2f) / 2f;
+        if (Mathf.Approximately(rounded % 1f, 0.5f))
+            return $"{Mathf.FloorToInt(rounded)}½";
+        return Mathf.RoundToInt(rounded).ToString();
+    }
+
+    private struct CRGroup
+    {
+        public float CR;
+        public string CRDisplay;
+        public int Count;
+    }
+
+    private struct GroupEL
+    {
+        public float CR;
+        public string CRDisplay;
+        public int Count;
+        public float EL;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -853,6 +1142,12 @@ public class CustomEncounterBuilderUI : MonoBehaviour
     private void CreateSmallButton(Transform parent, string label,
         Vector2 anchorMin, Vector2 anchorMax, Color color, Action onClick)
     {
+        CreateSmallButtonWithRef(parent, label, anchorMin, anchorMax, color, onClick, out _);
+    }
+
+    private void CreateSmallButtonWithRef(Transform parent, string label,
+        Vector2 anchorMin, Vector2 anchorMax, Color color, Action onClick, out Button button)
+    {
         GameObject obj = new GameObject($"SmBtn_{label}", typeof(RectTransform), typeof(Image), typeof(Button));
         obj.transform.SetParent(parent, false);
         RectTransform rt = obj.GetComponent<RectTransform>();
@@ -864,17 +1159,18 @@ public class CustomEncounterBuilderUI : MonoBehaviour
         Image img = obj.GetComponent<Image>();
         img.color = color;
 
-        Button btn = obj.GetComponent<Button>();
-        btn.targetGraphic = img;
-        btn.transition = Selectable.Transition.ColorTint;
-        ColorBlock cb = btn.colors;
+        button = obj.GetComponent<Button>();
+        button.targetGraphic = img;
+        button.transition = Selectable.Transition.ColorTint;
+        ColorBlock cb = button.colors;
         cb.normalColor = color;
         cb.highlightedColor = Color.Lerp(color, Color.white, 0.3f);
         cb.pressedColor = Color.Lerp(color, Color.black, 0.2f);
         cb.selectedColor = cb.highlightedColor;
+        cb.disabledColor = new Color(0.18f, 0.18f, 0.22f, 0.7f);
         cb.fadeDuration = 0.05f;
-        btn.colors = cb;
-        btn.onClick.AddListener(() => onClick?.Invoke());
+        button.colors = cb;
+        button.onClick.AddListener(() => onClick?.Invoke());
 
         CreateLabel(obj.transform, label, 20, FontStyle.Bold, Color.white,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
