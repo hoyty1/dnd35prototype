@@ -676,6 +676,43 @@ public partial class GameManager
 
         inv.CharacterInventory.RecalculateStats();
 
+        // --- Dragon innate sorcerer spellcasting ---
+        // D&D 3.5e MM: Dragons cast as sorcerers at a caster level determined by age.
+        // Since dragons use Warrior class (IsSpellcaster = false), we inject a Sorcerer
+        // class level equal to their CasterLevel so the spellcasting system recognizes them.
+        bool isDragonCaster = string.Equals(def.CreatureType, "Dragon", System.StringComparison.OrdinalIgnoreCase)
+            && def.KnownSpellIds != null && def.KnownSpellIds.Count > 0;
+
+        if (isDragonCaster)
+        {
+            // Determine sorcerer CL from the known spell count heuristic or look up from DragonData
+            int sorcererCL = 1;
+            // Try to find the dragon's actual CL from DragonData
+            string sourceId = def.Id;
+            foreach (DragonType dtype in DragonData.AllTypes())
+            {
+                foreach (DragonAgeCategory dage in DragonData.AllAges())
+                {
+                    if (string.Equals(DragonData.GetNPCId(dtype, dage), sourceId, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        var ageStats = DragonData.GetTemplate(dtype)?.AgeStats;
+                        if (ageStats != null && ageStats.ContainsKey(dage))
+                            sorcererCL = ageStats[dage].SorcererCasterLevel;
+                        break;
+                    }
+                }
+                if (sorcererCL > 1) break;
+            }
+
+            if (sorcererCL <= 0) sorcererCL = 1;
+
+            // Add Sorcerer class level so IsSpellcaster returns true
+            stats.ClassLevels.Add(new ClassLevelEntry("Sorcerer", sorcererCL));
+            stats.EnsureMulticlassDataInitialized();
+
+            Debug.Log($"[GameManager] Dragon {def.Name}: Injected Sorcerer CL {sorcererCL} for innate spellcasting ({def.KnownSpellIds.Count} spells known)");
+        }
+
         bool shouldInitSpellcasting = stats.IsSpellcaster
             && ((def.KnownSpellIds != null && def.KnownSpellIds.Count > 0)
                 || (def.PreparedSpellSlotIds != null && def.PreparedSpellSlotIds.Count > 0));

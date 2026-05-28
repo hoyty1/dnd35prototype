@@ -96,15 +96,15 @@ public static partial class NPCDatabase
         List<DamageType> damageImmunities = new List<DamageType> { template.ElementImmunity };
 
         // --- Spells (sorcerer casting for applicable dragons) ---
+        // Dragons cast as innate sorcerers per D&D 3.5e MM.
+        // Per-age spell lists are populated by DragonData.PopulateSpellcastingData().
         List<string> knownSpells = new List<string>();
         List<string> preparedSlots = new List<string>();
-        if (stats.SorcererCasterLevel > 0 && template.SorcererSpellIds != null && template.SorcererSpellIds.Count > 0)
+        if (stats.SorcererCasterLevel > 0 && stats.SorcererSpellIds != null && stats.SorcererSpellIds.Count > 0)
         {
-            knownSpells.AddRange(template.SorcererSpellIds);
-            // Sorcerer: spontaneous caster — use known spells as prepared slots
-            // Give slots equal to caster level (simplified)
-            for (int s = 0; s < Mathf.Min(stats.SorcererCasterLevel, template.SorcererSpellIds.Count); s++)
-                preparedSlots.Add(template.SorcererSpellIds[s]);
+            knownSpells.AddRange(stats.SorcererSpellIds);
+            // Sorcerer: spontaneous caster — prepared slots = all known spells
+            preparedSlots.AddRange(stats.SorcererSpellIds);
         }
 
         // --- Special abilities display ---

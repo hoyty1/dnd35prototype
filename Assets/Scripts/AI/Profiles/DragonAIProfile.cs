@@ -44,7 +44,7 @@ namespace DND35.AI.Profiles
         // ── Spellcasting ───────────────────────────────────────────────
         [Header("Spellcasting")]
         [Tooltip("Maximum melee-adjacent enemies before the dragon gives up on casting and just fights.")]
-        [Range(0, 4)] public int MaxMeleeEnemiesBeforeCasting = 0;
+        [Range(0, 4)] public int MaxMeleeEnemiesBeforeCasting = 2;
 
         // ── Internal ───────────────────────────────────────────────────
         /// <summary>

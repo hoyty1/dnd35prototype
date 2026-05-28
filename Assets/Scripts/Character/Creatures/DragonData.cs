@@ -100,6 +100,12 @@ public class DragonAgeStats
     // Sorcerer caster level (0 = no casting)
     public int SorcererCasterLevel;
 
+    // Per-age sorcerer spells known (populated from DragonData templates)
+    public List<string> SorcererSpellIds;
+
+    // Per-age spell-like abilities (populated from DragonData templates)
+    public List<string> SpellLikeAbilityIds;
+
     // Natural attack damage dice by attack type
     public int BiteDamageDice;     // e.g., 6 for 1d6, 8 for 1d8
     public int BiteDamageCount;    // Usually 1, could be 2 for 2d6
@@ -328,6 +334,8 @@ public static class DragonData
         RegisterBronzeDragon();
         RegisterCopperDragon();
         RegisterBrassDragon();
+
+        PopulateSpellcastingData();
     }
 
     // ================================================================
@@ -346,7 +354,7 @@ public static class DragonData
             BreathDamageType = DamageType.Fire,
             SecondaryBreath = SecondaryBreathType.None,
             ElementImmunity = DamageType.Fire,
-            SorcererSpellIds = new List<string> { "mage_armor", "shield" },
+            SorcererSpellIds = new List<string>(),
             SpellLikeAbilityIds = new List<string>(),
             SpriteColor = new Color(0.85f, 0.15f, 0.08f, 1f),
             PanelColor = new Color(0.35f, 0.05f, 0.02f, 0.85f),
@@ -470,7 +478,7 @@ public static class DragonData
                     BreathDamageDice = 8, BreathDamageCount = 6, BreathRangeFeet = 60, BreathSaveDC = 19,
                     BiteDamageDice = 8, BiteDamageCount = 1, ClawDamageDice = 6, ClawDamageCount = 1,
                     WingDamageDice = 4, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 1,
-                    SorcererCasterLevel = 1,
+                    SorcererCasterLevel = 0,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Cleave", "Multiattack" }
                 }},
                 { DragonAgeCategory.Juvenile, new DragonAgeStats {
@@ -480,7 +488,7 @@ public static class DragonData
                     BreathDamageDice = 8, BreathDamageCount = 8, BreathRangeFeet = 80, BreathSaveDC = 22,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
-                    SorcererCasterLevel = 3,
+                    SorcererCasterLevel = 1,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Cleave", "Multiattack", "Flyby Attack" }
                 }},
                 { DragonAgeCategory.YoungAdult, new DragonAgeStats {
@@ -493,7 +501,7 @@ public static class DragonData
                     FrightfulPresenceDC = 23, FrightfulPresenceRangeFeet = 150,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
-                    SorcererCasterLevel = 5,
+                    SorcererCasterLevel = 3,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Cleave", "Multiattack", "Flyby Attack", "Weapon Focus" }
                 }},
                 { DragonAgeCategory.Adult, new DragonAgeStats {
@@ -506,7 +514,7 @@ public static class DragonData
                     FrightfulPresenceDC = 27, FrightfulPresenceRangeFeet = 180,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
-                    SorcererCasterLevel = 7,
+                    SorcererCasterLevel = 5,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Cleave", "Great Cleave", "Multiattack", "Flyby Attack", "Weapon Focus" }
                 }}
             }
@@ -567,6 +575,7 @@ public static class DragonData
                     BreathDamageDice = 6, BreathDamageCount = 8, BreathRangeFeet = 40, BreathSaveDC = 21,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
+                    SorcererCasterLevel = 1,
                     Feats = new List<string> { "Power Attack", "Cleave", "Multiattack", "Alertness", "Flyby Attack" }
                 }},
                 { DragonAgeCategory.YoungAdult, new DragonAgeStats {
@@ -579,6 +588,7 @@ public static class DragonData
                     FrightfulPresenceDC = 23, FrightfulPresenceRangeFeet = 150,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
+                    SorcererCasterLevel = 3,
                     Feats = new List<string> { "Power Attack", "Cleave", "Multiattack", "Alertness", "Flyby Attack", "Weapon Focus" }
                 }},
                 { DragonAgeCategory.Adult, new DragonAgeStats {
@@ -591,6 +601,7 @@ public static class DragonData
                     FrightfulPresenceDC = 27, FrightfulPresenceRangeFeet = 180,
                     BiteDamageDice = 8, BiteDamageCount = 2, ClawDamageDice = 6, ClawDamageCount = 2,
                     WingDamageDice = 8, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 2,
+                    SorcererCasterLevel = 5,
                     Feats = new List<string> { "Power Attack", "Cleave", "Great Cleave", "Multiattack", "Alertness", "Flyby Attack", "Weapon Focus" }
                 }}
             }
@@ -663,6 +674,7 @@ public static class DragonData
                     FrightfulPresenceDC = 19, FrightfulPresenceRangeFeet = 150,
                     BiteDamageDice = 8, BiteDamageCount = 1, ClawDamageDice = 6, ClawDamageCount = 1,
                     WingDamageDice = 4, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 1,
+                    SorcererCasterLevel = 1,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack" }
                 }},
                 { DragonAgeCategory.Adult, new DragonAgeStats {
@@ -675,6 +687,7 @@ public static class DragonData
                     FrightfulPresenceDC = 23, FrightfulPresenceRangeFeet = 180,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
+                    SorcererCasterLevel = 3,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack", "Cleave" }
                 }}
             }
@@ -759,6 +772,7 @@ public static class DragonData
                     FrightfulPresenceDC = 19, FrightfulPresenceRangeFeet = 180,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
+                    SorcererCasterLevel = 1,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack", "Cleave" }
                 }}
             }
@@ -782,7 +796,7 @@ public static class DragonData
             BreathDamageType = DamageType.Fire,
             SecondaryBreath = SecondaryBreathType.WeakeningGas,
             ElementImmunity = DamageType.Fire,
-            SorcererSpellIds = new List<string> { "mage_armor", "shield" },
+            SorcererSpellIds = new List<string>(),
             SpellLikeAbilityIds = new List<string>(),
             SpriteColor = new Color(0.95f, 0.82f, 0.2f, 1f),
             PanelColor = new Color(0.4f, 0.32f, 0.05f, 0.85f),
@@ -808,7 +822,7 @@ public static class DragonData
                     SecondaryBreathSaveDC = 20, SecondaryBreathUsesPerDay = 1,
                     BiteDamageDice = 8, BiteDamageCount = 1, ClawDamageDice = 6, ClawDamageCount = 1,
                     WingDamageDice = 4, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 1,
-                    SorcererCasterLevel = 1,
+                    SorcererCasterLevel = 0,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Cleave", "Multiattack" }
                 }},
                 { DragonAgeCategory.Young, new DragonAgeStats {
@@ -819,7 +833,7 @@ public static class DragonData
                     SecondaryBreathSaveDC = 21, SecondaryBreathUsesPerDay = 2,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
-                    SorcererCasterLevel = 3,
+                    SorcererCasterLevel = 1,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Cleave", "Multiattack", "Flyby Attack" }
                 }},
                 { DragonAgeCategory.Juvenile, new DragonAgeStats {
@@ -830,7 +844,7 @@ public static class DragonData
                     SecondaryBreathSaveDC = 24, SecondaryBreathUsesPerDay = 2,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
-                    SorcererCasterLevel = 5,
+                    SorcererCasterLevel = 3,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Cleave", "Multiattack", "Flyby Attack", "Weapon Focus" }
                 }},
                 { DragonAgeCategory.YoungAdult, new DragonAgeStats {
@@ -844,7 +858,7 @@ public static class DragonData
                     FrightfulPresenceDC = 26, FrightfulPresenceRangeFeet = 150,
                     BiteDamageDice = 8, BiteDamageCount = 2, ClawDamageDice = 6, ClawDamageCount = 2,
                     WingDamageDice = 8, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 2,
-                    SorcererCasterLevel = 7,
+                    SorcererCasterLevel = 5,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Cleave", "Great Cleave", "Multiattack", "Flyby Attack", "Weapon Focus" }
                 }},
                 { DragonAgeCategory.Adult, new DragonAgeStats {
@@ -858,7 +872,7 @@ public static class DragonData
                     FrightfulPresenceDC = 30, FrightfulPresenceRangeFeet = 180,
                     BiteDamageDice = 8, BiteDamageCount = 2, ClawDamageDice = 6, ClawDamageCount = 2,
                     WingDamageDice = 8, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 2,
-                    SorcererCasterLevel = 9,
+                    SorcererCasterLevel = 7,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Cleave", "Great Cleave", "Multiattack", "Flyby Attack", "Weapon Focus", "Alertness" }
                 }}
             }
@@ -1011,7 +1025,7 @@ public static class DragonData
                     SecondaryBreathSaveDC = 18, SecondaryBreathUsesPerDay = 2,
                     BiteDamageDice = 8, BiteDamageCount = 1, ClawDamageDice = 6, ClawDamageCount = 1,
                     WingDamageDice = 4, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 1,
-                    SorcererCasterLevel = 0,
+                    SorcererCasterLevel = 1,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness" }
                 }},
                 { DragonAgeCategory.Juvenile, new DragonAgeStats {
@@ -1022,7 +1036,7 @@ public static class DragonData
                     SecondaryBreathSaveDC = 21, SecondaryBreathUsesPerDay = 2,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
-                    SorcererCasterLevel = 1,
+                    SorcererCasterLevel = 3,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack" }
                 }},
                 { DragonAgeCategory.YoungAdult, new DragonAgeStats {
@@ -1036,7 +1050,7 @@ public static class DragonData
                     FrightfulPresenceDC = 23, FrightfulPresenceRangeFeet = 150,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
-                    SorcererCasterLevel = 3,
+                    SorcererCasterLevel = 5,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack", "Weapon Focus" }
                 }},
                 { DragonAgeCategory.Adult, new DragonAgeStats {
@@ -1050,7 +1064,7 @@ public static class DragonData
                     FrightfulPresenceDC = 27, FrightfulPresenceRangeFeet = 180,
                     BiteDamageDice = 8, BiteDamageCount = 2, ClawDamageDice = 6, ClawDamageCount = 2,
                     WingDamageDice = 8, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 2,
-                    SorcererCasterLevel = 5,
+                    SorcererCasterLevel = 7,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack", "Weapon Focus", "Cleave" }
                 }}
             }
@@ -1105,6 +1119,7 @@ public static class DragonData
                     SecondaryBreathSaveDC = 17, SecondaryBreathUsesPerDay = 2,
                     BiteDamageDice = 6, BiteDamageCount = 1, ClawDamageDice = 4, ClawDamageCount = 1,
                     WingDamageDice = 3, WingDamageCount = 1, TailDamageDice = 4, TailDamageCount = 1,
+                    SorcererCasterLevel = 1,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack" }
                 }},
                 { DragonAgeCategory.Juvenile, new DragonAgeStats {
@@ -1115,6 +1130,7 @@ public static class DragonData
                     SecondaryBreathSaveDC = 19, SecondaryBreathUsesPerDay = 2,
                     BiteDamageDice = 8, BiteDamageCount = 1, ClawDamageDice = 6, ClawDamageCount = 1,
                     WingDamageDice = 4, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 1,
+                    SorcererCasterLevel = 3,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness" }
                 }},
                 { DragonAgeCategory.YoungAdult, new DragonAgeStats {
@@ -1128,6 +1144,7 @@ public static class DragonData
                     FrightfulPresenceDC = 21, FrightfulPresenceRangeFeet = 150,
                     BiteDamageDice = 8, BiteDamageCount = 1, ClawDamageDice = 6, ClawDamageCount = 1,
                     WingDamageDice = 4, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 1,
+                    SorcererCasterLevel = 5,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack" }
                 }},
                 { DragonAgeCategory.Adult, new DragonAgeStats {
@@ -1141,6 +1158,7 @@ public static class DragonData
                     FrightfulPresenceDC = 23, FrightfulPresenceRangeFeet = 180,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
+                    SorcererCasterLevel = 7,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack", "Weapon Focus" }
                 }}
             }
@@ -1195,7 +1213,7 @@ public static class DragonData
                     SecondaryBreathSaveDC = 16, SecondaryBreathUsesPerDay = 2,
                     BiteDamageDice = 6, BiteDamageCount = 1, ClawDamageDice = 4, ClawDamageCount = 1,
                     WingDamageDice = 4, WingDamageCount = 1, TailDamageDice = 4, TailDamageCount = 1,
-                    SorcererCasterLevel = 0,
+                    SorcererCasterLevel = 1,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack" }
                 }},
                 { DragonAgeCategory.Juvenile, new DragonAgeStats {
@@ -1206,7 +1224,7 @@ public static class DragonData
                     SecondaryBreathSaveDC = 19, SecondaryBreathUsesPerDay = 2,
                     BiteDamageDice = 8, BiteDamageCount = 1, ClawDamageDice = 6, ClawDamageCount = 1,
                     WingDamageDice = 4, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 1,
-                    SorcererCasterLevel = 0,
+                    SorcererCasterLevel = 3,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness" }
                 }},
                 { DragonAgeCategory.YoungAdult, new DragonAgeStats {
@@ -1220,6 +1238,7 @@ public static class DragonData
                     FrightfulPresenceDC = 19, FrightfulPresenceRangeFeet = 150,
                     BiteDamageDice = 8, BiteDamageCount = 1, ClawDamageDice = 6, ClawDamageCount = 1,
                     WingDamageDice = 4, WingDamageCount = 1, TailDamageDice = 6, TailDamageCount = 1,
+                    SorcererCasterLevel = 5,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack" }
                 }},
                 { DragonAgeCategory.Adult, new DragonAgeStats {
@@ -1233,10 +1252,319 @@ public static class DragonData
                     FrightfulPresenceDC = 21, FrightfulPresenceRangeFeet = 180,
                     BiteDamageDice = 6, BiteDamageCount = 2, ClawDamageDice = 8, ClawDamageCount = 1,
                     WingDamageDice = 6, WingDamageCount = 1, TailDamageDice = 8, TailDamageCount = 1,
+                    SorcererCasterLevel = 7,
                     Feats = new List<string> { "Improved Initiative", "Power Attack", "Multiattack", "Alertness", "Flyby Attack", "Cleave" }
                 }}
             }
         };
         _templates[DragonType.Brass] = t;
     }
+
+    // ================================================================
+    // DRAGON SPELLCASTING DATA
+    // D&D 3.5e MM: Each dragon type has unique caster level progression
+    // and thematic sorcerer spell selections.
+    // ================================================================
+
+    /// <summary>
+    /// Post-initialization: populate per-age SorcererSpellIds and SpellLikeAbilityIds
+    /// for all dragon templates based on their SorcererCasterLevel.
+    /// Called at the end of EnsureInitialized().
+    /// </summary>
+    private static void PopulateSpellcastingData()
+    {
+        foreach (var kvp in _templates)
+        {
+            DragonTypeTemplate template = kvp.Value;
+            List<string> thematicSpells = GetThematicSpellsForDragonType(template.Type);
+            Dictionary<DragonAgeCategory, List<string>> slasByAge = GetSpellLikeAbilitiesByAge(template.Type);
+
+            foreach (var ageKvp in template.AgeStats)
+            {
+                DragonAgeCategory age = ageKvp.Key;
+                DragonAgeStats stats = ageKvp.Value;
+
+                // Assign sorcerer spells based on caster level
+                stats.SorcererSpellIds = GetSpellsForCasterLevel(stats.SorcererCasterLevel, thematicSpells);
+
+                // Assign spell-like abilities for this age
+                stats.SpellLikeAbilityIds = slasByAge.ContainsKey(age) ? slasByAge[age] : new List<string>();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the subset of thematic spells a dragon knows at a given caster level.
+    /// Uses D&D 3.5e Sorcerer spells-known table:
+    ///   CL 1: 4 cantrips, 2 1st-level  (6 total)
+    ///   CL 3: 5 cantrips, 3 1st, 1 2nd  (9 total)
+    ///   CL 5: 6 cantrips, 4 1st, 2 2nd, 1 3rd  (13 total)
+    ///   CL 7: 6 cantrips, 4 1st, 3 2nd, 2 3rd, 1 4th  (16 total)
+    /// The thematic spell list is pre-sorted by priority (buffs first, then dispel, disable, damage).
+    /// </summary>
+    private static List<string> GetSpellsForCasterLevel(int casterLevel, List<string> thematicSpells)
+    {
+        if (casterLevel <= 0 || thematicSpells == null || thematicSpells.Count == 0)
+            return new List<string>();
+
+        // Number of spells known by CL (total across all levels)
+        int maxSpells;
+        if (casterLevel >= 7) maxSpells = 16;
+        else if (casterLevel >= 5) maxSpells = 13;
+        else if (casterLevel >= 3) maxSpells = 9;
+        else maxSpells = 6;
+
+        int count = Mathf.Min(maxSpells, thematicSpells.Count);
+        return new List<string>(thematicSpells.GetRange(0, count));
+    }
+
+    /// <summary>
+    /// Returns a prioritized list of thematic sorcerer spells for each dragon type.
+    /// Priority order per user requirements:
+    ///   1. Defensive/Buff (shield, mage armor, resist energy, blur, mirror image, etc.)
+    ///   2. Dispel magic
+    ///   3. Disable/Debuff (sleep, hold person, slow, etc.)
+    ///   4. Damage (magic missile, fireball, etc. - used sparingly)
+    /// Spells are listed from highest priority (taken first at low CL) to lowest.
+    /// </summary>
+    private static List<string> GetThematicSpellsForDragonType(DragonType type)
+    {
+        switch (type)
+        {
+            case DragonType.Red:
+                return new List<string>
+                {
+                    // Cantrips (Level 0) - 4-6 known
+                    "resistance", "detect_magic", "read_magic", "flare", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs first (2-4 known)
+                    "shield", "mage_armor", "burning_hands", "magic_missile",
+                    // Level 2 - Buffs/Disable (1-3 known)
+                    "resist_energy", "mirror_image", "scorching_ray",
+                    // Level 3 - Dispel + Disable (1-2 known)
+                    "dispel_magic", "haste", "fireball",
+                    // Level 4 - Buff/Control (1 known)
+                    "fire_shield", "stoneskin", "wall_of_fire"
+                };
+
+            case DragonType.Blue:
+                return new List<string>
+                {
+                    // Cantrips
+                    "resistance", "detect_magic", "ghost_sound", "daze", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs/Illusion
+                    "shield", "mage_armor", "ventriloquism", "disguise_self",
+                    // Level 2 - Buffs/Control
+                    "resist_energy", "mirror_image", "invisibility",
+                    // Level 3 - Dispel + Control
+                    "dispel_magic", "lightning_bolt", "displacement",
+                    // Level 4
+                    "stoneskin", "greater_invisibility", "phantasmal_killer"
+                };
+
+            case DragonType.Green:
+                return new List<string>
+                {
+                    // Cantrips
+                    "resistance", "detect_magic", "daze", "ghost_sound", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs/Enchantment
+                    "shield", "mage_armor", "charm_person", "sleep",
+                    // Level 2 - Buffs/Control
+                    "resist_energy", "invisibility", "hold_person",
+                    // Level 3 - Dispel + Enchantment
+                    "dispel_magic", "deep_slumber", "displacement",
+                    // Level 4
+                    "stoneskin", "charm_monster", "confusion"
+                };
+
+            case DragonType.Black:
+                return new List<string>
+                {
+                    // Cantrips
+                    "resistance", "detect_magic", "touch_of_fatigue", "daze", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs/Debuff
+                    "shield", "mage_armor", "ray_of_enfeeblement", "cause_fear",
+                    // Level 2 - Buffs/Debuff
+                    "resist_energy", "mirror_image", "blindness_deafness",
+                    // Level 3 - Dispel + Debuff
+                    "dispel_magic", "stinking_cloud", "slow",
+                    // Level 4
+                    "stoneskin", "fear", "enervation"
+                };
+
+            case DragonType.White:
+                return new List<string>
+                {
+                    // Cantrips
+                    "resistance", "detect_magic", "ray_of_frost", "daze", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs (simple for weakest caster)
+                    "shield", "mage_armor", "expeditious_retreat", "endure_elements",
+                    // Level 2 - Buffs
+                    "resist_energy", "mirror_image", "bears_endurance",
+                    // Level 3
+                    "dispel_magic", "protection_from_energy", "sleet_storm",
+                    // Level 4
+                    "stoneskin", "ice_storm", "wall_of_ice"
+                };
+
+            case DragonType.Gold:
+                return new List<string>
+                {
+                    // Cantrips
+                    "resistance", "detect_magic", "light", "read_magic", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs (holy/protective theme)
+                    "shield", "mage_armor", "protection_from_evil", "endure_elements",
+                    // Level 2 - Buffs/Utility
+                    "resist_energy", "mirror_image", "see_invisible",
+                    // Level 3 - Dispel + Protection
+                    "dispel_magic", "haste", "protection_from_energy",
+                    // Level 4
+                    "stoneskin", "lesser_globe_of_invulnerability", "dimensional_anchor"
+                };
+
+            case DragonType.Silver:
+                return new List<string>
+                {
+                    // Cantrips
+                    "resistance", "detect_magic", "light", "read_magic", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs/Protection
+                    "shield", "mage_armor", "feather_fall", "protection_from_evil",
+                    // Level 2 - Buffs/Control
+                    "resist_energy", "mirror_image", "fog_cloud",
+                    // Level 3 - Dispel + Control
+                    "dispel_magic", "haste", "wind_wall",
+                    // Level 4
+                    "stoneskin", "lesser_globe_of_invulnerability", "dimension_door"
+                };
+
+            case DragonType.Bronze:
+                return new List<string>
+                {
+                    // Cantrips
+                    "resistance", "detect_magic", "light", "read_magic", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs/Utility
+                    "shield", "mage_armor", "protection_from_evil", "obscuring_mist",
+                    // Level 2 - Buffs/Control
+                    "resist_energy", "mirror_image", "fog_cloud",
+                    // Level 3 - Dispel + Control
+                    "dispel_magic", "haste", "lightning_bolt",
+                    // Level 4
+                    "stoneskin", "lesser_globe_of_invulnerability", "resilient_sphere"
+                };
+
+            case DragonType.Copper:
+                return new List<string>
+                {
+                    // Cantrips
+                    "resistance", "detect_magic", "ghost_sound", "daze", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs/Trickster
+                    "shield", "mage_armor", "grease", "sleep",
+                    // Level 2 - Buffs/Control
+                    "resist_energy", "mirror_image", "glitterdust",
+                    // Level 3 - Dispel + Control
+                    "dispel_magic", "slow", "stinking_cloud",
+                    // Level 4
+                    "stoneskin", "confusion", "solid_fog"
+                };
+
+            case DragonType.Brass:
+                return new List<string>
+                {
+                    // Cantrips
+                    "resistance", "detect_magic", "ghost_sound", "daze", "prestidigitation", "arcane_mark",
+                    // Level 1 - Buffs/Enchantment
+                    "shield", "mage_armor", "charm_person", "sleep",
+                    // Level 2 - Buffs/Control
+                    "resist_energy", "mirror_image", "daze_monster",
+                    // Level 3 - Dispel + Enchantment
+                    "dispel_magic", "deep_slumber", "haste",
+                    // Level 4
+                    "stoneskin", "charm_monster", "confusion"
+                };
+
+            default:
+                return new List<string>();
+        }
+    }
+
+    /// <summary>
+    /// Returns spell-like abilities for each dragon type, organized by the age at which they become available.
+    /// SLAs gained at a given age persist through all later ages.
+    /// Uses cumulative lists: each age includes all SLAs from earlier ages plus new ones.
+    /// </summary>
+    private static Dictionary<DragonAgeCategory, List<string>> GetSpellLikeAbilitiesByAge(DragonType type)
+    {
+        var result = new Dictionary<DragonAgeCategory, List<string>>();
+
+        switch (type)
+        {
+            case DragonType.Red:
+                // Juvenile+: Locate Object
+                result[DragonAgeCategory.Juvenile] = new List<string> { "locate_object" };
+                result[DragonAgeCategory.YoungAdult] = new List<string> { "locate_object" };
+                result[DragonAgeCategory.Adult] = new List<string> { "locate_object" };
+                break;
+
+            case DragonType.Blue:
+                // All ages: Create/Destroy Water; Adult+: Ventriloquism
+                result[DragonAgeCategory.Wyrmling] = new List<string> { "create_water" };
+                result[DragonAgeCategory.VeryYoung] = new List<string> { "create_water" };
+                result[DragonAgeCategory.Young] = new List<string> { "create_water" };
+                result[DragonAgeCategory.Juvenile] = new List<string> { "create_water" };
+                result[DragonAgeCategory.YoungAdult] = new List<string> { "create_water" };
+                result[DragonAgeCategory.Adult] = new List<string> { "create_water", "ventriloquism" };
+                break;
+
+            case DragonType.Green:
+                // Adult+: Suggestion
+                result[DragonAgeCategory.Adult] = new List<string> { "charm_person" }; // Suggestion approximated
+                break;
+
+            case DragonType.Black:
+                // Juvenile+: Darkness; Adult+: Corrupt Water (approximated as create_water)
+                result[DragonAgeCategory.Juvenile] = new List<string> { "darkness" };
+                result[DragonAgeCategory.YoungAdult] = new List<string> { "darkness" };
+                result[DragonAgeCategory.Adult] = new List<string> { "darkness", "create_water" };
+                break;
+
+            case DragonType.White:
+                // Juvenile+: Fog Cloud; Adult+: Gust of Wind
+                result[DragonAgeCategory.Juvenile] = new List<string> { "fog_cloud" };
+                result[DragonAgeCategory.YoungAdult] = new List<string> { "fog_cloud" };
+                result[DragonAgeCategory.Adult] = new List<string> { "fog_cloud", "gust_of_wind" };
+                break;
+
+            case DragonType.Gold:
+                // Juvenile+: Bless
+                result[DragonAgeCategory.Juvenile] = new List<string> { "bless" };
+                result[DragonAgeCategory.YoungAdult] = new List<string> { "bless" };
+                result[DragonAgeCategory.Adult] = new List<string> { "bless" };
+                break;
+
+            case DragonType.Silver:
+                // Juvenile+: Feather Fall; Adult+: Fog Cloud
+                result[DragonAgeCategory.Juvenile] = new List<string> { "feather_fall" };
+                result[DragonAgeCategory.YoungAdult] = new List<string> { "feather_fall" };
+                result[DragonAgeCategory.Adult] = new List<string> { "feather_fall", "fog_cloud" };
+                break;
+
+            case DragonType.Bronze:
+                // Adult+: Create Food and Water (approximated), Fog Cloud
+                result[DragonAgeCategory.Adult] = new List<string> { "fog_cloud" };
+                break;
+
+            case DragonType.Copper:
+                // Adult+: Stone Shape (not in spell DB, skip)
+                break;
+
+            case DragonType.Brass:
+                // Juvenile+: Endure Elements; Adult+: Suggestion (approximated as charm_person)
+                result[DragonAgeCategory.Juvenile] = new List<string> { "endure_elements" };
+                result[DragonAgeCategory.YoungAdult] = new List<string> { "endure_elements" };
+                result[DragonAgeCategory.Adult] = new List<string> { "endure_elements", "charm_person" };
+                break;
+        }
+
+        return result;
+    }
+
 }
