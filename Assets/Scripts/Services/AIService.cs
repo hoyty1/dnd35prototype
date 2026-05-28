@@ -2987,7 +2987,7 @@ public class AIService : MonoBehaviour
             int damage = RollDamage(attack.DamageDice, attack.DamageCount);
             target.Stats.TakeDamage(damage);
             _gameManager.CombatUI?.ShowCombatLog(
-                CombatLogHelper.Hit("💥", $"{npc.Stats.CharacterName}'s {attack.Name} hits for {damage} {attack.DamageType} damage!"));
+                CombatLogHelper.Damage("💥", $"{npc.Stats.CharacterName}'s {attack.Name} hits for {damage} {attack.DamageType} damage!"));
 
             // Check for on-hit effects (blinding on crit, etc.)
             if (!string.IsNullOrEmpty(attack.OnHitStatusEffectType) && !attack.OnHitOnCritOnly)
@@ -2998,7 +2998,7 @@ public class AIService : MonoBehaviour
         else
         {
             _gameManager.CombatUI?.ShowCombatLog(
-                CombatLogHelper.Miss("❌", $"{npc.Stats.CharacterName}'s {attack.Name} misses!"));
+                CombatLogHelper.Failure("❌", $"{npc.Stats.CharacterName}'s {attack.Name} misses!"));
         }
 
         if (target.Stats.IsDead)
@@ -3081,7 +3081,7 @@ public class AIService : MonoBehaviour
             return false;
 
         int attackBonus = attacker.Stats.BaseAttackBonus + attacker.Stats.DEXMod;
-        int targetAC = target.GetTargetAC(includeShield: false);  // Ranged touch ignores armor/shield
+        int targetAC = CombatCalculationService.SimpleTouchAC(target.Stats);  // Ranged touch ignores armor/shield
 
         int roll = UnityEngine.Random.Range(1, 21);
         int total = roll + attackBonus;
