@@ -150,6 +150,25 @@ public class AIService : MonoBehaviour
             ProcessAuraAbility(npc);
         }
 
+        // ── Free-Action Ranged Special Attack (Spittle, etc.) ──
+        // Per MM p.126, Gibbering Mouther's Spittle is a free action each round.
+        // Fire at start of turn (after Gibbering aura) if any enemy is within range.
+        // This does NOT consume a standard or move action — the creature still acts normally.
+        if (npc.HasRangedSpecialAttack)
+        {
+            RangedSpecialAttackDefinition freeAttack = npc.GetRangedSpecialAttackDefinition();
+            if (freeAttack != null && freeAttack.IsFreeAction && npc.IsRangedSpecialAttackReady)
+            {
+                CharacterController spittleTarget = FindClosestEnemyInRange(npc, freeAttack.RangeFeet);
+                if (spittleTarget != null)
+                {
+                    Debug.Log($"[AI] {npc.Stats.CharacterName} fires free-action {freeAttack.Name} at {spittleTarget.Stats.CharacterName}");
+                    TryExecuteRangedSpecialAttack(npc, spittleTarget);
+                    // No yield break — creature continues its turn with standard/move actions
+                }
+            }
+        }
+
         // ── Resilient Sphere: NPC inside sphere can move within it but attacks/spells
         // cannot pass the boundary (PHB p.263). The sphere is now a stationary area effect.
         if (ResilientSphereAreaEffect.IsCharacterInAnySphere(npc))
@@ -478,19 +497,24 @@ public class AIService : MonoBehaviour
         }
 
         // ── Special ability priorities before movement ──
-        // If we have a ranged special attack (Spittle, Web) and target is in range, try it first
+        // Standard-action ranged special attacks (NOT free-action ones like Spittle).
+        // Free-action attacks are already fired at turn start in ExecuteNPCTurn.
         if (npc.HasRangedSpecialAttack)
         {
-            int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
-            int rangeSquares = npc.GetRangedSpecialAttackDefinition().RangeFeet / 5;
-            
-            if (distance <= rangeSquares && distance > 1)
+            RangedSpecialAttackDefinition preMovAttack = npc.GetRangedSpecialAttackDefinition();
+            if (preMovAttack != null && !preMovAttack.IsFreeAction)
             {
-                Debug.Log($"[AI] {npc.Stats.CharacterName} attempting ranged special attack (distance {distance} squares, range {rangeSquares} squares)");
-                if (TryExecuteRangedSpecialAttack(npc, target))
+                int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+                int rangeSquares = preMovAttack.RangeFeet / 5;
+                
+                if (distance <= rangeSquares)
                 {
-                    yield return new WaitForSeconds(0.8f);
-                    yield break;
+                    Debug.Log($"[AI] {npc.Stats.CharacterName} attempting ranged special attack (distance {distance} squares, range {rangeSquares} squares)");
+                    if (TryExecuteRangedSpecialAttack(npc, target))
+                    {
+                        yield return new WaitForSeconds(0.8f);
+                        yield break;
+                    }
                 }
             }
         }
@@ -562,19 +586,24 @@ public class AIService : MonoBehaviour
         }
         else
         {
-            // ── Post-movement ranged special attack (Spittle, etc.) ──
-            // If we moved but still can't reach melee range, try ranged special attack
+            // ── Post-movement ranged special attack ──
+            // If we moved but still can't reach melee range, try standard-action ranged special attack.
+            // Free-action attacks (Spittle) were already fired at turn start — skip them here.
             if (npc.HasRangedSpecialAttack && npc.IsRangedSpecialAttackReady)
             {
-                int postMoveDistance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
-                int rangeSquares = npc.GetRangedSpecialAttackDefinition().RangeFeet / 5;
-                if (postMoveDistance <= rangeSquares)
+                RangedSpecialAttackDefinition postMovAttack = npc.GetRangedSpecialAttackDefinition();
+                if (postMovAttack != null && !postMovAttack.IsFreeAction)
                 {
-                    Debug.Log($"[AI] {npc.Stats.CharacterName} attempting post-movement ranged special attack (distance {postMoveDistance} squares, range {rangeSquares} squares)");
-                    if (TryExecuteRangedSpecialAttack(npc, target))
+                    int postMoveDistance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+                    int rangeSquares = postMovAttack.RangeFeet / 5;
+                    if (postMoveDistance <= rangeSquares)
                     {
-                        yield return new WaitForSeconds(0.8f);
-                        yield break;
+                        Debug.Log($"[AI] {npc.Stats.CharacterName} attempting post-movement ranged special attack (distance {postMoveDistance} squares, range {rangeSquares} squares)");
+                        if (TryExecuteRangedSpecialAttack(npc, target))
+                        {
+                            yield return new WaitForSeconds(0.8f);
+                            yield break;
+                        }
                     }
                 }
             }
@@ -2695,6 +2724,40 @@ public class AIService : MonoBehaviour
 
             int dist = SquareGridUtils.GetDistance(source.GridPosition, candidate.GridPosition);
             if (dist < closestDist)
+            {
+                closestDist = dist;
+                closest = candidate;
+            }
+        }
+
+        return closest;
+    }
+
+    /// <summary>
+    /// Finds the closest alive enemy within a specified range (in feet).
+    /// Used for free-action ranged special attacks (e.g., Spittle) that need a target in range.
+    /// </summary>
+    private CharacterController FindClosestEnemyInRange(CharacterController source, int rangeFeet)
+    {
+        if (source == null || _gameManager == null) return null;
+
+        List<CharacterController> allCharacters = _gameManager.GetAllCharactersForAI();
+        if (allCharacters == null) return null;
+
+        int rangeSquares = rangeFeet / 5;
+        CharacterController closest = null;
+        int closestDist = int.MaxValue;
+
+        for (int i = 0; i < allCharacters.Count; i++)
+        {
+            CharacterController candidate = allCharacters[i];
+            if (candidate == null || candidate == source || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!TeamUtility.IsEnemy(source, candidate))
+                continue;
+
+            int dist = SquareGridUtils.GetDistance(source.GridPosition, candidate.GridPosition);
+            if (dist <= rangeSquares && dist < closestDist)
             {
                 closestDist = dist;
                 closest = candidate;

@@ -738,6 +738,7 @@ public static partial class NPCDatabase
                 DamageCount = 1,
                 DamageType = DamageType.Acid,
                 CooldownRounds = 0,         // Free action each round
+                IsFreeAction = true,        // MM p.126: Spittle is a free action, fires every round
                 OnHitStatusEffectType = "Blinded",
                 OnHitSaveDC = 18,           // Fort DC 18 (Constitution-based)
                 OnHitDurationRounds = 2,    // Fallback; overridden by OnHitDurationDice

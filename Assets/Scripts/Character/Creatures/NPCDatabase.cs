@@ -383,6 +383,12 @@ public class RangedSpecialAttackDefinition
     public int SaveDC;                       // 0 = no save, otherwise Reflex or Will
     public bool IsSaveReflex = true;         // true = Reflex, false = Will
     public int CooldownRounds = 0;           // 0 = at-will, X = must wait X rounds between uses
+    /// <summary>
+    /// If true, this attack is a FREE ACTION and fires every round at the start of turn
+    /// without consuming any action economy. The creature can still take standard/move/full actions.
+    /// MM p.126: Gibbering mouther Spittle is a free action each round.
+    /// </summary>
+    public bool IsFreeAction = false;
     
     /// <summary>On-hit status effect (blinding, sickening, etc.). Can be null.</summary>
     public string OnHitStatusEffectType;     // e.g., "Blinded"
