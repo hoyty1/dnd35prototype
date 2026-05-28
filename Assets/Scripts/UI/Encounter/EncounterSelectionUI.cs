@@ -285,7 +285,7 @@ public class EncounterSelectionUI : MonoBehaviour
         footerRect.offsetMax = Vector2.zero;
 
         HorizontalLayoutGroup footerLayout = footer.GetComponent<HorizontalLayoutGroup>();
-        footerLayout.spacing = 5f;
+        footerLayout.spacing = 3f;
         footerLayout.childAlignment = TextAnchor.MiddleCenter;
         footerLayout.childControlWidth = true;
         footerLayout.childControlHeight = true;
@@ -306,8 +306,8 @@ public class EncounterSelectionUI : MonoBehaviour
         buttonObj.transform.SetParent(parent, false);
 
         LayoutElement le = buttonObj.GetComponent<LayoutElement>();
-        le.minWidth = 150f;
-        le.preferredWidth = 150f;
+        le.minWidth = 110f;
+        le.preferredWidth = 120f;
         le.preferredHeight = 40f;
         le.minHeight = 40f;
 
@@ -331,14 +331,14 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateText(
             buttonObj.transform,
             label,
-            16,
+            14,
             FontStyle.Bold,
             Color.white,
             new Vector2(0.5f, 0.5f),
             new Vector2(0.5f, 0.5f),
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
-            new Vector2(140f, 30f),
+            new Vector2(110f, 36f),
             TextAnchor.MiddleCenter,
             out _
         );
