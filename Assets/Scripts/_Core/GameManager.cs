@@ -3822,7 +3822,7 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)} | aliveEnemiesBefore={aliveEnemiesBefore} | allNpcsDead={allNpcsDead} | allPcsDead={allPcsDead} | victory={isVictory}");
 
         // Clear aura save immunities (e.g., Gibbering 24-hour immunity) for the new encounter
-        _aiService?.ClearAuraSaveImmunities();
+        AIService.ClearAuraSaveImmunities();
 
         // Publish combat ended event
         GameEventSystem.Instance.Publish(new CombatEndedEvent
