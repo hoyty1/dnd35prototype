@@ -59,10 +59,11 @@ public partial class GameManager
     private bool _pendingChargeBullRush;
 
     // Charge distance guardrails (grid squares; 1 square = 5 ft)
-    // Requested behavior: characters within 2 squares (inclusive) cannot charge,
-    // so minimum charge movement must be 3+ squares.
-    private const int ChargeBlockedDistanceSquares = 2;
-    private const int MinChargeMovementSquares = ChargeBlockedDistanceSquares + 1;
+    // D&D 3.5e PHB p.154: "You must move at least 10 feet (2 squares)."
+    // ChargeBlockedDistanceSquares = 1 means only adjacent creatures (already in melee) are blocked.
+    // MinChargeMovementSquares = 2 enforces the 10-ft (2-square) minimum charge movement.
+    private const int ChargeBlockedDistanceSquares = 1;
+    private const int MinChargeMovementSquares = 2;
 
     private bool CanAttemptAidAnotherTouch(CharacterController actor, CharacterController enemy)
     {
@@ -1166,7 +1167,7 @@ public partial class GameManager
             return false;
         }
 
-        int minDistance = MinChargeMovementSquares; // Must move beyond 2 squares (3+ squares)
+        int minDistance = MinChargeMovementSquares; // Must move at least 2 squares (10 ft per PHB p.154)
         int maxDistance = Mathf.Max(minDistance, GetCurrentMoveRangeSquares(charger) * 2);
         int moverSizeSquares = Mathf.Max(1, charger.GetVisualSquaresOccupied());
         int searchRange = Mathf.Max(maxDistance, (Grid.Width + Grid.Height) * 2);

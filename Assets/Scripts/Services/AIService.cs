@@ -2404,6 +2404,8 @@ public class AIService : MonoBehaviour
         AIProfile profile = GetProfile(npc);
         bool profilePrefersCharge = profile == null || profile.ShouldPreferCharge(npc, target, distance, preferAggression);
 
+        Debug.Log($"[AI SelectBestAction] {npc.Stats.CharacterName} → {target.Stats.CharacterName}: dist={distance}, canCharge={canCharge}, profilePrefersCharge={profilePrefersCharge}, hpPct={hpPercent:F2}");
+
         if (!preferAggression && hpPercent < 0.30f && npc.Actions.HasMoveAction)
             return AIActionType.Retreat;
 
@@ -2760,15 +2762,29 @@ public class AIService : MonoBehaviour
     public bool ShouldNPCCharge(CharacterController npc, CharacterController target)
     {
         if (npc == null || target == null) return false;
-        if (npc.Actions == null || !npc.Actions.HasFullRoundAction) return false;
-        if (!npc.HasMeleeWeaponEquipped()) return false;
+        if (npc.Actions == null || !npc.Actions.HasFullRoundAction)
+        {
+            Debug.Log($"[AI Charge] {npc?.Stats?.CharacterName}: no full-round action available, skipping charge.");
+            return false;
+        }
+        if (!npc.HasMeleeWeaponEquipped())
+        {
+            Debug.Log($"[AI Charge] {npc?.Stats?.CharacterName}: no melee weapon equipped, skipping charge.");
+            return false;
+        }
         if (target.Stats == null || target.Stats.IsDead) return false;
 
         int dist = npc.GetMinimumDistanceToTarget(target, chebyshev: true);
         // Already in melee range — charge not needed
-        if (npc.CanMeleeAttackDistance(dist)) return false;
+        if (npc.CanMeleeAttackDistance(dist))
+        {
+            Debug.Log($"[AI Charge] {npc.Stats.CharacterName}: already in melee range (dist={dist}), no charge needed.");
+            return false;
+        }
 
-        return _gameManager.CanChargeTargetForAI(npc, target);
+        bool canCharge = _gameManager.CanChargeTargetForAI(npc, target);
+        Debug.Log($"[AI Charge] {npc.Stats.CharacterName} → {target.Stats.CharacterName}: dist={dist}, canCharge={canCharge}");
+        return canCharge;
     }
 
     /// <summary>
