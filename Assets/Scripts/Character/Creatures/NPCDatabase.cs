@@ -487,12 +487,6 @@ public class NPCDefinition
     public bool? UseCoupDeGrace;
 
     // Visuals
-    /// <summary>
-    /// Relative path to the creature token image within StreamingAssets/CreatureTokens/.
-    /// Example: "goblin.png". Used by CreatureTokenLoader to display circular artwork
-    /// tokens on the combat grid and in UI panels.
-    /// </summary>
-    public string TokenPath;
     public Color SpriteColor = Color.white;
     public Color PanelColor = new Color(0.4f, 0.1f, 0.1f, 0.85f);
     public Color NameColor = new Color(1f, 0.4f, 0.4f);
