@@ -82,6 +82,16 @@ public class SpellData
         {
             AddAvailability(ClassList[i], SpellLevel);
         }
+
+        // D&D 3.5e PHB: Sorcerers and Wizards share the same arcane spell list (Sor/Wiz).
+        // If a legacy ClassList includes one but not the other, add the missing class
+        // so both can access the spell at the same level.
+        bool hasWizard = ClassList.Any(c => string.Equals(c, "Wizard", StringComparison.OrdinalIgnoreCase));
+        bool hasSorcerer = ClassList.Any(c => string.Equals(c, "Sorcerer", StringComparison.OrdinalIgnoreCase));
+        if (hasWizard && !hasSorcerer)
+            AddAvailability("Sorcerer", SpellLevel);
+        else if (hasSorcerer && !hasWizard)
+            AddAvailability("Wizard", SpellLevel);
     }
 
     public bool IsAvailableFor(string className, int spellLevel)
@@ -98,9 +108,19 @@ public class SpellData
                 a.Level == spellLevel);
         }
 
-        return SpellLevel == spellLevel &&
-               ClassList != null &&
-               ClassList.Any(cls => string.Equals(cls, className, StringComparison.OrdinalIgnoreCase));
+        if (SpellLevel != spellLevel || ClassList == null)
+            return false;
+
+        // Fallback: check ClassList directly, treating Sorcerer/Wizard as interchangeable
+        string altClass = null;
+        if (string.Equals(className, "Sorcerer", StringComparison.OrdinalIgnoreCase))
+            altClass = "Wizard";
+        else if (string.Equals(className, "Wizard", StringComparison.OrdinalIgnoreCase))
+            altClass = "Sorcerer";
+
+        return ClassList.Any(cls =>
+            string.Equals(cls, className, StringComparison.OrdinalIgnoreCase) ||
+            (altClass != null && string.Equals(cls, altClass, StringComparison.OrdinalIgnoreCase)));
     }
 
     public bool IsAvailableForDomain(string domainName)
