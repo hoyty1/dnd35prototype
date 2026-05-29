@@ -672,8 +672,8 @@ public class CharacterCreationUI : MonoBehaviour
         int classCount = allClasses.Count;
 
         float panelW = 360f;
-        float panelH = 130f;
-        float rowSpacing = 162f; // panelH + gap for select button + padding
+        float panelH = 160f; // taller to include select button inside card
+        float rowSpacing = 172f; // panelH + 12px gap between rows
         int rowCount = (classCount + 1) / 2;
         float scrollAreaH = 440f; // visible scroll area height
         float contentH = rowCount * rowSpacing + 10f; // total scrollable content height
@@ -742,17 +742,17 @@ public class CharacterCreationUI : MonoBehaviour
 
             // Title text (near top of panel)
             MakeText(scrollContent.transform, $"{classDef.ClassName}Title",
-                new Vector2(posX, posY + panelH/2 - 12), new Vector2(340, 22),
+                new Vector2(posX, posY + panelH/2 - 14), new Vector2(340, 22),
                 classDef.ClassName.ToUpper(), 17, classDef.TitleColor, TextAnchor.MiddleCenter);
 
-            // Info text (constrained within panel, above button)
+            // Info text (middle of panel, above the button)
             MakeText(scrollContent.transform, $"{classDef.ClassName}Info",
-                new Vector2(posX, posY - 8), new Vector2(330, 80),
+                new Vector2(posX, posY + 2), new Vector2(330, 80),
                 classDef.InfoText,
                 10, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
         }
 
-        // Class selection buttons inside scroll content
+        // Class selection buttons INSIDE each card (at the bottom of the panel)
         _classButtons = new Button[classCount];
         _classButtonDefaultColors_dynamic = new Color[classCount];
         for (int i = 0; i < classCount; i++)
@@ -766,7 +766,7 @@ public class CharacterCreationUI : MonoBehaviour
             int idx = i;
             _classButtonDefaultColors_dynamic[i] = classDef.ButtonColor;
             _classButtons[i] = MakeButton(scrollContent.transform, $"Select{classDef.ClassName}",
-                new Vector2(posX, posY - panelH/2 - 12), new Vector2(180, 28),
+                new Vector2(posX, posY - panelH/2 + 18), new Vector2(180, 28),
                 $"Select {classDef.ClassName}", classDef.ButtonColor, Color.white, 13);
             _classButtons[i].onClick.AddListener(() => OnClassSelected(idx));
         }

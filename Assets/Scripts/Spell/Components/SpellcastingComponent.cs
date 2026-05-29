@@ -1615,6 +1615,14 @@ public class SpellcastingComponent : MonoBehaviour
         if (!alreadyKnownForClass)
             AddKnownSpellForClass(targetClass, spell);
 
+        // For spontaneous casters, also register in SpontaneousCastingData
+        if (IsSpontaneousCaster && SpontaneousData != null)
+        {
+            int spellLevelForClass = spell.GetSpellLevelFor(targetClass);
+            if (spellLevelForClass >= 0)
+                SpontaneousData.LearnSpell(spell.SpellId, spellLevelForClass);
+        }
+
         if (SelectedSpellIds == null)
             SelectedSpellIds = new List<string>();
         if (!SelectedSpellIds.Contains(spell.SpellId))

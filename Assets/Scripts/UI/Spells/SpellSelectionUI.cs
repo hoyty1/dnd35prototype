@@ -492,6 +492,13 @@ public class SpellSelectionUI : MonoBehaviour
 
         _wizardSpecializationFilter = WizardSpecialization.CreateGeneralist();
 
+        if (string.Equals(className, "Sorcerer", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Bard", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenForLevelUpSpontaneous(className);
+            return;
+        }
+
         Debug.Log($"[SpellSelection] Level-up spell selection not required for class '{className}'.");
         _isLevelUpMode = false;
         onComplete?.Invoke(new List<string>());
@@ -583,6 +590,110 @@ public class SpellSelectionUI : MonoBehaviour
         _subtitleText.text = _isWizardInitialSpellbookSelection
             ? $"Select {_levelUpSpellsToSelect} 1st-level spells for your wizard spellbook."
             : $"Select {_levelUpSpellsToSelect} new spells for your spellbook.";
+
+        _overlayPanel.SetActive(true);
+        IsOpen = true;
+
+        _currentFilterLevel = -1;
+        if (_filter0Button != null) _filter0Button.gameObject.SetActive(_levelUpAvailableSpellLevels.Contains(0));
+        if (_filter1Button != null) _filter1Button.gameObject.SetActive(_levelUpAvailableSpellLevels.Contains(1));
+        if (_filter2Button != null) _filter2Button.gameObject.SetActive(_levelUpAvailableSpellLevels.Contains(2));
+
+        PopulateSpellList();
+        RefreshUI();
+    }
+
+    /// <summary>
+    /// Opens spell selection for spontaneous casters (Sorcerer/Bard) during level-up.
+    /// Determines how many new spells the character can learn based on their
+    /// SpontaneousCastingData progression table, then presents available spells.
+    /// </summary>
+    private void OpenForLevelUpSpontaneous(string className)
+    {
+        if (_levelUpCharacter == null || _levelUpCharacter.Stats == null || _levelUpSpellcasting == null)
+        {
+            Debug.LogWarning($"[SpellSelection] OpenForLevelUpSpontaneous missing character/spellcasting state.");
+            OnSpellsConfirmed?.Invoke(new List<string>());
+            return;
+        }
+
+        _className = className;
+        _intMod = 0;
+        _maxCantrips = 0;
+        _maxSpells1st = 0;
+        _maxSpells2nd = 0;
+        _cantripSelectionRequired = false;
+        _autoAddedCantripCount = 0;
+        _selectedSpellIds.Clear();
+        _isWizardInitialSpellbookSelection = false;
+
+        // Load already-known spells
+        LoadExistingLevelUpSpells();
+
+        // Determine how many new spells can be learned by comparing
+        // current known counts vs the new level's max known counts.
+        SpontaneousCastingData spontData = _levelUpSpellcasting.SpontaneousData;
+        int totalNewSpells = 0;
+        _levelUpAvailableSpellLevels.Clear();
+        _levelUpMaxSpellLevel = 0;
+
+        if (spontData != null && spontData.IsInitialized)
+        {
+            for (int spellLevel = 0; spellLevel <= 9; spellLevel++)
+            {
+                int maxKnown = spontData.MaxSpellsKnownByLevel[spellLevel];
+                int currentKnown = spontData.SpellsKnownByLevel[spellLevel] != null
+                    ? spontData.SpellsKnownByLevel[spellLevel].Count : 0;
+                int openSlots = Mathf.Max(0, maxKnown - currentKnown);
+
+                if (openSlots > 0)
+                {
+                    totalNewSpells += openSlots;
+                    _levelUpAvailableSpellLevels.Add(spellLevel);
+                    if (spellLevel > _levelUpMaxSpellLevel)
+                        _levelUpMaxSpellLevel = spellLevel;
+                }
+            }
+        }
+
+        if (totalNewSpells <= 0)
+        {
+            Debug.Log($"[SpellSelection] {className} has no new spell slots to fill at this level.");
+            _isLevelUpMode = false;
+            OnSpellsConfirmed?.Invoke(new List<string>());
+            return;
+        }
+
+        _levelUpSpellsToSelect = totalNewSpells;
+
+        // Build available spell list from the class spell list
+        SpellDatabase.Init();
+        _availableSpells.Clear();
+        foreach (int level in _levelUpAvailableSpellLevels.OrderBy(l => l))
+        {
+            var spellsAtLevel = SpellDatabase.GetSpellsForClassAtLevel(className, level);
+            if (spellsAtLevel != null)
+                _availableSpells.AddRange(spellsAtLevel);
+        }
+
+        // Remove already-known spells and duplicates
+        _availableSpells = _availableSpells
+            .Where(s => s != null)
+            .GroupBy(s => s.SpellId)
+            .Select(g => g.First())
+            .OrderBy(s => s.SpellLevel)
+            .ThenBy(s => s.Name)
+            .ToList();
+
+        string characterName = !string.IsNullOrWhiteSpace(_levelUpCharacter.Stats.CharacterName)
+            ? _levelUpCharacter.Stats.CharacterName : _levelUpCharacter.name;
+        Debug.Log($"[SpellSelection] {className} {characterName} leveling up:");
+        Debug.Log($"[SpellSelection] - Already knows {_alreadyKnownSpellIds.Count} spells");
+        Debug.Log($"[SpellSelection] - Can select: {_levelUpSpellsToSelect} new spells");
+        Debug.Log($"[SpellSelection] - Can choose from levels: {string.Join(",", _levelUpAvailableSpellLevels.OrderBy(l => l))}");
+
+        _titleText.text = $"NEW SPELLS KNOWN - {className.ToUpper()}";
+        _subtitleText.text = $"Select {_levelUpSpellsToSelect} new spell(s) to add to your known spells.";
 
         _overlayPanel.SetActive(true);
         IsOpen = true;
