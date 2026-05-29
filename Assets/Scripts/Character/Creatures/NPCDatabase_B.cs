@@ -688,7 +688,7 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Undead", "Extraplanar", "Darkvision60", "MM35" },
             Feats = new List<string> { "Dodge", "Improved Initiative", "Toughness" },
             SpecialAbilities = new List<string> { "Death Gaze (Su): 30 ft., DC 15 Fort or die; save = 1 negative level", "DR 10/cold iron", "Resist acid 10, fire 10", "Immune to electricity", "Vulnerable to sunlight (1 HP damage/round)", "Flashback (Ex): creatures seeing bodak, DC 15 Fort or stunned 1 round", "Darkvision 60 ft.", "Undead traits" },
-            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadBrute,
             SpriteColor = new Color(0.25f, 0.2f, 0.3f, 1f),
             PanelColor = new Color(0.08f, 0.06f, 0.12f, 0.85f),
             NameColor = new Color(0.5f, 0.4f, 0.65f),

@@ -51,7 +51,7 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Undead", "Incorporeal", "MM35" },
             Feats = new List<string> { "Alertness", "Blind-Fight", "Combat Reflexes", "Improved Initiative", "Improved Natural Attack" },
             SpecialAbilities = new List<string> { "Incorporeal", "Con drain (1d6)", "Energy drain (1 negative level)", "Create spawn", "Unnatural aura (60 ft.)", "Darkvision 60 ft.", "Daylight powerlessness", "Fly 60 ft. (good)" },
-            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadIncorporeal,
             SpriteColor = new Color(0.2f, 0.2f, 0.3f, 0.5f),
             PanelColor = new Color(0.08f, 0.08f, 0.15f, 0.85f),
             NameColor = new Color(0.5f, 0.5f, 0.75f),
@@ -191,12 +191,12 @@ public static partial class NPCDatabase
             Immunities = new CreatureImmunities { ImmuneToCriticalHits = true, ImmuneToMindAffecting = true, ImmuneToPoison = true },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, EnergyDrainOnHit = 1, EnergyDrainRemovalDC = 14 }
             },
-            CreatureTags = new List<string> { "Undead", "MM35" },
+            CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
             Feats = new List<string> { "Alertness", "Blind-Fight" },
             SpecialAbilities = new List<string> { "Energy Drain (Su): slam bestows 1 negative level, DC 14 Fort to remove", "Create Spawn: humanoid slain rises as wight in 1d4 rounds", "Darkvision 60 ft.", "Undead traits" },
-            AIProfileArchetype = NPCAIProfileArchetype.Undead,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadTactical,
             SpriteColor = new Color(0.4f, 0.45f, 0.5f, 1f),
             PanelColor = new Color(0.12f, 0.14f, 0.18f, 0.85f),
             NameColor = new Color(0.65f, 0.7f, 0.8f),

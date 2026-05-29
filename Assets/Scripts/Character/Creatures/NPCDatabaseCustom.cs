@@ -244,7 +244,7 @@ public static partial class NPCDatabase
             DamageReductionBypass = DamageBypassTag.Silver,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
             SpecialAbilities = new List<string> { "Energy drain (1 negative level on slam)", "Create spawn", "Darkvision 60 ft.", "Undead traits" },
-            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadTactical,
             SpriteColor = new Color(0.78f, 0.82f, 0.9f, 1f),
             PanelColor = new Color(0.19f, 0.18f, 0.3f, 0.85f),
             NameColor = new Color(0.72f, 0.9f, 1f),

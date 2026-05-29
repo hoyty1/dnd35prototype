@@ -63,7 +63,7 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Undead", "Incorporeal", "MM35" },
             Feats = new List<string> { "Dodge" },
             SpecialAbilities = new List<string> { "Incorporeal", "Str drain (1d6)", "Darkvision 60 ft.", "Undead traits", "+2 turn resistance", "Fly 40 ft. (good)" },
-            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadIncorporeal,
             SpriteColor = new Color(0.3f, 0.3f, 0.35f, 0.6f),
             PanelColor = new Color(0.1f, 0.1f, 0.15f, 0.85f),
             NameColor = new Color(0.6f, 0.6f, 0.75f),

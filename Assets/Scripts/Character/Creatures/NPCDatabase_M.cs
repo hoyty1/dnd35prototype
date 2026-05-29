@@ -753,7 +753,7 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
             Feats = new List<string> { "Alertness", "Great Fortitude", "Toughness" },
             SpecialAbilities = new List<string> { "Despair (Su): 30 ft., Will DC 16 or paralyzed with fear 1d4 rounds", "Mummy Rot (Su): supernatural disease, 1d6 CON", "DR 5/—", "Vulnerable to fire (×1.5 damage)", "Darkvision 60 ft.", "Undead traits" },
-            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadBrute,
             SpriteColor = new Color(0.6f, 0.55f, 0.4f, 1f),
             PanelColor = new Color(0.22f, 0.2f, 0.12f, 0.85f),
             NameColor = new Color(0.85f, 0.78f, 0.55f),

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Monster Manual creatures: V
@@ -14,6 +15,7 @@ public static partial class NPCDatabase
         RegisterViperLarge();
         RegisterViperHuge();
         RegisterVampireSpawn();
+        RegisterVampire();
         RegisterVargouille();
         RegisterVioletFungus();
 
@@ -218,11 +220,98 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
             Feats = new List<string> { "Alertness", "Improved Initiative", "Lightning Reflexes", "Toughness" },
             SpecialAbilities = new List<string> { "Energy Drain (Su): 1 negative level on slam, DC 14 Fort", "Dominate (Su): DC 14 Will, as dominate person", "Blood Drain (Ex): Pin + 1d4 CON drain", "Fast Healing 2", "Gaseous Form (Su)", "Spider Climb (Ex)", "DR 5/silver", "Resist cold 10, electricity 10", "+2 turn resistance", "Darkvision 60 ft.", "Undead traits" },
-            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadTactical,
             SpriteColor = new Color(0.35f, 0.25f, 0.3f, 1f),
             PanelColor = new Color(0.15f, 0.08f, 0.12f, 0.85f),
             NameColor = new Color(0.7f, 0.4f, 0.5f),
             Description = "Vampire Spawn (CR 4). Lesser vampire with energy drain and domination. MM 3.5e p.253."
+        });
+    }
+
+    /// <summary>
+    /// Vampire (CR 7) — Medium undead (augmented humanoid).
+    /// MM 3.5e p.250. Template applied to a 5th-level human fighter base.
+    /// Energy drain, dominate person, blood drain, gaseous form escape,
+    /// DR 10/silver+magic, resist cold/electricity 10, fast healing 5.
+    /// Spellcasting: Wizard-like spell list (defensive/utility).
+    /// </summary>
+    private static void RegisterVampire()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "vampire",
+            Name = "Vampire",
+            ChallengeRating = "7",
+            Level = 7,
+            CharacterClass = "Fighter",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.ChaoticEvil,
+            HitDice = 7,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 22, DEX = 18, CON = 0, WIS = 16, INT = 17, CHA = 20,
+            NaturalArmorBonus = 6,
+            DamageReductionAmount = 10,
+            DamageReductionBypass = DamageBypassTag.Silver,
+            DamageResistances = new List<DamageResistanceEntry>
+            {
+                new DamageResistanceEntry { Type = DamageType.Cold, Amount = 10 },
+                new DamageResistanceEntry { Type = DamageType.Electricity, Amount = 10 }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 45,
+            BAB = 5,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Slam",
+            BloodDrain = new BloodDrainDefinition
+            {
+                AbilityDrainAmount = 1,
+                AbilityType = AbilityType.CON,
+                DamagePerRound = 0,
+                AbilityDrainDice = 4
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, EnergyDrainOnHit = 2, EnergyDrainRemovalDC = 18 }
+            },
+            Immunities = new CreatureImmunities { ImmuneToCriticalHits = true, ImmuneToMindAffecting = true, ImmuneToPoison = true },
+            KnownSpellIds = new List<string>
+            {
+                SpellNames.CHARM_PERSON,
+                SpellNames.SHIELD,
+                SpellNames.MAGE_ARMOR,
+                SpellNames.CAUSE_FEAR,
+                SpellNames.MIRROR_IMAGE,
+                SpellNames.INVISIBILITY,
+                SpellNames.HOLD_PERSON,
+                SpellNames.DOMINATE_PERSON,
+                SpellNames.DISPEL_MAGIC,
+                SpellNames.HASTE,
+                SpellNames.DISPLACEMENT,
+                SpellNames.GREATER_INVISIBILITY,
+                SpellNames.CHARM_MONSTER
+            },
+            PreparedSpellSlotIds = new List<string>
+            {
+                SpellNames.SHIELD,
+                SpellNames.CHARM_PERSON,
+                SpellNames.CAUSE_FEAR,
+                SpellNames.MIRROR_IMAGE,
+                SpellNames.INVISIBILITY,
+                SpellNames.HOLD_PERSON,
+                SpellNames.DOMINATE_PERSON,
+                SpellNames.DISPLACEMENT,
+                SpellNames.GREATER_INVISIBILITY,
+                SpellNames.CHARM_MONSTER
+            },
+            CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Alertness", "Combat Reflexes", "Dodge", "Improved Initiative", "Lightning Reflexes", "Toughness" },
+            SpecialAbilities = new List<string> { "Energy Drain (Su): slam bestows 2 negative levels, DC 18 Fort to remove", "Dominate (Su): DC 18 Will, as dominate person (CL 12)", "Blood Drain (Ex): grapple + pin, 1d4 CON drain/round", "Improved Grab (slam)", "Children of the Night (Su): 1d6+1 rat swarms or 1d4+1 bat swarms or 3d6 wolves", "Fast Healing 5", "Gaseous Form (Su): at will, as per spell", "Spider Climb (Ex): constant", "Alternate Form (Su): bat or dire bat", "DR 10/silver and magic", "Resist cold 10, electricity 10", "+4 turn resistance", "Darkvision 60 ft.", "Undead traits" },
+            AIProfileArchetype = NPCAIProfileArchetype.Vampire,
+            SpriteColor = new Color(0.3f, 0.15f, 0.2f, 1f),
+            PanelColor = new Color(0.12f, 0.04f, 0.08f, 0.9f),
+            NameColor = new Color(0.85f, 0.25f, 0.35f),
+            Description = "Vampire (CR 7). Cunning undead predator with energy drain, domination, blood drain, and spellcasting. MM 3.5e p.250."
         });
     }
 

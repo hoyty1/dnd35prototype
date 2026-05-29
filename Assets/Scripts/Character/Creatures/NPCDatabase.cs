@@ -138,7 +138,16 @@ public static partial class NPCDatabase
             new EncounterPreset("tier3_incorporeal_gauntlet", "💀 Tier 3: Incorporeal Gauntlet", "Wraith (CON drain + energy drain) and allip (WIS drain + babble). All incorporeal (EL 6).", new List<string> { "wraith", "allip" }),
             new EncounterPreset("tier3_hell_hound_pack", "🔥 Tier 3: Hell Hound Pack", "3 hell hounds with breath weapons and fiery bite. Tests breath weapon system (EL 7).", new List<string> { "hell_hound", "hell_hound", "hell_hound" }),
             new EncounterPreset("tier3_cloaker_ambush", "🦇 Tier 3: Cloaker Ambush", "Cloaker with engulf, moan aura, and shadow shift. Boss-style encounter (EL 5).", new List<string> { "cloaker" }),
-            new EncounterPreset("tier1_3_showcase", "🏟️ Tiers 1-3 Monster Showcase", "One of each new creature type for testing all mechanics. WARNING: High difficulty!", new List<string> { "giant_rat", "stirge", "gnoll", "troglodyte", "cockatrice", "shadow", "troll", "wraith" })
+            new EncounterPreset("tier1_3_showcase", "🏟️ Tiers 1-3 Monster Showcase", "One of each new creature type for testing all mechanics. WARNING: High difficulty!", new List<string> { "giant_rat", "stirge", "gnoll", "troglodyte", "cockatrice", "shadow", "troll", "wraith" }),
+            new EncounterPreset("tier2_ghoul_pack", "🧟 Tier 2: Ghoul Pack", "3 ghouls with paralysing claws and ghoul fever. Tests tactical undead AI (EL 4).", new List<string> { "ghoul", "ghoul", "ghoul" }),
+            new EncounterPreset("tier3_ghast_ambush", "💀 Tier 3: Ghast Ambush", "Ghast with stench aura + 2 ghouls. Paralysis combo with area denial (EL 5).", new List<string> { "ghast", "ghoul", "ghoul" }),
+            new EncounterPreset("tier3_mummy_tomb", "🏛️ Tier 3: Mummy's Tomb", "Mummy with despair aura and mummy rot. Brute undead AI test (EL 5).", new List<string> { "mummy" }),
+            new EncounterPreset("tier4_bodak_encounter", "💀 Tier 4: Bodak Encounter", "Bodak with death gaze. Save-or-die undead (EL 8).", new List<string> { "bodak" }),
+            new EncounterPreset("tier4_vampire_hunt", "🧛 Tier 4: Vampire Hunt", "Full vampire with spellcasting, energy drain, domination, and blood drain (EL 7).", new List<string> { "vampire" }),
+            new EncounterPreset("tier4_vampire_coven", "🧛 Tier 4: Vampire Coven", "Vampire lord with 2 vampire spawn. Tests Vampire AI + tactical undead coordination (EL 9).", new List<string> { "vampire", "vampire_spawn", "vampire_spawn" }),
+            new EncounterPreset("tier5_lich_sanctum", "💀 Tier 5: Lich's Sanctum", "Lich with full wizard spell arsenal, fear aura, and paralyzing touch. Boss encounter (EL 11).", new List<string> { "lich" }),
+            new EncounterPreset("tier5_lich_with_minions", "💀 Tier 5: Lich & Undead Army", "Lich supported by bodak and 2 wights. Ultimate undead encounter (EL 13).", new List<string> { "lich", "bodak", "wight", "wight" }),
+            new EncounterPreset("undead_showcase", "🏟️ Intelligent Undead Showcase", "One of each intelligent undead type. All new AI profiles in action!", new List<string> { "ghoul", "ghast", "mummy", "shadow", "wraith", "allip", "wight", "vampire_spawn" })
         };
 
         // Add dragon encounter presets
@@ -784,7 +793,12 @@ public enum NPCAIProfileArchetype
     Dragon,
     Brute,
     Caster,
-    Undead
+    Undead,
+    UndeadTactical,
+    UndeadBrute,
+    UndeadIncorporeal,
+    Vampire,
+    Lich
 }
 
 /// <summary>

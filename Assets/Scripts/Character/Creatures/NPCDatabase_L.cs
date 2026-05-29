@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Monster Manual creatures: L
@@ -10,6 +11,7 @@ public static partial class NPCDatabase
     {
         RegisterLanternArchon();
         RegisterLemure();
+        RegisterLich();
         RegisterLion();
         RegisterDireLion();
     
@@ -137,6 +139,152 @@ public static partial class NPCDatabase
         });
     }
 
+    /// <summary>
+    /// Lich (CR 11+) — Medium undead.
+    /// MM 3.5e p.166. Template applied to an 11th-level human wizard.
+    /// Paralyzing touch, fear aura 60 ft., full wizard spell repertoire,
+    /// DR 15/bludgeoning+magic, immune to cold/electricity/polymorph/mind-affecting.
+    /// </summary>
+    private static void RegisterLich()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "lich",
+            Name = "Lich",
+            ChallengeRating = "11",
+            Level = 11,
+            CharacterClass = "Wizard",
+            CreatureType = "Undead",
+            CharacterAlignment = Alignment.NeutralEvil,
+            HitDice = 11,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = true,
+            STR = 10, DEX = 14, CON = 0, WIS = 18, INT = 22, CHA = 18,
+            NaturalArmorBonus = 5,
+            DamageReductionAmount = 15,
+            DamageReductionBypass = DamageBypassTag.Bludgeoning | DamageBypassTag.Magic,
+            DamageImmunities = new List<DamageType> { DamageType.Cold, DamageType.Electricity },
+            Immunities = new CreatureImmunities
+            {
+                ImmuneToCriticalHits = true,
+                ImmuneToMindAffecting = true,
+                ImmuneToPoison = true,
+                immuneToElectricity = true,
+                immuneToCold = true
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 66,
+            BAB = 5,
+            FrightfulPresence = new FrightfulPresenceDefinition
+            {
+                SaveDC = 19,
+                RangeFeet = 60,
+                HDThresholdForPanic = 5,
+                DurationDice = 2,
+                DurationSides = 6
+            },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition
+                {
+                    Name = "Paralyzing Touch", DamageDice = 8, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true,
+                    ParalysisOnHitDC = 19, ParalysisOnHitDurationRounds = 10
+                }
+            },
+            KnownSpellIds = new List<string>
+            {
+                // Cantrips / Level 0 (not typically tracked but included for completeness)
+                SpellNames.RAY_OF_FROST,
+                SpellNames.DETECT_MAGIC,
+                // Level 1
+                SpellNames.MAGIC_MISSILE,
+                SpellNames.SHIELD,
+                SpellNames.MAGE_ARMOR,
+                SpellNames.CAUSE_FEAR,
+                SpellNames.RAY_OF_ENFEEBLEMENT,
+                SpellNames.CHILL_TOUCH,
+                // Level 2
+                SpellNames.MIRROR_IMAGE,
+                SpellNames.INVISIBILITY,
+                SpellNames.WEB,
+                SpellNames.GHOUL_TOUCH,
+                SpellNames.SPECTRAL_HAND,
+                SpellNames.FALSE_LIFE,
+                SpellNames.SCORCHING_RAY,
+                // Level 3
+                SpellNames.FIREBALL,
+                SpellNames.LIGHTNING_BOLT,
+                SpellNames.DISPEL_MAGIC,
+                SpellNames.HASTE,
+                SpellNames.SLOW,
+                SpellNames.VAMPIRIC_TOUCH,
+                SpellNames.DISPLACEMENT,
+                SpellNames.FEAR,
+                // Level 4
+                SpellNames.GREATER_INVISIBILITY,
+                SpellNames.STONESKIN,
+                SpellNames.WALL_OF_FIRE,
+                SpellNames.PHANTASMAL_KILLER,
+                SpellNames.BESTOW_CURSE,
+                SpellNames.ENERVATION,
+                SpellNames.DIMENSION_DOOR,
+                // Level 5
+                SpellNames.CONE_OF_COLD,
+                SpellNames.WALL_OF_FORCE,
+                SpellNames.HOLD_MONSTER,
+                SpellNames.DOMINATE_PERSON,
+                // Level 6
+                SpellNames.CHAIN_LIGHTNING,
+                SpellNames.CIRCLE_OF_DEATH,
+                SpellNames.DISINTEGRATE,
+                SpellNames.GLOBE_OF_INVULNERABILITY,
+                SpellNames.FLESH_TO_STONE
+            },
+            PreparedSpellSlotIds = new List<string>
+            {
+                // Level 1 (4 slots)
+                SpellNames.MAGIC_MISSILE,
+                SpellNames.SHIELD,
+                SpellNames.RAY_OF_ENFEEBLEMENT,
+                SpellNames.CAUSE_FEAR,
+                // Level 2 (3 slots)
+                SpellNames.MIRROR_IMAGE,
+                SpellNames.FALSE_LIFE,
+                SpellNames.SCORCHING_RAY,
+                // Level 3 (3 slots)
+                SpellNames.FIREBALL,
+                SpellNames.DISPEL_MAGIC,
+                SpellNames.HASTE,
+                // Level 4 (3 slots)
+                SpellNames.GREATER_INVISIBILITY,
+                SpellNames.STONESKIN,
+                SpellNames.ENERVATION,
+                // Level 5 (2 slots)
+                SpellNames.CONE_OF_COLD,
+                SpellNames.HOLD_MONSTER,
+                // Level 6 (1 slot)
+                SpellNames.CHAIN_LIGHTNING
+            },
+            CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
+            Feats = new List<string> { "Combat Casting", "Craft Wondrous Item", "Improved Initiative", "Scribe Scroll", "Spell Focus", "Greater Spell Focus", "Toughness" },
+            SpecialAbilities = new List<string>
+            {
+                "Fear Aura (Su): 60 ft., Will DC 19 or flee for 2d6 rounds (< 5 HD panic, others shaken)",
+                "Paralyzing Touch (Su): DC 19 Fort or paralyzed permanently (remove paralysis/break enchantment)",
+                "DR 15/bludgeoning and magic",
+                "Immune to cold, electricity, polymorph, mind-affecting",
+                "Turn Resistance +4",
+                "Darkvision 60 ft.",
+                "Undead traits"
+            },
+            AIProfileArchetype = NPCAIProfileArchetype.Lich,
+            SpriteColor = new Color(0.2f, 0.35f, 0.2f, 1f),
+            PanelColor = new Color(0.06f, 0.14f, 0.06f, 0.9f),
+            NameColor = new Color(0.4f, 0.9f, 0.4f),
+            Description = "Lich (CR 11). Undead archmage with fear aura, paralyzing touch, and devastating wizard spells. MM 3.5e p.166."
+        });
+    }
 
     /// <summary>
     /// Lion (CR 3) — Large animal with pounce and rake.

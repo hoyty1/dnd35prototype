@@ -799,6 +799,17 @@ public partial class GameManager
                 return ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
             case NPCAIProfileArchetype.Dragon:
                 return ScriptableObject.CreateInstance<DragonAIProfile>();
+            case NPCAIProfileArchetype.Undead:
+            case NPCAIProfileArchetype.UndeadTactical:
+                return ScriptableObject.CreateInstance<UndeadTacticalAIProfile>();
+            case NPCAIProfileArchetype.UndeadBrute:
+                return ScriptableObject.CreateInstance<UndeadBruteAIProfile>();
+            case NPCAIProfileArchetype.UndeadIncorporeal:
+                return ScriptableObject.CreateInstance<UndeadIncorporealAIProfile>();
+            case NPCAIProfileArchetype.Vampire:
+                return ScriptableObject.CreateInstance<VampireAIProfile>();
+            case NPCAIProfileArchetype.Lich:
+                return ScriptableObject.CreateInstance<LichAIProfile>();
             default:
                 return null;
         }
