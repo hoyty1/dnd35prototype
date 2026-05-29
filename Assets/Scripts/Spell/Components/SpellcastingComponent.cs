@@ -2912,11 +2912,40 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>Get a summary string of remaining spell slots.</summary>
     public string GetSlotSummary()
     {
-        List<string> classNames = GetPreparedCasterClassNames();
-        if (classNames.Count == 0)
-            return "None";
-
         var classParts = new List<string>();
+
+        // ── Spontaneous caster (Sorcerer/Bard) ──
+        if (IsSpontaneousCaster && SpontaneousData != null)
+        {
+            var parts = new List<string>();
+            int highest = SpontaneousData.GetHighestKnownSpellLevel();
+            for (int i = 0; i <= Mathf.Max(0, highest); i++)
+            {
+                string label = $"L{i}";
+                if (i == 0)
+                    parts.Add($"{label}:∞");
+                else
+                    parts.Add($"{label}:{SpontaneousData.SlotsRemaining[i]}/{SpontaneousData.SlotsMax[i]}");
+            }
+            classParts.Add($"{SpontaneousData.CasterClassName}[{string.Join(", ", parts)}]");
+        }
+
+        // ── Partial caster (Ranger/Paladin) ──
+        if (IsPartialCaster && PartialData != null)
+        {
+            var parts = new List<string>();
+            for (int i = 1; i <= 4; i++)
+            {
+                int max = PartialData.SlotsMax[i];
+                if (max <= 0) continue;
+                parts.Add($"L{i}:{PartialData.SlotsRemaining[i]}/{max}");
+            }
+            if (parts.Count > 0)
+                classParts.Add($"{PartialData.ClassName}[{string.Join(", ", parts)}]");
+        }
+
+        // ── Prepared casters (Wizard/Cleric/Druid) ──
+        List<string> classNames = GetPreparedCasterClassNames();
         for (int c = 0; c < classNames.Count; c++)
         {
             string className = classNames[c];
@@ -2928,7 +2957,7 @@ public class SpellcastingComponent : MonoBehaviour
             var parts = new List<string>();
             for (int i = 0; i < classMax.Length; i++)
             {
-                string label = i == 0 ? "L0" : $"L{i}";
+                string label = $"L{i}";
                 if (i == 0)
                     parts.Add($"{label}:∞");
                 else
@@ -3029,6 +3058,28 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public void RestoreAllSlots()
     {
+        // ── Spontaneous caster: restore SpontaneousData slots ──
+        if (IsSpontaneousCaster && SpontaneousData != null)
+        {
+            for (int i = 0; i < 10; i++)
+                SpontaneousData.SlotsRemaining[i] = SpontaneousData.SlotsMax[i];
+            // Sync legacy arrays
+            SlotsMax = SpontaneousData.GetSlotsMaxArray();
+            SlotsRemaining = SpontaneousData.GetSlotsRemainingArray();
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Spontaneous spell slots restored - {GetSlotSummary()}");
+            return;
+        }
+
+        // ── Partial caster: restore PartialData slots ──
+        if (IsPartialCaster && PartialData != null)
+        {
+            for (int i = 0; i < PartialData.SlotsRemaining.Length; i++)
+                PartialData.SlotsRemaining[i] = PartialData.SlotsMax[i];
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Partial caster spell slots restored - {GetSlotSummary()}");
+            return;
+        }
+
+        // ── Prepared caster: restore via slot system ──
         if (SpellSlots.Count > 0)
         {
             foreach (var slot in SpellSlots)

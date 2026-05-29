@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using Random = UnityEngine.Random;
@@ -667,8 +668,14 @@ public class CharacterCreationUI : MonoBehaviour
             13, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleCenter);
 
         // --- Dynamically generate class panels from ClassRegistry ---
+        // Filter out NPC classes (DMG p.107-110) for initial character creation.
+        // NPC classes are only available during level-up multiclassing.
         ClassRegistry.Init();
-        var allClasses = ClassRegistry.GetAllClasses();
+        var npcClassNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+            { "Warrior", "Adept", "Commoner", "Expert", "Aristocrat" };
+        var allClasses = ClassRegistry.GetAllClasses()
+            .Where(c => c != null && !npcClassNames.Contains(c.ClassName))
+            .ToList();
         int classCount = allClasses.Count;
 
         float panelW = 360f;

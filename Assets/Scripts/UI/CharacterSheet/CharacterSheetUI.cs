@@ -1420,30 +1420,82 @@ public class CharacterSheetUI : MonoBehaviour
     /// </summary>
     private void RefreshStandardSpellsTab(Transform content, SpellcastingComponent spellComp)
     {
-        var allSpells = spellComp.KnownSpells;
+        bool isSpontaneous = spellComp.IsSpontaneousCaster && spellComp.SpontaneousData != null;
+
+        // For spontaneous casters, show known spells from SpontaneousData
+        // For others, fall back to KnownSpells list
+        List<SpellData> allSpells;
+        if (isSpontaneous)
+        {
+            allSpells = new List<SpellData>();
+            var knownIds = spellComp.SpontaneousData.GetAllKnownSpellIds();
+            SpellDatabase.Init();
+            foreach (string id in knownIds)
+            {
+                SpellData spell = SpellDatabase.GetSpell(id);
+                if (spell != null && !allSpells.Any(s => s.SpellId == id))
+                    allSpells.Add(spell);
+            }
+        }
+        else
+        {
+            allSpells = spellComp.KnownSpells;
+        }
+
         if (allSpells == null || allSpells.Count == 0)
         {
             AddLine(content, "No spells known.", 12, DimText);
             return;
         }
 
-        int maxLevel = allSpells.Max(s => s.SpellLevel);
-        for (int lvl = 0; lvl <= maxLevel; lvl++)
+        int highestLevel = isSpontaneous
+            ? spellComp.SpontaneousData.GetHighestKnownSpellLevel()
+            : allSpells.Max(s => s.SpellLevel);
+
+        for (int lvl = 0; lvl <= highestLevel; lvl++)
         {
             var spellsAtLevel = allSpells.Where(s => s.SpellLevel == lvl).OrderBy(s => s.Name).ToList();
-            if (spellsAtLevel.Count == 0) continue;
 
-            string levelLabel = lvl == 0 ? "Cantrips (Level 0)" : $"Level {lvl} Spells";
+            // Build level header with slot info for spontaneous casters
+            string levelLabel;
+            if (lvl == 0)
+            {
+                levelLabel = "Cantrips (Level 0)";
+                if (isSpontaneous)
+                    levelLabel += $"  — {spellsAtLevel.Count} known, ∞/day";
+            }
+            else
+            {
+                levelLabel = $"Level {lvl} Spells";
+                if (isSpontaneous)
+                {
+                    int remaining = spellComp.SpontaneousData.SlotsRemaining[lvl];
+                    int max = spellComp.SpontaneousData.SlotsMax[lvl];
+                    levelLabel += $"  — {spellsAtLevel.Count} known, {remaining}/{max} slots/day";
+                }
+            }
+
+            if (spellsAtLevel.Count == 0 && !(isSpontaneous && spellComp.SpontaneousData.SlotsMax[lvl] > 0))
+                continue;
+
             AddLine(content, levelLabel, 11, GoldText, FontStyle.Bold, 16);
+
+            if (spellsAtLevel.Count == 0)
+            {
+                AddLine(content, "  (No spells known at this level yet)", 11, DimText);
+                continue;
+            }
 
             foreach (var spell in spellsAtLevel)
             {
-                bool isPrepared = spellComp.PreparedSpells != null && spellComp.PreparedSpells.Contains(spell);
+                bool isKnown = isSpontaneous
+                    ? spellComp.SpontaneousData.IsSpellKnown(spell.SpellId, spell.SpellLevel)
+                    : (spellComp.PreparedSpells != null && spellComp.PreparedSpells.Contains(spell));
                 bool canCast = spellComp.CanCastSpell(spell);
 
-                string prepMark = isPrepared ? "\u2713 " : "\u25cb ";
+                string mark = isKnown ? "\u2713 " : "\u25cb ";
                 Color spellColor = canCast ? new Color(0.5f, 0.9f, 0.5f) :
-                                   isPrepared ? LightText : DimText;
+                                   isKnown ? LightText : DimText;
 
                 var spellGO = new GameObject($"Spell_{spell.SpellId}");
                 spellGO.transform.SetParent(content, false);
@@ -1453,7 +1505,7 @@ public class CharacterSheetUI : MonoBehaviour
                 spellGO.AddComponent<RectTransform>();
 
                 MakeText(spellGO.transform, "Name", V2(0, 0), V2(0, 1), V2(0, 0.5f),
-                    V2(10, 0), V2(200, 0), $"{prepMark}{spell.Name}", 11, spellColor, TextAnchor.MiddleLeft);
+                    V2(10, 0), V2(200, 0), $"{mark}{spell.Name}", 11, spellColor, TextAnchor.MiddleLeft);
 
                 MakeText(spellGO.transform, "School", V2(0, 0), V2(0, 1), V2(0, 0.5f),
                     V2(215, 0), V2(100, 0), spell.School ?? "", 10, DimText, TextAnchor.MiddleLeft);
