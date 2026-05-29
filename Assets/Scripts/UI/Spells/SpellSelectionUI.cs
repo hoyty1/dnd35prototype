@@ -790,12 +790,13 @@ public class SpellSelectionUI : MonoBehaviour
         }
 
         // Select button — shown for level-up and existing creation modes.
+        // Must cover all class/level combinations where spells need to be selected.
         bool showSelect = false;
         if (_isLevelUpMode)
             showSelect = true;
         else if (spell.SpellLevel == 0 && _cantripSelectionRequired)
             showSelect = true;
-        else if (_className == "Wizard" && spell.SpellLevel > 0)
+        else if (spell.SpellLevel > 0 && (_maxSpells1st > 0 || _maxSpells2nd > 0))
             showSelect = true;
 
         // Layout: [SelectBtn 48px] [8px gap] [Name/Info text fills remaining width]
