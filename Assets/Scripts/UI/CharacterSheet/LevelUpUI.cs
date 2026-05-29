@@ -221,7 +221,7 @@ public class LevelUpUI : MonoBehaviour
 
         CreateSeparator();
         CreateInfoText("Choose class to advance:", true, Color.cyan);
-        CreateClassSelectionList(_currentLevelUp.AvailableClasses, _selectedClassForLevelUp);
+        CreateClassSelectionDropdown(_currentLevelUp.AvailableClasses, _selectedClassForLevelUp);
         CreateSeparator();
 
         CreateInfoText("GAINS:", true);
@@ -293,95 +293,204 @@ public class LevelUpUI : MonoBehaviour
         }
     }
 
-    private void CreateClassSelectionList(List<string> availableClasses, string selectedClassName)
+    private void CreateClassSelectionDropdown(List<string> availableClasses, string selectedClassName)
     {
-        if (_contentContainer == null)
+        if (_contentContainer == null || availableClasses == null || availableClasses.Count == 0)
             return;
 
-        GameObject listRoot = new GameObject("ClassSelectionList", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
-        listRoot.transform.SetParent(_contentContainer, false);
+        // Root container for the dropdown row
+        GameObject dropdownRoot = new GameObject("ClassDropdownRow", typeof(RectTransform), typeof(LayoutElement));
+        dropdownRoot.transform.SetParent(_contentContainer, false);
 
-        RectTransform listRootRect = listRoot.GetComponent<RectTransform>();
-        listRootRect.anchorMin = new Vector2(0f, 0.5f);
-        listRootRect.anchorMax = new Vector2(1f, 0.5f);
-        listRootRect.pivot = new Vector2(0.5f, 0.5f);
+        LayoutElement rootLayout = dropdownRoot.GetComponent<LayoutElement>();
+        rootLayout.preferredHeight = 44f;
+        rootLayout.minHeight = 44f;
+        rootLayout.flexibleWidth = 1f;
 
-        LayoutElement listLayout = listRoot.GetComponent<LayoutElement>();
-        listLayout.preferredHeight = 300f;
-        listLayout.minHeight = 300f;
-        listLayout.flexibleWidth = 1f;
+        // Dropdown GameObject
+        GameObject dropdownObj = new GameObject("ClassDropdown", typeof(RectTransform), typeof(Image), typeof(TMP_Dropdown), typeof(LayoutElement));
+        dropdownObj.transform.SetParent(dropdownRoot.transform, false);
 
-        Image listBg = listRoot.GetComponent<Image>();
-        listBg.color = new Color(0.05f, 0.08f, 0.14f, 0.92f);
+        RectTransform dropdownRect = dropdownObj.GetComponent<RectTransform>();
+        dropdownRect.anchorMin = new Vector2(0.15f, 0f);
+        dropdownRect.anchorMax = new Vector2(0.85f, 1f);
+        dropdownRect.offsetMin = Vector2.zero;
+        dropdownRect.offsetMax = Vector2.zero;
 
-        GameObject viewportObj = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
-        viewportObj.transform.SetParent(listRoot.transform, false);
+        Image dropdownBg = dropdownObj.GetComponent<Image>();
+        dropdownBg.color = new Color(0.12f, 0.16f, 0.24f, 1f);
 
-        RectTransform viewportRect = viewportObj.GetComponent<RectTransform>();
-        viewportRect.anchorMin = new Vector2(0f, 0f);
-        viewportRect.anchorMax = new Vector2(1f, 1f);
-        viewportRect.offsetMin = new Vector2(12f, 10f);
-        viewportRect.offsetMax = new Vector2(-34f, -10f);
+        // Caption text (shows selected value)
+        GameObject captionObj = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+        captionObj.transform.SetParent(dropdownObj.transform, false);
 
-        Image viewportImage = viewportObj.GetComponent<Image>();
-        viewportImage.color = new Color(0f, 0f, 0f, 0.16f);
+        RectTransform captionRect = captionObj.GetComponent<RectTransform>();
+        captionRect.anchorMin = new Vector2(0f, 0f);
+        captionRect.anchorMax = new Vector2(1f, 1f);
+        captionRect.offsetMin = new Vector2(10f, 2f);
+        captionRect.offsetMax = new Vector2(-30f, -2f);
 
-        Mask viewportMask = viewportObj.GetComponent<Mask>();
-        viewportMask.showMaskGraphic = false;
+        TextMeshProUGUI captionText = captionObj.GetComponent<TextMeshProUGUI>();
+        EnsureTMPFontAsset(captionText);
+        captionText.fontSize = 18;
+        captionText.color = new Color(0.9f, 0.85f, 0.6f);
+        captionText.alignment = TextAlignmentOptions.MidlineLeft;
+        captionText.enableWordWrapping = false;
+        captionText.overflowMode = TextOverflowModes.Ellipsis;
 
-        GameObject scrollbarObj = CreateScrollbar(listRoot.transform);
-        Scrollbar scrollbar = scrollbarObj.GetComponent<Scrollbar>();
+        // Arrow indicator
+        GameObject arrowObj = new GameObject("Arrow", typeof(RectTransform), typeof(TextMeshProUGUI));
+        arrowObj.transform.SetParent(dropdownObj.transform, false);
 
-        ScrollRect scrollRect = listRoot.AddComponent<ScrollRect>();
-        scrollRect.horizontal = false;
-        scrollRect.vertical = true;
-        scrollRect.viewport = viewportRect;
-        scrollRect.scrollSensitivity = 40f;
-        scrollRect.movementType = ScrollRect.MovementType.Clamped;
-        scrollRect.verticalScrollbar = scrollbar;
-        scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+        RectTransform arrowRect = arrowObj.GetComponent<RectTransform>();
+        arrowRect.anchorMin = new Vector2(1f, 0f);
+        arrowRect.anchorMax = new Vector2(1f, 1f);
+        arrowRect.pivot = new Vector2(1f, 0.5f);
+        arrowRect.sizeDelta = new Vector2(30f, 0f);
+        arrowRect.anchoredPosition = new Vector2(-4f, 0f);
 
-        GameObject contentObj = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-        contentObj.transform.SetParent(viewportObj.transform, false);
+        TextMeshProUGUI arrowText = arrowObj.GetComponent<TextMeshProUGUI>();
+        EnsureTMPFontAsset(arrowText);
+        arrowText.text = "▼";
+        arrowText.fontSize = 14;
+        arrowText.color = Color.white;
+        arrowText.alignment = TextAlignmentOptions.Center;
 
-        RectTransform contentRect = contentObj.GetComponent<RectTransform>();
-        contentRect.anchorMin = new Vector2(0f, 1f);
-        contentRect.anchorMax = new Vector2(1f, 1f);
-        contentRect.pivot = new Vector2(0.5f, 1f);
-        contentRect.anchoredPosition = Vector2.zero;
-        contentRect.sizeDelta = Vector2.zero;
+        // Template (dropdown list that appears on click)
+        GameObject templateObj = new GameObject("Template", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+        templateObj.transform.SetParent(dropdownObj.transform, false);
 
-        VerticalLayoutGroup contentLayout = contentObj.GetComponent<VerticalLayoutGroup>();
-        contentLayout.padding = new RectOffset(6, 6, 6, 6);
-        contentLayout.spacing = 8f;
-        contentLayout.childAlignment = TextAnchor.UpperCenter;
-        contentLayout.childControlWidth = true;
-        contentLayout.childControlHeight = false;
-        contentLayout.childForceExpandWidth = true;
-        contentLayout.childForceExpandHeight = false;
+        RectTransform templateRect = templateObj.GetComponent<RectTransform>();
+        templateRect.anchorMin = new Vector2(0f, 0f);
+        templateRect.anchorMax = new Vector2(1f, 0f);
+        templateRect.pivot = new Vector2(0.5f, 1f);
+        templateRect.sizeDelta = new Vector2(0f, 200f);
 
-        ContentSizeFitter fitter = contentObj.GetComponent<ContentSizeFitter>();
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        Image templateBg = templateObj.GetComponent<Image>();
+        templateBg.color = new Color(0.08f, 0.1f, 0.18f, 0.98f);
 
-        scrollRect.content = contentRect;
+        // Viewport inside template
+        GameObject tViewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+        tViewport.transform.SetParent(templateObj.transform, false);
 
-        if (availableClasses == null)
-            return;
+        RectTransform tViewportRect = tViewport.GetComponent<RectTransform>();
+        tViewportRect.anchorMin = Vector2.zero;
+        tViewportRect.anchorMax = Vector2.one;
+        tViewportRect.offsetMin = Vector2.zero;
+        tViewportRect.offsetMax = Vector2.zero;
 
+        Image tViewportImg = tViewport.GetComponent<Image>();
+        tViewportImg.color = Color.white;
+        tViewport.GetComponent<Mask>().showMaskGraphic = false;
+
+        // Content inside viewport
+        GameObject tContent = new GameObject("Content", typeof(RectTransform));
+        tContent.transform.SetParent(tViewport.transform, false);
+
+        RectTransform tContentRect = tContent.GetComponent<RectTransform>();
+        tContentRect.anchorMin = new Vector2(0f, 1f);
+        tContentRect.anchorMax = new Vector2(1f, 1f);
+        tContentRect.pivot = new Vector2(0.5f, 1f);
+        tContentRect.sizeDelta = new Vector2(0f, 28f);
+
+        ScrollRect tScroll = templateObj.GetComponent<ScrollRect>();
+        tScroll.content = tContentRect;
+        tScroll.viewport = tViewportRect;
+        tScroll.horizontal = false;
+        tScroll.vertical = true;
+        tScroll.movementType = ScrollRect.MovementType.Clamped;
+
+        // Item template (single option row)
+        GameObject itemObj = new GameObject("Item", typeof(RectTransform), typeof(Toggle));
+        itemObj.transform.SetParent(tContent.transform, false);
+
+        RectTransform itemRect = itemObj.GetComponent<RectTransform>();
+        itemRect.anchorMin = new Vector2(0f, 0.5f);
+        itemRect.anchorMax = new Vector2(1f, 0.5f);
+        itemRect.sizeDelta = new Vector2(0f, 32f);
+
+        // Item background
+        GameObject itemBgObj = new GameObject("Item Background", typeof(RectTransform), typeof(Image));
+        itemBgObj.transform.SetParent(itemObj.transform, false);
+
+        RectTransform itemBgRect = itemBgObj.GetComponent<RectTransform>();
+        itemBgRect.anchorMin = Vector2.zero;
+        itemBgRect.anchorMax = Vector2.one;
+        itemBgRect.offsetMin = Vector2.zero;
+        itemBgRect.offsetMax = Vector2.zero;
+
+        Image itemBgImage = itemBgObj.GetComponent<Image>();
+        itemBgImage.color = new Color(0.15f, 0.2f, 0.3f, 0.6f);
+
+        // Item checkmark (highlight indicator)
+        GameObject checkObj = new GameObject("Item Checkmark", typeof(RectTransform), typeof(Image));
+        checkObj.transform.SetParent(itemObj.transform, false);
+
+        RectTransform checkRect = checkObj.GetComponent<RectTransform>();
+        checkRect.anchorMin = new Vector2(0f, 0.5f);
+        checkRect.anchorMax = new Vector2(0f, 0.5f);
+        checkRect.pivot = new Vector2(0f, 0.5f);
+        checkRect.sizeDelta = new Vector2(20f, 20f);
+        checkRect.anchoredPosition = new Vector2(4f, 0f);
+
+        Image checkImg = checkObj.GetComponent<Image>();
+        checkImg.color = new Color(0.9f, 0.8f, 0.5f);
+
+        // Item label
+        GameObject itemLabelObj = new GameObject("Item Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+        itemLabelObj.transform.SetParent(itemObj.transform, false);
+
+        RectTransform itemLabelRect = itemLabelObj.GetComponent<RectTransform>();
+        itemLabelRect.anchorMin = Vector2.zero;
+        itemLabelRect.anchorMax = Vector2.one;
+        itemLabelRect.offsetMin = new Vector2(28f, 0f);
+        itemLabelRect.offsetMax = new Vector2(-8f, 0f);
+
+        TextMeshProUGUI itemLabelTMP = itemLabelObj.GetComponent<TextMeshProUGUI>();
+        EnsureTMPFontAsset(itemLabelTMP);
+        itemLabelTMP.fontSize = 16;
+        itemLabelTMP.color = Color.white;
+        itemLabelTMP.alignment = TextAlignmentOptions.MidlineLeft;
+
+        // Configure toggle
+        Toggle toggle = itemObj.GetComponent<Toggle>();
+        toggle.targetGraphic = itemBgImage;
+        toggle.graphic = checkImg;
+        toggle.isOn = true;
+
+        templateObj.SetActive(false);
+
+        // Configure TMP_Dropdown
+        TMP_Dropdown dropdown = dropdownObj.GetComponent<TMP_Dropdown>();
+        dropdown.captionText = captionText;
+        dropdown.itemText = itemLabelTMP;
+        dropdown.template = templateRect;
+
+        // Populate options
+        dropdown.ClearOptions();
+        List<string> options = new List<string>();
+        int selectedIndex = 0;
         for (int i = 0; i < availableClasses.Count; i++)
         {
-            string className = availableClasses[i];
-            string capturedClass = className;
-            string label = capturedClass == selectedClassName ? $"★ {capturedClass}" : capturedClass;
-            CreateButton(label, () =>
-            {
-                _selectedClassForLevelUp = capturedClass;
-                ShowSummary();
-            }, 92f, contentObj.transform);
+            options.Add(availableClasses[i]);
+            if (string.Equals(availableClasses[i], selectedClassName, StringComparison.OrdinalIgnoreCase))
+                selectedIndex = i;
         }
+        dropdown.AddOptions(options);
+        dropdown.value = selectedIndex;
+        dropdown.RefreshShownValue();
 
-        Canvas.ForceUpdateCanvases();
-        scrollRect.verticalNormalizedPosition = 1f;
+        // On value changed handler
+        dropdown.onValueChanged.AddListener((int index) =>
+        {
+            if (index >= 0 && index < availableClasses.Count)
+            {
+                _selectedClassForLevelUp = availableClasses[index];
+                ShowSummary();
+            }
+        });
+
+        Debug.Log($"[LevelUpUI] Created class dropdown with {options.Count} PC classes, selected: {selectedClassName}");
     }
 
     private static GameObject CreateScrollbar(Transform parent)
@@ -575,13 +684,16 @@ public class LevelUpUI : MonoBehaviour
                 existing.Add(className);
         }
 
+        HashSet<string> npcClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "Warrior", "Adept", "Commoner", "Expert", "Aristocrat" };
+
         string[] classNames = ClassRegistry.ClassNames;
         if (classNames != null)
         {
             for (int i = 0; i < classNames.Length; i++)
             {
                 string className = classNames[i];
-                if (string.IsNullOrWhiteSpace(className) || existing.Contains(className))
+                if (string.IsNullOrWhiteSpace(className) || existing.Contains(className) || npcClasses.Contains(className))
                     continue;
 
                 _currentLevelUp.AvailableClasses.Add(className);
@@ -674,8 +786,8 @@ public class LevelUpUI : MonoBehaviour
         contentRect.sizeDelta = Vector2.zero;
 
         VerticalLayoutGroup contentLayout = content.GetComponent<VerticalLayoutGroup>();
-        contentLayout.spacing = 14f;
-        contentLayout.padding = new RectOffset(34, 34, 28, 28);
+        contentLayout.spacing = 8f;
+        contentLayout.padding = new RectOffset(20, 20, 16, 16);
         contentLayout.childAlignment = TextAnchor.UpperCenter;
         contentLayout.childControlWidth = true;
         contentLayout.childControlHeight = false;
@@ -701,13 +813,13 @@ public class LevelUpUI : MonoBehaviour
 
     private void CreateTitle(string text)
     {
-        CreateText(_contentContainer, "Title", text, 28, FontStyles.Bold, new Color(0.9f, 0.8f, 0.5f), TextAlignmentOptions.Center, 54f);
+        CreateText(_contentContainer, "Title", text, 24, FontStyles.Bold, new Color(0.9f, 0.8f, 0.5f), TextAlignmentOptions.Center, 40f);
     }
 
     private void CreateInfoText(string text, bool bold = false, Color? color = null)
     {
         FontStyles style = bold ? FontStyles.Bold : FontStyles.Normal;
-        CreateText(_contentContainer, "Info", text, 16, style, color ?? Color.white, TextAlignmentOptions.Center, 36f);
+        CreateText(_contentContainer, "Info", text, 15, style, color ?? Color.white, TextAlignmentOptions.Center, 26f);
     }
 
     private void CreateText(
@@ -755,7 +867,7 @@ public class LevelUpUI : MonoBehaviour
         sepObj.transform.SetParent(_contentContainer, false);
 
         RectTransform sepRect = sepObj.GetComponent<RectTransform>();
-        sepRect.sizeDelta = new Vector2(0f, 14f);
+        sepRect.sizeDelta = new Vector2(0f, 6f);
     }
 
     private void CreateButton(string label, Action onClick, float height = 40f, Transform parentOverride = null)
