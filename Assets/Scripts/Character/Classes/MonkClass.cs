@@ -26,11 +26,17 @@ public class MonkClass : ICharacterClass
     {
         "Balance",
         "Climb",
+        "Concentration",
         "Diplomacy",
+        "Escape Artist",
         "Hide",
         "Jump",
+        "Knowledge (Arcana)",
+        "Knowledge (Religion)",
         "Listen",
         "Move Silently",
+        "Perform",
+        "Sense Motive",
         "Spot",
         "Swim",
         "Tumble"

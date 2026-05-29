@@ -25,9 +25,12 @@ public class BarbarianClass : ICharacterClass
     public HashSet<string> ClassSkills { get; } = new HashSet<string>
     {
         "Climb",
+        "Handle Animal",
         "Intimidate",
         "Jump",
         "Listen",
+        "Ride",
+        "Survival",
         "Swim"
     };
 

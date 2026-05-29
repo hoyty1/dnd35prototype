@@ -27,8 +27,10 @@ public class SorcererClass : ICharacterClass
     public HashSet<string> ClassSkills { get; } = new HashSet<string>
     {
         "Bluff",
-        "Diplomacy"
-        // Note: Concentration, Spellcraft, Knowledge (Arcana) not in prototype skill list
+        "Concentration",
+        "Diplomacy",
+        "Knowledge (Arcana)",
+        "Spellcraft"
     };
 
     // Starting Equipment Defaults - no armor proficiency

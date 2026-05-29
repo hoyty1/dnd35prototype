@@ -26,28 +26,38 @@ public class BardClass : ICharacterClass
     // Class Skills (PHB p.27) — high-skill class
     public HashSet<string> ClassSkills { get; } = new HashSet<string>
     {
+        "Appraise",
+        "Balance",
         "Bluff",
         "Climb",
+        "Concentration",
+        "Decipher Script",
         "Diplomacy",
         "Disguise",
+        "Escape Artist",
+        "Gather Information",
         "Hide",
         "Intimidate",
         "Jump",
         "Knowledge (Arcana)",
         "Knowledge (History)",
+        "Knowledge (Local)",
         "Knowledge (Nature)",
+        "Knowledge (Nobility)",
         "Knowledge (Religion)",
         "Knowledge (The Planes)",
         "Listen",
         "Move Silently",
+        "Perform",
         "Search",
+        "Sense Motive",
+        "Sleight of Hand",
+        "Spellcraft",
         "Spot",
         "Swim",
         "Tumble",
+        "Use Magic Device",
         "Use Rope"
-        // Note: Concentration, Decipher Script, Gather Information, Perform,
-        // Sense Motive, Sleight of Hand, Speak Language, Use Magic Device
-        // not in prototype skill list
     };
 
     // Starting Equipment Defaults — light armor proficiency

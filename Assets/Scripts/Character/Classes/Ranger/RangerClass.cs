@@ -26,17 +26,22 @@ public class RangerClass : ICharacterClass
     public HashSet<string> ClassSkills { get; } = new HashSet<string>
     {
         "Climb",
+        "Concentration",
+        "Handle Animal",
+        "Heal",
         "Hide",
         "Jump",
+        "Knowledge (Dungeoneering)",
+        "Knowledge (Geography)",
         "Knowledge (Nature)",
         "Listen",
         "Move Silently",
+        "Ride",
         "Search",
         "Spot",
         "Survival",
         "Swim",
         "Use Rope"
-        // Note: Concentration, Handle Animal, Heal, Ride not in prototype skill list
     };
 
     // Starting Equipment Defaults

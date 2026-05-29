@@ -356,6 +356,79 @@ public class SpellSelectionUI : MonoBehaviour
         RefreshUI();
     }
 
+    /// <summary>
+    /// Open for a spontaneous caster (Sorcerer, Bard, etc.) — select known spells.
+    /// D&D 3.5e PHB p.52: Level 1 Sorcerer knows 4 cantrips + 2 first-level spells.
+    /// Spontaneous casters cast from their known spell list without preparation.
+    /// </summary>
+    public void OpenForSorcerer(int characterLevel, string className = "Sorcerer")
+    {
+        _isLevelUpMode = false;
+        _className = className;
+        _wizardSpecializationFilter = WizardSpecialization.CreateGeneralist();
+
+        int safeLevel = Mathf.Max(1, characterLevel);
+
+        // PHB p.52 Table 3-17: Sorcerer Spells Known / PHB p.27 Bard Spells Known
+        // Level 1: 4 cantrips, 2 first-level
+        // Level 2: 5 cantrips, 2 first-level  (Bard: 3 cantrips, 1 first-level at L1)
+        // Level 3: 5 cantrips, 3 first-level
+        // Level 4: 6 cantrips, 3 first-level, 1 second-level
+        if (className == "Bard")
+        {
+            _maxCantrips = safeLevel >= 2 ? 5 : 4;
+            _maxSpells1st = safeLevel >= 3 ? 3 : (safeLevel >= 2 ? 2 : 1);
+            _maxSpells2nd = safeLevel >= 4 ? 1 : 0;
+        }
+        else // Sorcerer
+        {
+            _maxCantrips = safeLevel >= 4 ? 6 : (safeLevel >= 2 ? 5 : 4);
+            _maxSpells1st = safeLevel >= 3 ? 3 : 2;
+            _maxSpells2nd = safeLevel >= 4 ? 1 : 0;
+        }
+        _cantripSelectionRequired = true;
+        _autoAddedCantripCount = 0;
+
+        _selectedSpellIds.Clear();
+
+        SpellDatabase.Init();
+        _availableSpells.Clear();
+        _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel(className, 0));
+        _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel(className, 1));
+        if (_maxSpells2nd > 0)
+            _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel(className, 2));
+
+        // De-duplicate and sort
+        _availableSpells = _availableSpells
+            .Where(s => s != null)
+            .GroupBy(s => s.SpellId)
+            .Select(g => g.First())
+            .OrderBy(s => s.SpellLevel)
+            .ThenBy(s => s.Name)
+            .ToList();
+
+        _titleText.text = $"{className.ToUpper()} KNOWN SPELLS";
+        string subtitle = _maxSpells2nd > 0
+            ? $"Select {_maxCantrips} cantrips, {_maxSpells1st} 1st-level, and {_maxSpells2nd} 2nd-level spells."
+            : $"Select {_maxCantrips} cantrips and {_maxSpells1st} 1st-level spells.";
+        _subtitleText.text = subtitle;
+
+        _overlayPanel.SetActive(true);
+        IsOpen = true;
+
+        _currentFilterLevel = -1;
+
+        if (_filter0Button != null)
+            _filter0Button.gameObject.SetActive(true);
+        if (_filter1Button != null)
+            _filter1Button.gameObject.SetActive(true);
+        if (_filter2Button != null)
+            _filter2Button.gameObject.SetActive(_maxSpells2nd > 0);
+
+        PopulateSpellList();
+        RefreshUI();
+    }
+
     /// <summary>Close the spell selection UI.</summary>
     public void Close()
     {
@@ -983,6 +1056,21 @@ public class SpellSelectionUI : MonoBehaviour
             _selectionCountText.text = $"<color={c0}>Orisons: {sel0}/{_maxCantrips}</color>   |   " +
                                        "1st & 2nd level spells: All available";
             _confirmButton.interactable = (sel0 >= _maxCantrips);
+        }
+        else if (_className == "Sorcerer" || _className == "Bard")
+        {
+            string c0 = sel0 >= _maxCantrips ? "#44FF44" : "#FFDD44";
+            string c1 = sel1 >= _maxSpells1st ? "#44FF44" : "#FFDD44";
+            string statusText = $"<color={c0}>Cantrips: {sel0}/{_maxCantrips}</color>   |   " +
+                                $"<color={c1}>1st Level: {sel1}/{_maxSpells1st}</color>";
+            if (_maxSpells2nd > 0)
+            {
+                string c2 = sel2 >= _maxSpells2nd ? "#44FF44" : "#FFDD44";
+                statusText += $"   |   <color={c2}>2nd Level: {sel2}/{_maxSpells2nd}</color>";
+            }
+            _selectionCountText.text = statusText;
+            bool allSelected = (sel0 >= _maxCantrips && sel1 >= _maxSpells1st && sel2 >= _maxSpells2nd);
+            _confirmButton.interactable = allSelected;
         }
         else
         {

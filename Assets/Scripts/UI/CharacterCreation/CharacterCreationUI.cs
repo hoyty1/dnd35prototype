@@ -574,12 +574,12 @@ public class CharacterCreationUI : MonoBehaviour
 
         // Race info text (scrollable area approximated with large text)
         _raceInfoText = MakeText(_step3Panel.transform, "RaceInfo",
-            new Vector2(-180, -10), new Vector2(380, 260),
+            new Vector2(-180, -50), new Vector2(380, 220),
             "Select a race to see details.", 13, new Color(0.85f, 0.85f, 0.8f), TextAnchor.UpperLeft);
 
         // Preview with stats
         _racePreviewText = MakeText(_step3Panel.transform, "RacePreview",
-            new Vector2(210, -10), new Vector2(350, 260),
+            new Vector2(210, -50), new Vector2(350, 220),
             "", 13, new Color(0.7f, 0.9f, 0.7f), TextAnchor.UpperLeft);
 
         // Confirm race button
@@ -671,16 +671,59 @@ public class CharacterCreationUI : MonoBehaviour
         var allClasses = ClassRegistry.GetAllClasses();
         int classCount = allClasses.Count;
 
-        float topLeftX = -210f;
-        float topRightX = 210f;
-        float row1Y = 155f;
-        float row2Y = -5f;
-        float row3Y = -165f;
         float panelW = 360f;
         float panelH = 140f;
+        float rowSpacing = 170f; // panelH + gap for select button + padding
+        int rowCount = (classCount + 1) / 2;
+        float scrollAreaH = 430f; // visible scroll area height
+        float contentH = rowCount * rowSpacing + 20f; // total scrollable content height
 
-        // Layout: 2 columns, rows calculated from class count
-        float[] rowYValues = { row1Y, row2Y, row3Y, -325f, -485f }; // Support up to 10 classes (5 rows)
+        // --- Scroll area container (clip mask) ---
+        float scrollAreaY = 10f; // center the scroll area vertically
+        GameObject scrollArea = CreatePanel(_step4Panel.transform, "ClassScrollArea",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0, scrollAreaY), new Vector2(PANEL_W - 80, scrollAreaH),
+            new Color(0.08f, 0.08f, 0.12f, 0.5f));
+
+        Mask classMask = scrollArea.AddComponent<Mask>();
+        classMask.showMaskGraphic = true;
+
+        // Viewport
+        GameObject viewport = new GameObject("ClassViewport");
+        viewport.transform.SetParent(scrollArea.transform, false);
+        RectTransform vpRT = viewport.AddComponent<RectTransform>();
+        vpRT.anchorMin = Vector2.zero;
+        vpRT.anchorMax = Vector2.one;
+        vpRT.offsetMin = Vector2.zero;
+        vpRT.offsetMax = Vector2.zero;
+        viewport.AddComponent<Image>().color = new Color(1, 1, 1, 0.01f); // nearly invisible but needed for mask
+        viewport.AddComponent<Mask>().showMaskGraphic = false;
+
+        // Scroll content
+        GameObject scrollContent = new GameObject("ClassScrollContent");
+        scrollContent.transform.SetParent(viewport.transform, false);
+        RectTransform contentRT = scrollContent.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0, 1);
+        contentRT.anchorMax = new Vector2(1, 1);
+        contentRT.pivot = new Vector2(0.5f, 1);
+        contentRT.anchoredPosition = Vector2.zero;
+        contentRT.sizeDelta = new Vector2(0, contentH);
+
+        // ScrollRect
+        ScrollRect classScrollRect = scrollArea.AddComponent<ScrollRect>();
+        classScrollRect.content = contentRT;
+        classScrollRect.viewport = vpRT;
+        classScrollRect.horizontal = false;
+        classScrollRect.vertical = true;
+        classScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        classScrollRect.scrollSensitivity = 30f;
+
+        // Vertical scrollbar
+        ScrollbarHelper.CreateVerticalScrollbar(classScrollRect, scrollArea.transform);
+
+        // Layout classes inside scroll content (positions relative to top of content)
+        float topLeftX = -210f;
+        float topRightX = 210f;
 
         for (int i = 0; i < classCount; i++)
         {
@@ -688,27 +731,28 @@ public class CharacterCreationUI : MonoBehaviour
             int row = i / 2;
             bool isLeft = (i % 2 == 0);
             float posX = isLeft ? topLeftX : topRightX;
-            float posY = row < rowYValues.Length ? rowYValues[row] : rowYValues[rowYValues.Length - 1] - (row - rowYValues.Length + 1) * 160f;
+            // Position from top of scroll content (y=0 is top, negative goes down)
+            float posY = -(row * rowSpacing + panelH / 2 + 10);
 
             // Background panel
-            CreatePanel(_step4Panel.transform, $"{classDef.ClassName}BG",
+            CreatePanel(scrollContent.transform, $"{classDef.ClassName}BG",
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(posX, posY), new Vector2(panelW, panelH),
                 new Color(0.15f, 0.15f, 0.25f, 0.8f));
 
             // Title text
-            MakeText(_step4Panel.transform, $"{classDef.ClassName}Title",
+            MakeText(scrollContent.transform, $"{classDef.ClassName}Title",
                 new Vector2(posX, posY + panelH/2 - 12), new Vector2(340, 22),
                 classDef.ClassName.ToUpper(), 17, classDef.TitleColor, TextAnchor.MiddleCenter);
 
             // Info text
-            MakeText(_step4Panel.transform, $"{classDef.ClassName}Info",
+            MakeText(scrollContent.transform, $"{classDef.ClassName}Info",
                 new Vector2(posX, posY - 15), new Vector2(330, 100),
                 classDef.InfoText,
                 10, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
         }
 
-        // Class selection buttons - dynamically from ClassRegistry
+        // Class selection buttons inside scroll content
         _classButtons = new Button[classCount];
         _classButtonDefaultColors_dynamic = new Color[classCount];
         for (int i = 0; i < classCount; i++)
@@ -717,24 +761,24 @@ public class CharacterCreationUI : MonoBehaviour
             int row = i / 2;
             bool isLeft = (i % 2 == 0);
             float posX = isLeft ? topLeftX : topRightX;
-            float posY = row < rowYValues.Length ? rowYValues[row] : rowYValues[rowYValues.Length - 1] - (row - rowYValues.Length + 1) * 160f;
+            float posY = -(row * rowSpacing + panelH / 2 + 10);
 
             int idx = i;
             _classButtonDefaultColors_dynamic[i] = classDef.ButtonColor;
-            _classButtons[i] = MakeButton(_step4Panel.transform, $"Select{classDef.ClassName}",
+            _classButtons[i] = MakeButton(scrollContent.transform, $"Select{classDef.ClassName}",
                 new Vector2(posX, posY - panelH/2 - 18), new Vector2(180, 30),
                 $"Select {classDef.ClassName}", classDef.ButtonColor, Color.white, 14);
             _classButtons[i].onClick.AddListener(() => OnClassSelected(idx));
         }
 
-        // Info text for selected class
+        // Info text for selected class (outside scroll area, at bottom)
         _classInfoText = MakeText(_step4Panel.transform, "ClassInfo",
-            new Vector2(0, -260), new Vector2(700, 25),
+            new Vector2(0, -scrollAreaH / 2 - scrollAreaY - 15), new Vector2(700, 25),
             "", 14, new Color(0.9f, 0.9f, 0.5f), TextAnchor.MiddleCenter);
 
-        // Confirm class button
+        // Confirm class button (outside scroll area)
         _confirmClassButton = MakeButton(_step4Panel.transform, "ConfirmClass",
-            new Vector2(0, -288), new Vector2(200, 42),
+            new Vector2(0, -scrollAreaH / 2 - scrollAreaY - 43), new Vector2(200, 42),
             "Confirm Class ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 18);
         _confirmClassButton.onClick.AddListener(OnConfirmClass);
         _confirmClassButton.interactable = false;
@@ -1836,9 +1880,36 @@ public class CharacterCreationUI : MonoBehaviour
             Debug.Log("[CharCreation] Druid skips spell preparation during creation. Prepared list starts empty.");
             ShowStep(Step.Review);
         }
+        else if (data.ClassName == "Sorcerer")
+        {
+            // PHB p.52: Sorcerers select known spells (4 cantrips + 2 first-level at level 1).
+            // They cast spontaneously from their known spell list — no preparation needed.
+            SpellUI.OnSpellsConfirmed = (selectedSpellIds) =>
+            {
+                data.SelectedSpellIds = new List<string>(selectedSpellIds);
+                data.PreparedSpellSlotIds = new List<string>();
+                Debug.Log($"[CharCreation] Sorcerer known spells selected: {selectedSpellIds.Count} spells");
+                ShowStep(Step.Review);
+            };
+            SpellUI.OpenForSorcerer(Mathf.Max(1, data.CharacterLevel));
+        }
+        else if (data.ClassName == "Bard")
+        {
+            // Bards also use spontaneous casting, similar to sorcerer.
+            // PHB p.27: Level 1 Bard knows 4 cantrips + 2 first-level spells.
+            SpellUI.OnSpellsConfirmed = (selectedSpellIds) =>
+            {
+                data.SelectedSpellIds = new List<string>(selectedSpellIds);
+                data.PreparedSpellSlotIds = new List<string>();
+                Debug.Log($"[CharCreation] Bard known spells selected: {selectedSpellIds.Count} spells");
+                ShowStep(Step.Review);
+            };
+            // Bards use the same spontaneous caster selection UI
+            SpellUI.OpenForSorcerer(Mathf.Max(1, data.CharacterLevel), "Bard");
+        }
         else
         {
-            // Other spellcaster classes (e.g., Sorcerer/Bard) currently have no creation spell step here.
+            // Other spellcaster classes currently have no creation spell step here.
             // Ensure prepared slots still start empty.
             data.PreparedSpellSlotIds = new List<string>();
             Debug.Log($"[CharCreation] {data.ClassName} spell selection not implemented in creation; prepared list starts empty.");

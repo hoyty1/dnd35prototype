@@ -28,8 +28,12 @@ public class RogueClass : ICharacterClass
         "Balance",
         "Bluff",
         "Climb",
+        "Decipher Script",
         "Diplomacy",
         "Disable Device",
+        "Disguise",
+        "Escape Artist",
+        "Forgery",
         "Gather Information",
         "Hide",
         "Intimidate",
@@ -37,11 +41,15 @@ public class RogueClass : ICharacterClass
         "Listen",
         "Move Silently",
         "Open Lock",
+        "Perform",
         "Search",
+        "Sense Motive",
         "Sleight of Hand",
         "Spot",
+        "Swim",
         "Tumble",
-        "Use Magic Device"
+        "Use Magic Device",
+        "Use Rope"
     };
 
     // Starting Equipment Defaults

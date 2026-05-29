@@ -26,10 +26,15 @@ public class PaladinClass : ICharacterClass
     // Class Skills (D&D 3.5e PHB p.43)
     public HashSet<string> ClassSkills { get; } = new HashSet<string>
     {
+        "Concentration",
         "Diplomacy",
+        "Handle Animal",
+        "Heal",
+        "Knowledge (Nobility)",
         "Knowledge (Religion)",
-        "Knowledge (The Planes)"
-        // Note: Concentration, Handle Animal, Heal, Ride, Sense Motive not in prototype skill list
+        "Knowledge (The Planes)",
+        "Ride",
+        "Sense Motive"
     };
 
     // Starting Equipment Defaults

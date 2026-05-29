@@ -25,9 +25,21 @@ public class WizardClass : ICharacterClass
     public HashSet<string> ClassSkills { get; } = new HashSet<string>
     {
         "Appraise",
+        "Concentration",
+        "Decipher Script",
         "Diplomacy",
-        "Search"
-        // Note: Knowledge, Concentration, Spellcraft not in prototype skill list
+        "Knowledge (Arcana)",
+        "Knowledge (Architecture)",
+        "Knowledge (Dungeoneering)",
+        "Knowledge (Geography)",
+        "Knowledge (History)",
+        "Knowledge (Local)",
+        "Knowledge (Nature)",
+        "Knowledge (Nobility)",
+        "Knowledge (Religion)",
+        "Knowledge (The Planes)",
+        "Search",
+        "Spellcraft"
     };
 
     // Starting Equipment Defaults

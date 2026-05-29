@@ -25,15 +25,20 @@ public class DruidClass : ICharacterClass
     // Class Skills (D&D 3.5e PHB p.35)
     public HashSet<string> ClassSkills { get; } = new HashSet<string>
     {
+        "Climb",
+        "Concentration",
+        "Diplomacy",
+        "Handle Animal",
+        "Heal",
+        "Jump",
         "Knowledge (Nature)",
         "Listen",
+        "Ride",
+        "Search",
+        "Spellcraft",
         "Spot",
         "Survival",
-        "Swim",
-        "Climb",
-        "Jump",
-        "Search"
-        // Note: Concentration, Diplomacy, Handle Animal, Heal, Ride, Spellcraft not in prototype skill list
+        "Swim"
     };
 
     // Starting Equipment Defaults — Druid restrictions: no metal armor or shields

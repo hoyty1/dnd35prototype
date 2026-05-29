@@ -25,8 +25,10 @@ public class FighterClass : ICharacterClass
     public HashSet<string> ClassSkills { get; } = new HashSet<string>
     {
         "Climb",
+        "Handle Animal",
         "Intimidate",
         "Jump",
+        "Ride",
         "Swim"
     };
 

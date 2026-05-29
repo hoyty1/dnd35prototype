@@ -169,10 +169,11 @@ public class SkillsUIPanel : MonoBehaviour
         // Vertical scrollbar for the skills list
         ScrollbarHelper.CreateVerticalScrollbar(scrollRect, scrollArea.transform);
 
-        // Log text (for skill check results)
+        // Log text (for skill check results) — placed below the scroll area, raycast-transparent
         _logText = MakeText(_rootPanel.transform, "SkillLog",
             new Vector2(0, -PANEL_H / 2 + 75), new Vector2(PANEL_W - 60, 40),
             "", 13, new Color(0.6f, 0.9f, 0.6f), TextAnchor.MiddleCenter);
+        _logText.raycastTarget = false;
 
         // Close button
         _closeButton = MakeButton(_rootPanel.transform, "CloseBtn",
