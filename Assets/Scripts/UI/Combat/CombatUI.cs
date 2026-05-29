@@ -2237,25 +2237,65 @@ public class CombatUI : MonoBehaviour
         // Vertical scrollbar via helper
         ScrollbarHelper.CreateVerticalScrollbar(scrollRect, scrollArea.transform);
 
-        // Build spell list from PREPARED spells only, grouped by level
+        // Build spell list grouped by level.
+        // Spontaneous casters (Sorcerer/Bard) use known spells + SpontaneousData slots.
+        // Prepared casters (Wizard/Cleric/Druid) use prepared spells + slot system.
         float headerHeight = 24f;
         float buttonHeight = 32f;
         float spacing = 4f;
         float yOffset = 0f; // grows downward from top of content
 
-        int highestLevel = spellComp.GetHighestSlotLevel();
-        bool usesSlotSystem = spellComp.Stats != null &&
+        bool isSpontaneous = spellComp.IsSpontaneousCaster && spellComp.SpontaneousData != null;
+        int highestLevel = isSpontaneous
+            ? spellComp.SpontaneousData.GetHighestKnownSpellLevel()
+            : spellComp.GetHighestSlotLevel();
+        bool usesSlotSystem = !isSpontaneous && spellComp.Stats != null &&
             (spellComp.Stats.IsWizard || spellComp.Stats.IsCleric || spellComp.Stats.HasClass("Druid")) &&
             spellComp.SpellSlots.Count > 0;
 
+        // Fallback: if highestLevel is -1, try legacy SlotsMax array for spontaneous
+        if (isSpontaneous && highestLevel < 0 && spellComp.SlotsMax != null)
+        {
+            for (int i = spellComp.SlotsMax.Length - 1; i >= 0; i--)
+            {
+                if (spellComp.SlotsMax[i] > 0) { highestLevel = i; break; }
+            }
+        }
+
+        Debug.Log($"[CombatUI] BuildSpellSelectionPanel: isSpontaneous={isSpontaneous}, highestLevel={highestLevel}, usesSlotSystem={usesSlotSystem}");
+
+        if (isSpontaneous) SpellDatabase.Init();
+
         for (int level = 0; level <= highestLevel; level++)
         {
-            var preparedAtLevel = spellComp.GetPreparedSpellsByLevel(level);
-            int slotsRemaining = spellComp.GetSlotsRemaining(level);
-            int slotsMax = spellComp.GetMaxSlots(level);
+            List<SpellData> spellsAtLevel;
+            int slotsRemaining;
+            int slotsMax;
+
+            if (isSpontaneous)
+            {
+                // Spontaneous caster: show all known spells at this level
+                var knownIds = spellComp.SpontaneousData.GetKnownSpellsAtLevel(level);
+                spellsAtLevel = new List<SpellData>();
+                foreach (string spellId in knownIds)
+                {
+                    SpellData spell = SpellDatabase.GetSpell(spellId);
+                    if (spell != null) spellsAtLevel.Add(spell);
+                }
+                slotsMax = spellComp.SpontaneousData.SlotsMax[level];
+                slotsRemaining = spellComp.SpontaneousData.SlotsRemaining[level];
+            }
+            else
+            {
+                // Prepared caster: show prepared spells at this level
+                spellsAtLevel = spellComp.GetPreparedSpellsByLevel(level);
+                slotsRemaining = spellComp.GetSlotsRemaining(level);
+                slotsMax = spellComp.GetMaxSlots(level);
+            }
+
             bool hasSlotsAvailable = slotsRemaining > 0;
 
-            if (preparedAtLevel.Count == 0) continue;
+            if (spellsAtLevel.Count == 0 && !(isSpontaneous && slotsMax > 0)) continue;
 
             // Build section header with slot counts
             string levelName;
@@ -2286,15 +2326,20 @@ public class CombatUI : MonoBehaviour
                 CreateSpellSectionLabel(content, "  (No slots available)", yOffset, headerHeight, new Color(0.5f, 0.3f, 0.3f));
                 yOffset += headerHeight + spacing;
             }
+            else if (spellsAtLevel.Count == 0)
+            {
+                CreateSpellSectionLabel(content, "  (No spells known at this level)", yOffset, headerHeight, new Color(0.5f, 0.4f, 0.3f));
+                yOffset += headerHeight + spacing;
+            }
             else
             {
-                foreach (var spell in preparedAtLevel)
+                foreach (var spell in spellsAtLevel)
                 {
-                    // Show count of available prepared slots for this spell (both Wizard and Cleric)
+                    // Show count of available prepared slots for this spell (prepared casters only)
                     int preparedCount = usesSlotSystem ? spellComp.CountAvailablePreparedSpell(spell) : 0;
 
                     // Check if this spell can be spontaneously converted (clerics only, non-domain)
-                    bool canConvert = spellComp.CanConvertSpellToSpontaneous(spell);
+                    bool canConvert = !isSpontaneous && spellComp.CanConvertSpellToSpontaneous(spell);
 
                     if (canConvert)
                     {
@@ -2303,7 +2348,7 @@ public class CombatUI : MonoBehaviour
                     }
                     else
                     {
-                        // Standard spell button (full width) — domain spells, non-cleric, etc.
+                        // Standard spell button (full width)
                         CreateSpellButton(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic, usesSlotSystem, preparedCount);
                     }
                     yOffset += buttonHeight + spacing;

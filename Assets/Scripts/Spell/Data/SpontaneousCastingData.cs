@@ -249,6 +249,23 @@ public class SpontaneousCastingData
         return new List<string>(SpellsKnownByLevel[spellLevel]);
     }
 
+    /// <summary>Get the highest spell level that has known spells or available slots.</summary>
+    public int GetHighestKnownSpellLevel()
+    {
+        int highest = -1;
+        for (int i = 9; i >= 0; i--)
+        {
+            bool hasKnown = SpellsKnownByLevel[i] != null && SpellsKnownByLevel[i].Count > 0;
+            bool hasSlots = SlotsMax[i] > 0;
+            if (hasKnown || hasSlots)
+            {
+                highest = i;
+                break;
+            }
+        }
+        return highest;
+    }
+
     /// <summary>Get all known spell IDs across all levels.</summary>
     public List<string> GetAllKnownSpellIds()
     {

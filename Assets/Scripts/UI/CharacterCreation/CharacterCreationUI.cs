@@ -2662,6 +2662,9 @@ public class CharacterCreationUI : MonoBehaviour
         ScrollbarHelper.CreateVerticalScrollbar(premadeScrollRect, scrollArea.transform);
 
         // --- Character buttons inside scroll content ---
+        // Child elements use anchor(0.5, 0.5) (center of content) but content pivot is at top.
+        // Shift all positions up by half the content height so buttons start at the top.
+        float yOffset = contentH / 2f;
         int btnIndex = 0;
         for (int i = 0; i < classKeys.Length; i++)
         {
@@ -2671,8 +2674,8 @@ public class CharacterCreationUI : MonoBehaviour
             var ch = _qsAvailableCharacters[className];
             ch.ComputeFinalStats();
 
-            // Position from top of scroll content (y=0 is top, negative goes down)
-            float y = -(btnIndex * (btnH + btnSpacing) + btnH / 2 + 4);
+            // Position from top of scroll content, shifted by yOffset for center-anchored children
+            float y = yOffset - (btnIndex * (btnH + btnSpacing) + btnH / 2 + 4);
 
             // Background button for the character
             ClassRegistry.Init();
