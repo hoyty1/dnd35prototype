@@ -570,8 +570,68 @@ public class CharacterStats
     // Bard Class Features (PHB p.26-29)
     // ─────────────────────────────────────────────
 
-    /// <summary>Bard's bardic music tracking data. Initialized during character creation.</summary>
+    /// <summary>Bard's bardic music tracking data. Lazily initialized on first access via EnsureBardicMusicInitialized().</summary>
     public BardicMusicData BardBardicMusic;
+
+    /// <summary>
+    /// Ensures BardBardicMusic is created and up-to-date for a bard character.
+    /// Safe to call repeatedly — only creates/updates when needed.
+    /// </summary>
+    public void EnsureBardicMusicInitialized()
+    {
+        if (!IsBard) return;
+        int bardLevel = GetClassLevel("Bard");
+        if (bardLevel < 1) return;
+
+        if (BardBardicMusic == null)
+        {
+            BardBardicMusic = new BardicMusicData();
+            BardBardicMusic.Initialize(bardLevel, CHAMod, 0);
+            Debug.Log($"[CharacterStats] Initialized BardicMusicData for {CharacterName} (Bard L{bardLevel}, CHA mod {CHAMod})");
+        }
+        else
+        {
+            // Re-sync level and CHA in case of level-up or buff changes
+            BardBardicMusic.Initialize(bardLevel, CHAMod, 0);
+        }
+    }
+
+    /// <summary>Whether this character is currently receiving Inspire Courage from a bard ally.</summary>
+    public bool HasInspireCourageBonus;
+
+    /// <summary>The magnitude of the Inspire Courage bonus currently applied.</summary>
+    public int AppliedInspireCourageValue;
+
+    /// <summary>
+    /// Apply Inspire Courage morale bonuses to this character.
+    /// Adds morale bonus to attack, damage, and saves vs fear/charm.
+    /// Per PHB p.28, the morale save bonus technically only applies vs charm and fear,
+    /// but we use the global MoraleSaveBonus field for simplicity (matches existing pattern).
+    /// </summary>
+    public void ApplyInspireCourage(int bonus)
+    {
+        if (HasInspireCourageBonus) return; // Already has the bonus
+        MoraleAttackBonus += bonus;
+        MoraleDamageBonus += bonus;
+        MoraleSaveBonus += bonus;
+        HasInspireCourageBonus = true;
+        AppliedInspireCourageValue = bonus;
+        Debug.Log($"[BardicMusic] Applied Inspire Courage +{bonus} to {CharacterName} (Atk/Dmg/Save)");
+    }
+
+    /// <summary>
+    /// Remove Inspire Courage morale bonuses from this character.
+    /// </summary>
+    public void RemoveInspireCourage()
+    {
+        if (!HasInspireCourageBonus) return;
+        MoraleAttackBonus -= AppliedInspireCourageValue;
+        MoraleDamageBonus -= AppliedInspireCourageValue;
+        MoraleSaveBonus -= AppliedInspireCourageValue;
+        HasInspireCourageBonus = false;
+        Debug.Log($"[BardicMusic] Removed Inspire Courage from {CharacterName}");
+        AppliedInspireCourageValue = 0;
+    }
 
     /// <summary>Bard's bardic knowledge tracking data.</summary>
     public BardicKnowledgeData BardBardicKnowledge;

@@ -58,6 +58,8 @@ public class ActionButtonPanel : MonoBehaviour
     private Button FlurryOfBlowsButton => _combatUI != null ? _combatUI.FlurryOfBlowsButton : null;
     private Button RageButton => _combatUI != null ? _combatUI.RageButton : null;
     private Text RageStatusText => _combatUI != null ? _combatUI.RageStatusText : null;
+    private Button BardicMusicButton => _combatUI != null ? _combatUI.BardicMusicButton : null;
+    private Text BardicMusicStatusText => _combatUI != null ? _combatUI.BardicMusicStatusText : null;
     private Button CastSpellButton => _combatUI != null ? _combatUI.CastSpellButton : null;
     private Button UseImbuedSpellButton => _combatUI != null ? _combatUI.UseImbuedSpellButton : null;
     private Button BreakWallButton => _combatUI != null ? _combatUI.BreakWallButton : null;
@@ -734,6 +736,33 @@ public class ActionButtonPanel : MonoBehaviour
         else rageLabel = "Rage (Used)";
         states.Set(RageButton, new ActionButtonState(isBarbarian, canRage, rageLabel));
 
+        // ── Bardic Music (Bard only, Standard Action) ──
+        bool isBard = pc.Stats.IsBard;
+        bool bardicMusicActive = false;
+        bool canPerformBardicMusic = false;
+        string bardicMusicLabel = "Bardic Music";
+        if (isBard)
+        {
+            pc.Stats.EnsureBardicMusicInitialized();
+            var bm = pc.Stats.BardBardicMusic;
+            if (bm != null)
+            {
+                bardicMusicActive = bm.IsPerforming;
+                bool hasUses = bm.RemainingUses > 0;
+                canPerformBardicMusic = (bardicMusicActive || (context.Actions.HasStandardAction && hasUses)) && !context.IsTurned;
+
+                if (bm.IsPerforming)
+                    bardicMusicLabel = $"♪ {BardicAbilityInfo.GetDisplayName(bm.ActiveAbility)} ({bm.RemainingUses}/{bm.MaxUsesPerDay})\n[Click to Stop]";
+                else if (bm.IsEffectActive)
+                    bardicMusicLabel = $"♪ Lingering ({bm.LingerRoundsRemaining} rds)";
+                else if (hasUses)
+                    bardicMusicLabel = $"Bardic Music ({bm.RemainingUses}/{bm.MaxUsesPerDay})";
+                else
+                    bardicMusicLabel = "Bardic Music (Used)";
+            }
+        }
+        states.Set(BardicMusicButton, new ActionButtonState(isBard, canPerformBardicMusic, bardicMusicLabel));
+
         bool isSpellcaster = pc.Stats.IsSpellcaster;
         SpellcastingComponent spellComp = pc.Spellcasting;
         bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
@@ -1153,6 +1182,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (DualWieldButton != null) DualWieldButton.gameObject.SetActive(false);
         if (FlurryOfBlowsButton != null) FlurryOfBlowsButton.gameObject.SetActive(false);
         if (RageButton != null) RageButton.gameObject.SetActive(false);
+        if (BardicMusicButton != null) BardicMusicButton.gameObject.SetActive(false);
         if (ReloadButton != null) ReloadButton.gameObject.SetActive(false);
         if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
         if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
@@ -1210,6 +1240,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
         if (FlurryOfBlowsButton != null) FlurryOfBlowsButton.gameObject.SetActive(false);
         if (RageButton != null) RageButton.gameObject.SetActive(false);
+        if (BardicMusicButton != null) BardicMusicButton.gameObject.SetActive(false);
         if (CastSpellButton != null) CastSpellButton.gameObject.SetActive(false);
         if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
         if (UseImbuedSpellButton != null) UseImbuedSpellButton.gameObject.SetActive(false);

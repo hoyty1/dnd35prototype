@@ -127,10 +127,12 @@ public class CombatUI : MonoBehaviour
     public Button DamageModeToggleButton;  // Toggle attack damage mode (Lethal/Nonlethal)
     public Text ActionStatusText;          // Shows current action economy status
 
-    [Header("Monk/Barbarian Buttons")]
+    [Header("Monk/Barbarian/Bard Buttons")]
     public Button FlurryOfBlowsButton;     // Flurry of Blows (Full-Round Action, Monk only)
     public Button RageButton;              // Barbarian Rage (Free Action)
     public Text RageStatusText;            // Shows rage/fatigue status
+    public Button BardicMusicButton;       // Bardic Music (Standard Action, Bard only)
+    public Text BardicMusicStatusText;     // Shows bardic music status (active ability, uses remaining)
 
     [Header("Spellcasting")]
     public Button CastSpellButton;         // Cast Spell (Standard Action)

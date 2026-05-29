@@ -948,6 +948,15 @@ public partial class GameManager : MonoBehaviour
             stats.TemplateSmiteUsed = false;
             stats.RagesUsedToday = 0;
             stats.TurnUndeadAttemptsUsedToday = 0;
+            // Reset Bardic Music uses and clear any active performance/linger
+            if (stats.BardBardicMusic != null)
+            {
+                if (stats.BardBardicMusic.IsPerforming || stats.BardBardicMusic.IsEffectActive)
+                    RemoveInspireCourageFromParty();
+                stats.BardBardicMusic.RefreshUses();
+            }
+            stats.HasInspireCourageBonus = false;
+            stats.AppliedInspireCourageValue = 0;
             // Reset domain power daily uses
             stats.StrengthDomainUsesToday = 0;
             stats.DestructionDomainUsesToday = 0;
@@ -3832,6 +3841,20 @@ public partial class GameManager : MonoBehaviour
         });
 
         CurrentPhase = TurnPhase.CombatOver;
+        // Clean up any active bardic music effects
+        foreach (var pc in PCs)
+        {
+            if (pc?.Stats != null)
+                pc.Stats.RemoveInspireCourage();
+            if (pc?.Stats?.BardBardicMusic != null)
+            {
+                // StopPerformance + clear linger by ticking it down
+                if (pc.Stats.BardBardicMusic.IsPerforming)
+                    pc.Stats.BardBardicMusic.StopPerformance();
+                while (pc.Stats.BardBardicMusic.LingerRoundsRemaining > 0)
+                    pc.Stats.BardBardicMusic.TickLingerRound();
+            }
+        }
         EffectService.ClearAll();
         ClearAllActiveGreaseEffects();
         ClearAllMirrorImageEffects("combat ended");
@@ -4008,6 +4031,13 @@ public partial class GameManager : MonoBehaviour
             {
                 CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"{pc.Stats.CharacterName}: Rage - {pc.Stats.RageRoundsRemaining} rounds remaining"));
             }
+        }
+
+        // Tick Bardic Music at start of bard's turn
+        if (pc.Stats.IsBard && pc.Stats.BardBardicMusic != null &&
+            (pc.Stats.BardBardicMusic.IsPerforming || pc.Stats.BardBardicMusic.LingerRoundsRemaining > 0))
+        {
+            TickBardicMusic(pc);
         }
 
         EndAttackSequence();
@@ -8635,6 +8665,149 @@ public partial class GameManager : MonoBehaviour
                                (pc.Stats.IsFatiguedState ? "fatigued" : "no rages left today"));
             CombatUI.ShowCombatLog(CombatLogHelper.Failure("", $"{pc.Stats.CharacterName} cannot rage: {reason}"));
             Debug.Log($"[GameManager] {pc.Stats.CharacterName} failed to activate Rage: {reason}");
+        }
+    }
+
+    // ========== BARDIC MUSIC ==========
+
+    /// <summary>
+    /// Called when the Bardic Music button is pressed.
+    /// If already performing, stops the performance (effects linger 5 rounds).
+    /// Otherwise, starts Inspire Courage (Standard Action), applying morale bonuses to all allies.
+    /// </summary>
+    public void OnBardicMusicButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Stats.IsBard) return;
+
+        pc.Stats.EnsureBardicMusicInitialized();
+        var bm = pc.Stats.BardBardicMusic;
+        if (bm == null) return;
+
+        // If currently performing, stop the performance
+        if (bm.IsPerforming)
+        {
+            StopBardicMusic(pc);
+            return;
+        }
+
+        // Cannot start if no standard action or no uses remaining
+        if (!pc.Actions.HasStandardAction)
+        {
+            CombatUI.ShowCombatLog(CombatLogHelper.Failure("♪", $"{pc.Stats.CharacterName} needs a standard action to begin a bardic performance."));
+            return;
+        }
+
+        // Start Inspire Courage (the primary bardic music ability)
+        bool started = bm.StartPerformance(BardicAbility.InspireCourage);
+        if (started)
+        {
+            int bonus = bm.InspireCourageBonus;
+            ApplyInspireCourageToParty(pc, bonus);
+            pc.Actions.UseStandardAction();
+
+            CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
+                $"{pc.Stats.CharacterName} begins Inspire Courage! All allies gain +{bonus} morale bonus to attack, damage, and saves. ({bm.RemainingUses}/{bm.MaxUsesPerDay} uses remaining)"));
+            UpdateAllStatsUI();
+            CombatUI.UpdateActionButtons(pc);
+            Debug.Log($"[GameManager] {pc.Stats.CharacterName} activated Inspire Courage +{bonus} via Bardic Music button");
+        }
+        else
+        {
+            string reason = bm.RemainingUses <= 0 ? "no uses remaining today" : "unable to perform";
+            CombatUI.ShowCombatLog(CombatLogHelper.Failure("♪", $"{pc.Stats.CharacterName} cannot perform bardic music: {reason}"));
+            Debug.Log($"[GameManager] {pc.Stats.CharacterName} failed to start Inspire Courage: {reason}");
+        }
+    }
+
+    /// <summary>
+    /// Stop the bard's current performance. Effects linger for 5 rounds per PHB rules.
+    /// </summary>
+    private void StopBardicMusic(CharacterController bard)
+    {
+        var bm = bard.Stats.BardBardicMusic;
+        if (bm == null || !bm.IsPerforming) return;
+
+        string abilityName = BardicAbilityInfo.GetDisplayName(bm.ActiveAbility);
+        bm.StopPerformance();
+
+        CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
+            $"{bard.Stats.CharacterName} stops {abilityName}. Effects linger for {bm.LingerRoundsRemaining} rounds."));
+        UpdateAllStatsUI();
+        CombatUI.UpdateActionButtons(bard);
+        Debug.Log($"[GameManager] {bard.Stats.CharacterName} stopped bardic music. Linger: {bm.LingerRoundsRemaining} rounds.");
+    }
+
+    /// <summary>
+    /// Apply Inspire Courage morale bonuses to all living allied PCs.
+    /// </summary>
+    private void ApplyInspireCourageToParty(CharacterController bard, int bonus)
+    {
+        foreach (var ally in PCs)
+        {
+            if (ally == null || ally.Stats == null || ally.Stats.IsDead) continue;
+            ally.Stats.ApplyInspireCourage(bonus);
+        }
+    }
+
+    /// <summary>
+    /// Remove Inspire Courage morale bonuses from all PCs.
+    /// </summary>
+    private void RemoveInspireCourageFromParty()
+    {
+        foreach (var ally in PCs)
+        {
+            if (ally == null || ally.Stats == null) continue;
+            ally.Stats.RemoveInspireCourage();
+        }
+    }
+
+    /// <summary>
+    /// Tick bardic music at the start of the bard's turn:
+    /// - If performing, sustain the performance (costs 1 use)
+    /// - If lingering (stopped but effects still active), tick down the linger timer
+    /// - When linger expires, remove all morale bonuses from allies
+    /// </summary>
+    private void TickBardicMusic(CharacterController bard)
+    {
+        if (!bard.Stats.IsBard) return;
+        var bm = bard.Stats.BardBardicMusic;
+        if (bm == null) return;
+
+        if (bm.IsPerforming)
+        {
+            // Sustain the performance (costs 1 use per round)
+            bool sustained = bm.SustainPerformance();
+            if (!sustained)
+            {
+                // Ran out of uses — performance auto-stops, linger begins
+                CombatUI.ShowCombatLog(CombatLogHelper.Warning("♪",
+                    $"{bard.Stats.CharacterName}'s bardic music runs out of uses! Effects linger for {bm.LingerRoundsRemaining} rounds."));
+                UpdateAllStatsUI();
+            }
+            else
+            {
+                CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
+                    $"{bard.Stats.CharacterName}: ♪ Inspire Courage — {bm.RemainingUses}/{bm.MaxUsesPerDay} uses remaining"));
+            }
+        }
+        else if (bm.LingerRoundsRemaining > 0)
+        {
+            // Tick down the linger timer
+            bm.TickLingerRound();
+            if (bm.LingerRoundsRemaining > 0)
+            {
+                CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
+                    $"{bard.Stats.CharacterName}: Inspire Courage lingering ({bm.LingerRoundsRemaining} rounds remaining)"));
+            }
+            else
+            {
+                // Linger expired — remove all bonuses
+                RemoveInspireCourageFromParty();
+                CombatUI.ShowCombatLog(CombatLogHelper.Info("♪",
+                    $"{bard.Stats.CharacterName}'s Inspire Courage effect has faded."));
+                UpdateAllStatsUI();
+            }
         }
     }
 

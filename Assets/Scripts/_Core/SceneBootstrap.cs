@@ -814,6 +814,8 @@ public class SceneBootstrap : MonoBehaviour
             "Flurry of Blows", new Color(0.2f, 0.5f, 0.5f));
         combatUI.RageButton = CreateGridButton(btnGrid.transform, "RageBtn",
             "Rage", new Color(0.6f, 0.2f, 0.1f));
+        combatUI.BardicMusicButton = CreateGridButton(btnGrid.transform, "BardicMusicBtn",
+            "Bardic Music", new Color(0.45f, 0.25f, 0.65f));
         combatUI.CastSpellButton = CreateGridButton(btnGrid.transform, "CastSpellBtn",
             "Cast Spell", new Color(0.4f, 0.2f, 0.6f));
         combatUI.ControlFlamingSphereButton = CreateGridButton(btnGrid.transform, "ControlFlamingSphereBtn",
@@ -1191,6 +1193,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.FlurryOfBlowsButton.onClick.AddListener(() => GameManager.Instance.OnFlurryOfBlowsButtonPressed());
         if (ui.RageButton != null)
             ui.RageButton.onClick.AddListener(() => GameManager.Instance.OnRageButtonPressed());
+        if (ui.BardicMusicButton != null)
+            ui.BardicMusicButton.onClick.AddListener(() => GameManager.Instance.OnBardicMusicButtonPressed());
         if (ui.CastSpellButton != null)
             ui.CastSpellButton.onClick.AddListener(() => GameManager.Instance.OnCastSpellButtonPressed());
         if (ui.BreakWallButton != null)
