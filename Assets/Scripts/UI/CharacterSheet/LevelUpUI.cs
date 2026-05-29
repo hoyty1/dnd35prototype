@@ -364,7 +364,7 @@ public class LevelUpUI : MonoBehaviour
         templateRect.anchorMin = new Vector2(0f, 0f);
         templateRect.anchorMax = new Vector2(1f, 0f);
         templateRect.pivot = new Vector2(0.5f, 1f);
-        templateRect.sizeDelta = new Vector2(0f, 200f);
+        templateRect.sizeDelta = new Vector2(0f, 280f); // ~8 visible items at 32px each
 
         Image templateBg = templateObj.GetComponent<Image>();
         templateBg.color = new Color(0.08f, 0.1f, 0.18f, 0.98f);
@@ -399,6 +399,51 @@ public class LevelUpUI : MonoBehaviour
         tScroll.horizontal = false;
         tScroll.vertical = true;
         tScroll.movementType = ScrollRect.MovementType.Clamped;
+        tScroll.scrollSensitivity = 30f;
+
+        // Scrollbar for the dropdown template
+        GameObject tScrollbarObj = new GameObject("Scrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+        tScrollbarObj.transform.SetParent(templateObj.transform, false);
+
+        RectTransform tScrollbarRect = tScrollbarObj.GetComponent<RectTransform>();
+        tScrollbarRect.anchorMin = new Vector2(1f, 0f);
+        tScrollbarRect.anchorMax = new Vector2(1f, 1f);
+        tScrollbarRect.pivot = new Vector2(1f, 0.5f);
+        tScrollbarRect.sizeDelta = new Vector2(14f, 0f);
+        tScrollbarRect.anchoredPosition = Vector2.zero;
+
+        Image tScrollbarBg = tScrollbarObj.GetComponent<Image>();
+        tScrollbarBg.color = new Color(0.06f, 0.08f, 0.12f, 0.8f);
+
+        GameObject tHandleArea = new GameObject("SlidingArea", typeof(RectTransform));
+        tHandleArea.transform.SetParent(tScrollbarObj.transform, false);
+        RectTransform tHandleAreaRect = tHandleArea.GetComponent<RectTransform>();
+        tHandleAreaRect.anchorMin = Vector2.zero;
+        tHandleAreaRect.anchorMax = Vector2.one;
+        tHandleAreaRect.offsetMin = Vector2.zero;
+        tHandleAreaRect.offsetMax = Vector2.zero;
+
+        GameObject tHandle = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        tHandle.transform.SetParent(tHandleArea.transform, false);
+        RectTransform tHandleRect = tHandle.GetComponent<RectTransform>();
+        tHandleRect.anchorMin = Vector2.zero;
+        tHandleRect.anchorMax = new Vector2(1f, 0.2f);
+        tHandleRect.offsetMin = Vector2.zero;
+        tHandleRect.offsetMax = Vector2.zero;
+
+        Image tHandleImg = tHandle.GetComponent<Image>();
+        tHandleImg.color = new Color(0.5f, 0.5f, 0.6f, 0.9f);
+
+        Scrollbar tScrollbar = tScrollbarObj.GetComponent<Scrollbar>();
+        tScrollbar.handleRect = tHandleRect;
+        tScrollbar.direction = Scrollbar.Direction.BottomToTop;
+        tScrollbar.targetGraphic = tHandleImg;
+
+        tScroll.verticalScrollbar = tScrollbar;
+        tScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+
+        // Shrink viewport to leave room for scrollbar
+        tViewportRect.offsetMax = new Vector2(-14f, 0f);
 
         // Item template (single option row)
         GameObject itemObj = new GameObject("Item", typeof(RectTransform), typeof(Toggle));
@@ -687,6 +732,16 @@ public class LevelUpUI : MonoBehaviour
         HashSet<string> npcClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             { "Warrior", "Adept", "Commoner", "Expert", "Aristocrat" };
 
+        // Remove any NPC classes that were already in the list
+        for (int i = _currentLevelUp.AvailableClasses.Count - 1; i >= 0; i--)
+        {
+            if (npcClasses.Contains(_currentLevelUp.AvailableClasses[i]))
+            {
+                existing.Remove(_currentLevelUp.AvailableClasses[i]);
+                _currentLevelUp.AvailableClasses.RemoveAt(i);
+            }
+        }
+
         string[] classNames = ClassRegistry.ClassNames;
         if (classNames != null)
         {
@@ -705,7 +760,8 @@ public class LevelUpUI : MonoBehaviour
             ? stats.CharacterClass
             : (stats.ClassLevels != null && stats.ClassLevels.Count > 0 ? stats.ClassLevels[0].ClassName : null);
 
-        if (!string.IsNullOrWhiteSpace(fallbackClass) && !existing.Contains(fallbackClass))
+        // Only add fallback if it's not an NPC class
+        if (!string.IsNullOrWhiteSpace(fallbackClass) && !existing.Contains(fallbackClass) && !npcClasses.Contains(fallbackClass))
             _currentLevelUp.AvailableClasses.Add(fallbackClass);
 
         if (string.IsNullOrWhiteSpace(_currentLevelUp.SelectedClassName))

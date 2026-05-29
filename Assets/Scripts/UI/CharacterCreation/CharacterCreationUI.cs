@@ -672,14 +672,14 @@ public class CharacterCreationUI : MonoBehaviour
         int classCount = allClasses.Count;
 
         float panelW = 360f;
-        float panelH = 140f;
-        float rowSpacing = 170f; // panelH + gap for select button + padding
+        float panelH = 130f;
+        float rowSpacing = 162f; // panelH + gap for select button + padding
         int rowCount = (classCount + 1) / 2;
-        float scrollAreaH = 430f; // visible scroll area height
-        float contentH = rowCount * rowSpacing + 20f; // total scrollable content height
+        float scrollAreaH = 440f; // visible scroll area height
+        float contentH = rowCount * rowSpacing + 10f; // total scrollable content height
 
         // --- Scroll area container (clip mask) ---
-        float scrollAreaY = 10f; // center the scroll area vertically
+        float scrollAreaY = 18f; // push scroll area up to reduce blank space at top
         GameObject scrollArea = CreatePanel(_step4Panel.transform, "ClassScrollArea",
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             new Vector2(0, scrollAreaY), new Vector2(PANEL_W - 80, scrollAreaH),
@@ -732,7 +732,7 @@ public class CharacterCreationUI : MonoBehaviour
             bool isLeft = (i % 2 == 0);
             float posX = isLeft ? topLeftX : topRightX;
             // Position from top of scroll content (y=0 is top, negative goes down)
-            float posY = -(row * rowSpacing + panelH / 2 + 10);
+            float posY = -(row * rowSpacing + panelH / 2 + 4);
 
             // Background panel
             CreatePanel(scrollContent.transform, $"{classDef.ClassName}BG",
@@ -740,14 +740,14 @@ public class CharacterCreationUI : MonoBehaviour
                 new Vector2(posX, posY), new Vector2(panelW, panelH),
                 new Color(0.15f, 0.15f, 0.25f, 0.8f));
 
-            // Title text
+            // Title text (near top of panel)
             MakeText(scrollContent.transform, $"{classDef.ClassName}Title",
                 new Vector2(posX, posY + panelH/2 - 12), new Vector2(340, 22),
                 classDef.ClassName.ToUpper(), 17, classDef.TitleColor, TextAnchor.MiddleCenter);
 
-            // Info text
+            // Info text (constrained within panel, above button)
             MakeText(scrollContent.transform, $"{classDef.ClassName}Info",
-                new Vector2(posX, posY - 15), new Vector2(330, 100),
+                new Vector2(posX, posY - 8), new Vector2(330, 80),
                 classDef.InfoText,
                 10, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
         }
@@ -761,13 +761,13 @@ public class CharacterCreationUI : MonoBehaviour
             int row = i / 2;
             bool isLeft = (i % 2 == 0);
             float posX = isLeft ? topLeftX : topRightX;
-            float posY = -(row * rowSpacing + panelH / 2 + 10);
+            float posY = -(row * rowSpacing + panelH / 2 + 4);
 
             int idx = i;
             _classButtonDefaultColors_dynamic[i] = classDef.ButtonColor;
             _classButtons[i] = MakeButton(scrollContent.transform, $"Select{classDef.ClassName}",
-                new Vector2(posX, posY - panelH/2 - 18), new Vector2(180, 30),
-                $"Select {classDef.ClassName}", classDef.ButtonColor, Color.white, 14);
+                new Vector2(posX, posY - panelH/2 - 12), new Vector2(180, 28),
+                $"Select {classDef.ClassName}", classDef.ButtonColor, Color.white, 13);
             _classButtons[i].onClick.AddListener(() => OnClassSelected(idx));
         }
 
