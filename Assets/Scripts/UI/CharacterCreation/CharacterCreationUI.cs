@@ -2600,10 +2600,65 @@ public class CharacterCreationUI : MonoBehaviour
             new Vector2(0, topY - 30), new Vector2(panelW - 40, 25),
             $"Select a character for Hero {CurrentCharacterIndex + 1}", 14, new Color(0.7f, 0.8f, 1f), TextAnchor.MiddleCenter);
 
-        float btnStartY = topY - 75;
+        // --- Scrollable area for character buttons ---
+        float scrollAreaTop = topY - 60;
+        float cancelAreaH = 55f; // space for cancel button at bottom
+        float scrollAreaH = panelH - (panelH / 2 - scrollAreaTop) - cancelAreaH;
+        float scrollAreaY = scrollAreaTop - scrollAreaH / 2;
+
+        GameObject scrollArea = CreatePanel(panel.transform, "PremadeScrollArea",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0, scrollAreaY), new Vector2(panelW - 24, scrollAreaH),
+            new Color(0.06f, 0.06f, 0.1f, 0.5f));
+
+        scrollArea.AddComponent<Mask>().showMaskGraphic = true;
+
+        // Viewport
+        GameObject viewport = new GameObject("PremadeViewport");
+        viewport.transform.SetParent(scrollArea.transform, false);
+        RectTransform vpRT = viewport.AddComponent<RectTransform>();
+        vpRT.anchorMin = Vector2.zero;
+        vpRT.anchorMax = Vector2.one;
+        vpRT.offsetMin = Vector2.zero;
+        vpRT.offsetMax = Vector2.zero;
+        viewport.AddComponent<Image>().color = new Color(1, 1, 1, 0.01f);
+        viewport.AddComponent<Mask>().showMaskGraphic = false;
+
+        // Count visible characters for content sizing
         float btnH = 60f;
         float btnSpacing = 6f;
+        int visibleCount = 0;
+        for (int i = 0; i < classKeys.Length; i++)
+        {
+            if (_qsAvailableCharacters.ContainsKey(classKeys[i]))
+                visibleCount++;
+        }
+        float contentH = visibleCount * (btnH + btnSpacing) + 10;
 
+        // Scroll content
+        GameObject scrollContent = new GameObject("PremadeScrollContent");
+        scrollContent.transform.SetParent(viewport.transform, false);
+        RectTransform contentRT = scrollContent.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0, 1);
+        contentRT.anchorMax = new Vector2(1, 1);
+        contentRT.pivot = new Vector2(0.5f, 1);
+        contentRT.anchoredPosition = Vector2.zero;
+        contentRT.sizeDelta = new Vector2(0, contentH);
+
+        // ScrollRect
+        ScrollRect premadeScrollRect = scrollArea.AddComponent<ScrollRect>();
+        premadeScrollRect.content = contentRT;
+        premadeScrollRect.viewport = vpRT;
+        premadeScrollRect.horizontal = false;
+        premadeScrollRect.vertical = true;
+        premadeScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        premadeScrollRect.scrollSensitivity = 30f;
+
+        // Vertical scrollbar
+        ScrollbarHelper.CreateVerticalScrollbar(premadeScrollRect, scrollArea.transform);
+
+        // --- Character buttons inside scroll content ---
+        int btnIndex = 0;
         for (int i = 0; i < classKeys.Length; i++)
         {
             string className = classKeys[i];
@@ -2612,7 +2667,8 @@ public class CharacterCreationUI : MonoBehaviour
             var ch = _qsAvailableCharacters[className];
             ch.ComputeFinalStats();
 
-            float y = btnStartY - i * (btnH + btnSpacing);
+            // Position from top of scroll content (y=0 is top, negative goes down)
+            float y = -(btnIndex * (btnH + btnSpacing) + btnH / 2 + 4);
 
             // Background button for the character
             ClassRegistry.Init();
@@ -2630,8 +2686,8 @@ public class CharacterCreationUI : MonoBehaviour
             string statLine = $"STR {ch.FinalSTR}({CharacterStats.FormatMod(strMod)})  DEX {ch.FinalDEX}({CharacterStats.FormatMod(dexMod)})  CON {ch.FinalCON}({CharacterStats.FormatMod(conMod)})  INT {ch.FinalINT}({CharacterStats.FormatMod(intMod)})  WIS {ch.FinalWIS}({CharacterStats.FormatMod(wisMod)})  CHA {ch.FinalCHA}({CharacterStats.FormatMod(chaMod)})";
             string label = $"{ch.CharacterName} — {ch.RaceName} {ch.ClassName}   HP: {ch.HP}\n<size=10>{statLine}</size>";
 
-            Button charBtn = MakeButton(panel.transform, $"Premade_{className}",
-                new Vector2(0, y), new Vector2(panelW - 50, btnH),
+            Button charBtn = MakeButton(scrollContent.transform, $"Premade_{className}",
+                new Vector2(0, y), new Vector2(panelW - 80, btnH),
                 "", btnColor, Color.white, 15);
 
             // Replace the auto-created label with a rich text one
@@ -2645,9 +2701,10 @@ public class CharacterCreationUI : MonoBehaviour
 
             string capturedClass = className;
             charBtn.onClick.AddListener(() => OnPremadeCharacterSelected(capturedClass));
+            btnIndex++;
         }
 
-        // Cancel button
+        // Cancel button (outside scroll area, at bottom of panel)
         float bottomY = -panelH / 2 + 35;
         Button cancelBtn = MakeButton(panel.transform, "PremadeCancel",
             new Vector2(0, bottomY), new Vector2(140, 40),
