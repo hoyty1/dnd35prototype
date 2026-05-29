@@ -622,7 +622,7 @@ public partial class GameManager
                 ? $" (appraised: {item.AppraisedValueGp:N0} gp)"
                 : $" (value: {item.BasePriceGp:N0} gp)";
             Debug.Log($"[Loot] + Treasure item: {item.Name}{valueStr}");
-            AddLootInstance(ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Ground, null, Vector2Int.zero);
+            AddLootInstance(ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Treasure, null, Vector2Int.zero);
         }
 
         Debug.Log($"[LootCollection] GatherTreasureItemLootEntries complete | items={treasureItems.Count}");
@@ -722,6 +722,10 @@ public partial class GameManager
                 return cell != null && cell.RemoveGroundItem(lootInstance.Item);
             }
 
+            case LootCollectionUI.LootSourceType.Treasure:
+                // Treasure items exist only in the loot list — no world source to remove from.
+                return true;
+
             default:
                 return false;
         }
@@ -749,6 +753,10 @@ public partial class GameManager
                 cell?.AddGroundItem(lootInstance.Item);
                 break;
             }
+
+            case LootCollectionUI.LootSourceType.Treasure:
+                // Treasure items have no world source — nothing to restore.
+                break;
         }
     }
 

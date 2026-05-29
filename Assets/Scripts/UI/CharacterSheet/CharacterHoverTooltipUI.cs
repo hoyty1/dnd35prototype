@@ -69,8 +69,8 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         panelImage.color = new Color(0f, 0f, 0f, 0.86f);
 
         _panel.pivot = new Vector2(0f, 1f);
-        _panel.anchorMin = new Vector2(0f, 1f);
-        _panel.anchorMax = new Vector2(0f, 1f);
+        _panel.anchorMin = new Vector2(0.5f, 0.5f);
+        _panel.anchorMax = new Vector2(0.5f, 0.5f);
         _panel.sizeDelta = new Vector2(280f, 120f);
 
         GameObject textGO = new GameObject("Text");
@@ -132,7 +132,30 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         RectTransform canvasRT = _canvas.transform as RectTransform;
         Camera uiCamera = _canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _canvas.worldCamera;
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, screenPosition, uiCamera, out Vector2 localPos))
-            _panel.anchoredPosition = new Vector2(localPos.x + 16f, localPos.y - 16f);
+        {
+            // Pivot is top-left, so tooltip hangs down-right from the anchor point.
+            float tooltipW = _panel.sizeDelta.x;
+            float tooltipH = _panel.sizeDelta.y;
+            float halfW = canvasRT.rect.width * 0.5f;
+            float halfH = canvasRT.rect.height * 0.5f;
+
+            float x = localPos.x + 16f;
+            float y = localPos.y - 16f;
+
+            // Flip horizontally if overflowing right edge
+            if (x + tooltipW > halfW)
+                x = localPos.x - tooltipW - 8f;
+
+            // Flip vertically if overflowing bottom edge
+            if (y - tooltipH < -halfH)
+                y = localPos.y + 8f;
+
+            // Final clamp
+            x = Mathf.Clamp(x, -halfW, halfW - tooltipW);
+            y = Mathf.Clamp(y, -halfH + tooltipH, halfH);
+
+            _panel.anchoredPosition = new Vector2(x, y);
+        }
 
         _lastShowFrame = Time.frameCount;
         _panel.gameObject.SetActive(true);

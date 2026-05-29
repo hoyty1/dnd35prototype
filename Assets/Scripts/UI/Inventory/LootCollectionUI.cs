@@ -20,7 +20,8 @@ public class LootCollectionUI : MonoBehaviour
     public enum LootSourceType
     {
         Enemy,
-        Ground
+        Ground,
+        Treasure
     }
 
     [Serializable]
@@ -442,10 +443,10 @@ public class LootCollectionUI : MonoBehaviour
         _tooltipPanel = CreatePanel(
             _dialog.transform,
             "TooltipPanel",
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(-10f, -84f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 1f),
+            Vector2.zero,
             new Vector2(320f, 200f),
             new Color(0.05f, 0.05f, 0.1f, 0.97f));
 
@@ -993,8 +994,28 @@ public class LootCollectionUI : MonoBehaviour
         {
             Vector2 localPoint;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(dialogRT, Input.mousePosition, null, out localPoint);
-            float x = Mathf.Clamp(localPoint.x + 180f, -dialogRT.rect.width * 0.5f + 170f, dialogRT.rect.width * 0.5f - 170f);
-            float y = Mathf.Clamp(localPoint.y - 16f, -dialogRT.rect.height * 0.5f + 100f, dialogRT.rect.height * 0.5f - 100f);
+
+            // Offset tooltip to the right and slightly below the cursor (pivot is top-left)
+            float tooltipW = tooltipRT.sizeDelta.x;
+            float tooltipH = tooltipRT.sizeDelta.y;
+            float halfW = dialogRT.rect.width * 0.5f;
+            float halfH = dialogRT.rect.height * 0.5f;
+
+            float x = localPoint.x + 16f;
+            float y = localPoint.y - 16f;
+
+            // If tooltip would overflow the right edge, flip to left of cursor
+            if (x + tooltipW > halfW)
+                x = localPoint.x - tooltipW - 8f;
+
+            // If tooltip would overflow the bottom edge, flip above cursor
+            if (y - tooltipH < -halfH)
+                y = localPoint.y + 8f;
+
+            // Final clamp to keep fully inside dialog
+            x = Mathf.Clamp(x, -halfW, halfW - tooltipW);
+            y = Mathf.Clamp(y, -halfH + tooltipH, halfH);
+
             tooltipRT.anchoredPosition = new Vector2(x, y);
         }
 

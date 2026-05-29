@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D&D 3.5e Undead Creature Compendium</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<style>
+/* ── Page Setup ─────────────────────────────────────────────── */
+@page {
+  size: A4;
+  margin: 2cm 1.8cm;
+  @top-left   { content: string(chaptitle); font-size: 8pt; color: #8888aa; font-family: 'Georgia', serif; }
+  @top-right  { content: "D&D 3.5e Undead Compendium"; font-size: 8pt; color: #8888aa; font-family: 'Georgia', serif; }
+  @bottom-center { content: counter(page); font-size: 8.5pt; color: #888; font-family: 'Georgia', serif; }
+}
+@page :first { margin: 0; @top-left{content:none;} @top-right{content:none;} @bottom-center{content:none;} }
+@page cover-page { margin: 0; @top-left{content:none;} @top-right{content:none;} @bottom-center{content:none;} }
+@page toc-page  { @top-left{content:none;} @top-right{content:none;} }
+
+body { margin: 0; padding: 0; font-family: 'Georgia', serif; color: #1a1a2e; background: #fff; }
+h1 { string-set: chaptitle content(); }
+
+/* ── Overflow prevention ─────────────────────────────────────── */
+pre, table, figure, img, svg, blockquote, code {
+  max-width: 100%; box-sizing: border-box; overflow-wrap: break-word;
+}
+pre  { overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
+a    { word-break: break-all; }
+
+/* ── Cover ───────────────────────────────────────────────────── */
+.cover {
+  page: cover-page;
+  width: 210mm; height: 297mm; margin: 0;
+  position: relative; overflow: hidden; page-break-after: always;
+  background: linear-gradient(170deg, #0a0a1a 0%, #1a0a2e 30%, #2a0a3e 55%, #0d0d1f 100%);
+  color: #e8e0f0;
+  box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+}
+.cover-skull {
+  font-size: 72pt;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 18px #9b59b6);
+}
+.cover-rule-top {
+  width: 160mm; height: 2px;
+  background: linear-gradient(90deg, transparent, #9b59b6, #c0a060, #9b59b6, transparent);
+  margin: 10px auto;
+}
+.cover-rule-bottom {
+  width: 120mm; height: 1px;
+  background: linear-gradient(90deg, transparent, #9b59b6, transparent);
+  margin: 8px auto;
+}
+.cover h1 {
+  font-size: 30pt; font-weight: 700; color: #e8d5ff;
+  letter-spacing: 2px; line-height: 1.25; margin: 8px 20px;
+  text-shadow: 0 0 24px rgba(155,89,182,0.7), 0 2px 8px rgba(0,0,0,0.8);
+  white-space: normal; overflow-wrap: break-word;
+  string-set: chaptitle "";
+}
+.cover-sub {
+  font-size: 13pt; color: #c0a060; letter-spacing: 3px;
+  text-transform: uppercase; margin: 6px 0;
+  text-shadow: 0 1px 6px rgba(192,160,96,0.6);
+}
+.cover-edition {
+  font-size: 10pt; color: #9b8cc0; margin-top: 4px; letter-spacing: 1.5px;
+}
+.cover-stats-bar {
+  margin-top: 32px;
+  display: flex; gap: 28px; justify-content: center; flex-wrap: wrap;
+}
+.cover-stat {
+  background: rgba(155,89,182,0.15);
+  border: 1px solid rgba(155,89,182,0.4);
+  border-radius: 4px; padding: 10px 18px; text-align: center;
+}
+.cover-stat .cs-num { font-size: 22pt; font-weight: 700; color: #c0a060; display: block; line-height: 1; }
+.cover-stat .cs-lbl { font-size: 8pt; color: #aaaacc; letter-spacing: 1px; text-transform: uppercase; }
+.cover-footer {
+  position: absolute; bottom: 28px; width: 100%;
+  font-size: 8pt; color: #6666aa; letter-spacing: 1px;
+  text-align: center;
+}
+
+/* ── TOC ─────────────────────────────────────────────────────── */
+.toc-page { page-break-after: always; padding-top: 0; }
+.toc-title {
+  font-size: 20pt; color: #2a0a3e; margin: 0 0 6px 0;
+  border-bottom: 2px solid #9b59b6; padding-bottom: 6px;
+  letter-spacing: 1px;
+}
+.toc-subtitle { font-size: 9pt; color: #888; margin: 0 0 22px 0; font-style: italic; }
+.toc-list { list-style: none; padding: 0; margin: 0; }
+.toc-list li { display: flex; align-items: baseline; padding: 4px 0; }
+.toc-list li a {
+  display: flex; align-items: baseline; width: 100%;
+  text-decoration: none; color: #1a1a2e;
+}
+.toc-list .toc-h2 .toc-text {
+  font-weight: 700; font-size: 11pt; color: #2a0a3e;
+}
+.toc-list .toc-h3 { padding-left: 20px; }
+.toc-list .toc-h3 .toc-text { font-weight: 400; font-size: 10pt; color: #444; }
+.toc-list .toc-h4 { padding-left: 36px; }
+.toc-list .toc-h4 .toc-text { font-weight: 400; font-size: 9.5pt; color: #666; font-style: italic; }
+.toc-text  { white-space: nowrap; flex-shrink: 0; }
+.toc-dots  { flex: 1; margin: 0 6px; border-bottom: 1.5px dotted #bbb; min-width: 20px; position: relative; top: -3px; }
+.toc-page-num { flex-shrink: 0; text-align: right; min-width: 20px; font-size: 10pt; color: #666; }
+
+/* ── Section / Chapter Headings ─────────────────────────────── */
+.section-break { page-break-before: always; }
+
+.tier-header {
+  background: linear-gradient(135deg, #1a0a2e 0%, #2d1050 50%, #1a0a2e 100%);
+  color: #e8d5ff; padding: 18px 20px 14px; margin: 0 0 18px;
+  border-left: 5px solid #c0a060;
+  page-break-after: avoid;
+}
+.tier-header h1 {
+  font-size: 22pt; margin: 0; color: #e8d5ff;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 12px rgba(155,89,182,0.5);
+}
+.tier-header .tier-meta {
+  font-size: 9.5pt; color: #c0a060; margin-top: 4px; letter-spacing: 0.5px;
+}
+.tier-desc {
+  background: rgba(155,89,182,0.07);
+  border-left: 3px solid #9b59b6;
+  padding: 8px 14px; margin: 0 0 18px;
+  font-style: italic; font-size: 10pt; color: #444;
+  page-break-inside: avoid;
+}
+
+h2 {
+  font-size: 15pt; color: #2a0a3e; border-bottom: 1px solid #9b59b6;
+  padding-bottom: 4px; margin: 22px 0 10px;
+  page-break-after: avoid;
+}
+h3 {
+  font-size: 12pt; color: #4a1a6e; margin: 16px 0 8px;
+  page-break-after: avoid;
+  letter-spacing: 0.5px;
+}
+h4 {
+  font-size: 10.5pt; color: #6a2a8e; margin: 12px 0 6px;
+  page-break-after: avoid;
+}
+
+/* ── Tables ─────────────────────────────────────────────────── */
+table {
+  width: 100%; border-collapse: collapse;
+  font-size: 9pt; margin: 8px 0 16px;
+  page-break-inside: auto;
+}
+thead tr {
+  background: linear-gradient(90deg, #2a0a3e, #3d1460);
+  color: #e8d5ff;
+}
+thead th {
+  padding: 7px 8px; text-align: left;
+  font-size: 8.5pt; letter-spacing: 0.5px; font-weight: 700;
+  border-bottom: 2px solid #9b59b6;
+}
+tbody tr:nth-child(even) { background: #f5f0fa; }
+tbody tr:nth-child(odd)  { background: #fefcff; }
+tbody tr:hover { background: #ede0f5; }
+tbody td {
+  padding: 5px 8px; border-bottom: 1px solid #e0d0f0;
+  vertical-align: top;
+}
+.cr-badge {
+  display: inline-block;
+  background: #9b59b6; color: #fff;
+  border-radius: 3px; padding: 1px 5px;
+  font-size: 8pt; font-weight: 700; min-width: 24px; text-align: center;
+}
+.cr-fraction { font-size: 8pt; color: #9b59b6; font-weight: 700; }
+.int-dash { color: #cc3333; font-weight: 700; font-size: 9.5pt; }
+.profile-badge {
+  display: inline-block; font-size: 7.5pt; font-weight: 700;
+  padding: 1px 5px; border-radius: 2px; white-space: nowrap;
+}
+.pb-mindless  { background: #3d3d3d; color: #ddd; }
+.pb-humanoid  { background: #1a5276; color: #d6eaf8; }
+.pb-undead    { background: #7d3c98; color: #f0e6ff; }
+.pb-grappler  { background: #873600; color: #fdebd0; }
+.pb-tactical  { background: #1e8449; color: #d5f5e3; }
+.pb-incorporeal{ background: #1a6b8a; color: #d0eaf5; }
+.pb-brute     { background: #922b21; color: #fde8e7; }
+
+.ability-pill {
+  display: inline-block; font-size: 7.5pt;
+  background: #f0e8fa; border: 1px solid #c8a0e0;
+  border-radius: 10px; padding: 0 6px; margin: 1px 1px;
+  color: #4a1a6e; white-space: nowrap;
+}
+.ability-danger { background: #fce8e8; border-color: #e0a0a0; color: #7a1a1a; }
+.ability-drain  { background: #e8f0fa; border-color: #a0c0e0; color: #1a2a5e; }
+.ability-aura   { background: #fff0e0; border-color: #e0c080; color: #5e3a00; }
+
+/* ── Creature Card Variant (for named/solo entries) ─────────── */
+.creature-card {
+  border: 1px solid #c8a0e0;
+  border-radius: 4px; margin: 10px 0 16px;
+  page-break-inside: avoid; overflow: hidden;
+}
+.creature-card .cc-head {
+  background: linear-gradient(90deg, #2d1050, #4a1a6e);
+  color: #e8d5ff; padding: 8px 14px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.creature-card .cc-name { font-size: 12pt; font-weight: 700; }
+.creature-card .cc-cr   { font-size: 9pt; color: #c0a060; }
+.creature-card .cc-body { padding: 10px 14px; }
+.cc-stats {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 8px; font-size: 9pt;
+}
+.cc-stat { display: flex; flex-direction: column; min-width: 48px; }
+.cc-stat .cs-l { font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+.cc-stat .cs-v { font-weight: 700; color: #2a0a3e; font-size: 10.5pt; }
+.cc-abilities { margin-top: 6px; }
+.cc-abilities .ca-lbl { font-size: 8pt; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+
+/* ── Summary Boxes ───────────────────────────────────────────── */
+.summary-grid {
+  display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0;
+}
+.summary-card {
+  flex: 1; min-width: 90px;
+  border: 1px solid #c8a0e0;
+  border-radius: 4px; padding: 10px 12px; text-align: center;
+  background: linear-gradient(170deg, #f5f0fa, #ede0f5);
+  page-break-inside: avoid;
+}
+.summary-card .sc-num { font-size: 22pt; font-weight: 700; color: #9b59b6; line-height: 1; }
+.summary-card .sc-lbl { font-size: 8pt; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
+
+.info-box {
+  background: #f5f0fa; border-left: 4px solid #9b59b6;
+  padding: 10px 14px; margin: 12px 0;
+  font-size: 9.5pt; page-break-inside: avoid;
+}
+.info-box strong { color: #4a1a6e; }
+.warn-box {
+  background: #fff8e8; border-left: 4px solid #c0a060;
+  padding: 10px 14px; margin: 12px 0;
+  font-size: 9.5pt; page-break-inside: avoid;
+}
+.danger-box {
+  background: #fdf0f0; border-left: 4px solid #c0393b;
+  padding: 10px 14px; margin: 12px 0;
+  font-size: 9.5pt; page-break-inside: avoid;
+}
+
+/* ── AI Behavior Blocks ──────────────────────────────────────── */
+.ai-block {
+  background: #f0f5f0; border: 1px solid #a0c0a0;
+  border-radius: 4px; padding: 10px 14px; margin: 12px 0;
+  font-size: 9pt; page-break-inside: avoid;
+}
+.ai-block h4 { margin: 0 0 6px; color: #1e5226; font-size: 10pt; }
+.ai-block ul { margin: 0; padding-left: 18px; }
+.ai-block li { margin-bottom: 3px; }
+
+/* ── Page Break Rules ────────────────────────────────────────── */
+figure, tr { page-break-inside: avoid; }
+h2, h3, h4 { page-break-after: avoid; }
+
+/* ── Misc ────────────────────────────────────────────────────── */
+p { font-size: 10pt; line-height: 1.6; margin: 6px 0; text-align: justify; text-align-last: left; }
+ul, ol { font-size: 10pt; line-height: 1.6; margin: 6px 0 6px 20px; }
+li { margin-bottom: 2px; }
+.col-2 { display: flex; gap: 16px; }
+.col-2 > * { flex: 1; }
+.mt8  { margin-top: 8px; }
+.mt16 { margin-top: 16px; }
+.page-break { page-break-before: always; }
+code { font-family: 'Courier New', monospace; font-size: 8.5pt; background: #f0e8fa; padding: 0 3px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     COVER PAGE
+════════════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-rule-top"></div>
+  <div class="cover-skull">&#x2620;</div>
+  <div class="cover-sub">D&amp;D 3.5e Reference Document</div>
+  <h1>Undead Creature<br>Compendium</h1>
+  <div class="cover-sub" style="font-size:10pt; margin-top:2px;">Intelligence-Based AI Classification System</div>
+  <div class="cover-rule-bottom"></div>
+  <div class="cover-stats-bar">
+    <div class="cover-stat">
+      <span class="cs-num">32</span>
+      <span class="cs-lbl">Undead<br>Entries</span>
+    </div>
+    <div class="cover-stat">
+      <span class="cs-num">4</span>
+      <span class="cs-lbl">Intelligence<br>Tiers</span>
+    </div>
+    <div class="cover-stat">
+      <span class="cs-num">CR<br style="line-height:0">&#x2153;&#x2013;7</span>
+      <span class="cs-lbl">Challenge<br>Range</span>
+    </div>
+    <div class="cover-stat">
+      <span class="cs-num">6</span>
+      <span class="cs-lbl">AI<br>Profiles</span>
+    </div>
+  </div>
+  <div class="cover-footer">Generated 2026-05-28 &nbsp;|&nbsp; D&amp;D 3.5e Unity Prototype &nbsp;|&nbsp; Internal Reference</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     TABLE OF CONTENTS
+════════════════════════════════════════════════════════════ -->
+<div class="toc-page">
+  <h2 class="toc-title" style="font-size:20pt; color:#2a0a3e; margin:0 0 4px; border-bottom:2px solid #9b59b6; padding-bottom:6px;">Table of Contents</h2>
+  <div class="toc-subtitle">D&amp;D 3.5e Undead Creature Compendium — Intelligence Classification System</div>
+  <ul class="toc-list">
+    <li class="toc-h2">
+      <a href="#summary">
+        <span class="toc-text">1. &nbsp;Summary Statistics &amp; Overview</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#summary"></span></span>
+      </a>
+    </li>
+    <li class="toc-h3">
+      <a href="#tier-summary">
+        <span class="toc-text">Intelligence Tier Distribution</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#tier-summary"></span></span>
+      </a>
+    </li>
+    <li class="toc-h3">
+      <a href="#ai-profiles">
+        <span class="toc-text">AI Profile Distribution</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#ai-profiles"></span></span>
+      </a>
+    </li>
+    <li class="toc-h2">
+      <a href="#mindless">
+        <span class="toc-text">2. &nbsp;Mindless Undead &nbsp;(INT —)</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#mindless"></span></span>
+      </a>
+    </li>
+    <li class="toc-h3">
+      <a href="#zombies">
+        <span class="toc-text">Zombie Templates (7 variants)</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#zombies"></span></span>
+      </a>
+    </li>
+    <li class="toc-h3">
+      <a href="#skeletons">
+        <span class="toc-text">Skeleton Templates (8 variants)</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#skeletons"></span></span>
+      </a>
+    </li>
+    <li class="toc-h3">
+      <a href="#standard-undead">
+        <span class="toc-text">Standard Undead (Custom)</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#standard-undead"></span></span>
+      </a>
+    </li>
+    <li class="toc-h2">
+      <a href="#low-int">
+        <span class="toc-text">3. &nbsp;Low Intelligence &nbsp;(INT 3–6)</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#low-int"></span></span>
+      </a>
+    </li>
+    <li class="toc-h3">
+      <a href="#low-creatures">
+        <span class="toc-text">Creature Entries: Shadow, Mummy, Bodak, Greater Shadow</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#low-creatures"></span></span>
+      </a>
+    </li>
+    <li class="toc-h2">
+      <a href="#avg-int">
+        <span class="toc-text">4. &nbsp;Average Intelligence &nbsp;(INT 7–12)</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#avg-int"></span></span>
+      </a>
+    </li>
+    <li class="toc-h3">
+      <a href="#avg-creatures">
+        <span class="toc-text">Creature Entries: Allip, Wight, Ghost, Mohrg, Wight Dreadwalker</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#avg-creatures"></span></span>
+      </a>
+    </li>
+    <li class="toc-h2">
+      <a href="#high-int">
+        <span class="toc-text">5. &nbsp;High Intelligence &nbsp;(INT 13–18)</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#high-int"></span></span>
+      </a>
+    </li>
+    <li class="toc-h3">
+      <a href="#high-creatures">
+        <span class="toc-text">Creature Entries: Ghoul, Ghast, Vampire Spawn, Wraith, Spectre</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#high-creatures"></span></span>
+      </a>
+    </li>
+    <li class="toc-h2">
+      <a href="#special-abilities">
+        <span class="toc-text">6. &nbsp;Special Abilities Cross-Reference</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#special-abilities"></span></span>
+      </a>
+    </li>
+    <li class="toc-h2">
+      <a href="#ai-profile-assignments">
+        <span class="toc-text">7. &nbsp;Recommended AI Profile Assignments</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#ai-profile-assignments"></span></span>
+      </a>
+    </li>
+    <li class="toc-h3">
+      <a href="#new-profiles">
+        <span class="toc-text">New AI Profiles Required</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#new-profiles"></span></span>
+      </a>
+    </li>
+    <li class="toc-h2">
+      <a href="#source-files">
+        <span class="toc-text">8. &nbsp;Source File Index</span>
+        <span class="toc-dots"></span>
+        <span class="toc-page-num"><span class="page-ref" data-href="#source-files"></span></span>
+      </a>
+    </li>
+  </ul>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 1 — SUMMARY STATISTICS
+════════════════════════════════════════════════════════════ -->
+<div class="section-break" id="summary">
+  <div class="tier-header">
+    <h1 style="string-set: chaptitle 'Summary Statistics';">1. Summary Statistics &amp; Overview</h1>
+    <div class="tier-meta">Complete inventory of 32 undead creatures classified by intelligence for AI behavior design</div>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="sc-num">32</div>
+      <div class="sc-lbl">Total Undead</div>
+    </div>
+    <div class="summary-card">
+      <div class="sc-num">18</div>
+      <div class="sc-lbl">Mindless<br>(INT —)</div>
+    </div>
+    <div class="summary-card">
+      <div class="sc-num">4</div>
+      <div class="sc-lbl">Low INT<br>(3–6)</div>
+    </div>
+    <div class="summary-card">
+      <div class="sc-num">5</div>
+      <div class="sc-lbl">Average INT<br>(7–12)</div>
+    </div>
+    <div class="summary-card">
+      <div class="sc-num">5</div>
+      <div class="sc-lbl">High INT<br>(13–18)</div>
+    </div>
+  </div>
+
+  <h2 id="tier-summary">Intelligence Tier Distribution</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">Tier</th>
+        <th style="width:20%">INT Range</th>
+        <th style="width:10%">Count</th>
+        <th style="width:18%">CR Range</th>
+        <th>AI Profiles Used</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Mindless</strong></td>
+        <td><span class="int-dash">— (No Score)</span></td>
+        <td>18</td>
+        <td><span class="cr-fraction">1/3</span> – 4</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+      </tr>
+      <tr>
+        <td><strong>Low Intelligence</strong></td>
+        <td>INT 3–6</td>
+        <td>4</td>
+        <td>3 – 8</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span> <em style="font-size:8pt;color:#888">(→ upgrade recommended)</em></td>
+      </tr>
+      <tr>
+        <td><strong>Average Intelligence</strong></td>
+        <td>INT 7–12</td>
+        <td>5</td>
+        <td>3 – 8</td>
+        <td><span class="profile-badge pb-grappler">Grappler</span> <span class="profile-badge pb-humanoid">Humanoid</span> <span class="profile-badge pb-undead">Undead</span></td>
+      </tr>
+      <tr>
+        <td><strong>High Intelligence</strong></td>
+        <td>INT 13–18</td>
+        <td>5</td>
+        <td>1 – 7</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span> <em style="font-size:8pt;color:#888">(→ upgrade recommended)</em></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Wisdom Score Distribution</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>WIS Score</th>
+        <th style="width:10%">Count</th>
+        <th>Undead Creatures</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>10</strong></td>
+        <td>19</td>
+        <td style="font-size:8.5pt">All Zombies, All Skeletons, Mohrg, custom variants (Skeleton Warrior/Archer, Zombie)</td>
+      </tr>
+      <tr>
+        <td><strong>11</strong></td>
+        <td>1</td>
+        <td>Allip</td>
+      </tr>
+      <tr>
+        <td><strong>12</strong></td>
+        <td>3</td>
+        <td>Bodak, Greater Shadow, Shadow</td>
+      </tr>
+      <tr>
+        <td><strong>13</strong></td>
+        <td>3</td>
+        <td>Vampire Spawn, Wight, Wight Dreadwalker</td>
+      </tr>
+      <tr>
+        <td><strong>14</strong></td>
+        <td>6</td>
+        <td>Ghast, Ghost, Ghoul, Mummy, Spectre, Wraith</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="ai-profiles">AI Profile Distribution (Current)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">AI Profile</th>
+        <th style="width:10%">Count</th>
+        <th style="width:15%">Status</th>
+        <th>Undead Using It</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td>18</td>
+        <td style="color:#1e8449; font-weight:700">&#10003; Correct</td>
+        <td style="font-size:8.5pt">All Zombies (7), All Skeletons (8), Skeleton Warrior, Skeleton Archer, Zombie</td>
+      </tr>
+      <tr>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td>12</td>
+        <td style="color:#c0a060; font-weight:700">&#9888; Upgrade</td>
+        <td style="font-size:8.5pt">Allip, Bodak, Ghast, Ghost, Ghoul, Greater Shadow, Mummy, Shadow, Spectre, Vampire Spawn, Wight Dreadwalker, Wraith</td>
+      </tr>
+      <tr>
+        <td><span class="profile-badge pb-undead">Undead</span></td>
+        <td>1</td>
+        <td style="color:#1e8449; font-weight:700">&#10003; Correct</td>
+        <td>Wight</td>
+      </tr>
+      <tr>
+        <td><span class="profile-badge pb-grappler">Grappler</span></td>
+        <td>1</td>
+        <td style="color:#1e8449; font-weight:700">&#10003; Correct</td>
+        <td>Mohrg (Improved Grab)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="warn-box">
+    <strong>&#9888; Profile Upgrade Required:</strong> 12 creatures currently use the generic <code>Humanoid</code> profile. Based on ability analysis, these should be split into <code>UndeadIncorporeal</code>, <code>UndeadTactical</code>, and <code>UndeadBrute</code> profiles. See Section 7 for full recommendations.
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 2 — MINDLESS
+════════════════════════════════════════════════════════════ -->
+<div class="section-break" id="mindless">
+  <div class="tier-header">
+    <h1>2. Mindless Undead &nbsp;<span style="font-size:14pt;color:#c0a060;">(INT —)</span></h1>
+    <div class="tier-meta">18 creatures &nbsp;|&nbsp; CR 1/3 – 4 &nbsp;|&nbsp; AI Profile: UndeadMindless</div>
+  </div>
+
+  <div class="tier-desc">
+    No intelligence at all. Operates on pure necromantic animation. Cannot think, plan, or adapt.
+    Attacks nearest target with no tactical awareness. Zombies are limited to single actions per round;
+    Skeletons benefit from Improved Initiative.
+  </div>
+
+  <h2 id="zombies">Zombie Templates</h2>
+  <p>Factory-generated via <code>ZombieTemplate.cs</code>. All share the same core abilities:
+  <strong>Single Actions Only</strong>, <strong>DR 5/slashing</strong>, and <strong>Undead Traits</strong>.
+  HP is calculated as (HD × 8) + Constitution modifier (Undead have no Con score — HP = HD × 8 + 0).</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:26%">Name</th>
+        <th style="width:7%">CR</th>
+        <th style="width:7%">INT</th>
+        <th style="width:7%">WIS</th>
+        <th style="width:7%">HD</th>
+        <th style="width:13%">HP (avg)</th>
+        <th style="width:13%">AI Profile</th>
+        <th>Notable Abilities</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Human Commoner Zombie</strong></td>
+        <td><span class="cr-fraction">1/2</span></td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>2d12</td>
+        <td>13</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">Single Action</span> <span class="ability-pill">DR 5/slashing</span> <span class="ability-pill">Undead Traits</span></td>
+      </tr>
+      <tr>
+        <td><strong>Human Warrior Zombie</strong></td>
+        <td><span class="cr-fraction">1/2</span></td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>2d12</td>
+        <td>13</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">Single Action</span> <span class="ability-pill">DR 5/slashing</span> <span class="ability-pill">Undead Traits</span></td>
+      </tr>
+      <tr>
+        <td><strong>Troglodyte Zombie</strong></td>
+        <td>1</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>4d12</td>
+        <td>26</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">Single Action</span> <span class="ability-pill">DR 5/slashing</span> <span class="ability-pill">Undead Traits</span></td>
+      </tr>
+      <tr>
+        <td><strong>Bugbear Zombie</strong></td>
+        <td>2</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>6d12</td>
+        <td>39</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">Single Action</span> <span class="ability-pill">DR 5/slashing</span> <span class="ability-pill">Undead Traits</span></td>
+      </tr>
+      <tr>
+        <td><strong>Ogre Zombie</strong></td>
+        <td>3</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>8d12</td>
+        <td>52</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">Single Action</span> <span class="ability-pill">DR 5/slashing</span> <span class="ability-pill">Undead Traits</span></td>
+      </tr>
+      <tr>
+        <td><strong>Owlbear Zombie</strong></td>
+        <td>3</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>10d12</td>
+        <td>65</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">Single Action</span> <span class="ability-pill">DR 5/slashing</span> <span class="ability-pill">Undead Traits</span></td>
+      </tr>
+      <tr>
+        <td><strong>Minotaur Zombie</strong></td>
+        <td>4</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>12d12</td>
+        <td>78</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">Single Action</span> <span class="ability-pill">DR 5/slashing</span> <span class="ability-pill">Undead Traits</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="skeletons">Skeleton Templates</h2>
+  <p>Factory-generated via <code>SkeletonTemplate.cs</code>. All share: <strong>DR 5/bludgeoning</strong>,
+  <strong>Improved Initiative (bonus feat)</strong>, and <strong>Undead Traits</strong>. Skeletons are not
+  restricted to single actions — they act at full speed.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:26%">Name</th>
+        <th style="width:7%">CR</th>
+        <th style="width:7%">INT</th>
+        <th style="width:7%">WIS</th>
+        <th style="width:7%">HD</th>
+        <th style="width:13%">HP (avg)</th>
+        <th style="width:13%">AI Profile</th>
+        <th>Notable Abilities</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Human Archer Skeleton</strong></td>
+        <td><span class="cr-fraction">1/3</span></td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>1d12</td>
+        <td>6</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">DR 5/bludgeon</span> <span class="ability-pill">Improved Init</span></td>
+      </tr>
+      <tr>
+        <td><strong>Human Warrior Skeleton</strong></td>
+        <td><span class="cr-fraction">1/3</span></td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>1d12</td>
+        <td>6</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">DR 5/bludgeon</span> <span class="ability-pill">Improved Init</span></td>
+      </tr>
+      <tr>
+        <td><strong>Wolf Skeleton</strong></td>
+        <td>1</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>2d12</td>
+        <td>13</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">DR 5/bludgeon</span> <span class="ability-pill">Improved Init</span></td>
+      </tr>
+      <tr>
+        <td><strong>Heavy Warhorse Skeleton</strong></td>
+        <td>2</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>4d12</td>
+        <td>26</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">DR 5/bludgeon</span> <span class="ability-pill">Improved Init</span></td>
+      </tr>
+      <tr>
+        <td><strong>Owlbear Skeleton</strong></td>
+        <td>2</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>5d12</td>
+        <td>32</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">DR 5/bludgeon</span> <span class="ability-pill">Improved Init</span></td>
+      </tr>
+      <tr>
+        <td><strong>Minotaur Skeleton</strong></td>
+        <td>3</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>6d12</td>
+        <td>39</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">DR 5/bludgeon</span> <span class="ability-pill">Improved Init</span></td>
+      </tr>
+      <tr>
+        <td><strong>Troll Skeleton</strong></td>
+        <td>3</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>6d12</td>
+        <td>39</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">DR 5/bludgeon</span> <span class="ability-pill">Improved Init</span></td>
+      </tr>
+      <tr>
+        <td><strong>Megaraptor Skeleton</strong></td>
+        <td>4</td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td>8d12</td>
+        <td>52</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="ability-pill">DR 5/bludgeon</span> <span class="ability-pill">Improved Init</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="standard-undead">Standard Undead (Custom Variants)</h2>
+  <p>Defined in <code>NPCDatabaseCustom.cs</code>. These are the archetypical encounter-ready units
+  with predefined AI behavior roles.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>INT</th>
+        <th>WIS</th>
+        <th>AI Profile</th>
+        <th>AI Behavior Role</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Skeleton Archer</strong></td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td>RangedKiter — maintains distance, targets nearest</td>
+      </tr>
+      <tr>
+        <td><strong>Skeleton Warrior</strong></td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td>DefensiveMelee — front-line, absorbs hits</td>
+      </tr>
+      <tr>
+        <td><strong>Zombie</strong></td>
+        <td><span class="int-dash">—</span></td>
+        <td>10</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td>Shamble toward nearest target, single action restriction</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="ai-block">
+    <h4>&#129504; AI Behavior: UndeadMindless</h4>
+    <ul>
+      <li><strong>Target Selection:</strong> Attack nearest enemy — no prioritization whatsoever</li>
+      <li><strong>Movement:</strong> Move directly toward closest target; no flanking, no tactical positioning</li>
+      <li><strong>Special Abilities:</strong> Triggered automatically (slam attack) — no decision making</li>
+      <li><strong>Retreat:</strong> Never retreats — fights until destroyed</li>
+      <li><strong>Group Tactics:</strong> None — each creature acts independently</li>
+      <li><strong>Zombies only:</strong> Single standard action per round (move OR attack, not both)</li>
+      <li><strong>Skeletons only:</strong> Full actions; benefit from Improved Initiative (+4 to initiative rolls)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 3 — LOW INTELLIGENCE
+════════════════════════════════════════════════════════════ -->
+<div class="section-break" id="low-int">
+  <div class="tier-header">
+    <h1>3. Low Intelligence &nbsp;<span style="font-size:14pt;color:#c0a060;">(INT 3–6)</span></h1>
+    <div class="tier-meta">4 creatures &nbsp;|&nbsp; CR 3 – 8 &nbsp;|&nbsp; Current: Humanoid &nbsp;|&nbsp; Recommended: UndeadIncorporeal / UndeadBrute</div>
+  </div>
+
+  <div class="tier-desc">
+    Simple tactics. Can follow basic orders, use simple weapons, and recognize obvious threats.
+    Limited problem-solving ability. May withdraw if severely damaged (&lt;25% HP).
+    Basic target preference toward wounded or isolated enemies.
+  </div>
+
+  <h2 id="low-creatures">Creature Entries</h2>
+
+  <!-- Shadow -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Shadow</span>
+      <span class="cc-cr">CR 3 &nbsp;|&nbsp; Source: NPCDatabase_S.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">6</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">12</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">3d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">19</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-drain">Incorporeal</span>
+        <span class="ability-pill">Turn Resistance +2</span>
+        <span class="ability-pill ability-drain">Strength Damage</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Incorporeal movement allows passage through walls for flanking. Strength damage targeting should prioritize STR-dependent melee characters. Turn Resistance +2 is passive.
+      </div>
+    </div>
+  </div>
+
+  <!-- Mummy -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Mummy</span>
+      <span class="cc-cr">CR 5 &nbsp;|&nbsp; Source: NPCDatabase_M.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">6</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">14</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">8d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">52</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-brute">UndeadBrute</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-aura">Despair (Aura)</span>
+        <span class="ability-pill ability-danger">Mummy Rot (Disease)</span>
+        <span class="ability-pill ability-danger">Disease</span>
+        <span class="ability-pill">DR 5/—</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Despair aura activates passively — advance into melee to trigger against clustered enemies. Mummy Rot stacks with Despair for compounding debuffs. Low INT limits tactical flexibility.
+      </div>
+    </div>
+  </div>
+
+  <!-- Bodak -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Bodak</span>
+      <span class="cc-cr">CR 8 &nbsp;|&nbsp; Source: NPCDatabase_B.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">6</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">12</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">9d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">58</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-brute">UndeadBrute</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-danger">Death Gaze (30 ft)</span>
+        <span class="ability-pill">Immunity to Fire</span>
+        <span class="ability-pill">Daylight Vulnerability</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Death Gaze should trigger against all visible targets per round — position to maximize facing coverage. Avoid direct sunlight (take damage). Low INT despite high CR.
+      </div>
+    </div>
+  </div>
+
+  <!-- Greater Shadow -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Greater Shadow</span>
+      <span class="cc-cr">CR 8 &nbsp;|&nbsp; Source: NPCDatabase_G.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">6</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">12</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">9d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">58</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-drain">Incorporeal</span>
+        <span class="ability-pill ability-danger">Create Spawn</span>
+        <span class="ability-pill">Turn Resistance +2</span>
+        <span class="ability-pill ability-drain">Strength Damage</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Create Spawn awareness needed — avoid overkilling targets that would spawn useful Shadow minions. Incorporeal movement and Strength Damage targeting same as Shadow.
+      </div>
+    </div>
+  </div>
+
+  <div class="ai-block">
+    <h4>&#129504; AI Behavior: Low Intelligence Undead</h4>
+    <ul>
+      <li><strong>Target Selection:</strong> Prefer wounded or isolated targets over healthy grouped enemies</li>
+      <li><strong>Movement:</strong> Basic tactical positioning; may circle around obstacles</li>
+      <li><strong>Special Abilities:</strong> Used with basic awareness (Death Gaze against visible targets; Despair aura passive)</li>
+      <li><strong>Retreat:</strong> May withdraw if severely damaged (&lt;25% HP)</li>
+      <li><strong>Group Tactics:</strong> Basic swarming — multiple creatures focus same target</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 4 — AVERAGE INTELLIGENCE
+════════════════════════════════════════════════════════════ -->
+<div class="section-break" id="avg-int">
+  <div class="tier-header">
+    <h1>4. Average Intelligence &nbsp;<span style="font-size:14pt;color:#c0a060;">(INT 7–12)</span></h1>
+    <div class="tier-meta">5 creatures &nbsp;|&nbsp; CR 3 – 8 &nbsp;|&nbsp; Current: Grappler / Humanoid / Undead &nbsp;|&nbsp; Recommended: UndeadIncorporeal / UndeadTactical / Grappler</div>
+  </div>
+
+  <div class="tier-desc">
+    Human-like reasoning. Can use tactics, set ambushes, coordinate with allies, and make situational
+    decisions. Will retreat to reposition or lure enemies. Prioritizes spellcasters and weakened enemies.
+    Can coordinate — one grapples while others attack.
+  </div>
+
+  <h2 id="avg-creatures">Creature Entries</h2>
+
+  <!-- Allip -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Allip</span>
+      <span class="cc-cr">CR 3 &nbsp;|&nbsp; Source: NPCDatabase_A.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">11</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">11</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">4d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">26</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-drain">Incorporeal</span>
+        <span class="ability-pill ability-aura">Babble (AoE Madness)</span>
+        <span class="ability-pill ability-drain">Wisdom Drain</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Babble has AoE effect — needs positioning to maximize affected targets each round. Wisdom Drain targets should be prioritized for compounding mental debilitation. Incorporeal gives excellent mobility.
+      </div>
+    </div>
+  </div>
+
+  <!-- Wight -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Wight</span>
+      <span class="cc-cr">CR 3 &nbsp;|&nbsp; Source: NPCDatabase_W.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">11</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">13</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">4d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">26</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-undead">Undead</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-tactical">UndeadTactical</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-drain">Energy Drain</span>
+        <span class="ability-pill ability-danger">Create Spawn</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Energy Drain on high-level targets maximizes negative level impact. Create Spawn — manage kill decisions (don't waste spawns on low-value targets). Coordinate with pack.
+      </div>
+    </div>
+  </div>
+
+  <!-- Ghost -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Ghost</span>
+      <span class="cc-cr">CR 7 &nbsp;|&nbsp; Source: NPCDatabase_G.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">12</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">14</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">7d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">45</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-drain">Incorporeal</span>
+        <span class="ability-pill ability-drain">Energy Drain</span>
+        <span class="ability-pill">Manifestation (toggle)</span>
+        <span class="ability-pill ability-aura">Frightful Moan (AoE Fear)</span>
+        <span class="ability-pill ability-danger">Corrupting Touch</span>
+        <span class="ability-pill">Rejuvenation</span>
+        <span class="ability-pill">Turn Resistance +4</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Most complex AI in this tier. Use Frightful Moan as opener before engaging. Toggle Manifestation to avoid damage (ethereal/material switch). Energy Drain on highest-level targets. Rejuvenation means permanent kill requires special conditions.
+      </div>
+    </div>
+  </div>
+
+  <!-- Mohrg -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Mohrg</span>
+      <span class="cc-cr">CR 8 &nbsp;|&nbsp; Source: NPCDatabase_M.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">11</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">10</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">14d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">91</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-grappler">Grappler</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-grappler">Grappler</span> &#10003;</span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-danger">Improved Grab</span>
+        <span class="ability-pill ability-danger">Paralysis (tongue)</span>
+        <span class="ability-pill ability-danger">Create Spawn</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> &#10003; Profile already correct. Grapple then use tongue paralysis — can then deliver coup de gr&#226;ce or continue grapple. Create Spawn from paralyzed targets. Cycle between targets to paralyze multiple enemies.
+      </div>
+    </div>
+  </div>
+
+  <!-- Wight Dreadwalker -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Wight Dreadwalker</span>
+      <span class="cc-cr">CR — (Custom) &nbsp;|&nbsp; Source: NPCDatabaseCustom.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">11</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">13</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">Enhanced</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-tactical">UndeadTactical</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-drain">Energy Drain</span>
+        <span class="ability-pill ability-danger">Create Spawn</span>
+        <span class="ability-pill">Enhanced Wight Variant</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Enhanced Wight with coordinated Energy Drain tactics. Use with standard Wights for multi-drain coordination. Create Spawn adds battlefield control layer.
+      </div>
+    </div>
+  </div>
+
+  <div class="ai-block">
+    <h4>&#129504; AI Behavior: Average Intelligence Undead</h4>
+    <ul>
+      <li><strong>Target Selection:</strong> Prioritize spellcasters and weakened enemies</li>
+      <li><strong>Movement:</strong> Seek flanking positions; avoid Attacks of Opportunity when possible</li>
+      <li><strong>Special Abilities:</strong> Tactical use — Energy Drain on high-value targets, Create Spawn on isolated enemies</li>
+      <li><strong>Retreat:</strong> Will retreat to reposition or lure enemies into traps</li>
+      <li><strong>Group Tactics:</strong> Coordinate attacks; one grapples while others attack</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 5 — HIGH INTELLIGENCE
+════════════════════════════════════════════════════════════ -->
+<div class="section-break" id="high-int">
+  <div class="tier-header">
+    <h1>5. High Intelligence &nbsp;<span style="font-size:14pt;color:#c0a060;">(INT 13–18)</span></h1>
+    <div class="tier-meta">5 creatures &nbsp;|&nbsp; CR 1 – 7 &nbsp;|&nbsp; Current: Humanoid &nbsp;|&nbsp; Recommended: UndeadTactical / UndeadIncorporeal</div>
+  </div>
+
+  <div class="tier-desc">
+    Very smart. Uses advanced tactics, leverages special abilities strategically, and can plan multi-step
+    approaches. Analyzes party composition, targets healers and casters first. Uses incorporeal movement
+    through walls, coordinates with minions, and employs hit-and-run tactics.
+  </div>
+
+  <h2 id="high-creatures">Creature Entries</h2>
+
+  <!-- Ghoul -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Ghoul</span>
+      <span class="cc-cr">CR 1 &nbsp;|&nbsp; Source: NPCDatabase_G.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">13</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">14</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">2d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">13</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-tactical">UndeadTactical</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-danger">Paralysis (touch)</span>
+        <span class="ability-pill ability-danger">Disease</span>
+        <span class="ability-pill">Turn Resistance +2</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> High INT for a CR 1 creature — paralyze one target, then cycle to next for mass paralysis. Coup de gr&#226;ce paralyzed targets. Coordinate with pack: multiple ghouls paralyze, then pile on helpless enemies.
+      </div>
+    </div>
+  </div>
+
+  <!-- Ghast -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Ghast</span>
+      <span class="cc-cr">CR 3 &nbsp;|&nbsp; Source: NPCDatabase_G.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">13</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">14</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">4d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">26</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-tactical">UndeadTactical</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-danger">Paralysis (touch)</span>
+        <span class="ability-pill ability-danger">Disease</span>
+        <span class="ability-pill ability-aura">Stench (Aura)</span>
+        <span class="ability-pill">Turn Resistance +2</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Upgraded Ghoul with Stench aura — position for aura to affect multiple enemies (Sickened condition reduces attack/saves). Same paralysis cycling as Ghoul. Leads ghoul packs as a natural commander.
+      </div>
+    </div>
+  </div>
+
+  <!-- Vampire Spawn -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Vampire Spawn</span>
+      <span class="cc-cr">CR 4 &nbsp;|&nbsp; Source: NPCDatabase_V.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">13</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">13</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">4d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">26</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-tactical">UndeadTactical</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-drain">Energy Drain</span>
+        <span class="ability-pill ability-danger">Dominate (Will save)</span>
+        <span class="ability-pill ability-danger">Blood Drain (grapple)</span>
+        <span class="ability-pill">Turn Resistance +2</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Attempt Dominate before melee — target party leader or strongest fighter. Grapple then Blood Drain on isolated targets. Energy Drain on high-level characters for maximum level loss impact.
+      </div>
+    </div>
+  </div>
+
+  <!-- Wraith -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Wraith</span>
+      <span class="cc-cr">CR 5 &nbsp;|&nbsp; Source: NPCDatabase_W.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">14</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">14</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">5d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">32</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-drain">Incorporeal</span>
+        <span class="ability-pill ability-drain">Energy Drain</span>
+        <span class="ability-pill ability-danger">Create Spawn</span>
+        <span class="ability-pill">Daylight Powerlessness</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> High INT with full incorporeal movement. Energy Drain + Create Spawn — strategic kill selection. Move through walls to reach isolated spellcasters. Avoid daylight. Retreat into solid objects when damaged.
+      </div>
+    </div>
+  </div>
+
+  <!-- Spectre -->
+  <div class="creature-card">
+    <div class="cc-head">
+      <span class="cc-name">Spectre</span>
+      <span class="cc-cr">CR 7 &nbsp;|&nbsp; Source: NPCDatabase_S.cs</span>
+    </div>
+    <div class="cc-body">
+      <div class="cc-stats">
+        <div class="cc-stat"><span class="cs-l">INT</span><span class="cs-v">14</span></div>
+        <div class="cc-stat"><span class="cs-l">WIS</span><span class="cs-v">14</span></div>
+        <div class="cc-stat"><span class="cs-l">HD</span><span class="cs-v">7d12</span></div>
+        <div class="cc-stat"><span class="cs-l">HP (avg)</span><span class="cs-v">45</span></div>
+        <div class="cc-stat"><span class="cs-l">Current Profile</span><span class="cs-v"><span class="profile-badge pb-humanoid">Humanoid</span></span></div>
+        <div class="cc-stat"><span class="cs-l">Recommended</span><span class="cs-v"><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span></span></div>
+      </div>
+      <div class="cc-abilities">
+        <div class="ca-lbl">Special Abilities</div>
+        <span class="ability-pill ability-drain">Incorporeal</span>
+        <span class="ability-pill ability-drain">Energy Drain</span>
+        <span class="ability-pill ability-danger">Create Spawn</span>
+        <span class="ability-pill">Turn Resistance +2</span>
+        <span class="ability-pill">Daylight Powerlessness</span>
+        <span class="ability-pill">Undead Traits</span>
+      </div>
+      <div class="info-box" style="margin-top:8px; padding:6px 10px; font-size:9pt;">
+        <strong>AI Note:</strong> Upgraded Wraith with higher INT. Full tactical awareness — coordinate with spawn, use flanking through walls, prioritize energy drain on high-level party members. Avoid sunlight aggressively.
+      </div>
+    </div>
+  </div>
+
+  <div class="ai-block">
+    <h4>&#129504; AI Behavior: High Intelligence Undead</h4>
+    <ul>
+      <li><strong>Target Selection:</strong> Analyze party composition; prioritize healers, then casters, then martial</li>
+      <li><strong>Movement:</strong> Sophisticated positioning; use incorporeal movement through walls to reach isolated targets</li>
+      <li><strong>Special Abilities:</strong> Strategic use — Energy Drain to weaken before killing, Dominate on key targets, Paralysis cycling</li>
+      <li><strong>Retreat:</strong> Will retreat strategically; use hit-and-run tactics; retreat into solid objects (incorporeal)</li>
+      <li><strong>Group Tactics:</strong> Coordinate with other undead; use minions/spawn as shields and flankers</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 6 — SPECIAL ABILITIES
+════════════════════════════════════════════════════════════ -->
+<div class="section-break" id="special-abilities">
+  <div class="tier-header">
+    <h1>6. Special Abilities Cross-Reference</h1>
+    <div class="tier-meta">AI implications and behavior guidelines for each special ability type</div>
+  </div>
+
+  <p>The following table cross-references all special abilities with the undead that possess them and their
+  AI behavior implications. This is the primary reference for implementing ability-specific AI logic.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:20%">Ability</th>
+        <th style="width:36%">Undead With It</th>
+        <th>AI Implications</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Blood Drain</strong></td>
+        <td>Vampire Spawn</td>
+        <td>Grapple then drain — prefer isolated targets; establish grapple before draining</td>
+      </tr>
+      <tr>
+        <td><strong>Corrupting Touch</strong></td>
+        <td>Ghost</td>
+        <td>Prioritize physically strong targets (targets Fort save); use melee contact reliably</td>
+      </tr>
+      <tr>
+        <td><strong>Create Spawn</strong></td>
+        <td>Greater Shadow, Mohrg, Spectre, Wight, Wight Dreadwalker, Wraith</td>
+        <td>Kill priority matters — new spawn created from slain enemies. Avoid overkilling if spawn is desired</td>
+      </tr>
+      <tr>
+        <td><strong>DR 5/bludgeoning</strong></td>
+        <td>All Skeleton Templates</td>
+        <td>Passive defense; no AI impact. Note vulnerability for player targeting</td>
+      </tr>
+      <tr>
+        <td><strong>DR 5/slashing</strong></td>
+        <td>All Zombie Templates</td>
+        <td>Passive defense; no AI impact. Note vulnerability for player targeting</td>
+      </tr>
+      <tr>
+        <td><strong>Death Gaze</strong></td>
+        <td>Bodak</td>
+        <td>Position to affect maximum enemies per round; Death save (Fort DC) on all who meet gaze</td>
+      </tr>
+      <tr>
+        <td><strong>Despair</strong> (Aura)</td>
+        <td>Mummy</td>
+        <td>Passive aura — advance into melee clusters to trigger on multiple enemies simultaneously</td>
+      </tr>
+      <tr>
+        <td><strong>Disease</strong></td>
+        <td>Ghast, Ghoul, Mummy</td>
+        <td>Long-term threat; AI should prioritize contact attacks to spread disease to multiple targets</td>
+      </tr>
+      <tr>
+        <td><strong>Dominate</strong></td>
+        <td>Vampire Spawn</td>
+        <td>Target party leader or strongest fighter; maintain concentration on dominated target</td>
+      </tr>
+      <tr>
+        <td><strong>Energy Drain</strong></td>
+        <td>Ghost, Spectre, Vampire Spawn, Wight, Wight Dreadwalker, Wraith</td>
+        <td>Prioritize melee contact; targets with highest levels suffer greatest negative level impact</td>
+      </tr>
+      <tr>
+        <td><strong>Frightful Moan</strong> (AoE)</td>
+        <td>Ghost</td>
+        <td>Use as opener before engaging party — AoE fear to Panic or Shaken the entire group</td>
+      </tr>
+      <tr>
+        <td><strong>Improved Grab</strong></td>
+        <td>Mohrg</td>
+        <td>Grapple → tongue paralysis → coup de gr&#226;ce or continue drain</td>
+      </tr>
+      <tr>
+        <td><strong>Improved Initiative</strong></td>
+        <td>All Skeleton Templates</td>
+        <td>No AI logic impact; +4 to initiative rolls is a passive bonus</td>
+      </tr>
+      <tr>
+        <td><strong>Incorporeal</strong></td>
+        <td>Allip, Ghost, Greater Shadow, Shadow, Spectre, Wraith</td>
+        <td>Must require magic weapons; can move through walls for flanking; retreat into solid objects when damaged</td>
+      </tr>
+      <tr>
+        <td><strong>Manifestation</strong></td>
+        <td>Ghost</td>
+        <td>Toggle ethereal/material plane — use tactically to avoid concentrated damage</td>
+      </tr>
+      <tr>
+        <td><strong>Mummy Rot</strong></td>
+        <td>Mummy</td>
+        <td>Prioritize melee contact; stacks with Despair aura for compounding debuffs over time</td>
+      </tr>
+      <tr>
+        <td><strong>Paralysis</strong></td>
+        <td>Ghast, Ghoul, Mohrg</td>
+        <td>Cycle between targets to paralyze multiple enemies; coup de gr&#226;ce paralyzed foes</td>
+      </tr>
+      <tr>
+        <td><strong>Rejuvenation</strong></td>
+        <td>Ghost</td>
+        <td>Ghost returns after destruction — no AI retreat behavior needed; fight aggressively</td>
+      </tr>
+      <tr>
+        <td><strong>Single Actions Only</strong></td>
+        <td>All Zombie Templates</td>
+        <td>Move OR attack per round — always attack if adjacent; move otherwise</td>
+      </tr>
+      <tr>
+        <td><strong>Stench</strong> (Aura)</td>
+        <td>Ghast</td>
+        <td>Stay close to enemy cluster; Sickened condition (–2 to attacks/saves) on all within 10 ft</td>
+      </tr>
+      <tr>
+        <td><strong>Turn Resistance</strong></td>
+        <td>Ghast, Ghost, Ghoul, Greater Shadow, Shadow, Spectre, Vampire Spawn, Wight, Wight Dreadwalker, Wraith</td>
+        <td>Passive defense against cleric turning — no AI logic impact</td>
+      </tr>
+      <tr>
+        <td><strong>Undead Traits</strong></td>
+        <td>All undead</td>
+        <td>Immune to mind-affecting effects, poison, disease, critical hits, and sneak attacks</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 7 — AI PROFILE ASSIGNMENTS
+════════════════════════════════════════════════════════════ -->
+<div class="section-break" id="ai-profile-assignments">
+  <div class="tier-header">
+    <h1>7. Recommended AI Profile Assignments</h1>
+    <div class="tier-meta">Analysis-based profile upgrades for optimal combat behavior</div>
+  </div>
+
+  <h2>Complete Assignment Table</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:26%">Undead</th>
+        <th style="width:22%">Current Profile</th>
+        <th style="width:22%">Recommended Profile</th>
+        <th>Reason</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>All Zombies</strong> (7 types)</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span> &#10003;</td>
+        <td>Correct — mindless, single action only</td>
+      </tr>
+      <tr>
+        <td><strong>All Skeletons</strong> (8 types)</td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span></td>
+        <td><span class="profile-badge pb-mindless">UndeadMindless</span> &#10003;</td>
+        <td>Correct — mindless but full actions, Improved Initiative</td>
+      </tr>
+      <tr>
+        <td>Shadow</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span> &#9654;</td>
+        <td>Needs incorporeal movement AI + Strength damage targeting</td>
+      </tr>
+      <tr>
+        <td>Greater Shadow</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span> &#9654;</td>
+        <td>Incorporeal movement + Create Spawn awareness required</td>
+      </tr>
+      <tr>
+        <td>Allip</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span> &#9654;</td>
+        <td>Incorporeal; Babble AoE needs positioning logic</td>
+      </tr>
+      <tr>
+        <td>Wraith</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span> &#9654;</td>
+        <td>Incorporeal + Energy Drain + Create Spawn tactics</td>
+      </tr>
+      <tr>
+        <td>Spectre</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span> &#9654;</td>
+        <td>Incorporeal + Energy Drain; high INT needs full tactics</td>
+      </tr>
+      <tr>
+        <td>Ghost</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-incorporeal">UndeadIncorporeal</span> &#9654;</td>
+        <td>Incorporeal with multiple specials; needs complex AI</td>
+      </tr>
+      <tr>
+        <td>Ghoul</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-tactical">UndeadTactical</span> &#9654;</td>
+        <td>High INT; should cycle paralysis between targets</td>
+      </tr>
+      <tr>
+        <td>Ghast</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-tactical">UndeadTactical</span> &#9654;</td>
+        <td>High INT; paralysis + stench aura positioning</td>
+      </tr>
+      <tr>
+        <td>Wight</td>
+        <td><span class="profile-badge pb-undead">Undead</span></td>
+        <td><span class="profile-badge pb-tactical">UndeadTactical</span> &#9654;</td>
+        <td>Average INT; Energy Drain + Create Spawn tactics</td>
+      </tr>
+      <tr>
+        <td>Wight Dreadwalker</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-tactical">UndeadTactical</span> &#9654;</td>
+        <td>Enhanced Wight; coordinated Energy Drain needed</td>
+      </tr>
+      <tr>
+        <td>Vampire Spawn</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-tactical">UndeadTactical</span> &#9654;</td>
+        <td>High INT; Dominate + Blood Drain combo</td>
+      </tr>
+      <tr>
+        <td>Mummy</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-brute">UndeadBrute</span> &#9654;</td>
+        <td>Low INT but tough; Despair aura + Mummy Rot</td>
+      </tr>
+      <tr>
+        <td>Bodak</td>
+        <td><span class="profile-badge pb-humanoid">Humanoid</span></td>
+        <td><span class="profile-badge pb-brute">UndeadBrute</span> &#9654;</td>
+        <td>Low INT; Death Gaze needs facing/positioning</td>
+      </tr>
+      <tr>
+        <td>Mohrg</td>
+        <td><span class="profile-badge pb-grappler">Grappler</span></td>
+        <td><span class="profile-badge pb-grappler">Grappler</span> &#10003;</td>
+        <td>Correct — Improved Grab into tongue paralysis</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="new-profiles">New AI Profiles Required</h2>
+
+  <h3>&#10003; UndeadMindless <span style="font-size:9pt;color:#888;">(Already Implemented)</span></h3>
+  <div class="info-box">
+    Already correctly implemented for all zombies and skeletons. Handles single action restriction for zombies and Improved Initiative for skeletons. Attack nearest target, no retreat, no tactics.
+  </div>
+
+  <h3>&#9654; UndeadIncorporeal <span style="font-size:9pt;color:#c0a060;">(New — Priority 1)</span></h3>
+  <p><strong>Applies to:</strong> Shadow, Greater Shadow, Allip, Wraith, Spectre, Ghost</p>
+  <div class="ai-block">
+    <h4>Required Behaviors</h4>
+    <ul>
+      <li>Move through walls to reach isolated or unsupported targets (spellcasters behind lines)</li>
+      <li>Retreat into solid objects when below 40% HP to avoid damage</li>
+      <li>Prefer targets vulnerable to touch attacks; track magic weapon users on enemy side</li>
+      <li>Create Spawn awareness — avoid overkilling when undead minions are tactically valuable</li>
+      <li>Strength Damage users (Shadow, Greater Shadow): target STR-dependent melee fighters</li>
+      <li>Energy Drain users: prioritize targets with most character levels</li>
+      <li><strong>Ghost special:</strong> Frightful Moan as opener; toggle Manifestation to avoid focus fire</li>
+    </ul>
+  </div>
+
+  <h3>&#9654; UndeadTactical <span style="font-size:9pt;color:#c0a060;">(New — Priority 2)</span></h3>
+  <p><strong>Applies to:</strong> Ghoul, Ghast, Wight, Wight Dreadwalker, Vampire Spawn</p>
+  <div class="ai-block">
+    <h4>Required Behaviors</h4>
+    <ul>
+      <li>Cycle paralysis attacks between multiple targets rather than focusing one enemy</li>
+      <li>Ghast: position for Stench aura to affect maximum enemy count simultaneously</li>
+      <li>Energy Drain users: concentrate negative levels on key party members (healers, casters)</li>
+      <li>Vampire Spawn: attempt Dominate before entering melee; target the party's strongest fighter</li>
+      <li>Pack coordination: one paralysis attacker locks down target, others attack the helpless enemy</li>
+      <li>Deliver coup de gr&#226;ce against paralyzed or helpless enemies when opportunity arises</li>
+    </ul>
+  </div>
+
+  <h3>&#9654; UndeadBrute <span style="font-size:9pt;color:#c0a060;">(New — Priority 3)</span></h3>
+  <p><strong>Applies to:</strong> Mummy, Bodak</p>
+  <div class="ai-block">
+    <h4>Required Behaviors</h4>
+    <ul>
+      <li>Mummy: advance into melee range, let Despair aura trigger on clustered enemies, then slam for Mummy Rot</li>
+      <li>Bodak: position for Death Gaze line-of-sight to affect maximum enemies per round facing</li>
+      <li>Low INT limits tactical complexity — straightforward but effective melee/gaze approach</li>
+      <li>Neither retreats; rely on DR and Turn Resistance for passive survival</li>
+      <li>Bodak: avoid direct sunlight (takes 1 Con damage per round in sunlight)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SECTION 8 — SOURCE FILES
+════════════════════════════════════════════════════════════ -->
+<div class="section-break" id="source-files">
+  <div class="tier-header">
+    <h1>8. Source File Index</h1>
+    <div class="tier-meta">Unity project C# source files referenced by this compendium</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:35%">File</th>
+        <th style="width:15%">Count</th>
+        <th>Contents / Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>NPCDatabaseCustom.cs</code></td>
+        <td>4</td>
+        <td>Custom variants: Skeleton Warrior, Skeleton Archer, Zombie, Wight Dreadwalker</td>
+      </tr>
+      <tr>
+        <td><code>NPCDatabase_A.cs</code></td>
+        <td>1</td>
+        <td>Allip (Average INT, incorporeal, Wisdom drain)</td>
+      </tr>
+      <tr>
+        <td><code>NPCDatabase_B.cs</code></td>
+        <td>1</td>
+        <td>Bodak (Low INT, CR 8, Death Gaze)</td>
+      </tr>
+      <tr>
+        <td><code>NPCDatabase_G.cs</code></td>
+        <td>4</td>
+        <td>Ghoul, Ghast, Ghost, Greater Shadow</td>
+      </tr>
+      <tr>
+        <td><code>NPCDatabase_M.cs</code></td>
+        <td>2</td>
+        <td>Mohrg (Grappler), Mummy (Brute)</td>
+      </tr>
+      <tr>
+        <td><code>NPCDatabase_S.cs</code></td>
+        <td>2</td>
+        <td>Shadow (incorporeal), Spectre (incorporeal + energy drain)</td>
+      </tr>
+      <tr>
+        <td><code>NPCDatabase_V.cs</code></td>
+        <td>1</td>
+        <td>Vampire Spawn (Dominate + Blood Drain)</td>
+      </tr>
+      <tr>
+        <td><code>NPCDatabase_W.cs</code></td>
+        <td>2</td>
+        <td>Wight (energy drain), Wraith (incorporeal + energy drain)</td>
+      </tr>
+      <tr>
+        <td><code>SkeletonTemplate.cs</code></td>
+        <td>8</td>
+        <td>Factory-generated skeleton variants — uses template pattern for all 8 types</td>
+      </tr>
+      <tr>
+        <td><code>ZombieTemplate.cs</code></td>
+        <td>7</td>
+        <td>Factory-generated zombie variants — uses template pattern for all 7 types</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="summary-grid" style="margin-top:20px;">
+    <div class="summary-card">
+      <div class="sc-num">10</div>
+      <div class="sc-lbl">Source Files</div>
+    </div>
+    <div class="summary-card">
+      <div class="sc-num">32</div>
+      <div class="sc-lbl">Total Entries</div>
+    </div>
+    <div class="summary-card">
+      <div class="sc-num">3</div>
+      <div class="sc-lbl">New Profiles<br>Required</div>
+    </div>
+    <div class="summary-card">
+      <div class="sc-num">14</div>
+      <div class="sc-lbl">Profiles to<br>Upgrade</div>
+    </div>
+  </div>
+
+  <div class="warn-box" style="margin-top:20px;">
+    <strong>Implementation Priority:</strong>
+    <ol style="margin:6px 0 0 20px; font-size:9.5pt;">
+      <li><strong>UndeadIncorporeal</strong> — affects 6 creatures including Ghost (CR 7) and Spectre (CR 7)</li>
+      <li><strong>UndeadTactical</strong> — affects 5 creatures including Vampire Spawn (CR 4) and Ghast (CR 3)</li>
+      <li><strong>UndeadBrute</strong> — affects Mummy (CR 5) and Bodak (CR 8); simpler implementation</li>
+    </ol>
+  </div>
+
+  <p style="margin-top:16px; font-size:9pt; color:#666; text-align:center; border-top:1px solid #ddd; padding-top:10px;">
+    D&amp;D 3.5e Undead Creature Compendium &nbsp;|&nbsp; D&amp;D 3.5e Unity Prototype &nbsp;|&nbsp; Generated 2026-05-28<br>
+    Total: 32 undead across 4 intelligence tiers &nbsp;|&nbsp; CR 1/3 to 8 &nbsp;|&nbsp; 6 AI profile categories
+  </p>
+</div>
+
+<!-- TOC page number resolver -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var observer = new MutationObserver(function(mutations, obs) {
+    var pagedContent = document.querySelector('.pagedjs_pages');
+    if (pagedContent) { obs.disconnect(); setTimeout(resolvePageNumbers, 600); }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  function resolvePageNumbers() {
+    document.querySelectorAll('.page-ref').forEach(function(ref) {
+      var href = ref.getAttribute('data-href');
+      var target = document.getElementById(href.replace('#', ''));
+      if (target) {
+        var page = target.closest('.pagedjs_page');
+        if (page) ref.textContent = page.getAttribute('data-page-number') || '?';
+      }
+    });
+  }
+});
+</script>
+</body>
+</html>
