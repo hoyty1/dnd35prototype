@@ -65,7 +65,29 @@ public class MetamagicData
     }
 
     /// <summary>
-    /// Get the level adjustment for a specific metamagic feat.
+    /// Get the standard level adjustment for a metamagic feat (static convenience).
+    /// Returns the fixed adjustment for most feats; 0 for Heighten (which is variable).
+    /// </summary>
+    public static int GetLevelAdjustment(MetamagicFeatId feat)
+    {
+        switch (feat)
+        {
+            case MetamagicFeatId.EmpowerSpell:  return 2;
+            case MetamagicFeatId.EnlargeSpell:  return 1;
+            case MetamagicFeatId.ExtendSpell:   return 1;
+            case MetamagicFeatId.HeightenSpell:  return 0; // Variable — use instance method with baseSpellLevel
+            case MetamagicFeatId.MaximizeSpell:  return 3;
+            case MetamagicFeatId.QuickenSpell:   return 4;
+            case MetamagicFeatId.SilentSpell:    return 1;
+            case MetamagicFeatId.StillSpell:     return 1;
+            case MetamagicFeatId.WidenSpell:     return 3;
+            default: return 0;
+        }
+    }
+
+    /// <summary>
+    /// Get the level adjustment for a specific metamagic feat (instance method).
+    /// Handles Heighten's variable level based on HeightenToLevel.
     /// </summary>
     public int GetLevelAdjustment(MetamagicFeatId feat, int baseSpellLevel)
     {

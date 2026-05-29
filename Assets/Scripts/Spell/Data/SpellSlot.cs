@@ -64,6 +64,21 @@ public class SpellSlot
     /// </summary>
     public string CasterClassName;
 
+    /// <summary>
+    /// Metamagic feats applied during spell preparation (prepared casters only).
+    /// D&D 3.5e PHB p.88: Prepared casters apply metamagic at preparation time,
+    /// which raises the effective slot level used. Null if no metamagic applied.
+    /// </summary>
+    public MetamagicData AppliedMetamagic;
+
+    /// <summary>
+    /// The base spell level before metamagic adjustment.
+    /// When metamagic is applied during preparation, the slot Level reflects the
+    /// higher effective level, while BaseSpellLevel preserves the original spell level.
+    /// -1 means no metamagic was applied (BaseSpellLevel == Level).
+    /// </summary>
+    public int BaseSpellLevel = -1;
+
     /// <summary>Create a new empty spell slot at the given level.</summary>
     public SpellSlot(int level, bool isDomainSlot = false, string casterClassName = null, bool isSpecialistSlot = false)
     {
@@ -75,6 +90,8 @@ public class SpellSlot
         IsSpecialistSlot = isSpecialistSlot;
         DomainHint = null;
         CasterClassName = casterClassName;
+        AppliedMetamagic = null;
+        BaseSpellLevel = -1;
     }
 
     /// <summary>Create a spell slot with a specific spell already prepared.</summary>
@@ -88,7 +105,12 @@ public class SpellSlot
         IsSpecialistSlot = isSpecialistSlot;
         DomainHint = null;
         CasterClassName = casterClassName;
+        AppliedMetamagic = null;
+        BaseSpellLevel = -1;
     }
+
+    /// <summary>Whether this slot has metamagic applied during preparation.</summary>
+    public bool HasMetamagic => AppliedMetamagic != null && AppliedMetamagic.HasAnyMetamagic;
 
     /// <summary>Whether this slot can be cast (has a spell, isn't used, isn't disabled, and isn't locked by Imbue).</summary>
     public bool CanCast => PreparedSpell != null && !IsUsed && !DisabledByNegativeLevel && !LockedByImbue;
@@ -114,18 +136,45 @@ public class SpellSlot
         IsUsed = false;
     }
 
-    /// <summary>Clear this slot (remove prepared spell and reset used status).</summary>
+    /// <summary>Clear this slot (remove prepared spell, metamagic, and reset used status).</summary>
     public void Clear()
     {
         PreparedSpell = null;
         IsUsed = false;
+        AppliedMetamagic = null;
+        BaseSpellLevel = -1;
     }
 
-    /// <summary>Prepare a spell in this slot (replaces any existing spell).</summary>
+    /// <summary>Prepare a spell in this slot (replaces any existing spell). No metamagic.</summary>
     public void Prepare(SpellData spell)
     {
         PreparedSpell = spell;
         IsUsed = false;
+        AppliedMetamagic = null;
+        BaseSpellLevel = -1;
+    }
+
+    /// <summary>
+    /// Prepare a spell in this slot with metamagic applied (prepared casters only).
+    /// D&D 3.5e PHB p.88: Prepared casters choose metamagic at preparation time.
+    /// The spell occupies a higher-level slot equal to base level + metamagic adjustment.
+    /// </summary>
+    /// <param name="spell">The base spell to prepare.</param>
+    /// <param name="metamagic">The metamagic feats to apply. Null for no metamagic.</param>
+    public void PrepareWithMetamagic(SpellData spell, MetamagicData metamagic)
+    {
+        PreparedSpell = spell;
+        IsUsed = false;
+        if (metamagic != null && metamagic.HasAnyMetamagic)
+        {
+            AppliedMetamagic = metamagic.Clone();
+            BaseSpellLevel = spell.SpellLevel;
+        }
+        else
+        {
+            AppliedMetamagic = null;
+            BaseSpellLevel = -1;
+        }
     }
 
     public override string ToString()
@@ -134,6 +183,7 @@ public class SpellSlot
         string status = LockedByImbue ? "LOCKED(Imbue)" : (DisabledByNegativeLevel ? "DISABLED" : (IsUsed ? "USED" : "ready"));
         string bonusTag = IsDomainSlot ? " [DOMAIN]" : (IsSpecialistSlot ? " [SPECIALIST]" : string.Empty);
         string classTag = string.IsNullOrWhiteSpace(CasterClassName) ? string.Empty : $" [{CasterClassName}]";
-        return $"Lv{Level}{bonusTag}{classTag} [{spellName}] ({status})";
+        string metamagicTag = HasMetamagic ? $" {AppliedMetamagic.GetDisplayName()}" : string.Empty;
+        return $"Lv{Level}{bonusTag}{classTag} [{spellName}{metamagicTag}] ({status})";
     }
 }

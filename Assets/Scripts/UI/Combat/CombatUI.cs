@@ -2150,7 +2150,10 @@ public class CombatUI : MonoBehaviour
         titleText.alignment = TextAnchor.MiddleCenter;
         titleText.fontStyle = FontStyle.Bold;
 
-        bool hasMetamagic = spellComp.HasAnyMetamagicFeat();
+        // D&D 3.5e PHB p.88: Only spontaneous casters choose metamagic at cast time.
+        // Prepared casters apply metamagic during preparation, not during combat.
+        bool isSpontaneousCaster = spellComp.IsSpontaneousCaster && spellComp.SpontaneousData != null;
+        bool hasMetamagic = isSpontaneousCaster && spellComp.HasAnyMetamagicFeat();
         string mmNote = hasMetamagic ? " | ⚡ Metamagic Available" : "";
         int asfChance = (spellComp.Stats != null && spellComp.Stats.IsAffectedByArcaneSpellFailure)
             ? Mathf.Clamp(spellComp.Stats.ArcaneSpellFailure, 0, 100)
@@ -2441,10 +2444,16 @@ public class CombatUI : MonoBehaviour
             : 0;
         string asfWarn = asfChance > 0 ? $" ⚠ASF {asfChance}%" : "";
 
-        string label = $"{spell.Name}{countStr}{asfWarn} ({rangeStr}){effectStr}";
+        // D&D 3.5e: Show metamagic indicator for prepared casters with baked-in metamagic
+        string metamagicTag = "";
+        if (spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic)
+            metamagicTag = $" [{spell.MetamagicDataRef.GetDisplayName()}]";
+
+        string label = $"{spell.Name}{metamagicTag}{countStr}{asfWarn} ({rangeStr}){effectStr}";
 
         // Create button using pixel-based positioning within scroll content
-        string prefix = hasMetamagic ? "⚡ " : "";
+        // ⚡ prefix for spontaneous casters with metamagic feats available
+        string prefix = hasMetamagic ? "⚡ " : (metamagicTag.Length > 0 ? "✦ " : "");
 
         GameObject btnObj = new GameObject(spell.SpellId);
         btnObj.transform.SetParent(parent.transform, false);
@@ -2481,10 +2490,25 @@ public class CombatUI : MonoBehaviour
         // Wire up click handler
         if (hasMetamagic)
         {
+            // Spontaneous caster with metamagic feats — show metamagic panel
             SpellData capturedSpell = spell;
             btn.onClick.AddListener(() =>
             {
                 ShowMetamagicPanel(capturedSpell, spellComp);
+            });
+        }
+        else if (spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic)
+        {
+            // Prepared caster with metamagic already baked in — pass MetamagicData directly
+            SpellData capturedSpell = spell;
+            MetamagicData capturedMeta = spell.MetamagicDataRef;
+            btn.onClick.AddListener(() =>
+            {
+                HideSpellSelection();
+                if (_onSpellSelectedWithMetamagic != null)
+                    _onSpellSelectedWithMetamagic.Invoke(capturedSpell, capturedMeta);
+                else
+                    _onSpellSelected?.Invoke(capturedSpell);
             });
         }
         else
@@ -2999,6 +3023,15 @@ public class CombatUI : MonoBehaviour
             ? $"<color=#80ff80>Slot Available (Lv{effectiveLvl})</color>"
             : $"<color=#ff6060>No Lv{effectiveLvl} Slot! (Max: Lv{maxSlot})</color>";
 
+        // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
+        bool isSpontaneous = spellComp != null && spellComp.IsSpontaneousCaster;
+        string castTimeWarning = "";
+        if (isSpontaneous && _tempMetamagic.HasAnyMetamagic)
+        {
+            bool isQuickened = _tempMetamagic.Has(MetamagicFeatId.QuickenSpell);
+            castTimeWarning = isQuickened ? "" : "\n<color=#ffaa44>⚠ Full-round action (metamagic slows spontaneous casting)</color>";
+        }
+
         if (!_tempMetamagic.HasAnyMetamagic)
         {
             _metamagicInfoText.text = $"Base Spell Level: {baseLvl} | Select metamagic feats to apply";
@@ -3006,7 +3039,7 @@ public class CombatUI : MonoBehaviour
         }
         else
         {
-            _metamagicInfoText.text = $"Lv{baseLvl} → Lv{effectiveLvl} slot needed | {slotStatus}";
+            _metamagicInfoText.text = $"Lv{baseLvl} → Lv{effectiveLvl} slot needed | {slotStatus}{castTimeWarning}";
             _metamagicInfoText.supportRichText = true;
             _metamagicInfoText.color = hasSlot ? new Color(0.9f, 0.9f, 0.7f) : new Color(1f, 0.5f, 0.5f);
         }

@@ -45,7 +45,13 @@ public partial class GameManager
 
         if (!isQuickened)
         {
-            caster.CommitStandardAction();
+            // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
+            bool isSpontaneousMetamagic = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic
+                && MetamagicSystem.IsSpontaneousCaster(caster.Stats);
+            if (isSpontaneousMetamagic)
+                caster.Actions.UseFullRoundAction();
+            else
+                caster.CommitStandardAction();
         }
         else
         {
@@ -1473,7 +1479,13 @@ public partial class GameManager
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         if (!isQuickened)
         {
-            caster.CommitStandardAction();
+            // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
+            bool isSpontaneousMetamagic = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic
+                && MetamagicSystem.IsSpontaneousCaster(caster.Stats);
+            if (isSpontaneousMetamagic)
+                caster.Actions.UseFullRoundAction();
+            else
+                caster.CommitStandardAction();
         }
         else
         {
@@ -1692,7 +1704,13 @@ public partial class GameManager
         }
         else if (!isQuickened)
         {
-            caster.CommitStandardAction();
+            // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
+            bool isSpontaneousMetamagic = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic
+                && MetamagicSystem.IsSpontaneousCaster(caster.Stats);
+            if (isSpontaneousMetamagic)
+                caster.Actions.UseFullRoundAction();
+            else
+                caster.CommitStandardAction();
         }
         else
         {
@@ -3556,7 +3574,13 @@ public partial class GameManager
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         if (!isQuickened)
         {
-            caster.CommitStandardAction();
+            // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
+            bool isSpontaneousMetamagic = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic
+                && MetamagicSystem.IsSpontaneousCaster(caster.Stats);
+            if (isSpontaneousMetamagic)
+                caster.Actions.UseFullRoundAction();
+            else
+                caster.CommitStandardAction();
         }
         else
         {

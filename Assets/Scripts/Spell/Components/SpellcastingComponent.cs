@@ -1549,6 +1549,59 @@ public class SpellcastingComponent : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Prepare a spell with metamagic into a specific slot (prepared casters only).
+    /// D&D 3.5e PHB p.88: The metamagic-enhanced spell occupies a slot of the effective level.
+    /// The base spell level + metamagic adjustment must equal the slot level.
+    /// </summary>
+    public bool PrepareSpellInSlotWithMetamagic(int slotIndex, SpellData spell, MetamagicData metamagic)
+    {
+        if (slotIndex < 0 || slotIndex >= SpellSlots.Count) return false;
+        var slot = SpellSlots[slotIndex];
+
+        if (spell == null)
+        {
+            slot.Clear();
+            SyncSlotsRemainingFromSpellSlots();
+            SyncPreparedSpellsFromSlots();
+            return true;
+        }
+
+        if (metamagic == null || !metamagic.HasAnyMetamagic)
+        {
+            // No metamagic — use normal preparation
+            return PrepareSpellInSlot(slotIndex, spell);
+        }
+
+        // Validate: base level + metamagic adjustment must equal slot level
+        int effectiveLevel = metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
+        if (effectiveLevel != slot.Level)
+        {
+            Debug.LogWarning($"[Spellcasting] Metamagic spell {spell.Name} (Lv{spell.SpellLevel}+{effectiveLevel - spell.SpellLevel}={effectiveLevel}) doesn't match slot level {slot.Level}!");
+            return false;
+        }
+
+        // Domain/specialist slots should not use metamagic
+        if (slot.IsDomainSlot || slot.IsSpecialistSlot)
+        {
+            Debug.LogWarning($"[Spellcasting] Cannot prepare metamagic spells in domain/specialist slots!");
+            return false;
+        }
+
+        // Enforce class-specific availability
+        if (!string.IsNullOrWhiteSpace(slot.CasterClassName) && !IsSpellKnownByClass(slot.CasterClassName, spell))
+        {
+            Debug.LogWarning($"[Spellcasting] {spell.Name} is not in {slot.CasterClassName}'s available spell list!");
+            return false;
+        }
+
+        slot.PrepareWithMetamagic(spell, metamagic);
+        SyncSlotsRemainingFromSpellSlots();
+        SyncPreparedSpellsFromSlots();
+        Debug.Log($"[Spellcasting] Prepared {metamagic.GetDisplayName()} {spell.Name} (Lv{spell.SpellLevel}→{effectiveLevel}) in slot {slotIndex}");
+        return true;
+    }
+
     public List<SpellData> GetAllAvailableSpells()
     {
         SpellDatabase.Init();
@@ -1932,8 +1985,19 @@ public class SpellcastingComponent : MonoBehaviour
             return isPrepared ? 999 : 0; // 999 = unlimited
         }
 
+        // D&D 3.5e: If the spell has MetamagicDataRef, count only slots with matching metamagic
+        if (spell.MetamagicDataRef != null && spell.MetamagicDataRef.HasAnyMetamagic)
+        {
+            string metamagicKey = spell.MetamagicDataRef.GetDisplayName();
+            return SpellSlots.Count(s => s.PreparedSpell != null &&
+                s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed && !s.DisabledByNegativeLevel &&
+                s.HasMetamagic && s.AppliedMetamagic.GetDisplayName() == metamagicKey);
+        }
+
+        // Normal spell: count only non-metamagic slots
         return SpellSlots.Count(s => s.PreparedSpell != null &&
-                                     s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed && !s.DisabledByNegativeLevel);
+                                     s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed && !s.DisabledByNegativeLevel &&
+                                     !s.HasMetamagic);
     }
 
     /// <summary>
@@ -1963,11 +2027,37 @@ public class SpellcastingComponent : MonoBehaviour
 
             // Cantrips are available if prepared and not disabled by negative levels.
             bool isAvailable = (level == 0) ? !slot.DisabledByNegativeLevel : slot.CanCast;
+            if (!isAvailable) continue;
 
-            if (isAvailable && !seen.Contains(slot.PreparedSpell.SpellId))
+            // D&D 3.5e: Metamagic-enhanced prepared spells are distinct from their base versions.
+            // Use SpellId + metamagic display name as the unique key to differentiate them.
+            string metamagicKey = slot.HasMetamagic ? slot.AppliedMetamagic.GetDisplayName() : "";
+            string uniqueKey = slot.PreparedSpell.SpellId + "|" + metamagicKey;
+
+            if (!seen.Contains(uniqueKey))
             {
-                seen.Add(slot.PreparedSpell.SpellId);
-                result.Add(slot.PreparedSpell);
+                seen.Add(uniqueKey);
+
+                if (slot.HasMetamagic)
+                {
+                    // Clone the SpellData and attach metamagic info for combat UI display
+                    var metamagicSpell = slot.PreparedSpell.Clone();
+                    metamagicSpell.MetamagicDataRef = slot.AppliedMetamagic.Clone();
+                    metamagicSpell.BaseSpellLevel = slot.BaseSpellLevel;
+                    metamagicSpell.EffectiveSpellLevel = slot.Level;
+                    if (metamagicSpell.AppliedMetamagics == null)
+                        metamagicSpell.AppliedMetamagics = new System.Collections.Generic.List<MetamagicFeatId>();
+                    foreach (var feat in slot.AppliedMetamagic.AppliedMetamagic)
+                    {
+                        if (!metamagicSpell.AppliedMetamagics.Contains(feat))
+                            metamagicSpell.AppliedMetamagics.Add(feat);
+                    }
+                    result.Add(metamagicSpell);
+                }
+                else
+                {
+                    result.Add(slot.PreparedSpell);
+                }
             }
         }
 
@@ -2277,11 +2367,29 @@ public class SpellcastingComponent : MonoBehaviour
             return CastWizardSpellFromSlot(spell);
 
         int effectiveLevel = metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
+        string metamagicKey = metamagic.GetDisplayName();
 
-        // Find an available slot at the effective level
-        // For metamagic, we consume ANY unused slot at the effective level
+        // D&D 3.5e: Prefer finding the specifically prepared metamagic slot
+        // (matches spell ID AND metamagic display name for exact match)
         var slot = SpellSlots.FirstOrDefault(s =>
-            s.Level == effectiveLevel && !s.IsUsed && s.HasSpell);
+            s.Level == effectiveLevel && !s.IsUsed && s.HasSpell
+            && s.PreparedSpell.SpellId == spell.SpellId
+            && s.HasMetamagic && s.AppliedMetamagic.GetDisplayName() == metamagicKey);
+
+        // Fallback: find any available slot at the effective level with this spell
+        if (slot == null)
+        {
+            slot = SpellSlots.FirstOrDefault(s =>
+                s.Level == effectiveLevel && !s.IsUsed && s.HasSpell
+                && s.PreparedSpell.SpellId == spell.SpellId);
+        }
+
+        // Last resort: any available slot at the effective level
+        if (slot == null)
+        {
+            slot = SpellSlots.FirstOrDefault(s =>
+                s.Level == effectiveLevel && !s.IsUsed && s.HasSpell);
+        }
 
         if (slot == null)
         {
@@ -2293,7 +2401,7 @@ public class SpellcastingComponent : MonoBehaviour
         SyncSlotsRemainingFromSpellSlots();
         SyncPreparedSpellsFromSlots();
 
-        Debug.Log($"[Spellcasting] {Stats.CharacterName} cast metamagic {spell.Name} " +
+        Debug.Log($"[Spellcasting] {Stats.CharacterName} cast {metamagicKey} {spell.Name} " +
                   $"(effective Lv{effectiveLevel}) from slot.");
 
         return true;

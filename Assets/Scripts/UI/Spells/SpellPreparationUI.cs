@@ -82,6 +82,17 @@ public class SpellPreparationUI : MonoBehaviour
     private const float PANEL_W = 1200f;
     private const float PANEL_H = 860f;
 
+    /// <summary>
+    /// Represents one dropdown option for spell preparation.
+    /// Normal spells have Metamagic = null. Metamagic-enhanced options have the applied feats.
+    /// </summary>
+    private class SpellOptionEntry
+    {
+        public SpellData Spell;
+        public MetamagicData Metamagic; // null for normal spells
+        public string DisplayLabel;
+    }
+
     private class SlotRowUI
     {
         public GameObject Row;
@@ -89,7 +100,8 @@ public class SpellPreparationUI : MonoBehaviour
         public Dropdown SpellDropdown;
         public SpellSlot Slot;
         public int SlotIndex;
-        public List<SpellData> AvailableSpells; // Spells for dropdown at this level
+        public List<SpellData> AvailableSpells; // Spells for dropdown at this level (normal spells)
+        public List<SpellOptionEntry> AllOptions; // All options including metamagic variants
     }
 
     // ========== BUILD UI ==========
@@ -1155,9 +1167,10 @@ public class SpellPreparationUI : MonoBehaviour
         dropdown.captionText = labelText;
         dropdown.itemText = ilText;
 
-        // Populate options
-        var options = new List<Dropdown.OptionData>();
-        options.Add(new Dropdown.OptionData("(Empty)"));
+        // Build unified option list (normal spells + metamagic-enhanced variants)
+        row.AllOptions = new List<SpellOptionEntry>();
+
+        // Add normal spells at this slot's level
         foreach (var spell in row.AvailableSpells)
         {
             string optLabel = spell.Name;
@@ -1165,15 +1178,111 @@ public class SpellPreparationUI : MonoBehaviour
             if (!string.IsNullOrEmpty(domainTag))
                 optLabel += $" [{domainTag}]";
             if (spell.IsPlaceholder) optLabel += " [PH]";
-            options.Add(new Dropdown.OptionData(optLabel));
+
+            row.AllOptions.Add(new SpellOptionEntry
+            {
+                Spell = spell,
+                Metamagic = null,
+                DisplayLabel = optLabel
+            });
+        }
+
+        // D&D 3.5e PHB p.88: Prepared casters apply metamagic at preparation time.
+        // For non-domain, non-specialist slots at level > 0, generate metamagic-enhanced
+        // options from lower-level spells that the caster knows.
+        if (!isDomainSlot && !isSpecialistSlot && slot.Level > 0 && _spellComp != null)
+        {
+            var knownMetamagicFeats = _spellComp.GetKnownMetamagicFeats();
+            if (knownMetamagicFeats != null && knownMetamagicFeats.Count > 0)
+            {
+                // Get all known spells at lower levels
+                var allKnownSpells = _spellComp.GetKnownSpellsForClass(_activeCasterClassName);
+                var lowerLevelSpells = allKnownSpells
+                    .Where(s => s != null && s.SpellLevel < slot.Level && s.SpellLevel >= 0)
+                    .OrderBy(s => s.SpellLevel)
+                    .ThenBy(s => s.Name)
+                    .ToList();
+
+                foreach (var spell in lowerLevelSpells)
+                {
+                    // Generate single-feat metamagic options
+                    foreach (var featId in knownMetamagicFeats)
+                    {
+                        if (!MetamagicData.IsApplicable(featId, spell))
+                            continue;
+
+                        int adjustment = MetamagicData.GetLevelAdjustment(featId);
+                        if (adjustment <= 0) continue; // Skip Heighten (variable) for now
+                        if (spell.SpellLevel + adjustment != slot.Level) continue;
+
+                        var metamagic = new MetamagicData();
+                        metamagic.Toggle(featId);
+
+                        string metamagicLabel = $"⚡ {metamagic.GetDisplayName()} {spell.Name} (Lv{spell.SpellLevel}+{adjustment})";
+                        row.AllOptions.Add(new SpellOptionEntry
+                        {
+                            Spell = spell,
+                            Metamagic = metamagic,
+                            DisplayLabel = metamagicLabel
+                        });
+                    }
+
+                    // Generate two-feat combos where they fit the slot level
+                    var applicableFeats = knownMetamagicFeats
+                        .Where(f => MetamagicData.IsApplicable(f, spell) && MetamagicData.GetLevelAdjustment(f) > 0)
+                        .ToList();
+
+                    for (int i = 0; i < applicableFeats.Count; i++)
+                    {
+                        for (int j = i + 1; j < applicableFeats.Count; j++)
+                        {
+                            int adj1 = MetamagicData.GetLevelAdjustment(applicableFeats[i]);
+                            int adj2 = MetamagicData.GetLevelAdjustment(applicableFeats[j]);
+                            if (spell.SpellLevel + adj1 + adj2 != slot.Level) continue;
+
+                            var metamagic = new MetamagicData();
+                            metamagic.Toggle(applicableFeats[i]);
+                            metamagic.Toggle(applicableFeats[j]);
+
+                            string metamagicLabel = $"⚡ {metamagic.GetDisplayName()} {spell.Name} (Lv{spell.SpellLevel}+{adj1 + adj2})";
+                            row.AllOptions.Add(new SpellOptionEntry
+                            {
+                                Spell = spell,
+                                Metamagic = metamagic,
+                                DisplayLabel = metamagicLabel
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Populate dropdown options from the unified list
+        var options = new List<Dropdown.OptionData>();
+        options.Add(new Dropdown.OptionData("(Empty)"));
+        foreach (var entry in row.AllOptions)
+        {
+            options.Add(new Dropdown.OptionData(entry.DisplayLabel));
         }
         dropdown.options = options;
 
         // Set current selection
         if (slot.HasSpell)
         {
-            int spellIdx = row.AvailableSpells.FindIndex(s => s.SpellId == slot.PreparedSpell.SpellId);
-            dropdown.value = spellIdx >= 0 ? spellIdx + 1 : 0;
+            if (slot.HasMetamagic)
+            {
+                // Find the matching metamagic option
+                int matchIdx = row.AllOptions.FindIndex(o =>
+                    o.Spell != null && o.Spell.SpellId == slot.PreparedSpell.SpellId
+                    && o.Metamagic != null && o.Metamagic.GetDisplayName() == slot.AppliedMetamagic.GetDisplayName());
+                dropdown.value = matchIdx >= 0 ? matchIdx + 1 : 0;
+            }
+            else
+            {
+                int spellIdx = row.AllOptions.FindIndex(o =>
+                    o.Spell != null && o.Spell.SpellId == slot.PreparedSpell.SpellId && o.Metamagic == null);
+                dropdown.value = spellIdx >= 0 ? spellIdx + 1 : 0;
+            }
         }
         else
         {
@@ -1615,36 +1724,62 @@ public class SpellPreparationUI : MonoBehaviour
 
         if (dropdownValue == 0)
         {
-            row.Slot.Prepare(null);
+            row.Slot.Clear();
             _spellComp.SyncPreparedSpellsFromSlots();
             RefreshSummary();
             return;
         }
 
-        int spellIdx = dropdownValue - 1;
-        if (spellIdx >= row.AvailableSpells.Count)
-            return;
+        // Use the unified AllOptions list if available, otherwise fall back to AvailableSpells
+        int optionIdx = dropdownValue - 1;
+        SpellData selectedSpell = null;
+        MetamagicData selectedMetamagic = null;
 
-        SpellData selectedSpell = row.AvailableSpells[spellIdx];
-        Debug.Log($"[SpellPrep] Spell selected: {selectedSpell.Name} for level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}");
+        if (row.AllOptions != null && optionIdx < row.AllOptions.Count)
+        {
+            var entry = row.AllOptions[optionIdx];
+            selectedSpell = entry.Spell;
+            selectedMetamagic = entry.Metamagic;
+        }
+        else if (optionIdx < row.AvailableSpells.Count)
+        {
+            selectedSpell = row.AvailableSpells[optionIdx];
+        }
+        else
+        {
+            return;
+        }
+
+        if (selectedSpell == null) return;
+
+        string metamagicLabel = selectedMetamagic != null ? $" ({selectedMetamagic.GetDisplayName()})" : "";
+        Debug.Log($"[SpellPrep] Spell selected: {selectedSpell.Name}{metamagicLabel} for level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}");
 
         int globalSlotIndex = _spellComp.SpellSlots.IndexOf(row.Slot);
         if (globalSlotIndex < 0)
             return;
 
-        bool prepared = _spellComp.PrepareSpellInSlot(globalSlotIndex, selectedSpell);
+        bool prepared;
+        if (selectedMetamagic != null && selectedMetamagic.HasAnyMetamagic)
+        {
+            // Use metamagic-aware preparation
+            prepared = _spellComp.PrepareSpellInSlotWithMetamagic(globalSlotIndex, selectedSpell, selectedMetamagic);
+        }
+        else
+        {
+            prepared = _spellComp.PrepareSpellInSlot(globalSlotIndex, selectedSpell);
+        }
+
         if (!prepared)
         {
-            Debug.LogError($"[SpellPrep] Failed to prepare {selectedSpell.Name} in slot.");
-            int currentSpellIndex = row.Slot.HasSpell
-                ? row.AvailableSpells.FindIndex(s => s.SpellId == row.Slot.PreparedSpell.SpellId) + 1
-                : 0;
+            Debug.LogError($"[SpellPrep] Failed to prepare {selectedSpell.Name}{metamagicLabel} in slot.");
+            // Reset dropdown to current actual slot state
             if (row.SpellDropdown != null)
-                row.SpellDropdown.value = Mathf.Max(0, currentSpellIndex);
+                row.SpellDropdown.value = 0;
             return;
         }
 
-        Debug.Log($"[SpellPrep] Prepared {selectedSpell.Name} in level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}");
+        Debug.Log($"[SpellPrep] Prepared {selectedSpell.Name}{metamagicLabel} in level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}");
         _spellComp.SyncPreparedSpellsFromSlots();
         RefreshSummary();
     }
