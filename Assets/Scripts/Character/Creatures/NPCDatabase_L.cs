@@ -181,7 +181,7 @@ public static partial class NPCDatabase
                 RangeFeet = 60,
                 HDThresholdForPanic = 5,
                 DurationDice = 2,
-                DurationSides = 6
+                DurationDieSides = 6
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

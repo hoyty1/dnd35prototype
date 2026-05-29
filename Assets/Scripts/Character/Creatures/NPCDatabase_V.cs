@@ -266,7 +266,7 @@ public static partial class NPCDatabase
             BloodDrain = new BloodDrainDefinition
             {
                 AbilityDrainAmount = 1,
-                AbilityType = AbilityType.CON,
+                AbilityType = "Constitution",
                 DamagePerRound = 0,
                 AbilityDrainDice = 4
             },
