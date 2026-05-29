@@ -721,7 +721,11 @@ public class CharacterCreationUI : MonoBehaviour
         // Vertical scrollbar
         ScrollbarHelper.CreateVerticalScrollbar(classScrollRect, scrollArea.transform);
 
-        // Layout classes inside scroll content (positions relative to top of content)
+        // Layout classes inside scroll content.
+        // Child elements use anchor (0.5, 0.5) = center of content rect.
+        // Content pivot is at top, so center is at -contentH/2 from top.
+        // We add contentH/2 to shift all positions up so they start from the top.
+        float yOffset = contentH / 2f;
         float topLeftX = -210f;
         float topRightX = 210f;
 
@@ -731,8 +735,8 @@ public class CharacterCreationUI : MonoBehaviour
             int row = i / 2;
             bool isLeft = (i % 2 == 0);
             float posX = isLeft ? topLeftX : topRightX;
-            // Position from top of scroll content (y=0 is top, negative goes down)
-            float posY = -(row * rowSpacing + panelH / 2 + 4);
+            // posY measured from top of content (negative = downward)
+            float posY = yOffset - (row * rowSpacing + panelH / 2 + 4);
 
             // Background panel
             CreatePanel(scrollContent.transform, $"{classDef.ClassName}BG",
@@ -761,7 +765,7 @@ public class CharacterCreationUI : MonoBehaviour
             int row = i / 2;
             bool isLeft = (i % 2 == 0);
             float posX = isLeft ? topLeftX : topRightX;
-            float posY = -(row * rowSpacing + panelH / 2 + 4);
+            float posY = yOffset - (row * rowSpacing + panelH / 2 + 4);
 
             int idx = i;
             _classButtonDefaultColors_dynamic[i] = classDef.ButtonColor;

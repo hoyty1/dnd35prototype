@@ -780,11 +780,62 @@ public class SpellcastingComponent : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Re-initialize SpontaneousData for the character's current class level.
+    /// This updates MaxSpellsKnownByLevel and spell slots without clearing
+    /// already-learned spells (SpellsKnownByLevel is preserved by Initialize).
+    /// Call after a level-up so the new level's spell caps are reflected.
+    /// </summary>
+    public void RefreshSpontaneousSlots()
+    {
+        if (Stats == null) return;
+        if (!SpontaneousCastingData.IsSpontaneousCasterClass(Stats)) return;
+
+        string className = null;
+        int classLevel = 0;
+
+        if (Stats.HasClass("Sorcerer"))
+        {
+            className = "Sorcerer";
+            classLevel = Stats.GetClassLevel("Sorcerer");
+        }
+        else if (Stats.HasClass("Bard"))
+        {
+            className = "Bard";
+            classLevel = Stats.GetClassLevel("Bard");
+        }
+
+        if (className == null || classLevel <= 0) return;
+
+        int castingMod = Stats.GetPrimaryCastingModifier();
+
+        if (SpontaneousData == null)
+            SpontaneousData = new SpontaneousCastingData();
+
+        // Re-initialize updates SlotsMax, SlotsRemaining, MaxSpellsKnownByLevel
+        // but does NOT clear SpellsKnownByLevel, so existing known spells are preserved.
+        SpontaneousData.Initialize(className, classLevel, castingMod);
+
+        // Update legacy arrays for UI compatibility
+        SlotsMax = SpontaneousData.GetSlotsMaxArray();
+        SlotsRemaining = SpontaneousData.GetSlotsRemainingArray();
+
+        Debug.Log($"[Spellcasting] RefreshSpontaneousSlots: {Stats.CharacterName} {className} L{classLevel} — " +
+            $"MaxKnown={string.Join(",", SpontaneousData.MaxSpellsKnownByLevel)}");
+    }
+
     public void RefreshSpellSlots()
     {
         if (Stats == null)
         {
             Debug.LogWarning("[Spellcasting] RefreshSpellSlots called with null Stats.");
+            return;
+        }
+
+        // ── Spontaneous casters (Sorcerer, Bard): refresh their data then return ──
+        if (SpontaneousCastingData.IsSpontaneousCasterClass(Stats))
+        {
+            RefreshSpontaneousSlots();
             return;
         }
 
