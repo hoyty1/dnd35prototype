@@ -74,6 +74,12 @@ public class StoreUI : MonoBehaviour
 
     private RectTransform _buySortRoot;
     private RectTransform _sellSortRoot;
+
+    // Buy-side text search. Filters the displayed items by (partial, case-insensitive)
+    // name match, working alongside the active category filter and sort options.
+    private string _buySearchQuery = string.Empty;
+    private InputField _buySearchField;
+    private Text _buySearchPlaceholder;
     private readonly Dictionary<SortMode, Image> _buySortButtonImages = new Dictionary<SortMode, Image>();
     private readonly Dictionary<SortMode, Image> _sellSortButtonImages = new Dictionary<SortMode, Image>();
     private Text _buySortDirectionText;
@@ -123,6 +129,9 @@ public class StoreUI : MonoBehaviour
         _buySortDirection = SortDirection.Ascending;
         _sellSortMode = SortMode.Alphabetical;
         _sellSortDirection = SortDirection.Ascending;
+        _buySearchQuery = string.Empty;
+        if (_buySearchField != null)
+            _buySearchField.SetTextWithoutNotify(string.Empty);
 
         BuildSellCharacterOptions(_sellCharacterButtonsRoot);
         RefreshSellCharacterButtons();
@@ -476,6 +485,14 @@ public class StoreUI : MonoBehaviour
     {
         Debug.Log($"[Store] Filtering by category: {category}");
         _currentBuyCategory = category;
+
+        // Clear any active search when switching categories so the user always sees
+        // the full contents of the newly selected category. Done without notify to
+        // avoid an extra RebuildBuyList (the one below handles the refresh).
+        _buySearchQuery = string.Empty;
+        if (_buySearchField != null)
+            _buySearchField.SetTextWithoutNotify(string.Empty);
+
         RebuildBuyList();
     }
 
@@ -505,7 +522,7 @@ public class StoreUI : MonoBehaviour
 
         RectTransform rowRect = rowObj.GetComponent<RectTransform>();
         rowRect.anchorMin = new Vector2(0.14f, 0.08f);
-        rowRect.anchorMax = new Vector2(0.99f, 0.92f);
+        rowRect.anchorMax = new Vector2(0.50f, 0.92f);
         rowRect.offsetMin = Vector2.zero;
         rowRect.offsetMax = Vector2.zero;
 
@@ -530,8 +547,116 @@ public class StoreUI : MonoBehaviour
 
         _buySortDirectionText = CreateSortDirectionButton(rowObj.transform, "BuyDirection", () => ToggleBuySortDirection());
 
+        // Live text search occupies the right half of the sort band.
+        CreateBuySearchField(sortObj.transform);
+
         RefreshBuySortButtons();
-        Debug.Log("[Store] Buy sort area created (Name, Price, Direction toggle)");
+        Debug.Log("[Store] Buy sort area created (Name, Price, Direction toggle, Search)");
+    }
+
+    /// <summary>
+    /// Creates the live text-search box (with placeholder + clear button) in the
+    /// right portion of the buy sort band. Typing filters the buy list in real time.
+    /// </summary>
+    private void CreateBuySearchField(Transform parent)
+    {
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        // Search icon / label on the left of the field.
+        CreateText(parent, "SearchLabel", "SEARCH:",
+            new Vector2(0.52f, 0f), new Vector2(0.63f, 1f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleRight);
+
+        // Input field container.
+        GameObject fieldObj = new GameObject("BuySearchField", typeof(RectTransform), typeof(Image), typeof(InputField));
+        fieldObj.transform.SetParent(parent, false);
+
+        RectTransform fieldRect = fieldObj.GetComponent<RectTransform>();
+        fieldRect.anchorMin = new Vector2(0.64f, 0.12f);
+        fieldRect.anchorMax = new Vector2(0.99f, 0.88f);
+        fieldRect.offsetMin = Vector2.zero;
+        fieldRect.offsetMax = Vector2.zero;
+
+        Image fieldBg = fieldObj.GetComponent<Image>();
+        fieldBg.color = new Color(0.92f, 0.92f, 0.96f, 1f);
+
+        InputField inputField = fieldObj.GetComponent<InputField>();
+        inputField.targetGraphic = fieldBg;
+
+        // Visible typed text (leave room on the right for the clear button).
+        GameObject textObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
+        textObj.transform.SetParent(fieldObj.transform, false);
+        Text text = textObj.GetComponent<Text>();
+        text.font = font;
+        text.fontSize = 14;
+        text.color = new Color(0.1f, 0.1f, 0.12f, 1f);
+        text.alignment = TextAnchor.MiddleLeft;
+        text.supportRichText = false;
+        RectTransform textRect = text.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(8f, 2f);
+        textRect.offsetMax = new Vector2(-26f, -2f);
+
+        // Placeholder shown when empty.
+        GameObject phObj = new GameObject("Placeholder", typeof(RectTransform), typeof(Text));
+        phObj.transform.SetParent(fieldObj.transform, false);
+        _buySearchPlaceholder = phObj.GetComponent<Text>();
+        _buySearchPlaceholder.font = font;
+        _buySearchPlaceholder.fontSize = 14;
+        _buySearchPlaceholder.fontStyle = FontStyle.Italic;
+        _buySearchPlaceholder.color = new Color(0.45f, 0.45f, 0.5f, 1f);
+        _buySearchPlaceholder.alignment = TextAnchor.MiddleLeft;
+        _buySearchPlaceholder.text = "Search items...";
+        RectTransform phRect = _buySearchPlaceholder.GetComponent<RectTransform>();
+        phRect.anchorMin = Vector2.zero;
+        phRect.anchorMax = Vector2.one;
+        phRect.offsetMin = new Vector2(8f, 2f);
+        phRect.offsetMax = new Vector2(-26f, -2f);
+
+        inputField.textComponent = text;
+        inputField.placeholder = _buySearchPlaceholder;
+        inputField.lineType = InputField.LineType.SingleLine;
+        inputField.characterLimit = 40;
+        inputField.text = _buySearchQuery;
+        inputField.onValueChanged.AddListener(OnBuySearchChanged);
+        _buySearchField = inputField;
+
+        // Clear ("X") button pinned to the right edge of the field.
+        GameObject clearObj = new GameObject("ClearSearch", typeof(RectTransform), typeof(Image), typeof(Button));
+        clearObj.transform.SetParent(fieldObj.transform, false);
+        RectTransform clearRect = clearObj.GetComponent<RectTransform>();
+        clearRect.anchorMin = new Vector2(1f, 0.5f);
+        clearRect.anchorMax = new Vector2(1f, 0.5f);
+        clearRect.pivot = new Vector2(1f, 0.5f);
+        clearRect.sizeDelta = new Vector2(20f, 20f);
+        clearRect.anchoredPosition = new Vector2(-3f, 0f);
+        clearObj.GetComponent<Image>().color = new Color(0.55f, 0.2f, 0.2f, 0.9f);
+        clearObj.GetComponent<Button>().onClick.AddListener(ClearBuySearch);
+
+        CreateText(clearObj.transform, "X", "X",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+
+        Debug.Log("[Store] Buy search field created");
+    }
+
+    private void OnBuySearchChanged(string value)
+    {
+        _buySearchQuery = value ?? string.Empty;
+        RebuildBuyList();
+    }
+
+    private void ClearBuySearch()
+    {
+        _buySearchQuery = string.Empty;
+        if (_buySearchField != null)
+        {
+            // SetTextWithoutNotify avoids a second redundant RebuildBuyList.
+            _buySearchField.SetTextWithoutNotify(string.Empty);
+        }
+        RebuildBuyList();
+        Debug.Log("[Store] Buy search cleared");
     }
 
     private void CreateSellCharacterFilter()
@@ -1017,12 +1142,45 @@ public class StoreUI : MonoBehaviour
 
         string category = string.IsNullOrWhiteSpace(_currentBuyCategory) ? "All" : _currentBuyCategory;
         List<StoreInventory.StoreItemEntry> filteredItems = StoreInventory.Instance.GetItemsByCategory(category);
+
+        // Apply the text-search filter (case-insensitive partial name match) on top of
+        // the active category. Works together with the sort options below.
+        filteredItems = ApplyBuySearchFilter(filteredItems);
+
         List<StoreInventory.StoreItemEntry> sortedItems = SortBuyItems(filteredItems);
 
         for (int i = 0; i < sortedItems.Count; i++)
             CreateBuyRow(_buyContent, sortedItems[i]);
 
-        Debug.Log($"[Store] Buy list refreshed: {sortedItems.Count} items (Category: {category}, Sort: {_buySortMode} {_buySortDirection})");
+        Debug.Log($"[Store] Buy list refreshed: {sortedItems.Count} items (Category: {category}, Search: '{_buySearchQuery}', Sort: {_buySortMode} {_buySortDirection})");
+    }
+
+    /// <summary>
+    /// Filters the supplied store entries by the current search query, matching a
+    /// case-insensitive substring against each item's display name. An empty/blank
+    /// query returns the list unchanged (all category items shown).
+    /// </summary>
+    private List<StoreInventory.StoreItemEntry> ApplyBuySearchFilter(List<StoreInventory.StoreItemEntry> items)
+    {
+        if (items == null)
+            return new List<StoreInventory.StoreItemEntry>();
+
+        string query = (_buySearchQuery ?? string.Empty).Trim();
+        if (query.Length == 0)
+            return items;
+
+        return items.FindAll(entry =>
+        {
+            if (entry == null)
+                return false;
+
+            ItemData template = entry.GetTemplate();
+            string name = template != null
+                ? (template.FullNameWithEnhancement ?? template.Name ?? string.Empty)
+                : string.Empty;
+
+            return name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
+        });
     }
 
     private void RebuildSellList()
