@@ -271,7 +271,7 @@ public class StoreUI : MonoBehaviour
 
         CreateCategoryFilter();
         CreateBuySortArea();
-        CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 0.84f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _buyContent);
+        CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 0.82f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _buyContent);
 
         Debug.Log("[Store] === ITEM ROW WIDTH FIX ===");
         Debug.Log("[Store] Info section: minWidth=200, preferredWidth=300, flexibleWidth=1");
@@ -344,32 +344,99 @@ public class StoreUI : MonoBehaviour
         if (_buyPanel == null)
             return;
 
-        GameObject filterObj = new GameObject("CategoryFilter", typeof(RectTransform), typeof(Image), typeof(GridLayoutGroup));
-        filterObj.transform.SetParent(_buyPanel.transform, false);
+        // Single-row, horizontally-scrollable category bar. Using a ScrollRect prevents
+        // the (potentially 25+) category buttons from wrapping into extra rows and
+        // overlapping the SORT BY area below it.
+        GameObject scrollObj = new GameObject("CategoryFilter", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+        scrollObj.transform.SetParent(_buyPanel.transform, false);
 
-        _categoryFilterRoot = filterObj.GetComponent<RectTransform>();
-        _categoryFilterRoot.anchorMin = new Vector2(0f, 0.93f);
-        _categoryFilterRoot.anchorMax = new Vector2(1f, 1f);
-        _categoryFilterRoot.offsetMin = Vector2.zero;
-        _categoryFilterRoot.offsetMax = Vector2.zero;
+        RectTransform scrollRect = scrollObj.GetComponent<RectTransform>();
+        scrollRect.anchorMin = new Vector2(0f, 0.90f);
+        scrollRect.anchorMax = new Vector2(1f, 1f);
+        scrollRect.offsetMin = Vector2.zero;
+        scrollRect.offsetMax = Vector2.zero;
+        scrollObj.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.2f, 0.5f);
 
-        Image bg = filterObj.GetComponent<Image>();
-        bg.color = new Color(0.15f, 0.15f, 0.2f, 0.5f);
+        // Viewport (clips the button row). Leaves 10px at the bottom for the scrollbar.
+        GameObject viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+        viewport.transform.SetParent(scrollObj.transform, false);
+        RectTransform viewportRect = viewport.GetComponent<RectTransform>();
+        viewportRect.anchorMin = Vector2.zero;
+        viewportRect.anchorMax = Vector2.one;
+        viewportRect.offsetMin = new Vector2(4f, 12f);
+        viewportRect.offsetMax = new Vector2(-4f, -4f);
+        viewport.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.02f);
+        viewport.GetComponent<Mask>().showMaskGraphic = false;
 
-        GridLayoutGroup grid = filterObj.GetComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(90f, 35f);
-        grid.spacing = new Vector2(5f, 5f);
-        grid.padding = new RectOffset(5, 5, 5, 5);
-        grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
-        grid.startAxis = GridLayoutGroup.Axis.Horizontal;
-        grid.childAlignment = TextAnchor.UpperLeft;
-        grid.constraint = GridLayoutGroup.Constraint.Flexible;
+        // Content holder — a single horizontal row of buttons sized to their text.
+        GameObject content = new GameObject("Content", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
+        content.transform.SetParent(viewport.transform, false);
+        _categoryFilterRoot = content.GetComponent<RectTransform>();
+        _categoryFilterRoot.anchorMin = new Vector2(0f, 0f);
+        _categoryFilterRoot.anchorMax = new Vector2(0f, 1f);
+        _categoryFilterRoot.pivot = new Vector2(0f, 0.5f);
+        _categoryFilterRoot.anchoredPosition = Vector2.zero;
+
+        HorizontalLayoutGroup hlg = content.GetComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 5f;
+        hlg.padding = new RectOffset(5, 5, 3, 3);
+        hlg.childAlignment = TextAnchor.MiddleLeft;
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = true;
+
+        ContentSizeFitter fitter = content.GetComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+        ScrollRect sr = scrollObj.GetComponent<ScrollRect>();
+        sr.viewport = viewportRect;
+        sr.content = _categoryFilterRoot;
+        sr.horizontal = true;
+        sr.vertical = false;
+        sr.scrollSensitivity = 25f;
+        sr.movementType = ScrollRect.MovementType.Clamped;
+
+        // Thin horizontal scrollbar pinned to the bottom of the band.
+        GameObject sbObj = new GameObject("CategoryScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+        sbObj.transform.SetParent(scrollObj.transform, false);
+        RectTransform sbRect = sbObj.GetComponent<RectTransform>();
+        sbRect.anchorMin = new Vector2(0f, 0f);
+        sbRect.anchorMax = new Vector2(1f, 0f);
+        sbRect.pivot = new Vector2(0.5f, 0f);
+        sbRect.sizeDelta = new Vector2(0f, 8f);
+        sbRect.anchoredPosition = Vector2.zero;
+        sbObj.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.14f, 0.8f);
+
+        Scrollbar sb = sbObj.GetComponent<Scrollbar>();
+        sb.direction = Scrollbar.Direction.LeftToRight;
+
+        GameObject handle = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        handle.transform.SetParent(sbObj.transform, false);
+        RectTransform handleRect = handle.GetComponent<RectTransform>();
+        handleRect.anchorMin = Vector2.zero;
+        handleRect.anchorMax = Vector2.one;
+        handleRect.sizeDelta = Vector2.zero;
+        handle.GetComponent<Image>().color = new Color(0.45f, 0.5f, 0.65f, 0.95f);
+        sb.handleRect = handleRect;
+        sb.targetGraphic = handle.GetComponent<Image>();
+
+        sr.horizontalScrollbar = sb;
+        sr.horizontalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
     }
 
     private void CreateCategoryButton(Transform parent, string category)
     {
-        GameObject buttonObj = new GameObject($"CategoryBtn_{category}", typeof(RectTransform), typeof(Image), typeof(Button));
+        GameObject buttonObj = new GameObject($"CategoryBtn_{category}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
         buttonObj.transform.SetParent(parent, false);
+
+        // Size each button to its label so the horizontal row stays tidy.
+        LayoutElement le = buttonObj.GetComponent<LayoutElement>();
+        float width = Mathf.Clamp((category != null ? category.Length : 3) * 8f + 24f, 70f, 180f);
+        le.preferredWidth = width;
+        le.minWidth = width;
+        le.flexibleWidth = 0f;
 
         Image buttonBg = buttonObj.GetComponent<Image>();
         buttonBg.color = new Color(0.3f, 0.3f, 0.4f, 1f);
@@ -421,8 +488,8 @@ public class StoreUI : MonoBehaviour
         sortObj.transform.SetParent(_buyPanel.transform, false);
 
         _buySortRoot = sortObj.GetComponent<RectTransform>();
-        _buySortRoot.anchorMin = new Vector2(0f, 0.84f);
-        _buySortRoot.anchorMax = new Vector2(1f, 0.93f);
+        _buySortRoot.anchorMin = new Vector2(0f, 0.82f);
+        _buySortRoot.anchorMax = new Vector2(1f, 0.90f);
         _buySortRoot.offsetMin = Vector2.zero;
         _buySortRoot.offsetMax = Vector2.zero;
 

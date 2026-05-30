@@ -52,23 +52,23 @@ public class StoreInventory : MonoBehaviour
         _availableItems.Clear();
         _priceLookup.Clear();
 
-        // Weapons
-        Add(ItemID.WeaponLongsword, "Weapon", 15);
-        Add(ItemID.WeaponGreatsword, "Weapon", 50);
-        Add(ItemID.WeaponBattleaxe, "Weapon", 10);
-        Add(ItemID.WeaponGreataxe, "Weapon", 20);
-        Add(ItemID.WeaponRapier, "Weapon", 20);
-        Add(ItemID.WeaponShortsword, "Weapon", 10);
-        Add(ItemID.WeaponDagger, "Weapon", 2);
-        Add(ItemID.WeaponShortbow, "Weapon", 30);
-        Add(ItemID.WeaponLongbow, "Weapon", 75);
-        Add(ItemID.WeaponCrossbowHeavy, "Weapon", 50);
-        Add(ItemID.WeaponCrossbowLight, "Weapon", 35);
-        Add(ItemID.WeaponMaceHeavy, "Weapon", 8);
-        Add(ItemID.WeaponMorningstar, "Weapon", 8);
-        Add(ItemID.WeaponWarhammer, "Weapon", 12);
-        Add(ItemID.WeaponSpear, "Weapon", 2);
-        Add(ItemID.WeaponJavelin, "Weapon", 1);
+        // Mundane Weapons
+        Add(ItemID.WeaponLongsword, "Mundane Weapons", 15);
+        Add(ItemID.WeaponGreatsword, "Mundane Weapons", 50);
+        Add(ItemID.WeaponBattleaxe, "Mundane Weapons", 10);
+        Add(ItemID.WeaponGreataxe, "Mundane Weapons", 20);
+        Add(ItemID.WeaponRapier, "Mundane Weapons", 20);
+        Add(ItemID.WeaponShortsword, "Mundane Weapons", 10);
+        Add(ItemID.WeaponDagger, "Mundane Weapons", 2);
+        Add(ItemID.WeaponShortbow, "Mundane Weapons", 30);
+        Add(ItemID.WeaponLongbow, "Mundane Weapons", 75);
+        Add(ItemID.WeaponCrossbowHeavy, "Mundane Weapons", 50);
+        Add(ItemID.WeaponCrossbowLight, "Mundane Weapons", 35);
+        Add(ItemID.WeaponMaceHeavy, "Mundane Weapons", 8);
+        Add(ItemID.WeaponMorningstar, "Mundane Weapons", 8);
+        Add(ItemID.WeaponWarhammer, "Mundane Weapons", 12);
+        Add(ItemID.WeaponSpear, "Mundane Weapons", 2);
+        Add(ItemID.WeaponJavelin, "Mundane Weapons", 1);
 
         // Armor
         Add(ItemID.ArmorChainShirt, "Armor", 100);
@@ -83,13 +83,13 @@ public class StoreInventory : MonoBehaviour
         Add(ItemID.ArmorStuddedLeather, "Armor", 25);
         Add(ItemID.ArmorHide, "Armor", 15);
 
-        // Shields
-        Add(ItemID.ShieldBuckler, "Shield", 15);
-        Add(ItemID.ShieldLightWooden, "Shield", 3);
-        Add(ItemID.ShieldLightSteel, "Shield", 9);
-        Add(ItemID.ShieldHeavyWooden, "Shield", 7);
-        Add(ItemID.ShieldHeavySteel, "Shield", 20);
-        Add(ItemID.ShieldTower, "Shield", 30);
+        // Mundane Shields
+        Add(ItemID.ShieldBuckler, "Mundane Shields", 15);
+        Add(ItemID.ShieldLightWooden, "Mundane Shields", 3);
+        Add(ItemID.ShieldLightSteel, "Mundane Shields", 9);
+        Add(ItemID.ShieldHeavyWooden, "Mundane Shields", 7);
+        Add(ItemID.ShieldHeavySteel, "Mundane Shields", 20);
+        Add(ItemID.ShieldTower, "Mundane Shields", 30);
 
         AddEnhancedStoreVariants();
 
@@ -103,7 +103,7 @@ public class StoreInventory : MonoBehaviour
 
         // Adventuring gear / misc
         Add(ItemID.AmmoCrossbowBolts20, "Ammunition", 1);
-        Add(ItemID.WeaponTorch, "Weapon", 1);
+        Add(ItemID.WeaponTorch, "Mundane Weapons", 1);
         Add(ItemID.GearRopeHemp, "Gear", 1);
         Add(ItemID.GearRopeSilk, "Gear", 10);
 
@@ -115,6 +115,15 @@ public class StoreInventory : MonoBehaviour
 
         // Wands — generated from SpellDatabase by WandFactory
         WandFactory.AddWandsToStore(this);
+
+        // Rings — pulled from RingDatabase
+        AddRingsToStore();
+
+        // Rods — pulled from RodDatabase
+        AddRodsToStore();
+
+        // Wondrous Items — pulled from WondrousItemDatabase
+        AddWondrousItemsToStore();
 
         Debug.Log($"[Store] Initialized with {_availableItems.Count} items");
     }
@@ -128,12 +137,9 @@ public class StoreInventory : MonoBehaviour
             if (entry == null)
                 continue;
 
-            if (!string.Equals(entry.Category, "Weapon", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(entry.Category, "Armor", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(entry.Category, "Shield", StringComparison.OrdinalIgnoreCase))
-            {
+            string magicCategory = ResolveMagicCategory(entry.Category);
+            if (magicCategory == null)
                 continue;
-            }
 
             ItemID baseId = entry.ItemIDEnum;
             if (baseId == ItemID.None)
@@ -158,9 +164,104 @@ public class StoreInventory : MonoBehaviour
 
                 enhancedTemplate.BasePriceGp = Mathf.Max(0, entry.PriceGp);
                 int enhancedPrice = enhancedTemplate.GetEnhancedPriceGp(entry.PriceGp);
-                Add(enhancedId, entry.Category, enhancedPrice);
+                Add(enhancedId, magicCategory, enhancedPrice);
             }
         }
+    }
+
+    /// <summary>
+    /// Maps a mundane base category to its magic counterpart, or null when the
+    /// category has no enhanced (magic) variants in the store.
+    /// </summary>
+    private static string ResolveMagicCategory(string baseCategory)
+    {
+        if (string.Equals(baseCategory, "Mundane Weapons", StringComparison.OrdinalIgnoreCase))
+            return "Magic Weapons";
+        if (string.Equals(baseCategory, "Mundane Shields", StringComparison.OrdinalIgnoreCase))
+            return "Magic Shields";
+        if (string.Equals(baseCategory, "Armor", StringComparison.OrdinalIgnoreCase))
+            return "Magic Armor";
+        return null;
+    }
+
+    /// <summary>
+    /// Adds magic rings from RingDatabase to the store under the "Rings" category.
+    /// </summary>
+    private void AddRingsToStore()
+    {
+        RingDatabase.Init();
+        RingDatabase.RegisterAllRingsInItemDatabase();
+
+        var rings = RingDatabase.GetAllRings();
+        if (rings == null)
+            return;
+
+        foreach (var kvp in rings)
+        {
+            ItemData ring = kvp.Value;
+            if (ring == null || string.IsNullOrWhiteSpace(ring.Id))
+                continue;
+
+            int price = Mathf.Max(1, ring.BasePriceGp);
+            AddExternalItem(ring.Id, "Rings", price);
+        }
+    }
+
+    /// <summary>
+    /// Adds magic rods from RodDatabase to the store under the "Rods" category.
+    /// </summary>
+    private void AddRodsToStore()
+    {
+        RodDatabase.Init();
+        RodDatabase.RegisterAllInItemDatabase();
+
+        var rods = RodDatabase.GetAllRods();
+        if (rods == null)
+            return;
+
+        foreach (ItemData rod in rods)
+        {
+            if (rod == null || string.IsNullOrWhiteSpace(rod.Id))
+                continue;
+
+            int price = Mathf.Max(1, rod.BasePriceGp);
+            AddExternalItem(rod.Id, "Rods", price);
+        }
+    }
+
+    /// <summary>
+    /// Adds wondrous items from WondrousItemDatabase to the store under the
+    /// "Wondrous Items" category.
+    /// </summary>
+    private void AddWondrousItemsToStore()
+    {
+        WondrousItemDatabase.Init();
+        WondrousItemDatabase.RegisterAllInItemDatabase();
+
+        var items = WondrousItemDatabase.GetAllItems();
+        if (items == null)
+            return;
+
+        foreach (var kvp in items)
+        {
+            ItemData item = kvp.Value;
+            if (item == null || string.IsNullOrWhiteSpace(item.Id))
+                continue;
+
+            int price = Mathf.Max(1, item.BasePriceGp);
+            AddExternalItem(item.Id, "Wondrous Items", price);
+        }
+    }
+
+    /// <summary>
+    /// Adds an item that is keyed by a string Id (no ItemID enum entry), such as
+    /// rings, rods and wondrous items registered into the ItemDatabase externally.
+    /// </summary>
+    private void AddExternalItem(string itemId, string category, int priceGp)
+    {
+        #pragma warning disable CS0618 // Intentional use of string-based Add for externally-registered IDs
+        Add(itemId, category, priceGp);
+        #pragma warning restore CS0618
     }
 
     private void Add(ItemID itemId, string category, int priceGp)

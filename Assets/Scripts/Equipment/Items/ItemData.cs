@@ -1742,6 +1742,12 @@ public class ItemData
             string baseName = Name;
             int enhBonus = ResolveEnhancementBonus();
 
+            // Some stored names already bake in a "+N " enhancement prefix
+            // (e.g. RegisterEnhancedVariant sets Name = "+1 Banded Mail").
+            // Strip it here so we don't render a duplicate "+1 +1 Banded Mail".
+            if (enhBonus > 0)
+                baseName = StripEnhancementNotation(baseName);
+
             // Material prefix
             string matPrefix = "";
             if (Material != null && Material.MaterialType != ItemMaterialType.Standard)
