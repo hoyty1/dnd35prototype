@@ -220,6 +220,44 @@ public class MetamagicData
     }
 
     /// <summary>
+    /// Get the natural adjective form of a metamagic feat (e.g. "Empowered", "Maximized").
+    /// Reads naturally as a prefix to a spell name: "Empowered Magic Missile".
+    /// </summary>
+    public static string GetAdjective(MetamagicFeatId feat)
+    {
+        switch (feat)
+        {
+            case MetamagicFeatId.EmpowerSpell:  return "Empowered";
+            case MetamagicFeatId.EnlargeSpell:  return "Enlarged";
+            case MetamagicFeatId.ExtendSpell:   return "Extended";
+            case MetamagicFeatId.HeightenSpell: return "Heightened";
+            case MetamagicFeatId.MaximizeSpell: return "Maximized";
+            case MetamagicFeatId.QuickenSpell:  return "Quickened";
+            case MetamagicFeatId.SilentSpell:   return "Silent";
+            case MetamagicFeatId.StillSpell:    return "Stilled";
+            case MetamagicFeatId.WidenSpell:    return "Widened";
+            default: return "Enhanced";
+        }
+    }
+
+    /// <summary>
+    /// Get a combined display name for ALL applied metamagic feats on this instance.
+    /// Returns a deterministic adjective string (e.g. "Empowered" or "Empowered+Maximized").
+    /// Ordering is by enum value so the result is stable and usable as a matching key.
+    /// Returns "" when no metamagic is applied.
+    /// </summary>
+    public string GetDisplayName()
+    {
+        if (!HasAnyMetamagic) return "";
+        var ordered = new List<MetamagicFeatId>(AppliedMetamagic);
+        ordered.Sort((a, b) => ((int)a).CompareTo((int)b));
+        var parts = new List<string>();
+        foreach (var mm in ordered)
+            parts.Add(GetAdjective(mm));
+        return string.Join("+", parts);
+    }
+
+    /// <summary>
     /// Get short effect description for a metamagic feat.
     /// </summary>
     public static string GetShortEffect(MetamagicFeatId feat)
