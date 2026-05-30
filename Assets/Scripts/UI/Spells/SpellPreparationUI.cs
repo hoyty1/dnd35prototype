@@ -137,8 +137,15 @@ public class SpellPreparationUI : MonoBehaviour
             new Vector2(0, headerTop - 62), new Vector2(PANEL_W - 40, 24),
             "", 18, new Color(0.7f, 0.8f, 1f), TextAnchor.MiddleCenter);
 
+        // Metamagic help hint — explains how metamagic options appear in the slot dropdowns.
+        MakeText(_rootPanel.transform, "MetamagicHint",
+            new Vector2(0, headerTop - 86), new Vector2(PANEL_W - 40, 20),
+            "Tip: open a slot's dropdown to pick a spell. Options marked \u26a1 apply metamagic " +
+            "(e.g. \u26a1 Empowered Magic Missile = a 1st-level spell using this higher-level slot).",
+            12, new Color(0.95f, 0.85f, 0.5f), TextAnchor.MiddleCenter);
+
         // Scroll area for slot list
-        float contentTop = headerTop - 90;
+        float contentTop = headerTop - 108;
         float contentBottom = -PANEL_H / 2f + 80;
         float contentH = contentTop - contentBottom;
         float contentCenterY = (contentTop + contentBottom) / 2f;
@@ -1205,31 +1212,50 @@ public class SpellPreparationUI : MonoBehaviour
 
                 foreach (var spell in lowerLevelSpells)
                 {
-                    // Generate single-feat metamagic options
+                    // --- Single fixed-adjustment metamagic options (Empower, Maximize, etc.) ---
                     foreach (var featId in knownMetamagicFeats)
                     {
+                        if (featId == MetamagicFeatId.HeightenSpell) continue; // handled separately (variable)
                         if (!MetamagicData.IsApplicable(featId, spell))
                             continue;
 
                         int adjustment = MetamagicData.GetLevelAdjustment(featId);
-                        if (adjustment <= 0) continue; // Skip Heighten (variable) for now
+                        if (adjustment <= 0) continue;
                         if (spell.SpellLevel + adjustment != slot.Level) continue;
 
                         var metamagic = new MetamagicData();
                         metamagic.Toggle(featId);
 
-                        string metamagicLabel = $"⚡ {metamagic.GetDisplayName()} {spell.Name} (Lv{spell.SpellLevel}+{adjustment})";
                         row.AllOptions.Add(new SpellOptionEntry
                         {
                             Spell = spell,
                             Metamagic = metamagic,
-                            DisplayLabel = metamagicLabel
+                            DisplayLabel = BuildMetamagicOptionLabel(metamagic, spell, slot.Level)
                         });
                     }
 
-                    // Generate two-feat combos where they fit the slot level
+                    // --- Heighten Spell (variable): raise the base spell to exactly this slot level ---
+                    if (knownMetamagicFeats.Contains(MetamagicFeatId.HeightenSpell)
+                        && MetamagicData.IsApplicable(MetamagicFeatId.HeightenSpell, spell)
+                        && slot.Level > spell.SpellLevel)
+                    {
+                        var heighten = new MetamagicData();
+                        heighten.Toggle(MetamagicFeatId.HeightenSpell);
+                        heighten.HeightenToLevel = slot.Level; // raises effective level to the slot level
+
+                        row.AllOptions.Add(new SpellOptionEntry
+                        {
+                            Spell = spell,
+                            Metamagic = heighten,
+                            DisplayLabel = BuildMetamagicOptionLabel(heighten, spell, slot.Level)
+                        });
+                    }
+
+                    // --- Two-feat combos (fixed adjustments) that fit the slot level ---
                     var applicableFeats = knownMetamagicFeats
-                        .Where(f => MetamagicData.IsApplicable(f, spell) && MetamagicData.GetLevelAdjustment(f) > 0)
+                        .Where(f => f != MetamagicFeatId.HeightenSpell
+                            && MetamagicData.IsApplicable(f, spell)
+                            && MetamagicData.GetLevelAdjustment(f) > 0)
                         .ToList();
 
                     for (int i = 0; i < applicableFeats.Count; i++)
@@ -1244,12 +1270,11 @@ public class SpellPreparationUI : MonoBehaviour
                             metamagic.Toggle(applicableFeats[i]);
                             metamagic.Toggle(applicableFeats[j]);
 
-                            string metamagicLabel = $"⚡ {metamagic.GetDisplayName()} {spell.Name} (Lv{spell.SpellLevel}+{adj1 + adj2})";
                             row.AllOptions.Add(new SpellOptionEntry
                             {
                                 Spell = spell,
                                 Metamagic = metamagic,
-                                DisplayLabel = metamagicLabel
+                                DisplayLabel = BuildMetamagicOptionLabel(metamagic, spell, slot.Level)
                             });
                         }
                     }
@@ -1712,6 +1737,18 @@ public class SpellPreparationUI : MonoBehaviour
         }
 
         return matches.Count > 0 ? string.Join("/", matches) : string.Empty;
+    }
+
+    /// <summary>
+    /// Build a clear dropdown label for a metamagic-enhanced spell option, showing the
+    /// base spell, the metamagic applied, and the explicit level math, e.g.:
+    /// "⚡ Empowered Magic Missile  (lvl 1 +2 → lvl 3)".
+    /// </summary>
+    private string BuildMetamagicOptionLabel(MetamagicData metamagic, SpellData spell, int slotLevel)
+    {
+        int baseLevel = spell.SpellLevel;
+        int adjustment = slotLevel - baseLevel; // by construction the effective level equals the slot level
+        return $"⚡ {metamagic.GetDisplayName()} {spell.Name}  (lvl {baseLevel} +{adjustment} → lvl {slotLevel})";
     }
 
     private void OnSlotChanged(int slotIndex, int dropdownValue)
