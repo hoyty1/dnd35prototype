@@ -6218,6 +6218,11 @@ public partial class GameManager : MonoBehaviour
                               ?? SpellDatabase.GetSpell(wandItem.WandSpellId)
                               ?? SpellDatabase.GetSpell(wandItem.ConsumableSpellName)
                               ?? SpellDatabase.GetSpellByName(wandItem.ConsumableSpellName);
+
+        Debug.Log($"[TryUseWand] Spell lookup for '{wandItem.Name}': WandData.SpellId='{wandItem.Wand?.SpellId}', " +
+                  $"WandSpellId='{wandItem.WandSpellId}', ConsumableSpellName='{wandItem.ConsumableSpellName}', " +
+                  $"Found={wandSpell != null} ({wandSpell?.Name ?? "null"})");
+
         bool needsTargeting = wandSpell != null && (
             wandSpell.EffectType == SpellEffectType.Damage ||
             wandSpell.EffectType == SpellEffectType.Summon ||

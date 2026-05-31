@@ -85,21 +85,29 @@ public static class WandValidator
 
         CharacterStats stats = character.Stats;
 
-        // Look up the spell to check class lists
+        // Look up the spell to check class lists — robust fallback chain
         SpellDatabase.Init();
-        string spellName = wandItem.ConsumableSpellName;
-        if (string.IsNullOrWhiteSpace(spellName) && !string.IsNullOrWhiteSpace(wandItem.WandSpellId))
-        {
-            SpellData spellById = SpellDatabase.GetSpell(wandItem.WandSpellId);
-            if (spellById != null) spellName = spellById.Name;
-        }
-
         SpellData spell = null;
-        if (!string.IsNullOrWhiteSpace(spellName))
-            spell = SpellDatabase.GetSpellByName(spellName);
+
+        // 1. Try WandData (unified, canonical)
+        if (wandItem.Wand != null)
+            spell = wandItem.Wand.GetSpell();
+
+        // 2. Try legacy WandSpellId (ID-based lookup)
+        if (spell == null && !string.IsNullOrWhiteSpace(wandItem.WandSpellId))
+            spell = SpellDatabase.GetSpell(wandItem.WandSpellId);
+
+        // 3. Try ConsumableSpellName as ID first, then as display name
+        if (spell == null && !string.IsNullOrWhiteSpace(wandItem.ConsumableSpellName))
+        {
+            spell = SpellDatabase.GetSpell(wandItem.ConsumableSpellName)
+                    ?? SpellDatabase.GetSpellByName(wandItem.ConsumableSpellName);
+        }
 
         if (spell == null)
         {
+            string tried = wandItem.Wand?.SpellId ?? wandItem.WandSpellId ?? wandItem.ConsumableSpellName ?? "(none)";
+            Debug.LogWarning($"[WandValidator] Spell lookup failed for wand '{wandItem.Name}'. Tried SpellId='{tried}'");
             result.FailureReason = $"Spell data not found for wand '{wandItem.Name}'.";
             return result;
         }
