@@ -2852,6 +2852,10 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public int GetSpellDC(SpellData spell)
     {
+        // If the spell carries a pre-baked DC (e.g. scroll), use it directly
+        if (spell.SaveDC > 0)
+            return spell.SaveDC;
+
         string castingClass = GetPreferredCastingClassForSpell(spell);
         int castingMod = string.Equals(castingClass, "Wizard", System.StringComparison.OrdinalIgnoreCase)
             ? Stats.INTMod
