@@ -4633,7 +4633,12 @@ public partial class GameManager : MonoBehaviour
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{feedback}"));
             }
-            ShowActionChoices();
+
+            // If a scroll entered the targeting pipeline (AoE cone, single-target, etc.),
+            // do NOT reset the UI — the targeting overlay needs to stay active.
+            // ShowActionChoices would kill the targeting mode.
+            if (!_pendingScrollCastActive)
+                ShowActionChoices();
         };
         QuickItemUsePanel.OnCancelled = () =>
         {
