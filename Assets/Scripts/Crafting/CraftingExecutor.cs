@@ -252,6 +252,7 @@ public static class CraftingExecutor
             ScrollEffectiveSpellLevel = effLevel,
             ScrollSavedDC = savedDC,
             ScrollMetamagicFeats = hasMetamagic ? new List<MetamagicFeatId>(metamagicFeats) : null,
+            ConsumableEffect = ConsumableEffectType.SpellEffect,
             ConsumableSpellName = spell.SpellId,
             ConsumableMinimumCasterLevel = casterLevel,
             BasePriceGp = marketPrice

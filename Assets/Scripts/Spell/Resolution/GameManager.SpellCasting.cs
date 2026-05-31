@@ -1707,9 +1707,9 @@ public partial class GameManager
         bool isQuickened = !isDeliveringHeldCharge && _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         if (isScrollCast)
         {
-            // Scroll cast: action was already consumed by ResolveConsumableUseProvocation / ConsumeItemManipulationAction.
+            // Scroll cast: action is consumed via ConsumeScrollAfterCast (called from ConsumePendingSpellSlot).
             // Do NOT consume another action here.
-            Debug.Log($"[ScrollCast] {caster.Stats.CharacterName} casting from scroll — action already consumed by item use.");
+            Debug.Log($"[ScrollCast] {caster.Stats.CharacterName} casting from scroll — action consumed via ConsumeScrollAfterCast.");
         }
         else if (isDeliveringHeldCharge)
         {
@@ -3591,7 +3591,7 @@ public partial class GameManager
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         if (_pendingScrollCastActive)
         {
-            Debug.Log($"[ScrollCast] AoE scroll cast — action already consumed by item use.");
+            Debug.Log($"[ScrollCast] AoE scroll cast — action consumed via ConsumeScrollAfterCast.");
         }
         else if (!isQuickened)
         {

@@ -4484,6 +4484,14 @@ public partial class GameManager : MonoBehaviour
         {
             if (ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string noThreatMessage))
             {
+                // If the scroll entered the targeting pipeline (AoE/cone/etc.),
+                // do NOT consume the action or reset UI — targeting mode handles that.
+                if (_pendingScrollCastActive)
+                {
+                    CombatUI?.ShowCombatLog(noThreatMessage);
+                    return; // targeting mode is active; action consumed after cast resolves
+                }
+
                 ConsumeItemManipulationAction(actor);
                 CombatUI?.ShowCombatLog(noThreatMessage);
                 UpdateAllStatsUI();
@@ -4545,6 +4553,14 @@ public partial class GameManager : MonoBehaviour
 
         if (ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string resultMessage))
         {
+            // If the scroll entered the targeting pipeline (AoE/cone/etc.),
+            // do NOT consume the action or reset UI — targeting mode handles that.
+            if (_pendingScrollCastActive)
+            {
+                CombatUI?.ShowCombatLog(resultMessage);
+                yield break; // targeting mode is active; action consumed after cast resolves
+            }
+
             ConsumeItemManipulationAction(actor);
             CombatUI?.ShowCombatLog(resultMessage);
             UpdateAllStatsUI();
@@ -5659,7 +5675,8 @@ public partial class GameManager : MonoBehaviour
         }
 
         SpellDatabase.Init();
-        SpellData baseSpell = SpellDatabase.GetSpellByName(item.ConsumableSpellName);
+        SpellData baseSpell = SpellDatabase.GetSpell(item.ConsumableSpellName)
+                              ?? SpellDatabase.GetSpellByName(item.ConsumableSpellName);
         if (baseSpell == null)
         {
             summary = $"Spell not found for consumable: {item.ConsumableSpellName}.";
@@ -5796,7 +5813,8 @@ public partial class GameManager : MonoBehaviour
 
         // Step 4: Determine if the spell needs targeting (damage, AoE, etc.) or is self-target
         SpellDatabase.Init();
-        SpellData scrollSpell = SpellDatabase.GetSpellByName(scrollItem.ConsumableSpellName);
+        SpellData scrollSpell = SpellDatabase.GetSpell(scrollItem.ConsumableSpellName)
+                                ?? SpellDatabase.GetSpellByName(scrollItem.ConsumableSpellName);
         bool needsTargeting = scrollSpell != null && (
             scrollSpell.EffectType == SpellEffectType.Damage ||
             scrollSpell.EffectType == SpellEffectType.Summon ||
@@ -5940,6 +5958,9 @@ public partial class GameManager : MonoBehaviour
     private void ConsumeScrollAfterCast(CharacterController caster)
     {
         if (!_pendingScrollCastActive || _pendingScrollCastItem == null) return;
+
+        // Consume the action that was deferred when the scroll entered targeting mode
+        ConsumeItemManipulationAction(caster);
 
         var inv = caster?.InventoryComp?.CharacterInventory;
         if (inv != null && _pendingScrollCastInventoryIndex >= 0)
