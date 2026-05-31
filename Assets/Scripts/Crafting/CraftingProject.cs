@@ -75,6 +75,14 @@ public class CraftingProject
     /// <summary>Human-readable reason if validation failed.</summary>
     public string ValidationError;
 
+    // ============================== METAMAGIC SCROLL DATA ==============================
+    /// <summary>Metamagic feats applied to a crafted scroll. Null/empty for non-scroll or plain scrolls.</summary>
+    public List<MetamagicFeatId> ScrollMetamagicFeats;
+    /// <summary>Effective spell level after metamagic (base + adjustments). Set for scroll crafting.</summary>
+    public int ScrollEffectiveSpellLevel;
+    /// <summary>Save DC baked into the scroll: 10 + effective spell level + caster ability modifier.</summary>
+    public int ScrollSavedDC;
+
     /// <summary>
     /// Summary string for the confirmation dialog.
     /// </summary>

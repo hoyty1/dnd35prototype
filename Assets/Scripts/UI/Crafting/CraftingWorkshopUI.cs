@@ -76,6 +76,18 @@ public class CraftingWorkshopUI : MonoBehaviour
     private Text _debugToggleLabel;
     private Text _debugWarningText;
 
+    // Metamagic scroll crafting state
+    private GameObject _metamagicPanel;
+    private Text _metamagicSummaryText;
+    private Text _metamagicDCText;
+    private List<GameObject> _metamagicToggleObjects = new List<GameObject>();
+    private MetamagicData _currentMetamagic = new MetamagicData();
+    private int _heightenTarget = -1; // Target level for Heighten (-1 = not set)
+    private Text _heightenLevelText;
+    private static readonly Color MetamagicPanelColor = new Color(0.1f, 0.08f, 0.18f, 0.9f);
+    private static readonly Color MetamagicOnColor = new Color(0.3f, 0.5f, 0.8f, 1f);
+    private static readonly Color MetamagicOffColor = new Color(0.15f, 0.18f, 0.3f, 0.8f);
+
     // Colors matching the game's UI style
     private static readonly Color BgColor = new Color(0.08f, 0.09f, 0.14f, 0.97f);
     private static readonly Color PanelColor = new Color(0.06f, 0.08f, 0.14f, 0.85f);
@@ -283,6 +295,30 @@ public class CraftingWorkshopUI : MonoBehaviour
             Vector2.zero, Vector2.zero, 13, FontStyle.Normal,
             TextColor, TextAnchor.UpperLeft);
 
+        // ---- METAMAGIC PANEL (overlays spell sources area for scroll crafting) ----
+        _metamagicPanel = CreatePanel(rightPanel.transform, "MetamagicPanel",
+            new Vector2(0.02f, 0.22f), new Vector2(0.98f, 0.55f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, MetamagicPanelColor);
+
+        CreateText(_metamagicPanel.transform, "MetamagicHeader", "✦ Metamagic Customization",
+            new Vector2(0f, 0.88f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+            Vector2.zero, Vector2.zero, 14, FontStyle.Bold,
+            GoldTitleColor, TextAnchor.MiddleCenter);
+
+        // Metamagic summary line (effective level + DC)
+        _metamagicSummaryText = CreateText(_metamagicPanel.transform, "MetamagicSummary", "",
+            new Vector2(0.03f, 0.74f), new Vector2(0.97f, 0.88f), new Vector2(0.5f, 1f),
+            Vector2.zero, Vector2.zero, 12, FontStyle.Normal,
+            TextColor, TextAnchor.MiddleLeft);
+
+        // DC display
+        _metamagicDCText = CreateText(_metamagicPanel.transform, "MetamagicDC", "",
+            new Vector2(0.03f, 0.62f), new Vector2(0.97f, 0.74f), new Vector2(0.5f, 1f),
+            Vector2.zero, Vector2.zero, 13, FontStyle.Bold,
+            new Color(0.5f, 0.8f, 1f, 1f), TextAnchor.MiddleLeft);
+
+        _metamagicPanel.SetActive(false); // Hidden until a scroll is selected
+
         // Scroll substitution toggle button
         var scrollToggleObj = new GameObject("ScrollToggleBtn", typeof(RectTransform), typeof(Image), typeof(Button));
         scrollToggleObj.transform.SetParent(rightPanel.transform, false);
@@ -380,6 +416,7 @@ public class CraftingWorkshopUI : MonoBehaviour
         _selectedItem = null;
         _upgradeTarget = null;
 
+        ResetMetamagicState();
         RefreshFeatTabs();
         RefreshItemList(feat);
         ClearPreview();
@@ -460,12 +497,38 @@ public class CraftingWorkshopUI : MonoBehaviour
         _selectedItem = item;
         _upgradeTarget = null;
 
+        // Reset metamagic state for the new item
+        ResetMetamagicState();
+
         // Validate with party-wide spell checking and scroll substitution option
         _currentProject = CraftingValidator.Validate(
             item, _crafterStats, _spellComp, _upgradeTarget,
             _partyMembers, _useScrollsForMissing);
 
+        // Set base DC on project for non-metamagic scrolls
+        if (_currentProject != null && item.IsDynamic
+            && item.RequiredFeat == CraftingFeatType.ScribeScroll
+            && _currentProject.ScrollSavedDC == 0)
+        {
+            var spell = SpellDatabase.GetSpell(item.DynamicSpellId);
+            if (spell != null)
+            {
+                int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
+                _currentProject.ScrollSavedDC = 10 + spell.SpellLevel + abilityMod;
+            }
+        }
+
         RefreshPreview();
+
+        // Show metamagic panel for scroll items
+        if (item.IsDynamic && item.RequiredFeat == CraftingFeatType.ScribeScroll)
+        {
+            ShowMetamagicPanel();
+        }
+        else
+        {
+            HideMetamagicPanel();
+        }
     }
 
     private void OnScrollToggleClicked()
@@ -526,6 +589,386 @@ public class CraftingWorkshopUI : MonoBehaviour
         ClearPreview();
 
         Debug.Log($"[CraftingWorkshop] Debug mode toggled: {_debugMode}");
+    }
+
+    // ============================== METAMAGIC PANEL ==============================
+
+    /// <summary>
+    /// Show the metamagic selection panel for the currently selected scroll spell.
+    /// Populates toggles for each applicable metamagic feat the crafter has (or all in debug mode).
+    /// </summary>
+    private void ShowMetamagicPanel()
+    {
+        if (_metamagicPanel == null || _selectedItem == null) return;
+        if (_selectedItem.RequiredFeat != CraftingFeatType.ScribeScroll || !_selectedItem.IsDynamic)
+        {
+            HideMetamagicPanel();
+            return;
+        }
+
+        var spell = SpellDatabase.GetSpell(_selectedItem.DynamicSpellId);
+        if (spell == null)
+        {
+            HideMetamagicPanel();
+            return;
+        }
+
+        // Clear old toggles
+        ClearMetamagicToggles();
+
+        // Get available metamagic feats
+        List<MetamagicFeatId> availableFeats;
+        if (_debugMode)
+        {
+            // Show ALL metamagic feats in debug mode
+            availableFeats = new List<MetamagicFeatId>(MetamagicData.AllMetamagicFeats);
+        }
+        else if (_spellComp != null)
+        {
+            availableFeats = _spellComp.GetKnownMetamagicFeats();
+        }
+        else
+        {
+            availableFeats = new List<MetamagicFeatId>();
+        }
+
+        // Filter to only feats applicable to this spell
+        var applicableFeats = new List<MetamagicFeatId>();
+        foreach (var feat in availableFeats)
+        {
+            if (MetamagicData.IsApplicable(feat, spell))
+                applicableFeats.Add(feat);
+        }
+
+        if (applicableFeats.Count == 0)
+        {
+            // No applicable metamagic — show panel with "none available" message
+            _metamagicPanel.SetActive(true);
+            _metamagicSummaryText.text = "No applicable metamagic feats available.";
+            _metamagicDCText.text = "";
+            UpdateMetamagicSummary(spell);
+            return;
+        }
+
+        _metamagicPanel.SetActive(true);
+
+        // Create toggle buttons for each applicable metamagic feat
+        float toggleY = 0.58f;
+        float toggleHeight = 0.09f;
+        float toggleSpacing = 0.01f;
+
+        foreach (var feat in applicableFeats)
+        {
+            int levelAdj = MetamagicData.GetLevelAdjustment(feat);
+            string levelText = feat == MetamagicFeatId.HeightenSpell ? "+var" : $"+{levelAdj}";
+            string label = $"{MetamagicData.GetDisplayName(feat)} ({levelText} lvl)";
+
+            bool isOn = _currentMetamagic.Has(feat);
+            var captured = feat;
+
+            var toggleObj = new GameObject($"MM_{feat}", typeof(RectTransform), typeof(Image), typeof(Button));
+            toggleObj.transform.SetParent(_metamagicPanel.transform, false);
+
+            var rect = toggleObj.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.03f, toggleY - toggleHeight);
+            rect.anchorMax = new Vector2(0.97f, toggleY);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
+
+            toggleObj.GetComponent<Image>().color = isOn ? MetamagicOnColor : MetamagicOffColor;
+
+            var btn = toggleObj.GetComponent<Button>();
+            btn.onClick.AddListener(() => OnMetamagicToggled(captured, spell));
+
+            CreateText(toggleObj.transform, "Label", (isOn ? "☑ " : "☐ ") + label,
+                new Vector2(0.02f, 0f), new Vector2(0.98f, 1f), new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero, 11, isOn ? FontStyle.Bold : FontStyle.Normal,
+                Color.white, TextAnchor.MiddleLeft);
+
+            _metamagicToggleObjects.Add(toggleObj);
+            toggleY -= toggleHeight + toggleSpacing;
+
+            // For Heighten, add a level selector row
+            if (feat == MetamagicFeatId.HeightenSpell && isOn)
+            {
+                var heightenRow = new GameObject("HeightenRow", typeof(RectTransform));
+                heightenRow.transform.SetParent(_metamagicPanel.transform, false);
+                var hRect = heightenRow.GetComponent<RectTransform>();
+                hRect.anchorMin = new Vector2(0.03f, toggleY - toggleHeight);
+                hRect.anchorMax = new Vector2(0.97f, toggleY);
+                hRect.pivot = new Vector2(0.5f, 0.5f);
+                hRect.anchoredPosition = Vector2.zero;
+                hRect.sizeDelta = Vector2.zero;
+
+                int effTarget = _heightenTarget > spell.SpellLevel ? _heightenTarget : spell.SpellLevel + 1;
+                _heightenTarget = effTarget;
+                _currentMetamagic.HeightenToLevel = effTarget;
+
+                // - button
+                CreateButtonAt(heightenRow.transform, "HeightenDec", "◀",
+                    ButtonColor, new Vector2(0.1f, 0f), new Vector2(0.1f, 0f), new Vector2(0f, 0f),
+                    Vector2.zero, new Vector2(30f, 24f),
+                    () => AdjustHeightenLevel(-1, spell));
+
+                // Level display
+                _heightenLevelText = CreateText(heightenRow.transform, "HeightenLvl",
+                    $"Heighten to Level: {effTarget}",
+                    new Vector2(0.15f, 0f), new Vector2(0.85f, 1f), new Vector2(0.5f, 0.5f),
+                    Vector2.zero, Vector2.zero, 12, FontStyle.Bold,
+                    Color.white, TextAnchor.MiddleCenter);
+
+                // + button
+                CreateButtonAt(heightenRow.transform, "HeightenInc", "▶",
+                    ButtonColor, new Vector2(0.9f, 0f), new Vector2(0.9f, 0f), new Vector2(1f, 0f),
+                    Vector2.zero, new Vector2(30f, 24f),
+                    () => AdjustHeightenLevel(+1, spell));
+
+                _metamagicToggleObjects.Add(heightenRow);
+                toggleY -= toggleHeight + toggleSpacing;
+            }
+        }
+
+        UpdateMetamagicSummary(spell);
+    }
+
+    private void HideMetamagicPanel()
+    {
+        if (_metamagicPanel != null) _metamagicPanel.SetActive(false);
+        ClearMetamagicToggles();
+    }
+
+    private void ClearMetamagicToggles()
+    {
+        foreach (var obj in _metamagicToggleObjects)
+        {
+            if (obj != null) Destroy(obj);
+        }
+        _metamagicToggleObjects.Clear();
+        _heightenLevelText = null;
+    }
+
+    private void ResetMetamagicState()
+    {
+        _currentMetamagic = new MetamagicData();
+        _heightenTarget = -1;
+    }
+
+    private void OnMetamagicToggled(MetamagicFeatId feat, SpellData spell)
+    {
+        _currentMetamagic.Toggle(feat);
+
+        // If Heighten was toggled on, initialize target level
+        if (feat == MetamagicFeatId.HeightenSpell)
+        {
+            if (_currentMetamagic.Has(feat))
+            {
+                _heightenTarget = spell.SpellLevel + 1;
+                _currentMetamagic.HeightenToLevel = _heightenTarget;
+            }
+            else
+            {
+                _heightenTarget = -1;
+                _currentMetamagic.HeightenToLevel = -1;
+            }
+        }
+
+        // Rebuild toggles and revalidate
+        ShowMetamagicPanel();
+        RevalidateWithMetamagic();
+    }
+
+    private void AdjustHeightenLevel(int delta, SpellData spell)
+    {
+        int minLevel = spell.SpellLevel + 1;
+        int maxLevel = 9;
+
+        // Get caster's max castable level for upper bound
+        if (_spellComp != null && !_debugMode)
+            maxLevel = Mathf.Min(9, _spellComp.GetMaxCastableSpellLevel());
+
+        _heightenTarget = Mathf.Clamp(_heightenTarget + delta, minLevel, maxLevel);
+        _currentMetamagic.HeightenToLevel = _heightenTarget;
+
+        if (_heightenLevelText != null)
+            _heightenLevelText.text = $"Heighten to Level: {_heightenTarget}";
+
+        UpdateMetamagicSummary(spell);
+        RevalidateWithMetamagic();
+    }
+
+    private void UpdateMetamagicSummary(SpellData spell)
+    {
+        if (spell == null || _metamagicSummaryText == null || _metamagicDCText == null) return;
+
+        int baseLevel = spell.SpellLevel;
+        int effLevel = _currentMetamagic.GetEffectiveSpellLevel(baseLevel);
+
+        if (!_currentMetamagic.HasAnyMetamagic)
+        {
+            _metamagicSummaryText.text = $"Base Level: {baseLevel} (no metamagic)";
+        }
+        else
+        {
+            // Build adjustment breakdown
+            var parts = new List<string>();
+            parts.Add($"Base: {baseLevel}");
+            foreach (var mm in _currentMetamagic.AppliedMetamagic)
+            {
+                int adj = _currentMetamagic.GetLevelAdjustment(mm, baseLevel);
+                parts.Add($"{MetamagicData.GetAdjective(mm)} (+{adj})");
+            }
+            _metamagicSummaryText.text = $"{string.Join(" + ", parts)} = Eff. Level: {effLevel}";
+        }
+
+        // DC calculation: 10 + effective level + caster ability modifier
+        int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
+        int dc = 10 + effLevel + abilityMod;
+
+        string abilityName = GetCasterAbilityName();
+        _metamagicDCText.text = $"Save DC: {dc} (10 + {effLevel} spell + {abilityMod} {abilityName})";
+
+        // Validate effective level against max castable
+        int maxCastable = 9;
+        if (_spellComp != null && !_debugMode)
+            maxCastable = _spellComp.GetMaxCastableSpellLevel();
+
+        int rawLevel = _currentMetamagic.GetRawEffectiveSpellLevel(baseLevel);
+        if (rawLevel > maxCastable && !_debugMode)
+        {
+            _metamagicDCText.text += $"\n❌ Effective level {rawLevel} exceeds max castable ({maxCastable})!";
+            _metamagicDCText.color = ErrorColor;
+        }
+        else if (rawLevel > 9 && !_debugMode)
+        {
+            _metamagicDCText.text += $"\n❌ Effective level {rawLevel} exceeds maximum (9)!";
+            _metamagicDCText.color = ErrorColor;
+        }
+        else
+        {
+            _metamagicDCText.color = new Color(0.5f, 0.8f, 1f, 1f);
+        }
+    }
+
+    private string GetCasterAbilityName()
+    {
+        if (_crafterStats == null) return "MOD";
+        string cls = _crafterStats.CharacterClass;
+        if (string.IsNullOrEmpty(cls)) return "MOD";
+        switch (cls)
+        {
+            case "Wizard": return "INT";
+            case "Sorcerer": case "Bard": return "CHA";
+            case "Cleric": case "Druid": case "Ranger": case "Paladin": return "WIS";
+            default: return "MOD";
+        }
+    }
+
+    /// <summary>
+    /// Revalidate the current project with metamagic applied.
+    /// Recalculates cost and validates effective spell level.
+    /// </summary>
+    private void RevalidateWithMetamagic()
+    {
+        if (_selectedItem == null || _selectedItem.RequiredFeat != CraftingFeatType.ScribeScroll) return;
+
+        var spell = SpellDatabase.GetSpell(_selectedItem.DynamicSpellId);
+        if (spell == null) return;
+
+        int baseLevel = spell.SpellLevel;
+        int effLevel = _currentMetamagic.HasAnyMetamagic
+            ? _currentMetamagic.GetEffectiveSpellLevel(baseLevel)
+            : baseLevel;
+        int rawLevel = _currentMetamagic.GetRawEffectiveSpellLevel(baseLevel);
+
+        // Validate effective level
+        int maxCastable = 9;
+        if (_spellComp != null && !_debugMode)
+            maxCastable = _spellComp.GetMaxCastableSpellLevel();
+
+        if (!_debugMode && rawLevel > maxCastable)
+        {
+            // Invalid — too high
+            _currentProject = new CraftingProject
+            {
+                Definition = _selectedItem,
+                Crafter = _crafterStats,
+                IsValid = false,
+                ValidationError = $"Effective spell level {rawLevel} exceeds your max castable level ({maxCastable})."
+            };
+            RefreshPreview();
+            return;
+        }
+
+        if (!_debugMode && rawLevel > 9)
+        {
+            _currentProject = new CraftingProject
+            {
+                Definition = _selectedItem,
+                Crafter = _crafterStats,
+                IsValid = false,
+                ValidationError = $"Effective spell level {rawLevel} exceeds maximum 9th level."
+            };
+            RefreshPreview();
+            return;
+        }
+
+        // Recalculate with the validator (handles all other checks)
+        _currentProject = CraftingValidator.Validate(
+            _selectedItem, _crafterStats, _spellComp, _upgradeTarget,
+            _partyMembers, _useScrollsForMissing);
+
+        // Overlay metamagic data on the project
+        if (_currentMetamagic.HasAnyMetamagic)
+        {
+            var feats = new List<MetamagicFeatId>(_currentMetamagic.AppliedMetamagic);
+            _currentProject.ScrollMetamagicFeats = feats;
+            _currentProject.ScrollEffectiveSpellLevel = effLevel;
+
+            // DC = 10 + effective level + caster ability modifier
+            int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
+            _currentProject.ScrollSavedDC = 10 + effLevel + abilityMod;
+
+            // Recalculate cost using effective spell level
+            int casterLevel = _selectedItem.RequiredCasterLevel;
+            int effCL = CraftingCostCalculator.MinimumCasterLevelForSpell(effLevel);
+            if (effCL < casterLevel) effCL = casterLevel;
+            int newMarketPrice = CraftingCostCalculator.ScrollMarketPrice(effLevel, effCL);
+            var newCost = CraftingCostCalculator.FromMarketPrice(newMarketPrice);
+
+            if (!CraftingValidator.DebugMode)
+            {
+                _currentProject.GoldCost = newCost.GoldCost;
+                _currentProject.XPCost = newCost.XPCost;
+                _currentProject.CraftingDays = newCost.CraftingDays;
+            }
+            _currentProject.MarketPriceGp = newMarketPrice;
+            _currentProject.ItemCasterLevel = effCL;
+
+            // Re-check gold/XP if not debug
+            if (!CraftingValidator.DebugMode && _crafterStats != null)
+            {
+                if (_crafterStats.ComponentGold < _currentProject.GoldCost)
+                {
+                    _currentProject.IsValid = false;
+                    _currentProject.ValidationError = $"Insufficient gold for metamagic scroll. Need {_currentProject.GoldCost:N0} gp, have {_crafterStats.ComponentGold:N0} gp.";
+                }
+                else if (_currentProject.XPCost > _crafterStats.MaxSpendableXP())
+                {
+                    _currentProject.IsValid = false;
+                    _currentProject.ValidationError = $"Insufficient XP for metamagic scroll. Need {_currentProject.XPCost:N0} XP.";
+                }
+            }
+        }
+        else
+        {
+            // No metamagic — set base DC
+            int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
+            _currentProject.ScrollEffectiveSpellLevel = baseLevel;
+            _currentProject.ScrollSavedDC = 10 + baseLevel + abilityMod;
+        }
+
+        RefreshPreview();
     }
 
     // ============================== PREVIEW PANEL ==============================
@@ -627,6 +1070,8 @@ public class CraftingWorkshopUI : MonoBehaviour
         if (_previewSpellSourcesText != null) _previewSpellSourcesText.text = "";
         if (_previewWarningText != null) _previewWarningText.text = "";
         if (_scrollToggleButton != null) _scrollToggleButton.gameObject.SetActive(false);
+        HideMetamagicPanel();
+        ResetMetamagicState();
         if (_craftButton != null)
         {
             _craftButton.interactable = false;

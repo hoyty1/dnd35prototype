@@ -2762,6 +2762,36 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
+    /// Get the maximum spell level this caster can cast, considering class and ability scores.
+    /// For prepared casters: highest slot level. For spontaneous: highest castable level.
+    /// For partial casters: highest spell level from progression. Returns 0 if not a caster.
+    /// </summary>
+    public int GetMaxCastableSpellLevel()
+    {
+        int best = 0;
+
+        // Prepared caster (Wizard, Cleric, Druid)
+        int slotLevel = GetHighestSlotLevel();
+        if (slotLevel > best) best = slotLevel;
+
+        // Spontaneous caster (Sorcerer, Bard)
+        if (IsSpontaneousCaster && SpontaneousData != null)
+        {
+            int spontLevel = SpontaneousData.GetHighestCastableLevel();
+            if (spontLevel > best) best = spontLevel;
+        }
+
+        // Partial caster (Ranger, Paladin)
+        if (IsPartialCaster && PartialData != null)
+        {
+            int partialLevel = PartialData.GetHighestSpellLevel();
+            if (partialLevel > best) best = partialLevel;
+        }
+
+        return best;
+    }
+
+    /// <summary>
     /// Get the list of metamagic feats the character knows (from CharacterStats.Feats).
     /// </summary>
     public List<MetamagicFeatId> GetKnownMetamagicFeats()

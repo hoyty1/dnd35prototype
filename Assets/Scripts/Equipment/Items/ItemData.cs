@@ -357,6 +357,16 @@ public class ItemData
     /// <summary>The spell level on the scroll (0-9). Used for validation and pricing.</summary>
     public int ScrollSpellLevel;
 
+    // --- Metamagic Scroll Data (crafted scrolls with metamagic) ---
+    /// <summary>Metamagic feats applied to this scroll at creation time. Null/empty if no metamagic.</summary>
+    public List<MetamagicFeatId> ScrollMetamagicFeats;
+    /// <summary>Effective spell level after metamagic adjustments (base + metamagic). Equals ScrollSpellLevel if no metamagic.</summary>
+    public int ScrollEffectiveSpellLevel;
+    /// <summary>Save DC baked into this scroll at creation: 10 + effective spell level + caster's ability modifier.</summary>
+    public int ScrollSavedDC;
+    /// <summary>True if this scroll has metamagic applied (convenience check).</summary>
+    public bool HasScrollMetamagic => ScrollMetamagicFeats != null && ScrollMetamagicFeats.Count > 0;
+
     // --- Potion-specific (D&D 3.5e DMG) ---
     /// <summary>True if this consumable is a potion. Anyone can drink a potion (no class/ability restrictions).</summary>
     public bool IsPotion;

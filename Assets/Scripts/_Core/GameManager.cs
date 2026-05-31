@@ -5663,6 +5663,13 @@ public partial class GameManager : MonoBehaviour
         int casterLevel = Mathf.Max(1, item.ConsumableMinimumCasterLevel);
         SpellData consumableSpell = BuildConsumableSpellVariant(baseSpell, item);
 
+        // Use stored DC from metamagic scrolls for saving throw resolution
+        if (item.HasScrollMetamagic && item.ScrollSavedDC > 0)
+        {
+            consumableSpell.SaveDC = item.ScrollSavedDC;
+            Debug.Log($"[Scroll Metamagic] Using stored DC {item.ScrollSavedDC} for {consumableSpell.Name}");
+        }
+
         if (consumableSpell.EffectType == SpellEffectType.Healing)
         {
             int oldHP = actor.Stats.CurrentHP;
@@ -6129,6 +6136,54 @@ public partial class GameManager : MonoBehaviour
         SpellData spell = baseSpell != null ? baseSpell.Clone() : null;
         if (spell == null || item == null)
             return spell;
+
+        // Apply stored metamagic effects from crafted scrolls
+        if (item.HasScrollMetamagic && item.ScrollMetamagicFeats != null && item.ScrollMetamagicFeats.Count > 0)
+        {
+            var metamagic = new MetamagicData();
+            foreach (var feat in item.ScrollMetamagicFeats)
+            {
+                metamagic.Toggle(feat);
+                // For Heighten, set the target level from the stored effective level
+                if (feat == MetamagicFeatId.HeightenSpell && item.ScrollEffectiveSpellLevel > spell.SpellLevel)
+                {
+                    metamagic.HeightenToLevel = item.ScrollEffectiveSpellLevel;
+                }
+            }
+            // Apply pre-cast modifications (Extend, Enlarge, Widen, Silent, Still, Quicken)
+            SpellCaster.ApplyMetamagicToSpellData(spell, metamagic);
+
+            // Maximize: set dice counts to max values (replace variable dice with flat bonus)
+            if (metamagic.Has(MetamagicFeatId.MaximizeSpell))
+            {
+                if (spell.DamageCount > 0 && spell.DamageDice > 0)
+                {
+                    spell.BonusDamage += spell.DamageCount * spell.DamageDice;
+                    spell.DamageCount = 0;
+                }
+                if (spell.HealCount > 0 && spell.HealDice > 0)
+                {
+                    spell.BonusHealing += spell.HealCount * spell.HealDice;
+                    spell.HealCount = 0;
+                }
+            }
+
+            // Empower: multiply all variable numeric effects by 1.5
+            if (metamagic.Has(MetamagicFeatId.EmpowerSpell))
+            {
+                if (spell.DamageCount > 0)
+                    spell.BonusDamage += (spell.DamageCount * (spell.DamageDice + 1)) / 4; // avg×0.5
+                if (spell.HealCount > 0)
+                    spell.BonusHealing += (spell.HealCount * (spell.HealDice + 1)) / 4;
+                // For already-maximized values, multiply flat bonus
+                if (spell.DamageCount == 0 && spell.BonusDamage > 0 && metamagic.Has(MetamagicFeatId.MaximizeSpell))
+                    spell.BonusDamage = (int)(spell.BonusDamage * 1.5f);
+                if (spell.HealCount == 0 && spell.BonusHealing > 0 && metamagic.Has(MetamagicFeatId.MaximizeSpell))
+                    spell.BonusHealing = (int)(spell.BonusHealing * 1.5f);
+            }
+
+            Debug.Log($"[Scroll Metamagic] Applied {item.ScrollMetamagicFeats.Count} metamagic feat(s) to {spell.Name}");
+        }
 
         int modifier = item.ConsumableModifier;
         if (modifier == 0)

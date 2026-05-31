@@ -92,7 +92,8 @@ public static class CraftingExecutor
         }
         else if (def.IsDynamic)
         {
-            craftedItem = CreateDynamicItem(def, project.ItemCasterLevel);
+            // Pass full project so metamagic scroll data flows through
+            craftedItem = CreateDynamicItem(def, project.ItemCasterLevel, project);
         }
         else
         {
@@ -160,6 +161,14 @@ public static class CraftingExecutor
 
     private static ItemData CreateDynamicItem(CraftableItemDefinition def, int casterLevel)
     {
+        return CreateDynamicItem(def, casterLevel, null);
+    }
+
+    /// <summary>
+    /// Create a dynamic item (scroll/potion/wand) with optional metamagic project data.
+    /// </summary>
+    private static ItemData CreateDynamicItem(CraftableItemDefinition def, int casterLevel, CraftingProject project)
+    {
         if (string.IsNullOrEmpty(def.DynamicSpellId)) return null;
 
         var spell = SpellDatabase.GetSpell(def.DynamicSpellId);
@@ -172,6 +181,10 @@ public static class CraftingExecutor
         switch (def.RequiredFeat)
         {
             case CraftingFeatType.ScribeScroll:
+                // Pass metamagic data from project if available
+                if (project != null && project.ScrollMetamagicFeats != null && project.ScrollMetamagicFeats.Count > 0)
+                    return CreateScroll(spell, casterLevel, project.ScrollMetamagicFeats,
+                        project.ScrollEffectiveSpellLevel, project.ScrollSavedDC);
                 return CreateScroll(spell, casterLevel);
 
             case CraftingFeatType.BrewPotion:
@@ -188,23 +201,64 @@ public static class CraftingExecutor
 
     private static ItemData CreateScroll(SpellData spell, int casterLevel)
     {
+        return CreateScroll(spell, casterLevel, null, 0, 0);
+    }
+
+    /// <summary>
+    /// Create a scroll with optional metamagic feats, saved DC, and effective spell level.
+    /// </summary>
+    private static ItemData CreateScroll(SpellData spell, int casterLevel,
+        List<MetamagicFeatId> metamagicFeats, int effectiveSpellLevel, int savedDC)
+    {
         bool isArcane = IsArcaneSpell(spell);
+        bool hasMetamagic = metamagicFeats != null && metamagicFeats.Count > 0;
+        int baseLevel = spell.SpellLevel;
+        int effLevel = hasMetamagic ? effectiveSpellLevel : baseLevel;
+
+        // Build metamagic name prefix (e.g., "Empowered+Maximized")
+        string metamagicPrefix = "";
+        if (hasMetamagic)
+        {
+            var adjectives = new List<string>();
+            foreach (var mm in metamagicFeats)
+                adjectives.Add(MetamagicData.GetAdjective(mm));
+            metamagicPrefix = string.Join(" ", adjectives) + " ";
+        }
+
+        string scrollName = $"Scroll of {metamagicPrefix}{spell.Name}";
+        int marketPrice = CraftingCostCalculator.ScrollMarketPrice(effLevel, casterLevel);
+
+        // Build description with metamagic info
+        string desc = $"A spell scroll containing {metamagicPrefix}{spell.Name} (CL {casterLevel}).";
+        if (hasMetamagic)
+        {
+            desc += $"\nMetamagic: {string.Join(", ", metamagicPrefix.Trim())}";
+            desc += $"\nBase Spell Level: {baseLevel} → Effective Level: {effLevel}";
+        }
+        if (savedDC > 0)
+            desc += $"\nSave DC: {savedDC} (baked at creation)";
+        desc += "\n" + spell.Description;
+
         var scroll = new ItemData
         {
             Id = $"crafted_scroll_{spell.SpellId}_{System.Guid.NewGuid():N}",
-            Name = $"Scroll of {spell.Name}",
-            Description = $"A spell scroll containing {spell.Name} (CL {casterLevel}). " + spell.Description,
+            Name = scrollName,
+            Description = desc,
             Type = ItemType.Consumable,
             Slot = EquipSlot.None,
             IsScroll = true,
             ScrollType = isArcane ? "Arcane" : "Divine",
-            ScrollSpellLevel = spell.SpellLevel,
+            ScrollSpellLevel = baseLevel,
+            ScrollEffectiveSpellLevel = effLevel,
+            ScrollSavedDC = savedDC,
+            ScrollMetamagicFeats = hasMetamagic ? new List<MetamagicFeatId>(metamagicFeats) : null,
             ConsumableSpellName = spell.SpellId,
             ConsumableMinimumCasterLevel = casterLevel,
-            BasePriceGp = CraftingCostCalculator.ScrollMarketPrice(spell.SpellLevel, casterLevel)
+            BasePriceGp = marketPrice
         };
 
-        Debug.Log($"[CraftingExecutor] Created scroll: {scroll.Name} (CL {casterLevel}, {scroll.ScrollType})");
+        Debug.Log($"[CraftingExecutor] Created scroll: {scroll.Name} (CL {casterLevel}, {scroll.ScrollType}" +
+            (hasMetamagic ? $", Eff.Lv {effLevel}, DC {savedDC}" : "") + ")");
         return scroll;
     }
 
