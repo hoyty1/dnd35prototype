@@ -612,7 +612,11 @@ public class QuickItemUsePanel : MonoBehaviour
         if (entry.Item.ConsumableEffect == ConsumableEffectType.SpellEffect
             && !string.IsNullOrEmpty(entry.Item.ConsumableSpellName))
         {
-            parts.Add(entry.Item.ConsumableSpellName);
+            // Show display name (resolve from database if possible)
+            SpellDatabase.Init();
+            SpellData infoSpell = entry.Item.Scroll?.GetSpell()
+                                  ?? SpellDatabase.GetSpell(entry.Item.ConsumableSpellName);
+            parts.Add(infoSpell != null ? infoSpell.Name : entry.Item.ConsumableSpellName);
         }
 
         // Magic domain indicator for arcane scrolls/wands usable via Magic domain

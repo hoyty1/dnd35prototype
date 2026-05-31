@@ -517,11 +517,15 @@ public class ItemBuilder
     //  Scroll / Wand / Potion — Consumable Properties
     // ════════════════════════════════════════════════════════════
 
-    /// <summary>Set the spell for scrolls (spell name + level).</summary>
+    /// <summary>Set the spell for scrolls (spell name/ID + level).</summary>
     public ItemBuilder ForSpell(string spellName, int spellLevel)
     {
         _item.ConsumableSpellName = spellName;
-        if (_item.IsScroll) _item.ScrollSpellLevel = spellLevel;
+        if (_item.IsScroll)
+        {
+            _item.ScrollSpellLevel = spellLevel;
+            _item.ScrollEffectiveSpellLevel = spellLevel;
+        }
         if (_item.IsPotion) _item.PotionSpellLevel = spellLevel;
         return this;
     }
@@ -770,6 +774,26 @@ public class ItemBuilder
             if (savedEnhancement > 0) { _item.EnhancementBonus = savedEnhancement; _item.enhancementBonus = savedEnhancement; }
             if (savedMasterwork) _item.IsMasterwork = true;
             if (savedMagic) _item.CountsAsMagicForBypass = true;
+        }
+
+        // Auto-populate ScrollData for scroll items if not already set
+        if (_item.IsScroll && _item.Scroll == null && !string.IsNullOrWhiteSpace(_item.ConsumableSpellName))
+        {
+            SpellDatabase.Init();
+            SpellData spell = SpellDatabase.GetSpell(_item.ConsumableSpellName)
+                              ?? SpellDatabase.GetSpellByName(_item.ConsumableSpellName);
+            if (spell != null)
+            {
+                bool isArcane = _item.ScrollType == "Arcane";
+                int cl = Mathf.Max(1, _item.ConsumableMinimumCasterLevel);
+                int price = _item.BasePriceGp > 0 ? _item.BasePriceGp : (_item.ScrollSpellLevel * cl * 25);
+                _item.Scroll = ScrollData.Create(spell, cl, isArcane, price,
+                    _item.ScrollMetamagicFeats,
+                    _item.ScrollEffectiveSpellLevel > 0 ? _item.ScrollEffectiveSpellLevel : -1,
+                    _item.ScrollSavedDC);
+                // Ensure ConsumableSpellName uses canonical spell ID
+                _item.ConsumableSpellName = spell.SpellId;
+            }
         }
 
         // Validation

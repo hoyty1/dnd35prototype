@@ -227,7 +227,9 @@ public sealed class CharmedBehaviorController
         // Spell-based consumables first (Potion of Cure...).
         if (item.ConsumableEffect == ConsumableEffectType.SpellEffect && !string.IsNullOrWhiteSpace(item.ConsumableSpellName))
         {
-            SpellData spell = SpellDatabase.GetSpellByName(item.ConsumableSpellName);
+            SpellData spell = item.Scroll?.GetSpell()
+                              ?? SpellDatabase.GetSpell(item.ConsumableSpellName)
+                              ?? SpellDatabase.GetSpellByName(item.ConsumableSpellName);
             if (spell != null && spell.EffectType == SpellEffectType.Healing)
             {
                 SpellResult result = SpellCaster.Cast(spell, actor.Stats, caster.Stats, null, forceFriendlyTouchNoRoll: true, forceTargetToFailSave: false, actor, caster);

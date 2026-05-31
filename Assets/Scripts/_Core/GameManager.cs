@@ -5675,22 +5675,30 @@ public partial class GameManager : MonoBehaviour
         }
 
         SpellDatabase.Init();
-        SpellData baseSpell = SpellDatabase.GetSpell(item.ConsumableSpellName)
-                              ?? SpellDatabase.GetSpellByName(item.ConsumableSpellName);
+
+        // Use unified ScrollData when available, fall back to legacy lookup
+        SpellData baseSpell = (item.IsScroll && item.Scroll != null)
+            ? item.Scroll.GetSpell()
+            : SpellDatabase.GetSpell(item.ConsumableSpellName)
+              ?? SpellDatabase.GetSpellByName(item.ConsumableSpellName);
         if (baseSpell == null)
         {
-            summary = $"Spell not found for consumable: {item.ConsumableSpellName}.";
+            string spellRef = item.Scroll?.SpellId ?? item.ConsumableSpellName;
+            summary = $"Spell not found for consumable: {spellRef}.";
             return false;
         }
 
-        int casterLevel = Mathf.Max(1, item.ConsumableMinimumCasterLevel);
+        int casterLevel = (item.Scroll != null)
+            ? item.Scroll.CasterLevel
+            : Mathf.Max(1, item.ConsumableMinimumCasterLevel);
         SpellData consumableSpell = BuildConsumableSpellVariant(baseSpell, item);
 
-        // Use stored DC from metamagic scrolls for saving throw resolution
-        if (item.HasScrollMetamagic && item.ScrollSavedDC > 0)
+        // Use stored DC from scroll (unified ScrollData or legacy metamagic fields)
+        int scrollDC = item.Scroll?.SaveDC ?? (item.HasScrollMetamagic ? item.ScrollSavedDC : 0);
+        if (item.IsScroll && scrollDC > 0)
         {
-            consumableSpell.SaveDC = item.ScrollSavedDC;
-            Debug.Log($"[Scroll Metamagic] Using stored DC {item.ScrollSavedDC} for {consumableSpell.Name}");
+            consumableSpell.SaveDC = scrollDC;
+            Debug.Log($"[Scroll] Using stored DC {scrollDC} for {consumableSpell.Name}");
         }
 
         if (consumableSpell.EffectType == SpellEffectType.Healing)
@@ -5813,7 +5821,8 @@ public partial class GameManager : MonoBehaviour
 
         // Step 4: Determine if the spell needs targeting (damage, AoE, etc.) or is self-target
         SpellDatabase.Init();
-        SpellData scrollSpell = SpellDatabase.GetSpell(scrollItem.ConsumableSpellName)
+        SpellData scrollSpell = scrollItem.Scroll?.GetSpell()
+                                ?? SpellDatabase.GetSpell(scrollItem.ConsumableSpellName)
                                 ?? SpellDatabase.GetSpellByName(scrollItem.ConsumableSpellName);
         bool needsTargeting = scrollSpell != null && (
             scrollSpell.EffectType == SpellEffectType.Damage ||
@@ -5895,29 +5904,34 @@ public partial class GameManager : MonoBehaviour
         // Clone the spell so modifications don't affect the database
         SpellData spellClone = baseSpell.Clone();
 
+        // Use unified ScrollData when available, fall back to legacy fields
+        ScrollData sd = scrollItem.Scroll;
+
         // Build metamagic data from scroll's stored metamagic feats
         MetamagicData scrollMetamagic = null;
-        if (scrollItem.HasScrollMetamagic && scrollItem.ScrollMetamagicFeats != null && scrollItem.ScrollMetamagicFeats.Count > 0)
+        var mmFeats = sd?.MetamagicFeats ?? (scrollItem.HasScrollMetamagic ? scrollItem.ScrollMetamagicFeats : null);
+        int effLevel = sd?.EffectiveSpellLevel ?? scrollItem.ScrollEffectiveSpellLevel;
+        if (mmFeats != null && mmFeats.Count > 0)
         {
             scrollMetamagic = new MetamagicData();
-            foreach (var feat in scrollItem.ScrollMetamagicFeats)
+            foreach (var feat in mmFeats)
             {
                 scrollMetamagic.Toggle(feat);
-                if (feat == MetamagicFeatId.HeightenSpell && scrollItem.ScrollEffectiveSpellLevel > spellClone.SpellLevel)
-                    scrollMetamagic.HeightenToLevel = scrollItem.ScrollEffectiveSpellLevel;
+                if (feat == MetamagicFeatId.HeightenSpell && effLevel > spellClone.SpellLevel)
+                    scrollMetamagic.HeightenToLevel = effLevel;
             }
             // Apply pre-cast metamagic modifications (Extend, Enlarge, Widen, etc.)
             SpellCaster.ApplyMetamagicToSpellData(spellClone, scrollMetamagic);
         }
 
         // Override the spell's save DC with the scroll's stored DC
-        if (scrollItem.ScrollSavedDC > 0)
-            spellClone.SaveDC = scrollItem.ScrollSavedDC;
-        else if (scrollItem.HasScrollMetamagic && scrollItem.ScrollEffectiveSpellLevel > 0)
-            spellClone.SaveDC = 10 + scrollItem.ScrollEffectiveSpellLevel;
+        int scrollSaveDC = sd?.SaveDC ?? scrollItem.ScrollSavedDC;
+        if (scrollSaveDC > 0)
+            spellClone.SaveDC = scrollSaveDC;
+        else if (mmFeats != null && mmFeats.Count > 0 && effLevel > 0)
+            spellClone.SaveDC = 10 + effLevel;
 
-        // Note: caster level for the scroll is scrollItem.ConsumableMinimumCasterLevel
-        int scrollCasterLevel = Mathf.Max(1, scrollItem.ConsumableMinimumCasterLevel);
+        int scrollCasterLevel = sd?.CasterLevel ?? Mathf.Max(1, scrollItem.ConsumableMinimumCasterLevel);
 
         // Store scroll state for consumption after spell resolves
         _pendingScrollCastItem = scrollItem;
@@ -6312,17 +6326,21 @@ public partial class GameManager : MonoBehaviour
         if (spell == null || item == null)
             return spell;
 
-        // Apply stored metamagic effects from crafted scrolls
-        if (item.HasScrollMetamagic && item.ScrollMetamagicFeats != null && item.ScrollMetamagicFeats.Count > 0)
+        // Apply stored metamagic effects from scroll (unified ScrollData or legacy fields)
+        ScrollData sd = item.Scroll;
+        var mmFeats = sd?.MetamagicFeats ?? (item.HasScrollMetamagic ? item.ScrollMetamagicFeats : null);
+        int mmEffLevel = sd?.EffectiveSpellLevel ?? item.ScrollEffectiveSpellLevel;
+
+        if (mmFeats != null && mmFeats.Count > 0)
         {
             var metamagic = new MetamagicData();
-            foreach (var feat in item.ScrollMetamagicFeats)
+            foreach (var feat in mmFeats)
             {
                 metamagic.Toggle(feat);
                 // For Heighten, set the target level from the stored effective level
-                if (feat == MetamagicFeatId.HeightenSpell && item.ScrollEffectiveSpellLevel > spell.SpellLevel)
+                if (feat == MetamagicFeatId.HeightenSpell && mmEffLevel > spell.SpellLevel)
                 {
-                    metamagic.HeightenToLevel = item.ScrollEffectiveSpellLevel;
+                    metamagic.HeightenToLevel = mmEffLevel;
                 }
             }
             // Apply pre-cast modifications (Extend, Enlarge, Widen, Silent, Still, Quicken)
@@ -6357,7 +6375,7 @@ public partial class GameManager : MonoBehaviour
                     spell.BonusHealing = (int)(spell.BonusHealing * 1.5f);
             }
 
-            Debug.Log($"[Scroll Metamagic] Applied {item.ScrollMetamagicFeats.Count} metamagic feat(s) to {spell.Name}");
+            Debug.Log($"[Scroll Metamagic] Applied {mmFeats.Count} metamagic feat(s) to {spell.Name}");
         }
 
         int modifier = item.ConsumableModifier;

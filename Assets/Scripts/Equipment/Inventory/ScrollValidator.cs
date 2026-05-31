@@ -111,16 +111,21 @@ public static class ScrollValidator
 
         CharacterStats stats = character.Stats;
         SpellDatabase.Init();
-        SpellData spell = SpellDatabase.GetSpellByName(scrollItem.ConsumableSpellName);
+
+        // Use unified ScrollData when available, fall back to legacy fields
+        SpellData spell = scrollItem.Scroll?.GetSpell()
+                          ?? SpellDatabase.GetSpell(scrollItem.ConsumableSpellName)
+                          ?? SpellDatabase.GetSpellByName(scrollItem.ConsumableSpellName);
         if (spell == null)
         {
-            result.FailureReason = $"Spell '{scrollItem.ConsumableSpellName}' not found in spell database.";
+            string spellRef = scrollItem.Scroll?.SpellId ?? scrollItem.ConsumableSpellName;
+            result.FailureReason = $"Spell '{spellRef}' not found in spell database.";
             return result;
         }
 
-        int scrollSpellLevel = scrollItem.ScrollSpellLevel;
-        int scrollCasterLevel = scrollItem.ConsumableMinimumCasterLevel;
-        string scrollType = scrollItem.ScrollType ?? "Arcane";
+        int scrollSpellLevel = scrollItem.Scroll?.BaseSpellLevel ?? scrollItem.ScrollSpellLevel;
+        int scrollCasterLevel = scrollItem.Scroll?.CasterLevel ?? scrollItem.ConsumableMinimumCasterLevel;
+        string scrollType = scrollItem.Scroll?.TypeLabel ?? scrollItem.ScrollType ?? "Arcane";
 
         // Step 1: Find a matching class on the character that has this spell on its list
         string matchedClass = null;

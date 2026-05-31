@@ -239,6 +239,11 @@ public static class CraftingExecutor
             desc += $"\nSave DC: {savedDC} (baked at creation)";
         desc += "\n" + spell.Description;
 
+        // Unified scroll data — single source of truth
+        ScrollData scrollData = ScrollData.Create(
+            spell, casterLevel, isArcane, marketPrice,
+            hasMetamagic ? metamagicFeats : null, effLevel, savedDC);
+
         var scroll = new ItemData
         {
             Id = $"crafted_scroll_{spell.SpellId}_{System.Guid.NewGuid():N}",
@@ -255,7 +260,8 @@ public static class CraftingExecutor
             ConsumableEffect = ConsumableEffectType.SpellEffect,
             ConsumableSpellName = spell.SpellId,
             ConsumableMinimumCasterLevel = casterLevel,
-            BasePriceGp = marketPrice
+            BasePriceGp = marketPrice,
+            Scroll = scrollData
         };
 
         Debug.Log($"[CraftingExecutor] Created scroll: {scroll.Name} (CL {casterLevel}, {scroll.ScrollType}" +

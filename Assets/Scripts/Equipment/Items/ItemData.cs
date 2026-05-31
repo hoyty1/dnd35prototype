@@ -367,6 +367,15 @@ public class ItemData
     /// <summary>True if this scroll has metamagic applied (convenience check).</summary>
     public bool HasScrollMetamagic => ScrollMetamagicFeats != null && ScrollMetamagicFeats.Count > 0;
 
+    // --- Unified Scroll Data (canonical source of truth) ---
+    /// <summary>
+    /// Unified scroll data container. Non-null for scroll items.
+    /// All scroll creation paths populate this. Usage code should prefer Scroll.GetSpell()
+    /// over ConsumableSpellName for spell resolution on scrolls.
+    /// Legacy fields (IsScroll, ScrollType, etc.) are still populated for backward compatibility.
+    /// </summary>
+    public ScrollData Scroll;
+
     // --- Potion-specific (D&D 3.5e DMG) ---
     /// <summary>True if this consumable is a potion. Anyone can drink a potion (no class/ability restrictions).</summary>
     public bool IsPotion;

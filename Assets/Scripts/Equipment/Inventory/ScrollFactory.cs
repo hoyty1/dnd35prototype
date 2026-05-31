@@ -251,6 +251,11 @@ public static class ScrollFactory
             ? new Color(0.4f, 0.7f, 1f)   // Light blue for arcane
             : new Color(1f, 0.85f, 0.4f);  // Gold for divine
 
+        bool isArcaneScroll = scrollType == "Arcane";
+
+        // Unified scroll data — single source of truth
+        ScrollData scrollData = ScrollData.Create(spell, casterLevel, isArcaneScroll, priceGp);
+
         ItemData scrollItem = new ItemData
         {
             Id = id,
@@ -259,7 +264,7 @@ public static class ScrollFactory
             Type = ItemType.Consumable,
             Slot = EquipSlot.None,
             ConsumableEffect = ConsumableEffectType.SpellEffect,
-            ConsumableSpellName = spell.Name,
+            ConsumableSpellName = spell.SpellId,   // Canonical spell ID (not display name)
             ConsumableMinimumCasterLevel = casterLevel,
             ConsumableModifier = 0,
             BasePriceGp = priceGp,
@@ -269,6 +274,9 @@ public static class ScrollFactory
             IsScroll = true,
             ScrollType = scrollType,
             ScrollSpellLevel = spellLevel,
+            ScrollEffectiveSpellLevel = spellLevel,  // No metamagic on store scrolls
+            ScrollSavedDC = scrollData.SaveDC,
+            Scroll = scrollData,
             IsStackable = true,
             MaxStackSize = 20,
             StackCount = 1

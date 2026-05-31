@@ -1817,6 +1817,10 @@ public static class ItemDatabase
         clone.IsScroll = src.IsScroll;
         clone.ScrollType = src.ScrollType;
         clone.ScrollSpellLevel = src.ScrollSpellLevel;
+        clone.ScrollMetamagicFeats = src.ScrollMetamagicFeats != null ? new List<MetamagicFeatId>(src.ScrollMetamagicFeats) : null;
+        clone.ScrollEffectiveSpellLevel = src.ScrollEffectiveSpellLevel;
+        clone.ScrollSavedDC = src.ScrollSavedDC;
+        clone.Scroll = src.Scroll?.Clone();
         clone.IsPotion = src.IsPotion;
         clone.PotionSpellLevel = src.PotionSpellLevel;
         clone.IsWand = src.IsWand;
