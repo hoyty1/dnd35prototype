@@ -4821,7 +4821,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
-        int saveDc = CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
+        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
         int hdPool = DiceService.RollMultiple(2, 4, "Hypnotism HD pool 2d4"); // 2d4
         int fascinatedRounds = DiceService.RollMultiple(2, 4, "Fascinated rounds 2d4"); // 2d4
 
@@ -5001,7 +5001,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
-        int saveDc = CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
+        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
         int hdPool = DiceService.RollMultiple(4, 4, "Sleep HD pool 4d4"); // 4d4
         int sleepRounds = SpellCastingHelper.CalculateDuration(_pendingSpell, casterLevel);
 
@@ -5125,7 +5125,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
-        int saveDc = CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
+        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
         int hdPool = 10; // Deep Slumber: flat 10 HD (no dice roll, unlike Sleep's 4d4)
         int sleepRounds = SpellCastingHelper.CalculateDuration(_pendingSpell, casterLevel);
 
@@ -5244,7 +5244,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
         int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
-        int saveDc = CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
+        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
 
         var logBuilder = new System.Text.StringBuilder();
         logBuilder.AppendLine("═══════════════════════════════════");
@@ -5975,7 +5975,7 @@ public partial class GameManager
             return;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int saveDc = CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, caster.Stats.GetPrimaryCastingModifier());
+        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, caster.Stats.GetPrimaryCastingModifier());
         string casterName = caster.Stats.CharacterName;
 
         var logBuilder = new System.Text.StringBuilder();
@@ -6669,7 +6669,7 @@ public partial class GameManager
         {
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
-            int wakeDc = CombatCalculationService.SpellSaveDC(spell.SpellLevel, GetSpellSaveAbilityModifier(caster, spell));
+            int wakeDc = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, GetSpellSaveAbilityModifier(caster, spell));
 
             ApplySleepState(caster, target, sleepRounds, wakeDc, spell);
 
@@ -6682,7 +6682,7 @@ public partial class GameManager
         {
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
-            int wakeDc = CombatCalculationService.SpellSaveDC(spell.SpellLevel, GetSpellSaveAbilityModifier(caster, spell));
+            int wakeDc = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, GetSpellSaveAbilityModifier(caster, spell));
 
             ApplySleepState(caster, target, sleepRounds, wakeDc, spell);
 
@@ -7388,7 +7388,7 @@ public partial class GameManager
                 return null;
 
             int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
-            int saveDC = CombatCalculationService.SpellSaveDC(spell.SpellLevel, recipient.Stats != null ? recipient.Stats.WISMod : 0);
+            int saveDC = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, recipient.Stats != null ? recipient.Stats.WISMod : 0);
 
             StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
@@ -7421,7 +7421,7 @@ public partial class GameManager
                 return null;
 
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-            int saveDC = CombatCalculationService.SpellSaveDC(spell.SpellLevel, caster != null && caster.Stats != null ? caster.Stats.WISMod : 0);
+            int saveDC = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, caster != null && caster.Stats != null ? caster.Stats.WISMod : 0);
 
             StatusEffectManager targetStatusMgr = target.StatusEffectManager;
             if (targetStatusMgr == null)

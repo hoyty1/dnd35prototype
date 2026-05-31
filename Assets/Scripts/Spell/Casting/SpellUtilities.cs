@@ -36,7 +36,12 @@ public static class SpellUtilities
     /// <returns>The spell save DC, minimum 10.</returns>
     public static int GetSpellSaveDC(CharacterController caster, SpellData spell)
     {
-        if (caster == null || caster.Stats == null || spell == null)
+        if (spell == null) return 10;
+
+        // If the spell carries a pre-baked DC (e.g. scroll, imbued spell), use it directly
+        if (spell.SaveDC > 0) return spell.SaveDC;
+
+        if (caster == null || caster.Stats == null)
             return 10;
 
         int castingMod = GetCastingAbilityModifier(caster.Stats);
@@ -48,7 +53,12 @@ public static class SpellUtilities
     /// </summary>
     public static int GetSpellSaveDC(CharacterStats stats, SpellData spell)
     {
-        if (stats == null || spell == null)
+        if (spell == null) return 10;
+
+        // If the spell carries a pre-baked DC (e.g. scroll), use it directly
+        if (spell.SaveDC > 0) return spell.SaveDC;
+
+        if (stats == null)
             return 10;
 
         int castingMod = GetCastingAbilityModifier(stats);

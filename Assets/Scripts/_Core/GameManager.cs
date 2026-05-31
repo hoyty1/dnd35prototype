@@ -5922,19 +5922,33 @@ public partial class GameManager : MonoBehaviour
             foreach (var feat in mmFeats)
             {
                 scrollMetamagic.Toggle(feat);
-                if (feat == MetamagicFeatId.HeightenSpell && effLevel > spellClone.SpellLevel)
-                    scrollMetamagic.HeightenToLevel = effLevel;
+                // Use the stored HeightenToLevel (not full effective level, which includes other metamagic)
+                if (feat == MetamagicFeatId.HeightenSpell)
+                {
+                    int htl = sd?.HeightenToLevel ?? -1;
+                    if (htl > spellClone.SpellLevel)
+                        scrollMetamagic.HeightenToLevel = htl;
+                    else if (effLevel > spellClone.SpellLevel)
+                        scrollMetamagic.HeightenToLevel = effLevel; // Legacy fallback
+                }
             }
             // Apply pre-cast metamagic modifications (Extend, Enlarge, Widen, etc.)
             SpellCaster.ApplyMetamagicToSpellData(spellClone, scrollMetamagic);
         }
 
         // Override the spell's save DC with the scroll's stored DC
+        // D&D 3.5e: Only Heighten metamagic increases DC; other metamagic does NOT.
         int scrollSaveDC = sd?.SaveDC ?? scrollItem.ScrollSavedDC;
         if (scrollSaveDC > 0)
             spellClone.SaveDC = scrollSaveDC;
-        else if (mmFeats != null && mmFeats.Count > 0 && effLevel > 0)
-            spellClone.SaveDC = 10 + effLevel;
+        else if (mmFeats != null && mmFeats.Count > 0)
+        {
+            // Fallback: compute DC using base level + heighten only
+            int dcLevel = spellClone.SpellLevel;
+            if (scrollMetamagic != null && scrollMetamagic.HeightenToLevel > dcLevel)
+                dcLevel = scrollMetamagic.HeightenToLevel;
+            spellClone.SaveDC = 10 + dcLevel;
+        }
 
         int scrollCasterLevel = sd?.CasterLevel ?? Mathf.Max(1, scrollItem.ConsumableMinimumCasterLevel);
 
@@ -6342,10 +6356,14 @@ public partial class GameManager : MonoBehaviour
             foreach (var feat in mmFeats)
             {
                 metamagic.Toggle(feat);
-                // For Heighten, set the target level from the stored effective level
-                if (feat == MetamagicFeatId.HeightenSpell && mmEffLevel > spell.SpellLevel)
+                // For Heighten, use stored HeightenToLevel (not full effective level)
+                if (feat == MetamagicFeatId.HeightenSpell)
                 {
-                    metamagic.HeightenToLevel = mmEffLevel;
+                    int htl = sd?.HeightenToLevel ?? -1;
+                    if (htl > spell.SpellLevel)
+                        metamagic.HeightenToLevel = htl;
+                    else if (mmEffLevel > spell.SpellLevel)
+                        metamagic.HeightenToLevel = mmEffLevel; // Legacy fallback
                 }
             }
             // Apply pre-cast modifications (Extend, Enlarge, Widen, Silent, Still, Quicken)

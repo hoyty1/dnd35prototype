@@ -468,7 +468,7 @@ public partial class GameManager
 
         // Sound Burst damage is handled by normal spell damage resolution.
         // Here we check for the stun: Fort save or stunned for 1 round.
-        int saveDC = CombatCalculationService.SpellSaveDC(spell.SpellLevel, GetSpellSaveAbilityModifier(caster, spell));
+        int saveDC = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, GetSpellSaveAbilityModifier(caster, spell));
         var fortResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC);
 
         Debug.Log($"[SoundBurst] Fort save: {target.Stats.CharacterName} rolled {fortResult.Total} vs DC {saveDC}");

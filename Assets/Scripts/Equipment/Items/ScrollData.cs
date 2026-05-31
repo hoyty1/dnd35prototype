@@ -35,9 +35,15 @@ public class ScrollData
     /// <summary>
     /// Save DC baked into the scroll at creation.
     /// D&D 3.5e DMG p.238: DC = 10 + spell level + minimum ability modifier.
-    /// For metamagic scrolls, uses effective spell level.
+    /// Only Heighten metamagic increases DC; other metamagic does NOT affect DC.
     /// </summary>
     public int SaveDC;
+
+    /// <summary>
+    /// For Heighten Spell: the target spell level to heighten to. -1 = not heightened.
+    /// Only Heighten increases DC; stored separately from EffectiveSpellLevel.
+    /// </summary>
+    public int HeightenToLevel = -1;
 
     /// <summary>Metamagic feats applied at creation. Null or empty if none.</summary>
     public List<MetamagicFeatId> MetamagicFeats;
@@ -82,6 +88,7 @@ public class ScrollData
             BaseSpellLevel = BaseSpellLevel,
             EffectiveSpellLevel = EffectiveSpellLevel,
             SaveDC = SaveDC,
+            HeightenToLevel = HeightenToLevel,
             MetamagicFeats = MetamagicFeats != null ? new List<MetamagicFeatId>(MetamagicFeats) : null,
             IsArcane = IsArcane,
             GoldValue = GoldValue
@@ -99,8 +106,9 @@ public class ScrollData
     /// <param name="isArcane">True for arcane scrolls, false for divine.</param>
     /// <param name="goldValue">Market price in GP.</param>
     /// <param name="metamagicFeats">Optional metamagic feats applied at creation.</param>
-    /// <param name="effectiveSpellLevel">Effective spell level after metamagic. -1 = use base level.</param>
-    /// <param name="saveDC">Baked save DC. 0 = auto-calculate as 10 + effective level.</param>
+    /// <param name="effectiveSpellLevel">Effective spell level after metamagic (for slot/cost). -1 = use base level.</param>
+    /// <param name="saveDC">Baked save DC. 0 = auto-calculate as 10 + base level (only Heighten increases DC).</param>
+    /// <param name="heightenToLevel">For Heighten Spell: the target level. -1 = not heightened.</param>
     public static ScrollData Create(
         SpellData spell,
         int casterLevel,
@@ -108,7 +116,8 @@ public class ScrollData
         int goldValue,
         List<MetamagicFeatId> metamagicFeats = null,
         int effectiveSpellLevel = -1,
-        int saveDC = 0)
+        int saveDC = 0,
+        int heightenToLevel = -1)
     {
         if (spell == null)
         {
@@ -126,7 +135,8 @@ public class ScrollData
             CasterLevel = Mathf.Max(1, casterLevel),
             BaseSpellLevel = baseLevel,
             EffectiveSpellLevel = effLevel,
-            SaveDC = saveDC > 0 ? saveDC : (10 + effLevel),
+            SaveDC = saveDC > 0 ? saveDC : (10 + baseLevel), // Only Heighten raises DC; fallback uses base level
+            HeightenToLevel = heightenToLevel,
             MetamagicFeats = hasMetamagic ? new List<MetamagicFeatId>(metamagicFeats) : null,
             IsArcane = isArcane,
             GoldValue = goldValue

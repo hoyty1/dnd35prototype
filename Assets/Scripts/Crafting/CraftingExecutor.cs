@@ -184,7 +184,8 @@ public static class CraftingExecutor
                 // Pass metamagic data from project if available
                 if (project != null && project.ScrollMetamagicFeats != null && project.ScrollMetamagicFeats.Count > 0)
                     return CreateScroll(spell, casterLevel, project.ScrollMetamagicFeats,
-                        project.ScrollEffectiveSpellLevel, project.ScrollSavedDC);
+                        project.ScrollEffectiveSpellLevel, project.ScrollSavedDC,
+                        project.ScrollHeightenToLevel);
                 return CreateScroll(spell, casterLevel);
 
             case CraftingFeatType.BrewPotion:
@@ -201,14 +202,15 @@ public static class CraftingExecutor
 
     private static ItemData CreateScroll(SpellData spell, int casterLevel)
     {
-        return CreateScroll(spell, casterLevel, null, 0, 0);
+        return CreateScroll(spell, casterLevel, null, 0, 0, -1);
     }
 
     /// <summary>
     /// Create a scroll with optional metamagic feats, saved DC, and effective spell level.
     /// </summary>
     private static ItemData CreateScroll(SpellData spell, int casterLevel,
-        List<MetamagicFeatId> metamagicFeats, int effectiveSpellLevel, int savedDC)
+        List<MetamagicFeatId> metamagicFeats, int effectiveSpellLevel, int savedDC,
+        int heightenToLevel)
     {
         bool isArcane = IsArcaneSpell(spell);
         bool hasMetamagic = metamagicFeats != null && metamagicFeats.Count > 0;
@@ -242,7 +244,7 @@ public static class CraftingExecutor
         // Unified scroll data — single source of truth
         ScrollData scrollData = ScrollData.Create(
             spell, casterLevel, isArcane, marketPrice,
-            hasMetamagic ? metamagicFeats : null, effLevel, savedDC);
+            hasMetamagic ? metamagicFeats : null, effLevel, savedDC, heightenToLevel);
 
         var scroll = new ItemData
         {

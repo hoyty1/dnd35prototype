@@ -80,8 +80,10 @@ public class CraftingProject
     public List<MetamagicFeatId> ScrollMetamagicFeats;
     /// <summary>Effective spell level after metamagic (base + adjustments). Set for scroll crafting.</summary>
     public int ScrollEffectiveSpellLevel;
-    /// <summary>Save DC baked into the scroll: 10 + effective spell level + caster ability modifier.</summary>
+    /// <summary>Save DC baked into the scroll: 10 + (base level + heighten bonus) + caster ability modifier.</summary>
     public int ScrollSavedDC;
+    /// <summary>For Heighten Spell: the target spell level. -1 = not heightened.</summary>
+    public int ScrollHeightenToLevel = -1;
 
     /// <summary>
     /// Summary string for the confirmation dialog.

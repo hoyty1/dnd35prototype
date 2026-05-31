@@ -821,12 +821,21 @@ public class CraftingWorkshopUI : MonoBehaviour
             _metamagicSummaryText.text = $"{string.Join(" + ", parts)} = Eff. Level: {effLevel}";
         }
 
-        // DC calculation: 10 + effective level + caster ability modifier
+        // DC calculation: 10 + (base level + heighten bonus ONLY) + caster ability modifier
+        // D&D 3.5e PHB p.88: Only Heighten Spell increases save DC; other metamagic
+        // raises slot level for cost/preparation but NOT for DC.
+        int heightenBonus = (_currentMetamagic.Has(MetamagicFeatId.HeightenSpell)
+            && _currentMetamagic.HeightenToLevel > baseLevel)
+            ? _currentMetamagic.HeightenToLevel - baseLevel : 0;
+        int dcLevel = baseLevel + heightenBonus;
         int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
-        int dc = 10 + effLevel + abilityMod;
+        int dc = 10 + dcLevel + abilityMod;
 
         string abilityName = GetCasterAbilityName();
-        _metamagicDCText.text = $"Save DC: {dc} (10 + {effLevel} spell + {abilityMod} {abilityName})";
+        string dcLabel = heightenBonus > 0
+            ? $"Save DC: {dc} (10 + {dcLevel} heightened + {abilityMod} {abilityName})"
+            : $"Save DC: {dc} (10 + {dcLevel} spell + {abilityMod} {abilityName})";
+        _metamagicDCText.text = dcLabel;
 
         // Validate effective level against max castable
         int maxCastable = 9;
@@ -925,9 +934,16 @@ public class CraftingWorkshopUI : MonoBehaviour
             _currentProject.ScrollMetamagicFeats = feats;
             _currentProject.ScrollEffectiveSpellLevel = effLevel;
 
-            // DC = 10 + effective level + caster ability modifier
+            // Store Heighten target level separately for DC reconstruction
+            bool hasHeighten = _currentMetamagic.Has(MetamagicFeatId.HeightenSpell)
+                && _currentMetamagic.HeightenToLevel > baseLevel;
+            _currentProject.ScrollHeightenToLevel = hasHeighten ? _currentMetamagic.HeightenToLevel : -1;
+
+            // DC = 10 + (base level + heighten bonus ONLY) + caster ability modifier
+            // D&D 3.5e: Only Heighten increases DC; Empower/Maximize/etc. do NOT.
+            int dcLevel = hasHeighten ? _currentMetamagic.HeightenToLevel : baseLevel;
             int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
-            _currentProject.ScrollSavedDC = 10 + effLevel + abilityMod;
+            _currentProject.ScrollSavedDC = 10 + dcLevel + abilityMod;
 
             // Recalculate cost using effective spell level
             int casterLevel = _selectedItem.RequiredCasterLevel;
