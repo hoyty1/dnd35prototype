@@ -321,6 +321,11 @@ public partial class GameManager : MonoBehaviour
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
     private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
 
+    // Scroll casting state — tracks scroll being cast through the targeting pipeline
+    private ItemData _pendingScrollCastItem;      // The scroll item being consumed after spell resolves
+    private int _pendingScrollCastInventoryIndex = -1; // Inventory slot of the scroll being cast
+    private bool _pendingScrollCastActive;         // True when a scroll is being cast through the spell pipeline
+
     // Mid-sequence full-attack retargeting state (ranged + melee)
     private bool _isAwaitingRangedRetargetSelection;
     private bool _rangedRetargetSelectionCancelled;
@@ -1122,6 +1127,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSummonSwarmNpcId = null;
         _pendingNaturalAttackSequenceIndex = -1;
         _pendingNaturalAttackLabel = null;
+        CleanupScrollCastState();
         ResetPendingGreaseCastMode();
 
         _isConfirmingSelfAoE = false;
@@ -5788,7 +5794,46 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        // Step 4: Apply the spell effect
+        // Step 4: Determine if the spell needs targeting (damage, AoE, etc.) or is self-target
+        SpellDatabase.Init();
+        SpellData scrollSpell = SpellDatabase.GetSpellByName(scrollItem.ConsumableSpellName);
+        bool needsTargeting = scrollSpell != null && (
+            scrollSpell.EffectType == SpellEffectType.Damage ||
+            scrollSpell.EffectType == SpellEffectType.Summon ||
+            scrollSpell.EffectType == SpellEffectType.Escape ||
+            scrollSpell.EffectType == SpellEffectType.Dispel ||
+            scrollSpell.EffectType == SpellEffectType.Wall ||
+            scrollSpell.EffectType == SpellEffectType.Divination ||
+            scrollSpell.EffectType == SpellEffectType.Utility ||
+            scrollSpell.TargetType == SpellTargetType.SingleEnemy ||
+            scrollSpell.TargetType == SpellTargetType.SingleAlly ||
+            scrollSpell.TargetType == SpellTargetType.Area ||
+            scrollSpell.TargetType == SpellTargetType.Touch);
+
+        if (needsTargeting && IsCombatEncounterRunning())
+        {
+            // Route through the full spell targeting pipeline
+            if (!InitiateScrollCastThroughPipeline(actor, scrollItem, inventoryIndex, scrollSpell))
+            {
+                resultMessage = $"📜 {charName} reads {scrollItem.Name} but cannot initiate the spell.";
+                return false;
+            }
+
+            // The spell will be resolved asynchronously through the targeting pipeline.
+            // Scroll consumption happens in PerformSpellCast/CleanupScrollCast.
+            string castClInfo;
+            if (validation.UsedUMD)
+                castClInfo = "via UMD";
+            else if (validation.UsedMagicDomain)
+                castClInfo = $"via Magic domain (CL {validation.CharacterCasterLevel})";
+            else
+                castClInfo = $"as {validation.MatchedClassName} (CL {scrollItem.ConsumableMinimumCasterLevel})";
+
+            resultMessage = $"📜 {charName} reads {scrollItem.Name} {castClInfo} — select a target.";
+            return true;
+        }
+
+        // Self-target spells: apply immediately
         string spellSummary;
         if (!TryApplySpellConsumableEffect(actor, scrollItem, out spellSummary))
         {
@@ -5813,6 +5858,115 @@ public partial class GameManager : MonoBehaviour
 
         resultMessage = $"📜 {charName} reads {scrollItem.Name} {clInfo}. {spellSummary} Scroll consumed.{scrollStackInfo}";
         return true;
+    }
+
+    // ==================== SCROLL TARGETING PIPELINE ====================
+
+    /// <summary>
+    /// Routes a scroll's spell through the full spell targeting pipeline.
+    /// Sets up pending spell state and kicks off BeginPendingSpellTargeting,
+    /// similar to OnSpellSelectedWithMetamagic / TestCastSpellFromPanel.
+    /// The scroll is consumed after the spell resolves (in PerformSpellCast).
+    /// </summary>
+    private bool InitiateScrollCastThroughPipeline(CharacterController actor, ItemData scrollItem, int inventoryIndex, SpellData baseSpell)
+    {
+        if (actor == null || scrollItem == null || baseSpell == null) return false;
+
+        string charName = actor.Stats != null ? actor.Stats.CharacterName : "Unknown";
+
+        // Clone the spell so modifications don't affect the database
+        SpellData spellClone = baseSpell.Clone();
+
+        // Build metamagic data from scroll's stored metamagic feats
+        MetamagicData scrollMetamagic = null;
+        if (scrollItem.HasScrollMetamagic && scrollItem.ScrollMetamagicFeats != null && scrollItem.ScrollMetamagicFeats.Count > 0)
+        {
+            scrollMetamagic = new MetamagicData();
+            foreach (var feat in scrollItem.ScrollMetamagicFeats)
+            {
+                scrollMetamagic.Toggle(feat);
+                if (feat == MetamagicFeatId.HeightenSpell && scrollItem.ScrollEffectiveSpellLevel > spellClone.SpellLevel)
+                    scrollMetamagic.HeightenToLevel = scrollItem.ScrollEffectiveSpellLevel;
+            }
+            // Apply pre-cast metamagic modifications (Extend, Enlarge, Widen, etc.)
+            SpellCaster.ApplyMetamagicToSpellData(spellClone, scrollMetamagic);
+        }
+
+        // Override the spell's save DC with the scroll's stored DC
+        if (scrollItem.ScrollSavedDC > 0)
+            spellClone.SaveDC = scrollItem.ScrollSavedDC;
+        else if (scrollItem.HasScrollMetamagic && scrollItem.ScrollEffectiveSpellLevel > 0)
+            spellClone.SaveDC = 10 + scrollItem.ScrollEffectiveSpellLevel;
+
+        // Note: caster level for the scroll is scrollItem.ConsumableMinimumCasterLevel
+        int scrollCasterLevel = Mathf.Max(1, scrollItem.ConsumableMinimumCasterLevel);
+
+        // Store scroll state for consumption after spell resolves
+        _pendingScrollCastItem = scrollItem;
+        _pendingScrollCastInventoryIndex = inventoryIndex;
+        _pendingScrollCastActive = true;
+
+        // Set up pending spell state (mirrors OnSpellSelectedWithMetamagic)
+        _pendingSpell = spellClone;
+        _pendingMetamagic = scrollMetamagic ?? new MetamagicData();
+        _pendingSpellFromHeldCharge = false;
+        _pendingAnimateRopeItem = null;
+        _pendingResistEnergyType = null;
+        _pendingProtectionFromEnergyType = null;
+        _pendingFireShieldIsWarm = null;
+        _pendingMagicWeaponItem = null;
+        _pendingKeenEdgeItem = null;
+        _pendingKeenEdgeIsAmmo = false;
+        _pendingGreaterMagicWeaponItem = null;
+        _pendingDisguiseSelfRace = null;
+        _pendingSummonSelection = null;
+        _pendingSummonListLevel = 0;
+        _pendingSummonCountInfo = null;
+        _pendingSummonSwarmNpcId = null;
+
+        string metamagicInfo = scrollItem.HasScrollMetamagic ? $" (metamagic: {scrollItem.ScrollMetamagicFeats.Count} feat(s))" : "";
+        Debug.Log($"[ScrollCast] {charName} initiating scroll cast: {spellClone.Name}{metamagicInfo} CL {scrollCasterLevel}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("📜", $"{charName} reads {scrollItem.Name} — select a target for {spellClone.Name}."));
+
+        // Kick off the targeting pipeline
+        BeginPendingSpellTargeting(actor);
+        return true;
+    }
+
+    /// <summary>
+    /// Consumes the scroll after a successful spell cast through the targeting pipeline.
+    /// Called from PerformSpellCast when _pendingScrollCastActive is true.
+    /// </summary>
+    private void ConsumeScrollAfterCast(CharacterController caster)
+    {
+        if (!_pendingScrollCastActive || _pendingScrollCastItem == null) return;
+
+        var inv = caster?.InventoryComp?.CharacterInventory;
+        if (inv != null && _pendingScrollCastInventoryIndex >= 0)
+        {
+            string scrollName = _pendingScrollCastItem.Name;
+            ConsumeOneFromStack(inv, _pendingScrollCastInventoryIndex, _pendingScrollCastItem);
+
+            string stackInfo = "";
+            if (_pendingScrollCastItem.IsStackable && _pendingScrollCastItem.StackCount > 0)
+                stackInfo = $" ({_pendingScrollCastItem.StackCount} remaining)";
+
+            string dcInfo = _pendingScrollCastItem.ScrollSavedDC > 0 ? $" (DC {_pendingScrollCastItem.ScrollSavedDC})" : "";
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("📜", $"{scrollName} consumed.{dcInfo}{stackInfo}"));
+            Debug.Log($"[ScrollCast] Scroll consumed: {scrollName}");
+        }
+
+        CleanupScrollCastState();
+    }
+
+    /// <summary>
+    /// Resets scroll casting state. Called after spell resolution or cancellation.
+    /// </summary>
+    private void CleanupScrollCastState()
+    {
+        _pendingScrollCastItem = null;
+        _pendingScrollCastInventoryIndex = -1;
+        _pendingScrollCastActive = false;
     }
 
     // ==================== WAND USAGE (D&D 3.5e DMG) ====================

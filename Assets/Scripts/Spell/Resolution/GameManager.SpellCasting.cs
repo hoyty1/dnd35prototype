@@ -171,6 +171,14 @@ public partial class GameManager
     {
         if (spellComp == null || spell == null) return false;
 
+        // Scroll casts do not consume spell slots — the scroll IS the resource
+        if (_pendingScrollCastActive)
+        {
+            Debug.Log($"[ScrollCast] Skipping spell slot consumption — casting from scroll.");
+            ConsumeScrollAfterCast(ActivePC);
+            return true;
+        }
+
         if (isSpontaneous)
         {
             if (!string.IsNullOrEmpty(spontaneousSacrificedSpellId))
@@ -193,8 +201,8 @@ public partial class GameManager
         if (isDeliveringHeldCharge || caster == null || caster.Stats == null || spell == null)
             return false;
 
-        // Bypass arcane spell failure for F12 test panel casts
-        if (_testPanelCastActive)
+        // Bypass arcane spell failure for F12 test panel casts and scroll casts
+        if (_testPanelCastActive || _pendingScrollCastActive)
             return false;
 
         if (!caster.Stats.IsAffectedByArcaneSpellFailure)
@@ -1612,7 +1620,7 @@ public partial class GameManager
     /// </summary>
     private void PerformSpellCast(CharacterController caster, CharacterController target)
     {
-        Debug.Log($"[SpellCasting] PerformSpellCast  caster={caster?.Stats?.CharacterName}  target={target?.Stats?.CharacterName}  spell={_pendingSpell?.Name}  testPanel={_testPanelCastActive}");
+        Debug.Log($"[SpellCasting] PerformSpellCast  caster={caster?.Stats?.CharacterName}  target={target?.Stats?.CharacterName}  spell={_pendingSpell?.Name}  testPanel={_testPanelCastActive}  scrollCast={_pendingScrollCastActive}");
 
         // Clean up test-panel override now that the spell is resolving
         CleanupTestPanelCast();
@@ -1669,8 +1677,8 @@ public partial class GameManager
 
         // ── Spell Component Pouch check (D&D 3.5e PHB p.130) ──
         // Spells with common material components (M with no GP cost) require a spell component pouch.
-        // F12 test panel casts bypass this requirement for testing convenience.
-        if (!_testPanelCastActive && _pendingSpell.HasMaterialComponent)
+        // F12 test panel casts and scroll casts bypass this requirement (scroll provides components).
+        if (!_testPanelCastActive && !_pendingScrollCastActive && _pendingSpell.HasMaterialComponent)
         {
             if (!SpellComponentRegistry.ValidatePouchRequirement(_pendingSpell.SpellId, _pendingSpell, caster, out string pouchFailure))
             {
@@ -1693,10 +1701,17 @@ public partial class GameManager
         CaptureSpellcastResourceSnapshot(caster);
 
         bool isDeliveringHeldCharge = _pendingSpellFromHeldCharge;
+        bool isScrollCast = _pendingScrollCastActive;
 
         // Quickened applies when CASTING the spell, not when delivering a previously held charge.
         bool isQuickened = !isDeliveringHeldCharge && _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
-        if (isDeliveringHeldCharge)
+        if (isScrollCast)
+        {
+            // Scroll cast: action was already consumed by ResolveConsumableUseProvocation / ConsumeItemManipulationAction.
+            // Do NOT consume another action here.
+            Debug.Log($"[ScrollCast] {caster.Stats.CharacterName} casting from scroll — action already consumed by item use.");
+        }
+        else if (isDeliveringHeldCharge)
         {
             // D&D 3.5e: discharging a held touch spell is a free action.
             // Do not consume standard/move actions here.
@@ -3425,6 +3440,7 @@ public partial class GameManager
         _pendingSummonListLevel = 0;
         _pendingSummonCountInfo = null;
         _pendingSummonSwarmNpcId = null;
+        CleanupScrollCastState();
         ResetPendingGreaseCastMode();
         ResetPendingWallOfFireMode();
         ResetPendingWallOfIceMode();
@@ -3521,6 +3537,7 @@ public partial class GameManager
         _pendingSpell = null;
         _pendingMetamagic = null;
         _pendingSpellFromHeldCharge = false;
+        CleanupScrollCastState();
 
         Grid.ClearAllHighlights();
         ShowActionChoices();
@@ -3570,9 +3587,13 @@ public partial class GameManager
 
         CaptureSpellcastResourceSnapshot(caster);
 
-        // Quickened spells don't consume standard action
+        // Quickened spells don't consume standard action; scroll casts already consumed action
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
-        if (!isQuickened)
+        if (_pendingScrollCastActive)
+        {
+            Debug.Log($"[ScrollCast] AoE scroll cast — action already consumed by item use.");
+        }
+        else if (!isQuickened)
         {
             // D&D 3.5e PHB p.88: Spontaneous casters using metamagic take a full-round action
             bool isSpontaneousMetamagic = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic
@@ -8441,6 +8462,7 @@ public partial class GameManager
         _pendingSpell = null;
         _pendingMetamagic = null;
         _pendingSpellFromHeldCharge = false;
+        CleanupScrollCastState();
         ResetPendingGreaseCastMode();
 
         Grid.ClearAllHighlights();
@@ -8457,6 +8479,7 @@ public partial class GameManager
         _pendingSpell = null;
         _pendingMetamagic = null;
         _pendingSpellFromHeldCharge = false;
+        CleanupScrollCastState();
         ResetPendingGreaseCastMode();
 
         Grid.ClearAllHighlights();
