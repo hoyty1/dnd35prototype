@@ -1829,6 +1829,7 @@ public static class ItemDatabase
         clone.WandSpellId = src.WandSpellId;
         clone.WandCasterLevel = src.WandCasterLevel;
         clone.WandSpellLevel = src.WandSpellLevel;
+        clone.Wand = src.Wand?.Clone();
         clone.IsStaff = src.IsStaff;
         clone.StaffId = src.StaffId;
         clone.StaffCharges = src.StaffCharges;

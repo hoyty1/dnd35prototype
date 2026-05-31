@@ -518,10 +518,23 @@ public class CraftingWorkshopUI : MonoBehaviour
             }
         }
 
+        // Set base DC on project for non-metamagic wands
+        // Wand DC = 10 + SL + floor(SL/2) (DMG p.245)
+        if (_currentProject != null && item.IsDynamic
+            && item.RequiredFeat == CraftingFeatType.CraftWand
+            && _currentProject.WandSavedDC == 0)
+        {
+            var spell = SpellDatabase.GetSpell(item.DynamicSpellId);
+            if (spell != null)
+            {
+                _currentProject.WandSavedDC = WandFactory.CalculateWandSaveDC(spell.SpellLevel);
+            }
+        }
+
         RefreshPreview();
 
-        // Show metamagic panel for scroll items
-        if (item.IsDynamic && item.RequiredFeat == CraftingFeatType.ScribeScroll)
+        // Show metamagic panel for scroll and wand items
+        if (item.IsDynamic && (item.RequiredFeat == CraftingFeatType.ScribeScroll || item.RequiredFeat == CraftingFeatType.CraftWand))
         {
             ShowMetamagicPanel();
         }
@@ -600,7 +613,9 @@ public class CraftingWorkshopUI : MonoBehaviour
     private void ShowMetamagicPanel()
     {
         if (_metamagicPanel == null || _selectedItem == null) return;
-        if (_selectedItem.RequiredFeat != CraftingFeatType.ScribeScroll || !_selectedItem.IsDynamic)
+        bool isScroll = _selectedItem.RequiredFeat == CraftingFeatType.ScribeScroll;
+        bool isWand = _selectedItem.RequiredFeat == CraftingFeatType.CraftWand;
+        if ((!isScroll && !isWand) || !_selectedItem.IsDynamic)
         {
             HideMetamagicPanel();
             return;
@@ -783,9 +798,14 @@ public class CraftingWorkshopUI : MonoBehaviour
         int minLevel = spell.SpellLevel + 1;
         int maxLevel = 9;
 
+        // For wands, effective level (with metamagic) cannot exceed 5
+        bool isWandCraft = _selectedItem != null && _selectedItem.RequiredFeat == CraftingFeatType.CraftWand;
+        if (isWandCraft)
+            maxLevel = 5; // Wand max effective spell level
+
         // Get caster's max castable level for upper bound
         if (_spellComp != null && !_debugMode)
-            maxLevel = Mathf.Min(9, _spellComp.GetMaxCastableSpellLevel());
+            maxLevel = Mathf.Min(maxLevel, _spellComp.GetMaxCastableSpellLevel());
 
         _heightenTarget = Mathf.Clamp(_heightenTarget + delta, minLevel, maxLevel);
         _currentMetamagic.HeightenToLevel = _heightenTarget;
@@ -821,26 +841,43 @@ public class CraftingWorkshopUI : MonoBehaviour
             _metamagicSummaryText.text = $"{string.Join(" + ", parts)} = Eff. Level: {effLevel}";
         }
 
-        // DC calculation: 10 + (base level + heighten bonus ONLY) + caster ability modifier
-        // D&D 3.5e PHB p.88: Only Heighten Spell increases save DC; other metamagic
-        // raises slot level for cost/preparation but NOT for DC.
+        // DC calculation differs for scrolls vs wands:
+        // Scrolls: DC = 10 + (base level + heighten bonus) + caster ability modifier
+        // Wands: DC = 10 + SL + floor(SL/2) (minimum ability modifier, per DMG p.245)
+        bool isWandCraft = _selectedItem != null && _selectedItem.RequiredFeat == CraftingFeatType.CraftWand;
         int heightenBonus = (_currentMetamagic.Has(MetamagicFeatId.HeightenSpell)
             && _currentMetamagic.HeightenToLevel > baseLevel)
             ? _currentMetamagic.HeightenToLevel - baseLevel : 0;
         int dcLevel = baseLevel + heightenBonus;
-        int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
-        int dc = 10 + dcLevel + abilityMod;
 
-        string abilityName = GetCasterAbilityName();
-        string dcLabel = heightenBonus > 0
-            ? $"Save DC: {dc} (10 + {dcLevel} heightened + {abilityMod} {abilityName})"
-            : $"Save DC: {dc} (10 + {dcLevel} spell + {abilityMod} {abilityName})";
+        int dc;
+        string dcLabel;
+        if (isWandCraft)
+        {
+            // Wand DC: 10 + SL + floor(SL/2), where SL = heightened level if applicable
+            int minAbilityMod = dcLevel / 2;
+            dc = 10 + dcLevel + minAbilityMod;
+            dcLabel = heightenBonus > 0
+                ? $"Save DC: {dc} (10 + {dcLevel} heightened + {minAbilityMod} min mod)"
+                : $"Save DC: {dc} (10 + {dcLevel} spell + {minAbilityMod} min mod)";
+        }
+        else
+        {
+            // Scroll DC: 10 + SL + caster ability modifier
+            int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
+            dc = 10 + dcLevel + abilityMod;
+            string abilityName = GetCasterAbilityName();
+            dcLabel = heightenBonus > 0
+                ? $"Save DC: {dc} (10 + {dcLevel} heightened + {abilityMod} {abilityName})"
+                : $"Save DC: {dc} (10 + {dcLevel} spell + {abilityMod} {abilityName})";
+        }
         _metamagicDCText.text = dcLabel;
 
         // Validate effective level against max castable
-        int maxCastable = 9;
+        int maxEffective = isWandCraft ? 5 : 9; // Wand effective level max is 5
+        int maxCastable = maxEffective;
         if (_spellComp != null && !_debugMode)
-            maxCastable = _spellComp.GetMaxCastableSpellLevel();
+            maxCastable = Mathf.Min(maxEffective, _spellComp.GetMaxCastableSpellLevel());
 
         int rawLevel = _currentMetamagic.GetRawEffectiveSpellLevel(baseLevel);
         if (rawLevel > maxCastable && !_debugMode)
@@ -848,9 +885,9 @@ public class CraftingWorkshopUI : MonoBehaviour
             _metamagicDCText.text += $"\n❌ Effective level {rawLevel} exceeds max castable ({maxCastable})!";
             _metamagicDCText.color = ErrorColor;
         }
-        else if (rawLevel > 9 && !_debugMode)
+        else if (rawLevel > maxEffective && !_debugMode)
         {
-            _metamagicDCText.text += $"\n❌ Effective level {rawLevel} exceeds maximum (9)!";
+            _metamagicDCText.text += $"\n❌ Effective level {rawLevel} exceeds maximum ({maxEffective})!";
             _metamagicDCText.color = ErrorColor;
         }
         else
@@ -879,7 +916,10 @@ public class CraftingWorkshopUI : MonoBehaviour
     /// </summary>
     private void RevalidateWithMetamagic()
     {
-        if (_selectedItem == null || _selectedItem.RequiredFeat != CraftingFeatType.ScribeScroll) return;
+        if (_selectedItem == null) return;
+        bool isScroll = _selectedItem.RequiredFeat == CraftingFeatType.ScribeScroll;
+        bool isWand = _selectedItem.RequiredFeat == CraftingFeatType.CraftWand;
+        if (!isScroll && !isWand) return;
 
         var spell = SpellDatabase.GetSpell(_selectedItem.DynamicSpellId);
         if (spell == null) return;
@@ -890,10 +930,11 @@ public class CraftingWorkshopUI : MonoBehaviour
             : baseLevel;
         int rawLevel = _currentMetamagic.GetRawEffectiveSpellLevel(baseLevel);
 
-        // Validate effective level
-        int maxCastable = 9;
+        // Validate effective level — wands max at 5, scrolls max at 9
+        int maxEffective = isWand ? 5 : 9;
+        int maxCastable = maxEffective;
         if (_spellComp != null && !_debugMode)
-            maxCastable = _spellComp.GetMaxCastableSpellLevel();
+            maxCastable = Mathf.Min(maxEffective, _spellComp.GetMaxCastableSpellLevel());
 
         if (!_debugMode && rawLevel > maxCastable)
         {
@@ -909,14 +950,14 @@ public class CraftingWorkshopUI : MonoBehaviour
             return;
         }
 
-        if (!_debugMode && rawLevel > 9)
+        if (!_debugMode && rawLevel > maxEffective)
         {
             _currentProject = new CraftingProject
             {
                 Definition = _selectedItem,
                 Crafter = _crafterStats,
                 IsValid = false,
-                ValidationError = $"Effective spell level {rawLevel} exceeds maximum 9th level."
+                ValidationError = $"Effective spell level {rawLevel} exceeds maximum {(isWand ? "5th" : "9th")} level for {(isWand ? "wands" : "scrolls")}."
             };
             RefreshPreview();
             return;
@@ -931,57 +972,93 @@ public class CraftingWorkshopUI : MonoBehaviour
         if (_currentMetamagic.HasAnyMetamagic)
         {
             var feats = new List<MetamagicFeatId>(_currentMetamagic.AppliedMetamagic);
-            _currentProject.ScrollMetamagicFeats = feats;
-            _currentProject.ScrollEffectiveSpellLevel = effLevel;
 
             // Store Heighten target level separately for DC reconstruction
             bool hasHeighten = _currentMetamagic.Has(MetamagicFeatId.HeightenSpell)
                 && _currentMetamagic.HeightenToLevel > baseLevel;
-            _currentProject.ScrollHeightenToLevel = hasHeighten ? _currentMetamagic.HeightenToLevel : -1;
 
-            // DC = 10 + (base level + heighten bonus ONLY) + caster ability modifier
-            // D&D 3.5e: Only Heighten increases DC; Empower/Maximize/etc. do NOT.
-            int dcLevel = hasHeighten ? _currentMetamagic.HeightenToLevel : baseLevel;
-            int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
-            _currentProject.ScrollSavedDC = 10 + dcLevel + abilityMod;
-
-            // Recalculate cost using effective spell level
-            int casterLevel = _selectedItem.RequiredCasterLevel;
-            int effCL = CraftingCostCalculator.MinimumCasterLevelForSpell(effLevel);
-            if (effCL < casterLevel) effCL = casterLevel;
-            int newMarketPrice = CraftingCostCalculator.ScrollMarketPrice(effLevel, effCL);
-            var newCost = CraftingCostCalculator.FromMarketPrice(newMarketPrice);
-
-            if (!CraftingValidator.DebugMode)
+            if (isWand)
             {
-                _currentProject.GoldCost = newCost.GoldCost;
-                _currentProject.XPCost = newCost.XPCost;
-                _currentProject.CraftingDays = newCost.CraftingDays;
+                // Wand metamagic data
+                _currentProject.WandMetamagicFeats = feats;
+                _currentProject.WandEffectiveSpellLevel = effLevel;
+                _currentProject.WandHeightenToLevel = hasHeighten ? _currentMetamagic.HeightenToLevel : -1;
+
+                // Wand DC = 10 + SL + floor(SL/2) — uses minimum ability modifier
+                int dcLevel = hasHeighten ? _currentMetamagic.HeightenToLevel : baseLevel;
+                _currentProject.WandSavedDC = 10 + dcLevel + (dcLevel / 2);
+
+                // Recalculate cost using effective spell level
+                int casterLevel = _selectedItem.RequiredCasterLevel;
+                int effCL = WandFactory.GetMinimumCasterLevel(effLevel);
+                if (effCL < casterLevel) effCL = casterLevel;
+                int newMarketPrice = WandFactory.CalculateWandPrice(effLevel, effCL);
+                var newCost = CraftingCostCalculator.FromMarketPrice(newMarketPrice);
+
+                if (!CraftingValidator.DebugMode)
+                {
+                    _currentProject.GoldCost = newCost.GoldCost;
+                    _currentProject.XPCost = newCost.XPCost;
+                    _currentProject.CraftingDays = newCost.CraftingDays;
+                }
             }
-            _currentProject.MarketPriceGp = newMarketPrice;
-            _currentProject.ItemCasterLevel = effCL;
+            else
+            {
+                // Scroll metamagic data (existing logic)
+                _currentProject.ScrollMetamagicFeats = feats;
+                _currentProject.ScrollEffectiveSpellLevel = effLevel;
+                _currentProject.ScrollHeightenToLevel = hasHeighten ? _currentMetamagic.HeightenToLevel : -1;
+
+                // DC = 10 + (base level + heighten bonus ONLY) + caster ability modifier
+                int dcLevel = hasHeighten ? _currentMetamagic.HeightenToLevel : baseLevel;
+                int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
+                _currentProject.ScrollSavedDC = 10 + dcLevel + abilityMod;
+
+                // Recalculate cost using effective spell level
+                int casterLevel = _selectedItem.RequiredCasterLevel;
+                int effCL = CraftingCostCalculator.MinimumCasterLevelForSpell(effLevel);
+                if (effCL < casterLevel) effCL = casterLevel;
+                int newMarketPrice = CraftingCostCalculator.ScrollMarketPrice(effLevel, effCL);
+                var newCost = CraftingCostCalculator.FromMarketPrice(newMarketPrice);
+
+                if (!CraftingValidator.DebugMode)
+                {
+                    _currentProject.GoldCost = newCost.GoldCost;
+                    _currentProject.XPCost = newCost.XPCost;
+                    _currentProject.CraftingDays = newCost.CraftingDays;
+                }
+            }
 
             // Re-check gold/XP if not debug
+            string itemTypeLabel = isWand ? "metamagic wand" : "metamagic scroll";
             if (!CraftingValidator.DebugMode && _crafterStats != null)
             {
                 if (_crafterStats.ComponentGold < _currentProject.GoldCost)
                 {
                     _currentProject.IsValid = false;
-                    _currentProject.ValidationError = $"Insufficient gold for metamagic scroll. Need {_currentProject.GoldCost:N0} gp, have {_crafterStats.ComponentGold:N0} gp.";
+                    _currentProject.ValidationError = $"Insufficient gold for {itemTypeLabel}. Need {_currentProject.GoldCost:N0} gp, have {_crafterStats.ComponentGold:N0} gp.";
                 }
                 else if (_currentProject.XPCost > _crafterStats.MaxSpendableXP())
                 {
                     _currentProject.IsValid = false;
-                    _currentProject.ValidationError = $"Insufficient XP for metamagic scroll. Need {_currentProject.XPCost:N0} XP.";
+                    _currentProject.ValidationError = $"Insufficient XP for {itemTypeLabel}. Need {_currentProject.XPCost:N0} XP.";
                 }
             }
         }
         else
         {
             // No metamagic — set base DC
-            int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
-            _currentProject.ScrollEffectiveSpellLevel = baseLevel;
-            _currentProject.ScrollSavedDC = 10 + baseLevel + abilityMod;
+            if (isWand)
+            {
+                _currentProject.WandEffectiveSpellLevel = baseLevel;
+                _currentProject.WandSavedDC = WandFactory.CalculateWandSaveDC(baseLevel);
+            }
+            else
+            {
+                int abilityMod = _crafterStats != null ? _crafterStats.GetPrimaryCastingModifier() : 0;
+                _currentProject.ScrollEffectiveSpellLevel = baseLevel;
+                _currentProject.ScrollSavedDC = 10 + baseLevel + abilityMod;
+            }
         }
 
         RefreshPreview();

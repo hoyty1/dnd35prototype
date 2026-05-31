@@ -192,6 +192,11 @@ public static class CraftingExecutor
                 return CreatePotion(spell, casterLevel);
 
             case CraftingFeatType.CraftWand:
+                // Pass metamagic data from project if available
+                if (project != null && project.WandMetamagicFeats != null && project.WandMetamagicFeats.Count > 0)
+                    return CreateWand(spell, casterLevel, project.WandMetamagicFeats,
+                        project.WandEffectiveSpellLevel, project.WandSavedDC,
+                        project.WandHeightenToLevel);
                 return CreateWand(spell, casterLevel);
 
             default:
@@ -293,11 +298,36 @@ public static class CraftingExecutor
 
     private static ItemData CreateWand(SpellData spell, int casterLevel)
     {
+        return CreateWand(spell, casterLevel, null, 0, 0, -1);
+    }
+
+    /// <summary>
+    /// Create a wand with optional metamagic feats, saved DC, and effective spell level.
+    /// </summary>
+    private static ItemData CreateWand(SpellData spell, int casterLevel,
+        List<MetamagicFeatId> metamagicFeats, int effectiveSpellLevel,
+        int savedDC, int heightenToLevel)
+    {
+        bool hasMetamagic = metamagicFeats != null && metamagicFeats.Count > 0;
+        int effLevel = hasMetamagic && effectiveSpellLevel > 0 ? effectiveSpellLevel : spell.SpellLevel;
+        int priceGp = CraftingCostCalculator.WandMarketPrice(effLevel, casterLevel);
+        bool isArcane = IsArcaneSpell(spell);
+
+        // Calculate DC using DMG wand formula if not provided
+        int dcLevel = (heightenToLevel > spell.SpellLevel) ? heightenToLevel : spell.SpellLevel;
+        int dc = savedDC > 0 ? savedDC : (10 + dcLevel + dcLevel / 2);
+
+        // Create unified WandData
+        WandData wandData = WandData.Create(
+            spell, casterLevel, isArcane, priceGp,
+            metamagicFeats, effLevel, dc, heightenToLevel);
+
+        string mmLabel = hasMetamagic ? " (metamagic)" : "";
         var wand = new ItemData
         {
             Id = $"crafted_wand_{spell.SpellId}_{System.Guid.NewGuid():N}",
-            Name = $"Wand of {spell.Name}",
-            Description = $"A magic wand of {spell.Name} (CL {casterLevel}, 50 charges). " + spell.Description,
+            Name = $"Wand of {spell.Name}{mmLabel}",
+            Description = $"A magic wand of {spell.Name} (CL {casterLevel}, {CraftingConstants.WandMaxCharges} charges). " + spell.Description,
             Type = ItemType.Consumable,
             Slot = EquipSlot.None,
             IsWand = true,
@@ -308,10 +338,15 @@ public static class CraftingExecutor
             MaxCharges = CraftingConstants.WandMaxCharges,
             ConsumableSpellName = spell.SpellId,
             ConsumableMinimumCasterLevel = casterLevel,
-            BasePriceGp = CraftingCostCalculator.WandMarketPrice(spell.SpellLevel, casterLevel)
+            ConsumableEffect = ConsumableEffectType.SpellEffect,
+            BasePriceGp = priceGp,
+            Wand = wandData,
+            IsStackable = false,
+            MaxStackSize = 1,
+            StackCount = 1
         };
 
-        Debug.Log($"[CraftingExecutor] Created wand: {wand.Name} (CL {casterLevel}, {wand.CurrentCharges} charges)");
+        Debug.Log($"[CraftingExecutor] Created wand: {wand.Name} (CL {casterLevel}, {wand.CurrentCharges} charges, DC {dc})");
         return wand;
     }
 

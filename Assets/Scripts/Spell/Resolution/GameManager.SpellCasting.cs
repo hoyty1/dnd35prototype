@@ -179,6 +179,14 @@ public partial class GameManager
             return true;
         }
 
+        // Wand casts do not consume spell slots — the wand charge IS the resource
+        if (_pendingWandCastActive)
+        {
+            Debug.Log($"[WandCast] Skipping spell slot consumption — casting from wand.");
+            ConsumeWandChargeAfterCast(ActivePC);
+            return true;
+        }
+
         if (isSpontaneous)
         {
             if (!string.IsNullOrEmpty(spontaneousSacrificedSpellId))
@@ -201,8 +209,8 @@ public partial class GameManager
         if (isDeliveringHeldCharge || caster == null || caster.Stats == null || spell == null)
             return false;
 
-        // Bypass arcane spell failure for F12 test panel casts and scroll casts
-        if (_testPanelCastActive || _pendingScrollCastActive)
+        // Bypass arcane spell failure for F12 test panel casts, scroll casts, and wand casts
+        if (_testPanelCastActive || _pendingScrollCastActive || _pendingWandCastActive)
             return false;
 
         if (!caster.Stats.IsAffectedByArcaneSpellFailure)
@@ -1677,8 +1685,8 @@ public partial class GameManager
 
         // ── Spell Component Pouch check (D&D 3.5e PHB p.130) ──
         // Spells with common material components (M with no GP cost) require a spell component pouch.
-        // F12 test panel casts and scroll casts bypass this requirement (scroll provides components).
-        if (!_testPanelCastActive && !_pendingScrollCastActive && _pendingSpell.HasMaterialComponent)
+        // F12 test panel casts, scroll casts, and wand casts bypass this requirement (item provides components).
+        if (!_testPanelCastActive && !_pendingScrollCastActive && !_pendingWandCastActive && _pendingSpell.HasMaterialComponent)
         {
             if (!SpellComponentRegistry.ValidatePouchRequirement(_pendingSpell.SpellId, _pendingSpell, caster, out string pouchFailure))
             {
@@ -1702,14 +1710,15 @@ public partial class GameManager
 
         bool isDeliveringHeldCharge = _pendingSpellFromHeldCharge;
         bool isScrollCast = _pendingScrollCastActive;
+        bool isWandCast = _pendingWandCastActive;
 
         // Quickened applies when CASTING the spell, not when delivering a previously held charge.
         bool isQuickened = !isDeliveringHeldCharge && _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
-        if (isScrollCast)
+        if (isScrollCast || isWandCast)
         {
-            // Scroll cast: action is consumed via ConsumeScrollAfterCast (called from ConsumePendingSpellSlot).
+            // Scroll/wand cast: action is consumed via ConsumeScrollAfterCast/ConsumeWandChargeAfterCast (called from ConsumePendingSpellSlot).
             // Do NOT consume another action here.
-            Debug.Log($"[ScrollCast] {caster.Stats.CharacterName} casting from scroll — action consumed via ConsumeScrollAfterCast.");
+            Debug.Log($"[{(isWandCast ? "WandCast" : "ScrollCast")}] {caster.Stats.CharacterName} casting from {(isWandCast ? "wand" : "scroll")} — action consumed via post-cast handler.");
         }
         else if (isDeliveringHeldCharge)
         {
@@ -3587,11 +3596,15 @@ public partial class GameManager
 
         CaptureSpellcastResourceSnapshot(caster);
 
-        // Quickened spells don't consume standard action; scroll casts already consumed action
+        // Quickened spells don't consume standard action; scroll/wand casts already consumed action
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         if (_pendingScrollCastActive)
         {
             Debug.Log($"[ScrollCast] AoE scroll cast — action consumed via ConsumeScrollAfterCast.");
+        }
+        else if (_pendingWandCastActive)
+        {
+            Debug.Log($"[WandCast] AoE wand cast — action consumed via ConsumeWandChargeAfterCast.");
         }
         else if (!isQuickened)
         {

@@ -85,6 +85,16 @@ public class CraftingProject
     /// <summary>For Heighten Spell: the target spell level. -1 = not heightened.</summary>
     public int ScrollHeightenToLevel = -1;
 
+    // ============================== METAMAGIC WAND DATA ==============================
+    /// <summary>Metamagic feats applied to a crafted wand. Null/empty for non-wand or plain wands.</summary>
+    public List<MetamagicFeatId> WandMetamagicFeats;
+    /// <summary>Effective spell level after metamagic for wand (base + adjustments). Must be ≤ 5.</summary>
+    public int WandEffectiveSpellLevel;
+    /// <summary>Save DC baked into the wand: 10 + SL + floor(SL/2). Only Heighten increases DC.</summary>
+    public int WandSavedDC;
+    /// <summary>For Heighten Spell on wand: the target spell level. -1 = not heightened.</summary>
+    public int WandHeightenToLevel = -1;
+
     /// <summary>
     /// Summary string for the confirmation dialog.
     /// </summary>

@@ -185,6 +185,13 @@ public static class WandFactory
         // Pick icon color based on spell effect type
         Color iconColor = GetWandColor(spell);
 
+        // Determine if the spell is arcane
+        bool isArcane = IsArcaneSpell(spell);
+
+        // Create unified WandData (single source of truth)
+        WandData wandData = WandData.Create(
+            spell, casterLevel, isArcane, priceGp);
+
         ItemData wandItem = new ItemData
         {
             Id = id,
@@ -193,7 +200,7 @@ public static class WandFactory
             Type = ItemType.Consumable,
             Slot = EquipSlot.None,
             ConsumableEffect = ConsumableEffectType.SpellEffect,
-            ConsumableSpellName = spell.Name,
+            ConsumableSpellName = spell.SpellId,
             ConsumableMinimumCasterLevel = casterLevel,
             ConsumableModifier = 0,
             BasePriceGp = priceGp,
@@ -206,6 +213,7 @@ public static class WandFactory
             WandSpellId = spell.SpellId,
             WandCasterLevel = casterLevel,
             WandSpellLevel = spellLevel,
+            Wand = wandData,
             IsStackable = false, // Wands are NOT stackable — each has unique charge count
             MaxStackSize = 1,
             StackCount = 1
@@ -258,6 +266,22 @@ public static class WandFactory
         }
 
         return classes.Count > 0 ? string.Join(", ", classes) : "Various";
+    }
+
+    /// <summary>Determines if a spell is arcane (Wizard/Sorcerer/Bard) or divine.</summary>
+    private static bool IsArcaneSpell(SpellData spell)
+    {
+        if (spell == null || spell.AvailableFor == null) return true; // Default to arcane
+        string[] arcaneCasters = { "Wizard", "Sorcerer", "Bard" };
+        foreach (var avail in spell.AvailableFor)
+        {
+            if (avail == null) continue;
+            foreach (string cls in arcaneCasters)
+            {
+                if (avail.MatchesClass(cls)) return true;
+            }
+        }
+        return false;
     }
 
     private static Color GetWandColor(SpellData spell)

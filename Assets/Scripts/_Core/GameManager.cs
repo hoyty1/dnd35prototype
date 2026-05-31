@@ -326,6 +326,11 @@ public partial class GameManager : MonoBehaviour
     private int _pendingScrollCastInventoryIndex = -1; // Inventory slot of the scroll being cast
     private bool _pendingScrollCastActive;         // True when a scroll is being cast through the spell pipeline
 
+    // Wand casting state — tracks wand being cast through the targeting pipeline
+    private ItemData _pendingWandCastItem;        // The wand whose charge is consumed after spell resolves
+    private int _pendingWandCastInventoryIndex = -1; // Inventory slot of the wand being cast
+    private bool _pendingWandCastActive;           // True when a wand is being cast through the spell pipeline
+
     // Mid-sequence full-attack retargeting state (ranged + melee)
     private bool _isAwaitingRangedRetargetSelection;
     private bool _rangedRetargetSelectionCancelled;
@@ -1128,6 +1133,7 @@ public partial class GameManager : MonoBehaviour
         _pendingNaturalAttackSequenceIndex = -1;
         _pendingNaturalAttackLabel = null;
         CleanupScrollCastState();
+        CleanupWandCastState();
         ResetPendingGreaseCastMode();
 
         _isConfirmingSelfAoE = false;
@@ -4484,9 +4490,9 @@ public partial class GameManager : MonoBehaviour
         {
             if (ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string noThreatMessage))
             {
-                // If the scroll entered the targeting pipeline (AoE/cone/etc.),
+                // If the scroll/wand entered the targeting pipeline (AoE/cone/etc.),
                 // do NOT consume the action or reset UI — targeting mode handles that.
-                if (_pendingScrollCastActive)
+                if (_pendingScrollCastActive || _pendingWandCastActive)
                 {
                     CombatUI?.ShowCombatLog(noThreatMessage);
                     return; // targeting mode is active; action consumed after cast resolves
@@ -4553,9 +4559,9 @@ public partial class GameManager : MonoBehaviour
 
         if (ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string resultMessage))
         {
-            // If the scroll entered the targeting pipeline (AoE/cone/etc.),
+            // If the scroll/wand entered the targeting pipeline (AoE/cone/etc.),
             // do NOT consume the action or reset UI — targeting mode handles that.
-            if (_pendingScrollCastActive)
+            if (_pendingScrollCastActive || _pendingWandCastActive)
             {
                 CombatUI?.ShowCombatLog(resultMessage);
                 yield break; // targeting mode is active; action consumed after cast resolves
@@ -4634,10 +4640,10 @@ public partial class GameManager : MonoBehaviour
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{feedback}"));
             }
 
-            // If a scroll entered the targeting pipeline (AoE cone, single-target, etc.),
+            // If a scroll/wand entered the targeting pipeline (AoE cone, single-target, etc.),
             // do NOT reset the UI — the targeting overlay needs to stay active.
             // ShowActionChoices would kill the targeting mode.
-            if (!_pendingScrollCastActive)
+            if (!_pendingScrollCastActive && !_pendingWandCastActive)
                 ShowActionChoices();
         };
         QuickItemUsePanel.OnCancelled = () =>
@@ -5681,20 +5687,26 @@ public partial class GameManager : MonoBehaviour
 
         SpellDatabase.Init();
 
-        // Use unified ScrollData when available, fall back to legacy lookup
-        SpellData baseSpell = (item.IsScroll && item.Scroll != null)
-            ? item.Scroll.GetSpell()
-            : SpellDatabase.GetSpell(item.ConsumableSpellName)
-              ?? SpellDatabase.GetSpellByName(item.ConsumableSpellName);
+        // Use unified ScrollData/WandData when available, fall back to legacy lookup
+        SpellData baseSpell = null;
+        if (item.IsScroll && item.Scroll != null)
+            baseSpell = item.Scroll.GetSpell();
+        else if (item.IsWand && item.Wand != null)
+            baseSpell = item.Wand.GetSpell();
+
+        if (baseSpell == null)
+            baseSpell = SpellDatabase.GetSpell(item.ConsumableSpellName)
+                        ?? SpellDatabase.GetSpellByName(item.ConsumableSpellName);
+
         if (baseSpell == null)
         {
-            string spellRef = item.Scroll?.SpellId ?? item.ConsumableSpellName;
+            string spellRef = item.Scroll?.SpellId ?? item.Wand?.SpellId ?? item.ConsumableSpellName;
             summary = $"Spell not found for consumable: {spellRef}.";
             return false;
         }
 
-        int casterLevel = (item.Scroll != null)
-            ? item.Scroll.CasterLevel
+        int casterLevel = item.Scroll != null ? item.Scroll.CasterLevel
+            : item.Wand != null ? item.Wand.CasterLevel
             : Mathf.Max(1, item.ConsumableMinimumCasterLevel);
         SpellData consumableSpell = BuildConsumableSpellVariant(baseSpell, item);
 
@@ -5704,6 +5716,17 @@ public partial class GameManager : MonoBehaviour
         {
             consumableSpell.SaveDC = scrollDC;
             Debug.Log($"[Scroll] Using stored DC {scrollDC} for {consumableSpell.Name}");
+        }
+
+        // Use stored DC from wand (unified WandData or calculated from spell level)
+        if (item.IsWand)
+        {
+            int wandDC = item.Wand?.SaveDC ?? WandFactory.CalculateWandSaveDC(item.WandSpellLevel);
+            if (wandDC > 0)
+            {
+                consumableSpell.SaveDC = wandDC;
+                Debug.Log($"[Wand] Using stored DC {wandDC} for {consumableSpell.Name}");
+            }
         }
 
         if (consumableSpell.EffectType == SpellEffectType.Healing)
@@ -6023,6 +6046,121 @@ public partial class GameManager : MonoBehaviour
         _pendingScrollCastActive = false;
     }
 
+    // ==================== WAND TARGETING PIPELINE ====================
+
+    /// <summary>
+    /// Routes a wand's spell through the full spell targeting pipeline.
+    /// Mirrors InitiateScrollCastThroughPipeline but consumes a charge instead of removing the item.
+    /// </summary>
+    private bool InitiateWandCastThroughPipeline(CharacterController actor, ItemData wandItem, int inventoryIndex, SpellData baseSpell)
+    {
+        if (actor == null || wandItem == null || baseSpell == null) return false;
+
+        string charName = actor.Stats != null ? actor.Stats.CharacterName : "Unknown";
+
+        // Clone the spell so modifications don't affect the database
+        SpellData spellClone = baseSpell.Clone();
+
+        // Use unified WandData when available
+        WandData wd = wandItem.Wand;
+
+        // Build metamagic data from wand's stored metamagic feats
+        MetamagicData wandMetamagic = null;
+        var mmFeats = wd?.MetamagicFeats;
+        if (mmFeats != null && mmFeats.Count > 0)
+        {
+            wandMetamagic = new MetamagicData();
+            foreach (var feat in mmFeats)
+            {
+                wandMetamagic.Toggle(feat);
+                if (feat == MetamagicFeatId.HeightenSpell)
+                {
+                    int htl = wd?.HeightenToLevel ?? -1;
+                    if (htl > spellClone.SpellLevel)
+                        wandMetamagic.HeightenToLevel = htl;
+                }
+            }
+            SpellCaster.ApplyMetamagicToSpellData(spellClone, wandMetamagic);
+        }
+
+        // Override the spell's save DC with the wand's stored DC
+        int wandSaveDC = wd?.SaveDC ?? WandFactory.CalculateWandSaveDC(wandItem.WandSpellLevel);
+        if (wandSaveDC > 0)
+            spellClone.SaveDC = wandSaveDC;
+
+        int wandCasterLevel = wd?.CasterLevel ?? Mathf.Max(1, wandItem.WandCasterLevel);
+
+        // Store wand state for charge consumption after spell resolves
+        _pendingWandCastItem = wandItem;
+        _pendingWandCastInventoryIndex = inventoryIndex;
+        _pendingWandCastActive = true;
+
+        // Set up pending spell state (mirrors InitiateScrollCastThroughPipeline)
+        _pendingSpell = spellClone;
+        _pendingMetamagic = wandMetamagic ?? new MetamagicData();
+        _pendingSpellFromHeldCharge = false;
+        _pendingAnimateRopeItem = null;
+        _pendingResistEnergyType = null;
+        _pendingProtectionFromEnergyType = null;
+        _pendingFireShieldIsWarm = null;
+        _pendingMagicWeaponItem = null;
+        _pendingKeenEdgeItem = null;
+        _pendingKeenEdgeIsAmmo = false;
+        _pendingGreaterMagicWeaponItem = null;
+        _pendingDisguiseSelfRace = null;
+        _pendingSummonSelection = null;
+        _pendingSummonListLevel = 0;
+        _pendingSummonCountInfo = null;
+        _pendingSummonSwarmNpcId = null;
+
+        string metamagicInfo = (wd != null && wd.HasMetamagic) ? $" (metamagic: {wd.MetamagicFeats.Count} feat(s))" : "";
+        Debug.Log($"[WandCast] {charName} initiating wand cast: {spellClone.Name}{metamagicInfo} CL {wandCasterLevel}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{charName} activates {wandItem.Name} — select a target for {spellClone.Name}."));
+
+        // Kick off the targeting pipeline
+        BeginPendingSpellTargeting(actor);
+        return true;
+    }
+
+    /// <summary>
+    /// Consumes a wand charge after a successful spell cast through the targeting pipeline.
+    /// Called from ConsumePendingSpellSlot when _pendingWandCastActive is true.
+    /// </summary>
+    private void ConsumeWandChargeAfterCast(CharacterController caster)
+    {
+        if (!_pendingWandCastActive || _pendingWandCastItem == null) return;
+
+        // Consume the action that was deferred when the wand entered targeting mode
+        ConsumeItemManipulationAction(caster);
+
+        string wandName = _pendingWandCastItem.Name;
+
+        // Consume 1 charge from WandData and legacy field
+        if (_pendingWandCastItem.Wand != null) _pendingWandCastItem.Wand.ConsumeCharge();
+        _pendingWandCastItem.CurrentCharges--;
+
+        string chargeInfo = $"{_pendingWandCastItem.CurrentCharges}/{_pendingWandCastItem.MaxCharges} charges";
+        string depletedNote = _pendingWandCastItem.CurrentCharges <= 0 ? " ⚠ DEPLETED!" : "";
+
+        int wandDC = _pendingWandCastItem.Wand?.SaveDC ?? WandFactory.CalculateWandSaveDC(_pendingWandCastItem.WandSpellLevel);
+        string dcInfo = wandDC > 0 ? $" (DC {wandDC})" : "";
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{wandName} charge consumed.{dcInfo} {chargeInfo}{depletedNote}"));
+        Debug.Log($"[WandCast] Wand charge consumed: {wandName} ({chargeInfo})");
+
+        CleanupWandCastState();
+    }
+
+    /// <summary>
+    /// Resets wand casting state. Called after spell resolution or cancellation.
+    /// </summary>
+    private void CleanupWandCastState()
+    {
+        _pendingWandCastItem = null;
+        _pendingWandCastInventoryIndex = -1;
+        _pendingWandCastActive = false;
+    }
+
     // ==================== WAND USAGE (D&D 3.5e DMG) ====================
 
     /// <summary>
@@ -6073,7 +6211,49 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{charName} uses Magic domain power to activate arcane wand as a wizard of level {validation.EffectiveWizardLevel}."));
         }
 
-        // Step 3: Apply the spell effect
+        // Step 3: Determine if the spell needs targeting (damage, AoE, etc.) or is self-target
+        SpellDatabase.Init();
+        SpellData wandSpell = wandItem.Wand?.GetSpell()
+                              ?? SpellDatabase.GetSpell(wandItem.WandSpellId)
+                              ?? SpellDatabase.GetSpell(wandItem.ConsumableSpellName)
+                              ?? SpellDatabase.GetSpellByName(wandItem.ConsumableSpellName);
+        bool needsTargeting = wandSpell != null && (
+            wandSpell.EffectType == SpellEffectType.Damage ||
+            wandSpell.EffectType == SpellEffectType.Summon ||
+            wandSpell.EffectType == SpellEffectType.Escape ||
+            wandSpell.EffectType == SpellEffectType.Dispel ||
+            wandSpell.EffectType == SpellEffectType.Wall ||
+            wandSpell.EffectType == SpellEffectType.Divination ||
+            wandSpell.EffectType == SpellEffectType.Utility ||
+            wandSpell.TargetType == SpellTargetType.SingleEnemy ||
+            wandSpell.TargetType == SpellTargetType.SingleAlly ||
+            wandSpell.TargetType == SpellTargetType.Area ||
+            wandSpell.TargetType == SpellTargetType.Touch);
+
+        if (needsTargeting && IsCombatEncounterRunning())
+        {
+            // Route through the full spell targeting pipeline
+            if (!InitiateWandCastThroughPipeline(actor, wandItem, inventoryIndex, wandSpell))
+            {
+                resultMessage = $"🪄 {charName} activates {wandItem.Name} but cannot initiate the spell.";
+                return false;
+            }
+
+            // The spell will be resolved asynchronously through the targeting pipeline.
+            // Charge consumption happens in ConsumeWandChargeAfterCast (called from PerformSpellCast).
+            string castClInfo;
+            if (validation.UsedUMD)
+                castClInfo = "via UMD";
+            else if (validation.UsedMagicDomain)
+                castClInfo = $"via Magic domain (CL {validation.EffectiveWizardLevel})";
+            else
+                castClInfo = $"as {validation.MatchedClassName} (CL {wandItem.WandCasterLevel})";
+
+            resultMessage = $"🪄 {charName} activates {wandItem.Name} {castClInfo} — select a target.";
+            return true;
+        }
+
+        // Self-target spells: apply immediately
         string spellSummary;
         if (!TryApplySpellConsumableEffect(actor, wandItem, out spellSummary))
         {
@@ -6082,6 +6262,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         // Step 4: Consume 1 charge (wand stays in inventory)
+        if (wandItem.Wand != null) wandItem.Wand.ConsumeCharge();
         wandItem.CurrentCharges--;
         string chargeInfo = $" ({wandItem.CurrentCharges}/{wandItem.MaxCharges} charges)";
         string depletedNote = "";

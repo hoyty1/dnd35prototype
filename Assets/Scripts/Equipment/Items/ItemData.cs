@@ -396,6 +396,15 @@ public class ItemData
     /// <summary>The spell level of the wand's spell (0-4).</summary>
     public int WandSpellLevel;
 
+    // --- Unified Wand Data (canonical source of truth) ---
+    /// <summary>
+    /// Unified wand data container. Non-null for wand items.
+    /// All wand creation paths populate this. Usage code should prefer Wand.GetSpell()
+    /// over ConsumableSpellName for spell resolution on wands.
+    /// Legacy fields (IsWand, WandSpellId, etc.) are still populated for backward compatibility.
+    /// </summary>
+    public WandData Wand;
+
     // --- Staff-specific (D&D 3.5e DMG p.243 — Core rules only) ---
     // Staves are non-rechargeable under core DMG 3.5e rules.
     // Once all charges are expended, the staff becomes a non-magical quarterstaff (worthless).
@@ -2308,11 +2317,35 @@ public class ItemData
                 }
                 else if (IsWand)
                 {
-                    string chargeStatus = CurrentCharges > 0
-                        ? $"{CurrentCharges}/{MaxCharges} charges"
-                        : "DEPLETED (0 charges)";
-                    stats += $"\nCharges: {chargeStatus}";
-                    stats += $"\nSpell Level: {WandSpellLevel} | Spell trigger (class list or UMD DC 20)";
+                    // Use unified WandData when available for richer display
+                    if (Wand != null)
+                    {
+                        stats += $"\nCharges: {Wand.ChargeDisplay}";
+                        stats += $"\nCaster Level: {Wand.CasterLevel} | Save DC: {Wand.SaveDC}";
+                        stats += $"\nSpell Level: {Wand.BaseSpellLevel}";
+                        if (Wand.HasMetamagic)
+                            stats += $" (Eff. Level: {Wand.EffectiveSpellLevel})";
+                        stats += $" | {Wand.TypeLabel} | Spell trigger";
+                        if (Wand.HasMetamagic)
+                        {
+                            var mmNames = new System.Collections.Generic.List<string>();
+                            foreach (var mm in Wand.MetamagicFeats)
+                                mmNames.Add(MetamagicData.GetDisplayName(mm));
+                            stats += $"\nMetamagic: {string.Join(", ", mmNames)}";
+                        }
+                        if (Wand.IsDepleted)
+                            stats += "\n⚠ DEPLETED — useless nonmagical stick";
+                    }
+                    else
+                    {
+                        // Legacy fallback
+                        string chargeStatus = CurrentCharges > 0
+                            ? $"{CurrentCharges}/{MaxCharges} charges"
+                            : "DEPLETED (0 charges)";
+                        stats += $"\nCharges: {chargeStatus}";
+                        stats += $"\nCaster Level: {WandCasterLevel} | Save DC: {WandFactory.CalculateWandSaveDC(WandSpellLevel)}";
+                        stats += $"\nSpell Level: {WandSpellLevel} | Spell trigger (class list or UMD DC 20)";
+                    }
                 }
                 else if (IsPotion)
                     stats += $"\nSpell Level: {PotionSpellLevel} | No class restrictions";
