@@ -5742,6 +5742,24 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
+        // Special handling: Mirror Image needs clone spawning, not just a generic buff
+        if (string.Equals(consumableSpell.SpellId, SpellNames.MIRROR_IMAGE, System.StringComparison.Ordinal))
+        {
+            var mirrorResult = new SpellResult
+            {
+                Success = true,
+                Spell = consumableSpell,
+                CasterName = actor.Stats?.CharacterName ?? "Unknown",
+                TargetName = actor.Stats?.CharacterName ?? "Unknown"
+            };
+            bool handled = TryResolveMirrorImageSpellEffect(actor, actor, consumableSpell, mirrorResult);
+            if (handled)
+            {
+                summary = $"Mirror Image applied via {item?.Name ?? "consumable"}.";
+                return true;
+            }
+        }
+
         if (consumableSpell.EffectType == SpellEffectType.Buff || consumableSpell.EffectType == SpellEffectType.Debuff ||
             consumableSpell.EffectType == SpellEffectType.Illusion || consumableSpell.EffectType == SpellEffectType.Control)
         {

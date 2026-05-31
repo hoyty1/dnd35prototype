@@ -60,6 +60,7 @@ public class SpellResult
     // ========== DAMAGE ==========
     public int DamageDealt;             // Final damage applied after save and mitigation
     public int DamageRolled;            // Raw damage before save reduction
+    public int[] DamageRolls;           // Individual dice results (e.g., [5,2,6,3,4,1] for 6d6)
     public string DamageType;           // Legacy display string ("cold", "acid", "force", etc.)
     public string DamageTypeSummary;    // Canonical typed summary used by mitigation model
     public int ResistancePrevented;
@@ -70,6 +71,7 @@ public class SpellResult
     public int HealingDone;             // Lethal HP restored
     public int NonlethalHealed;         // Nonlethal damage removed
     public int HealRolled;              // Raw healing dice roll
+    public int[] HealRolls;             // Individual healing dice results
 
     // ========== BUFF ==========
     public bool BuffApplied;
@@ -269,7 +271,13 @@ public class SpellResult
             {
                 sb.AppendLine($"  Damage:");
                 if (Spell.DamageCount > 0)
-                    sb.AppendLine($"    {Spell.DamageCount}d{Spell.DamageDice} = {DamageRolled}");
+                {
+                    string diceStr = FormatDiceRolls(DamageRolls);
+                    if (!string.IsNullOrEmpty(diceStr))
+                        sb.AppendLine($"    {Spell.DamageCount}d{Spell.DamageDice} {diceStr} = {DamageRolled}");
+                    else
+                        sb.AppendLine($"    {Spell.DamageCount}d{Spell.DamageDice} = {DamageRolled}");
+                }
                 if (Spell.BonusDamage > 0 && Spell.DamageCount > 0)
                     sb.AppendLine($"    + {Spell.BonusDamage} bonus");
 
@@ -306,7 +314,13 @@ public class SpellResult
         {
             sb.AppendLine($"  Healing: healed!");
             if (Spell.HealCount > 0)
-                sb.AppendLine($"    {Spell.HealCount}d{Spell.HealDice} = {HealRolled}");
+            {
+                string healDiceStr = FormatDiceRolls(HealRolls);
+                if (!string.IsNullOrEmpty(healDiceStr))
+                    sb.AppendLine($"    {Spell.HealCount}d{Spell.HealDice} {healDiceStr} = {HealRolled}");
+                else
+                    sb.AppendLine($"    {Spell.HealCount}d{Spell.HealDice} = {HealRolled}");
+            }
             if (Spell.BonusHealing > 0)
                 sb.AppendLine($"    + {Spell.BonusHealing} (caster level)");
             if (EmpowerBonus > 0)
@@ -335,5 +349,22 @@ public class SpellResult
             return $"+ {value} ({label})";
         else
             return $"- {-value} ({label})";
+    }
+
+    /// <summary>
+    /// Format individual dice results for display, e.g. "[5, 2, 6, 3, 4, 1]".
+    /// Returns empty string if rolls array is null or empty.
+    /// </summary>
+    public static string FormatDiceRolls(int[] rolls)
+    {
+        if (rolls == null || rolls.Length == 0) return "";
+        var sb = new StringBuilder("[");
+        for (int i = 0; i < rolls.Length; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append(rolls[i]);
+        }
+        sb.Append(']');
+        return sb.ToString();
     }
 }

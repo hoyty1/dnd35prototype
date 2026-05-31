@@ -442,13 +442,16 @@ public static class SpellCaster
             else
             {
                 int dmg = 0;
+                int[] rolls = new int[spell.DamageCount];
                 for (int i = 0; i < spell.DamageCount; i++)
                 {
                     if (isMaximized)
-                        dmg += spell.DamageDice; // Max die value
+                        rolls[i] = spell.DamageDice; // Max die value
                     else
-                        dmg += Random.Range(1, spell.DamageDice + 1);
+                        rolls[i] = Random.Range(1, spell.DamageDice + 1);
+                    dmg += rolls[i];
                 }
+                result.DamageRolls = rolls;
                 dmg += spell.BonusDamage;
                 int baseDmg = Mathf.Max(0, dmg);
 
@@ -506,14 +509,16 @@ public static class SpellCaster
             result.TargetHPBefore = targetStats.CurrentHP;
 
             int healRoll = 0;
+            int[] healRolls = new int[spell.HealCount];
             for (int i = 0; i < spell.HealCount; i++)
             {
                 if (isMaximized)
-                    healRoll += spell.HealDice; // Max die value
+                    healRolls[i] = spell.HealDice; // Max die value
                 else
-                    healRoll += Random.Range(1, spell.HealDice + 1);
+                    healRolls[i] = Random.Range(1, spell.HealDice + 1);
+                healRoll += healRolls[i];
             }
-
+            result.HealRolls = healRolls;
             result.HealRolled = healRoll;
 
             int totalHeal = healRoll + spell.BonusHealing;

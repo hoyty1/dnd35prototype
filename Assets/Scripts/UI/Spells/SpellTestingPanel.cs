@@ -53,6 +53,14 @@ public class SpellTestingPanel : MonoBehaviour
     // Level filter buttons
     private List<Button> _levelFilterButtons = new List<Button>();
 
+    // ========== METAMAGIC STATE ==========
+    private MetamagicData _metamagicState = new MetamagicData();
+    private int _heightenToLevel = -1;
+    private Text _metamagicSummaryText;
+    private GameObject _metamagicPanel;
+    private Dictionary<MetamagicFeatId, Image> _metamagicToggleImages = new Dictionary<MetamagicFeatId, Image>();
+    private Text _heightenValueText;
+
     // ========== COLORS ==========
     private static readonly Color PanelBg = new Color(0.08f, 0.09f, 0.14f, 0.96f);
     private static readonly Color SectionBg = new Color(0.12f, 0.13f, 0.2f, 0.95f);
@@ -294,6 +302,9 @@ public class SpellTestingPanel : MonoBehaviour
                 $"LvlFilter_{levelLabels[i]}", font, 11);
             _levelFilterButtons.Add(btn);
         }
+
+        // ===== METAMAGIC SECTION =====
+        BuildMetamagicSection(parent, font);
 
         // Scroll area for spell list
         _spellListScroll = UIFactory.CreateScrollPanel(parent, "SpellListScroll");
@@ -710,6 +721,197 @@ public class SpellTestingPanel : MonoBehaviour
         }
     }
 
+    // ========== METAMAGIC UI ==========
+
+    private void BuildMetamagicSection(Transform parent, Font font)
+    {
+        // Collapsible metamagic panel
+        _metamagicPanel = new GameObject("MetamagicPanel");
+        _metamagicPanel.transform.SetParent(parent, false);
+        RectTransform mmRT = _metamagicPanel.AddComponent<RectTransform>();
+        Image mmBg = _metamagicPanel.AddComponent<Image>();
+        mmBg.color = new Color(0.15f, 0.12f, 0.22f, 0.95f);
+        LayoutElement mmLE = _metamagicPanel.AddComponent<LayoutElement>();
+        mmLE.preferredHeight = 110;
+
+        VerticalLayoutGroup mmVlg = _metamagicPanel.AddComponent<VerticalLayoutGroup>();
+        mmVlg.spacing = 2;
+        mmVlg.padding = new RectOffset(6, 6, 4, 4);
+        mmVlg.childControlWidth = true;
+        mmVlg.childControlHeight = true;
+        mmVlg.childForceExpandWidth = true;
+        mmVlg.childForceExpandHeight = false;
+
+        // Header
+        Text mmHeader = CreateSafeLabel(_metamagicPanel.transform, "⚡ METAMAGIC (applied to next cast)", 12,
+            new Color(1f, 0.7f, 0.3f, 1f), font, "MetamagicHeader");
+        mmHeader.fontStyle = FontStyle.Bold;
+        LayoutElement headerLE = mmHeader.gameObject.GetComponent<LayoutElement>() ?? mmHeader.gameObject.AddComponent<LayoutElement>();
+        headerLE.preferredHeight = 18;
+
+        // Row 1: Empower, Maximize, Extend, Enlarge
+        GameObject row1 = CreateMetamagicRow(_metamagicPanel.transform, "Row1");
+        CreateMetamagicToggle(row1.transform, MetamagicFeatId.EmpowerSpell, "Emp +2", font);
+        CreateMetamagicToggle(row1.transform, MetamagicFeatId.MaximizeSpell, "Max +3", font);
+        CreateMetamagicToggle(row1.transform, MetamagicFeatId.ExtendSpell, "Ext +1", font);
+        CreateMetamagicToggle(row1.transform, MetamagicFeatId.EnlargeSpell, "Enl +1", font);
+
+        // Row 2: Quicken, Silent, Still, Widen
+        GameObject row2 = CreateMetamagicRow(_metamagicPanel.transform, "Row2");
+        CreateMetamagicToggle(row2.transform, MetamagicFeatId.QuickenSpell, "Qck +4", font);
+        CreateMetamagicToggle(row2.transform, MetamagicFeatId.SilentSpell, "Sil +1", font);
+        CreateMetamagicToggle(row2.transform, MetamagicFeatId.StillSpell, "Stl +1", font);
+        CreateMetamagicToggle(row2.transform, MetamagicFeatId.WidenSpell, "Wdn +3", font);
+
+        // Row 3: Heighten + level selector + Clear All + summary
+        GameObject row3 = CreateMetamagicRow(_metamagicPanel.transform, "Row3");
+        CreateMetamagicToggle(row3.transform, MetamagicFeatId.HeightenSpell, "Hgt", font);
+
+        // Heighten level display (- / level / +)
+        Button htMinus = UIFactory.CreateButton(row3.transform, "◀", () => AdjustHeightenLevel(-1),
+            new Vector2(22, 22), new Color(0.3f, 0.3f, 0.5f, 1f), "HtMinus", font, 11);
+        LayoutElement htMinusLE = htMinus.gameObject.GetComponent<LayoutElement>() ?? htMinus.gameObject.AddComponent<LayoutElement>();
+        htMinusLE.preferredWidth = 22;
+
+        _heightenValueText = CreateSafeLabel(row3.transform, "—", 12, Color.white, font, "HtLevel");
+        _heightenValueText.alignment = TextAnchor.MiddleCenter;
+        LayoutElement htLvlLE = _heightenValueText.gameObject.GetComponent<LayoutElement>() ?? _heightenValueText.gameObject.AddComponent<LayoutElement>();
+        htLvlLE.preferredWidth = 24;
+
+        Button htPlus = UIFactory.CreateButton(row3.transform, "▶", () => AdjustHeightenLevel(1),
+            new Vector2(22, 22), new Color(0.3f, 0.3f, 0.5f, 1f), "HtPlus", font, 11);
+        LayoutElement htPlusLE = htPlus.gameObject.GetComponent<LayoutElement>() ?? htPlus.gameObject.AddComponent<LayoutElement>();
+        htPlusLE.preferredWidth = 22;
+
+        // Spacer
+        GameObject spacer = new GameObject("Spacer");
+        spacer.transform.SetParent(row3.transform, false);
+        spacer.AddComponent<RectTransform>();
+        LayoutElement spacerLE = spacer.AddComponent<LayoutElement>();
+        spacerLE.flexibleWidth = 0.5f;
+
+        // Clear All button
+        Button clearBtn = UIFactory.CreateButton(row3.transform, "Clear All", () => ClearAllMetamagic(),
+            new Vector2(65, 22), DangerBtnColor, "ClearMM", font, 11);
+        LayoutElement clearLE = clearBtn.gameObject.GetComponent<LayoutElement>() ?? clearBtn.gameObject.AddComponent<LayoutElement>();
+        clearLE.preferredWidth = 65;
+
+        // Summary label
+        _metamagicSummaryText = CreateSafeLabel(_metamagicPanel.transform, "", 11,
+            new Color(0.7f, 0.9f, 1f, 1f), font, "MetamagicSummary");
+        _metamagicSummaryText.alignment = TextAnchor.MiddleCenter;
+        LayoutElement sumLE = _metamagicSummaryText.gameObject.GetComponent<LayoutElement>() ?? _metamagicSummaryText.gameObject.AddComponent<LayoutElement>();
+        sumLE.preferredHeight = 16;
+
+        RefreshMetamagicSummary();
+    }
+
+    private GameObject CreateMetamagicRow(Transform parent, string name)
+    {
+        GameObject row = new GameObject(name);
+        row.transform.SetParent(parent, false);
+        row.AddComponent<RectTransform>();
+        HorizontalLayoutGroup hlg = row.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 3;
+        hlg.padding = new RectOffset(2, 2, 0, 0);
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+        hlg.childForceExpandWidth = true;
+        hlg.childForceExpandHeight = true;
+        LayoutElement le = row.AddComponent<LayoutElement>();
+        le.preferredHeight = 24;
+        return row;
+    }
+
+    private void CreateMetamagicToggle(Transform parent, MetamagicFeatId feat, string label, Font font)
+    {
+        Color offColor = new Color(0.25f, 0.25f, 0.35f, 0.9f);
+        Color onColor = new Color(0.3f, 0.6f, 0.9f, 1f);
+
+        MetamagicFeatId capturedFeat = feat;
+        Button btn = UIFactory.CreateButton(parent, label,
+            () => ToggleMetamagicFeat(capturedFeat),
+            new Vector2(60, 22), offColor, $"MM_{feat}", font, 10);
+
+        Image btnImg = btn.GetComponent<Image>();
+        if (btnImg != null)
+            _metamagicToggleImages[feat] = btnImg;
+
+        Text btnText = btn.GetComponentInChildren<Text>();
+        if (btnText != null)
+        {
+            btnText.color = Color.white;
+            btnText.fontSize = 10;
+            if (btnText.font == null) btnText.font = font;
+        }
+
+        LayoutElement le = btn.gameObject.GetComponent<LayoutElement>() ?? btn.gameObject.AddComponent<LayoutElement>();
+        le.flexibleWidth = 1;
+    }
+
+    private void ToggleMetamagicFeat(MetamagicFeatId feat)
+    {
+        _metamagicState.Toggle(feat);
+        RefreshMetamagicUI();
+    }
+
+    private void AdjustHeightenLevel(int delta)
+    {
+        if (_heightenToLevel < 0)
+            _heightenToLevel = 1;
+        else
+            _heightenToLevel = Mathf.Clamp(_heightenToLevel + delta, 1, 9);
+
+        _metamagicState.HeightenToLevel = _heightenToLevel;
+        RefreshMetamagicUI();
+    }
+
+    private void ClearAllMetamagic()
+    {
+        _metamagicState = new MetamagicData();
+        _heightenToLevel = -1;
+        RefreshMetamagicUI();
+    }
+
+    private void RefreshMetamagicUI()
+    {
+        Color offColor = new Color(0.25f, 0.25f, 0.35f, 0.9f);
+        Color onColor = new Color(0.3f, 0.6f, 0.9f, 1f);
+
+        foreach (var kvp in _metamagicToggleImages)
+        {
+            if (kvp.Value != null)
+                kvp.Value.color = _metamagicState.Has(kvp.Key) ? onColor : offColor;
+        }
+
+        if (_heightenValueText != null)
+        {
+            _heightenValueText.text = _heightenToLevel > 0 ? $"L{_heightenToLevel}" : "—";
+        }
+
+        RefreshMetamagicSummary();
+    }
+
+    private void RefreshMetamagicSummary()
+    {
+        if (_metamagicSummaryText == null) return;
+
+        if (!_metamagicState.HasAnyMetamagic)
+        {
+            _metamagicSummaryText.text = "No metamagic applied";
+            _metamagicSummaryText.color = new Color(0.5f, 0.5f, 0.6f, 1f);
+        }
+        else
+        {
+            string mmName = _metamagicState.GetDisplayName();
+            int adj = _metamagicState.GetTotalLevelAdjustment(0);
+            string htInfo = _metamagicState.Has(MetamagicFeatId.HeightenSpell) && _heightenToLevel > 0
+                ? $" → heighten to L{_heightenToLevel}" : "";
+            _metamagicSummaryText.text = $"Active: {mmName} (+{adj} lvl){htInfo}";
+            _metamagicSummaryText.color = new Color(0.7f, 0.9f, 1f, 1f);
+        }
+    }
+
     // ========== SPELL CASTING ==========
 
     /// <summary>
@@ -930,9 +1132,17 @@ public class SpellTestingPanel : MonoBehaviour
         // Use TestCastSpellFromPanel which bypasses ActivePC/turn-phase guards
         try
         {
-            var metamagic = new MetamagicData();
+            var metamagic = _metamagicState.Clone();
+            string mmInfo = "";
+            if (metamagic.HasAnyMetamagic)
+            {
+                string mmNames = metamagic.GetDisplayName();
+                int effLevel = metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
+                mmInfo = $" [{mmNames}] (L{spell.SpellLevel}→L{effLevel})";
+                gm.CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("⚡", $"[TEST] Metamagic: {mmNames} applied to {spell.Name}{mmInfo}"));
+            }
             gm.TestCastSpellFromPanel(caster, spell, true, metamagic);
-            gm.CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"[TEST] Spell targeting initiated for {spell.Name}"));
+            gm.CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"[TEST] Spell targeting initiated for {spell.Name}{mmInfo}"));
             Debug.Log($"[SpellTestPanel] TestCastSpellFromPanel returned normally.");
         }
         catch (System.Exception ex)
