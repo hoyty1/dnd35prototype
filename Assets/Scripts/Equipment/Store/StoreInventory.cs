@@ -387,6 +387,20 @@ public class StoreInventory : MonoBehaviour
 
         int baseValue = ResolveBaseValue(item);
         int sellPrice = Mathf.FloorToInt(baseValue * 0.5f);
+
+        // Wand sell value is proportional to remaining charges
+        // D&D 3.5e: a partially-used wand is worth less proportionally.
+        // 0 charges = 0 gp (depleted wand is a useless stick).
+        if (item.IsWand)
+        {
+            int maxCharges = item.Wand != null ? item.Wand.MaxCharges : item.MaxCharges;
+            int currentCharges = item.Wand != null ? item.Wand.CurrentCharges : item.CurrentCharges;
+            if (maxCharges > 0)
+                sellPrice = Mathf.FloorToInt(sellPrice * ((float)currentCharges / maxCharges));
+            else
+                sellPrice = 0;
+        }
+
         return Mathf.Max(0, sellPrice);
     }
 

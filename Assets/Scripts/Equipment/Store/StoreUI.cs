@@ -1993,9 +1993,24 @@ public class StoreUI : MonoBehaviour
         int baseValue = sellPrice * 2;
         string sourceSummary = BuildSellStackSourceSummary(stack);
         string itemDescription = GetItemDescription(stack.RepresentativeItem, string.Empty);
+
+        // Add charge info for wands (sell value is proportional to remaining charges)
+        string chargeNote = "";
+        ItemData repItem = stack.RepresentativeItem;
+        if (repItem != null && repItem.IsWand)
+        {
+            int curCharges = repItem.Wand != null ? repItem.Wand.CurrentCharges : repItem.CurrentCharges;
+            int maxCharges = repItem.Wand != null ? repItem.Wand.MaxCharges : repItem.MaxCharges;
+            if (maxCharges > 0)
+            {
+                int pct = Mathf.RoundToInt(100f * curCharges / maxCharges);
+                chargeNote = $" [{curCharges}/{maxCharges} charges, {pct}% value]";
+            }
+        }
+
         string valueLine = string.IsNullOrWhiteSpace(itemDescription)
-            ? $"Value {baseValue} gp -> Sell {sellPrice} gp each{sourceSummary}"
-            : $"{itemDescription} | Value {baseValue} gp -> Sell {sellPrice} gp each{sourceSummary}";
+            ? $"Value {baseValue} gp -> Sell {sellPrice} gp each{chargeNote}{sourceSummary}"
+            : $"{itemDescription} | Sell {sellPrice} gp{chargeNote}{sourceSummary}";
 
         Text valueText = CreateText(infoObj.transform, "Value", valueLine,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,

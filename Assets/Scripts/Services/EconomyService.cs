@@ -191,6 +191,7 @@ public class EconomyService : MonoBehaviour
     /// <summary>
     /// Calculate the sell price for an item (half base price, per D&D 3.5e rules).
     /// D&D 3.5e: Items sell for half their listed price.
+    /// Wands: sell value is proportional to remaining charges.
     /// </summary>
     public int GetSellPrice(ItemData item)
     {
@@ -201,7 +202,22 @@ public class EconomyService : MonoBehaviour
         if (item.IsTreasureItem && item.IsAppraised && item.AppraisedValueGp > 0)
             return Mathf.Max(0, item.AppraisedValueGp / 2);
 
-        return Mathf.Max(0, item.BasePriceGp / 2);
+        int sellPrice = Mathf.Max(0, item.BasePriceGp / 2);
+
+        // Wand sell value is proportional to remaining charges
+        // D&D 3.5e: a partially-used wand is worth less proportionally.
+        // 0 charges = 0 gp (depleted wand is a useless stick).
+        if (item.IsWand)
+        {
+            int maxCharges = item.Wand != null ? item.Wand.MaxCharges : item.MaxCharges;
+            int currentCharges = item.Wand != null ? item.Wand.CurrentCharges : item.CurrentCharges;
+            if (maxCharges > 0)
+                sellPrice = Mathf.FloorToInt(sellPrice * ((float)currentCharges / maxCharges));
+            else
+                sellPrice = 0;
+        }
+
+        return sellPrice;
     }
 
     /// <summary>
