@@ -433,6 +433,103 @@ public static class CraftableItemRegistry
         return results.OrderBy(d => d.DynamicSpellLevel).ThenBy(d => d.DisplayName).ToList();
     }
 
+    // ============================== DEBUG: ALL-SPELL GENERATORS ==============================
+
+    /// <summary>
+    /// Generate scroll definitions for ALL spells in the database (debug mode).
+    /// </summary>
+    public static List<CraftableItemDefinition> GenerateAllScrollDefinitions()
+    {
+        var results = new List<CraftableItemDefinition>();
+        foreach (var spell in SpellDatabase.GetAllSpells())
+        {
+            if (spell == null || string.IsNullOrEmpty(spell.SpellId)) continue;
+            int spellLevel = spell.SpellLevel;
+            int minCL = CraftingCostCalculator.MinimumCasterLevelForSpell(spellLevel);
+            int marketPrice = CraftingCostCalculator.ScrollMarketPrice(spellLevel, minCL);
+
+            results.Add(new CraftableItemDefinition
+            {
+                ItemId = $"scroll_{spell.SpellId}",
+                DisplayName = $"Scroll of {spell.Name}",
+                RequiredFeat = CraftingFeatType.ScribeScroll,
+                RequiredCasterLevel = minCL,
+                MarketPriceGp = marketPrice,
+                Category = $"Scroll - Level {spellLevel}",
+                Description = spell.Description,
+                IsDynamic = true,
+                DynamicSpellId = spell.SpellId,
+                DynamicSpellLevel = spellLevel,
+                RequiredSpellIds = new List<string> { spell.SpellId }
+            });
+        }
+        return results.OrderBy(d => d.DynamicSpellLevel).ThenBy(d => d.DisplayName).ToList();
+    }
+
+    /// <summary>
+    /// Generate potion definitions for ALL eligible spells in the database (debug mode).
+    /// </summary>
+    public static List<CraftableItemDefinition> GenerateAllPotionDefinitions()
+    {
+        var results = new List<CraftableItemDefinition>();
+        foreach (var spell in SpellDatabase.GetAllSpells())
+        {
+            if (spell == null || string.IsNullOrEmpty(spell.SpellId)) continue;
+            if (spell.SpellLevel > CraftingConstants.PotionMaxSpellLevel) continue;
+            int spellLevel = spell.SpellLevel;
+            int minCL = CraftingCostCalculator.MinimumCasterLevelForSpell(spellLevel);
+            int marketPrice = CraftingCostCalculator.PotionMarketPrice(spellLevel, minCL);
+
+            results.Add(new CraftableItemDefinition
+            {
+                ItemId = $"potion_{spell.SpellId}",
+                DisplayName = $"Potion of {spell.Name}",
+                RequiredFeat = CraftingFeatType.BrewPotion,
+                RequiredCasterLevel = minCL,
+                MarketPriceGp = marketPrice,
+                Category = $"Potion - Level {spellLevel}",
+                Description = spell.Description,
+                IsDynamic = true,
+                DynamicSpellId = spell.SpellId,
+                DynamicSpellLevel = spellLevel,
+                RequiredSpellIds = new List<string> { spell.SpellId }
+            });
+        }
+        return results.OrderBy(d => d.DynamicSpellLevel).ThenBy(d => d.DisplayName).ToList();
+    }
+
+    /// <summary>
+    /// Generate wand definitions for ALL eligible spells in the database (debug mode).
+    /// </summary>
+    public static List<CraftableItemDefinition> GenerateAllWandDefinitions()
+    {
+        var results = new List<CraftableItemDefinition>();
+        foreach (var spell in SpellDatabase.GetAllSpells())
+        {
+            if (spell == null || string.IsNullOrEmpty(spell.SpellId)) continue;
+            if (spell.SpellLevel > CraftingConstants.WandMaxSpellLevel) continue;
+            int spellLevel = spell.SpellLevel;
+            int minCL = CraftingCostCalculator.MinimumCasterLevelForSpell(spellLevel);
+            int marketPrice = CraftingCostCalculator.WandMarketPrice(spellLevel, minCL);
+
+            results.Add(new CraftableItemDefinition
+            {
+                ItemId = $"wand_{spell.SpellId}",
+                DisplayName = $"Wand of {spell.Name}",
+                RequiredFeat = CraftingFeatType.CraftWand,
+                RequiredCasterLevel = minCL,
+                MarketPriceGp = marketPrice,
+                Category = $"Wand - Level {spellLevel}",
+                Description = spell.Description,
+                IsDynamic = true,
+                DynamicSpellId = spell.SpellId,
+                DynamicSpellLevel = spellLevel,
+                RequiredSpellIds = new List<string> { spell.SpellId }
+            });
+        }
+        return results.OrderBy(d => d.DynamicSpellLevel).ThenBy(d => d.DisplayName).ToList();
+    }
+
     // ============================== HELPERS ==============================
 
     /// <summary>Attempt to extract spell prerequisites from item description keywords.</summary>

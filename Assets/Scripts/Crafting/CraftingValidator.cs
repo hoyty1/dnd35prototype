@@ -18,6 +18,14 @@ using UnityEngine;
 /// </summary>
 public static class CraftingValidator
 {
+    // ============================== DEBUG MODE ==============================
+
+    /// <summary>
+    /// When true, bypasses feat, caster level, spell, gold, and XP requirements.
+    /// Persists for the session (static field). Toggled from CraftingWorkshopUI.
+    /// </summary>
+    public static bool DebugMode { get; set; }
+
     // ============================== PARTY-WIDE SPELL CHECKING ==============================
 
     /// <summary>
@@ -163,6 +171,33 @@ public static class CraftingValidator
         {
             project.IsValid = false;
             project.ValidationError = "No item definition provided.";
+            return project;
+        }
+
+        // ============================== DEBUG MODE — BYPASS ALL CHECKS ==============================
+        if (DebugMode)
+        {
+            // Calculate costs for display, but mark everything valid with zero costs
+            CraftingCostCalculator.CraftingCost debugCost;
+            if (definition.IsUpgrade && upgradeTarget != null)
+            {
+                int curBonus = upgradeTarget.ResolveEnhancementBonus();
+                int tgtBonus = definition.EnhancementTier;
+                debugCost = definition.IsWeaponEnhancement
+                    ? CraftingCostCalculator.ForWeaponUpgrade(curBonus, tgtBonus)
+                    : CraftingCostCalculator.ForArmorUpgrade(curBonus, tgtBonus);
+            }
+            else
+            {
+                debugCost = CraftingCostCalculator.FromMarketPrice(definition.MarketPriceGp);
+            }
+
+            project.GoldCost = 0;
+            project.XPCost = 0;
+            project.CraftingDays = 0;
+            project.MarketPriceGp = debugCost.MarketPriceGp;
+            project.ItemCasterLevel = definition.RequiredCasterLevel;
+            project.IsValid = true;
             return project;
         }
 
@@ -332,10 +367,20 @@ public static class CraftingValidator
 
     /// <summary>
     /// Get all crafting feats the character has, as CraftingFeatType values.
+    /// In debug mode, returns ALL crafting feat types regardless of character feats.
     /// </summary>
     public static List<CraftingFeatType> GetCraftingFeats(CharacterStats crafter)
     {
         var result = new List<CraftingFeatType>();
+
+        if (DebugMode)
+        {
+            // Return every crafting feat type so the UI shows all categories
+            foreach (CraftingFeatType feat in System.Enum.GetValues(typeof(CraftingFeatType)))
+                result.Add(feat);
+            return result;
+        }
+
         if (crafter == null) return result;
 
         foreach (var kvp in CraftingConstants.FeatNames)

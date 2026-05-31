@@ -70,6 +70,12 @@ public class CraftingWorkshopUI : MonoBehaviour
     private GameObject _confirmDialog;
     private Text _confirmText;
 
+    // Debug mode — persists across open/close during session (static)
+    private static bool _debugMode;
+    private Image _debugToggleImage;
+    private Text _debugToggleLabel;
+    private Text _debugWarningText;
+
     // Colors matching the game's UI style
     private static readonly Color BgColor = new Color(0.08f, 0.09f, 0.14f, 0.97f);
     private static readonly Color PanelColor = new Color(0.06f, 0.08f, 0.14f, 0.85f);
@@ -84,6 +90,9 @@ public class CraftingWorkshopUI : MonoBehaviour
     private static readonly Color CraftBtnColor = new Color(0.2f, 0.55f, 0.3f, 1f);
     private static readonly Color CraftBtnDisabledColor = new Color(0.25f, 0.25f, 0.3f, 0.6f);
     private static readonly Color CloseButtonColor = new Color(0.55f, 0.23f, 0.23f, 1f);
+    private static readonly Color DebugOnColor = new Color(0.85f, 0.35f, 0.15f, 1f);
+    private static readonly Color DebugOffColor = new Color(0.4f, 0.2f, 0.1f, 0.7f);
+    private static readonly Color DebugBannerColor = new Color(0.9f, 0.25f, 0.15f, 1f);
 
     public bool IsOpen => _isOpen;
 
@@ -107,11 +116,22 @@ public class CraftingWorkshopUI : MonoBehaviour
         _currentProject = null;
         _upgradeTarget = null;
 
+        // Sync debug mode state to validator (static persists across open/close)
+        CraftingValidator.DebugMode = _debugMode;
+
         EnsureBuilt();
         if (_root == null) return;
 
         // Ensure registry is initialized
         CraftableItemRegistry.Init();
+
+        // Refresh debug toggle visuals (state persists but UI rebuilt only once)
+        if (_debugToggleImage != null)
+            _debugToggleImage.color = _debugMode ? DebugOnColor : DebugOffColor;
+        if (_debugToggleLabel != null)
+            _debugToggleLabel.text = _debugMode ? "🔧 DEBUG: ON" : "🔧 DEBUG: OFF";
+        if (_debugWarningText != null)
+            _debugWarningText.gameObject.SetActive(_debugMode);
 
         RefreshFeatTabs();
         ClearItemList();
@@ -168,6 +188,33 @@ public class CraftingWorkshopUI : MonoBehaviour
             new Vector2(0.1f, 0.93f), new Vector2(0.9f, 0.99f), new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, 36, FontStyle.Bold,
             GoldTitleColor, TextAnchor.MiddleCenter);
+
+        // ---- DEBUG MODE TOGGLE (top-right, visually distinct red/orange) ----
+        var debugToggleObj = new GameObject("DebugToggleBtn", typeof(RectTransform), typeof(Image), typeof(Button));
+        debugToggleObj.transform.SetParent(_root.transform, false);
+        var debugToggleRect = debugToggleObj.GetComponent<RectTransform>();
+        debugToggleRect.anchorMin = new Vector2(0.75f, 0.93f);
+        debugToggleRect.anchorMax = new Vector2(0.95f, 0.98f);
+        debugToggleRect.pivot = new Vector2(1f, 1f);
+        debugToggleRect.anchoredPosition = Vector2.zero;
+        debugToggleRect.sizeDelta = Vector2.zero;
+        _debugToggleImage = debugToggleObj.GetComponent<Image>();
+        _debugToggleImage.color = _debugMode ? DebugOnColor : DebugOffColor;
+        var debugBtn = debugToggleObj.GetComponent<Button>();
+        debugBtn.onClick.AddListener(OnDebugToggleClicked);
+        _debugToggleLabel = CreateText(debugToggleObj.transform, "Label",
+            _debugMode ? "🔧 DEBUG: ON" : "🔧 DEBUG: OFF",
+            new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 14, FontStyle.Bold,
+            Color.white, TextAnchor.MiddleCenter);
+
+        // ---- DEBUG WARNING BANNER (below title, only visible when debug active) ----
+        _debugWarningText = CreateText(_root.transform, "DebugWarning",
+            "⚠ DEBUG MODE ACTIVE — All requirements bypassed, items are free ⚠",
+            new Vector2(0.05f, 0.91f), new Vector2(0.95f, 0.935f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 15, FontStyle.Bold,
+            DebugBannerColor, TextAnchor.MiddleCenter);
+        _debugWarningText.gameObject.SetActive(_debugMode);
 
         // Stats bar (bottom)
         var statsPanel = CreatePanel(_root.transform, "StatsBar",
@@ -347,19 +394,26 @@ public class CraftingWorkshopUI : MonoBehaviour
         string featName = CraftingConstants.GetFeatName(feat);
         _categoryLabel.text = featName;
 
-        // Get items based on feat type
+        // Get items based on feat type (debug mode shows ALL items from database)
+        bool isDebug = _debugMode;
         switch (feat)
         {
             case CraftingFeatType.ScribeScroll:
-                _currentItemList = CraftableItemRegistry.GenerateScrollDefinitions(_crafterStats, _spellComp);
+                _currentItemList = isDebug
+                    ? CraftableItemRegistry.GenerateAllScrollDefinitions()
+                    : CraftableItemRegistry.GenerateScrollDefinitions(_crafterStats, _spellComp);
                 break;
 
             case CraftingFeatType.BrewPotion:
-                _currentItemList = CraftableItemRegistry.GeneratePotionDefinitions(_crafterStats, _spellComp);
+                _currentItemList = isDebug
+                    ? CraftableItemRegistry.GenerateAllPotionDefinitions()
+                    : CraftableItemRegistry.GeneratePotionDefinitions(_crafterStats, _spellComp);
                 break;
 
             case CraftingFeatType.CraftWand:
-                _currentItemList = CraftableItemRegistry.GenerateWandDefinitions(_crafterStats, _spellComp);
+                _currentItemList = isDebug
+                    ? CraftableItemRegistry.GenerateAllWandDefinitions()
+                    : CraftableItemRegistry.GenerateWandDefinitions(_crafterStats, _spellComp);
                 break;
 
             default:
@@ -440,6 +494,38 @@ public class CraftingWorkshopUI : MonoBehaviour
                 _partyMembers, _useScrollsForMissing);
             RefreshPreview();
         }
+    }
+
+    // ============================== DEBUG TOGGLE ==============================
+
+    private void OnDebugToggleClicked()
+    {
+        _debugMode = !_debugMode;
+        CraftingValidator.DebugMode = _debugMode;
+
+        // Update toggle button appearance
+        if (_debugToggleImage != null)
+            _debugToggleImage.color = _debugMode ? DebugOnColor : DebugOffColor;
+        if (_debugToggleLabel != null)
+            _debugToggleLabel.text = _debugMode ? "🔧 DEBUG: ON" : "🔧 DEBUG: OFF";
+
+        // Show/hide warning banner
+        if (_debugWarningText != null)
+            _debugWarningText.gameObject.SetActive(_debugMode);
+
+        // Refresh everything to reflect debug state
+        _selectedItem = null;
+        _currentProject = null;
+        RefreshFeatTabs();
+
+        if (_selectedFeat.HasValue)
+            RefreshItemList(_selectedFeat.Value);
+        else
+            ClearItemList();
+
+        ClearPreview();
+
+        Debug.Log($"[CraftingWorkshop] Debug mode toggled: {_debugMode}");
     }
 
     // ============================== PREVIEW PANEL ==============================

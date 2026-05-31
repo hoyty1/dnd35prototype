@@ -26,10 +26,12 @@ public static class CraftingExecutor
 
     /// <summary>
     /// Execute a validated crafting project. The project must have IsValid == true.
+    /// In debug mode, skips cost deductions and prefixes item name with "[DEBUG]".
     /// </summary>
     public static CraftingResult Execute(CraftingProject project, Inventory targetInventory)
     {
         var result = new CraftingResult();
+        bool debugMode = CraftingValidator.DebugMode;
 
         // ============================== PRE-FLIGHT ==============================
         if (project == null || !project.IsValid)
@@ -38,7 +40,7 @@ public static class CraftingExecutor
             return result;
         }
 
-        if (project.Crafter == null)
+        if (project.Crafter == null && !debugMode)
         {
             result.Message = "No crafter assigned to project.";
             return result;
@@ -47,34 +49,38 @@ public static class CraftingExecutor
         var crafter = project.Crafter;
         var def = project.Definition;
 
-        // ============================== DOUBLE-CHECK RESOURCES ==============================
-        // Re-verify resources haven't changed since validation
-        if (crafter.ComponentGold < project.GoldCost)
+        // ============================== RESOURCE CHECKS (skip in debug) ==============================
+        if (!debugMode)
         {
-            result.Message = $"Insufficient gold ({crafter.ComponentGold:N0}/{project.GoldCost:N0} gp).";
-            return result;
+            // Re-verify resources haven't changed since validation
+            if (crafter.ComponentGold < project.GoldCost)
+            {
+                result.Message = $"Insufficient gold ({crafter.ComponentGold:N0}/{project.GoldCost:N0} gp).";
+                return result;
+            }
+
+            if (project.XPCost > crafter.MaxSpendableXP())
+            {
+                result.Message = $"Insufficient spendable XP ({crafter.MaxSpendableXP():N0}/{project.XPCost:N0}).";
+                return result;
+            }
         }
 
-        if (project.XPCost > crafter.MaxSpendableXP())
+        // ============================== DEDUCT COSTS (skip in debug) ==============================
+        if (!debugMode)
         {
-            result.Message = $"Insufficient spendable XP ({crafter.MaxSpendableXP():N0}/{project.XPCost:N0}).";
-            return result;
-        }
+            if (!crafter.SpendComponentGold(project.GoldCost))
+            {
+                result.Message = "Failed to deduct gold cost.";
+                return result;
+            }
 
-        // ============================== DEDUCT COSTS ==============================
-        // Deduct gold first (less impactful if we need to roll back)
-        if (!crafter.SpendComponentGold(project.GoldCost))
-        {
-            result.Message = "Failed to deduct gold cost.";
-            return result;
-        }
-
-        if (!crafter.SpendXP(project.XPCost))
-        {
-            // Roll back gold
-            crafter.ComponentGold += project.GoldCost;
-            result.Message = "Failed to deduct XP cost (would lose level). Gold refunded.";
-            return result;
+            if (!crafter.SpendXP(project.XPCost))
+            {
+                crafter.ComponentGold += project.GoldCost;
+                result.Message = "Failed to deduct XP cost (would lose level). Gold refunded.";
+                return result;
+            }
         }
 
         // ============================== CREATE/UPGRADE ITEM ==============================
@@ -82,28 +88,34 @@ public static class CraftingExecutor
 
         if (def.IsUpgrade && project.UpgradeTargetItem != null)
         {
-            // Upgrade existing item's enhancement bonus
             craftedItem = ApplyEnhancementUpgrade(project.UpgradeTargetItem, def);
         }
         else if (def.IsDynamic)
         {
-            // Create dynamic item (scroll, potion, wand)
             craftedItem = CreateDynamicItem(def, project.ItemCasterLevel);
         }
         else
         {
-            // Clone from database
             craftedItem = ItemDatabase.CloneItem(def.ItemId);
         }
 
         if (craftedItem == null)
         {
-            // Roll back all costs
-            crafter.ComponentGold += project.GoldCost;
-            crafter.ExperiencePoints += project.XPCost;
+            if (!debugMode)
+            {
+                // Roll back all costs
+                crafter.ComponentGold += project.GoldCost;
+                crafter.ExperiencePoints += project.XPCost;
+            }
             result.Message = $"Failed to create item '{def.DisplayName}'. Costs refunded.";
             Debug.LogError($"[CraftingExecutor] Failed to create item '{def.ItemId}'");
             return result;
+        }
+
+        // ============================== DEBUG PREFIX ==============================
+        if (debugMode)
+        {
+            craftedItem.Name = "[DEBUG] " + craftedItem.Name;
         }
 
         // ============================== ADD TO INVENTORY ==============================
@@ -112,22 +124,34 @@ public static class CraftingExecutor
             targetInventory.AddItem(craftedItem);
         }
 
-        // ============================== TIME ADVANCEMENT ==============================
-        AdvanceTime(project.CraftingDays);
+        // ============================== TIME ADVANCEMENT (skip in debug) ==============================
+        if (!debugMode)
+        {
+            AdvanceTime(project.CraftingDays);
+        }
 
         // ============================== SUCCESS ==============================
         result.Success = true;
         result.CraftedItem = craftedItem;
-        result.GoldSpent = project.GoldCost;
-        result.XPSpent = project.XPCost;
-        result.DaysElapsed = project.CraftingDays;
-        string scrollNote = project.ScrollCostGp > 0
-            ? $" (includes {project.ScrollCostGp:N0} gp for scrolls)"
-            : "";
-        result.Message = $"Successfully crafted {craftedItem.Name}! ({project.GoldCost:N0} gp{scrollNote}, {project.XPCost:N0} XP, {project.CraftingDays} day{(project.CraftingDays != 1 ? "s" : "")})";
+        result.GoldSpent = debugMode ? 0 : project.GoldCost;
+        result.XPSpent = debugMode ? 0 : project.XPCost;
+        result.DaysElapsed = debugMode ? 0 : project.CraftingDays;
 
-        Debug.Log($"[CraftingExecutor] ✅ {crafter.CharacterName} crafted {craftedItem.Name}. " +
-            $"Gold: -{project.GoldCost} (scrolls: {project.ScrollCostGp}), XP: -{project.XPCost}, Days: {project.CraftingDays}");
+        if (debugMode)
+        {
+            result.Message = $"[DEBUG] Instantly created {craftedItem.Name} (no cost).";
+            Debug.Log($"[CraftingExecutor] 🔧 DEBUG created {craftedItem.Name}");
+        }
+        else
+        {
+            string scrollNote = project.ScrollCostGp > 0
+                ? $" (includes {project.ScrollCostGp:N0} gp for scrolls)"
+                : "";
+            result.Message = $"Successfully crafted {craftedItem.Name}! ({project.GoldCost:N0} gp{scrollNote}, {project.XPCost:N0} XP, {project.CraftingDays} day{(project.CraftingDays != 1 ? "s" : "")})";
+
+            Debug.Log($"[CraftingExecutor] ✅ {crafter.CharacterName} crafted {craftedItem.Name}. " +
+                $"Gold: -{project.GoldCost} (scrolls: {project.ScrollCostGp}), XP: -{project.XPCost}, Days: {project.CraftingDays}");
+        }
 
         return result;
     }
