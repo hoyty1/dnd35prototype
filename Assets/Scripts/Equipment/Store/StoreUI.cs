@@ -41,13 +41,12 @@ public class StoreUI : MonoBehaviour
     private Text _goldText;
     private Text _messageText;
 
-    private RectTransform _buyContent;
+    private RectTransform _buyContent;            // Left panel item list content
+    private RectTransform _buyDetailContent;      // Right panel detail scroll content
     private RectTransform _sellContent;
-    private RectTransform _categoryFilterRoot;
     private RectTransform _sellCharacterFilterRoot;
     private RectTransform _sellCharacterButtonsRoot;
     private RectTransform _sellCategoryFilterRoot;
-    private readonly Dictionary<string, Image> _categoryButtonImages = new Dictionary<string, Image>();
     private readonly Dictionary<string, Image> _sellCharacterButtonImages = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Image> _sellCategoryButtonImages = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
     private enum SortMode
@@ -63,6 +62,7 @@ public class StoreUI : MonoBehaviour
     }
 
     private string _currentBuyCategory = "All";
+    private string _currentBuySubFilter = "All";
     private string _currentSellCategory = "All";
     private string _currentSellCharacterKey = SellCharacterStashKey;
     private CharacterController _selectedSellCharacter;
@@ -72,17 +72,22 @@ public class StoreUI : MonoBehaviour
     private SortMode _sellSortMode = SortMode.Alphabetical;
     private SortDirection _sellSortDirection = SortDirection.Ascending;
 
-    private RectTransform _buySortRoot;
     private RectTransform _sellSortRoot;
 
-    // Buy-side text search. Filters the displayed items by (partial, case-insensitive)
-    // name match, working alongside the active category filter and sort options.
+    // Buy-side toolbar controls
     private string _buySearchQuery = string.Empty;
     private InputField _buySearchField;
-    private Text _buySearchPlaceholder;
-    private readonly Dictionary<SortMode, Image> _buySortButtonImages = new Dictionary<SortMode, Image>();
+    private Dropdown _categoryDropdown;
+    private Dropdown _subFilterDropdown;
+    private Dropdown _sortDropdown;
+    private bool _showAffordableOnly;
+    private Image _affordableToggleImage;
+    private Text _buyDetailTitleText;
+    private Text _buyDetailBodyText;
+    private StoreInventory.StoreItemEntry _selectedBuyEntry;
+    private readonly Dictionary<string, Image> _buyRowImages = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
+
     private readonly Dictionary<SortMode, Image> _sellSortButtonImages = new Dictionary<SortMode, Image>();
-    private Text _buySortDirectionText;
     private Text _sellSortDirectionText;
 
     private const string SellCharacterStashKey = "__stash__";
@@ -119,7 +124,6 @@ public class StoreUI : MonoBehaviour
             _goldText.text = $"Gold: {GameManager.Instance.PartyGold} gp";
 
         SubscribeGoldEvents();
-        BuildCategoryOptions();
 
         _currentSellCharacterKey = SellCharacterStashKey;
         _selectedSellCharacter = null;
@@ -130,13 +134,24 @@ public class StoreUI : MonoBehaviour
         _sellSortMode = SortMode.Alphabetical;
         _sellSortDirection = SortDirection.Ascending;
         _buySearchQuery = string.Empty;
+        _currentBuyCategory = "All";
+        _currentBuySubFilter = "All";
+        _showAffordableOnly = false;
+        _selectedBuyEntry = null;
         if (_buySearchField != null)
             _buySearchField.SetTextWithoutNotify(string.Empty);
+        if (_categoryDropdown != null)
+            _categoryDropdown.value = 0;
+        if (_subFilterDropdown != null)
+        {
+            _subFilterDropdown.gameObject.SetActive(false);
+        }
+        if (_affordableToggleImage != null)
+            _affordableToggleImage.color = new Color(0.3f, 0.3f, 0.4f, 1f);
 
         BuildSellCharacterOptions(_sellCharacterButtonsRoot);
         RefreshSellCharacterButtons();
         RefreshSellCategoryButtons();
-        RefreshBuySortButtons();
         RefreshSellSortButtons();
 
         ShowBuyPanel();
@@ -276,23 +291,50 @@ public class StoreUI : MonoBehaviour
             new Vector2(0.1f, 0.17f), new Vector2(0.9f, 0.83f), new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, new Color(0.06f, 0.08f, 0.12f, 0.94f));
 
-        Debug.Log("[Store] Buy panel bounds: fullscreen proportion (0.10 to 0.90)");
+        // --- TOOLBAR (top 12% of buy panel) ---
+        BuildBuyToolbar();
 
-        CreateCategoryFilter();
-        CreateBuySortArea();
-        CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 0.82f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _buyContent);
+        // --- SPLIT PANELS (bottom 88%) ---
+        // Left panel: item list (60% width)
+        GameObject leftPanel = CreatePanel(_buyPanel.transform, "BuyLeftPanel",
+            new Vector2(0f, 0f), new Vector2(0.58f, 0.88f), new Vector2(0f, 0f),
+            Vector2.zero, Vector2.zero, new Color(0.05f, 0.06f, 0.1f, 0.8f));
 
-        Debug.Log("[Store] === ITEM ROW WIDTH FIX ===");
-        Debug.Log("[Store] Info section: minWidth=200, preferredWidth=300, flexibleWidth=1");
-        Debug.Log("[Store] Price section: fixed 90px width");
-        Debug.Log("[Store] Button section: fixed 70px width");
-        Debug.Log("[Store] Left padding increased to 15px");
-        Debug.Log("[Store] Text overflow mode: Overflow (no clipping)");
-        Debug.Log("[Store] Full item names and descriptions now visible");
-        Debug.Log("[Store] === CATEGORY BUTTONS ===");
-        Debug.Log("[Store] Grid layout with wrapping");
-        Debug.Log("[Store] Button size: 90x35");
-        Debug.Log("[Store] Active category highlighted green");
+        CreateScrollList(leftPanel.transform, "BuyItemScroll",
+            Vector2.zero, Vector2.one,
+            new Vector2(4f, 4f), new Vector2(-4f, -4f), out _buyContent);
+
+        // Right panel: item details (40% width)
+        GameObject rightPanel = CreatePanel(_buyPanel.transform, "BuyRightPanel",
+            new Vector2(0.59f, 0f), new Vector2(1f, 0.88f), new Vector2(0f, 0f),
+            Vector2.zero, Vector2.zero, new Color(0.08f, 0.09f, 0.14f, 0.9f));
+
+        // Detail scroll area
+        CreateScrollList(rightPanel.transform, "BuyDetailScroll",
+            Vector2.zero, Vector2.one,
+            new Vector2(4f, 4f), new Vector2(-4f, -4f), out _buyDetailContent);
+
+        // Default detail placeholder
+        _buyDetailTitleText = CreateText(_buyDetailContent, "DetailTitle", "Select an Item",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 1f), Vector2.zero,
+            new Vector2(0f, 30f), 20, FontStyle.Bold,
+            new Color(0.9f, 0.85f, 0.5f), TextAnchor.MiddleCenter);
+        LayoutElement titleLE = _buyDetailTitleText.gameObject.AddComponent<LayoutElement>();
+        titleLE.preferredHeight = 36f;
+        titleLE.flexibleWidth = 1f;
+
+        _buyDetailBodyText = CreateText(_buyDetailContent, "DetailBody", "Click an item on the left to view its details here.",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 1f), Vector2.zero,
+            new Vector2(0f, 200f), 15, FontStyle.Normal,
+            new Color(0.78f, 0.82f, 0.92f), TextAnchor.UpperLeft);
+        _buyDetailBodyText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        _buyDetailBodyText.verticalOverflow = VerticalWrapMode.Overflow;
+        LayoutElement bodyLE = _buyDetailBodyText.gameObject.AddComponent<LayoutElement>();
+        bodyLE.preferredHeight = 400f;
+        bodyLE.flexibleWidth = 1f;
+        bodyLE.flexibleHeight = 1f;
+
+        Debug.Log("[Store] Buy panel built with split layout + toolbar");
     }
 
     private void BuildSellPanel()
@@ -312,334 +354,288 @@ public class StoreUI : MonoBehaviour
 
         CreateScrollList(_sellPanel.transform, "SellScroll", new Vector2(0f, 0f), new Vector2(1f, 0.72f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _sellContent);
 
-        Debug.Log("[Store] === SELL MENU FILTERS ADDED ===");
-        Debug.Log("[Store] Character filter: All, Stash, and individual characters");
-        Debug.Log("[Store] Type filter: All, Weapon, Armor, Shield, Potion, Scroll, Ammunition, Gear");
-        Debug.Log("[Store] Filter area layout:");
-        Debug.Log("[Store]   - Character filter: 88-94% (top)");
-        Debug.Log("[Store]   - Type filter: 80-88% (middle)");
-        Debug.Log("[Store]   - Sort filter: 72-80% (middle-lower)");
-        Debug.Log("[Store]   - Sell list: 0-72% (bottom)");
-        Debug.Log("[Store] Filters automatically reset when switching to SELL tab");
-
         _sellPanel.SetActive(false);
     }
 
-    private void BuildCategoryOptions()
+    // ========== BUY TOOLBAR ==========
+
+    /// <summary>Category options for the main dropdown (alphabetised).</summary>
+    private static readonly string[] BuyCategoryOptions = new string[]
     {
-        if (_categoryFilterRoot == null)
-            return;
-
-        ClearChildren(_categoryFilterRoot);
-        _categoryButtonImages.Clear();
-
-        List<string> categories = StoreInventory.Instance.GetCategories();
-        if (categories == null || categories.Count == 0)
-            categories = new List<string> { "All" };
-
-        if (!categories.Contains(_currentBuyCategory))
-            _currentBuyCategory = categories[0];
-
-        Debug.Log($"[Store] Creating {categories.Count} category buttons");
-
-        for (int i = 0; i < categories.Count; i++)
-            CreateCategoryButton(_categoryFilterRoot, categories[i]);
-
-        RefreshCategoryButtons();
-    }
-
-    private void CreateCategoryFilter()
-    {
-        if (_buyPanel == null)
-            return;
-
-        // Single-row, horizontally-scrollable category bar. Using a ScrollRect prevents
-        // the (potentially 25+) category buttons from wrapping into extra rows and
-        // overlapping the SORT BY area below it.
-        GameObject scrollObj = new GameObject("CategoryFilter", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
-        scrollObj.transform.SetParent(_buyPanel.transform, false);
-
-        RectTransform scrollRect = scrollObj.GetComponent<RectTransform>();
-        scrollRect.anchorMin = new Vector2(0f, 0.90f);
-        scrollRect.anchorMax = new Vector2(1f, 1f);
-        scrollRect.offsetMin = Vector2.zero;
-        scrollRect.offsetMax = Vector2.zero;
-        scrollObj.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.2f, 0.5f);
-
-        // Viewport (clips the button row). Leaves 10px at the bottom for the scrollbar.
-        GameObject viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
-        viewport.transform.SetParent(scrollObj.transform, false);
-        RectTransform viewportRect = viewport.GetComponent<RectTransform>();
-        viewportRect.anchorMin = Vector2.zero;
-        viewportRect.anchorMax = Vector2.one;
-        viewportRect.offsetMin = new Vector2(4f, 12f);
-        viewportRect.offsetMax = new Vector2(-4f, -4f);
-        viewport.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.02f);
-        viewport.GetComponent<Mask>().showMaskGraphic = false;
-
-        // Content holder — a single horizontal row of buttons sized to their text.
-        GameObject content = new GameObject("Content", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
-        content.transform.SetParent(viewport.transform, false);
-        _categoryFilterRoot = content.GetComponent<RectTransform>();
-        _categoryFilterRoot.anchorMin = new Vector2(0f, 0f);
-        _categoryFilterRoot.anchorMax = new Vector2(0f, 1f);
-        _categoryFilterRoot.pivot = new Vector2(0f, 0.5f);
-        _categoryFilterRoot.anchoredPosition = Vector2.zero;
-
-        HorizontalLayoutGroup hlg = content.GetComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 5f;
-        hlg.padding = new RectOffset(5, 5, 3, 3);
-        hlg.childAlignment = TextAnchor.MiddleLeft;
-        hlg.childControlWidth = true;
-        hlg.childControlHeight = true;
-        hlg.childForceExpandWidth = false;
-        hlg.childForceExpandHeight = true;
-
-        ContentSizeFitter fitter = content.GetComponent<ContentSizeFitter>();
-        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-        fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
-
-        ScrollRect sr = scrollObj.GetComponent<ScrollRect>();
-        sr.viewport = viewportRect;
-        sr.content = _categoryFilterRoot;
-        sr.horizontal = true;
-        sr.vertical = false;
-        sr.scrollSensitivity = 25f;
-        sr.movementType = ScrollRect.MovementType.Clamped;
-
-        // Thin horizontal scrollbar pinned to the bottom of the band.
-        GameObject sbObj = new GameObject("CategoryScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
-        sbObj.transform.SetParent(scrollObj.transform, false);
-        RectTransform sbRect = sbObj.GetComponent<RectTransform>();
-        sbRect.anchorMin = new Vector2(0f, 0f);
-        sbRect.anchorMax = new Vector2(1f, 0f);
-        sbRect.pivot = new Vector2(0.5f, 0f);
-        sbRect.sizeDelta = new Vector2(0f, 8f);
-        sbRect.anchoredPosition = Vector2.zero;
-        sbObj.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.14f, 0.8f);
-
-        Scrollbar sb = sbObj.GetComponent<Scrollbar>();
-        sb.direction = Scrollbar.Direction.LeftToRight;
-
-        GameObject handle = new GameObject("Handle", typeof(RectTransform), typeof(Image));
-        handle.transform.SetParent(sbObj.transform, false);
-        RectTransform handleRect = handle.GetComponent<RectTransform>();
-        handleRect.anchorMin = Vector2.zero;
-        handleRect.anchorMax = Vector2.one;
-        handleRect.sizeDelta = Vector2.zero;
-        handle.GetComponent<Image>().color = new Color(0.45f, 0.5f, 0.65f, 0.95f);
-        sb.handleRect = handleRect;
-        sb.targetGraphic = handle.GetComponent<Image>();
-
-        sr.horizontalScrollbar = sb;
-        sr.horizontalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
-    }
-
-    private void CreateCategoryButton(Transform parent, string category)
-    {
-        GameObject buttonObj = new GameObject($"CategoryBtn_{category}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-        buttonObj.transform.SetParent(parent, false);
-
-        // Size each button to its label so the horizontal row stays tidy.
-        LayoutElement le = buttonObj.GetComponent<LayoutElement>();
-        float width = Mathf.Clamp((category != null ? category.Length : 3) * 8f + 24f, 70f, 180f);
-        le.preferredWidth = width;
-        le.minWidth = width;
-        le.flexibleWidth = 0f;
-
-        Image buttonBg = buttonObj.GetComponent<Image>();
-        buttonBg.color = new Color(0.3f, 0.3f, 0.4f, 1f);
-
-        Button button = buttonObj.GetComponent<Button>();
-        button.onClick.AddListener(() =>
-        {
-            FilterByCategory(category);
-            RefreshCategoryButtons();
-        });
-
-        _categoryButtonImages[category] = buttonBg;
-
-        CreateText(buttonObj.transform, "Text", category,
-            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
-
-        Debug.Log($"[Store] Created category button: {category}");
-    }
-
-    private void RefreshCategoryButtons()
-    {
-        foreach (KeyValuePair<string, Image> kvp in _categoryButtonImages)
-        {
-            if (kvp.Value == null)
-                continue;
-
-            kvp.Value.color = kvp.Key == _currentBuyCategory
-                ? new Color(0.4f, 0.6f, 0.4f, 1f)
-                : new Color(0.3f, 0.3f, 0.4f, 1f);
-        }
-
-        Debug.Log($"[Store] Refreshed category buttons, current: {_currentBuyCategory}");
-    }
-
-    private void FilterByCategory(string category)
-    {
-        Debug.Log($"[Store] Filtering by category: {category}");
-        _currentBuyCategory = category;
-
-        // Clear any active search when switching categories so the user always sees
-        // the full contents of the newly selected category. Done without notify to
-        // avoid an extra RebuildBuyList (the one below handles the refresh).
-        _buySearchQuery = string.Empty;
-        if (_buySearchField != null)
-            _buySearchField.SetTextWithoutNotify(string.Empty);
-
-        RebuildBuyList();
-    }
-
-    private void CreateBuySortArea()
-    {
-        if (_buyPanel == null)
-            return;
-
-        GameObject sortObj = new GameObject("BuySortFilter", typeof(RectTransform), typeof(Image));
-        sortObj.transform.SetParent(_buyPanel.transform, false);
-
-        _buySortRoot = sortObj.GetComponent<RectTransform>();
-        _buySortRoot.anchorMin = new Vector2(0f, 0.82f);
-        _buySortRoot.anchorMax = new Vector2(1f, 0.90f);
-        _buySortRoot.offsetMin = Vector2.zero;
-        _buySortRoot.offsetMax = Vector2.zero;
-
-        Image bg = sortObj.GetComponent<Image>();
-        bg.color = new Color(0.15f, 0.15f, 0.2f, 0.55f);
-
-        CreateText(sortObj.transform, "Label", "SORT BY:",
-            new Vector2(0.01f, 0f), new Vector2(0.13f, 1f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, Vector2.zero, 14, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
-
-        GameObject rowObj = new GameObject("SortButtons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-        rowObj.transform.SetParent(sortObj.transform, false);
-
-        RectTransform rowRect = rowObj.GetComponent<RectTransform>();
-        rowRect.anchorMin = new Vector2(0.14f, 0.08f);
-        rowRect.anchorMax = new Vector2(0.50f, 0.92f);
-        rowRect.offsetMin = Vector2.zero;
-        rowRect.offsetMax = Vector2.zero;
-
-        HorizontalLayoutGroup rowLayout = rowObj.GetComponent<HorizontalLayoutGroup>();
-        rowLayout.spacing = 8f;
-        rowLayout.padding = new RectOffset(0, 0, 0, 0);
-        rowLayout.childAlignment = TextAnchor.MiddleLeft;
-        rowLayout.childControlWidth = false;
-        rowLayout.childControlHeight = true;
-        rowLayout.childForceExpandWidth = false;
-        rowLayout.childForceExpandHeight = true;
-
-        _buySortButtonImages.Clear();
-
-        Image alphaImage = CreateSortControlButton(rowObj.transform, "BuySortName", "Name", () => SetBuySortMode(SortMode.Alphabetical));
-        if (alphaImage != null)
-            _buySortButtonImages[SortMode.Alphabetical] = alphaImage;
-
-        Image priceImage = CreateSortControlButton(rowObj.transform, "BuySortPrice", "Price", () => SetBuySortMode(SortMode.Price));
-        if (priceImage != null)
-            _buySortButtonImages[SortMode.Price] = priceImage;
-
-        _buySortDirectionText = CreateSortDirectionButton(rowObj.transform, "BuyDirection", () => ToggleBuySortDirection());
-
-        // Live text search occupies the right half of the sort band.
-        CreateBuySearchField(sortObj.transform);
-
-        RefreshBuySortButtons();
-        Debug.Log("[Store] Buy sort area created (Name, Price, Direction toggle, Search)");
-    }
+        "All",
+        "Ammunition",
+        "Armor",
+        "Gear",
+        "Potions",
+        "Rings",
+        "Rods",
+        "Scrolls",
+        "Shields",
+        "Wands",
+        "Weapons",
+        "Wondrous Items"
+    };
 
     /// <summary>
-    /// Creates the live text-search box (with placeholder + clear button) in the
-    /// right portion of the buy sort band. Typing filters the buy list in real time.
+    /// Builds the toolbar at the top of the buy panel containing:
+    /// Search | Category dropdown | Sub-filter dropdown | Sort dropdown | Affordable toggle
     /// </summary>
-    private void CreateBuySearchField(Transform parent)
+    private void BuildBuyToolbar()
     {
+        GameObject toolbar = CreatePanel(_buyPanel.transform, "BuyToolbar",
+            new Vector2(0f, 0.89f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0.12f, 0.13f, 0.18f, 0.9f));
+
         Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
-        // Search icon / label on the left of the field.
-        CreateText(parent, "SearchLabel", "SEARCH:",
-            new Vector2(0.52f, 0f), new Vector2(0.63f, 1f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleRight);
+        // --- Search field (left 22%) ---
+        CreateText(toolbar.transform, "SearchLbl", "Search:",
+            new Vector2(0.005f, 0f), new Vector2(0.06f, 1f), new Vector2(0f, 0.5f),
+            Vector2.zero, Vector2.zero, 11, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
 
-        // Input field container.
-        GameObject fieldObj = new GameObject("BuySearchField", typeof(RectTransform), typeof(Image), typeof(InputField));
+        _buySearchField = BuildToolbarInputField(toolbar.transform, "BuySearch",
+            new Vector2(0.065f, 0.12f), new Vector2(0.22f, 0.88f), "Search items...", font);
+        _buySearchField.onValueChanged.AddListener(OnBuySearchChanged);
+
+        // --- Category dropdown (next 20%) ---
+        CreateText(toolbar.transform, "CatLbl", "Category:",
+            new Vector2(0.225f, 0f), new Vector2(0.30f, 1f), new Vector2(0f, 0.5f),
+            Vector2.zero, Vector2.zero, 11, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+
+        List<Dropdown.OptionData> catOpts = new List<Dropdown.OptionData>();
+        for (int i = 0; i < BuyCategoryOptions.Length; i++)
+            catOpts.Add(new Dropdown.OptionData(BuyCategoryOptions[i]));
+        _categoryDropdown = BuildToolbarDropdown(toolbar.transform, "CategoryDD",
+            new Vector2(0.30f, 0.10f), new Vector2(0.46f, 0.90f), catOpts, 0, font);
+        _categoryDropdown.onValueChanged.AddListener(OnCategoryChanged);
+
+        // --- Sub-filter dropdown (next 17%) - hidden by default ---
+        _subFilterDropdown = BuildToolbarDropdown(toolbar.transform, "SubFilterDD",
+            new Vector2(0.47f, 0.10f), new Vector2(0.63f, 0.90f),
+            new List<Dropdown.OptionData> { new Dropdown.OptionData("All") }, 0, font);
+        _subFilterDropdown.onValueChanged.AddListener(OnSubFilterChanged);
+        _subFilterDropdown.gameObject.SetActive(false);
+
+        // --- Sort dropdown (next 14%) ---
+        CreateText(toolbar.transform, "SortLbl", "Sort:",
+            new Vector2(0.64f, 0f), new Vector2(0.68f, 1f), new Vector2(0f, 0.5f),
+            Vector2.zero, Vector2.zero, 11, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+
+        List<Dropdown.OptionData> sortOpts = new List<Dropdown.OptionData>
+        {
+            new Dropdown.OptionData("Name ↑"),
+            new Dropdown.OptionData("Name ↓"),
+            new Dropdown.OptionData("Price ↑"),
+            new Dropdown.OptionData("Price ↓")
+        };
+        _sortDropdown = BuildToolbarDropdown(toolbar.transform, "SortDD",
+            new Vector2(0.685f, 0.10f), new Vector2(0.80f, 0.90f), sortOpts, 0, font);
+        _sortDropdown.onValueChanged.AddListener(OnSortChanged);
+
+        // --- Affordable toggle (right 19%) ---
+        GameObject affObj = new GameObject("AffordableBtn", typeof(RectTransform), typeof(Image), typeof(Button));
+        affObj.transform.SetParent(toolbar.transform, false);
+        RectTransform affRect = affObj.GetComponent<RectTransform>();
+        affRect.anchorMin = new Vector2(0.81f, 0.12f);
+        affRect.anchorMax = new Vector2(0.995f, 0.88f);
+        affRect.offsetMin = Vector2.zero;
+        affRect.offsetMax = Vector2.zero;
+        _affordableToggleImage = affObj.GetComponent<Image>();
+        _affordableToggleImage.color = new Color(0.3f, 0.3f, 0.4f, 1f);
+        affObj.GetComponent<Button>().onClick.AddListener(ToggleAffordable);
+        CreateText(affObj.transform, "AffLbl", "Affordable",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 12, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+    }
+
+    // ========== TOOLBAR WIDGET BUILDERS ==========
+
+    private InputField BuildToolbarInputField(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax, string placeholder, Font font)
+    {
+        GameObject fieldObj = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(InputField));
         fieldObj.transform.SetParent(parent, false);
-
         RectTransform fieldRect = fieldObj.GetComponent<RectTransform>();
-        fieldRect.anchorMin = new Vector2(0.64f, 0.12f);
-        fieldRect.anchorMax = new Vector2(0.99f, 0.88f);
+        fieldRect.anchorMin = anchorMin;
+        fieldRect.anchorMax = anchorMax;
         fieldRect.offsetMin = Vector2.zero;
         fieldRect.offsetMax = Vector2.zero;
-
-        Image fieldBg = fieldObj.GetComponent<Image>();
-        fieldBg.color = new Color(0.92f, 0.92f, 0.96f, 1f);
+        fieldObj.GetComponent<Image>().color = new Color(0.88f, 0.88f, 0.92f, 1f);
 
         InputField inputField = fieldObj.GetComponent<InputField>();
-        inputField.targetGraphic = fieldBg;
+        inputField.targetGraphic = fieldObj.GetComponent<Image>();
 
-        // Visible typed text (leave room on the right for the clear button).
         GameObject textObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
         textObj.transform.SetParent(fieldObj.transform, false);
         Text text = textObj.GetComponent<Text>();
         text.font = font;
-        text.fontSize = 14;
+        text.fontSize = 13;
         text.color = new Color(0.1f, 0.1f, 0.12f, 1f);
         text.alignment = TextAnchor.MiddleLeft;
         text.supportRichText = false;
         RectTransform textRect = text.GetComponent<RectTransform>();
         textRect.anchorMin = Vector2.zero;
         textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = new Vector2(8f, 2f);
-        textRect.offsetMax = new Vector2(-26f, -2f);
+        textRect.offsetMin = new Vector2(6f, 2f);
+        textRect.offsetMax = new Vector2(-6f, -2f);
 
-        // Placeholder shown when empty.
         GameObject phObj = new GameObject("Placeholder", typeof(RectTransform), typeof(Text));
         phObj.transform.SetParent(fieldObj.transform, false);
-        _buySearchPlaceholder = phObj.GetComponent<Text>();
-        _buySearchPlaceholder.font = font;
-        _buySearchPlaceholder.fontSize = 14;
-        _buySearchPlaceholder.fontStyle = FontStyle.Italic;
-        _buySearchPlaceholder.color = new Color(0.45f, 0.45f, 0.5f, 1f);
-        _buySearchPlaceholder.alignment = TextAnchor.MiddleLeft;
-        _buySearchPlaceholder.text = "Search items...";
-        RectTransform phRect = _buySearchPlaceholder.GetComponent<RectTransform>();
+        Text phText = phObj.GetComponent<Text>();
+        phText.font = font;
+        phText.fontSize = 13;
+        phText.fontStyle = FontStyle.Italic;
+        phText.color = new Color(0.45f, 0.45f, 0.5f, 1f);
+        phText.alignment = TextAnchor.MiddleLeft;
+        phText.text = placeholder;
+        RectTransform phRect = phText.GetComponent<RectTransform>();
         phRect.anchorMin = Vector2.zero;
         phRect.anchorMax = Vector2.one;
-        phRect.offsetMin = new Vector2(8f, 2f);
-        phRect.offsetMax = new Vector2(-26f, -2f);
+        phRect.offsetMin = new Vector2(6f, 2f);
+        phRect.offsetMax = new Vector2(-6f, -2f);
 
         inputField.textComponent = text;
-        inputField.placeholder = _buySearchPlaceholder;
+        inputField.placeholder = phText;
         inputField.lineType = InputField.LineType.SingleLine;
         inputField.characterLimit = 40;
-        inputField.text = _buySearchQuery;
-        inputField.onValueChanged.AddListener(OnBuySearchChanged);
-        _buySearchField = inputField;
-
-        // Clear ("X") button pinned to the right edge of the field.
-        GameObject clearObj = new GameObject("ClearSearch", typeof(RectTransform), typeof(Image), typeof(Button));
-        clearObj.transform.SetParent(fieldObj.transform, false);
-        RectTransform clearRect = clearObj.GetComponent<RectTransform>();
-        clearRect.anchorMin = new Vector2(1f, 0.5f);
-        clearRect.anchorMax = new Vector2(1f, 0.5f);
-        clearRect.pivot = new Vector2(1f, 0.5f);
-        clearRect.sizeDelta = new Vector2(20f, 20f);
-        clearRect.anchoredPosition = new Vector2(-3f, 0f);
-        clearObj.GetComponent<Image>().color = new Color(0.55f, 0.2f, 0.2f, 0.9f);
-        clearObj.GetComponent<Button>().onClick.AddListener(ClearBuySearch);
-
-        CreateText(clearObj.transform, "X", "X",
-            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
-
-        Debug.Log("[Store] Buy search field created");
+        return inputField;
     }
+
+    private Dropdown BuildToolbarDropdown(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax,
+        List<Dropdown.OptionData> options, int defaultIndex, Font font)
+    {
+        GameObject ddObj = new GameObject(name);
+        ddObj.transform.SetParent(parent, false);
+        RectTransform ddRT = ddObj.AddComponent<RectTransform>();
+        ddRT.anchorMin = anchorMin;
+        ddRT.anchorMax = anchorMax;
+        ddRT.offsetMin = Vector2.zero;
+        ddRT.offsetMax = Vector2.zero;
+        Image ddBG = ddObj.AddComponent<Image>();
+        ddBG.color = new Color(0.18f, 0.18f, 0.28f, 1f);
+        Dropdown dropdown = ddObj.AddComponent<Dropdown>();
+
+        GameObject labelGO = new GameObject("Label");
+        labelGO.transform.SetParent(ddObj.transform, false);
+        RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+        labelRT.anchorMin = Vector2.zero;
+        labelRT.anchorMax = Vector2.one;
+        labelRT.offsetMin = new Vector2(6, 2);
+        labelRT.offsetMax = new Vector2(-22, -2);
+        Text labelText = labelGO.AddComponent<Text>();
+        labelText.font = font;
+        labelText.fontSize = 13;
+        labelText.color = Color.white;
+        labelText.alignment = TextAnchor.MiddleLeft;
+
+        GameObject arrowGO = new GameObject("Arrow");
+        arrowGO.transform.SetParent(ddObj.transform, false);
+        RectTransform arrowRT = arrowGO.AddComponent<RectTransform>();
+        arrowRT.anchorMin = new Vector2(1, 0);
+        arrowRT.anchorMax = new Vector2(1, 1);
+        arrowRT.pivot = new Vector2(1, 0.5f);
+        arrowRT.anchoredPosition = new Vector2(-3, 0);
+        arrowRT.sizeDelta = new Vector2(18, 0);
+        Text arrowText = arrowGO.AddComponent<Text>();
+        arrowText.font = font;
+        arrowText.fontSize = 12;
+        arrowText.color = new Color(0.7f, 0.7f, 0.9f);
+        arrowText.text = "\u25BC";
+        arrowText.alignment = TextAnchor.MiddleCenter;
+
+        // Template
+        GameObject templateGO = new GameObject("Template");
+        templateGO.transform.SetParent(ddObj.transform, false);
+        RectTransform tempRT = templateGO.AddComponent<RectTransform>();
+        tempRT.anchorMin = new Vector2(0, 0);
+        tempRT.anchorMax = new Vector2(1, 0);
+        tempRT.pivot = new Vector2(0.5f, 1);
+        tempRT.anchoredPosition = Vector2.zero;
+        tempRT.sizeDelta = new Vector2(0, 200);
+        Image tempImg = templateGO.AddComponent<Image>();
+        tempImg.color = new Color(0.12f, 0.12f, 0.2f, 0.98f);
+        ScrollRect tempScroll = templateGO.AddComponent<ScrollRect>();
+
+        GameObject tempVP = new GameObject("Viewport");
+        tempVP.transform.SetParent(templateGO.transform, false);
+        RectTransform vpRT = tempVP.AddComponent<RectTransform>();
+        vpRT.anchorMin = Vector2.zero;
+        vpRT.anchorMax = Vector2.one;
+        vpRT.offsetMin = Vector2.zero;
+        vpRT.offsetMax = Vector2.zero;
+        tempVP.AddComponent<Image>().color = Color.white;
+        tempVP.AddComponent<Mask>().showMaskGraphic = false;
+        tempScroll.viewport = vpRT;
+
+        GameObject tempContent = new GameObject("Content");
+        tempContent.transform.SetParent(tempVP.transform, false);
+        RectTransform tcRT = tempContent.AddComponent<RectTransform>();
+        tcRT.anchorMin = new Vector2(0, 1);
+        tcRT.anchorMax = new Vector2(1, 1);
+        tcRT.pivot = new Vector2(0.5f, 1);
+        tcRT.anchoredPosition = Vector2.zero;
+        tcRT.sizeDelta = new Vector2(0, 28);
+        tempScroll.content = tcRT;
+
+        GameObject itemGO = new GameObject("Item");
+        itemGO.transform.SetParent(tempContent.transform, false);
+        RectTransform itemRT = itemGO.AddComponent<RectTransform>();
+        itemRT.anchorMin = new Vector2(0, 0.5f);
+        itemRT.anchorMax = new Vector2(1, 0.5f);
+        itemRT.sizeDelta = new Vector2(0, 26);
+        Toggle itemToggle = itemGO.AddComponent<Toggle>();
+
+        GameObject itemBG = new GameObject("Item Background");
+        itemBG.transform.SetParent(itemGO.transform, false);
+        RectTransform ibRT = itemBG.AddComponent<RectTransform>();
+        ibRT.anchorMin = Vector2.zero;
+        ibRT.anchorMax = Vector2.one;
+        ibRT.offsetMin = Vector2.zero;
+        ibRT.offsetMax = Vector2.zero;
+        Image ibImg = itemBG.AddComponent<Image>();
+        ibImg.color = new Color(0.15f, 0.15f, 0.25f, 1f);
+
+        GameObject itemCheck = new GameObject("Item Checkmark");
+        itemCheck.transform.SetParent(itemBG.transform, false);
+        RectTransform icRT = itemCheck.AddComponent<RectTransform>();
+        icRT.anchorMin = new Vector2(0, 0);
+        icRT.anchorMax = new Vector2(0, 1);
+        icRT.pivot = new Vector2(0, 0.5f);
+        icRT.anchoredPosition = new Vector2(4, 0);
+        icRT.sizeDelta = new Vector2(18, 0);
+        Image icImg = itemCheck.AddComponent<Image>();
+        icImg.color = new Color(0.3f, 0.8f, 0.3f);
+
+        GameObject itemLabel = new GameObject("Item Label");
+        itemLabel.transform.SetParent(itemGO.transform, false);
+        RectTransform ilRT = itemLabel.AddComponent<RectTransform>();
+        ilRT.anchorMin = Vector2.zero;
+        ilRT.anchorMax = Vector2.one;
+        ilRT.offsetMin = new Vector2(24, 2);
+        ilRT.offsetMax = new Vector2(-4, -2);
+        Text ilText = itemLabel.AddComponent<Text>();
+        ilText.font = font;
+        ilText.fontSize = 13;
+        ilText.color = Color.white;
+        ilText.alignment = TextAnchor.MiddleLeft;
+
+        itemToggle.targetGraphic = ibImg;
+        itemToggle.graphic = icImg;
+        itemToggle.isOn = false;
+        templateGO.SetActive(false);
+
+        dropdown.targetGraphic = ddBG;
+        dropdown.template = tempRT;
+        dropdown.captionText = labelText;
+        dropdown.itemText = ilText;
+        dropdown.options = options ?? new List<Dropdown.OptionData>();
+        dropdown.value = Mathf.Clamp(defaultIndex, 0, Mathf.Max(0, dropdown.options.Count - 1));
+        dropdown.RefreshShownValue();
+        return dropdown;
+    }
+
+    // ========== TOOLBAR EVENT HANDLERS ==========
 
     private void OnBuySearchChanged(string value)
     {
@@ -647,16 +643,240 @@ public class StoreUI : MonoBehaviour
         RebuildBuyList();
     }
 
-    private void ClearBuySearch()
+    private void OnCategoryChanged(int index)
     {
+        _currentBuyCategory = index >= 0 && index < BuyCategoryOptions.Length
+            ? BuyCategoryOptions[index] : "All";
+        _currentBuySubFilter = "All";
         _buySearchQuery = string.Empty;
         if (_buySearchField != null)
-        {
-            // SetTextWithoutNotify avoids a second redundant RebuildBuyList.
             _buySearchField.SetTextWithoutNotify(string.Empty);
+        RefreshSubFilterDropdown();
+        RebuildBuyList();
+        Debug.Log($"[Store] Category changed to: {_currentBuyCategory}");
+    }
+
+    private void OnSubFilterChanged(int index)
+    {
+        if (_subFilterDropdown != null && _subFilterDropdown.options != null
+            && index >= 0 && index < _subFilterDropdown.options.Count)
+        {
+            _currentBuySubFilter = _subFilterDropdown.options[index].text;
+        }
+        else
+        {
+            _currentBuySubFilter = "All";
         }
         RebuildBuyList();
-        Debug.Log("[Store] Buy search cleared");
+        Debug.Log($"[Store] Sub-filter changed to: {_currentBuySubFilter}");
+    }
+
+    private void OnSortChanged(int index)
+    {
+        switch (index)
+        {
+            case 0: _buySortMode = SortMode.Alphabetical; _buySortDirection = SortDirection.Ascending; break;
+            case 1: _buySortMode = SortMode.Alphabetical; _buySortDirection = SortDirection.Descending; break;
+            case 2: _buySortMode = SortMode.Price; _buySortDirection = SortDirection.Ascending; break;
+            case 3: _buySortMode = SortMode.Price; _buySortDirection = SortDirection.Descending; break;
+        }
+        RebuildBuyList();
+    }
+
+    private void ToggleAffordable()
+    {
+        _showAffordableOnly = !_showAffordableOnly;
+        if (_affordableToggleImage != null)
+        {
+            _affordableToggleImage.color = _showAffordableOnly
+                ? new Color(0.25f, 0.55f, 0.3f, 1f)
+                : new Color(0.3f, 0.3f, 0.4f, 1f);
+        }
+        RebuildBuyList();
+        Debug.Log($"[Store] Affordable filter: {_showAffordableOnly}");
+    }
+
+    // ========== SUB-FILTER LOGIC ==========
+
+    private void RefreshSubFilterDropdown()
+    {
+        if (_subFilterDropdown == null)
+            return;
+
+        List<string> subOptions = GetSubFilterOptions(_currentBuyCategory);
+        if (subOptions == null || subOptions.Count == 0)
+        {
+            _subFilterDropdown.gameObject.SetActive(false);
+            return;
+        }
+
+        _subFilterDropdown.gameObject.SetActive(true);
+        _subFilterDropdown.ClearOptions();
+        List<Dropdown.OptionData> opts = new List<Dropdown.OptionData>();
+        for (int i = 0; i < subOptions.Count; i++)
+            opts.Add(new Dropdown.OptionData(subOptions[i]));
+        _subFilterDropdown.AddOptions(opts);
+        _subFilterDropdown.value = 0;
+        _subFilterDropdown.RefreshShownValue();
+        _currentBuySubFilter = "All";
+    }
+
+    private static List<string> GetSubFilterOptions(string category)
+    {
+        switch (category)
+        {
+            case "Weapons":
+            case "Armor":
+            case "Shields":
+                return new List<string>
+                {
+                    "All", "Mundane", "+1", "+2", "+3", "+4", "+5",
+                    "Special Properties", "Specific", "Special Material"
+                };
+            case "Wondrous Items":
+                return new List<string> { "All", "Minor", "Medium", "Major" };
+            case "Scrolls":
+                return new List<string>
+                {
+                    "All", "Level 0 (Cantrips)", "Level 1", "Level 2", "Level 3",
+                    "Level 4", "Level 5", "Level 6", "Level 7", "Level 8", "Level 9"
+                };
+            default:
+                return null;
+        }
+    }
+
+    // ========== CATEGORY + SUB-FILTER MATCHING ==========
+
+    /// <summary>
+    /// Maps a top-level dropdown category to the set of store categories it encompasses,
+    /// then applies the current sub-filter to narrow the results.
+    /// </summary>
+    private List<StoreInventory.StoreItemEntry> GetFilteredBuyItems()
+    {
+        List<StoreInventory.StoreItemEntry> all = StoreInventory.Instance.GetItemsByCategory("All");
+        if (string.Equals(_currentBuyCategory, "All", StringComparison.OrdinalIgnoreCase))
+            return all;
+
+        List<StoreInventory.StoreItemEntry> filtered = new List<StoreInventory.StoreItemEntry>();
+        for (int i = 0; i < all.Count; i++)
+        {
+            StoreInventory.StoreItemEntry entry = all[i];
+            if (entry == null) continue;
+            if (MatchesBuyCategory(entry, _currentBuyCategory))
+                filtered.Add(entry);
+        }
+
+        // Apply sub-filter
+        if (!string.Equals(_currentBuySubFilter, "All", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(_currentBuySubFilter))
+        {
+            filtered = ApplySubFilter(filtered, _currentBuyCategory, _currentBuySubFilter);
+        }
+
+        return filtered;
+    }
+
+    private static bool MatchesBuyCategory(StoreInventory.StoreItemEntry entry, string uiCategory)
+    {
+        string cat = entry.Category ?? string.Empty;
+        switch (uiCategory)
+        {
+            case "Weapons":
+                return cat.IndexOf("Weapon", StringComparison.OrdinalIgnoreCase) >= 0;
+            case "Armor":
+                return string.Equals(cat, "Armor", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(cat, "Magic Armor", StringComparison.OrdinalIgnoreCase);
+            case "Shields":
+                return cat.IndexOf("Shield", StringComparison.OrdinalIgnoreCase) >= 0;
+            case "Scrolls":
+                return cat.StartsWith("Scroll", StringComparison.OrdinalIgnoreCase);
+            case "Potions":
+                return cat.StartsWith("Potion", StringComparison.OrdinalIgnoreCase);
+            case "Wands":
+                return cat.StartsWith("Wand", StringComparison.OrdinalIgnoreCase);
+            case "Rings":
+                return string.Equals(cat, "Rings", StringComparison.OrdinalIgnoreCase);
+            case "Rods":
+                return string.Equals(cat, "Rods", StringComparison.OrdinalIgnoreCase);
+            case "Wondrous Items":
+                return string.Equals(cat, "Wondrous Items", StringComparison.OrdinalIgnoreCase);
+            case "Ammunition":
+                return string.Equals(cat, "Ammunition", StringComparison.OrdinalIgnoreCase);
+            case "Gear":
+                return string.Equals(cat, "Gear", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(cat, "Spell Component", StringComparison.OrdinalIgnoreCase);
+            default:
+                return false;
+        }
+    }
+
+    private static List<StoreInventory.StoreItemEntry> ApplySubFilter(
+        List<StoreInventory.StoreItemEntry> items, string category, string subFilter)
+    {
+        if (items == null) return new List<StoreInventory.StoreItemEntry>();
+
+        // Weapons / Armor / Shields sub-filters
+        if (category == "Weapons" || category == "Armor" || category == "Shields")
+        {
+            if (subFilter == "Mundane")
+                return items.FindAll(e => GetEnhBonus(e) == 0 && !HasSpecialMaterial(e));
+            if (subFilter.StartsWith("+"))
+            {
+                int bonus;
+                if (int.TryParse(subFilter.Substring(1), out bonus))
+                    return items.FindAll(e => GetEnhBonus(e) == bonus);
+            }
+            if (subFilter == "Special Properties")
+                return items.FindAll(e => { ItemData t = e.GetTemplate(); return t != null && t.IsEnchanted; });
+            if (subFilter == "Specific")
+                return items.FindAll(e => { ItemData t = e.GetTemplate(); return t != null && t.SpecificItemType != SpecificItemType.None; });
+            if (subFilter == "Special Material")
+                return items.FindAll(e => HasSpecialMaterial(e));
+        }
+
+        // Wondrous Items sub-filters (by price bracket: Minor <5k, Medium 5k-25k, Major >25k)
+        if (category == "Wondrous Items")
+        {
+            if (subFilter == "Minor")
+                return items.FindAll(e => e.PriceGp < 5000);
+            if (subFilter == "Medium")
+                return items.FindAll(e => e.PriceGp >= 5000 && e.PriceGp <= 25000);
+            if (subFilter == "Major")
+                return items.FindAll(e => e.PriceGp > 25000);
+        }
+
+        // Scrolls sub-filters (by spell level)
+        if (category == "Scrolls")
+        {
+            if (subFilter.StartsWith("Level "))
+            {
+                string levelStr = subFilter.Replace("Level ", "").Replace(" (Cantrips)", "").Trim();
+                int level;
+                if (int.TryParse(levelStr, out level))
+                    return items.FindAll(e =>
+                    {
+                        ItemData t = e.GetTemplate();
+                        return t != null && t.ScrollSpellLevel == level;
+                    });
+            }
+        }
+
+        return items;
+    }
+
+    private static int GetEnhBonus(StoreInventory.StoreItemEntry entry)
+    {
+        if (entry == null) return 0;
+        ItemData t = entry.GetTemplate();
+        return t != null ? t.ResolveEnhancementBonus() : 0;
+    }
+
+    private static bool HasSpecialMaterial(StoreInventory.StoreItemEntry entry)
+    {
+        if (entry == null) return false;
+        ItemData t = entry.GetTemplate();
+        return t != null && t.Material != null && t.Material.MaterialType != ItemMaterialType.Standard;
     }
 
     private void CreateSellCharacterFilter()
@@ -1014,44 +1234,6 @@ public class StoreUI : MonoBehaviour
             Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
     }
 
-    private void SetBuySortMode(SortMode mode)
-    {
-        _buySortMode = mode;
-        RefreshBuySortButtons();
-        RebuildBuyList();
-
-        Debug.Log($"[Store] Buy sort mode: {_buySortMode}");
-    }
-
-    private void ToggleBuySortDirection()
-    {
-        _buySortDirection = _buySortDirection == SortDirection.Ascending
-            ? SortDirection.Descending
-            : SortDirection.Ascending;
-
-        RefreshBuySortButtons();
-        RebuildBuyList();
-
-        Debug.Log($"[Store] Buy sort direction: {_buySortDirection}");
-    }
-
-    private void RefreshBuySortButtons()
-    {
-        foreach (KeyValuePair<SortMode, Image> kvp in _buySortButtonImages)
-        {
-            if (kvp.Value == null)
-                continue;
-
-            bool selected = kvp.Key == _buySortMode;
-            kvp.Value.color = selected
-                ? new Color(0.4f, 0.6f, 0.4f, 1f)
-                : new Color(0.3f, 0.3f, 0.4f, 1f);
-        }
-
-        if (_buySortDirectionText != null)
-            _buySortDirectionText.text = _buySortDirection == SortDirection.Ascending ? "↑ ASC" : "↓ DESC";
-    }
-
     private void SetSellSortMode(SortMode mode)
     {
         _sellSortMode = mode;
@@ -1106,8 +1288,6 @@ public class StoreUI : MonoBehaviour
         Debug.Log("[Store] Showing buy panel");
         if (_buyPanel != null) _buyPanel.SetActive(true);
         if (_sellPanel != null) _sellPanel.SetActive(false);
-        RefreshCategoryButtons();
-        RefreshBuySortButtons();
         RebuildBuyList();
     }
 
@@ -1139,27 +1319,28 @@ public class StoreUI : MonoBehaviour
             return;
 
         ClearChildren(_buyContent);
+        _buyRowImages.Clear();
 
-        string category = string.IsNullOrWhiteSpace(_currentBuyCategory) ? "All" : _currentBuyCategory;
-        List<StoreInventory.StoreItemEntry> filteredItems = StoreInventory.Instance.GetItemsByCategory(category);
+        List<StoreInventory.StoreItemEntry> filteredItems = GetFilteredBuyItems();
 
-        // Apply the text-search filter (case-insensitive partial name match) on top of
-        // the active category. Works together with the sort options below.
+        // Text search
         filteredItems = ApplyBuySearchFilter(filteredItems);
+
+        // Affordable filter
+        if (_showAffordableOnly)
+        {
+            int gold = GameManager.Instance != null ? GameManager.Instance.PartyGold : 0;
+            filteredItems = filteredItems.FindAll(e => e != null && e.PriceGp <= gold);
+        }
 
         List<StoreInventory.StoreItemEntry> sortedItems = SortBuyItems(filteredItems);
 
         for (int i = 0; i < sortedItems.Count; i++)
             CreateBuyRow(_buyContent, sortedItems[i]);
 
-        Debug.Log($"[Store] Buy list refreshed: {sortedItems.Count} items (Category: {category}, Search: '{_buySearchQuery}', Sort: {_buySortMode} {_buySortDirection})");
+        Debug.Log($"[Store] Buy list refreshed: {sortedItems.Count} items (Cat: {_currentBuyCategory}, Sub: {_currentBuySubFilter}, Search: '{_buySearchQuery}', Affordable: {_showAffordableOnly})");
     }
 
-    /// <summary>
-    /// Filters the supplied store entries by the current search query, matching a
-    /// case-insensitive substring against each item's display name. An empty/blank
-    /// query returns the list unchanged (all category items shown).
-    /// </summary>
     private List<StoreInventory.StoreItemEntry> ApplyBuySearchFilter(List<StoreInventory.StoreItemEntry> items)
     {
         if (items == null)
@@ -1528,84 +1709,218 @@ public class StoreUI : MonoBehaviour
         if (template == null)
             return;
 
+        string displayName = template.FullNameWithEnhancement;
+
         GameObject row = CreatePanel(parent, $"Buy_{entry.ItemId}",
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-            Vector2.zero, new Vector2(0f, 70f), new Color(0.16f, 0.18f, 0.25f, 1f));
+            Vector2.zero, new Vector2(0f, 40f), new Color(0.16f, 0.18f, 0.25f, 1f));
 
         LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-        rowLayout.minHeight = 70f;
-        rowLayout.preferredHeight = 70f;
+        rowLayout.minHeight = 40f;
+        rowLayout.preferredHeight = 40f;
         rowLayout.flexibleWidth = 1f;
 
+        // Make entire row clickable to show details
+        Button rowBtn = row.AddComponent<Button>();
+        Image rowImg = row.GetComponent<Image>();
+        rowBtn.targetGraphic = rowImg;
+        StoreInventory.StoreItemEntry capturedEntry = entry;
+        rowBtn.onClick.AddListener(() => SelectBuyItem(capturedEntry));
+        _buyRowImages[entry.ItemId] = rowImg;
+
         HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-        layout.padding = new RectOffset(15, 10, 5, 5);
-        layout.spacing = 10f;
+        layout.padding = new RectOffset(10, 6, 3, 3);
+        layout.spacing = 6f;
         layout.childAlignment = TextAnchor.MiddleLeft;
         layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
         layout.childForceExpandHeight = true;
 
-        string details = GetItemDescription(template, entry.Category);
-
-        GameObject infoObj = new GameObject("Info", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
-        infoObj.transform.SetParent(row.transform, false);
-
-        LayoutElement infoLayoutElement = infoObj.GetComponent<LayoutElement>();
-        infoLayoutElement.minWidth = 200f;
-        infoLayoutElement.preferredWidth = 300f;
-        infoLayoutElement.flexibleWidth = 1f;
-
-        VerticalLayoutGroup infoLayout = infoObj.GetComponent<VerticalLayoutGroup>();
-        infoLayout.spacing = 2f;
-        infoLayout.padding = new RectOffset(0, 0, 5, 5);
-        infoLayout.childAlignment = TextAnchor.MiddleLeft;
-        infoLayout.childControlWidth = true;
-        infoLayout.childControlHeight = true;
-        infoLayout.childForceExpandWidth = true;
-        infoLayout.childForceExpandHeight = false;
-
-        Text nameText = CreateText(infoObj.transform, "Name", template.FullNameWithEnhancement,
+        // Item name (flexible width)
+        Text nameText = CreateText(row.transform, "Name", displayName,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
-        LayoutElement nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
-        nameLayout.preferredHeight = 24f;
-        nameLayout.flexibleWidth = 1f;
+            Vector2.zero, 14, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
+        LayoutElement nameLE = nameText.gameObject.AddComponent<LayoutElement>();
+        nameLE.minWidth = 120f;
+        nameLE.flexibleWidth = 1f;
         nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
         nameText.verticalOverflow = VerticalWrapMode.Overflow;
 
-        Text detailText = CreateText(infoObj.transform, "Details", details,
+        // Price (fixed)
+        Text priceText = CreateText(row.transform, "Price", $"{entry.PriceGp} gp",
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 13, FontStyle.Normal, new Color(0.8f, 0.85f, 0.95f), TextAnchor.MiddleLeft);
-        LayoutElement detailsLayout = detailText.gameObject.AddComponent<LayoutElement>();
-        detailsLayout.preferredHeight = 18f;
-        detailsLayout.flexibleWidth = 1f;
-        detailText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        detailText.verticalOverflow = VerticalWrapMode.Overflow;
+            Vector2.zero, 13, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleRight);
+        LayoutElement priceLE = priceText.gameObject.AddComponent<LayoutElement>();
+        priceLE.minWidth = 70f;
+        priceLE.preferredWidth = 70f;
+        priceLE.flexibleWidth = 0f;
 
-        GameObject priceObj = new GameObject("Price", typeof(RectTransform), typeof(LayoutElement));
-        priceObj.transform.SetParent(row.transform, false);
-        LayoutElement priceLayout = priceObj.GetComponent<LayoutElement>();
-        priceLayout.minWidth = 90f;
-        priceLayout.preferredWidth = 90f;
-        priceLayout.flexibleWidth = 0f;
+        // BUY button (fixed)
+        CreateSmallBuyButton(row.transform, entry);
+    }
 
-        Text priceText = CreateText(priceObj.transform, "PriceLabel", $"{entry.PriceGp} gp",
+    private Button CreateSmallBuyButton(Transform parent, StoreInventory.StoreItemEntry entry)
+    {
+        GameObject buttonObj = new GameObject("BuyBtn", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        buttonObj.transform.SetParent(parent, false);
+        LayoutElement le = buttonObj.GetComponent<LayoutElement>();
+        le.minWidth = 50f;
+        le.preferredWidth = 50f;
+        le.preferredHeight = 30f;
+        le.flexibleWidth = 0f;
+        Image img = buttonObj.GetComponent<Image>();
+        img.color = new Color(0.2f, 0.56f, 0.26f);
+        Button btn = buttonObj.GetComponent<Button>();
+        StoreInventory.StoreItemEntry capturedEntry = entry;
+        btn.onClick.AddListener(() => BuyItem(capturedEntry));
+        CreateText(buttonObj.transform, "Lbl", "BUY",
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 18, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
-        priceText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        priceText.verticalOverflow = VerticalWrapMode.Overflow;
+            Vector2.zero, 12, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+        return btn;
+    }
 
-        GameObject buttonSection = new GameObject("ButtonSection", typeof(RectTransform), typeof(LayoutElement));
-        buttonSection.transform.SetParent(row.transform, false);
-        LayoutElement buttonLayout = buttonSection.GetComponent<LayoutElement>();
-        buttonLayout.minWidth = 70f;
-        buttonLayout.preferredWidth = 70f;
-        buttonLayout.flexibleWidth = 0f;
+    private void SelectBuyItem(StoreInventory.StoreItemEntry entry)
+    {
+        _selectedBuyEntry = entry;
 
-        CreateSmallActionButton(buttonSection.transform, "BuyButton", "BUY", new Color(0.2f, 0.56f, 0.26f), () => BuyItem(entry));
+        // Highlight selected row
+        foreach (var kvp in _buyRowImages)
+        {
+            if (kvp.Value == null) continue;
+            kvp.Value.color = string.Equals(kvp.Key, entry.ItemId, StringComparison.OrdinalIgnoreCase)
+                ? new Color(0.22f, 0.32f, 0.42f, 1f)
+                : new Color(0.16f, 0.18f, 0.25f, 1f);
+        }
 
-        Debug.Log($"[Store] Created buy entry for {template.FullNameWithEnhancement} with proper width constraints");
+        // Update detail panel
+        UpdateBuyDetailPanel(entry);
+    }
+
+    private void UpdateBuyDetailPanel(StoreInventory.StoreItemEntry entry)
+    {
+        if (_buyDetailTitleText == null || _buyDetailBodyText == null)
+            return;
+
+        ItemData template = entry != null ? entry.GetTemplate() : null;
+        if (template == null)
+        {
+            _buyDetailTitleText.text = "Select an Item";
+            _buyDetailBodyText.text = "Click an item on the left to view its details here.";
+            return;
+        }
+
+        _buyDetailTitleText.text = template.FullNameWithEnhancement;
+        _buyDetailBodyText.text = BuildDetailDescription(template, entry);
+    }
+
+    /// <summary>
+    /// Builds a rich text description for the detail panel, covering all relevant
+    /// item stats based on item type (weapon, armor, shield, consumable, ring, etc.).
+    /// </summary>
+    private static string BuildDetailDescription(ItemData item, StoreInventory.StoreItemEntry entry)
+    {
+        if (item == null) return string.Empty;
+
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+
+        // Category + Price
+        sb.AppendLine($"Category: {entry.Category}");
+        sb.AppendLine($"Price: {entry.PriceGp} gp");
+
+        // Stored description
+        if (!string.IsNullOrWhiteSpace(item.Description))
+        {
+            sb.AppendLine();
+            sb.AppendLine(item.Description);
+        }
+
+        sb.AppendLine();
+
+        // Type-specific stats
+        if (item.IsWeapon)
+        {
+            sb.AppendLine("--- Weapon Stats ---");
+            if (item.DamageDice > 0)
+                sb.AppendLine($"Damage: {item.DamageCount}d{item.DamageDice}");
+            int enhBonus = item.ResolveEnhancementBonus();
+            if (enhBonus > 0)
+                sb.AppendLine($"Enhancement: +{enhBonus}");
+            sb.AppendLine($"Proficiency: {item.Proficiency}");
+            sb.AppendLine($"Category: {item.WeaponCat}");
+            sb.AppendLine($"Size: {item.WeaponSize}");
+            if (item.CritThreatMin > 0 && item.CritThreatMin < 20)
+                sb.AppendLine($"Critical: {item.CritThreatMin}-20/x{item.CritMultiplier}");
+            else if (item.CritMultiplier > 0)
+                sb.AppendLine($"Critical: 20/x{item.CritMultiplier}");
+            if (item.IsEnchanted)
+            {
+                sb.Append("Enchantments: ");
+                for (int i = 0; i < item.Enchantment.Abilities.Count; i++)
+                {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append(EnchantmentProperties.GetDisplayName(item.Enchantment.Abilities[i]));
+                }
+                sb.AppendLine();
+            }
+        }
+        else if (item.IsArmor)
+        {
+            sb.AppendLine("--- Armor Stats ---");
+            int totalAC = item.GetTotalArmorBonus();
+            sb.AppendLine($"Armor Bonus: +{totalAC}");
+            int enhBonus = item.ResolveEnhancementBonus();
+            if (enhBonus > 0)
+                sb.AppendLine($"Enhancement: +{enhBonus}");
+            sb.AppendLine($"Max Dex Bonus: {(item.MaxDexBonus < 0 ? "—" : $"+{item.EffectiveMaxDexBonus}")}");
+            sb.AppendLine($"Armor Check Penalty: -{item.EffectiveArmorCheckPenalty}");
+            sb.AppendLine($"Arcane Spell Failure: {item.EffectiveArcaneSpellFailure}%");
+        }
+        else if (item.IsShield)
+        {
+            sb.AppendLine("--- Shield Stats ---");
+            int totalShield = item.GetTotalShieldBonus();
+            sb.AppendLine($"Shield Bonus: +{totalShield}");
+            int enhBonus = item.ResolveEnhancementBonus();
+            if (enhBonus > 0)
+                sb.AppendLine($"Enhancement: +{enhBonus}");
+            sb.AppendLine($"Armor Check Penalty: -{item.EffectiveArmorCheckPenalty}");
+            sb.AppendLine($"Arcane Spell Failure: {item.EffectiveArcaneSpellFailure}%");
+        }
+
+        // Material
+        if (item.Material != null && item.Material.MaterialType != ItemMaterialType.Standard)
+            sb.AppendLine($"Material: {item.Material.MaterialType}");
+
+        // Weight
+        if (item.WeightLbs > 0f)
+            sb.AppendLine($"Weight: {item.EffectiveWeightLbs:F1} lbs");
+
+        // Masterwork
+        if (item.IsMasterwork && item.ResolveEnhancementBonus() <= 0)
+            sb.AppendLine("Masterwork: Yes");
+
+        // Ring / Rod / Wondrous item descriptions use the stored Description
+        // which was already printed above. Add caster level if available.
+        if (item.IsRingItem && item.RingCasterLevel > 0)
+            sb.AppendLine($"Caster Level: {item.RingCasterLevel}");
+        if (item.Type == ItemType.Rod && item.RodCasterLevel > 0)
+            sb.AppendLine($"Caster Level: {item.RodCasterLevel}");
+        if (item.IsWondrousItem && item.WondrousCasterLevel > 0)
+            sb.AppendLine($"Caster Level: {item.WondrousCasterLevel}");
+
+        // Scroll / Potion / Wand
+        if (item.Type == ItemType.Consumable)
+        {
+            if (item.ScrollSpellLevel > 0)
+                sb.AppendLine($"Scroll Spell Level: {item.ScrollSpellLevel}");
+            if (item.PotionSpellLevel > 0)
+                sb.AppendLine($"Potion Spell Level: {item.PotionSpellLevel}");
+        }
+        if (item.WandSpellLevel > 0)
+            sb.AppendLine($"Wand Spell Level: {item.WandSpellLevel}  |  Charges: {item.CurrentCharges}/{item.MaxCharges}");
+
+        return sb.ToString();
     }
 
     private void CreateSellRow(Transform parent, SellStack stack)
