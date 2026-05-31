@@ -1904,7 +1904,7 @@ public class StoreUI : MonoBehaviour
         // which was already printed above. Add caster level if available.
         if (item.IsRingItem && item.RingCasterLevel > 0)
             sb.AppendLine($"Caster Level: {item.RingCasterLevel}");
-        if (item.Type == ItemType.Rod && item.RodCasterLevel > 0)
+        if (item.IsRodItem && item.RodCasterLevel > 0)
             sb.AppendLine($"Caster Level: {item.RodCasterLevel}");
         if (item.IsWondrousItem && item.WondrousCasterLevel > 0)
             sb.AppendLine($"Caster Level: {item.WondrousCasterLevel}");
