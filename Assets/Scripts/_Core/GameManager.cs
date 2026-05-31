@@ -5619,6 +5619,7 @@ public partial class GameManager : MonoBehaviour
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🪄", $"{actor.Stats.CharacterName} uses Magic domain power to activate arcane wand as a wizard of level {wandValidation.EffectiveWizardLevel}."));
             }
 
+            if (currentItem.Wand != null) currentItem.Wand.ConsumeCharge();
             currentItem.CurrentCharges--;
             string chargeInfo = $" ({currentItem.CurrentCharges}/{currentItem.MaxCharges} charges)";
             string depletedNote = currentItem.CurrentCharges <= 0 ? " ⚠ WAND DEPLETED — now a useless stick!" : "";
@@ -6580,6 +6581,53 @@ public partial class GameManager : MonoBehaviour
             }
 
             Debug.Log($"[Scroll Metamagic] Applied {mmFeats.Count} metamagic feat(s) to {spell.Name}");
+        }
+
+        // Apply stored metamagic effects from wand (WandData)
+        WandData wd = item.Wand;
+        var wandMmFeats = wd?.MetamagicFeats;
+        if (wandMmFeats != null && wandMmFeats.Count > 0)
+        {
+            var metamagic = new MetamagicData();
+            foreach (var feat in wandMmFeats)
+            {
+                metamagic.Toggle(feat);
+                if (feat == MetamagicFeatId.HeightenSpell)
+                {
+                    int htl = wd.HeightenToLevel;
+                    if (htl > spell.SpellLevel)
+                        metamagic.HeightenToLevel = htl;
+                }
+            }
+            SpellCaster.ApplyMetamagicToSpellData(spell, metamagic);
+
+            if (metamagic.Has(MetamagicFeatId.MaximizeSpell))
+            {
+                if (spell.DamageCount > 0 && spell.DamageDice > 0)
+                {
+                    spell.BonusDamage += spell.DamageCount * spell.DamageDice;
+                    spell.DamageCount = 0;
+                }
+                if (spell.HealCount > 0 && spell.HealDice > 0)
+                {
+                    spell.BonusHealing += spell.HealCount * spell.HealDice;
+                    spell.HealCount = 0;
+                }
+            }
+
+            if (metamagic.Has(MetamagicFeatId.EmpowerSpell))
+            {
+                if (spell.DamageCount > 0)
+                    spell.BonusDamage += (spell.DamageCount * (spell.DamageDice + 1)) / 4;
+                if (spell.HealCount > 0)
+                    spell.BonusHealing += (spell.HealCount * (spell.HealDice + 1)) / 4;
+                if (spell.DamageCount == 0 && spell.BonusDamage > 0 && metamagic.Has(MetamagicFeatId.MaximizeSpell))
+                    spell.BonusDamage = (int)(spell.BonusDamage * 1.5f);
+                if (spell.HealCount == 0 && spell.BonusHealing > 0 && metamagic.Has(MetamagicFeatId.MaximizeSpell))
+                    spell.BonusHealing = (int)(spell.BonusHealing * 1.5f);
+            }
+
+            Debug.Log($"[Wand Metamagic] Applied {wandMmFeats.Count} metamagic feat(s) to {spell.Name}");
         }
 
         int modifier = item.ConsumableModifier;

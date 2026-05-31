@@ -95,7 +95,14 @@ public class WandData
     {
         if (string.IsNullOrWhiteSpace(SpellId)) return null;
         SpellDatabase.Init();
-        return SpellDatabase.GetSpell(SpellId);
+        // Robust fallback chain: ID lookup → alias → name-based search
+        var spell = SpellDatabase.GetSpell(SpellId);
+        if (spell == null)
+        {
+            Debug.LogWarning($"[WandData] SpellId '{SpellId}' not found by ID, trying name lookup...");
+            spell = SpellDatabase.GetSpellByName(SpellId);
+        }
+        return spell;
     }
 
     // ======================== CHARGE MANAGEMENT ========================
