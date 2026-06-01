@@ -61,6 +61,16 @@ public static class SpellCaster
         bool isMaximized = metamagic != null && metamagic.Has(MetamagicFeatId.MaximizeSpell);
         bool isHeightened = metamagic != null && metamagic.Has(MetamagicFeatId.HeightenSpell);
 
+        // Log active metamagic for debugging
+        if (isEmpowered || isMaximized || isHeightened)
+        {
+            var mmParts = new System.Collections.Generic.List<string>();
+            if (isEmpowered) mmParts.Add("Empower (×1.5 damage/healing)");
+            if (isMaximized) mmParts.Add("Maximize (max dice)");
+            if (isHeightened) mmParts.Add($"Heighten (effective level {metamagic.HeightenToLevel})");
+            Debug.Log($"[Metamagic] Applying metamagic to {spell.Name}: {string.Join(", ", mmParts)}");
+        }
+
         Alignment sourceAlignment = casterStats != null ? casterStats.CharacterAlignment : Alignment.None;
         AlignmentProtectionBenefits protection = AlignmentProtectionRules.GetBenefitsAgainst(targetController, sourceAlignment);
         result.ProtectionSourceName = GetActiveAlignmentProtectionSourceName(targetController);
@@ -431,9 +441,11 @@ public static class SpellCaster
                 // Empower: multiply total by 1.5
                 if (isEmpowered)
                 {
+                    int preDmg = totalDmg;
                     int empowerBonus = Mathf.RoundToInt(totalDmg * 0.5f);
                     result.EmpowerBonus = empowerBonus;
                     totalDmg += empowerBonus;
+                    Debug.Log($"[Metamagic] Empower Spell (missiles): base damage {preDmg} + {empowerBonus} (×1.5) = {totalDmg}");
                 }
 
                 result.DamageRolled = totalDmg;
@@ -458,10 +470,14 @@ public static class SpellCaster
                 // Empower: multiply variable portion by 1.5
                 if (isEmpowered)
                 {
+                    int preDmg = baseDmg;
                     int empowerBonus = Mathf.RoundToInt(baseDmg * 0.5f);
                     result.EmpowerBonus = empowerBonus;
                     baseDmg += empowerBonus;
+                    Debug.Log($"[Metamagic] Empower Spell: base damage {preDmg} + {empowerBonus} (×1.5) = {baseDmg}");
                 }
+                if (isMaximized)
+                    Debug.Log($"[Metamagic] Maximize Spell: all {spell.DamageCount}d{spell.DamageDice} dice set to max ({spell.DamageDice} each)");
 
                 result.DamageRolled = baseDmg;
 
@@ -526,10 +542,14 @@ public static class SpellCaster
             // Empower: multiply total by 1.5
             if (isEmpowered)
             {
+                int preHeal = totalHeal;
                 int empowerBonus = Mathf.RoundToInt(totalHeal * 0.5f);
                 result.EmpowerBonus = empowerBonus;
                 totalHeal += empowerBonus;
+                Debug.Log($"[Metamagic] Empower Spell: base healing {preHeal} + {empowerBonus} (×1.5) = {totalHeal}");
             }
+            if (isMaximized)
+                Debug.Log($"[Metamagic] Maximize Spell: all {spell.HealCount}d{spell.HealDice} heal dice set to max ({spell.HealDice} each)");
 
             totalHeal = Mathf.Max(1, totalHeal);
 
@@ -761,13 +781,28 @@ public static class SpellCaster
     {
         if (metamagic == null || !metamagic.HasAnyMetamagic) return;
 
-        // Enlarge Spell: double range
-        if (metamagic.Has(MetamagicFeatId.EnlargeSpell) && spell.RangeSquares > 0)
+        // Enlarge Spell: double range AND area dimensions (cone length, line length, burst/spread size)
+        // D&D 3.5e: Enlarge doubles close/medium/long range. We also scale AoE size for cones/lines/areas.
+        if (metamagic.Has(MetamagicFeatId.EnlargeSpell))
         {
-            spell.RangeSquares *= 2;
-            if (spell.RangeIncreaseSquares > 0)
-                spell.RangeIncreaseSquares *= 2;
-            Debug.Log($"[Metamagic] Enlarge Spell: range doubled to {spell.RangeSquares} squares (scaling +{spell.RangeIncreaseSquares}/{spell.RangeIncreasePerLevels} lv)");
+            if (spell.RangeSquares > 0)
+            {
+                spell.RangeSquares *= 2;
+                if (spell.RangeIncreaseSquares > 0)
+                    spell.RangeIncreaseSquares *= 2;
+                Debug.Log($"[Metamagic] Enlarge Spell: range doubled to {spell.RangeSquares} squares (scaling +{spell.RangeIncreaseSquares}/{spell.RangeIncreasePerLevels} lv)");
+            }
+            // Also double AoE dimensions (cone length, line length, burst size)
+            if (spell.AoESizeSquares > 0)
+            {
+                spell.AoESizeSquares *= 2;
+                Debug.Log($"[Metamagic] Enlarge Spell: AoESizeSquares doubled to {spell.AoESizeSquares} sq");
+            }
+            if (spell.AreaRadius > 0)
+            {
+                spell.AreaRadius *= 2;
+                Debug.Log($"[Metamagic] Enlarge Spell: AreaRadius doubled to {spell.AreaRadius} sq");
+            }
         }
 
         // Extend Spell: double duration

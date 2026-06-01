@@ -4690,6 +4690,8 @@ public partial class GameManager
             logBuilder.AppendLine($"═══════════════════════════════════");
             logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! ({_pendingSpell.AoESizeSquares * 5}-ft {shapeStr})");
             logBuilder.AppendLine($"  [{(_pendingSpell.SpellLevel == 0 ? "Cantrip" : $"Level {_pendingSpell.SpellLevel}")}] {_pendingSpell.School}");
+            if (_pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic)
+                logBuilder.AppendLine($"  Metamagic: {_pendingMetamagic.GetDisplayName()}");
             logBuilder.AppendLine($"  Targets: {targets.Count} creature(s) in {aoeCells.Count} squares");
             logBuilder.AppendLine();
 
@@ -4751,6 +4753,10 @@ public partial class GameManager
                                 logBuilder.AppendLine($"  Damage: {result.Spell.DamageCount}d{result.Spell.DamageDice} {SpellResult.FormatDiceRolls(result.DamageRolls)} = {result.DamageDealt} {result.DamageType}");
                             else
                                 logBuilder.AppendLine($"  Damage: {result.DamageDealt} {result.DamageType}");
+                            if (result.EmpowerBonus > 0)
+                                logBuilder.AppendLine($"    Empower: +{result.EmpowerBonus} (×1.5)");
+                            if (result.Metamagic != null && result.Metamagic.Has(MetamagicFeatId.MaximizeSpell))
+                                logBuilder.AppendLine($"    Maximized (all dice set to max)");
                             logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
 
                             // Check concentration for AoE spell damage
@@ -4772,6 +4778,10 @@ public partial class GameManager
                         SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, aoeHealForceFailSave, caster, target);
 
                         logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
+                        if (result.EmpowerBonus > 0)
+                            logBuilder.AppendLine($"    Empower: +{result.EmpowerBonus} (×1.5)");
+                        if (result.Metamagic != null && result.Metamagic.Has(MetamagicFeatId.MaximizeSpell))
+                            logBuilder.AppendLine($"    Maximized (all dice set to max)");
                         logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
                     }
 
