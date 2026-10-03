@@ -57,3 +57,5 @@ Assets/_Recovery/0.unity
 # Docs are Markdown only (docs/README.md policy 6); exports are generated on demand
 *.docx
 *.pdf
+# Abacus DeepAgent state blob: kept locally, untracked by owner decision (docs/issues/REPO.md REPO-012)
+.abacus.donotdelete
