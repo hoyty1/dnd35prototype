@@ -28,7 +28,7 @@ Entries per section:
 
 | Section | Prefix | High | Med | Low | Total | Next ID |
 |---|---|---|---|---|---|---|
-| [Build, repo and tooling](issues/REPO.md) | REPO | 1 | 5 | 10 | 16 | REPO-019 |
+| [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 2 | 19 | 15 | 36 | CORE-037 |
 | [Combat](issues/CMB.md) | CMB | 7 | 36 | 36 | 79 | CMB-080 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 7 | 9 | 17 | GRID-018 |
@@ -40,7 +40,7 @@ Entries per section:
 | [AI](issues/AI.md) | AI | 1 | 19 | 34 | 54 | AI-055 |
 | [UI](issues/UI.md) | UI | 1 | 11 | 38 | 50 | UI-051 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 18 | 26 | TST-027 |
-| **All** | | 39 | 233 | 303 | 575 | |
+| **All** | | 38 | 233 | 301 | 572 | |
 
 ## Top issues
 
@@ -48,7 +48,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
-| [REPO-001](issues/REPO.md) | High | Build, repo and tooling | Untracked .meta files: a fresh clone shows a Missing Script and does not boot | Yes |
 | [CORE-001](issues/CORE.md) | High | Runtime loop and core | Party wipe soft-locks the game (no defeat screen or exit path) | Yes |
 | [CORE-034](issues/CORE.md) | High | Runtime loop and core | A downed regenerating or fast-healing enemy is never counted as defeated, so the fight cannot be won | Yes |
 | [ENC-001](issues/ENC.md) | High | Encounters | Enemies 6+ spawn off the grid and cannot move; more than 15 enemies are dropped | Yes |

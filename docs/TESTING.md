@@ -63,7 +63,7 @@ No suite covers wand or scroll use in combat (only `CraftingSystemTests` scroll/
 ### 2.3 Runners that exist
 
 - `Tests.Services.ServiceTestRunner.RunAll()` runs 9 suites in sequence: SpellUtilities, SpellCastingHelper, TeamUtility, ConcentrationService, DispelMagicService, CombatLogHelper, SpellTargetingService, CombatCalculationService, DiceService. It skips AttackCalculatorTests, EconomyServiceTests, SavingThrowResolverTests and SpellResolutionServiceTests, has no exception isolation (one throw stops the rest), and its header comment ("Phase 5C", 8 suites, assertion counts) is stale (TST-024). Nothing calls it.
-- Three suites are MonoBehaviours whose `Start()` calls `public static void RunAllTests()`: `Tests.Combat.FlankingReachRulesTests`, `RangeCalculatorTests`, `ReachWeaponRulesTests`. They log `[FlankReachTest] PASS/FAIL ...` style lines. None is attached to a scene or prefab. You can add one as a component, but `.meta` files are git-ignored (`.gitignore:49-51`), so the script reference breaks on a fresh clone (REPO-001, [issues/REPO.md](issues/REPO.md)); do not commit such a scene change.
+- Three suites are MonoBehaviours whose `Start()` calls `public static void RunAllTests()`: `Tests.Combat.FlankingReachRulesTests`, `RangeCalculatorTests`, `ReachWeaponRulesTests`. They log `[FlankReachTest] PASS/FAIL ...` style lines. None is attached to a scene or prefab. You can add one as a component for a local run; do not commit that scene change.
 - Nothing else. No production code calls any `RunAll` (TST-002). `Encounters/DungeonEncounterTableExamples.RunAll()` is an example dump, not a test.
 
 ### 2.4 Shared helpers
@@ -177,7 +177,7 @@ public class TempTestRunner : MonoBehaviour
 #endif
 ```
 
-Steps: open `Assets/Scenes/MainScene.unity`, press Play, and press F10 once the character-creation screen is up (suites build their own characters, so no party is needed). The bootstrap needs no scene edit, so the git-ignored `.meta` file does not matter. F10 is unused elsewhere (only F12 is bound). Stop Play mode afterwards (see the pitfalls in 2.6).
+Steps: open `Assets/Scenes/MainScene.unity`, press Play, and press F10 once the character-creation screen is up (suites build their own characters, so no party is needed). The bootstrap needs no scene edit. F10 is unused elsewhere (only F12 is bound). Stop Play mode afterwards (see the pitfalls in 2.6).
 
 Reading results: enable only the Error filter in the Console to see `FAIL:` lines and exceptions (except `Phase5IntegrationTests`, which logs failures as plain `Debug.Log`). For summary lines search `passed` (case-insensitive): 81 suites print `Results:`, 13 print `RESULTS`, and `MetamagicSystemTests`, `NPCTemplateSystemTests` and `RodTests` use other formats. A suite with no summary line threw. The per-suite error count includes any `Debug.LogError` from production code, not just `FAIL:` lines, and misses `Phase5IntegrationTests` failures. An agent without Editor access can read the same output from `%LOCALAPPDATA%\Unity\Editor\Editor.log` after the user runs the suites.
 

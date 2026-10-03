@@ -83,15 +83,9 @@ After a victory you get DMG treasure by EL (coins go straight to party gold; gem
    - **Quick Start** lets you pick pre-made characters by class.
    - Build four characters step by step.
 
-**Known issue: "Missing Script" on GameBootstrap after a fresh clone.** `.gitignore` lines 49-51 ignore every `*.meta` file (they override the `!/[Aa]ssets/**/*.meta` exception on line 14; only 4 sprite `.meta` files are tracked). Script GUIDs are therefore generated per machine, and the scene's reference to `SceneBootstrap` breaks. The symptom is a Missing Script warning on `GameBootstrap` and an empty scene in Play mode. To fix it:
-1. Select `GameBootstrap` in the Hierarchy.
-2. Remove the missing component.
-3. Choose Add Component > Scene Bootstrap.
-4. Save the scene.
+`.meta` files are committed (since 2026-10-03), so the scene's reference to `SceneBootstrap` resolves on a fresh clone. If you add or move scripts outside Unity, open the project in Unity before committing so it creates or keeps the matching `.meta` files, and commit them with the scripts.
 
-The change this makes to `MainScene.unity` is only valid on your machine. You may need to repeat the fix after a pull that changes `MainScene.unity` or moves `SceneBootstrap.cs`. This lasts until the `.meta` files are tracked (see [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)).
-
-To update, run `git pull`, then reopen Unity and check `GameBootstrap` again.
+To update, run `git pull` and reopen Unity.
 
 ## Controls and debug tools
 

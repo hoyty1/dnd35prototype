@@ -21,14 +21,14 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 - **Verify D&D rules claims.** A PHB cite in a comment shows intent, not correctness; say which rule you applied. Deviations from RAW that might be intentional (e.g. crit multiplier CMB-004, Enlarge Spell area SPL-010) are unconfirmed: ask the owner before changing such behaviour. Call something a house rule only if the code labels it so (luck stacking in `Assets/Scripts/Spell/BonusType.cs`, the attack pool in `Assets/Scripts/Combat/Core/AttackPool.cs`) or the owner confirmed it.
 - **Never mutate database templates.** `SpellDatabase.GetSpell`, `ItemDatabase.Get`, `NPCDatabase.Get` return shared instances: clone (`SpellData.Clone()`, `ItemDatabase.CloneItem`, `NPCDefinition.Clone()`). New `ItemData` fields go in `ItemDatabase.CloneItem(string)` and `ItemBuilder.CopyBaseProperties`; new `NPCDefinition` fields in `Clone` and the templates' `CopyDefinitionFields` (CRE-023).
 - **Keep docs true in the same change.** Markdown in `docs/` only. Fixed issue: delete its entry in `docs/issues/<PREFIX>.md`, update counts/Top issues in `docs/KNOWN_ISSUES.md`, cite the ID in the commit. New issue: next free ID for the prefix. Update `docs/ARCHITECTURE.md` (or its part), the matching `docs/systems/` doc and `docs/DEVELOPMENT_RECIPES.md` when structure, status or a recipe changes. Refresh status lines you re-verify; say "not verified in Play mode" for anything only read.
-- **`.meta` files are git-ignored (REPO-001).** Never `git checkout`/`restore` `MainScene.unity` (its uncommitted change is the local `SceneBootstrap` GUID relink). Move a `.cs`'s `.meta` with it; never hand-write metas.
+- **`.meta` files are versioned.** Commit each asset's `.meta` with it; after adding scripts outside Unity, let Unity import them and commit the generated metas; move or rename assets with their metas (`git mv` both); never hand-write metas.
 - **Ask first:** history rewrites, force-pushes, mass deletions, Unity asset/scene/package/settings changes, anything pending an owner decision.
 - **Commits:** imperative sentence-case subject, no period, e.g. `Fix flanking AC double count (CMB-001)`; no "Phase/Sprint/Tier N" prefixes; doc-only changes separate; "not verified in Play mode" in the body when true.
 
 ## Build, run, test
 
 - **Compile:** `bash tools/compile_check.sh` (about 5 s, `VERBOSE=1` lists warnings); expect `exit=0 errors=0 warnings=508`.
-- **Run:** open in 6000.4.0f1, open `MainScene`, Play ("Missing Script" fix in `README.md`). You cannot press Play: ask the owner or state what is unverified.
+- **Run:** open in 6000.4.0f1, open `MainScene`, Play. You cannot press Play: ask the owner or state what is unverified.
 - **Fast party:** **Play Now!** or **Quick Start** on character creation.
 - **Dev tools:** the F12 Spell Testing Panel and `*_test` presets bypass normal rules; see `docs/TESTING.md` 4.2-4.3.
 - **Static suites** in `Assets/Scripts/Tests` (no test framework, no CI, never called): run via the temporary runner in `docs/TESTING.md` section 3, then delete it.
@@ -47,7 +47,7 @@ Under `Assets/Scripts/`; full map in `docs/ARCHITECTURE.md`.
 | `Services/` | MonoBehaviour services on GameManager (Turn, Input, Movement, Condition, AI, CombatFlow, Economy, DispelMagic) + static helpers |
 | `AI/`, `UI/`, `Encounters/`, `Grid/` | AI profiles; code-built UI; DMG tables and spawner; square grid ("Hex" names are legacy) |
 
-Empty leftover folders (`Core/`, `Magic/`, ...; REPO-016) are local only. Resolve an old path like `Magic/X.cs` with Glob `**/X.cs`.
+Resolve an old doc path like `Magic/X.cs` with Glob `**/X.cs` (the 2026-05-27 reorganization moved files, not names).
 
 Where to look first:
 
@@ -95,10 +95,9 @@ Where to look first:
 
 ## Current state
 
-- **Idle since 0dd8e76 (2026-06-01).** Unity last opened 2026-05-27; the next open reimports and creates new `.meta` files.
+- **Last feature commit 0dd8e76 (2026-06-01).** Unity reopened on this project 2026-10-03 with the Unity MCP attached (check console paths before trusting it).
 - **Metamagic/consumables thread mid-flight:** scrolls and wands now use the cast pipeline, F12 has metamagic toggles, and 0dd8e76 added Enlarge area doubling and `[Metamagic]` logging. Open: SPL-010, SPL-038, SPL-040, SPL-064.
-- **Uncommitted `MainScene.unity` GUID relink:** keep it (REPO-001, REPO-008).
-- **Repo hygiene (2026-10-03):** `.meta` tracking approved, to do when Unity is free (REPO-001); `.abacus.donotdelete` untracked, history purge only on request (REPO-012); creature token art kept for later (REPO-015).
+- **Repo hygiene (2026-10-03):** `.meta` files tracked; `.abacus.donotdelete` untracked (history purge only on request, REPO-012); creature token art kept for later (REPO-015); TMP re-import pending (REPO-002).
 - **Docs:** rebuilt 2026-10-03. All old docs are retired (`docs/archive/INDEX.md`); every finding is filed in `docs/issues/`; `docs/designs/` holds 3 unbuilt plans with status headers.
 
 ## Docs index

@@ -65,7 +65,7 @@ Developer shortcuts (22 hard-wired test encounter presets, the F12 Spell Testing
 
 The project has no prefabs (0 `.prefab` files) and no project-authored ScriptableObject assets (the only `.asset` ScriptableObjects are TextMesh Pro's own font/settings files under `Assets/TextMesh Pro/`). Everything else is created at runtime.
 
-`.meta` files are gitignored (`.gitignore:49-51`), so the scene's script GUID only resolves on a machine whose local `SceneBootstrap.cs.meta` matches. On a fresh clone `GameBootstrap` shows "Missing Script" and Play shows an empty view. The fix is to re-add `SceneBootstrap` to `GameBootstrap`. The working copy carries an uncommitted GUID fix for this machine. Tracked in [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+The scene references `SceneBootstrap` by the GUID in `Assets/Scripts/_Core/SceneBootstrap.cs.meta`. `.meta` files have been committed since 2026-10-03, so the reference resolves on any clone; keep each `.meta` next to its asset when moving or renaming files.
 
 #### SceneBootstrap (`_Core/SceneBootstrap.cs`)
 
@@ -287,7 +287,7 @@ Assets/Scripts/
   Tests/ (101)           14 domain subfolders of static RunAll() suites (+ README.md, manual .md scenarios)
 ```
 
-Leftover folders exist only on this machine. They are empty, untracked, and visible in Unity because their folder `.meta` files exist locally: `Core/` (with `Commands/`), `Magic/` (with `AreaEffects`, `Components`, `Spells/Databases`, `StatusEffects`), `CombatSystems/`, `Classes/`, `Store/`, `Inventory/`, `UI/Panels/`. They contain no code. Ignore them, or delete each one together with its `.meta`.
+The empty legacy folders left by the reorganization (`Core/`, `Magic/`, `CombatSystems/`, `Classes/`, `Store/`, `Inventory/`, `UI/Panels/`) were removed on 2026-10-03. Resolve an old doc path such as `Magic/X.cs` by file name (`**/X.cs`).
 
 ### Cross-cutting conventions
 
