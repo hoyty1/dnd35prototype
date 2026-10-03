@@ -1,8 +1,8 @@
-> Verified against commit 0dd8e76 (2026-06-01) on 2026-10-02.
+> Verified against commit 0dd8e76 (2026-06-01) on 2026-10-03.
 
 # CLAUDE.md
 
-Working agreement for AI agents. It loads into every session, so it stays short; depth is in `docs/`.
+Working agreement for AI agents. It loads every session, so it stays short; depth is in `docs/`.
 
 ## Project
 
@@ -10,6 +10,7 @@ Working agreement for AI agents. It loads into every session, so it stays short;
 - One scene, `Assets/Scenes/MainScene.unity`; `SceneBootstrap.Awake` (`Assets/Scripts/_Core/SceneBootstrap.cs`) builds grid, characters, UI and `GameManager` at runtime. No prefabs, no saves.
 - Written mostly by earlier AI agents; maintained by Claude for the owner, hoyty1.
 - **Goal (owner, 2026-10-03):** play as close to the 3.5e core rules (PHB/DMG/MM) as possible. Battles are randomized encounters based on the DMG random encounter rules. Between battles you manage the party by PHB/DMG rules. Enemy AI needs much more depth because the combat option space is vast. Prefer RAW unless the owner confirms a house rule.
+- **Enemy AI work:** start at `docs/systems/AI.md` (requests: `AI_PLAYBOOKS.md`; option matrix: `AI_ACTION_COVERAGE.md`); rules fidelity: `docs/systems/RULES_COVERAGE.md`.
 
 ## Ground rules
 
@@ -19,7 +20,7 @@ Working agreement for AI agents. It loads into every session, so it stays short;
 - **Unity MCP tools may point at another project:** check that console paths exist here. No Unity batchmode without permission (writes `Library/` and `.meta` files).
 - **Verify D&D rules claims.** A PHB cite in a comment shows intent, not correctness; say which rule you applied. Deviations from RAW that might be intentional (e.g. crit multiplier CMB-004, Enlarge Spell area SPL-010) are unconfirmed: ask the owner before changing such behaviour. Call something a house rule only if the code labels it so (luck stacking in `Assets/Scripts/Spell/BonusType.cs`, the attack pool in `Assets/Scripts/Combat/Core/AttackPool.cs`) or the owner confirmed it.
 - **Never mutate database templates.** `SpellDatabase.GetSpell`, `ItemDatabase.Get`, `NPCDatabase.Get` return shared instances: clone (`SpellData.Clone()`, `ItemDatabase.CloneItem`, `NPCDefinition.Clone()`). New `ItemData` fields go in `ItemDatabase.CloneItem(string)` and `ItemBuilder.CopyBaseProperties`; new `NPCDefinition` fields in `Clone` and the templates' `CopyDefinitionFields` (CRE-023).
-- **Keep docs true in the same change.** Markdown in `docs/` only. Fixed issue: delete its entry in `docs/issues/<PREFIX>.md`, update counts/Top issues in `docs/KNOWN_ISSUES.md`, cite the ID in the commit. New issue: next free ID for the prefix. Update `docs/ARCHITECTURE.md` (or its part) and `docs/DEVELOPMENT_RECIPES.md` when structure or a recipe changes. Refresh status lines you re-verify; say "not verified in Play mode" for anything only read.
+- **Keep docs true in the same change.** Markdown in `docs/` only. Fixed issue: delete its entry in `docs/issues/<PREFIX>.md`, update counts/Top issues in `docs/KNOWN_ISSUES.md`, cite the ID in the commit. New issue: next free ID for the prefix. Update `docs/ARCHITECTURE.md` (or its part), the matching `docs/systems/` doc and `docs/DEVELOPMENT_RECIPES.md` when structure, status or a recipe changes. Refresh status lines you re-verify; say "not verified in Play mode" for anything only read.
 - **`.meta` files are git-ignored (REPO-001).** Never `git checkout`/`restore` `MainScene.unity` (its uncommitted change is the local `SceneBootstrap` GUID relink). Move a `.cs`'s `.meta` with it; never hand-write metas.
 - **Ask first:** history rewrites, force-pushes, mass deletions, Unity asset/scene/package/settings changes, anything pending an owner decision.
 - **Commits:** imperative sentence-case subject, no period, e.g. `Fix flanking AC double count (CMB-001)`; no "Phase/Sprint/Tier N" prefixes; doc-only changes separate; "not verified in Play mode" in the body when true.
@@ -97,17 +98,17 @@ Where to look first:
 - **Idle since 0dd8e76 (2026-06-01).** Unity last opened 2026-05-27; the next open reimports and creates new `.meta` files.
 - **Metamagic/consumables thread mid-flight:** scrolls and wands now use the cast pipeline, F12 has metamagic toggles, and 0dd8e76 added Enlarge area doubling and `[Metamagic]` logging. Open: SPL-010, SPL-038, SPL-040, SPL-064.
 - **Uncommitted `MainScene.unity` GUID relink:** keep it (REPO-001, REPO-008).
-- **Repo hygiene (2026-10-03):** `.meta` tracking approved, to do when Unity is free (REPO-001); `.abacus.donotdelete` untracked, history purge only on request (REPO-012); creature token art kept for later (REPO-015). Rest in `docs/issues/REPO.md`.
-- **Docs phase 2 pending:** `docs/README.md`.
+- **Repo hygiene (2026-10-03):** `.meta` tracking approved, to do when Unity is free (REPO-001); `.abacus.donotdelete` untracked, history purge only on request (REPO-012); creature token art kept for later (REPO-015).
+- **Docs:** rebuilt 2026-10-03. All old docs are retired (`docs/archive/INDEX.md`); every finding is filed in `docs/issues/`; `docs/designs/` holds 3 unbuilt plans with status headers.
 
 ## Docs index
 
 - `README.md`: overview, setup, controls.
 - `docs/README.md`: docs index and policy.
 - `docs/ARCHITECTURE.md` + `docs/architecture/*.md`: structure, services, conventions, subsystems.
-- `docs/KNOWN_ISSUES.md` + `docs/issues/<PREFIX>.md`: issue rules, counts and next IDs, Top issues; entries. Read the prefix file before changing a subsystem.
+- `docs/KNOWN_ISSUES.md` + `docs/issues/<PREFIX>.md`: rules, counts, next IDs, Top issues; entries. Read the prefix file before changing a subsystem.
 - `docs/DEVELOPMENT_RECIPES.md`: how to add spells, items, monsters, UI and more.
 - `docs/TESTING.md`: compile check, suites, presets, F12 panel.
-- `docs/designs/`: older unbuilt plans; verify against code.
+- `docs/designs/`: older unbuilt plans.
 - `docs/archive/INDEX.md`: retired docs via `git show`.
-- `docs/systems/` (planned): AI, rules coverage, encounters, party management, spells, creatures, magic items.
+- `docs/systems/*.md`: per-system content, 3.5e status, backlog (AI, rules, encounters, party, spells, creatures, items).

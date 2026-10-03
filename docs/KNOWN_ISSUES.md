@@ -29,18 +29,18 @@ Entries per section:
 | Section | Prefix | High | Med | Low | Total | Next ID |
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 1 | 5 | 10 | 16 | REPO-019 |
-| [Runtime loop and core](issues/CORE.md) | CORE | 1 | 17 | 15 | 33 | CORE-034 |
-| [Combat](issues/CMB.md) | CMB | 6 | 25 | 32 | 63 | CMB-064 |
+| [Runtime loop and core](issues/CORE.md) | CORE | 2 | 19 | 15 | 36 | CORE-037 |
+| [Combat](issues/CMB.md) | CMB | 7 | 36 | 36 | 79 | CMB-080 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 7 | 9 | 17 | GRID-018 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 10 | 43 | 36 | 89 | SPL-090 |
-| [Characters, feats and classes](issues/CHR.md) | CHR | 7 | 19 | 29 | 55 | CHR-056 |
-| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 12 | 13 | 29 | CRE-030 |
-| [Encounters](issues/ENC.md) | ENC | 1 | 6 | 12 | 19 | ENC-020 |
-| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 29 | 30 | 63 | ITM-064 |
-| [AI](issues/AI.md) | AI | 1 | 9 | 21 | 31 | AI-032 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 10 | 53 | 46 | 109 | SPL-110 |
+| [Characters, feats and classes](issues/CHR.md) | CHR | 7 | 23 | 36 | 66 | CHR-067 |
+| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 14 | 15 | 33 | CRE-034 |
+| [Encounters](issues/ENC.md) | ENC | 1 | 7 | 13 | 21 | ENC-022 |
+| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 31 | 33 | 68 | ITM-069 |
+| [AI](issues/AI.md) | AI | 1 | 19 | 34 | 54 | AI-055 |
 | [UI](issues/UI.md) | UI | 1 | 11 | 38 | 50 | UI-051 |
-| [Tests](issues/TST.md) | TST | 0 | 8 | 16 | 24 | TST-025 |
-| **All** | | 37 | 191 | 261 | 489 | |
+| [Tests](issues/TST.md) | TST | 0 | 8 | 18 | 26 | TST-027 |
+| **All** | | 39 | 233 | 303 | 575 | |
 
 ## Top issues
 
@@ -50,6 +50,7 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 |---|---|---|---|---|
 | [REPO-001](issues/REPO.md) | High | Build, repo and tooling | Untracked .meta files: a fresh clone shows a Missing Script and does not boot | Yes |
 | [CORE-001](issues/CORE.md) | High | Runtime loop and core | Party wipe soft-locks the game (no defeat screen or exit path) | Yes |
+| [CORE-034](issues/CORE.md) | High | Runtime loop and core | A downed regenerating or fast-healing enemy is never counted as defeated, so the fight cannot be won | Yes |
 | [ENC-001](issues/ENC.md) | High | Encounters | Enemies 6+ spawn off the grid and cannot move; more than 15 enemies are dropped | Yes |
 | [UI-001](issues/UI.md) | High | UI | Combat log adds about 50 pooled GameObjects on every log call (growth not measured) | Yes |
 | [CMB-001](issues/CMB.md) | High | Combat | Flanked targets get -2 AC against every attacker (effective +4 for flankers) | Yes |
@@ -57,7 +58,8 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [CMB-003](issues/CMB.md) | High | Combat | Morale and situational damage bonuses never reach weapon damage | Yes |
 | [CMB-004](issues/CMB.md) | High | Combat | Critical hits multiply only weapon dice; coup de grace multiplies sneak attack | Yes |
 | [CMB-005](issues/CMB.md) | High | Combat | Movement AoOs resolve after the step, so they can auto-miss but are still spent | Yes |
-| [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at round end, so 1-round conditions can cost the target nothing | Yes |
+| [CMB-073](issues/CMB.md) | High | Combat | NPC, summon and condition-forced movement never provokes attacks of opportunity | Yes |
+| [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at the round boundary (GameManager.OnNewRound -> ConditionService.OnRoundEnd), so 1-round conditions can cost the target nothing | Yes |
 | [CHR-001](issues/CHR.md) | High | Characters, feats and classes | Created PCs get CON hit points twice; CON HP clamped to +1 per level | Yes |
 | [CHR-002](issues/CHR.md) | High | Characters, feats and classes | Class BAB and hit-die tables contradict class data and RAW (e.g. Bard 1/2 BAB) | Yes |
 | [CHR-018](issues/CHR.md) | High | Characters, feats and classes | Divine Grace and other save bonuses are computed but never applied | Yes |

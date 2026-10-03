@@ -129,7 +129,7 @@ Test encounter presets: in encounter selection, 22 preset IDs (for example `grap
 | [docs/TESTING.md](docs/TESTING.md) | Compile check, runtime suites, manual test presets and scenarios, the F12 panel |
 | [docs/designs/](docs/designs/) | Older design and implementation plans for features that are not fully built. They have no verified status header yet; check the code before trusting them |
 | [docs/archive/INDEX.md](docs/archive/INDEX.md) | Retired docs and how to read them from git history |
-| `docs/systems/` (planned, not yet written) | Developer references: enemy AI today, 3.5e rules coverage, encounters, party management between battles, spells, creatures, magic items. Until they exist, use `docs/ARCHITECTURE.md` and `docs/KNOWN_ISSUES.md`. |
+| [docs/systems/](docs/systems/) | Developer references on content, 3.5e rules status and backlog, one per system: [enemy AI](docs/systems/AI.md), [rules coverage (PHB/DMG/MM)](docs/systems/RULES_COVERAGE.md), [encounters](docs/systems/ENCOUNTERS.md), [party management between battles](docs/systems/PARTY_MANAGEMENT.md), [spells and metamagic](docs/systems/SPELLS_AND_METAMAGIC.md), [creatures](docs/systems/CREATURES.md), [magic items](docs/systems/MAGIC_ITEMS.md) |
 
 The code is the source of truth. If a doc disagrees with the code, fix the doc.
 

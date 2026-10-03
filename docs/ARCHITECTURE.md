@@ -16,6 +16,8 @@ This file covers the runtime loop, composition, services and cross-cutting conve
 | [Items & economy](architecture/items-and-economy.md) | ItemData/ItemDatabase, inventory, consumables, enchantments, rings/rods/wondrous/staves, store, crafting, treasure |
 | [AI, encounters & UI](architecture/ai-encounters-ui.md) | NPC AI pipeline and profiles, encounter sources and spawning, UI construction, debug tools |
 
+The parts describe how the code is built. For content inventories, status against the 3.5e rules and backlogs, see the systems docs in [systems/](systems/): [AI](systems/AI.md), [rules coverage](systems/RULES_COVERAGE.md), [encounters](systems/ENCOUNTERS.md), [party management](systems/PARTY_MANAGEMENT.md), [spells and metamagic](systems/SPELLS_AND_METAMAGIC.md), [creatures](systems/CREATURES.md), [magic items](systems/MAGIC_ITEMS.md). The index with when to read each is in [README.md](README.md#systems-docs).
+
 ## Overview & runtime loop
 
 ### What the game is and the runtime loop

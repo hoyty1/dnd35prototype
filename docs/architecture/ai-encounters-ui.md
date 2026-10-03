@@ -1,10 +1,14 @@
-> Verified against commit 0dd8e76 (2026-06-01) on 2026-10-02.
+> Verified against commit 0dd8e76 (2026-06-01) on 2026-10-03.
 
 # AI, encounters & UI
 
 This part covers how non-player combatants choose actions, how an encounter's enemies are picked and placed, and how the code-built UI is organised. Grid geometry and the combat rules that the AI calls into are described in [Combat & grid](combat-and-grid.md#combat--grid). Behaviour here was checked by reading code; none of it was re-checked in Play mode.
 
+This part is an overview. The deep references are [systems/AI.md](../systems/AI.md) for enemy AI (full turn pipeline, every routine and hook, the combat options the AI can and cannot use, rules deviations, extension playbooks) and [systems/ENCOUNTERS.md](../systems/ENCOUNTERS.md) for encounter generation (DMG tables, CR/EL/XP math, treasure, DMG coverage).
+
 ## NPC AI: two-axis configuration
+
+Detail, status and backlog for every NPC AI section below: [systems/AI.md](../systems/AI.md).
 
 Each NPC's AI is set by two independent fields on `NPCDefinition` (Assets/Scripts/Character/Creatures/NPCDatabase.cs:626-627):
 
@@ -89,12 +93,12 @@ The base class is `AIProfile` (AI/AIProfile.cs, namespace `DND35.AI`). There are
 | UndeadBrute | UndeadBruteAIProfile | Melee | Ignores AoOs |
 | UndeadIncorporeal | UndeadIncorporealAIProfile | Melee | Prefers targets with low touch AC |
 | Vampire | VampireAIProfile : SpellcasterAIProfile | Melee | Its docstring promises spells first; with the default behavior it never casts |
-| Lich | LichAIProfile : SpellcasterAIProfile | Ranged | Casts through RangedKiter |
+| Lich | LichAIProfile : SpellcasterAIProfile | Ranged | Routed to RangedKiter, but prepares no spells (SPL-015), so it never casts |
 | Swarm, IndiscriminateSwarm | SwarmAI, IndiscriminateSwarmAI | Melee | Own routine; the indiscriminate variant ignores teams |
 | Dragon | DragonAIProfile | Mixed | Own routine. Per-turn state lives on the instance, so never share one instance between NPCs |
 | Brute, Caster | none | n/a | `BuildRuntimeAIProfile` returns null |
 
-The live virtual hooks on `AIProfile` are `ScoreTarget`, `ShouldPreferCharge`, `ShouldIgnoreUnconsciousTargets`, `ShouldSwitchTargetsMidFullAttack`, `ShouldTakeFiveFootStepToContinueFullAttack`, `ShouldUseCoupDeGrace`, `ShouldIgnoreAoO`, `TryEnsureWeaponFallback`, `ShouldInitiateGrapple`, `GetPreferredManeuver` and `GetRangedAoORiskToleranceMultiplier`, plus the virtual properties `PrioritizeVisibleTargets` and `ConcealmentPenaltyMultiplier` (read by AIService target scoring). `ShouldEscapeGrapple` is never called. Several fields are assigned but never read: `Aggression`, `SwitchTargetsOften`, `Movement.MaintainDistance`, `Movement.UseCover`, `Maneuvers.UsePowerAttack/UseAidAnother/UseCombatExpertise`, `SpellcasterAIProfile.FleeHealthThreshold` and `HealerAIProfile.StayNearWoundedAllies`. No profile can make an NPC flee. The only low-HP retreats are the DefensiveMelee withdraw and the summon retreat, both hard-coded at 30% HP in AIService and GameManager. The AI never toggles Power Attack or Combat Expertise.
+The live virtual hooks on `AIProfile` are `ScoreTarget`, `ShouldPreferCharge`, `ShouldIgnoreUnconsciousTargets`, `ShouldSwitchTargetsMidFullAttack`, `ShouldTakeFiveFootStepToContinueFullAttack`, `ShouldUseCoupDeGrace`, `ShouldIgnoreAoO`, `TryEnsureWeaponFallback`, `ShouldInitiateGrapple`, `GetPreferredManeuver` and `GetRangedAoORiskToleranceMultiplier`, plus the virtual properties `PrioritizeVisibleTargets` and `ConcealmentPenaltyMultiplier` (read by AIService target scoring). `ShouldEscapeGrapple` is never called. Several fields are assigned but never read: `Aggression`, `SwitchTargetsOften`, `Movement.MaintainDistance`, `Movement.UseCover`, `Maneuvers.UsePowerAttack/UseAidAnother/UseCombatExpertise`, `SpellcasterAIProfile.FleeHealthThreshold` and `HealerAIProfile.StayNearWoundedAllies`. No profile can make an NPC flee (AI-010). The only retreats are hard-coded: the DefensiveMelee withdraw below 30% HP (AIService.cs:1165), the non-controllable summon retreat at 30% HP (GameManager.NPCTurns.cs:101), the animal grapple escape below 25% HP (AnimalAIProfile.cs:196), the dragon's step away after breathing (AIService.cs:719, 761), the RangedKiter's distance keeping, and condition-forced fleeing (Confused and Frightened). See [Morale and fleeing](../systems/AI.md#89-morale-and-fleeing) in systems/AI.md. The AI never toggles Power Attack or Combat Expertise.
 
 ## NPC AI: spellcasting
 
@@ -125,13 +129,17 @@ AIService.TryExecuteSpellcastAction (2340)       requires a standard action and 
 
 ## NPC AI: what it cannot do
 
+The full option-by-option list (PHB ch.8 actions, maneuvers, spells, items, monster specials) is the [action coverage matrix](../systems/AI.md#9-action-coverage-matrix) in systems/AI.md.
+
 - **Cast area spells.** `TryNPCPerformSpellCast` returns false for any `SpellTargetType.Area` spell (GameManager.NPCTurns.cs:787-788). The profile and the strategist still score AoE spells, so a caster can pick Fireball, fail to cast it, and fall back to another action in silence.
-- **Cast from the melee routines.** `ExecuteAggressiveMeleeTurn` and `ExecuteDefensiveMeleeTurn` never call `TryExecuteSpellcastAction`. A Spellcaster-archetype monster that keeps the default AggressiveMelee behavior never casts. Examples are mind_flayer (NPCDatabase_M.cs:600) and vampire (NPCDatabase_V.cs:242, Vampire profile with CombatStyle Melee). The Lich casts only because its profile sets `CombatStyle.Ranged`.
+- **Cast from the melee routines.** `ExecuteAggressiveMeleeTurn` and `ExecuteDefensiveMeleeTurn` never call `TryExecuteSpellcastAction`. A Spellcaster-archetype monster that keeps the default AggressiveMelee behavior never casts. Examples are mind_flayer (NPCDatabase_M.cs:600) and vampire (NPCDatabase_V.cs:242, Vampire profile with CombatStyle Melee). The Lich reaches RangedKiter because its profile sets `CombatStyle.Ranged`, but it still never casts: its prepared list is assigned to slots by position and starts at 1st level, so no spell lands in a matching slot (SPL-015). See [Who can cast](../systems/AI.md#71-who-can-cast) in systems/AI.md.
 - **Counterspell.** `AIService.TryAIReadyCounterspell` (2660) has no callers, and no player UI calls `CharacterController.ReadyCounterspell` (CharacterController.cs:12137); only tests do. `DispelMagicService.TryResolveCounterspell` therefore never finds a readied caster in normal play.
 - **Rules deviations.** NPC casting never provokes an AoO and never rolls a defensive Concentration check (see the `TryNPCPerformSpellCast` row in [Cast pipelines](spells.md#cast-pipelines)). Monster special attacks (Spittle, swarm damage) bypass the normal attack and damage math. These and the other AI rules gaps are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 - **Consumables.** `AIConsumableManager` is used only in Tests/Classes/NPCTemplateSystemTests.cs, so NPCs never use potions, scrolls or wands.
 
 ## Encounters: the four sources
+
+Detail, status and backlog for both Encounters sections: [systems/ENCOUNTERS.md](../systems/ENCOUNTERS.md).
 
 All four sources end in a `List<string>` of NPC IDs. `GameManager.PromptEncounterSelection` (GameManager.cs:785) passes three callbacks to `EncounterSelectionUI.Open`: `onSelect` receives a preset ID (an empty ID becomes `goblin_raiders`) that `ApplyEncounterPreset` resolves to its ID list, `onStartRandomEncounter` receives the ID list directly, and `onCancel` applies `goblin_raiders`.
 
