@@ -68,7 +68,7 @@ After a victory you get DMG treasure by EL (coins go straight to party gold; gem
 ## Requirements
 
 - Unity **6000.4.0f1** exactly (`ProjectSettings/ProjectVersion.txt`). Other versions will offer to upgrade the project.
-- Packages resolve from `Packages/manifest.json`: Input System 1.11.2, uGUI 2.0.0, TextMeshPro, 2D Sprite, 2D Tilemap. Active Input Handling is set to Both.
+- Packages resolve from `Packages/manifest.json`: Input System 1.11.2, uGUI 2.0.0, TextMeshPro, 2D Sprite, 2D Tilemap, plus Unity AI Assistant (`com.unity.ai.assistant`, pre-release) and AI Inference (`com.unity.ai.inference`), which provide the Unity MCP bridge the maintaining agent uses. Active Input Handling is set to Both.
 - No IDE package is included, so Unity generates no `.sln`. For IntelliSense, add `com.unity.ide.visualstudio` or `com.unity.ide.rider` locally.
 - Git Bash (on Windows) to run `tools/compile_check.sh`.
 
