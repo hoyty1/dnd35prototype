@@ -54,4 +54,6 @@ Assets/Resources/Sprites/npc_enemy_dead.png.meta
 ProjectSettings/SceneTemplateSettings.json
 Assets/_Recovery/0.unity
 *.bak_refactor
-CODEBASE_EVALUATION.pdf
+# Docs are Markdown only (docs/README.md policy 6); exports are generated on demand
+*.docx
+*.pdf
