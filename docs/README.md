@@ -17,7 +17,7 @@ The code is the source of truth. These docs cover only what the code can't tell 
 | [`DEVELOPMENT_RECIPES.md`](DEVELOPMENT_RECIPES.md) | You are adding a spell or spell effect, metamagic feat, condition, feat, class feature, maneuver, item, monster, template, encounter, action button or UI panel. |
 | [`TESTING.md`](TESTING.md) | You need to compile-check, run a test suite or play-test a change. |
 | [`systems/`](systems/) | You need content, status against the 3.5e rules, or the backlog for one system. One doc per system; see the table below. |
-| [`designs/`](designs/) | Three design plans for features that are not fully built (creature trapping, item creation feats, remaining class features). Each starts with a status header verified on 2026-10-03; the body below it is design intent, not a description of the code. |
+| [`designs/`](designs/) | Design plans for features that are not fully built, each with a status header: creature trapping, item creation feats, remaining class features, and [`enemy_ai_knowledge_and_personalities.md`](designs/enemy_ai_knowledge_and_personalities.md) (proposal: knowledge tags and weighted personality blends for enemy AI). The body below each header is design intent, not a description of the code. |
 | [`archive/INDEX.md`](archive/INDEX.md) | You want an old doc. Retired docs are listed there, with the `git show` command to read them. |
 
 ### Systems docs
