@@ -84,7 +84,7 @@ What does exist is 19 profile classes:
   - The concrete class: `is SwarmAI`, `is HealerAIProfile` and `is DragonAIProfile` at `AIService.cs:183, 197, 260`.
   - `NPCAIBehavior`, read through `GetNPCBehaviorForAI` (`NPCTurns.cs:62`) from the parallel list `_npcAIBehaviors`.
 
-  Other type checks are at `AIService.cs:2518`, `AISpellcastingStrategist.cs:1506`, `GrappleSystem.cs:1812, 1836` and `GameManager.SpellCasting.cs:777`.
+  Other type checks are at `AIService.cs:2518`, `AISpellcastingStrategist.cs:1506`, `GrappleSystem.cs:1818, 1842` and `GameManager.SpellCasting.cs:777`.
 - **Mismatched scales.** Profile scores are on very different scales. `UndeadMindlessAIProfile.ScoreTarget` returns `100000 - 1000*dist`, Swarm returns `100 - dist`, and the base profile returns about 10-40. The perception and concealment adjustment (±50 to 120, `AIService.cs:1925-1997`) swamps every profile term.
 - **Tags are global ground truth.**
   - `CharacterTags` is filled by `StatusTagManager` with `Race:` (from `DisplayedRace`, so Disguise Self works), `Class:` (the true class), `HP State:`, `Status:` (every condition, including Charmed), `Wielding:` (item names, which can include "+1") and `Armor:`.

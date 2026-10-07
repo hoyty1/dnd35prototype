@@ -9407,18 +9407,18 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                if (TryGetGrappleLink(this, out GrappleLink link))
-                    ClearPinnedState(link);
-
                 string opponentName = opponent != null && opponent.Stats != null
                     ? opponent.Stats.CharacterName
                     : "opponent";
+
+                // PHB p.157: releasing a pin (a free action) ends the grapple for both creatures (CMB-089).
+                ReleaseGrappleState("pinned opponent released");
 
                 return new SpecialAttackResult
                 {
                     ManeuverName = "Release Pinned Opponent",
                     Success = true,
-                    Log = $"{Stats.CharacterName} releases {opponentName} from pin. Both remain in the grapple."
+                    Log = $"{Stats.CharacterName} releases {opponentName} from the pin, ending the grapple."
                 };
             }
             default:
@@ -12250,5 +12250,14 @@ public class CharacterController : MonoBehaviour
         else
             Debug.LogWarning($"[Counterspell] {Stats.CharacterName}: Failed to consume spell slot for {spell.Name}!");
         return consumed;
+    }
+
+    /// <summary>
+    /// Grapple actions that cost no action (PHB p.157: releasing a pinned opponent is a free action).
+    /// Shared by the PC grapple flow, the AI grapple turn and the AI legal-action list.
+    /// </summary>
+    public static bool IsFreeGrappleAction(GrappleActionType actionType)
+    {
+        return actionType == GrappleActionType.ReleasePinnedOpponent;
     }
 }

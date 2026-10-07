@@ -187,7 +187,7 @@ Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3989):
 | 8 | 135 | `TryExecuteAnimateRopeEscapeForNpc` | an NPC entangled by Animate Rope spends its standard action on STR/Escape Artist; turn continues |
 | 9 | 140-153 | `SelectBestTarget` | none: `ExecuteSearchTurnWhenNoTargets`, reselect; still none: end |
 | 10 | 155 | Turned and undead | `ExecuteTurnedUndeadTurn` (unreachable) |
-| 11 | 161 | `IsGrappling` | `AI_GrappleRestrictedTurn`, end |
+| 11 | 161 | `IsGrappling` | `RunGrappleTurnForAI` -> `AI_GrappleRestrictedTurn`; end, unless the grapple ended with the standard action unspent (`CanContinueTurnAfterGrappleEnded`, after a free pin release), then continue to gate 12 |
 | 12 | 170 | `HasAuraAbility` | `ProcessAuraAbility` (free) |
 | 13 | 179-192 | Free-action ranged special ready | fire at the closest enemy in range (gibbering mouther Spittle) |
 | 14 | 196 | In a Resilient Sphere | end (no movement inside the sphere either) |
@@ -198,7 +198,7 @@ Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3989):
 | 19 | 289-300 | Other profile | DefensiveMelee; else RangedKiter if behaviour RangedKiter or `CombatStyle == Ranged`; else AggressiveMelee. `CombatStyle.Mixed` counts as melee |
 | 20 | 305-319 | No profile | switch on behaviour; `Ranged` and default go to AggressiveMelee (AI-003) |
 
-Side effects of the order: auras and free-action Spittle are skipped on any turn ended by gates 4-11 (AI-053). Gates 4-7 never consult profile or behaviour. Target selection (gate 9) runs before the grapple, swarm and summon checks, so it rolls Sanctuary saves for creatures that then ignore the result (AI-005).
+Side effects of the order: auras and free-action Spittle are skipped on any turn ended by gates 4-11 (AI-053); a grapple turn that continues after a pin release does reach them. Gates 4-7 never consult profile or behaviour. Target selection (gate 9) runs before the grapple, swarm and summon checks, so it rolls Sanctuary saves for creatures that then ignore the result (AI-005).
 
 ### 3.4 Coroutines, pacing and action economy
 
@@ -351,7 +351,7 @@ Reached only by non-controllable summons (PC-cast summons are controllable and g
 
 - `ExecuteSearchTurnWhenNoTargets` (300): needs a move action; moves to the cell nearest a tracked last-known square, else toward the map centre with 0-4 random noise. The turn continues if a target appears; the next routine cannot move again (move action spent) but can still attack in reach.
 - `ExecuteTurnedUndeadTurn` (419): flee one move from the turner; unreachable (3.2).
-- `AI_GrappleRestrictedTurn` (GrappleSystem.cs:1633): see 8.8.
+- `AI_GrappleRestrictedTurn` (GrappleSystem.cs:1636): see 8.8.
 
 ### 5.9 How attacks resolve: `GameManager.NPCPerformAttack` (NPCTurns.cs:1065)
 
@@ -581,7 +581,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 ### 8.6 Grapple AI
 
 - **Starting a grapple:** via `GetPreferredManeuver`/`ShouldInitiateGrapple` (Aggressive always; InitiateWhenSafe if STR mod ≥ target's; never with Improved Grab), or the legacy chooser (STR mod ≥4). Improved Grab is a free attempt on a qualifying hit, automatic for NPCs.
-- **In a grapple** (`AI_GrappleRestrictedTurn`, up to 8 iterations, 20% random early stop): predatory animals use their full natural routine plus rake and escape below 25% HP; others, when pinning, Damage > Use Opponent's Weapon > Disarm 50% > Move 20% > Release 5%; otherwise Pin 35% (STR mod ≥3), light weapon 45%, opponent's weapon 30%, unarmed 20%, then Damage. Several chosen sub-actions are stubs (CMB-033). Non-animal NPCs escape only when pinned, which never happens because pinned turns are skipped (CMB-075). `GrappleBehavior.EscapeOnly`/`Avoid` are ignored once grappled (AI-029).
+- **In a grapple** (`AI_GrappleRestrictedTurn`, up to 8 iterations, 20% random early stop): predatory animals use their full natural routine plus rake, escape below 25% HP and deal grapple damage while pinning; others, when pinning, Damage > Use Opponent's Weapon > Disarm 50% > Move 20% > Release 5%; otherwise Pin 35% (STR mod ≥3), light weapon 45%, opponent's weapon 30%, unarmed 20%, then Damage. Releasing a pin is a free action that ends the grapple for both creatures and moves neither (PHB p.157, CMB-089 fixed; `CharacterController.IsFreeGrappleAction`). The AI rolls the release only before it has spent an attack this turn, so no iterative attacks are lost, and `AIService.RunGrappleTurnForAI` / `CanContinueTurnAfterGrappleEnded` then let `ExecuteNPCTurn` carry on with a normal turn (standing up first if prone) while the standard action is unspent (not verified in Play mode). Several chosen sub-actions are stubs (CMB-033). Non-animal NPCs escape only when pinned, which never happens because pinned turns are skipped (CMB-075). `GrappleBehavior.EscapeOnly`/`Avoid` are ignored once grappled (AI-029).
 
 ### 8.7 Summons and allied NPCs
 

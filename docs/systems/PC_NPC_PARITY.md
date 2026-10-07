@@ -117,10 +117,10 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | CHR-069 (new) | Inspire Courage, rage/bardic ticks | Recipients from PCs list; ticks only in StartPCTurn | depends | Low | GameManager.cs:4033-4053, 9334-9353 |
 | GRID-019 (new) | Movement legality | NPC executors skip "5-ft step taken" and "grappling" checks | NPC | Low | CombatActions.cs:1108-1191 |
 | CMB-093 (new) | Sanctuary | Attacker save exists only in AI target selection | PC | Low | AIService.cs:1721-1790 |
-| CMB-098 (new) | RAW choices | Forced for non-controllable actors (grab, escape, push, follow, overrun avoid, disarm item) | depends | Low | GrappleSystem.cs:410, 1430; StandardManeuvers.cs:1006-1010 |
+| CMB-098 (new) | RAW choices | Forced for non-controllable actors (grab, escape, push, follow, overrun avoid, disarm item) | depends | Low | GrappleSystem.cs:413, 1433; StandardManeuvers.cs:1006-1010 |
 | CMB-099 (new) | Coup de grace | NPC pays cost against crit-immune target | PC | Low | StandardManeuvers.cs:541 |
 | CMB-101 (new) | Casting while grappled | NPC has no path; NPC core lacks legality check | PC | Low | AIService.cs:161-165 |
-| CMB-103 (new) | Grapple Move | NPC spends action, never moves | PC | Low | GrappleSystem.cs:1548-1552, 1693 |
+| CMB-103 (new) | Grapple Move | NPC spends action, never moves | PC | Low | GrappleSystem.cs:1551-1555, 1696 |
 | CMB-104 (new) | Maneuver reach | Kiter AI can trip or disarm at range | NPC | Low | AIService.cs:1010-1019 |
 | CRE-040 (new) | Bombardier acid spray | Made-up save and damage | NPC | Low | NPCTurns.cs:1070-1111 |
 | SPL-115 (new) | Held charge | PC only | PC | Low | SpellCasting.cs:1483-1630 |

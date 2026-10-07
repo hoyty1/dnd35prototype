@@ -372,6 +372,9 @@ public partial class GameManager
         if (actor == null || result == null || !result.Success)
             return false;
 
+        // Only an escape (PHB p.157) moves the escaper into an adjacent space. Releasing a pin also ends
+        // the grapple (PHB p.157, CMB-089) but grants the releaser no movement: both creatures stay where
+        // they are and the releaser leaves with its own move or 5-foot step, provoking normally.
         bool wasEscapeAction = actionType == GrappleActionType.EscapeArtist
             || actionType == GrappleActionType.OpposedGrappleEscape;
         if (!wasEscapeAction)
@@ -1106,7 +1109,7 @@ public partial class GameManager
                 options.Add((
                     GrappleActionType.ReleasePinnedOpponent,
                     canReleasePinnedOpponent
-                        ? $"Release {opponent.Stats.CharacterName} from pin (remain grappling)"
+                        ? $"Release {opponent.Stats.CharacterName} from pin (free action, ends the grapple)"
                         : "Release Pinned Opponent (No pinned opponent)",
                     canReleasePinnedOpponent,
                     canReleasePinnedOpponent ? string.Empty : "No pinned opponent to release."));
@@ -1590,7 +1593,7 @@ public partial class GameManager
 
         EndGrappleContextMenuDisplayLock();
 
-        bool isFreeAction = actionType == GrappleActionType.ReleasePinnedOpponent;
+        bool isFreeAction = CharacterController.IsFreeGrappleAction(actionType);
         bool usesIterativeAttack = CharacterController.IsIterativeGrappleAttackAction(actionType);
         int attackBonusUsed = 0;
         int attacksRemaining = 0;
@@ -1657,7 +1660,7 @@ public partial class GameManager
                 yield break;
             }
 
-            bool isFreeAction = chosenAction.Value == GrappleActionType.ReleasePinnedOpponent;
+            bool isFreeAction = CharacterController.IsFreeGrappleAction(chosenAction.Value);
             bool usesIterativeAttack = CharacterController.IsIterativeGrappleAttackAction(chosenAction.Value);
             int? iterativeAttackBonusOverride = null;
             int remainingAttacks = 0;
@@ -1780,7 +1783,10 @@ public partial class GameManager
             if (legalActions.Contains(GrappleActionType.MoveHalfSpeed) && UnityEngine.Random.value < 0.2f)
                 return GrappleActionType.MoveHalfSpeed;
 
-            if (legalActions.Contains(GrappleActionType.ReleasePinnedOpponent) && UnityEngine.Random.value < 0.05f)
+            // Releasing ends the grapple (PHB p.157), so only release before any attack of the turn is spent:
+            // AIService then continues with a normal turn and no iterative attacks are lost (CMB-089).
+            bool noAttackSpentThisTurn = npc.Actions != null && npc.Actions.HasStandardAction;
+            if (noAttackSpentThisTurn && legalActions.Contains(GrappleActionType.ReleasePinnedOpponent) && UnityEngine.Random.value < 0.05f)
                 return GrappleActionType.ReleasePinnedOpponent;
 
             if (legalActions.Contains(GrappleActionType.DamageOpponent))
@@ -1885,11 +1891,8 @@ public partial class GameManager
             return false;
         }
 
-        if (npc.IsPinningOpponent() && legalActions.Contains(GrappleActionType.ReleasePinnedOpponent))
-        {
-            chosenAction = GrappleActionType.ReleasePinnedOpponent;
-            return true;
-        }
+        // A pinning predator keeps the hold and deals grapple damage (falls through to DamageOpponent below):
+        // releasing the pin would end the grapple (PHB p.157, CMB-089).
 
         if (!opponentPinned && legalActions.Contains(GrappleActionType.AttackUnarmed))
         {
@@ -1931,14 +1934,14 @@ public partial class GameManager
 
         bool hasStandardAction = npc.Actions != null && npc.Actions.HasStandardAction;
 
-        void TryAdd(GrappleActionType actionType, bool requiresStandardAction = true)
+        void TryAdd(GrappleActionType actionType)
         {
             if (CharacterController.IsIterativeGrappleAttackAction(actionType))
             {
                 if (!CanUseGrappleAttackOption(npc))
                     return;
             }
-            else if (requiresStandardAction && !hasStandardAction)
+            else if (!CharacterController.IsFreeGrappleAction(actionType) && !hasStandardAction)
             {
                 return;
             }
@@ -2004,7 +2007,7 @@ public partial class GameManager
             TryAdd(GrappleActionType.UseOpponentWeapon);
             TryAdd(GrappleActionType.MoveHalfSpeed);
             TryAdd(GrappleActionType.DisarmSmallObject);
-            TryAdd(GrappleActionType.ReleasePinnedOpponent, requiresStandardAction: false);
+            TryAdd(GrappleActionType.ReleasePinnedOpponent);
             return actions;
         }
 
@@ -2017,7 +2020,7 @@ public partial class GameManager
         TryAdd(GrappleActionType.BreakPin);
         TryAdd(GrappleActionType.OpposedGrappleEscape);
         TryAdd(GrappleActionType.EscapeArtist);
-        TryAdd(GrappleActionType.ReleasePinnedOpponent, requiresStandardAction: false);
+        TryAdd(GrappleActionType.ReleasePinnedOpponent);
 
         return actions;
     }

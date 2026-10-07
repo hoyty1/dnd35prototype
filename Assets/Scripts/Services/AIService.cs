@@ -160,8 +160,8 @@ public class AIService : MonoBehaviour
 
         if (npc.IsGrappling())
         {
-            yield return _gameManager.StartCoroutine(_gameManager.ExecuteGrappleRestrictedTurnForAI(npc));
-            yield break;
+            yield return _gameManager.StartCoroutine(RunGrappleTurnForAI(npc));
+            if (!CanContinueTurnAfterGrappleEnded(npc)) yield break; // free pin release (CMB-089)
         }
 
         // ── Supernatural Aura (free action): Gibbering, Frightful Presence, etc. ──
@@ -3538,4 +3538,34 @@ public class AIService : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Runs the grapple-restricted turn. If the NPC ended the grapple without spending its standard action
+    /// (releasing a pin is a free action that ends the grapple, PHB p.157, CMB-089) and is prone, it stands
+    /// up here, because the stand-up gate in ExecuteNPCTurn skips grappling creatures (CMB-074).
+    /// </summary>
+    private IEnumerator RunGrappleTurnForAI(CharacterController npc)
+    {
+        yield return _gameManager.StartCoroutine(_gameManager.ExecuteGrappleRestrictedTurnForAI(npc));
+
+        if (CanContinueTurnAfterGrappleEnded(npc) && npc.HasCondition(CombatConditionType.Prone))
+            yield return _gameManager.StartCoroutine(_gameManager.TryStandUpFromProneForAI(npc));
+
+        if (CanContinueTurnAfterGrappleEnded(npc))
+            Debug.Log($"[AI][Grapple] {npc.Stats.CharacterName} is no longer grappling and still has its standard action; continuing the turn.");
+    }
+
+    /// <summary>
+    /// Releasing a pin is a free action that ends the grapple (PHB p.157, CMB-089). A PC keeps its
+    /// standard and move actions afterwards, so an NPC whose grapple ended this turn without spending
+    /// its standard action carries on with the normal turn instead of ending it.
+    /// </summary>
+    private bool CanContinueTurnAfterGrappleEnded(CharacterController npc)
+    {
+        return npc != null
+            && !npc.IsGrappling()
+            && !ThreatSystem.IsMoverIncapacitated(npc)
+            && npc.Actions != null
+            && npc.Actions.HasStandardAction
+            && _gameManager.CurrentPhase != GameManager.TurnPhase.CombatOver;
+    }
 }

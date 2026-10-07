@@ -88,7 +88,7 @@ IDs refer to [issues/TST.md](issues/TST.md) unless another prefix is given.
 | `Tests.Classes.Phase3ClassTests` | `TestAllElevenClassesRegistered` expects 11 classes; `ClassRegistry.Init` registers 16 (11 PHB + 5 NPC classes) (TST-008). | `Tests/Classes/Phase3ClassTests.cs:613-616`, `Character/Classes/ClassRegistry.cs:29-46` |
 | `Tests.Classes.NPCTemplateSystemTests` | `TestAdeptSpellLookup`/`TestAdeptSpellLevelLookup` pass uppercase ids (`"CURE_LIGHT_WOUNDS"`, `"BLESS"`, `"CURE_MODERATE_WOUNDS"`); `AdeptSpellList` stores lowercase ids and uses case-sensitive `List.Contains`, so 4 assertions fail (TST-008). | `Tests/Classes/NPCTemplateSystemTests.cs:338-356`, `Character/Classes/NPC/AdeptSpellList.cs:40, 121-148` |
 | Placeholder passes | 38 `Assert(true, ...)` calls count as passes: TeamUtilityTests (all 10), SpellTargetingServiceTests 9, SpellUtilitiesTests 4, RapidShotTests 4, CounterspellRulesTests 3, EconomyServiceTests 2, NPCTemplateSystemTests 2, one each in AreaControlSpells, GhoulTouch, Scare, DispelMagicService (TST-003). | `grep -rn "Assert(true" Assets/Scripts/Tests` |
-| `Tests.Maneuvers.GrappleDamageRulesTests` | Iterative-maneuver tests assign `Stats.BaseAttackBonus`, which is ignored for classed characters (CHR-068); seven assertions check log text that was later rewritten; three expect the PHB pin release (CMB-089). 28 failures in Play mode on 2026-10-07 (TST-027). | `Tests/Maneuvers/GrappleDamageRulesTests.cs:95-110, 643-783` |
+| `Tests.Maneuvers.GrappleDamageRulesTests` | Iterative-maneuver tests assign `Stats.BaseAttackBonus`, which is ignored for classed characters (CHR-068); seven assertions check log text that was later rewritten; three pin-duration assertions fail every run; a few more fail by chance because the "very strong grappler" helpers also write the ignored BAB. 23 to 31 failures of 165-166 in Play mode after the CMB-089 fix (TST-027). | `Tests/Maneuvers/GrappleDamageRulesTests.cs:96-143, 689-829` |
 | `Tests.Combat.RapidShotTests` | Four older tests expect the constructor to grant Rapid Shot, Point Blank Shot or Power Attack (TST-028). | `Tests/Combat/RapidShotTests.cs:68-112, 150-165` |
 | `Tests.AI.AIProfileFrameworkTests` | Stale archetype expectations, and the off-hand threat test sets sides with `IsPlayerControlled` instead of `Team` (TST-025). | `Tests/AI/AIProfileFrameworkTests.cs:919-953` |
 | `CauseFearRulesTests`, `ScareRulesTests` | Pass in edit mode, fail 6 and 1 in Play mode because the scene GameManager destroys the suite's own (TST-007). | `_Core/GameManager.cs:483-490` |
@@ -242,9 +242,11 @@ Run of 2026-10-07 (Play mode, after the AI roadmap step 1 rules fixes 2dc4d02..e
 | `Tests.Combat.ScareRulesTests` | 76 | 1 | Play mode only (TST-007); 77 pass, 0 fail in edit mode |
 | `Tests.Services.SpellUtilitiesTests` | 26 | 0 | |
 | `Tests.Services.ConcentrationServiceTests` | 34 | 0 | |
-| `Tests.Maneuvers.GrappleDamageRulesTests` | 130 | 28 | Ignored BAB writes, stale log text, pin release (TST-027, CHR-068, CMB-089) |
+| `Tests.Maneuvers.GrappleDamageRulesTests` | 130 | 28 | Ignored BAB writes, stale log text, pin release (TST-027, CHR-068; CMB-089 since fixed, see below) |
 | `Tests.Combat.FlankingReachRulesTests` | 80 | 0 | |
 | `Tests.Combat.RapidShotTests` | 48 | 6 | Class-granted feats assumed (TST-028) |
+
+Re-runs of `GrappleDamageRulesTests` on 2026-10-07 after the CMB-089 fix (pin release ends the grapple and moves neither creature): six runs of the first version (165 assertions) gave 140 to 142 pass, 23 to 25 fail; four runs of the final version (166 assertions) gave 135 to 142 pass, 24 to 31 fail. The pin-release assertions (14 per run in the final version) all passed every run; the failures are the TST-027 causes (13 ignored BAB writes, 7 stale log texts, 3 pin-duration assertions) plus 0 to 8 chance failures in the damage, pin, pin-escape and Use Opponent's Weapon tests.
 
 ## 4. Manual testing
 

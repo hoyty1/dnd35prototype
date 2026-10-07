@@ -277,7 +277,7 @@ n is the number of creatures in the 310-entry work list (192 CSV creatures and 1
 
 **Index corrections found in this pass:**
 
-- `ability_rake` (n=9) is marked missing, but rake is implemented. `HasRake` is set on 9 definitions (tiger, dire_tiger, lion, dire_lion, leopard, celestial_lion, hellcat, behir, skum) and executed by `CharacterController.cs:10119`, `SupportActions.cs:1418/1562/1897` and `GrappleSystem.cs:1905`. Regrade it to implemented and check which indexed creatures lack the flag.
+- `ability_rake` (n=9) is marked missing, but rake is implemented. `HasRake` is set on 9 definitions (tiger, dire_tiger, lion, dire_lion, leopard, celestial_lion, hellcat, behir, skum) and executed by `CharacterController.cs:10119`, `SupportActions.cs:1418/1562/1897` and `GrappleSystem.cs:1908`. Regrade it to implemented and check which indexed creatures lack the flag.
 - `ability_natural_attack_energy_rider` (4) and `ability_fiery_bite` (2) are data_only, not missing.
 - `ability_trample` is data_only for the treant (CRE-018).
 - Pounce is set on 9 creatures, not 6, including the non-RAW blue_slaad.

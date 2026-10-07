@@ -51,6 +51,7 @@ public static class GrappleDamageRulesTests
         TestEscapeFromPinMaintainsGrapple_EscapeArtist();
         TestEscapeFromPinMaintainsGrapple_OpposedEscape();
         TestReleasePinnedOpponentEndsEntireGrapple();
+        TestReleasePinnedOpponentIsFreeAndGrantsNoStep();
         TestSilentAndStillMetamagicRemoveVerbalAndSomaticComponents();
         TestIterativeGrappleAttackBonusesConsumeInOrder();
         TestOpposedEscapeCountsAsIterativeGrappleAttackAction();
@@ -601,6 +602,9 @@ public static class GrappleDamageRulesTests
         var defender = CreateWeakDefender("GrappleReleasePinTarget");
         ConfigureVeryStrongGrappler(attacker);
         ConfigureVeryWeakGrappler(defender);
+        // Stats.BaseAttackBonus is ignored for classed characters (CHR-068); pin the gap so the pin cannot fail.
+        attacker.Stats.BaseAttackBonusOverride = 20;
+        defender.Stats.BaseAttackBonusOverride = 0;
 
         ForceGrappleState(attacker, defender);
         SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
@@ -612,6 +616,49 @@ public static class GrappleDamageRulesTests
         Assert(!attacker.HasCondition(CombatConditionType.Grappled), "Pin maintainer is no longer grappled after release action");
         Assert(!defender.HasCondition(CombatConditionType.Grappled), "Released opponent is no longer grappled after release action");
         Assert(!defender.HasCondition(CombatConditionType.Pinned), "Released opponent is no longer pinned after release action");
+        Assert(!attacker.IsGrappling() && !defender.IsGrappling(), "Neither creature is in a grapple link after the pin is released (PHB p.157, CMB-089)");
+        Assert(!attacker.IsPinningOpponent() && defender.GetPinnedBy() == null, "Release clears the pinner and pinned-by state on both creatures");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestReleasePinnedOpponentIsFreeAndGrantsNoStep()
+    {
+        var attacker = CreateTestCharacter("GrappleReleasePinFree", "Fighter");
+        var defender = CreateWeakDefender("GrappleReleasePinFreeTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+        // Stats.BaseAttackBonus is ignored for classed characters (CHR-068); pin the gap so the pin cannot fail.
+        attacker.Stats.BaseAttackBonusOverride = 20;
+        defender.Stats.BaseAttackBonusOverride = 0;
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "Pin succeeds before free-release validation");
+
+        attacker.StartNewTurn();
+        SpecialAttackResult releaseResult = attacker.ResolveGrappleAction(GrappleActionType.ReleasePinnedOpponent);
+        Assert(releaseResult != null && releaseResult.Success, "Release succeeds at the start of the pinner's turn");
+        Assert(CharacterController.IsFreeGrappleAction(GrappleActionType.ReleasePinnedOpponent),
+            "Releasing a pin is a free action in the shared PC/AI action-cost helper (PHB p.157)");
+        Assert(!CharacterController.IsFreeGrappleAction(GrappleActionType.PinOpponent)
+            && !CharacterController.IsFreeGrappleAction(GrappleActionType.MoveHalfSpeed),
+            "Other grapple actions are not free actions");
+
+        // The shared PC/AI post-action step (FinalizeGrappleActionResolution and AI_GrappleRestrictedTurn)
+        // grants the free adjacent move only to an escaper; a releaser stays put (PHB p.157).
+        GameManager gm = GameManager.Instance;
+        MethodInfo endedGrapple = typeof(GameManager).GetMethod("DidActorEndGrappleAndGainFreeAdjacentMove", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(endedGrapple != null, "GameManager.DidActorEndGrappleAndGainFreeAdjacentMove exists for the release follow-up test");
+        if (gm != null && endedGrapple != null)
+        {
+            bool releaseGrantsStep = (bool)endedGrapple.Invoke(gm, new object[] { attacker, GrappleActionType.ReleasePinnedOpponent, releaseResult });
+            Assert(!releaseGrantsStep, "Releasing a pin grants the releaser no free adjacent move (only an escape does, PHB p.157)");
+        }
+        else if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; release follow-up check needs Play mode");
+        }
 
         Cleanup(attacker, defender);
     }
