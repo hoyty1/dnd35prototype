@@ -126,7 +126,8 @@ public static class GrappleDamageRulesTests
         inventory.Init(stats);
 
         // Strong deterministic gap so opposed grapple checks reliably succeed in tests.
-        controller.Stats.BaseAttackBonus = 12;
+        // Stats.BaseAttackBonus is ignored for classed characters (CHR-068), so set the override.
+        controller.Stats.BaseAttackBonusOverride = 12;
         controller.Stats.STR = 26;
 
         return controller;
@@ -135,7 +136,7 @@ public static class GrappleDamageRulesTests
     private static CharacterController CreateWeakDefender(string name)
     {
         var defender = CreateTestCharacter(name);
-        defender.Stats.BaseAttackBonus = 0;
+        defender.Stats.BaseAttackBonusOverride = 0;
         defender.Stats.STR = 6;
         return defender;
     }
@@ -151,7 +152,8 @@ public static class GrappleDamageRulesTests
         if (controller == null || controller.Stats == null)
             return;
 
-        controller.Stats.BaseAttackBonus = 20;
+        // Stats.BaseAttackBonus is ignored for classed characters (CHR-068); the override makes the gap deterministic.
+        controller.Stats.BaseAttackBonusOverride = 20;
         controller.Stats.STR = 30;
     }
 
@@ -160,7 +162,7 @@ public static class GrappleDamageRulesTests
         if (controller == null || controller.Stats == null)
             return;
 
-        controller.Stats.BaseAttackBonus = 0;
+        controller.Stats.BaseAttackBonusOverride = 0; // CHR-068: the plain setter is ignored for classed characters
         controller.Stats.STR = 6;
     }
 
@@ -580,9 +582,10 @@ public static class GrappleDamageRulesTests
         SpecialAttackResult pinResult = pinner.ResolveGrappleAction(GrappleActionType.PinOpponent);
         Assert(pinResult != null && pinResult.Success, "Pin succeeds before Escape Artist pin-break validation");
 
-        // Ensure deterministic success for the pinned character's Escape Artist check.
+        // Ensure deterministic success for the pinned character's Escape Artist check
+        // (opposed by the pinner's grapple check of +30: BAB override 20, Str 30).
         pinned.Stats.InitializeSkills(pinned.Stats.CharacterClass, pinned.Stats.Level);
-        pinned.Stats.Skills["Escape Artist"].Ranks = 40;
+        pinned.Stats.Skills["Escape Artist"].Ranks = 60;
         SpecialAttackResult escapeResult = pinned.ResolveGrappleAction(GrappleActionType.EscapeArtist);
 
         Assert(escapeResult != null && escapeResult.Success, "Pinned character succeeds Escape Artist check");
@@ -624,9 +627,6 @@ public static class GrappleDamageRulesTests
         var defender = CreateWeakDefender("GrappleReleasePinTarget");
         ConfigureVeryStrongGrappler(attacker);
         ConfigureVeryWeakGrappler(defender);
-        // Stats.BaseAttackBonus is ignored for classed characters (CHR-068); pin the gap so the pin cannot fail.
-        attacker.Stats.BaseAttackBonusOverride = 20;
-        defender.Stats.BaseAttackBonusOverride = 0;
 
         ForceGrappleState(attacker, defender);
         SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
@@ -650,9 +650,6 @@ public static class GrappleDamageRulesTests
         var defender = CreateWeakDefender("GrappleReleasePinFreeTarget");
         ConfigureVeryStrongGrappler(attacker);
         ConfigureVeryWeakGrappler(defender);
-        // Stats.BaseAttackBonus is ignored for classed characters (CHR-068); pin the gap so the pin cannot fail.
-        attacker.Stats.BaseAttackBonusOverride = 20;
-        defender.Stats.BaseAttackBonusOverride = 0;
 
         ForceGrappleState(attacker, defender);
         SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);

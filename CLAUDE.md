@@ -32,7 +32,7 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 - **Run:** open in 6000.4.0f1, open `MainScene`, Play. Through the Unity MCP you can enter and exit Play mode and run suites (`docs/TESTING.md` 3.1); hand play-testing of UI flows is still the owner's, so state what you did not verify.
 - **Fast party:** **Play Now!** or **Quick Start** on character creation.
 - **Dev tools:** the F12 Spell Testing Panel and `*_test` presets bypass normal rules; see `docs/TESTING.md` 4.2-4.3.
-- **Static suites** in `Assets/Scripts/Tests` (no test framework, no CI): run with Tools > DND Tests or `Tests.Runner.StaticSuiteRunner.RunFromCommand` through the Unity MCP (edit pass, then Play pass; `docs/TESTING.md` 3); results in `Logs/TestRunner/`. Known failures live in `tools/tests/static-suites.json` (not curated yet: TST-001, TST-007, TST-025, TST-027, TST-028).
+- **Static suites** in `Assets/Scripts/Tests` (no test framework, no CI): run with Tools > DND Tests or `Tests.Runner.StaticSuiteRunner.RunFromCommand` through the Unity MCP (edit pass, then Play pass; `docs/TESTING.md` 3); results in `Logs/TestRunner/`. Known failures live in `tools/tests/static-suites.json`, curated 2026-10-07 with an issue ID for each; both passes must give verdict OK, and a fix removes its entry.
 
 ## Code map
 

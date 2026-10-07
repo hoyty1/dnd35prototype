@@ -7,7 +7,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 73,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -18,10 +18,23 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 158,
+      "failed": 3,
       "flakyFailures": 0,
-      "knownFailures": [],
+      "knownFailures": [
+        {
+          "match": "EffectiveMaxLevel == 9",
+          "issue": "ENC-007"
+        },
+        {
+          "match": "MaxLevel constant == 9",
+          "issue": "ENC-007"
+        },
+        {
+          "match": "Fiendish template detected",
+          "issue": "ENC-022"
+        }
+      ],
       "notes": ""
     },
     {
@@ -29,7 +42,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 183,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -40,29 +53,42 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 43,
+      "failed": 3,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Enemy database assigns AI profile archetypes for all enemies",
+          "issue": "TST-025"
+        },
+        {
+          "match": "Scenario enemy definitions use expected AI profile archetypes",
+          "issue": "TST-025"
+        },
+        {
+          "match": "Threat system includes off-hand melee threatener",
+          "issue": "TST-025"
+        }
+      ],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Character.CharacterTagSystemTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 15,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Character.ClassLevelFeatureProgressionTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 7,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -73,7 +99,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 11,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -84,7 +110,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 19,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -95,7 +121,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 6,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -106,7 +132,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 13,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -117,7 +143,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 12,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -128,7 +154,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 28,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -139,7 +165,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 16,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -150,7 +176,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 514,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -160,19 +186,84 @@
       "type": "Tests.Classes.NPCTemplateSystemTests",
       "needs": "either",
       "skip": "",
-      "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "expectThrow": "KeyNotFoundException",
+      "passed": 139,
+      "failed": 16,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Cure Light Wounds is an adept spell",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Bless is an adept spell",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Cure Light Wounds is 1st level for adept",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Cure Moderate Wounds is 2nd level for adept",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Templates exist for CR 20",
+          "issue": "CRE-043"
+        },
+        {
+          "match": "Fighter L20 is CR 20",
+          "issue": "CRE-043"
+        },
+        {
+          "match": "Expert 5 levels INT +2 = 40 skill points",
+          "issue": "TST-008"
+        },
+        {
+          "match": "3 HD = 2 feats",
+          "issue": "CRE-043"
+        },
+        {
+          "match": "6 HD = 3 feats",
+          "issue": "CRE-043"
+        },
+        {
+          "match": "Standard CR: Fighter 10 = CR 10",
+          "issue": "CRE-043"
+        },
+        {
+          "match": "12 HD = 5 feats",
+          "issue": "CRE-043"
+        },
+        {
+          "match": "Fighter primary stat is Strength",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Fighter secondary stat is Constitution",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Wizard primary stat is Intelligence",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Adept primary stat is Wisdom",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Warrior primary stat is Strength",
+          "issue": "TST-008"
+        }
+      ],
+      "notes": "Throws KeyNotFoundException in TestApplyEliteArrayFighter (stat keys are STR/CON..., TST-008); later tests do not run."
     },
     {
       "type": "Tests.Classes.Phase1ClassTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 131,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -183,7 +274,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 170,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -193,19 +284,64 @@
       "type": "Tests.Classes.Phase3ClassTests",
       "needs": "either",
       "skip": "",
-      "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "expectThrow": "NullReferenceException",
+      "passed": 141,
+      "failed": 11,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "DC <10 no info",
+          "issue": "TST-008"
+        },
+        {
+          "match": "DC 10 common knowledge",
+          "issue": "TST-008"
+        },
+        {
+          "match": "DC 20 uncommon",
+          "issue": "TST-008"
+        },
+        {
+          "match": "DC 25 rare",
+          "issue": "TST-008"
+        },
+        {
+          "match": "DC 30 legendary",
+          "issue": "TST-008"
+        },
+        {
+          "match": "WildShape initialized 2 uses at L8",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Uses decreased to 1 after transform",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Duration 3000 rounds at L5",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Duration decreased to 2999 after tick",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Still wild shaped after 1 tick",
+          "issue": "TST-008"
+        },
+        {
+          "match": "Small Fire Elemental exists",
+          "issue": "TST-008"
+        }
+      ],
+      "notes": "Throws NullReferenceException in TestElementalForms (form is named \"Fire Elemental (Small)\", TST-008); later tests do not run."
     },
     {
       "type": "Tests.Combat.AnimateRopeRulesTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 20,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -216,10 +352,15 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 54,
+      "failed": 1,
       "flakyFailures": 0,
-      "knownFailures": [],
+      "knownFailures": [
+        {
+          "match": "IsNauseated returns true after applying condition",
+          "issue": "TST-029"
+        }
+      ],
       "notes": ""
     },
     {
@@ -227,7 +368,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 108,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -235,109 +376,137 @@
     },
     {
       "type": "Tests.Combat.BlindnessDeafnessRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 79,
+      "failed": 1,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Cleric variant is level 3",
+          "issue": "TST-026"
+        }
+      ],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.BlurRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 36,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.CauseFearRulesTests",
       "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 36,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "TST-007: fails in Play mode because the scene GameManager destroys the suite's own."
+      "notes": "Edit mode: in Play mode the scene GameManager destroys the suite's own (TST-007)."
     },
     {
       "type": "Tests.Combat.CharmPersonRulesTests",
-      "needs": "unknown",
+      "needs": "play",
       "skip": "",
       "expectThrow": "TargetParameterCountException",
-      "passed": 0,
+      "passed": 8,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "TST-001: reflects on SpellCaster.GetSaveModifier with 6 of its 8 arguments."
+      "notes": "TST-001: GetSaveModifier reflected with 6 of 8 arguments; throws before its summary."
     },
     {
       "type": "Tests.Combat.ColorSprayRulesTests",
-      "needs": "unknown",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 34,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
       "type": "Tests.Combat.CommandUndeadRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 66,
+      "failed": 1,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Effect type is Debuff",
+          "issue": "TST-030"
+        }
+      ],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.ConcealmentRulesTests",
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 29,
+      "failed": 2,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Attack misses due to concealment",
+          "issue": "TST-029"
+        },
+        {
+          "match": "Concealment miss chance recorded in result",
+          "issue": "TST-029"
+        }
+      ],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.ConditionSourceAgnosticTests",
-      "needs": "either",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 8,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
       "type": "Tests.Combat.CoreConditionRulesTests",
-      "needs": "either",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 16,
+      "failed": 2,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Stunned target drops held items",
+          "issue": "TST-029"
+        },
+        {
+          "match": "Blinded applies at least -4 to STR/DEX-based skills",
+          "issue": "TST-029"
+        }
+      ],
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed. Its two edit-mode failures are also TST-029: without Awake the ConditionManager stun hook (drop held items) never runs, and the suite never initializes skills."
     },
     {
       "type": "Tests.Combat.CounterspellRulesTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 66,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -345,21 +514,21 @@
     },
     {
       "type": "Tests.Combat.CreatureImmunityRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 21,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.DamageModifierTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 107,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -367,43 +536,53 @@
     },
     {
       "type": "Tests.Combat.DazeMonsterAndHideousLaughterRulesTests",
-      "needs": "unknown",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 44,
+      "failed": 1,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Daze Monster logs living-creature immunity",
+          "issue": "TST-030"
+        }
+      ],
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
       "type": "Tests.Combat.DeepSlumberAndHeroismTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 46,
+      "failed": 1,
       "flakyFailures": 0,
-      "knownFailures": [],
+      "knownFailures": [
+        {
+          "match": "Deep Slumber effect type is Debuff",
+          "issue": "TST-030"
+        }
+      ],
       "notes": ""
     },
     {
       "type": "Tests.Combat.DisguiseSelfRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 25,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.DispelMagicRulesTests",
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 35,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -414,7 +593,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 16,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -422,21 +601,26 @@
     },
     {
       "type": "Tests.Combat.ExpeditiousRetreatRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 25,
+      "failed": 1,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Character tracks removable Expeditious Retreat effect data",
+          "issue": "TST-030"
+        }
+      ],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.FalseLifeRulesTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 60,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -447,117 +631,175 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 24,
+      "failed": 5,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Sphere repositions to adjacent square closest to caster",
+          "issue": "SPL-120"
+        },
+        {
+          "match": "Cast log documents 2d6 damage and control hint",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Sphere can be moved between two stationary enemies",
+          "issue": "SPL-120"
+        },
+        {
+          "match": "Sphere stops one square before second enemy on impact",
+          "issue": "SPL-120"
+        },
+        {
+          "match": "Sphere marks moved state after reposition",
+          "issue": "SPL-120"
+        }
+      ],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.FlankingReachRulesTests",
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 80,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.GhoulTouchRulesTests",
-      "needs": "either",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 45,
+      "failed": 1,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Paralyzed target is not affected by own stench",
+          "issue": "TST-030"
+        }
+      ],
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
       "type": "Tests.Combat.GustOfWindRulesTests",
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 13,
+      "failed": 2,
       "flakyFailures": 0,
-      "knownFailures": [],
+      "knownFailures": [
+        {
+          "match": "Line targeting no longer snaps to 8 fixed directions",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Line targeting rejects endpoints outside 60-ft range",
+          "issue": "TST-030"
+        }
+      ],
       "notes": ""
     },
     {
       "type": "Tests.Combat.HypnotismRulesTests",
-      "needs": "unknown",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 15,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
       "type": "Tests.Combat.ImprovedShieldBashTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 19,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.InvisibilityRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 55,
+      "failed": 2,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Invisibility effect data clears on attack action",
+          "issue": "TST-029"
+        },
+        {
+          "match": "Invisibility spell effect removed on attack action",
+          "issue": "TST-029"
+        }
+      ],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.JumpAndMagicWeaponRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 43,
+      "failed": 2,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Attack flow reads +1 enhancement attack bonus from weapon effect",
+          "issue": "TST-029"
+        },
+        {
+          "match": "Attack flow reads +1 enhancement damage bonus from weapon effect",
+          "issue": "TST-029"
+        }
+      ],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.MagicCircleRulesTests",
-      "needs": "unknown",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
-      "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "passed": 105,
+      "failed": 2,
+      "flakyFailures": 1,
+      "knownFailures": [
+        {
+          "match": "MC vs Evil: barrier blocks summoned evil creature melee",
+          "issue": "TST-007"
+        }
+      ],
+      "notes": "TST-007: the suite registers its summon on its own GameManager, but the attack asks GameManager.Instance. The 1 tolerated failure is \"MC vs Evil: summoned blocked attack is treated as miss\" (TST-031): it depends on the attack roll (failed with 54 of 67 seeds, including the baseline seed). Any other unlisted failure here is a regression, even if the verdict stays OK."
     },
     {
       "type": "Tests.Combat.MediumConditionRulesTests",
-      "needs": "either",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 16,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
       "type": "Tests.Combat.MelfsAcidArrowRulesTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 36,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -565,65 +807,82 @@
     },
     {
       "type": "Tests.Combat.MirrorImageRulesTests",
-      "needs": "unknown",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 14,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.NonlethalDamageTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 11,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.ProtectionFromAlignmentTests",
-      "needs": "unknown",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 31,
+      "failed": 4,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Matching aligned attacker sees +2 deflection AC from protection",
+          "issue": "TST-029"
+        },
+        {
+          "match": "Matching aligned attack target AC is 2 higher than non-matching aligned attack",
+          "issue": "TST-029"
+        },
+        {
+          "match": "Protection barrier blocks bodily contact from summoned matching-aligned melee attacker",
+          "issue": "TST-029"
+        },
+        {
+          "match": "Summoned contact block provides barrier note",
+          "issue": "TST-029"
+        }
+      ],
+      "notes": "Play: the attack checks run with attacker and defender in the same square, so Attack returns early (TST-029)."
     },
     {
       "type": "Tests.Combat.ProtectionFromArrowsRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 23,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.ProtectionFromEnergyRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 90,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.RangeCalculatorTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 28,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -631,21 +890,42 @@
     },
     {
       "type": "Tests.Combat.RapidShotTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 48,
+      "failed": 6,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Rogue should have Rapid Shot feat",
+          "issue": "TST-028"
+        },
+        {
+          "match": "Rogue should have Point Blank Shot feat",
+          "issue": "TST-028"
+        },
+        {
+          "match": "Fighter should have Power Attack feat",
+          "issue": "TST-028"
+        },
+        {
+          "match": "Full Attack button should be relevant (visible) due to Rapid Shot",
+          "issue": "TST-028"
+        },
+        {
+          "match": "Rapid Shot should activate with ranged weapon",
+          "issue": "TST-028"
+        }
+      ],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.RayOfEnfeeblementRulesTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 41,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -656,7 +936,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 8,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -664,43 +944,43 @@
     },
     {
       "type": "Tests.Combat.ResistEnergyRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 30,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.ScareRulesTests",
       "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 77,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "TST-007: fails in Play mode because the scene GameManager destroys the suite's own."
+      "notes": "Edit mode: in Play mode the scene GameManager destroys the suite's own (TST-007)."
     },
     {
       "type": "Tests.Combat.SeeInvisibleRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 28,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.ShieldSpellRulesTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 15,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -708,76 +988,102 @@
     },
     {
       "type": "Tests.Combat.ShockingGraspMetalBonusTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 6,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.SizeDamageScalingTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 9,
+      "failed": 4,
       "flakyFailures": 0,
-      "knownFailures": [],
+      "knownFailures": [
+        {
+          "match": "Longsword Medium->Small = 1d6",
+          "issue": "CMB-119"
+        },
+        {
+          "match": "Longsword Medium->Large = 2d6",
+          "issue": "CMB-119"
+        },
+        {
+          "match": "After enlarge, equipped longsword damage is 2d6",
+          "issue": "CMB-119"
+        },
+        {
+          "match": "After enlarge then reduce to Small, equipped longsword damage is 1d6",
+          "issue": "CMB-119"
+        }
+      ],
       "notes": ""
     },
     {
       "type": "Tests.Combat.SleepSpellRulesTests",
-      "needs": "unknown",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 19,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
       "type": "Tests.Combat.SpectralHandRulesTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 77,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.TouchOfIdiocyRulesTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 32,
+      "failed": 2,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Touch of Idiocy checks spell resistance",
+          "issue": "TST-031"
+        },
+        {
+          "match": "Very high SR blocks Touch of Idiocy",
+          "issue": "TST-031"
+        }
+      ],
+      "notes": "TST-031: the suite reseeds UnityEngine.Random with 42 itself, so the runner seed does not vary it; its 2 known failures depend on the current order of Random calls. If they go STALE after an unrelated change, the touch attack now hits: delete the two entries rather than investigating."
     },
     {
       "type": "Tests.Combat.UnarmedDamageModeTests",
-      "needs": "either",
+      "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 31,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Combat.WebSpellRulesTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 15,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -788,7 +1094,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 49,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -799,7 +1105,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 53,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -810,7 +1116,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 6,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -821,7 +1127,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 131,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -832,7 +1138,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 15,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -843,10 +1149,47 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 41,
+      "failed": 9,
       "flakyFailures": 0,
-      "knownFailures": [],
+      "knownFailures": [
+        {
+          "match": "Black Bear definition matches MM stats",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Bison definition matches MM stats",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Dire Weasel definition matches MM stats",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Constrictor Snake definition matches MM stats",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Large Viper definition matches MM stats",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Small Earth Elemental definition matches MM stats",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Small Water Elemental definition matches MM stats",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Hell Hound has Breath Weapon special ability",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Dretch definition matches MM stats",
+          "issue": "CRE-022"
+        }
+      ],
       "notes": ""
     },
     {
@@ -854,10 +1197,19 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 39,
+      "failed": 2,
       "flakyFailures": 0,
-      "knownFailures": [],
+      "knownFailures": [
+        {
+          "match": "Cleric LawfulNeutral gets filtered Summon Monster II options",
+          "issue": "CHR-013"
+        },
+        {
+          "match": "Cleric ChaoticNeutral gets filtered Summon Monster II options",
+          "issue": "CHR-013"
+        }
+      ],
       "notes": ""
     },
     {
@@ -865,10 +1217,23 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 37,
+      "failed": 3,
       "flakyFailures": 0,
-      "knownFailures": [],
+      "knownFailures": [
+        {
+          "match": "Wizard slot accepts wizard spellbook spell",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Wizard spell cast succeeds for multiclass caster",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Casting wizard spell consumes wizard level-1 slot",
+          "issue": "TST-030"
+        }
+      ],
       "notes": ""
     },
     {
@@ -876,76 +1241,138 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 48,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Push-and-follow scenarios need the scene GameManager and grid; they log [SKIP] outside Play mode."
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
       "type": "Tests.Maneuvers.CoupDeGraceRulesTests",
-      "needs": "play",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 5,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
       "type": "Tests.Maneuvers.GrappleDamageRulesTests",
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 225,
+      "failed": 10,
       "flakyFailures": 0,
-      "knownFailures": [],
-      "notes": ""
+      "knownFailures": [
+        {
+          "match": "Pin expires at end of maintainer's next turn if not maintained",
+          "issue": "CMB-120"
+        },
+        {
+          "match": "Maintain pin action succeeds on subsequent turn",
+          "issue": "CMB-120"
+        },
+        {
+          "match": "Maintained pin eventually expires when not maintained again",
+          "issue": "CMB-120"
+        },
+        {
+          "match": "Grapple damage log identifies unarmed grapple damage",
+          "issue": "TST-027"
+        },
+        {
+          "match": "Grapple damage roll uses unarmed damage dice (1d3 for Medium)",
+          "issue": "TST-027"
+        },
+        {
+          "match": "Use Opponent's Weapon log names the selected opponent weapon",
+          "issue": "TST-027"
+        },
+        {
+          "match": "Draw weapon block message is explicit while pinning",
+          "issue": "TST-027"
+        },
+        {
+          "match": "Retrieve component block message is explicit while pinning",
+          "issue": "TST-027"
+        },
+        {
+          "match": "Break pin block message is explicit while pinning",
+          "issue": "TST-027"
+        },
+        {
+          "match": "Escape block message is explicit while pinning",
+          "issue": "TST-027"
+        }
+      ],
+      "notes": "Deterministic since the helpers set BaseAttackBonusOverride (CHR-068): the same 10 assertions fail with all 67 seeds swept on 2026-10-07. CMB-120: the pin never expires and cannot be re-pinned, so the 3 pin-duration checks fail. TST-027: 7 checks of rewritten log text."
     },
     {
       "type": "Tests.Maneuvers.OverrunRulesTests",
-      "needs": "play",
+      "needs": "edit",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 4,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
       "type": "Tests.Maneuvers.SunderInventoryRemovalTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 12,
       "failed": 0,
-      "flakyFailures": 0,
+      "flakyFailures": 3,
       "knownFailures": [],
-      "notes": ""
+      "notes": "TST-031: the destruction checks depend on the sunder roll. The 3 tolerated failures are either the three \"Main-hand weapon destroyed - ...\" checks (6 of 67 seeds) or the three \"Shield destroyed - ...\" checks (1 of 67); none fail with the baseline seed. Any other failure label here is a regression, even if the verdict stays OK."
     },
     {
       "type": "Tests.Mounts.MountSystemTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 107,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "Assertion total 105 or 107 by seed: TestTrampleHoofAttack checks damage and HP only when the hoof attack hits (TST-031). A warning that the total dropped to 105 is expected."
     },
     {
       "type": "Tests.Services.AttackCalculatorTests",
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
-      "failed": 0,
+      "passed": 25,
+      "failed": 5,
       "flakyFailures": 0,
-      "knownFailures": [],
+      "knownFailures": [
+        {
+          "match": "Weapon Focus = +1",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Weapon Focus + Greater = +2",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Weapon Specialization = +2",
+          "issue": "TST-030"
+        },
+        {
+          "match": "Weapon Spec + Greater = +4",
+          "issue": "TST-030"
+        },
+        {
+          "match": "AllFeats: WF bonus = +1",
+          "issue": "TST-030"
+        }
+      ],
       "notes": ""
     },
     {
@@ -953,7 +1380,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 50,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -964,7 +1391,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 42,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -975,7 +1402,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 34,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -986,7 +1413,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 26,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -997,7 +1424,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 11,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -1008,7 +1435,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 27,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -1019,7 +1446,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 42,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -1030,7 +1457,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 8,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -1041,7 +1468,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 116,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -1052,7 +1479,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 34,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -1063,7 +1490,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 26,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -1074,7 +1501,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 10,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],

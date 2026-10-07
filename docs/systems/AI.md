@@ -787,7 +787,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 - **Capabilities are data the AI cannot see.** Spell-like abilities, stench, constrict, secondary breath and many MM specials exist only as text or unread fields; most monsters that should cast cannot. A deeper chooser has little to choose from until the capability data is executable.
 - **One-move horizon, no memory, no team.** Movement looks one move ahead, profiles are stateless except for dragons and swarms, and NPCs share nothing.
 - **Performance budget.** Per-cell A* already causes hitches; any search over action sequences needs a shared reachability flood and a cached threat map per turn first (AI-019).
-- **Testability.** No harness can run `ExecuteNPCTurn` headless (AI-018, TST-002), so behaviour changes are verified only by play.
+- **Testability.** No harness can run `ExecuteNPCTurn` headless (AI-018; the static-suite runner covers only the static suites), so behaviour changes are verified only by play.
 
 ### 13.2 Prerequisites (fix before tuning behaviour)
 

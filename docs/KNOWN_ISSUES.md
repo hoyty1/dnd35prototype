@@ -30,17 +30,17 @@ Entries per section:
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 2 | 20 | 15 | 37 | CORE-038 |
-| [Combat](issues/CMB.md) | CMB | 3 | 46 | 57 | 106 | CMB-119 |
+| [Combat](issues/CMB.md) | CMB | 4 | 47 | 57 | 108 | CMB-121 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 10 | 19 | GRID-020 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 8 | 57 | 53 | 118 | SPL-120 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 8 | 58 | 53 | 119 | SPL-121 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 9 | 26 | 37 | 72 | CHR-073 |
-| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 21 | 17 | 42 | CRE-043 |
-| [Encounters](issues/ENC.md) | ENC | 1 | 7 | 13 | 21 | ENC-022 |
+| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 21 | 18 | 43 | CRE-044 |
+| [Encounters](issues/ENC.md) | ENC | 1 | 7 | 14 | 22 | ENC-023 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 32 | 34 | 70 | ITM-071 |
 | [AI](issues/AI.md) | AI | 1 | 19 | 36 | 56 | AI-058 |
 | [UI](issues/UI.md) | UI | 1 | 11 | 38 | 50 | UI-051 |
-| [Tests](issues/TST.md) | TST | 0 | 7 | 19 | 26 | TST-029 |
-| **All** | | 34 | 259 | 337 | 630 | |
+| [Tests](issues/TST.md) | TST | 0 | 7 | 22 | 29 | TST-033 |
+| **All** | | 35 | 261 | 342 | 638 | |
 
 ## Top issues
 
@@ -54,6 +54,7 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [UI-001](issues/UI.md) | High | UI | Combat log adds about 50 pooled GameObjects on every log call (588 in one FlankingReach suite run) | Yes |
 | [CMB-003](issues/CMB.md) | High | Combat | Morale and situational damage bonuses never reach weapon damage | Yes |
 | [CMB-004](issues/CMB.md) | High | Combat | Critical hits multiply only weapon dice; coup de grace multiplies sneak attack | Yes |
+| [CMB-119](issues/CMB.md) | High | Combat | Single-die weapon damage by size is one size step too large (a Small wielder's longsword deals 1d8; Enlarge Person makes it 3d6); 2d6 and 2d8 weapons scale correctly | Yes |
 | [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at the round boundary (GameManager.OnNewRound -> ConditionService.OnRoundEnd), so 1-round conditions can cost the target nothing | Yes |
 | [CHR-001](issues/CHR.md) | High | Characters, feats and classes | Created PCs get CON hit points twice; CON HP clamped to +1 per level | Yes |
 | [CHR-002](issues/CHR.md) | High | Characters, feats and classes | Class BAB and hit-die tables contradict class data and RAW (e.g. Bard 1/2 BAB) | Yes |
