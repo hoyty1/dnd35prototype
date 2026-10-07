@@ -478,6 +478,11 @@ namespace Tests.Runner
             else if (!o.AllowStaleCode) refusal = StaleCodeReason();
             if (refusal != null) return Refuse(report, mode, refusal);
 
+            // Leftover scenario-harness state would force dice or hide logs during the suites.
+            string leftover = Tests.Scenarios.ScenarioSessionGuard.CleanUp("StaticSuiteRunner");
+            if (leftover != null)
+                report.warnings.Add("Scenario harness state was still set before the run and was cleared (" + leftover + ").");
+
             string baselineError;
             StaticBaseline baseline = LoadBaseline(out baselineError);
             report.baselineError = baselineError;

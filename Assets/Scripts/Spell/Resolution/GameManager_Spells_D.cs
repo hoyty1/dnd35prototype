@@ -479,6 +479,8 @@ public partial class GameManager
         // Update position
         caster.GridPosition = dest;
         grid.SetCreatureOccupancy(caster, dest, casterSize);
+        if (casterPos != dest)
+            ScenarioHooks.Moved?.Invoke(caster, casterPos, dest, "teleport");
 
         // Update visual position
         Vector3 worldPos = grid.GetCenteredWorldPosition(dest, casterSize);

@@ -442,6 +442,9 @@ public partial class GameManager
                 newCell.AddOccupant(creature);
         }
 
+        if (oldPos != wallCell)
+            ScenarioHooks.Moved?.Invoke(creature, oldPos, wallCell, "wall-disrupt");
+
         Debug.Log($"[WallOfIce] {creature.Stats.CharacterName} moves from ({oldPos.x},{oldPos.y}) into wall cell ({wallCell.x},{wallCell.y}) to disrupt the wall!");
     }
 

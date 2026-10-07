@@ -16,6 +16,9 @@ public class ConditionManager : MonoBehaviour
     private SpriteRenderer _spriteRenderer;
     private Color _baseColor = Color.white;
     private bool _capturedBaseColor;
+    private CharacterController _owner;
+
+    private CharacterController Owner => _owner != null ? _owner : (_owner = GetComponent<CharacterController>());
 
     public void Init(CharacterStats stats)
     {
@@ -241,6 +244,9 @@ public class ConditionManager : MonoBehaviour
     {
         if (_stats == null || condition == null) return;
 
+        // Inert test hook: a new condition instance was stored (refreshing an existing one is not reported).
+        ScenarioHooks.ConditionChanged?.Invoke(Owner, condition.Type, true, condition.RemainingRounds, condition.SourceName);
+
         // ===== RULE STUBS =====
         // These hooks are intentionally lightweight: we centralize where richer per-condition
         // behavior will be added without changing the rest of the combat pipeline.
@@ -280,6 +286,9 @@ public class ConditionManager : MonoBehaviour
     private void OnConditionRemoved(StatusEffect condition)
     {
         if (_stats == null || condition == null) return;
+
+        // Inert test hook: removal, expiry on tick and linked-helpless cleanup all land here.
+        ScenarioHooks.ConditionChanged?.Invoke(Owner, condition.Type, false, condition.RemainingRounds, condition.SourceName);
 
         switch (ConditionRules.Normalize(condition.Type))
         {

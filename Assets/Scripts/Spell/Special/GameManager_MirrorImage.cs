@@ -575,6 +575,9 @@ public partial class GameManager
         if (mover == null || previousPosition == currentPosition)
             return;
 
+        // Inert test hook: every MoveToCell, MoveAlongPath (segment) and grapple reposition lands here.
+        ScenarioHooks.Moved?.Invoke(mover, previousPosition, currentPosition, movementType);
+
         if (_mirrorImageFollowSuppression.Contains(mover))
         {
             _mirrorImageFollowSuppression.Remove(mover);

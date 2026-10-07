@@ -278,6 +278,7 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void ShowCombatLog(string message)
     {
+        ScenarioHooks.CombatLog?.Invoke(message);
         EnsureCombatLogPanel();
         _combatLogPanel?.AddMessage(message);
     }

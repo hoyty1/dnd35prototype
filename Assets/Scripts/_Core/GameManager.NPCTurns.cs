@@ -484,7 +484,7 @@ public partial class GameManager
                 continue;
             }
 
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, attacker);
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, attacker, trigger: "ranged");
             if (aooResult == null)
             {
                 Debug.Log($"[AOO-DEBUG] ExecuteAoO returned null for {enemy?.Stats?.CharacterName ?? "<unknown>"} vs {attacker.Stats.CharacterName}.");

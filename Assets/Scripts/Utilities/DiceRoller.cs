@@ -19,6 +19,9 @@ using UnityEngine;
 // ============================================================================
 
 /// <summary>
+/// Every die is drawn from UnityEngine.Random first and then passed through
+/// <see cref="ScenarioHooks.FilterRoll"/>, which returns it unchanged in normal play
+/// (the scenario harness can force a die without shifting later rolls).
 /// Centralized dice rolling for D&D 3.5e. All dice rolls should go through this utility
 /// to enable future features like deterministic replay, roll logging, and RNG seeding.
 /// </summary>
@@ -29,25 +32,25 @@ public static class DiceRoller
     // ════════════════════════════════════════════════════════════
 
     /// <summary>Roll 1d4 (1-4).</summary>
-    public static int D4() => Random.Range(1, 5);
+    public static int D4() => ScenarioHooks.FilterRoll(4, null, Random.Range(1, 5));
 
     /// <summary>Roll 1d6 (1-6).</summary>
-    public static int D6() => Random.Range(1, 7);
+    public static int D6() => ScenarioHooks.FilterRoll(6, null, Random.Range(1, 7));
 
     /// <summary>Roll 1d8 (1-8).</summary>
-    public static int D8() => Random.Range(1, 9);
+    public static int D8() => ScenarioHooks.FilterRoll(8, null, Random.Range(1, 9));
 
     /// <summary>Roll 1d10 (1-10).</summary>
-    public static int D10() => Random.Range(1, 11);
+    public static int D10() => ScenarioHooks.FilterRoll(10, null, Random.Range(1, 11));
 
     /// <summary>Roll 1d12 (1-12).</summary>
-    public static int D12() => Random.Range(1, 13);
+    public static int D12() => ScenarioHooks.FilterRoll(12, null, Random.Range(1, 13));
 
     /// <summary>Roll 1d20 (1-20). The most common roll in D&D — attack rolls, saves, ability checks.</summary>
-    public static int D20() => Random.Range(1, 21);
+    public static int D20() => ScenarioHooks.FilterRoll(20, null, Random.Range(1, 21));
 
     /// <summary>Roll 1d100 (1-100). Percentile roll.</summary>
-    public static int D100() => Random.Range(1, 101);
+    public static int D100() => ScenarioHooks.FilterRoll(100, null, Random.Range(1, 101));
 
     // ════════════════════════════════════════════════════════════
     //  Multi-Dice Rolls
@@ -63,7 +66,7 @@ public static class DiceRoller
     {
         int total = 0;
         for (int i = 0; i < count; i++)
-            total += Random.Range(1, sides + 1);
+            total += ScenarioHooks.FilterRoll(sides, null, Random.Range(1, sides + 1));
         return total;
     }
 
@@ -83,7 +86,7 @@ public static class DiceRoller
         if (log != null) log.Append('[');
         for (int i = 0; i < count; i++)
         {
-            int roll = Random.Range(1, sides + 1);
+            int roll = ScenarioHooks.FilterRoll(sides, null, Random.Range(1, sides + 1));
             total += roll;
             if (log != null)
             {

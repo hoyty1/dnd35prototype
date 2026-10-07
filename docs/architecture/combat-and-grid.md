@@ -51,14 +51,14 @@ Difficult terrain doubles cost only in `MovementService.GetMovementCost`, which 
 
 ## Turn structure
 
-**Initiative.** `TurnService` owns the order. `TurnService.StartCombat` creates one `InitiativeEntry` (d20 + `Stats.InitiativeModifier`) per combatant that is not dead, sorts the entries (`SortInitiativeOrder`: total, then modifier, then a coin flip inside the comparator), applies forced-first test ordering, sets round 1, fires `OnNewRound(1)`, then starts the first turn. Summons join mid-combat via `AddToInitiative`. There is no surprise round, and `FlatFooted` is never applied (it is only checked). `InitiativeSystem` and `CombatStateMachine` are dormant (see [Dormant and unused infrastructure](../ARCHITECTURE.md#dormant-and-unused-infrastructure)); the live phase state is `GameManager.CurrentPhase` (`TurnPhase`) and `CurrentSubPhase` (`PlayerSubPhase`).
+**Initiative.** `TurnService` owns the order. `TurnService.StartCombat` creates one `InitiativeEntry` (d20 + `Stats.InitiativeModifier`) per combatant that is not dead, sorts the entries (`SortInitiativeOrder`: total, then modifier, then a coin flip inside the comparator), applies forced-first test ordering (`GetForcedFirstInitiativeActors`: `ScenarioHooks.ForcedFirstInitiative` when set, else the spell-test presets' PC1), sets round 1, fires `OnNewRound(1)`, then starts the first turn. Summons join mid-combat via `AddToInitiative`. There is no surprise round, and `FlatFooted` is never applied (it is only checked). `InitiativeSystem` and `CombatStateMachine` are dormant (see [Dormant and unused infrastructure](../ARCHITECTURE.md#dormant-and-unused-infrastructure)); the live phase state is `GameManager.CurrentPhase` (`TurnPhase`) and `CurrentSubPhase` (`PlayerSubPhase`).
 
 **Turn advancement is synchronous and re-entrant.** No coroutine sits between turns:
 
 ```
 EndCurrentTurn -> EndActivePCTurn (PC) | NextInitiativeTurn (NPC)
 NextInitiativeTurn: True Strike expiry, pinned duration, ConditionService.OnTurnEnd,
-                    ProcessEndOfTurnHPState, TurnService.EndTurn
+                    ProcessEndOfTurnHPState, publish TurnEndedEvent, TurnService.EndTurn
   TurnService.AdvanceToNextTurn -> StartTurnAtCurrentIndex
     index wraps -> round++ -> OnNewRound -> GameManager.OnNewRound (round-start ticks)
     OnTurnStarted(next):
@@ -216,6 +216,25 @@ The `GrappleSystem`, `OverrunSystem`, `StandardManeuvers`, `SupportActions` and 
 ## Mounted combat
 
 `Combat/Mounts/` (`MountSystem`, `MountedCombatSystem`, `MountDatabase`, `MountData`) is a complete rules library with a test suite (`Tests/Mounts/MountSystemTests.cs`). It is unreachable in play: `MountSystem.TryMount`/`CreateMount` have no non-test callers, so `MountSystem.IsMounted` is always false. The production references (`GetMountedRangedPenalty` and `GetMountedACBonus` in `CharacterController`, `ProcessMountedChargeDamage` in `SupportActions`) are therefore no-ops. Do not document mounted combat as a player feature.
+
+## Scenario hooks (test instrumentation)
+
+`_Core/ScenarioHooks.cs` is a static class of inert seams for the scenario harness. Every member is null or false in normal play and every raise site is one null-conditional call, so the game behaves the same without it; rules code must never read these values. Raise sites:
+
+- `RollFilter`: every `DiceRoller` die and every `DiceService` die with min 1 (`Roll`, so `D20`, `RollDie`, `Percentile`, and each die of `RollMultiple` with its context). The die is drawn first, so forcing one never shifts later rolls. Raw `Random.Range` dice bypass it (TST-033).
+- `AttackResolved`: `CharacterController.PerformSingleAttackWithCrit`, now a wrapper around `PerformSingleAttackWithCritCore`, so every weapon attack path reports (an AoO's attack reports before `IsAttackOfOpportunity` is set).
+- `AoOResolved`: `ThreatSystem.ExecuteAoO`, with the new optional `trigger` argument: `spellcast`, `maneuver`, `bullrush-move`, `standup`, `ranged`, `item`, `pickup`, or `movement`/`other` by default.
+- `ManeuverResolved`: `CharacterController.ExecuteSpecialAttack`, now a wrapper around `ExecuteSpecialAttackCore` (the free trip of `ResolveFreeTripAttempt` does not go through it).
+- `ThreatenedCast`: `GameManager.ResolveThreatenedSpellcast` (PC and NPC), after the AoOs or the defensive Concentration check.
+- `Moved`: `GameManager.NotifyCharacterMovement` (every `MoveToCell`, each `MoveAlongPath` call and grapple repositioning), Dimension Door and the Wall of Ice disruption move.
+- `ConditionChanged`: `ConditionManager` when a new condition instance is stored and when one is removed (removal, tick expiry, linked helpless). Refreshing an existing condition and the direct `CharacterStats.ApplyCondition`/`RemoveCondition` calls are not reported.
+- `CombatLog`: `CombatUI.ShowCombatLog`. `PhaseChanged`: the `GameManager.CurrentPhase` setter, on a change only.
+- `ScriptedTurn`: `AIService.ExecuteNPCTurn`, after the turn-start rules and the HP, confused, charmed and fascinated gates; a non-null coroutine replaces the rest of the AI's turn, so it also skips the automatic stand-up, the frightened/panicked gate, the Animate Rope escape, the no-target search, the turned-undead gate, the grapple turn, free auras and spittle and the Resilient Sphere restriction. The provider must return null for Frightened, Panicked and Turned actors so the AI applies those compulsions.
+- `ForcedFirstInitiative` (`GetForcedFirstInitiativeActors`) and `SuppressPlayerInput` (`GameManager.Update` returns before any input handling).
+
+Handlers run inline in rules code. The harness installs observers through `ScenarioHooks.Safe(name, handler)` and scripted turns through `ScenarioHooks.SafeTurn(provider)`: an exception is recorded in `ScenarioHooks.HookErrors` and logged, and the game path goes on (a throwing script ends the turn). A roll filter that throws or returns a value outside 1..sides is recorded there too and the natural roll is used. A run fails when `HookErrors` is not empty. `ClearAll` resets everything, including `HookErrors`.
+
+The editor-only partial `_Core/GameManager.ScenarioHarness.cs` holds the `Harness_*` entry points (party from creation data or exact `CharacterStats`, exact enemy placement as a custom encounter, start, halt and reset, state dump, PC menu callbacks, AoO prompt answers); `CharacterCreationUI.CompleteWithParty` finishes creation the way Play Now! and Quick Start do. `Tests/Scenarios/ScenarioFastMode.cs` speeds Play mode up for harness runs ([TESTING.md](../TESTING.md) 3.3).
 
 ## Combat log
 

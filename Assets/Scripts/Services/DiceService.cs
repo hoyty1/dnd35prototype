@@ -31,6 +31,11 @@ public static class DiceService
         // Random.Range(int, int) is exclusive on the upper bound
         int result = Random.Range(min, max + 1);
 
+        // A die (1..max) passes through the inert scenario filter after it is drawn, so the
+        // RNG stream is the same whether or not a test forces the value.
+        if (min == 1)
+            result = ScenarioHooks.FilterRoll(max, context, result);
+
         if (EnableLogging && !string.IsNullOrEmpty(context))
         {
             Debug.Log($"[Dice] {context}: rolled {result} (range {min}-{max})");
@@ -81,7 +86,8 @@ public static class DiceService
         int total = 0;
         for (int i = 0; i < count; i++)
         {
-            total += Roll(1, sides);
+            // Same draw as Roll(1, sides); the filter sees this call's context for each die.
+            total += ScenarioHooks.FilterRoll(sides, context, Random.Range(1, sides + 1));
         }
 
         if (EnableLogging && !string.IsNullOrEmpty(context))

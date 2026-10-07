@@ -6,7 +6,7 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 
 ## Project
 
-- D&D 3.5e tactical combat prototype, Unity **6000.4.0f1** only (`F:/Unity/6000.4.0f1/Editor/Unity.exe`; ignore other editors under `F:/Unity/`). C# 9.0, one assembly (Assembly-CSharp), about 654 `.cs` files in `Assets/Scripts`, mostly global namespace.
+- D&D 3.5e tactical combat prototype, Unity **6000.4.0f1** only (`F:/Unity/6000.4.0f1/Editor/Unity.exe`; ignore other editors under `F:/Unity/`). C# 9.0, one assembly (Assembly-CSharp), about 661 `.cs` files in `Assets/Scripts`, mostly global namespace.
 - One scene, `Assets/Scenes/MainScene.unity`; `SceneBootstrap.Awake` (`Assets/Scripts/_Core/SceneBootstrap.cs`) builds grid, characters, UI and `GameManager` at runtime. No prefabs, no saves.
 - Written mostly by earlier AI agents; maintained by Claude for the owner, hoyty1.
 - **Goal (owner, 2026-10-03):** play as close to the 3.5e core rules (PHB/DMG/MM) as possible. Battles are randomized encounters based on the DMG random encounter rules. Between battles you manage the party by PHB/DMG rules. Enemy AI needs much more depth because the combat option space is vast. Prefer RAW unless the owner confirms a house rule.
@@ -40,7 +40,7 @@ Under `Assets/Scripts/`; full map in `docs/ARCHITECTURE.md`.
 
 | Folder | Contents |
 |---|---|
-| `_Core/` | `GameManager.cs` (about 11.5K lines) + 8 `GameManager.*.cs` partials, `SceneBootstrap` |
+| `_Core/` | `GameManager.cs` (about 11.5K lines) + 9 `GameManager.*.cs` partials, `SceneBootstrap`, `ScenarioHooks` (inert test seams) |
 | `Combat/` | `Core/` (AttackCalculator, ThreatSystem, DamageModel, TeamUtility), `Conditions/`, `StatusEffects/` (ConditionRules), `Maneuvers/` + `Special/` (GameManager partials), `Behaviors/` (Charmed/Confused/Fascinated/Frightened), `Utilities/` (CombatCalculationService, CombatUtils), `Reactions/`, `Mounts/`, `Logging/` |
 | `Spell/` | `Data/`, `Database/`, `Casting/` (SpellCaster), `Components/` (StatusEffectManager, MetamagicData); GameManager partials in `Resolution/`, `Special/`, `Domain/` |
 | `Character/` | `Controller/CharacterController.cs` (about 12K lines), `Stats/CharacterStats.cs`, `Classes/`, `Creatures/`, `Templates/`, `Feats/` |
@@ -65,7 +65,7 @@ Where to look first:
 
 ## Architecture in brief
 
-1. **GameManager**: singleton `partial class`, 52 files in 7 folders, owns all session state (party, NPCs, `CurrentPhase`, `_pending*`).
+1. **GameManager**: singleton `partial class`, 53 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`, `_pending*`).
 2. **Services** are added in `GameManager.Awake` and reach private state via `Combat_*` accessors and `*ForAI` wrappers.
 3. **CharacterController** resolves actions; **CharacterStats** has one named field per bonus source, hand-summed per stat. No modifier engine.
 4. **Spell effects dispatch by SpellId string compare** in chained `TryResolve<Name>SpellEffect` handlers; unclaimed spells fall to `ApplySpellBuff`.

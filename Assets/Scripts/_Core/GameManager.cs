@@ -224,7 +224,20 @@ public partial class GameManager : MonoBehaviour
         Animating
     }
 
-    public TurnPhase CurrentPhase { get; private set; }
+    private TurnPhase _currentPhase;
+    public TurnPhase CurrentPhase
+    {
+        get => _currentPhase;
+        private set
+        {
+            if (_currentPhase == value)
+                return;
+
+            TurnPhase previous = _currentPhase;
+            _currentPhase = value;
+            ScenarioHooks.PhaseChanged?.Invoke(previous, value);
+        }
+    }
     public PlayerSubPhase CurrentSubPhase { get; private set; }
 
     // ========== INITIATIVE / TURN SERVICE ==========
@@ -2189,6 +2202,13 @@ public partial class GameManager : MonoBehaviour
         // Poison secondary timers continue regardless of input/turn state.
         UpdatePoisonTimers();
 
+        // Scenario harness runs drive the game through code; ignore mouse and keyboard world input.
+        if (ScenarioHooks.SuppressPlayerInput)
+        {
+            HideCharacterHoverTooltip();
+            return;
+        }
+
         // Skip all game input during character creation / encounter selection / pre-combat inventory.
         if (WaitingForCharacterCreation || WaitingForEncounterSelection || WaitingForPreCombatInventory || WaitingForLootCollection)
         {
@@ -3741,6 +3761,9 @@ public partial class GameManager : MonoBehaviour
 
     private List<CharacterController> GetForcedFirstInitiativeActors()
     {
+        if (ScenarioHooks.ForcedFirstInitiative != null && ScenarioHooks.ForcedFirstInitiative.Count > 0)
+            return new List<CharacterController>(ScenarioHooks.ForcedFirstInitiative);
+
         if ((_isWizardSpellTestEncounter || _isClericSpellTestEncounter || _isMirrorImageTestEncounter) && IsActiveCombatant(PC1) && PC1 != null)
         {
             return new List<CharacterController> { PC1 };
@@ -3956,6 +3979,9 @@ public partial class GameManager : MonoBehaviour
         WarnFlamingSphereNotMovedAtTurnEnd(endingCharacter);
         _conditionService?.OnTurnEnd(endingCharacter);
         ProcessEndOfTurnHPState(endingCharacter);
+
+        if (endingCharacter != null)
+            GameEventSystem.Instance.Publish(new TurnEndedEvent { Character = endingCharacter });
 
         // Threat map may have changed (NPC moved, character died, etc.)
         InvalidatePreviewThreats();
@@ -4533,7 +4559,7 @@ public partial class GameManager : MonoBehaviour
             if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy))
                 continue;
 
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor);
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor, trigger: "item");
             if (aooResult == null) continue;
 
             CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs item use: {aooResult.GetDetailedSummary()}"));
@@ -4929,7 +4955,7 @@ public partial class GameManager : MonoBehaviour
             if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy))
                 continue;
 
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor);
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor, trigger: "pickup");
             if (aooResult == null) continue;
 
             CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs pick up: {aooResult.GetDetailedSummary()}"));
@@ -7202,7 +7228,7 @@ public partial class GameManager : MonoBehaviour
                 if (IsDroppedWhileStanding()) break;
                 if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy)) continue;
 
-                CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor);
+                CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor, trigger: "standup");
                 if (aooResult == null)
                     continue;
 

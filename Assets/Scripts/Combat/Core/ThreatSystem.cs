@@ -487,8 +487,10 @@ public static class ThreatSystem
     /// </summary>
     /// <param name="threatener">The character making the AoO.</param>
     /// <param name="target">The character being attacked (the one who provoked).</param>
+    /// <param name="trigger">What provoked the AoO, for the ScenarioHooks.AoOResolved test hook only
+    /// ("spellcast", "maneuver", "standup", "ranged", ...); null means "movement" or "other".</param>
     /// <returns>The CombatResult of the AoO, or null if the AoO couldn't be made.</returns>
-    public static CombatResult ExecuteAoO(CharacterController threatener, CharacterController target, bool isFromMovement = false)
+    public static CombatResult ExecuteAoO(CharacterController threatener, CharacterController target, bool isFromMovement = false, string trigger = null)
     {
         if (threatener == null || target == null || threatener.Stats == null || target.Stats == null)
             return null;
@@ -548,6 +550,9 @@ public static class ThreatSystem
 
         // Mark this as an AoO in the result for logging
         result.IsAttackOfOpportunity = true;
+
+        // Inert test hook; the trigger names what provoked the AoO (movement, spellcast, maneuver, standup, ...).
+        ScenarioHooks.AoOResolved?.Invoke(threatener, target, trigger ?? (isFromMovement ? "movement" : "other"), result);
 
         // Innate trip follow-up (e.g., wolf bite) is a free action and should not consume AoO economy.
         if (result.Hit

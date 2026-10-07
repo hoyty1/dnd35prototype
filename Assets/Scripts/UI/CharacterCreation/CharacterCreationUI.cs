@@ -2822,10 +2822,7 @@ public class CharacterCreationUI : MonoBehaviour
             }
         }
 
-        IsComplete = true;
-        HideCreationUI();
-
-        NotifyCreationComplete("VeryQuickStart");
+        CompleteWithParty(CreatedCharacters, "VeryQuickStart");
 
         Debug.Log("[VeryQuickStart] Game started!");
     }
@@ -3354,11 +3351,30 @@ public class CharacterCreationUI : MonoBehaviour
             Debug.Log($"  Slot {i + 1}: {CreatedCharacters[i].CharacterName} ({CreatedCharacters[i].RaceName} {CreatedCharacters[i].ClassName})");
         }
 
+        CompleteWithParty(CreatedCharacters, "QuickStartPartyBuilder");
+    }
+
+    /// <summary>
+    /// Finishes character creation with a ready party: stores it, hides the creation and Quick Start
+    /// overlays and hands the party to the game exactly as the Play Now! and Quick Start buttons do.
+    /// The scenario harness calls this to boot a party through the real creation path.
+    /// Returns false, and changes nothing, when <paramref name="party"/> is null or empty.
+    /// </summary>
+    public bool CompleteWithParty(CharacterCreationData[] party, string flowSource)
+    {
+        if (party == null || party.Length == 0)
+        {
+            Debug.LogError($"[CharacterCreation] CompleteWithParty ({flowSource}) called without a party; creation stays open.");
+            return false;
+        }
+
+        CreatedCharacters = party;
         IsComplete = true;
         HideQSOverlay();
         HideCreationUI();
 
-        NotifyCreationComplete("QuickStartPartyBuilder");
+        NotifyCreationComplete(flowSource);
+        return true;
     }
 
     private void NotifyCreationComplete(string flowSource)

@@ -113,6 +113,19 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        // ── Scenario harness scripted turn (test instrumentation; null in normal play) ──
+        // Runs after the turn-start rules and the HP, confused, charmed and fascinated gates. A script
+        // replaces everything below: the automatic stand-up, the frightened/panicked gate, the Animate
+        // Rope escape, the no-target search, the turned-undead gate, the grapple turn, free auras and
+        // spittle and the Resilient Sphere restriction. The harness returns null for Frightened,
+        // Panicked or Turned actors and for any actor it wants the AI to run (ScenarioHooks.ScriptedTurn).
+        IEnumerator scripted = ScenarioHooks.ScriptedTurn?.Invoke(npc);
+        if (scripted != null)
+        {
+            yield return _gameManager.StartCoroutine(scripted);
+            yield break;
+        }
+
         // ── Stand up from prone (move action, provokes; PHB p.143, CMB-074) ──
         // A prone creature cannot take ordinary movement, so it stands first through the same
         // resolution as the PC Stand Up button. Grappling creatures stay down (grapple turn below).

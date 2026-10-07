@@ -8387,12 +8387,20 @@ public partial class GameManager
         if (threateningEnemies == null || threateningEnemies.Count == 0)
             return true;
 
+        bool proceeds;
         if (castDefensively)
-            return AttemptCastDefensively(caster, spell);
+        {
+            proceeds = AttemptCastDefensively(caster, spell);
+        }
+        else
+        {
+            bool canProceed = false;
+            ResolveSpellcastAoOs(caster, spell, threateningEnemies, proceed => canProceed = proceed);
+            proceeds = canProceed;
+        }
 
-        bool canProceed = false;
-        ResolveSpellcastAoOs(caster, spell, threateningEnemies, proceed => canProceed = proceed);
-        return canProceed;
+        ScenarioHooks.ThreatenedCast?.Invoke(caster, spell, castDefensively, proceeds, threateningEnemies.Count);
+        return proceeds;
     }
 
     private void ResolveSpellcastAoOs(CharacterController caster, SpellData spell, List<CharacterController> threateningEnemies, System.Action<bool> onResolved)
@@ -8416,7 +8424,7 @@ public partial class GameManager
             if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy))
                 continue;
 
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, caster);
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, caster, trigger: "spellcast");
             if (aooResult == null)
                 continue;
 

@@ -923,7 +923,7 @@ public partial class GameManager
             int targetHpBefore = target != null && target.Stats != null ? target.Stats.CurrentHP : 0;
             CombatResult maneuverAoO = isBullRush && provokers[i] != target
                 ? ResolveBullRushAoO(provokers[i], attacker, target, isFromMovement: false, context: $"{maneuverLabel} initiation")
-                : ThreatSystem.ExecuteAoO(provokers[i], attacker);
+                : ThreatSystem.ExecuteAoO(provokers[i], attacker, trigger: "maneuver");
             if (maneuverAoO == null)
                 continue;
 
@@ -999,7 +999,8 @@ public partial class GameManager
         }
 
         bool strays = victim != intended;
-        CombatResult result = ThreatSystem.ExecuteAoO(provoker, victim, isFromMovement && !strays);
+        CombatResult result = ThreatSystem.ExecuteAoO(provoker, victim, isFromMovement && !strays,
+            trigger: isFromMovement ? "bullrush-move" : "maneuver");
         if (result == null)
             return null;
 

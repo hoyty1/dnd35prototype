@@ -92,10 +92,10 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 52 files (51,899 lines), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 53 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
-- `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-228;
+- `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
 - the pending-action and targeting fields;
 - summons, test flags and loop statistics.
 
@@ -139,11 +139,11 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 52 files, found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Six files with system-sounding names are also partials.
+There are 53 files, found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Six files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
-| **_Core/** (9) | | |
+| **_Core/** (10) | | |
 | GameManager.cs | 11,516 | Main partial: singleton, state and enums, Awake/Start wiring, creation callbacks, encounter selection, hub, preset/random setup, rest and reset, `Update`/input routing, `StartCombat`, turn callbacks, `StartPCTurn`/`ShowActionChoices`, item/scroll/wand/staff use, 31 of the 51 GameManager `On*ButtonPressed` handlers, `*ForAI` wrappers (~10879-11026), path and hover previews. |
 | GameManager.CombatActions.cs | 2,697 | `OnCellClicked` routing by sub-phase; movement with AoO; attack target clicks; off-hand, full attack and special-attack execution; hand-off to `CombatFlowService`; `EndActivePCTurn`. |
 | GameManager.CombatFlowAccessors.cs | 130 | `Combat_*` getters, setters and forwarders over private state. |
@@ -152,6 +152,7 @@ There are 52 files, found with `grep -rlE '^\s*public partial class GameManager\
 | GameManager.NPCTurns.cs | 1,853 | `SingleNPCTurnFromInitiative`; summon AI; NPC attacks, full attacks and spellcasting (`TryNPCPerformSpellCast`); breath weapon; grab/trip helpers. |
 | GameManager.TestConfigs.cs | 1,875 | 22 `Configure*TestParty` methods, `RestoreStandardPartyLayout`. |
 | GameManager.TestPanel.cs | 110 | F12 panel bridge: `TestCastSpellFromPanel`, `CleanupTestPanelCast`. |
+| GameManager.ScenarioHarness.cs | 473 | Editor-only (`#if UNITY_EDITOR`) `Harness_*` entry points for the scenario harness: build the party from creation data or exact `CharacterStats`, spawn enemies at exact squares, start, halt and reset combat, dump turn state, call the PC menu callbacks and answer the AoO prompt. No game code calls it. |
 | GameManager.TreasureGeneration.cs | 158 | `GeneratePostCombatTreasure` (EL -> `TreasureGenerator.Generate`). Its `ShowTreasureUI` path has no external callers. |
 | **Spell/Resolution/** (25) | | |
 | GameManager.SpellCasting.cs | 8,957 | Spell targeting and casting orchestration (`BeginPendingSpellTargeting`, `PerformSpellCast`), summon spawn and despawn, `TickSummonDurations`, `TickAllSpellDurations`. |
@@ -225,7 +226,7 @@ These types compile and some are even instantiated, but they do not drive behavi
 
 | Item | Path | Status |
 |---|---|---|
-| GameEventSystem | _Core/GameEventSystem.cs | Lazy plain-C# pub/sub singleton with 20 event structs. Only 4 are published on live paths, all from GameManager: `CombatStartedEvent` (:3735), `TurnStartedEvent` (:3782), `NewRoundEvent` (:3809) and `CombatEndedEvent` (:3849, rarely reached). The only subscriber is `WallOfFireAreaEffect.cs:630` (heat-wave damage on `TurnStartedEvent`), so removing that publish breaks Wall of Fire. `Publish` catches and logs subscriber exceptions. |
+| GameEventSystem | _Core/GameEventSystem.cs | Lazy plain-C# pub/sub singleton with 20 event structs. Only 5 are published on live paths, all from GameManager: `CombatStartedEvent` (:3753), `TurnStartedEvent` (:3803), `NewRoundEvent` (:3830), `CombatEndedEvent` (:3870, rarely reached) and `TurnEndedEvent` (:3984, in `NextInitiativeTurn` after the end-of-turn HP state and before `TurnService.EndTurn`; no subscriber in game code). The only subscriber is `WallOfFireAreaEffect.cs:630` (heat-wave damage on `TurnStartedEvent`), so removing that publish breaks Wall of Fire. `Publish` catches and logs subscriber exceptions. |
 | CommandProcessor, IGameCommand, IGameCommandAsync, 7 command classes | _Core/Commands/ | `CommandProcessor` is added in Awake (:575) into a field that is never read. No command is ever constructed, and every `Execute` only logs. |
 | CombatStateMachine | Combat/Core/CombatStateMachine.cs | Instantiated as `GameManager.CombatState` (:30). Nothing transitions or reads it, so it stays Idle. Real state is `CurrentPhase`/`CurrentSubPhase` plus `InputService.InputMode`. |
 | InitiativeSystem | Combat/Core/InitiativeSystem.cs | Static initiative roller with zero references. `TurnService` does this job. |
@@ -235,12 +236,12 @@ These types compile and some are even instantiated, but they do not drive behavi
 
 ### Folder map of Assets/Scripts
 
-There are 654 `.cs` files (about 292K lines). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
+There are 661 `.cs` files (about 293K lines). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
 
 ```
 Assets/Scripts/
-  _Core/ (14)            GameManager.cs + 8 GameManager.*.cs partials, SceneBootstrap, GameEventSystem,
-                         GameSettings, GameConstants, PlaneType
+  _Core/ (16)            GameManager.cs + 9 GameManager.*.cs partials (ScenarioHarness is editor-only),
+                         SceneBootstrap, GameEventSystem, ScenarioHooks, GameSettings, GameConstants, PlaneType
     Commands/ (3)        dormant command pattern
   AI/ (8)                AISpellcastingStrategist, LastKnownPositionTracker, SpellCategoryClassifier,
                          AIProfile base, AIConsumableManager, AIBehaviorData,
@@ -284,7 +285,8 @@ Assets/Scripts/
   World/ (2)             PlanarTravelSystem, CreatureTrapSystem (mostly inert)
   Utilities/ (12)        DiceRoller, CameraController, DebugCommands, IdentifierExtensions, ...
   Identifiers/ (2)       two editor-only ContextMenu smoke tests (the real ID types live elsewhere)
-  Tests/ (103)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
+  Tests/ (105)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
+                         and Scenarios/ (ScenarioFastMode, ScenarioSessionGuard; the scenario harness grows here)
 ```
 
 The empty legacy folders left by the reorganization (`Core/`, `Magic/`, `CombatSystems/`, `Classes/`, `Store/`, `Inventory/`, `UI/Panels/`) were removed on 2026-10-03. Resolve an old doc path such as `Magic/X.cs` by file name (`**/X.cs`).
@@ -334,7 +336,7 @@ There is one deliberate exception. `SpellCategoryClassifier.ReclassifyAll`, call
 - `[TestPanel]`
 - `[AI][Spell]`
 
-**Dice.** Three random sources coexist, all backed by `UnityEngine.Random`, with no seeding hook in game code (some tests call `Random.InitState`):
+**Dice.** Three random sources coexist, all backed by `UnityEngine.Random`, with no seeding hook in game code (some tests call `Random.InitState`). Every `DiceRoller` die and every `DiceService` die (min 1) is drawn first and then passed through the inert test filter `ScenarioHooks.FilterRoll`, which returns it unchanged in normal play; raw `Random.Range` sites bypass it (TST-033):
 
 - `DiceRoller` (Utilities): about 155 referencing lines, none in tests.
 - `DiceService` (Services): about 130 referencing lines (about 120 outside tests), adds an optional context label.

@@ -6097,6 +6097,28 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// Perform a single attack with full D&D 3.5 critical hit mechanics (see
+    /// <see cref="PerformSingleAttackWithCritCore"/>), then report the result to the inert
+    /// <see cref="ScenarioHooks.AttackResolved"/> test hook. Every weapon attack path calls this.
+    /// </summary>
+    private CombatResult PerformSingleAttackWithCrit(CharacterController target, int totalAtkMod,
+        bool isFlanking, int flankingBonus, string flankingPartnerName,
+        int damageDice, int damageCount, int bonusDamage,
+        int critThreatMin, int critMultiplier,
+        ItemData weapon, bool isOffHand, int featDamageBonus = 0, int situationalTargetAcBonus = 0,
+        bool dealNonlethalDamage = false, int damageModeAttackPenalty = 0, string damageModePenaltySource = "")
+    {
+        CombatResult result = PerformSingleAttackWithCritCore(target, totalAtkMod,
+            isFlanking, flankingBonus, flankingPartnerName,
+            damageDice, damageCount, bonusDamage,
+            critThreatMin, critMultiplier,
+            weapon, isOffHand, featDamageBonus, situationalTargetAcBonus,
+            dealNonlethalDamage, damageModeAttackPenalty, damageModePenaltySource);
+        ScenarioHooks.AttackResolved?.Invoke(this, result);
+        return result;
+    }
+
+    /// <summary>
     /// Perform a single attack with full D&D 3.5 critical hit mechanics.
     /// Uses the weapon's DamageModifierType to determine STR bonus to damage.
     /// Step 1: Roll d20. Check if in threat range.
@@ -6106,7 +6128,7 @@ public class CharacterController : MonoBehaviour
     /// <param name="weapon">The weapon being used (null = unarmed)</param>
     /// <param name="isOffHand">True if this is an off-hand attack (overrides to 0.5× STR)</param>
     /// <param name="featDamageBonus">Extra flat damage from feats (Power Attack, Point Blank Shot)</param>
-    private CombatResult PerformSingleAttackWithCrit(CharacterController target, int totalAtkMod,
+    private CombatResult PerformSingleAttackWithCritCore(CharacterController target, int totalAtkMod,
         bool isFlanking, int flankingBonus, string flankingPartnerName,
         int damageDice, int damageCount, int bonusDamage,
         int critThreatMin, int critMultiplier,
@@ -10144,6 +10166,10 @@ public class CharacterController : MonoBehaviour
 
     // ========== SPECIAL ATTACK MANEUVERS ==========
 
+    /// <summary>
+    /// Resolves a special attack (see <see cref="ExecuteSpecialAttackCore"/>), then reports it to the
+    /// inert <see cref="ScenarioHooks.ManeuverResolved"/> test hook.
+    /// </summary>
     public SpecialAttackResult ExecuteSpecialAttack(
         SpecialAttackType type,
         CharacterController target,
@@ -10160,6 +10186,33 @@ public class CharacterController : MonoBehaviour
         ItemData sunderAttackerWeaponOverride = null,
         bool sunderUsedOffHand = false,
         int sunderDualWieldPenaltyForLog = 0)
+    {
+        SpecialAttackResult result = ExecuteSpecialAttackCore(type, target,
+            disarmTargetSlot, disarmAttackBonusOverride, grappleAttackBonusOverride,
+            bullRushChargeBonusOverride, disarmAttackerWeaponOverride, tripAttackBonusOverride,
+            disarmUsedOffHand, disarmDualWieldPenaltyForLog,
+            sunderTargetSlot, sunderAttackBonusOverride, sunderAttackerWeaponOverride,
+            sunderUsedOffHand, sunderDualWieldPenaltyForLog);
+        ScenarioHooks.ManeuverResolved?.Invoke(this, target, type, result);
+        return result;
+    }
+
+    private SpecialAttackResult ExecuteSpecialAttackCore(
+        SpecialAttackType type,
+        CharacterController target,
+        EquipSlot? disarmTargetSlot,
+        int? disarmAttackBonusOverride,
+        int? grappleAttackBonusOverride,
+        int bullRushChargeBonusOverride,
+        ItemData disarmAttackerWeaponOverride,
+        int? tripAttackBonusOverride,
+        bool disarmUsedOffHand,
+        int disarmDualWieldPenaltyForLog,
+        EquipSlot? sunderTargetSlot,
+        int? sunderAttackBonusOverride,
+        ItemData sunderAttackerWeaponOverride,
+        bool sunderUsedOffHand,
+        int sunderDualWieldPenaltyForLog)
     {
         if (target == null || target.Stats == null)
         {
