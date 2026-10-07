@@ -269,12 +269,12 @@ public class MovementService : MonoBehaviour
 
     // ========== MOVEMENT EXECUTION ==========
 
-    public IEnumerator ExecuteMovement(CharacterController mover, List<Vector2Int> path, float secondsPerStep, bool markAsMoved = true)
+    public IEnumerator ExecuteMovement(CharacterController mover, List<Vector2Int> path, float secondsPerStep, bool markAsMoved = true, bool lastStepIsDestination = true)
     {
         if (mover == null || path == null || path.Count == 0)
             yield break;
 
-        yield return mover.MoveAlongPath(path, secondsPerStep, markAsMoved);
+        yield return mover.MoveAlongPath(path, secondsPerStep, markAsMoved, lastStepIsDestination);
     }
 
     public bool CanTake5FootStep(CharacterController character, out string reason)

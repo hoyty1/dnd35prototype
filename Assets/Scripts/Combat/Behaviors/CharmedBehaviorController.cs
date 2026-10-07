@@ -80,10 +80,15 @@ public sealed class CharmedBehaviorController
             if (TryGetBestHealingSpell(actor, out SpellData healingSpell))
             {
                 int distance = actor.GetMinimumDistanceToTarget(caster, chebyshev: true);
-                if (distance > 1 && HasAnyMoveAction(actor))
+                if (distance > 1 && HasAnyMoveAction(actor)
+                    && TryFindCellAdjacentToCaster(gameManager, actor, caster, out Vector2Int adjacentCell))
                 {
-                    if (TryMoveAdjacentToCaster(gameManager, actor, caster))
-                        yield return new WaitForSeconds(0.35f);
+                    // Wait for the move: it can provoke AoOs that drop the actor (CMB-073).
+                    yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, adjacentCell, gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                    ConsumeMoveAction(actor);
+                    if (actor.Stats.CurrentHP <= 0)
+                        yield break;
+                    yield return new WaitForSeconds(0.35f);
                 }
 
                 if (actor.GetMinimumDistanceToTarget(caster, chebyshev: true) <= 1 && actor.Actions.HasStandardAction)
@@ -96,7 +101,19 @@ public sealed class CharmedBehaviorController
                 }
             }
 
-            // Then try healing consumable.
+            // Then try healing consumable, moving next to the caster first if needed.
+            if (actor.GetMinimumDistanceToTarget(caster, chebyshev: true) > 1
+                && actor.Actions.HasStandardAction
+                && HasAnyMoveAction(actor)
+                && HasHealingConsumable(actor)
+                && TryFindCellAdjacentToCaster(gameManager, actor, caster, out Vector2Int consumableCell))
+            {
+                yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, consumableCell, gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                ConsumeMoveAction(actor);
+                if (actor.Stats.CurrentHP <= 0)
+                    yield break;
+            }
+
             if (TryUseHealingConsumableOnCaster(gameManager, actor, caster))
             {
                 yield return new WaitForSeconds(0.35f);
@@ -112,10 +129,14 @@ public sealed class CharmedBehaviorController
             yield break;
         }
 
-        if (!actor.IsTargetInCurrentWeaponRange(hostileToCaster) && HasAnyMoveAction(actor))
+        if (!actor.IsTargetInCurrentWeaponRange(hostileToCaster) && HasAnyMoveAction(actor)
+            && TryFindCellTowardTarget(gameManager, actor, hostileToCaster, out Vector2Int approachCell))
         {
-            if (TryMoveTowardTarget(gameManager, actor, hostileToCaster))
-                yield return new WaitForSeconds(0.35f);
+            yield return gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, approachCell, gameManager.GetPlayerMoveSecondsPerStepForAI()));
+            ConsumeMoveAction(actor);
+            if (actor.Stats.CurrentHP <= 0)
+                yield break;
+            yield return new WaitForSeconds(0.35f);
         }
 
         if (actor.IsTargetInCurrentWeaponRange(hostileToCaster) && actor.Actions.HasStandardAction)
@@ -162,14 +183,9 @@ public sealed class CharmedBehaviorController
         if (!actor.Actions.HasStandardAction)
             return false;
 
+        // ExecuteDecision moves the actor next to the caster first (and waits for that move).
         if (actor.GetMinimumDistanceToTarget(caster, chebyshev: true) > 1)
-        {
-            if (!HasAnyMoveAction(actor))
-                return false;
-
-            if (!TryMoveAdjacentToCaster(gameManager, actor, caster))
-                return false;
-        }
+            return false;
 
         InventoryComponent invComp = actor.InventoryComp;
         Inventory inventory = invComp != null ? invComp.CharacterInventory : null;
@@ -193,6 +209,22 @@ public sealed class CharmedBehaviorController
             gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧪", $"{actor.Stats.CharacterName} uses {item.Name} to heal {caster.Stats.CharacterName} for {healed} HP."));
             gameManager.Combat_UpdateAllStatsUI();
             return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasHealingConsumable(CharacterController actor)
+    {
+        InventoryComponent invComp = actor != null ? actor.InventoryComp : null;
+        Inventory inventory = invComp != null ? invComp.CharacterInventory : null;
+        if (inventory == null || inventory.GeneralSlots == null)
+            return false;
+
+        for (int i = 0; i < inventory.GeneralSlots.Length; i++)
+        {
+            if (IsHealingConsumable(inventory.GeneralSlots[i]))
+                return true;
         }
 
         return false;
@@ -256,8 +288,9 @@ public sealed class CharmedBehaviorController
         return caster.Stats.HealDamage(rolled, out nonlethalHealed);
     }
 
-    private static bool TryMoveAdjacentToCaster(GameManager gameManager, CharacterController actor, CharacterController caster)
+    private static bool TryFindCellAdjacentToCaster(GameManager gameManager, CharacterController actor, CharacterController caster, out Vector2Int destination)
     {
+        destination = actor != null ? actor.GridPosition : Vector2Int.zero;
         if (gameManager == null || actor == null || caster == null)
             return false;
 
@@ -289,13 +322,13 @@ public sealed class CharmedBehaviorController
         if (best == actor.GridPosition)
             return false;
 
-        gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, best, gameManager.GetPlayerMoveSecondsPerStepForAI()));
-        ConsumeMoveAction(actor);
+        destination = best;
         return true;
     }
 
-    private static bool TryMoveTowardTarget(GameManager gameManager, CharacterController actor, CharacterController target)
+    private static bool TryFindCellTowardTarget(GameManager gameManager, CharacterController actor, CharacterController target, out Vector2Int destination)
     {
+        destination = actor != null ? actor.GridPosition : Vector2Int.zero;
         if (gameManager == null || actor == null || target == null)
             return false;
 
@@ -334,8 +367,7 @@ public sealed class CharmedBehaviorController
         if (best == actor.GridPosition)
             return false;
 
-        gameManager.StartCoroutine(gameManager.MoveCharacterAlongComputedPathForAI(actor, best, gameManager.GetPlayerMoveSecondsPerStepForAI()));
-        ConsumeMoveAction(actor);
+        destination = best;
         return true;
     }
 

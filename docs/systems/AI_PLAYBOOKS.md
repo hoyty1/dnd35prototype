@@ -18,11 +18,11 @@ Seven requests the owner is likely to make, each with the code to read first, wh
 - **What blocks it.**
   - A goblin already in reach never moves, so it never steps or repositions into a flank (5.1); a goblin at charge distance charges straight in (charge is checked before movement). There is no shared target, reserved square or awareness of allies acting later in the round (AI-010; 13.3 group tactics).
   - `HumanoidAIProfile` sets `AttemptTrip` and `AttemptDisarm`, so goblins in reach of a standing PC trip instead of attacking (AI-035). Fix or gate this first, or flanking goblins will not swing.
-  - Movement provokes nothing (CMB-073), so walking around a PC to its far side is free. Once CMB-073 is fixed the flank term must be weighed against the AoOs it costs.
+  - NPC movement provokes AoOs like PC movement, so walking around a PC to its far side costs AoOs. The flank term must be weighed against them; the path scorer today applies only -1000 (profiles that avoid AoOs) or -2 per provoked AoO.
   - Flanking is worth the RAW +2 on melee attacks (plus sneak attack for rogues); the Flanked condition is a display tag with no AC effect.
   - `ExecuteAidAnother` cannot be called by an NPC (AI-054) and `AddAidBonus` is private. Split out a rules core that takes (aider, ally, enemy, type) and returns the result, keep the PC wrapper for the menus, and add a `*ForAI` wrapper (11.3).
 - **Decision to build.** Aid Another pays when the aider's own expected damage against the enemy is lower than the ally's gain from +2 attack (or the expected damage prevented by +2 AC), and both threaten the same enemy. Waking an adjacent sleeping ally is a simpler first rule and matters against PC Sleep spells.
-- **Fix first.** AI-035, CMB-073; then AI-054 for Aid Another.
+- **Fix first.** AI-035; then AI-054 for Aid Another.
 - **Rules.** PHB ch.8, Combat Modifiers (Flanking) and Special Attacks (Aid Another).
 - **Test with.** `test_2_goblins`, `goblin_raiders`, `sleep_spell_test` (includes the wake-ally flow), or the Custom Encounter Builder with three or more goblins against one PC.
 
@@ -55,9 +55,9 @@ Seven requests the owner is likely to make, each with the code to read first, wh
   - Seven definitions carry potions in `BackpackItemIds`: `hobgoblin_sergeant`, `human_monk_3`, `human_monk_5`, `human_monk_7`, `human_paladin_3`, `human_paladin_5`, `human_paladin_7`. `InitializeNPCFromDefinition` adds them to the inventory (NPCSetup.cs:670-675). DMG random-encounter spawns carry none.
   - Potions of Cure Light Wounds are spell potions (`RegisterSpellPotion`, Equipment/Items/ItemDatabase.cs:1241) resolved by `ApplyConsumableEffectAndConsume` through the spell-consumable branch.
   - `AIConsumableManager` has a healing threshold (`HealingPotionThreshold` 0.4), potion, scroll and wand name lists and pickers, but only tests attach it and it keeps its own lists instead of reading the inventory (AI-009).
-  - The only live NPC consumable use is a charmed NPC feeding a healing potion to its charmer (`CharmedBehaviorController`, about line 187): it removes the item and spends a standard action but resolves no AoO (AI-042 covers the charm behaviour).
+  - The only live NPC consumable use is a charmed NPC feeding a healing potion to its charmer (`CharmedBehaviorController.TryUseHealingConsumableOnCaster`, about line 178): it removes the item and spends a standard action but resolves no AoO (AI-042 covers the charm behaviour).
 - **What blocks it.**
-  - The PC wrapper refuses any actor that is not `ActivePC` and ends the PC turn (AI-054). NPC use needs its own wrapper around `ApplyConsumableEffectAndConsume`, resolving provoked AoOs with `ThreatSystem.ExecuteAoO` as `ResolveRangedAttackAoOForNPCAttackIfProvoked` (NPCTurns.cs:385) does.
+  - The PC wrapper refuses any actor that is not `ActivePC` and ends the PC turn (AI-054). NPC use needs its own wrapper around `ApplyConsumableEffectAndConsume`, resolving provoked AoOs with `ThreatSystem.ExecuteAoO` as `ResolveRangedAttackAoOForNPCAttackIfProvoked` (NPCTurns.cs:406) does.
   - Item use costs a full-round action for everyone (ITM-005). RAW, retrieving a stored item is a move action and drinking is a standard action, so an NPC could retrieve and drink in one turn but not also move.
   - Nothing decides between drinking, withdrawing and attacking; `FleeHealthThreshold` is unread (AI-010).
   - Wands and scrolls also need targets and Use Magic Device checks for non-casters (`WandValidator`), so start with self-targeted potions.
@@ -74,13 +74,13 @@ Seven requests the owner is likely to make, each with the code to read first, wh
   - Disarm moves the weapon to the attacker's free hand or the ground (`DropItemToGround`), and a failed disarm gives the defender one counter-disarm.
 - **What blocks it.**
   - AI-035: no odds or value test; profiles trip anything standing. A chooser needs P(success) from the opposed terms in `ResolveTrip` and a value for prone (+4 to hit for adjacent allies, -4 on the target's melee attacks, standing up provokes).
-  - CMB-076: NPC maneuvers never provoke (PC trip, disarm and bull rush never provoke either, CMB-014), so Improved Trip and Improved Disarm make no difference to risk.
+  - Trip, disarm and bull rush never provoke for anyone (CMB-014), so Improved Trip and Improved Disarm make no difference to risk. NPC grapple, sunder and coup de grace already provoke like the PC versions.
   - CMB-074: a tripped NPC never stands up.
   - CMB-079: no counter-trip, no Improved Trip follow-up attack, no size limit.
   - CMB-014: the opposed-check math is wrong in several ways; fix it before tuning odds.
   - NPCs cannot trip or disarm as one attack of a full attack (the PC path uses a shared pool, `TryConsumeTripAttackAction`). NPC disarmers never pick up the dropped weapon and disarmed NPCs never re-arm (5.9).
   - Two choosers (AI-025); Sunder, BullRush and Overrun flags are never set and their target checks are placeholders (AI-014).
-- **Fix first.** CMB-014, CMB-076, CMB-074, AI-035; then CMB-079.
+- **Fix first.** CMB-014, CMB-074, AI-035; then CMB-079.
 - **Rules.** PHB ch.8, Special Attacks (Trip, Disarm); PHB ch.5 (Improved Trip, Improved Disarm); MM entries for free trips on a hit (for example the wolf).
 - **Test with.** `wolf_pack`, `beast_arena` (Tripper animals), `goblin_raiders` and `test_2_goblins` (Humanoid trips and disarms).
 
@@ -91,10 +91,10 @@ Seven requests the owner is likely to make, each with the code to read first, wh
 - **What blocks it.**
   - Nowhere to go. The map has no exit, so a fleeing creature stays in play. To remove one, follow `GameManager.DespawnSummonWithEffect` (GameManager.SpellCasting.cs): it clears occupancy, removes the creature from `NPCs` and `_npcAIBehaviors` together (AI-015) and calls `TurnService.RemoveFromInitiative`.
   - Victory and XP count only enemies at HP ≤ 0 (`AreAllNPCsDead`, `RegisterDefeatedEnemyForXP`; [ENCOUNTERS.md 6.2](ENCOUNTERS.md#62-xp)). A fled, surrendered, charmed or cornered frightened enemy keeps combat going and gives no XP, while DMG XP is for overcoming a challenge (CHR-004). Morale needs a "defeated" state that both checks honour, and a decision about the treasure of fled creatures.
-  - The existing fear path is broken: Panicked creatures lose their turn instead of fleeing (CMB-075), and Frightened flight is 1× speed and provokes nothing (AI-044, CMB-073).
+  - The existing fear path is broken: Panicked creatures lose their turn instead of fleeing (CMB-075), and Frightened flight is 1× speed (AI-044); it does provoke AoOs like any move.
   - No surrender or parley state. No effect changes a creature's team (the only `SetTeam` caller is the Lion's Shield), and team checks are inconsistent (AI-016).
   - The core books give no morale roll, so the trigger is a house rule to agree with the owner (for example a Will save when reduced below half HP or when the leader falls; never for mindless creatures; lich 0 as already set).
-- **Fix first.** CMB-075, CMB-073, AI-044, AI-010, AI-027 (by acting on `Retreat`, not by removing it); agree the defeated-state rule with [ENCOUNTERS.md](ENCOUNTERS.md) and [PARTY_MANAGEMENT.md](PARTY_MANAGEMENT.md) before coding.
+- **Fix first.** CMB-075, AI-044, AI-010, AI-027 (by acting on `Retreat`, not by removing it); agree the defeated-state rule with [ENCOUNTERS.md](ENCOUNTERS.md) and [PARTY_MANAGEMENT.md](PARTY_MANAGEMENT.md) before coding.
 - **Rules.** PHB ch.8 and DMG ch.8, Condition Summary (Frightened, Panicked, Cowering); MM Introduction (Intelligence, mindless creatures).
 - **Test with.** Any preset; `tier3_hell_hound_pack` and the dragon presets apply frightful presence (Panicked targets).
 

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using DND35e.Identifiers;
 using Tests.Utilities;
@@ -7,7 +8,9 @@ namespace Tests.Combat
 /// <summary>
 /// Lightweight runtime checks for reach-aware flanking geometry and threat-distance semantics,
 /// plus the PHB p.153 flanking bonus rule (flankers get +2 on melee attacks; the defender
-/// takes no AC penalty, CMB-001) and flanking sneak attack eligibility.
+/// takes no AC penalty, CMB-001) and flanking sneak attack eligibility, and the shared
+/// attack-of-opportunity rules for movement and maneuvers (one AoO per opponent per movement,
+/// what stops a mover, who a grapple, sunder or coup de grace provokes) for PC and NPC sides.
 /// Attach to any GameObject or call FlankingReachRulesTests.RunAllTests().
 /// </summary>
 public class FlankingReachRulesTests : MonoBehaviour
@@ -43,6 +46,14 @@ public class FlankingReachRulesTests : MonoBehaviour
         TestFlankedConditionHasNoAcPenalty(ref passed, ref failed);
         TestFlankingAttackGetsBonusAndSneakAttack(ref passed, ref failed);
         TestFlankedTagAloneGivesNonFlankerNothing(ref passed, ref failed);
+
+        // Shared AoO rules: movement and maneuvers provoke the same way for PCs and NPCs.
+        TestPathAoOsOncePerOpponent(CharacterTeam.Enemy, ref passed, ref failed);
+        TestPathAoOsOncePerOpponent(CharacterTeam.Player, ref passed, ref failed);
+        TestMovementStopsOnlyOnAoOChanges(ref passed, ref failed);
+        TestManeuverAoOProvokers(CharacterTeam.Enemy, ref passed, ref failed);
+        TestManeuverAoOProvokers(CharacterTeam.Player, ref passed, ref failed);
+        TestManeuverAoODisruption(ref passed, ref failed);
 
         Debug.Log($"[FlankReachTest] === RESULTS: {passed} passed, {failed} failed ===");
     }
@@ -156,6 +167,156 @@ public class FlankingReachRulesTests : MonoBehaviour
         {
             TestHelpers.Cleanup(rogue != null ? rogue.gameObject : null, defender != null ? defender.gameObject : null);
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Shared AoO rules for movement and maneuvers (CMB-005, CMB-073, CMB-076).
+    // The GameManager coroutines that apply them need Play mode; these check the
+    // ThreatSystem rules they all call, for an NPC mover and a PC mover alike.
+    // ------------------------------------------------------------------------
+
+    private static CharacterController CreateTeamCharacter(string name, CharacterTeam team, int x, int y)
+    {
+        CharacterController c = TestHelpers.CreateCharacter(name: name);
+        c.SetTeam(team);
+        TestHelpers.SetGridPosition(c, x, y);
+        ThreatSystem.ResetAoOForTurn(c);
+        return c;
+    }
+
+    private static void TestPathAoOsOncePerOpponent(CharacterTeam moverTeam, ref int passed, ref int failed)
+    {
+        CharacterTeam threatTeam = moverTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = moverTeam == CharacterTeam.Player ? "PC" : "NPC";
+        CharacterController mover = null;
+        CharacterController threatener = null;
+        try
+        {
+            mover = CreateTeamCharacter("PathMover", moverTeam, 0, 0);
+            threatener = CreateTeamCharacter("PathThreatener", threatTeam, 1, 0);
+            var all = new List<CharacterController> { mover, threatener };
+
+            // Leaves (0,0) and (0,1), both threatened from (1,0), then (0,2), which is not.
+            var path = new List<Vector2Int> { new Vector2Int(0, 1), new Vector2Int(0, 2), new Vector2Int(0, 3) };
+
+            // Combat Reflexes-sized pool: still one opportunity for this movement (PHB p.138).
+            threatener.Stats.MaxAttacksOfOpportunity = 3;
+            threatener.Stats.AttacksOfOpportunityUsed = 0;
+            List<AoOThreatInfo> aoos = ThreatSystem.AnalyzePathForAoOs(mover, path, all);
+            Assert(aoos.Count == 1 && aoos[0].PathIndex == 0 && aoos[0].Threatener == threatener,
+                $"{side} mover leaving two squares threatened by one Combat Reflexes enemy provokes once, at the first square (got {aoos.Count})",
+                ref passed, ref failed);
+
+            // Withdraw: the first square is exempt, the next threatened square still provokes.
+            List<AoOThreatInfo> withdraw = ThreatSystem.AnalyzePathForAoOs(mover, path, all, suppressFirstSquareAoO: true);
+            Assert(withdraw.Count == 1 && withdraw[0].PathIndex == 1,
+                $"{side} withdraw skips the first square but provokes on leaving the second threatened square",
+                ref passed, ref failed);
+
+            // Regression: an enemy that has spent its AoOs this round gets none.
+            threatener.Stats.MaxAttacksOfOpportunity = 1;
+            threatener.Stats.AttacksOfOpportunityUsed = 1;
+            Assert(ThreatSystem.AnalyzePathForAoOs(mover, path, all).Count == 0,
+                $"{side} mover provokes nothing from an enemy with no AoOs left", ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(mover != null ? mover.gameObject : null, threatener != null ? threatener.gameObject : null);
+        }
+    }
+
+    private static void TestMovementStopsOnlyOnAoOChanges(ref int passed, ref int failed)
+    {
+        CharacterController mover = null;
+        try
+        {
+            mover = CreateTeamCharacter("StopMover", CharacterTeam.Enemy, 0, 0);
+
+            ThreatSystem.MoverAoOSnapshot before = ThreatSystem.CaptureMoverState(mover);
+            Assert(!ThreatSystem.ShouldStopMovementAfterAoO(mover, before, out _),
+                "Mover that is unharmed by an AoO keeps moving", ref passed, ref failed);
+
+            mover.ApplyCondition(CombatConditionType.Prone, -1, "AoO trip");
+            Assert(ThreatSystem.ShouldStopMovementAfterAoO(mover, before, out string tripReason) && tripReason == "knocked prone",
+                "Mover tripped by an AoO stops moving", ref passed, ref failed);
+
+            // Regression: a creature already prone (crawling) is not stopped by being prone.
+            ThreatSystem.MoverAoOSnapshot pronebefore = ThreatSystem.CaptureMoverState(mover);
+            Assert(!ThreatSystem.ShouldStopMovementAfterAoO(mover, pronebefore, out _),
+                "Mover already prone before the AoO is not stopped by Prone", ref passed, ref failed);
+
+            mover.Stats.CurrentHP = 0;
+            Assert(ThreatSystem.IsMoverIncapacitated(mover) && ThreatSystem.ShouldStopMovementAfterAoO(mover, pronebefore, out _),
+                "Mover dropped to 0 HP by an AoO stops moving", ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(mover != null ? mover.gameObject : null);
+        }
+    }
+
+    private static void TestManeuverAoOProvokers(CharacterTeam attackerTeam, ref int passed, ref int failed)
+    {
+        CharacterTeam foeTeam = attackerTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = attackerTeam == CharacterTeam.Player ? "PC" : "NPC";
+        CharacterController attacker = null;
+        CharacterController target = null;
+        CharacterController sideFoe = null;
+        CharacterController farFoe = null;
+        try
+        {
+            attacker = CreateTeamCharacter("ManeuverAttacker", attackerTeam, 0, 0);
+            target = CreateTeamCharacter("ManeuverTarget", foeTeam, 1, 0);
+            sideFoe = CreateTeamCharacter("ManeuverSideFoe", foeTeam, 0, 1);
+            farFoe = CreateTeamCharacter("ManeuverFarFoe", foeTeam, 6, 6);
+            var all = new List<CharacterController> { attacker, target, sideFoe, farFoe };
+
+            List<CharacterController> grapple = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Grapple, all);
+            Assert(grapple.Count == 1 && grapple[0] == target,
+                $"{side} grapple provokes from the target only", ref passed, ref failed);
+
+            List<CharacterController> sunder = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Sunder, all);
+            Assert(sunder.Count == 1 && sunder[0] == target,
+                $"{side} sunder provokes from the target only", ref passed, ref failed);
+
+            List<CharacterController> coup = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.CoupDeGrace, all);
+            Assert(coup.Count == 2 && coup.Contains(target) && coup.Contains(sideFoe) && !coup.Contains(farFoe),
+                $"{side} coup de grace provokes from every threatening enemy (got {coup.Count})", ref passed, ref failed);
+
+            Assert(ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Trip, all).Count == 0,
+                $"{side} trip still does not provoke (CMB-014 unchanged)", ref passed, ref failed);
+
+            attacker.Stats.Feats.Add("Improved Grapple");
+            attacker.Stats.Feats.Add("Improved Sunder");
+            Assert(ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Grapple, all).Count == 0
+                && ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Sunder, all).Count == 0,
+                $"{side} Improved Grapple and Improved Sunder remove the initiation AoO", ref passed, ref failed);
+
+            // Regression: an enemy with no AoO left this round gets none.
+            sideFoe.Stats.AttacksOfOpportunityUsed = sideFoe.Stats.MaxAttacksOfOpportunity;
+            List<CharacterController> coupSpent = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.CoupDeGrace, all);
+            Assert(coupSpent.Count == 1 && coupSpent[0] == target,
+                $"{side} coup de grace skips an enemy whose AoOs are spent", ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(
+                attacker != null ? attacker.gameObject : null,
+                target != null ? target.gameObject : null,
+                sideFoe != null ? sideFoe.gameObject : null,
+                farFoe != null ? farFoe.gameObject : null);
+        }
+    }
+
+    private static void TestManeuverAoODisruption(ref int passed, ref int failed)
+    {
+        var hit = new CombatResult { Hit = true };
+        var miss = new CombatResult { Hit = false };
+        Assert(ThreatSystem.DoesManeuverAoODisruptAttempt(SpecialAttackType.Grapple, hit)
+            && !ThreatSystem.DoesManeuverAoODisruptAttempt(SpecialAttackType.Grapple, miss),
+            "A hitting initiation AoO foils a grapple; a miss does not", ref passed, ref failed);
+        Assert(!ThreatSystem.DoesManeuverAoODisruptAttempt(SpecialAttackType.CoupDeGrace, hit),
+            "A hitting AoO does not by itself foil a coup de grace", ref passed, ref failed);
     }
 
     private static void AssertThreatBand(string itemId, int expectedMin, int expectedMax, ref int passed, ref int failed)

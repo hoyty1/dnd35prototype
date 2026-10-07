@@ -45,7 +45,7 @@ Contents:
 **Biggest limitations.**
 
 1. **Narrow action set.** No double move, run, total defense, ready, delay, Power Attack, Combat Expertise, two-weapon fighting, Aid Another, standing up, weapon switching, item use, turning, class abilities such as Rage, Flurry of Blows or smite (11.8.7), spontaneous cure/inflict conversion, area spells or metamagic (section 9). Several PC executors for these are bound to the PC turn flow and cannot be called by the AI as they are (AI-054).
-2. **Asymmetries that favour NPCs.** Ordinary NPC movement never provokes attacks of opportunity (CMB-073), NPC maneuvers never provoke (CMB-076), and NPC casting never provokes or rolls Concentration (SPL-006).
+2. **Asymmetries that favour NPCs.** NPC casting never provokes or rolls Concentration (SPL-006). Movement and maneuver attacks of opportunity now use the same helpers for PCs and NPCs (4.5).
 3. **Asymmetries that cripple NPCs.** A tripped NPC never stands up (CMB-074). Panicked, Turned, Pinned and Nauseated NPCs lose their whole turn before the AI runs (CMB-075). Breath weapons fire once per spawn (AI-032) and only for the Dragon profile (AI-033). Almost no monster can actually cast: the lich has no prepared spells (SPL-015), the vampire is not a spellcaster (CRE-030), class-levelled DMG spawns have no spell lists (ENC-021) and creature spell-like abilities do not exist (CRE-015, CRE-017).
 4. **No decision layer.** Each routine is a fixed script. There is no comparison of the expected value of a spell, a breath, a full attack or a maneuver; `SelectBestAction` computes six results but its callers act only on `Charge` (AI-027). Profiles that set Trip trip every standing target in reach instead of attacking (AI-035).
 5. **No group play.** Every NPC scores alone. There is no focus fire, flank pairing, protection of casters, morale or retreat policy (AI-010).
@@ -110,7 +110,7 @@ Contents:
 | _Core/GameManager.NPCTurns.cs | 1,642 | `SingleNPCTurnFromInitiative` 35, `AI_SummonedCreature` 79, `TryNPCSpecialAttackIfBeneficial` 289, adaptive full attack 509, `TryNPCPerformSpellCast` 758, bombardier spray 975, `NPCPerformAttack` 1065, breath 1430, frightful presence 1570 |
 | _Core/GameManager.cs | 11,516 | `OnTurnStarted` 3764, `ShouldSkipTurnDueToHPState` 3909, `NextInitiativeTurn` 3948, the `*ForAI` block 10879-11036 |
 | _Core/GameManager.NPCSetup.cs | 818 | `SetupEnemyEncounter` (adds `_npcAIBehaviors` 179), `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile` 758 |
-| _Core/GameManager.CombatActions.cs | | `MoveCharacterAlongComputedPath` 984, withdraw 914, Wall of Ice AI helpers 2636-2670 |
+| _Core/GameManager.CombatActions.cs | | `MoveCharacterAlongComputedPath` 1148, withdraw 1102, shared AoO helpers `ResolveMovementAoOsBeforeStep`/`ExecutePathWithMovementAoOs`/`ResolveManeuverInitiationAoOs` 720-935, Wall of Ice AI helpers 2636-2670 |
 | Combat/Maneuvers/SupportActions.cs | | `CanChargeTarget` 1061, `NPCExecuteCharge` 1801 |
 | Combat/Maneuvers/GrappleSystem.cs | | `AI_GrappleRestrictedTurn` 1633, `ChooseNPCGrappleAction` 1747 |
 | Combat/Behaviors/*.cs | 1,047 | The four condition controllers |
@@ -200,8 +200,8 @@ Side effects of the order: auras and free-action Spittle are skipped on any turn
 ### 3.4 Coroutines, pacing and action economy
 
 - `AIService` is a component on the GameManager object. Every nested coroutine is started with `_gameManager.StartCoroutine(...)` and awaited with `yield return` (49 sites). `ResetCombatStateForNextEncounter` calls `StopAllCoroutines`, which kills AI coroutines mid-turn (CORE-013).
-- Exception: `CharmedBehaviorController.TryMoveAdjacentToCaster` and `TryMoveTowardTarget` start the move without awaiting it, wait 0.35 s and act, so the attack or heal may resolve mid-walk (AI-042).
-- **Re-check HP after every movement yield.** Routines test `CurrentHP <= 0` after each move; `MoveAlongPath` also stops per step at HP ≤ 0. Wall of Fire, Wall of Ice breaches and similar can kill a mover.
+- `CharmedBehaviorController` now awaits its moves too (it used to start them and act mid-walk).
+- **Re-check HP after every movement yield.** Routines test `CurrentHP <= 0` after each move; `MoveAlongPath` also stops per step at HP ≤ 0. Attacks of opportunity, Wall of Fire, Wall of Ice breaches and similar can kill a mover.
 - Pacing: 41 `WaitForSeconds` literals in AIService (0.2-0.8 s), 17 in NPCTurns.cs (0.35-1.0 s), more in controllers and GrappleSystem. Movement is 0.08 s per square (`PlayerMoveSecondsPerStep`, CombatActions.cs:619), charge 0.06. No speed setting (AI-023).
 - **Action economy is the caller's job.** Movement helpers never spend actions; each AI routine tests `npc.Actions.HasMoveAction` before moving and then calls `npc.Actions.UseMoveAction()`, which returns false and changes nothing when no move action is left (Combat/Core/ActionEconomy.cs). After a search move or a breath-positioning move, the melee approach is skipped; no routine double-moves (a second move would be an explicit `ConvertStandardToMove`). Specials that spend no action remain (AI-053). Use `CharacterController.CommitStandardAction()` for standard actions; it handles the Disabled single-action rule.
 
@@ -285,9 +285,9 @@ Ties keep the first cell in dictionary order. There is no cover, terrain, hazard
 
 Other movement scorers: `EvaluateWithdrawRetreatDestination` (2143; 2× range, `dist*3 - provokes*4 - overshoot*2`); `TryTakeTacticalFiveFootStep` (1074; minimise expected AoO damage, +6 if no threats remain); dragon breath positioning (8.2); `ConfusedBehaviorController.FindBestMovementCell` (no path check); `FrightenedBehaviorController.FindBestFleeCell` (must increase distance).
 
-### 4.5 Movement execution and the AoO gap (CMB-073)
+### 4.5 Movement execution and attacks of opportunity
 
-`MoveCharacterAlongComputedPathForAI` → `MoveCharacterAlongComputedPath` (CombatActions.cs:984) recomputes the path and calls `MovementService.ExecuteMovement`, which is only `CharacterController.MoveAlongPath`. None of these resolves attacks of opportunity. Movement AoOs exist only on the PC move path (CombatActions.cs:827), withdraw (`MoveCharacterAlongComputedPathWithdraw`, first square suppressed), crawl, PC and NPC charge, and overrun. So NPCs (and enemy summons, charmed, confused and frightened creatures) walk out of and through threatened squares freely, contrary to PHB ch.8 (Attacks of Opportunity). The -1000/-2 AoO scoring therefore has no real effect, `ShouldIgnoreAoO` costs nothing, and the Frightened "run, provoking attacks of opportunity" log line is untrue. Melee routines also path toward an unseen target's true square (AI-051).
+`MoveCharacterAlongComputedPathForAI` → `MoveCharacterAlongComputedPath` (`GameManager.CombatActions.cs`) recomputes the path with `MovementService.FindPath`, then `ExecutePathWithMovementAoOs` walks it. AoO-free stretches move in one `MoveAlongPath` call; before each step that leaves a threatened square, the shared `ResolveMovementAoOsBeforeStep` resolves that step's `ProvokedAoOs` while the mover is still in the square (PHB p.137). The same helper serves the PC move loop (`ExecuteMovement`), AI withdraw (`MoveCharacterAlongComputedPathWithdraw`, first square exempt), crawl and both charge paths. Movement stops if an AoO drops the mover (0 HP or less, dead, unconscious), trips it (newly Prone, e.g. a wolf's free trip) or gives it a condition that prevents movement (`ThreatSystem.ShouldStopMovementAfterAoO`); a tripped mover still takes the other AoOs provoked at that step. `ThreatSystem.AnalyzePathForAoOs` gives each enemy at most one AoO per path, whatever its Combat Reflexes count (per path, not per round: CMB-084). 5-foot steps never reach this code, and there is no Tumble. So enemies, enemy summons and charmed, confused and frightened creatures now provoke like PCs, and the -1000/-2 path scoring and `ShouldIgnoreAoO` matter. Every caller re-checks the mover's HP after the move coroutine before acting again; charmed movement now waits for the move instead of starting it and carrying on. Not verified in Play mode. Melee routines still path toward an unseen target's true square (AI-051).
 
 ## 5. Routines
 
@@ -358,7 +358,7 @@ Reached only by non-controllable summons (PC-cast summons are controllable and g
 - **Last-known misses:** after 3 consecutive auto-misses on a remembered square the target is forgotten; otherwise the NPC may spend its remaining move searching toward it.
 - **Natural attacks** are used only when no manufactured weapon is equipped (`ShouldUseInnateNaturalAttackProfile`, CharacterController.cs:995). A creature with a weapon never adds secondary natural attacks (MM Introduction; CMB-077). No Multiattack feat.
 - **Charge** (`NPCExecuteCharge`, SupportActions.cs:1801): decision by `ShouldNPCCharge` (full-round action, melee weapon, not in reach, `CanChargeTarget` straight-line path) and `profile.ShouldPreferCharge`. Path AoOs are resolved. +2 is applied as `MoraleAttackBonus` (RAW untyped). Pounce gives a full attack plus rake. Calls the victory check.
-- **Maneuvers:** `ShouldUseManeuver` (2213) → coup de grace first (profile or `UseCoupDeGrace` override, full-round, helpless adjacent target); else `profile.GetPreferredManeuver` re-validated (Trip needs a standing target and any melee or natural weapon; Disarm, Grapple, Sunder their checks); without a profile the legacy chooser `TryNPCSpecialAttackIfBeneficial` (AI-025). A maneuver replaces the whole attack action and never provokes (AI-035, CMB-076). Maneuver math: CMB-014.
+- **Maneuvers:** `ShouldUseManeuver` (2213) → coup de grace first (profile or `UseCoupDeGrace` override, full-round, helpless adjacent target); else `profile.GetPreferredManeuver` re-validated (Trip needs a standing target and any melee or natural weapon; Disarm, Grapple, Sunder their checks); without a profile the legacy chooser `TryNPCSpecialAttackIfBeneficial` (AI-025). A maneuver replaces the whole attack action (AI-035). Grapple and sunder provoke from the target and coup de grace from every threatening enemy through `ResolveManeuverInitiationAoOs`, shared with the PC wrapper; a foiled attempt still spends the action (disruption rule: CMB-083). Trip, disarm and bull rush provoke for nobody (CMB-014). Maneuver math: CMB-014.
 
 ## 6. Profiles and archetypes
 
@@ -408,7 +408,7 @@ The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, b
 |---|---|---|
 | `CombatStyle` | routing (AIService.cs:271), base `ScoreTarget` | Mixed is never special-cased |
 | `TagPriorities`, `PrioritizeWounded`, `PrioritizeIsolated` | base `ScoreTarget` (and copies in the undead profiles) | live |
-| `Movement.PreferredRangeSquares`, `AvoidAoOs`, `SeekFlanking` | `EvaluateMovementOptions`, `TryTakeTacticalFiveFootStep` | live (AoO avoidance moot, CMB-073) |
+| `Movement.PreferredRangeSquares`, `AvoidAoOs`, `SeekFlanking` | `EvaluateMovementOptions`, `TryTakeTacticalFiveFootStep` | live |
 | `GrappleBehavior` | `ShouldInitiateGrapple`, `GetPreferredManeuver` | `Maintain` unreachable (no maneuvers while grappling) |
 | `Maneuvers.AttemptTrip/Disarm/Sunder/BullRush/Overrun` | base `GetPreferredManeuver`, fixed order | Sunder, BullRush, Overrun never set (AI-014) |
 | `Aggression`, `SwitchTargetsOften`, `Movement.MaintainDistance`, `Movement.UseCover`, `Maneuvers.UseAidAnother/UseCombatExpertise/UsePowerAttack`, `FleeHealthThreshold`, `StayNearWoundedAllies`, `PreferBreathThreshold`, `SpellSchoolPriority.CombatOnly` | nothing | dead (AI-026, AI-010) |
@@ -538,9 +538,9 @@ Outcome by category (static reading): Area spells refused; single-target damage 
 | Controller | Reached? | Behaviour | Deviation |
 |---|---|---|---|
 | Confused | yes (also forces PC turns, `TryBeginConfusedPCTurn`) | d%: 01-10 attack the source if in reach else **hit itself**; 11-20 act normally; 21-50 babble; 51-70 flee one move; 71-100 attack the nearest creature of any team | PHB ch.11 (Confusion): 01-10 attacks the caster or closes with it; no self-damage; no "attacked creature retaliates" rule; flee should be at top speed (AI-043) |
-| Charmed | yes | caster dead → remove, lose turn; caster injured → move adjacent (not awaited) and heal it by spell or potion; else attack the nearest enemy of the caster | PHB ch.11 (Charm Person): friendly, not controlled; attacking its own allies is Dominate behaviour (AI-042). Charm breaks only when the charmer attacks the subject |
+| Charmed | yes | caster dead → remove, lose turn; caster injured → move adjacent (awaited) and heal it by spell or potion; else attack the nearest enemy of the caster | PHB ch.11 (Charm Person): friendly, not controlled; attacking its own allies is Dominate behaviour (AI-042). Charm breaks only when the charmer attacks the subject |
 | Fascinated | no (turn skipped, 3.2) | stares | |
-| Frightened | Frightened yes; Panicked no | source dead → clear; withdraw (2× move) with a full-round action, else "run" at 1× move with no AoOs; cornered Frightened fights defensively and **never attacks**; cornered Panicked logs "cowers" with no condition | PHB ch.8 run is ×4; DMG ch.8 a cornered frightened creature may fight (AI-044) |
+| Frightened | Frightened yes; Panicked no | source dead → clear; withdraw (2× move) with a full-round action, else "run" at 1× move (it provokes like any move); cornered Frightened fights defensively and **never attacks**; cornered Panicked logs "cowers" with no condition | PHB ch.8 run is ×4; DMG ch.8 a cornered frightened creature may fight (AI-044) |
 
 The source of each condition comes from `ActiveCondition.Source`, then a typed payload, then a display-name match (CORE-017). Frightened PCs get no forced behaviour.
 
@@ -620,7 +620,7 @@ From [issues/AI.md](../issues/AI.md), AI-001 to AI-031 (AI-032 to AI-054 were fi
 - **Missing behaviour:** AI-009 (consumables), AI-010 (flee thresholds, lich aura), AI-012 (difficulty unused).
 - **Structure and performance:** AI-018 (`CombatUI` null derefs), AI-019 (A* per cell), AI-020 (3,504-line god class), AI-023 (hard-coded delays), AI-024 (two-way coupling via `*ForAI`), AI-025 (duplicate maneuver choosers), AI-026 (unread settings), AI-027 (`SelectBestAction` results other than `Charge` are ignored; if morale is built, wire in its `Retreat` result instead of reducing it to a charge test, 13.3), AI-029 (uncalled members), AI-030 (dead `ShouldNPCUseCharge`).
 
-From other files: CMB-002 to CMB-006, CMB-008, CMB-014 to CMB-019, CMB-021 to CMB-029, CMB-031 to CMB-033, CMB-037, CMB-039, CMB-044, CMB-055 ([issues/CMB.md](../issues/CMB.md)); SPL-005, SPL-006, SPL-024, SPL-025, SPL-027, SPL-037, SPL-038, SPL-041, SPL-047, SPL-054, SPL-068 ([issues/SPL.md](../issues/SPL.md)); CRE-002, CRE-004, CRE-006, CRE-007, CRE-012 to CRE-018, CRE-020, CRE-022 to CRE-024 ([issues/CRE.md](../issues/CRE.md)); CORE-002, CORE-004, CORE-011 to CORE-015, CORE-017, CORE-022, CORE-030 ([issues/CORE.md](../issues/CORE.md)); GRID-005, GRID-007, GRID-009 to GRID-011 ([issues/GRID.md](../issues/GRID.md)); ITM-004, ITM-005, ITM-018, ITM-019, ITM-024 ([issues/ITM.md](../issues/ITM.md)); CHR-003 to CHR-005, CHR-008, CHR-020, CHR-021, CHR-023, CHR-024, CHR-026, CHR-053, CHR-062 ([issues/CHR.md](../issues/CHR.md)); ENC-001, ENC-005, ENC-012 ([issues/ENC.md](../issues/ENC.md)); TST-001 to TST-003, TST-008 ([issues/TST.md](../issues/TST.md)).
+From other files: CMB-002 to CMB-004, CMB-006, CMB-008, CMB-014 to CMB-019, CMB-021 to CMB-029, CMB-031 to CMB-033, CMB-037, CMB-039, CMB-044, CMB-055 ([issues/CMB.md](../issues/CMB.md)); SPL-005, SPL-006, SPL-024, SPL-025, SPL-027, SPL-037, SPL-038, SPL-041, SPL-047, SPL-054, SPL-068 ([issues/SPL.md](../issues/SPL.md)); CRE-002, CRE-004, CRE-006, CRE-007, CRE-012 to CRE-018, CRE-020, CRE-022 to CRE-024 ([issues/CRE.md](../issues/CRE.md)); CORE-002, CORE-004, CORE-011 to CORE-015, CORE-017, CORE-022, CORE-030 ([issues/CORE.md](../issues/CORE.md)); GRID-005, GRID-007, GRID-009 to GRID-011 ([issues/GRID.md](../issues/GRID.md)); ITM-004, ITM-005, ITM-018, ITM-019, ITM-024 ([issues/ITM.md](../issues/ITM.md)); CHR-003 to CHR-005, CHR-008, CHR-020, CHR-021, CHR-023, CHR-024, CHR-026, CHR-053, CHR-062 ([issues/CHR.md](../issues/CHR.md)); ENC-001, ENC-005, ENC-012 ([issues/ENC.md](../issues/ENC.md)); TST-001 to TST-003, TST-008 ([issues/TST.md](../issues/TST.md)).
 
 ### 10.2 Issues found while writing this doc
 
@@ -628,13 +628,11 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 
 | ID | Issue |
 |---|---|
-| CMB-073 | Ordinary NPC movement (including enemy summons and charmed, confused and frightened creatures) never provokes AoOs |
 | CMB-074 | NPCs never stand up; trip Prone has no duration and prone NPCs move at full speed |
 | CMB-075 | Conditions that prevent standard and full-round actions skip the turn before the AI: Panicked and Turned never flee, Pinned never escapes, Nauseated gets no move action, and skipped turns miss regeneration and acid-arrow ticks |
 | AI-032 | Breath weapons, ranged specials and terrain manipulation never recharge (their tick methods have no callers) |
 | AI-033 | Only the Dragon profile breathes; ankheg, behir, chimera, digester and gorgon never do |
 | AI-035 | Trip-flagged profiles and null-profile NPCs trip every standing target in reach instead of attacking |
-| CMB-076 | NPC maneuvers (including grapple, sunder and coup de grace) never provoke |
 | AI-036 | The Mirror Image priority target overrides all targeting map-wide, before exclusions and reach filters |
 | SPL-015 | The lich, evil_acolyte_test, gust_druid and mist_wizard prepare nothing (positional slot assignment plus the wizard 2nd-level cap) |
 | CRE-030 | The vampire is a Fighter, so it never gets a `SpellcastingComponent` |
@@ -644,9 +642,9 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | AI-039 | Kiter retreat is not gated on a ranged weapon; weaponless ranged monsters oscillate |
 | AI-040 | Breath saves have no natural 1/20 or Evasion, damage bypasses `ApplyIncomingDamage`, and breath spends no action |
 | AI-041 | Frightful presence fires once per combat, not on a charge, with Manhattan range, no HD filter and a raw save |
-| AI-042 | Charmed NPCs attack their own allies, and their movement coroutines are not awaited |
+| AI-042 | Charmed NPCs attack their own allies |
 | AI-043 | Confusion 01-10 makes the creature hit itself; no retaliation rule; one-move flee |
-| AI-044 | Frightened "run" is 1× speed with no AoOs; cornered Frightened never attacks; cornered Panicked applies no Cowering |
+| AI-044 | Frightened "run" is 1× speed; cornered Frightened never attacks; cornered Panicked applies no Cowering |
 | AI-045 | The kiter's approach branch ends the turn with the standard action unused |
 | CMB-077 | Natural attacks are used only when no weapon is equipped (no weapon plus secondary naturals) |
 | AI-046 | The strategist's SR chance `(CL+1-SR)/20` is 20 points too low |
@@ -697,7 +695,7 @@ AIService may use only public GameManager members (docs/ARCHITECTURE.md conventi
 
 1. **Executor:** a GameManager partial next to `NPCPerformAttack`, `NPCExecuteBreathWeaponForAI`, `NPCExecuteCharge`, or in AIService if it needs no GameManager privates (`TryExecuteEngulf`, `ProcessAuraAbility`). Expose GameManager executors with a wrapper.
 2. **Action economy:** spend the action yourself (`CommitStandardAction`, `UseFullRoundAction`, `UseMoveAction`); existing specials forget to (AI-053).
-3. **Rules plumbing:** resolve AoOs where PHB ch.8 says the action provokes (see `CheckForAoO` use on the PC paths); route damage through `Stats.ApplyIncomingDamage` with a typed `DamagePacket` (do not copy AI-006 or the breath code); saves through `SavingThrowResolver`; check `AreAllPCsDead` and victory (CORE-011).
+3. **Rules plumbing:** resolve AoOs where PHB ch.8 says the action provokes (movement: `ResolveMovementAoOsBeforeStep`; maneuvers: `ResolveManeuverInitiationAoOs`); route damage through `Stats.ApplyIncomingDamage` with a typed `DamagePacket` (do not copy AI-006 or the breath code); saves through `SavingThrowResolver`; check `AreAllPCsDead` and victory (CORE-011).
 4. **Call site:** free actions at the top of `ExecuteNPCTurn` (after the condition gates); standard actions before or after movement in the routines that should use it. Prefer a capability check usable by every routine over adding it to AggressiveMelee only.
 5. **Data:** a new ability kind needs an `NPCDefinition` field, a deep copy in `NPCDefinition.Clone`, a `CharacterController.ConfigureX`, a call in `InitializeNPCFromDefinition`, and the template copy lists (DEVELOPMENT_RECIPES "Add a monster or NPC"). Tick its cooldown in `BeginNPCTurnForAI` (AI-032).
 6. **Feedback:** `CombatUI?.ShowCombatLog(CombatLogHelper...)`, a `[AI][Tag]` `Debug.Log`, and a `WaitForSeconds`.
@@ -791,7 +789,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 
 Ordered by how much they distort what the AI experiences:
 
-1. Rules parity on NPC paths: movement AoOs (CMB-073), stand up (CMB-074), the turn-skip gate versus controllers (CMB-075), maneuver and casting AoOs and Concentration (CMB-076, SPL-006), breath and special resolution through the standard pipeline with recharge (AI-032, AI-040, AI-006).
+1. Rules parity on NPC paths: stand up (CMB-074), the turn-skip gate versus controllers (CMB-075), casting AoOs and Concentration (SPL-006), breath and special resolution through the standard pipeline with recharge (AI-032, AI-040, AI-006).
 2. Capability data that works: spells for the lich, vampire, DMG class levels and Spellcaster monsters (SPL-015, CRE-030, ENC-021), or an SLA system (CRE-015, CRE-017); ranged weapons actually equipped (ITM-004); null profiles mapped (AI-004); `Ranged` behaviour handled (AI-003).
 3. Plumbing: behaviour stored on the NPC instead of the parallel list (AI-015); one target filter `IsTargetableBy(attacker, target, action)` with cached ward saves used by every selector (AI-005, AI-049, AI-050); a decision trace log.
 

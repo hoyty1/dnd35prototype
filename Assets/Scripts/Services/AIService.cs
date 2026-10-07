@@ -322,6 +322,8 @@ public class AIService : MonoBehaviour
 
         yield return _gameManager.StartCoroutine(
             _gameManager.MoveCharacterAlongComputedPathForAI(npc, searchDestination, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+        if (npc.Stats.CurrentHP <= 0)
+            yield break; // dropped by an AoO or area damage while moving (CMB-073)
 
         if (npc.Actions.HasMoveAction)
             npc.Actions.UseMoveAction();
@@ -463,6 +465,8 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                if (npc.Stats.CurrentHP <= 0)
+                    yield break; // dropped by an AoO or area damage while moving (CMB-073)
                 npc.Actions.UseMoveAction();
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{npc.Stats.CharacterName} flees from divine turning!"));
                 yield return new WaitForSeconds(0.45f);
@@ -722,6 +726,8 @@ public class AIService : MonoBehaviour
                                 {
                                     yield return _gameManager.StartCoroutine(
                                         _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                                    if (npc.Stats.CurrentHP <= 0)
+                                        yield break; // dropped by an AoO or area damage while moving (CMB-073)
                                     npc.Actions.UseMoveAction();
                                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                                         $"{npc.Stats.CharacterName} repositions after breath weapon."));
@@ -764,6 +770,8 @@ public class AIService : MonoBehaviour
                                 {
                                     yield return _gameManager.StartCoroutine(
                                         _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                                    if (npc.Stats.CurrentHP <= 0)
+                                        yield break; // dropped by an AoO or area damage while moving (CMB-073)
                                     npc.Actions.UseMoveAction();
                                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("🐉",
                                         $"{npc.Stats.CharacterName} repositions after breath weapon."));
@@ -886,6 +894,8 @@ public class AIService : MonoBehaviour
                 {
                     yield return _gameManager.StartCoroutine(
                         _gameManager.MoveCharacterAlongComputedPathForAI(npc, blindSearchCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                    if (npc.Stats.CurrentHP <= 0)
+                        yield break; // dropped by an AoO or area damage while moving (CMB-073)
                     npc.Actions.UseMoveAction();
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} advances, trying to reacquire line of sight through concealment."));
                     yield return new WaitForSeconds(0.4f);
@@ -997,6 +1007,8 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, approachCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                if (npc.Stats.CurrentHP <= 0)
+                    yield break; // dropped by an AoO or area damage while moving (CMB-073)
                 npc.Actions.UseMoveAction();
                 _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{npc.Stats.CharacterName} moves to get a better shot."));
                 yield return new WaitForSeconds(0.5f);

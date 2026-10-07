@@ -9,9 +9,9 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 
 | Option | AI | Where / conditions | PC | Notes |
 |---|---|---|---|---|
-| Move | Used | every routine, `EvaluateMovementOptions`, one move action, only while `HasMoveAction` | Yes | CMB-073 (no AoOs), AI-052, AI-019 |
+| Move | Used | every routine, `EvaluateMovementOptions`, one move action, only while `HasMoveAction` | Yes | provokes AoOs like PC movement; AI-052, AI-019 |
 | Double move | Never | AggressiveMelee wastes the standard action when still out of reach | Yes | gap |
-| Run (×4) | Never | Frightened "run" is 1× and provokes nothing | No | game-wide gap (PHB ch.8) |
+| Run (×4) | Never | Frightened "run" is 1× (it provokes like any move) | No | game-wide gap (PHB ch.8) |
 | 5-foot step | Partial | kiter AoO avoidance; mid full attack (Animal, Dragon, UndeadTactical, UndeadIncorporeal) | Yes | never "step then full attack" |
 | Withdraw | Partial | DefensiveMelee <30% HP; Frightened | Yes | AI-010 |
 | Charge | Used | Aggressive, Defensive, Dragon via `ShouldNPCCharge` + `ShouldPreferCharge`; pounce | Yes | Morale-typed +2; CMB-018 |
@@ -36,8 +36,8 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Cleave | Never | PC path only | Yes | CMB-017 |
 | Sneak attack | Auto | damage path; AI seeks flanks, not sneak attack | Auto | CMB-028 |
 | Nonlethal | Never | | Yes | |
-| Take AoOs | Auto | `ThreatSystem.ExecuteAoO` when something provokes | Auto | CMB-005 |
-| Avoid provoking: movement | Partial (moot) | path scoring | | CMB-073 |
+| Take AoOs | Auto | `ThreatSystem.ExecuteAoO` when something provokes, before the mover leaves the square | Auto | CMB-084 |
+| Avoid provoking: movement | Partial | path scoring | | |
 | Avoid provoking: ranged | Used | kiter risk model | Prompt | |
 | Avoid provoking: casting | Partial | adjacency estimate; never rolled | Prompt + roll | SPL-006 |
 | Trip | Used | Humanoid, Berserk, Grappler, null profile, `HasTripAttack` summons; free trip on hit | Yes | AI-035, CMB-079, CMB-014; 11.8.4 |
@@ -45,7 +45,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Trip or disarm within a full attack | Never | a maneuver replaces the whole attack action | Yes (shared attack pool) | |
 | Sunder, bull rush (attack or charge), overrun, feint, Improved Feint | Never | flags never set; feint has no AI path | Yes | AI-014, CMB-015 |
 | Aid another (+2 attack or AC, or wake a sleeping ally) | Never | `UseAidAnother` unread; executor is PC-bound | Yes | AI-026, AI-054; 11.8.1 |
-| Coup de grace | Used | profiles or data override, helpless adjacent | Yes | never provokes (CMB-076), CMB-004 |
+| Coup de grace | Used | profiles or data override, helpless adjacent | Yes | provokes from all threatening enemies, as for PCs; CMB-004 |
 | Grapple start / in-grapple | Used | 8.6 | Yes | CMB-014, CMB-033 |
 | Grapple escape | Partial | animals <25% HP only in practice | Yes | CMB-075, AI-029 |
 | Improved Grab | Auto | free on hit | Prompt | |
@@ -83,4 +83,4 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 
 **PC can, NPC cannot:** double move; free 5-foot steps (including step then full attack); stand up, drop prone, crawl; Power Attack; Rapid Shot; fighting defensively by choice; two-weapon and off-hand attacks; throw melee throwables; Cleave; Flurry, Rage, Bardic Music, Turn Undead, domain powers (including the Destruction smite); template smite outside summons; sunder, bull rush, overrun, feint; aid another and waking allies; trip or disarm as part of a full attack; spontaneous cure/inflict conversion; escape a grapple while not pinned; decline Improved Grab; area spells and metamagic; summoning; holding a touch charge; controlling a Flaming Sphere (`TryControlFlamingSphereForAI` has no callers); dismissing spells; imbued spells; potions, wands, scrolls; picking up or dropping items; weapon swaps; nonlethal damage.
 
-**NPC-only advantages (all bugs or gaps):** movement never provokes (CMB-073); maneuvers never provoke (CMB-076); casting never provokes and needs no Concentration (SPL-006); breath and specials cost no action (AI-040, AI-053); melee routines path to an invisible target's true square (AI-051); monster ranged specials skip mitigation (AI-006); silenced NPCs can cast (SPL-092).
+**NPC-only advantages (all bugs or gaps):** casting never provokes and needs no Concentration (SPL-006); breath and specials cost no action (AI-040, AI-053); melee routines path to an invisible target's true square (AI-051); monster ranged specials skip mitigation (AI-006); silenced NPCs can cast (SPL-092).

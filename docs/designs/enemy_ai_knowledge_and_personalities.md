@@ -38,7 +38,7 @@ Scope: this design answers the two owner requests. The first is "visual" knowled
 **Honest effort estimate:**
 
 - Increment 1 is medium: about 15 new files and about 20 edited call sites.
-- Increments 2 and 3 are each large. Increment 2 touches the attack, cast and damage pipelines and the UI. Increment 3 depends on combat-rules fixes (CMB-073, AI-047, AI-010).
+- Increments 2 and 3 are each large. Increment 2 touches the attack, cast and damage pipelines and the UI. Increment 3 depends on combat-rules fixes (AI-047, AI-010; the NPC movement AoO fix CMB-073 has landed).
 - Phase 4 needs data work: skill ranks for monsters.
 
 ---
@@ -418,7 +418,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | | **AI-018**, **TST-002** | `CombatUI` null dereference at `AIService.cs:59-60`, and no runner for `RunAll`. Without these fixes the tests below never run. |
 | | **AI-005 / AI-007** | `SelectBestTarget` re-rolls Sanctuary and Listen on every call, so cached decisions would still flip within a turn. |
 | | Tag leak / **AI-021** | `ClearAllTags` has no callers, and the position stores are never cleared, so state leaks across encounters on reused slots. |
-| Before Cowardly counts as "complete" | **CMB-073** (High) | NPC movement never provokes AoOs, so "avoid AoOs" changes nothing. Until it lands, the trace labels it "AoO risk simulated". |
+| Before Cowardly counts as "complete" | CMB-073 (fixed 2026-10-07) | NPC movement now provokes AoOs, so "avoid AoOs" has a real cost; the "AoO risk simulated" trace label is no longer needed. |
 | | **AI-047** | The healer never moves to touch (the shaman example). |
 | | **AI-010**, **CMB-075** | `FleeHealthThreshold` is unread, and the turn-skip gate pre-empts Panicked creatures. Withdraw needs both. |
 | | **AI-002** | Casters on melee routines never cast. |
@@ -455,7 +455,7 @@ That difference, shown in the trace, is the demonstration of fairness.
   - The orc does a coup de grace on a downed PC.
   - The captain focuses the softest, most wounded target.
   - The validator rejects Smart on a zombie.
-- **Known limit:** the shaman only heals allies already in touch range, and AoO avoidance is cosmetic until CMB-073.
+- **Known limit:** the shaman only heals allies already in touch range, and AoO avoidance now matters (CMB-073 fixed).
 
 ### Increment 2: fair sight (large)
 
@@ -476,7 +476,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 
 ### Increment 3: stances, withdraw and healer movement (large; rules-gated)
 
-- **Prerequisites:** CMB-073, AI-047, AI-010, CMB-075 and ENC-021 (for adept spells).
+- **Prerequisites:** AI-047, AI-010, CMB-075 and ENC-021 (for adept spells).
 - **Build:**
   - `ChooseBehavior` at `NPCTurns.cs:62` with stance desires and hysteresis.
   - The healer branch generalised into a Support stance for any NPC with a castable heal or buff.
@@ -490,7 +490,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 - **Phase 4. Knowing things.** NPC skill ranks (MM skill lines, starting with the preset creatures), `IdentificationService` (Knowledge, Spellcraft, Sense Motive, Spot vs Disguise for both sides), the Bestiary, the hub Intel panel (Study Foes, Scout, optional Gather Information) with a preparation budget, `EncounterContext` with intel levels (ENC-015), save and immunity outcome learning, and enemy encounter-preview name gating.
 - **Phase 5.** Divination as fact sources (*deathwatch*, *detect magic/evil*), and faction memory carried home by fleeing survivors.
 - **Phase 5b. Demeanor tells.** A `Demeanor` fact, revealed by Sense Motive or by Knowledge for MM-iconic temperaments ("goblins are cowardly"). Opinion reasons become one-line log tells ("the goblin adept hangs back behind its allies").
-- **Phase 6.** Once CMB-073 and AI-019 (A* per cell) are fixed: a unified candidate evaluator in hit-point-equivalents, with the consideration library becoming its terms, quorum-veto trace lines, and the retirement of `TagPriorities` and the duplicated routines.
+- **Phase 6.** Once AI-019 (A* per cell) is fixed (CMB-073 already is): a unified candidate evaluator in hit-point-equivalents, with the consideration library becoming its terms, quorum-veto trace lines, and the retirement of `TagPriorities` and the duplicated routines.
 
 ---
 
@@ -513,7 +513,7 @@ That difference, shown in the trace, is the demonstration of fairness.
  TARGET  fighter#1 legacy 18.0 + traits -4.2 (ThreatensMe 1.0 [Rules/Sight], EngagedByAlly 0) + percep 0 = 13.8
          wizard#3  legacy 14.5 + traits +3.1 (EngagedByAlly 1.0, LooksDangerous 0)      = 17.6  <- chosen
  BOOL    Charge: Cowardly Forbid (held .60 >= .50) -> false
-         ProvokeAoO: Cowardly Forbid (SelfWound Hurt) -> false   [AoO risk simulated: CMB-073 open]
+         ProvokeAoO: Cowardly Forbid (SelfWound Hurt) -> false   [AoO risk real]
  SKIPPED Smart.KillChance (not present); Healer.KnownCaster (tier ok, fact Unknown -> 0)
  CACHE   target=wizard#3 maneuver=none cdg=false
 ```
@@ -554,6 +554,6 @@ That difference, shown in the trace, is the demonstration of fairness.
 3. **In Rules mode, should the encounter cards and NPC panels still show creature names, CR and EL before identification?** These are DM meta-knowledge today.
 4. **Is a sadistic coup de grace on downed PCs acceptable at Normal difficulty,** or should Easy and Normal add a rules gate?
 5. **Should the "Rumours" version of Gather Information exist** before a clock and town system exist, or wait for them? And is the abstract preparation budget an acceptable stand-in for hours?
-6. **Should Increment 3 (stances) and Phase 4 (knowledge rolls and hub intel) swap?** Stances finish request 2 but are blocked by the CMB-073, AI-047 and AI-010 rules fixes. Phase 4 finishes request 1 but needs monster skill data.
+6. **Should Increment 3 (stances) and Phase 4 (knowledge rolls and hub intel) swap?** Stances finish request 2 but are blocked by the AI-047 and AI-010 rules fixes. Phase 4 finishes request 1 but needs monster skill data.
 7. **Should alignment stay a warning,** as proposed, or become a hard gate, such as Sadistic requiring Evil? A hard gate cannot work until CRE-002 is fixed.
 8. **Should Rules mode eventually become the default,** or stay a difficulty and realism option?

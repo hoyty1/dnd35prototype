@@ -7264,41 +7264,21 @@ public partial class GameManager : MonoBehaviour
         Vector2Int oldPos = pc.GridPosition;
         ConsumeMoveAction(pc);
 
-        if (_movementService != null)
-            yield return StartCoroutine(_movementService.ExecuteMovement(pc, crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true));
-        else
-            yield return StartCoroutine(pc.MoveAlongPath(crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true));
-
-        bool interruptedByIncapacitation = false;
+        // Crawling provokes like any movement; the AoOs resolve before the creature leaves
+        // its square (shared helper, PHB p.137, CMB-005).
         if (provokedAoOs.Count > 0)
-        {
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Crawling provokes attacks of opportunity!"));
-            foreach (var aooInfo in provokedAoOs)
-            {
-                CharacterController threatener = aooInfo != null ? aooInfo.Threatener : null;
-                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
-                    continue;
 
-                CombatResult aooResult = _movementService != null
-                    ? _movementService.TriggerAoO(threatener, pc)
-                    : ThreatSystem.ExecuteAoO(threatener, pc, isFromMovement: true);
-                if (aooResult == null)
-                    continue;
+        var aooOutcome = new MovementAoOStepOutcome();
+        yield return StartCoroutine(ResolveMovementAoOsBeforeStep(pc, provokedAoOs, 0, "AoO (crawling)", 0.8f, aooOutcome));
+        bool interruptedByIncapacitation = aooOutcome.Incapacitated;
 
-                CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO (crawling): {aooResult.GetDetailedSummary()}"));
-                UpdateAllStatsUI();
-
-                if (aooResult.Hit && aooResult.TotalDamage > 0)
-                    CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
-
-                if (pc.IsUnconscious || pc.Stats.IsDead)
-                {
-                    interruptedByIncapacitation = true;
-                    break;
-                }
-
-                yield return new WaitForSeconds(0.8f);
-            }
+        if (!aooOutcome.StopMovement)
+        {
+            if (_movementService != null)
+                yield return StartCoroutine(_movementService.ExecuteMovement(pc, crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true));
+            else
+                yield return StartCoroutine(pc.MoveAlongPath(crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true));
         }
 
         RefreshFlankedConditions();
@@ -7309,6 +7289,14 @@ public partial class GameManager : MonoBehaviour
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{pc.Stats.CharacterName}'s crawl is interrupted by incapacitation."));
             EndActivePCTurn();
+            yield break;
+        }
+
+        if (aooOutcome.StopMovement)
+        {
+            // Stopped but still able to act (e.g. an AoO left it unable to move).
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⛔", $"{pc.Stats.CharacterName}'s crawl stops ({aooOutcome.Reason}) after an attack of opportunity."));
+            ShowActionChoices();
             yield break;
         }
 

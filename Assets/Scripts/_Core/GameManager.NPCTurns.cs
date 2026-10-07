@@ -358,6 +358,27 @@ public partial class GameManager
             target = coupTarget;
         }
 
+        // Same initiation AoOs as the PC wrapper (CMB-076). A foiled attempt still spends
+        // its action; an NPC dropped by the AoO ends its turn (callers return after this).
+        int hpBeforeManeuverAoOs = npc.Stats.CurrentHP;
+        ManeuverAoOOutcome maneuverAoOOutcome = ResolveManeuverInitiationAoOs(npc, target, choice.Value);
+        if (maneuverAoOOutcome != ManeuverAoOOutcome.Proceed)
+        {
+            // The PC wrapper spends its action before the AoOs, so an AoO that drops the PC to
+            // 0 HP costs no extra strenuous-action hit point; match that for a dropped NPC.
+            bool droppedByAoO = maneuverAoOOutcome == ManeuverAoOOutcome.AttackerIncapacitated
+                || (hpBeforeManeuverAoOs > 0 && npc.Stats.CurrentHP <= 0);
+            if (choice.Value == SpecialAttackType.CoupDeGrace)
+                npc.Actions.UseFullRoundAction();
+            else if (droppedByAoO)
+                npc.Actions.UseStandardAction();
+            else
+                npc.CommitStandardAction();
+
+            UpdateAllStatsUI();
+            return true;
+        }
+
         var result = npc.ExecuteSpecialAttack(choice.Value, target);
         CombatUI.ShowCombatLog(CombatLogHelper.Death("☠", $"{npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}"));
 
@@ -1348,6 +1369,8 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{npcName} rushes to search after missing {targetName}'s last known position."));
 
         yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, searchCell.Coords, PlayerMoveSecondsPerStep));
+        if (npc.Stats.CurrentHP <= 0)
+            yield break; // dropped by an AoO while moving (CMB-073)
 
         if (npc.Actions.HasMoveAction)
             npc.Actions.UseMoveAction();

@@ -718,6 +718,221 @@ public partial class GameManager
         });
     }
 
+    // ========================================================================
+    // SHARED ATTACK-OF-OPPORTUNITY RESOLUTION (CMB-005, CMB-073, CMB-076)
+    // One path for PCs, NPCs, summons and condition-forced movers. The rules
+    // themselves (what provokes, what stops movement) live in ThreatSystem.
+    // ========================================================================
+
+    /// <summary>What happened while the AoOs for one path step resolved.</summary>
+    private sealed class MovementAoOStepOutcome
+    {
+        public bool StopMovement;
+        public bool Incapacitated;
+        public string Reason = string.Empty;
+
+        public void Reset()
+        {
+            StopMovement = false;
+            Incapacitated = false;
+            Reason = string.Empty;
+        }
+    }
+
+    private static bool HasAoOAtPathIndex(List<AoOThreatInfo> provokedAoOs, int pathIndex)
+    {
+        if (provokedAoOs == null)
+            return false;
+
+        for (int i = 0; i < provokedAoOs.Count; i++)
+        {
+            if (provokedAoOs[i] != null && provokedAoOs[i].PathIndex == pathIndex)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves the AoOs the mover provokes by leaving its current square toward
+    /// path[pathIndex]. Call it BEFORE the step, while the mover is still in the square
+    /// it is leaving (PHB p.137), so the threatener's reach is checked from there.
+    /// Sets <paramref name="outcome"/>.StopMovement when an AoO kills, drops, trips or
+    /// otherwise stops the mover; the caller must then not take the step.
+    /// </summary>
+    private IEnumerator ResolveMovementAoOsBeforeStep(
+        CharacterController mover,
+        List<AoOThreatInfo> provokedAoOs,
+        int pathIndex,
+        string logLabel,
+        float secondsAfterEachAoO,
+        MovementAoOStepOutcome outcome)
+    {
+        outcome.Reset();
+        if (mover == null || mover.Stats == null || !HasAoOAtPathIndex(provokedAoOs, pathIndex))
+            yield break;
+
+        ThreatSystem.MoverAoOSnapshot before = ThreatSystem.CaptureMoverState(mover);
+
+        for (int i = 0; i < provokedAoOs.Count; i++)
+        {
+            AoOThreatInfo aooInfo = provokedAoOs[i];
+            if (aooInfo == null || aooInfo.PathIndex != pathIndex)
+                continue;
+
+            CharacterController threatener = aooInfo.Threatener;
+            if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
+                continue;
+
+            CombatResult aooResult = _movementService != null
+                ? _movementService.TriggerAoO(threatener, mover)
+                : ThreatSystem.ExecuteAoO(threatener, mover, isFromMovement: true);
+            if (aooResult == null)
+                continue;
+
+            string aooLog = $"{logLabel}: {aooResult.GetDetailedSummary()}";
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", aooLog));
+            UpdateAllStatsUI();
+
+            if (LogAttacksToConsole)
+                Debug.Log("[Combat] " + aooLog);
+
+            if (aooResult.Hit && aooResult.TotalDamage > 0)
+                CheckConcentrationOnDamage(mover, aooResult.TotalDamage);
+
+            if (ThreatSystem.ShouldStopMovementAfterAoO(mover, before, out string reason))
+            {
+                outcome.StopMovement = true;
+                outcome.Reason = reason;
+                if (ThreatSystem.IsMoverIncapacitated(mover))
+                {
+                    // Further AoOs against a dropped mover are moot; stop now.
+                    outcome.Incapacitated = true;
+                    yield break;
+                }
+            }
+
+            // A tripped mover still takes the other AoOs it already provoked at this step.
+            yield return new WaitForSeconds(secondsAfterEachAoO);
+        }
+    }
+
+    /// <summary>
+    /// Moves a non-interactive mover (NPC, summon, charmed/confused/frightened creature,
+    /// AI withdraw) along a precomputed path, resolving each provoked AoO before the step
+    /// that provokes it. Path segments without AoOs move in one call, exactly as before.
+    /// </summary>
+    private IEnumerator ExecutePathWithMovementAoOs(
+        CharacterController mover,
+        List<Vector2Int> path,
+        List<AoOThreatInfo> provokedAoOs,
+        float secondsPerStep,
+        string aooLogLabel,
+        MovementAoOStepOutcome outcome)
+    {
+        outcome.Reset();
+        if (mover == null || mover.Stats == null || path == null || path.Count == 0)
+            yield break;
+
+        var stepOutcome = new MovementAoOStepOutcome();
+        int segmentStart = 0;
+        for (int pathIndex = 0; pathIndex <= path.Count; pathIndex++)
+        {
+            bool atEnd = pathIndex == path.Count;
+            if (!atEnd && !HasAoOAtPathIndex(provokedAoOs, pathIndex))
+                continue;
+
+            // Walk the AoO-free segment that ends where the next AoO is provoked. A segment
+            // that pauses mid-path may end in an ally's square the move only passes through,
+            // so only the true end of the path is treated as the destination.
+            if (pathIndex > segmentStart)
+            {
+                List<Vector2Int> segment = path.GetRange(segmentStart, pathIndex - segmentStart);
+                if (_movementService != null)
+                    yield return StartCoroutine(_movementService.ExecuteMovement(mover, segment, secondsPerStep, markAsMoved: true, lastStepIsDestination: atEnd));
+                else
+                    yield return StartCoroutine(mover.MoveAlongPath(segment, secondsPerStep, markAsMoved: true, lastStepIsDestination: atEnd));
+
+                if (ThreatSystem.IsMoverIncapacitated(mover))
+                {
+                    outcome.StopMovement = true;
+                    outcome.Incapacitated = true;
+                    outcome.Reason = "incapacitated";
+                    yield break;
+                }
+
+                // Blocked part-way (MoveAlongPath stops at an untraversable node): the
+                // squares that would provoke later were never reached.
+                if (mover.GridPosition != segment[segment.Count - 1])
+                {
+                    outcome.StopMovement = true;
+                    outcome.Reason = "blocked";
+                    yield break;
+                }
+            }
+
+            if (atEnd)
+                yield break;
+
+            segmentStart = pathIndex;
+            yield return StartCoroutine(ResolveMovementAoOsBeforeStep(mover, provokedAoOs, pathIndex, aooLogLabel, 0.5f, stepOutcome));
+            if (stepOutcome.StopMovement)
+            {
+                outcome.StopMovement = true;
+                outcome.Incapacitated = stepOutcome.Incapacitated;
+                outcome.Reason = stepOutcome.Reason;
+                CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔",
+                    $"{mover.Stats.CharacterName}'s movement stops ({stepOutcome.Reason}) after an attack of opportunity."));
+                yield break;
+            }
+        }
+    }
+
+    private enum ManeuverAoOOutcome
+    {
+        Proceed,
+        Disrupted,
+        AttackerIncapacitated
+    }
+
+    /// <summary>
+    /// Resolves the AoOs a maneuver provokes when it starts, for PCs and NPCs alike
+    /// (rules in <see cref="ThreatSystem.GetManeuverAoOProvokers"/>). The caller has already
+    /// spent the action; on anything but Proceed the attempt is lost.
+    /// </summary>
+    private ManeuverAoOOutcome ResolveManeuverInitiationAoOs(CharacterController attacker, CharacterController target, SpecialAttackType type)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return ManeuverAoOOutcome.AttackerIncapacitated;
+
+        List<CharacterController> provokers = ThreatSystem.GetManeuverAoOProvokers(attacker, target, type, GetAllCharacters());
+        string maneuverLabel = ThreatSystem.GetManeuverAoOLabel(type);
+
+        for (int i = 0; i < provokers.Count; i++)
+        {
+            CombatResult maneuverAoO = ThreatSystem.ExecuteAoO(provokers[i], attacker);
+            if (maneuverAoO == null)
+                continue;
+
+            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{maneuverLabel} initiation AoO: {maneuverAoO.GetDetailedSummary()}"));
+            UpdateAllStatsUI();
+
+            if (attacker.IsDead || attacker.Stats.IsDead || attacker.IsUnconscious)
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{attacker.Stats.CharacterName} is incapacitated while attempting to start {maneuverLabel.ToLowerInvariant()}."));
+                return ManeuverAoOOutcome.AttackerIncapacitated;
+            }
+
+            if (ThreatSystem.DoesManeuverAoODisruptAttempt(type, maneuverAoO))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{maneuverLabel} attempt disrupted by attack of opportunity"));
+                return ManeuverAoOOutcome.Disrupted;
+            }
+        }
+
+        return ManeuverAoOOutcome.Proceed;
+    }
+
     private IEnumerator ResolveAoOsAndMove(CharacterController pc, AoOPathResult pathResult, bool isWithdraw = false)
     {
         if (pc == null || pc.Stats == null)
@@ -788,9 +1003,11 @@ public partial class GameManager
 
         bool interruptedByIncapacitation = false;
         bool interruptedByGreaseSlip = false;
+        string stoppedByAoOReason = null;
         int movementBudgetSquares = isWithdraw ? GetWithdrawMoveRangeSquares(pc) : GetCurrentMoveRangeSquares(pc);
         int movementCostConsumed = 0;
         Vector2Int previousCell = pc.GridPosition;
+        var aooOutcome = new MovementAoOStepOutcome();
 
         for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {
@@ -802,6 +1019,17 @@ public partial class GameManager
                 break;
             }
 
+            // AoOs for leaving the current square resolve before the step (PHB p.137, CMB-005).
+            yield return StartCoroutine(ResolveMovementAoOsBeforeStep(pc, provokedAoOs, pathIndex, "AoO", 1.0f, aooOutcome));
+            if (aooOutcome.StopMovement)
+            {
+                if (aooOutcome.Incapacitated)
+                    interruptedByIncapacitation = true;
+                else
+                    stoppedByAoOReason = aooOutcome.Reason;
+                break;
+            }
+
             var stepPath = new List<Vector2Int> { step };
 
             if (_movementService != null)
@@ -810,47 +1038,6 @@ public partial class GameManager
                 yield return StartCoroutine(pc.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
 
             movementCostConsumed += stepCost;
-
-            if (provokedAoOs != null && provokedAoOs.Count > 0)
-            {
-                for (int aooIndex = 0; aooIndex < provokedAoOs.Count; aooIndex++)
-                {
-                    AoOThreatInfo aooInfo = provokedAoOs[aooIndex];
-                    if (aooInfo == null || aooInfo.PathIndex != pathIndex)
-                        continue;
-
-                    CharacterController threatener = aooInfo.Threatener;
-                    if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
-                        continue;
-
-                    CombatResult aooResult = _movementService != null
-                        ? _movementService.TriggerAoO(threatener, pc)
-                        : ThreatSystem.ExecuteAoO(threatener, pc, isFromMovement: true);
-                    if (aooResult == null)
-                        continue;
-
-                    string aooLog = $"⚔ AoO: {aooResult.GetDetailedSummary()}";
-                    CombatUI?.ShowCombatLog(aooLog);
-                    UpdateAllStatsUI();
-
-                    if (LogAttacksToConsole)
-                        Debug.Log("[Combat] " + aooLog);
-
-                    if (aooResult.Hit && aooResult.TotalDamage > 0)
-                        CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
-
-                    if (pc.IsUnconscious || pc.Stats.IsDead)
-                    {
-                        interruptedByIncapacitation = true;
-                        break;
-                    }
-
-                    yield return new WaitForSeconds(1.0f);
-                }
-
-                if (interruptedByIncapacitation)
-                    break;
-            }
 
             // ── Death/disable check after area effect damage during movement step ──
             // Area effects (Wall of Fire, etc.) may deal damage when a creature enters
@@ -908,6 +1095,9 @@ public partial class GameManager
         if (interruptedByGreaseSlip)
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"{pc.Stats.CharacterName}'s movement ends after slipping in grease."));
 
+        if (!string.IsNullOrEmpty(stoppedByAoOReason))
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⛔", $"{pc.Stats.CharacterName}'s movement stops ({stoppedByAoOReason}) after an attack of opportunity."));
+
         ShowActionChoices();
     }
 
@@ -945,38 +1135,14 @@ public partial class GameManager
         mover.IsWithdrawing = true;
         mover.WithdrawFirstStepProtected = true;
 
-        if (pathResult != null && pathResult.ProvokedAoOs != null)
-        {
-            foreach (var aooInfo in pathResult.ProvokedAoOs)
-            {
-                if (mover.Stats.IsDead)
-                    break;
+        // The first square is already exempt in ProvokedAoOs (suppressFirstSquareAoO);
+        // the rest resolve before the step that provokes them, like any other movement.
+        List<AoOThreatInfo> provokedAoOs = pathResult != null ? pathResult.ProvokedAoOs : null;
+        var moveOutcome = new MovementAoOStepOutcome();
+        yield return StartCoroutine(ExecutePathWithMovementAoOs(mover, path, provokedAoOs, secondsPerStep, "AoO (Withdraw)", moveOutcome));
 
-                CharacterController threatener = aooInfo != null ? aooInfo.Threatener : null;
-                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
-                    continue;
-
-                CombatResult aooResult = _movementService != null
-                    ? _movementService.TriggerAoO(threatener, mover)
-                    : ThreatSystem.ExecuteAoO(threatener, mover, isFromMovement: true);
-
-                if (aooResult != null)
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO (Withdraw): {aooResult.GetDetailedSummary()}"));
-
-                yield return new WaitForSeconds(0.35f);
-            }
-        }
-
-        if (!mover.Stats.IsDead)
-        {
-            if (_movementService != null)
-                yield return StartCoroutine(_movementService.ExecuteMovement(mover, path, secondsPerStep, markAsMoved: true));
-            else
-                yield return StartCoroutine(mover.MoveAlongPath(path, secondsPerStep, markAsMoved: true));
-
-            CheckTurnUndeadProximityBreakingForMover(mover);
-            PruneTurnUndeadTrackers();
-        }
+        CheckTurnUndeadProximityBreakingForMover(mover);
+        PruneTurnUndeadTrackers();
 
         mover.WithdrawFirstStepProtected = false;
     }
@@ -1008,10 +1174,11 @@ public partial class GameManager
             yield break;
         }
 
-        if (_movementService != null)
-            yield return StartCoroutine(_movementService.ExecuteMovement(mover, path, secondsPerStep, markAsMoved: true));
-        else
-            yield return StartCoroutine(mover.MoveAlongPath(path, secondsPerStep, markAsMoved: true));
+        // Ordinary movement provokes for every mover (PHB p.137, CMB-073). Callers re-check
+        // the mover's HP after this coroutine, because an AoO can drop it mid-path.
+        var moveOutcome = new MovementAoOStepOutcome();
+        yield return StartCoroutine(ExecutePathWithMovementAoOs(mover, path, pathResult != null ? pathResult.ProvokedAoOs : null, secondsPerStep, "AoO", moveOutcome));
+
         CheckTurnUndeadProximityBreakingForMover(mover);
         PruneTurnUndeadTrackers();
     }
@@ -1720,76 +1887,19 @@ public partial class GameManager
             actionLabel = "standard action";
         }
 
-        bool maneuverProvokesAoO = type == SpecialAttackType.Grapple || type == SpecialAttackType.Sunder || type == SpecialAttackType.CoupDeGrace;
-        if (maneuverProvokesAoO)
+        // Shared with the NPC executor (TryNPCSpecialAttackIfBeneficial, CMB-076).
+        if (ResolveManeuverInitiationAoOs(attacker, target, type) != ManeuverAoOOutcome.Proceed)
         {
-            bool attackerIgnoresAoO = false;
-            string maneuverLabel = type == SpecialAttackType.Grapple
-                ? "Grapple"
-                : (type == SpecialAttackType.Sunder ? "Sunder" : "Coup de Grace");
-
-            if (type == SpecialAttackType.Grapple)
-                attackerIgnoresAoO = attacker.Stats != null && attacker.Stats.HasFeat("Improved Grapple");
-            else if (type == SpecialAttackType.Sunder)
-                attackerIgnoresAoO = attacker.Stats != null && attacker.Stats.HasFeat("Improved Sunder");
-
-            if (!attackerIgnoresAoO)
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            _isSelectingSpecialAttack = false;
+            if (type == SpecialAttackType.Sunder)
             {
-                var provokingEnemies = new List<CharacterController>();
-
-                if (type == SpecialAttackType.Grapple || type == SpecialAttackType.Sunder)
-                {
-                    if (target != null && target.Stats != null && !target.Stats.IsDead)
-                        provokingEnemies.Add(target);
-                }
-                else
-                {
-                    provokingEnemies = ThreatSystem.GetThreateningEnemies(attacker.GridPosition, attacker, GetAllCharacters());
-                }
-
-                provokingEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
-
-                for (int i = 0; i < provokingEnemies.Count; i++)
-                {
-                    CharacterController enemy = provokingEnemies[i];
-                    CombatResult maneuverAoO = ThreatSystem.ExecuteAoO(enemy, attacker);
-                    if (maneuverAoO == null)
-                        continue;
-
-                    CombatUI.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{maneuverLabel} initiation AoO: {maneuverAoO.GetDetailedSummary()}"));
-                    UpdateAllStatsUI();
-
-                    if (type != SpecialAttackType.CoupDeGrace && maneuverAoO.Hit)
-                    {
-                        CombatUI.ShowCombatLog(CombatLogHelper.Info("", $"{maneuverLabel} attempt disrupted by attack of opportunity"));
-                        Grid.ClearAllHighlights();
-                        _highlightedCells.Clear();
-                        _isSelectingSpecialAttack = false;
-                        if (type == SpecialAttackType.Sunder)
-                        {
-                            _pendingSunderUseOffHandSelection = false;
-                            ClearSunderSequenceState();
-                        }
-                        StartCoroutine(AfterAttackDelay(attacker, 0.8f));
-                        return;
-                    }
-
-                    if (attacker.Stats.IsDead || attacker.IsUnconscious)
-                    {
-                        CombatUI.ShowCombatLog(CombatLogHelper.Death("💀", $"{attacker.Stats.CharacterName} is incapacitated while attempting to start {maneuverLabel.ToLowerInvariant()}."));
-                        Grid.ClearAllHighlights();
-                        _highlightedCells.Clear();
-                        _isSelectingSpecialAttack = false;
-                        if (type == SpecialAttackType.Sunder)
-                        {
-                            _pendingSunderUseOffHandSelection = false;
-                            ClearSunderSequenceState();
-                        }
-                        StartCoroutine(AfterAttackDelay(attacker, 0.8f));
-                        return;
-                    }
-                }
+                _pendingSunderUseOffHandSelection = false;
+                ClearSunderSequenceState();
             }
+            StartCoroutine(AfterAttackDelay(attacker, 0.8f));
+            return;
         }
 
         BreakFascinationOnHostileAction(attacker, target, "threatening movement");

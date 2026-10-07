@@ -3330,8 +3330,11 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Smoothly animate movement along a path of grid coordinates.
     /// The path must be ordered and should exclude the current starting square.
+    /// Pass <paramref name="lastStepIsDestination"/> false when the path is one segment of a
+    /// longer move (the movement AoO helper pauses mid-path), so the segment may end in an
+    /// ally's square that the full move only passes through.
     /// </summary>
-    public IEnumerator MoveAlongPath(List<Vector2Int> path, float secondsPerStep = DefaultMoveSecondsPerStep, bool markAsMoved = true)
+    public IEnumerator MoveAlongPath(List<Vector2Int> path, float secondsPerStep = DefaultMoveSecondsPerStep, bool markAsMoved = true, bool lastStepIsDestination = true)
     {
         if (path == null || path.Count == 0)
             yield break;
@@ -3365,7 +3368,7 @@ public class CharacterController : MonoBehaviour
             if (nextCell == null)
                 continue;
 
-            bool isDestinationStep = (i == path.Count - 1);
+            bool isDestinationStep = lastStepIsDestination && (i == path.Count - 1);
             bool allowEnemyOverlap = Stats != null && Stats.IsSwarm;
             if (grid != null && !grid.CanTraversePathNode(
                     nextCell.Coords,

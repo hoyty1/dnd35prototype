@@ -359,12 +359,12 @@ public static class ThreatSystem
 
     /// <summary>
     /// Analyze a movement path and determine which AoOs would be provoked.
-    /// D&D 3.5 rule: Moving OUT of a threatened square provokes an AoO from the
-    /// threatening character, but only if the character is also threatening the square
-    /// you move INTO (or you leave their threatened area entirely).
-    ///
-    /// Simplified: leaving a square threatened by an enemy provokes AoO from that enemy.
-    /// Each enemy can only provoke once per movement (they use their AoO on the first opportunity).
+    /// PHB p.137-138: moving out of a threatened square provokes an AoO from the threatening
+    /// enemy, and moving out of more than one square threatened by the same enemy counts
+    /// as only one opportunity for that enemy, so Combat Reflexes never grants a second
+    /// AoO for the same movement (PHB p.92). Each enemy is therefore listed at most once,
+    /// at the first square it threatens, and only if it has an AoO left this round.
+    /// The opportunity is tracked per path, not per round (CMB-084).
     /// </summary>
     /// <param name="mover">The character moving.</param>
     /// <param name="path">The movement path (list of squares, NOT including the starting square).</param>
@@ -429,12 +429,12 @@ public static class ThreatSystem
                 if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(enemy, mover))
                     continue;
 
-                // Check if this enemy can still make AoOs
+                // One opportunity per enemy per movement (PHB p.138), and only if the
+                // enemy still has an AoO left this round (Combat Reflexes raises that cap).
                 int usedThisMovement = enemyAoOUsedThisMovement[enemy];
                 int remainingGlobal = enemy.Stats.MaxAttacksOfOpportunity - enemy.Stats.AttacksOfOpportunityUsed;
-                int remainingThisMovement = remainingGlobal - usedThisMovement;
 
-                if (remainingThisMovement > 0)
+                if (usedThisMovement == 0 && remainingGlobal > 0)
                 {
                     Vector2Int provokedFrom = previousOccupiedSquares.Count > 0
                         ? previousOccupiedSquares[0]
@@ -583,6 +583,134 @@ public static class ThreatSystem
 
         Debug.Log($"[ThreatSystem] === END AoO ===");
         return result;
+    }
+
+    // ========================================================================
+    // SHARED AoO RULES FOR MOVEMENT AND MANEUVERS
+    // Used by the GameManager AoO helpers (ResolveMovementAoOsBeforeStep,
+    // ResolveManeuverInitiationAoOs) so PCs, NPCs and summons follow one rule.
+    // ========================================================================
+
+    /// <summary>The mover's state captured before an AoO resolves.</summary>
+    public struct MoverAoOSnapshot
+    {
+        public bool WasProne;
+        public bool WasMovementBlocked;
+    }
+
+    public static MoverAoOSnapshot CaptureMoverState(CharacterController mover)
+    {
+        var snapshot = new MoverAoOSnapshot();
+        if (mover == null || mover.Stats == null)
+            return snapshot;
+
+        snapshot.WasProne = mover.Stats.IsProne;
+        snapshot.WasMovementBlocked = mover.Stats.MovementBlockedByCondition;
+        return snapshot;
+    }
+
+    /// <summary>
+    /// True when the mover is dead, unconscious or at 0 HP or less. Matches the check
+    /// <c>CharacterController.MoveAlongPath</c> and the AI routines make after moving.
+    /// </summary>
+    public static bool IsMoverIncapacitated(CharacterController mover)
+    {
+        if (mover == null || mover.Stats == null)
+            return true;
+
+        return mover.IsDead || mover.IsUnconscious || mover.Stats.IsDead || mover.Stats.CurrentHP <= 0;
+    }
+
+    /// <summary>
+    /// PHB p.137: an attack of opportunity interrupts the provoking movement. Movement stops
+    /// if the AoO incapacitates the mover, knocks it prone (a free trip such as a wolf's bite)
+    /// or gives it a condition that prevents movement. Prone or blocking conditions the mover
+    /// already had before the AoO do not stop it, so only what the AoO changed counts.
+    /// </summary>
+    public static bool ShouldStopMovementAfterAoO(CharacterController mover, MoverAoOSnapshot before, out string reason)
+    {
+        reason = string.Empty;
+        if (IsMoverIncapacitated(mover))
+        {
+            reason = "incapacitated";
+            return true;
+        }
+
+        if (!before.WasProne && mover.Stats.IsProne)
+        {
+            reason = "knocked prone";
+            return true;
+        }
+
+        if (!before.WasMovementBlocked && mover.Stats.MovementBlockedByCondition)
+        {
+            reason = "unable to move";
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Table 8-2 and PHB p.155-158 as currently implemented: Grapple and Sunder provoke from
+    /// the target unless the attacker has Improved Grapple or Improved Sunder; Coup de Grace
+    /// provokes from every threatening enemy (PHB p.153). Trip, Disarm and Bull Rush do not
+    /// provoke yet (CMB-014).
+    /// </summary>
+    public static bool DoesManeuverProvokeAoO(SpecialAttackType type, CharacterController attacker)
+    {
+        CharacterStats stats = attacker != null ? attacker.Stats : null;
+        switch (type)
+        {
+            case SpecialAttackType.Grapple:
+                return stats == null || !stats.HasFeat("Improved Grapple");
+            case SpecialAttackType.Sunder:
+                return stats == null || !stats.HasFeat("Improved Sunder");
+            case SpecialAttackType.CoupDeGrace:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>The enemies that get an AoO when <paramref name="attacker"/> starts this maneuver.</summary>
+    public static List<CharacterController> GetManeuverAoOProvokers(
+        CharacterController attacker,
+        CharacterController target,
+        SpecialAttackType type,
+        List<CharacterController> allCharacters)
+    {
+        var provokers = new List<CharacterController>();
+        if (attacker == null || attacker.Stats == null || !DoesManeuverProvokeAoO(type, attacker))
+            return provokers;
+
+        if (type == SpecialAttackType.CoupDeGrace)
+            provokers = GetThreateningEnemies(attacker.GridPosition, attacker, allCharacters);
+        else if (target != null && target.Stats != null && !target.Stats.IsDead)
+            provokers.Add(target);
+
+        provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoO(enemy));
+        return provokers;
+    }
+
+    /// <summary>
+    /// A hit from the initiation AoO foils a Grapple or Sunder attempt; Coup de Grace goes
+    /// ahead unless the attacker is incapacitated. RAW differs (CMB-083).
+    /// </summary>
+    public static bool DoesManeuverAoODisruptAttempt(SpecialAttackType type, CombatResult aooResult)
+    {
+        return type != SpecialAttackType.CoupDeGrace && aooResult != null && aooResult.Hit;
+    }
+
+    public static string GetManeuverAoOLabel(SpecialAttackType type)
+    {
+        switch (type)
+        {
+            case SpecialAttackType.Grapple: return "Grapple";
+            case SpecialAttackType.Sunder: return "Sunder";
+            case SpecialAttackType.CoupDeGrace: return "Coup de Grace";
+            default: return type.ToString();
+        }
     }
 
     // ========================================================================
