@@ -309,7 +309,7 @@ public class ActionButtonPanel : MonoBehaviour
             return options;
 
         GameManager gm = GameManager.Instance;
-        bool shouldGroupByAttackTypeAtTurnStart = gm != null && gm.Combat_GetWeaponAttacksCommittedThisTurn() <= 0;
+        bool shouldGroupByAttackTypeAtTurnStart = gm != null && !gm.Combat_HasStartedAttackingThisTurn(pc);
         HashSet<string> seenAttackTypes = shouldGroupByAttackTypeAtTurnStart
             ? new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
             : null;
@@ -486,7 +486,9 @@ public class ActionButtonPanel : MonoBehaviour
             attackLabel = context.HasThrowableMeleeWeapon ? "Attack (Melee - Full Round)" : "Attack (Full Round)";
         else if (context.Gm != null)
             attackLabel = context.HasThrowableMeleeWeapon
-                ? (context.IterativeWeaponFullRoundStage ? "Attack (Melee - Full Round)" : "Attack (Melee)")
+                ? (context.IterativeWeaponFullRoundStage || pc.ProgressiveAttackPool.IsFullAttack || pc.ProgressiveAttackPool.NextAttackNeedsMoveAction
+                    ? "Attack (Melee - Full Round)"
+                    : "Attack (Melee)")
                 : context.Gm.GetIterativeAttackButtonLabel(pc, context.UsingUnarmedStrike, context.AttackSourceLabel);
         else
             attackLabel = context.UsingUnarmedStrike ? $"Attack (Standard, {context.AttackSourceLabel})" : "Attack (Standard)";

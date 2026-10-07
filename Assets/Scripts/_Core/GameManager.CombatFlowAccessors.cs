@@ -15,14 +15,10 @@ public partial class GameManager
     public int Combat_GetCurrentAttackBAB() => _currentAttackBAB;
     public void Combat_SetCurrentAttackBAB(int value) => _currentAttackBAB = value;
 
-    public int Combat_GetTotalAttackBudget() => _totalAttackBudget;
-    public void Combat_SetTotalAttackBudget(int value) => _totalAttackBudget = value;
-
-    public int Combat_GetTotalAttacksUsed() => _totalAttacksUsed;
-    public void Combat_SetTotalAttacksUsed(int value) => _totalAttacksUsed = value;
-
-    public bool Combat_GetAttackSequenceConsumesFullRound() => _attackSequenceConsumesFullRound;
-    public void Combat_SetAttackSequenceConsumesFullRound(bool value) => _attackSequenceConsumesFullRound = value;
+    // The attack-sequence counters belong to the attacking creature (CharacterController.ProgressiveAttackPool).
+    public int Combat_GetTotalAttackBudget() => _attackingCharacter != null ? _attackingCharacter.ProgressiveAttackPool.MainHandBudget : 0;
+    public int Combat_GetTotalAttacksUsed() => _attackingCharacter != null ? _attackingCharacter.ProgressiveAttackPool.MainHandStepsUsed : 0;
+    public bool Combat_GetAttackSequenceConsumesFullRound() => _attackingCharacter != null && _attackingCharacter.ProgressiveAttackPool.IsFullAttack;
 
     public bool Combat_IsDualWielding() => _isDualWielding;
     public int Combat_GetMainHandPenalty() => _mainHandPenalty;
@@ -45,11 +41,10 @@ public partial class GameManager
     public int Combat_GetPendingNaturalAttackSequenceIndex() => _pendingNaturalAttackSequenceIndex;
     public string Combat_GetPendingNaturalAttackLabel() => _pendingNaturalAttackLabel;
     public void Combat_ClearPendingNaturalAttackSelection() => ClearPendingNaturalAttackSelection();
-    public int Combat_GetWeaponAttacksCommittedThisTurn() => _weaponAttacksCommittedThisTurn;
-    public bool Combat_TryEnterProgressiveFullAttackStage(CharacterController attacker, string attemptedActionLabel)
-        => TryEnterProgressiveFullAttackStage(attacker, attemptedActionLabel);
-    public void Combat_RegisterWeaponAttackCommitted(CharacterController attacker)
-        => RegisterWeaponAttackCommitted(attacker);
+    public bool Combat_HasStartedAttackingThisTurn(CharacterController actor)
+        => actor != null && actor.ProgressiveAttackPool.HasStartedAttacking;
+    public int Combat_ResolveNextUnusedNaturalAttackIndex(CharacterController attacker, int preferredSequenceIndex)
+        => ResolveNextAvailableNaturalAttackSequenceIndex(attacker, preferredSequenceIndex, null);
     public void Combat_MarkNaturalAttackSequenceIndexUsed(int sequenceIndex)
     {
         if (sequenceIndex >= 0)

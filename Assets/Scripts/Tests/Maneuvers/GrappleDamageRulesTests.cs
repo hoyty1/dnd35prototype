@@ -61,6 +61,18 @@ public static class GrappleDamageRulesTests
         TestIterativeBullRushAttackBonusesConsumeInOrder();
         TestIterativeDisarmAttackBonusesConsumeInOrder();
         TestStandardOnlyAllowsSingleIterativeDisarmAttack();
+        TestAttackSequenceFirstStepSpendsOnlyStandardAction();
+        TestAttackSequenceSecondStepRefusedAfterMoveAction();
+        TestAttackSequenceFiveFootStepAllowsFullAttack();
+        TestAttackSequenceOffHandThenMainHandEntersFullAttack();
+        TestAttackSequenceIsPerCreature();
+        TestAttackSequencePayingTwiceSpendsOnlyStandardAction();
+        TestAttackSequenceClearedByStartNewTurn();
+        TestAttackSequenceSingleActionOnlyAllowsOneStep();
+        TestAttackSequenceSlowedCreatureGetsOneStep();
+        TestAttackSequenceSingleAttackThenAttackUsesNextStep();
+        TestAttackSequenceNaturalAttackThenTripRefusedWhenNaturalBudgetSpent();
+        TestAttackSequenceTripReplacesOneNaturalAttack();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
         TestBullRushImprovedFeatAddsPlus4();
         TestBullRushDefenderUsesStrengthAndDwarfStability();
@@ -690,7 +702,7 @@ public static class GrappleDamageRulesTests
     private static void TestIterativeGrappleAttackBonusesConsumeInOrder()
     {
         var attacker = CreateTestCharacter("IterativeGrappleBonuses", "Fighter");
-        attacker.Stats.BaseAttackBonus = 11;
+        attacker.Stats.BaseAttackBonusOverride = 11; // CHR-068: the plain setter is ignored for classed characters
         attacker.StartNewTurn();
 
         bool first = attacker.TryConsumeIterativeGrappleAttackAction(out int bab1, out int remaining1, out string reason1);
@@ -718,7 +730,7 @@ public static class GrappleDamageRulesTests
     private static void TestStandardOnlyAllowsSingleIterativeGrappleAttack()
     {
         var attacker = CreateTestCharacter("StandardSingleIterative", "Fighter");
-        attacker.Stats.BaseAttackBonus = 11;
+        attacker.Stats.BaseAttackBonusOverride = 11; // CHR-068: the plain setter is ignored for classed characters
         attacker.StartNewTurn();
 
         attacker.Actions.UseMoveAction(); // Spend move first: only standard action remains.
@@ -757,7 +769,7 @@ public static class GrappleDamageRulesTests
         var attacker = CreateTestCharacter("ImprovedGrabIterativeGrapple", "Fighter");
         var defender = CreateWeakDefender("ImprovedGrabIterativeGrappleTarget");
 
-        attacker.Stats.BaseAttackBonus = 11;
+        attacker.Stats.BaseAttackBonusOverride = 11; // CHR-068: the plain setter is ignored for classed characters
         attacker.Stats.HasImprovedGrab = true;
         attacker.StartNewTurn();
 
@@ -776,7 +788,7 @@ public static class GrappleDamageRulesTests
     private static void TestIterativeBullRushAttackBonusesConsumeInOrder()
     {
         var attacker = CreateTestCharacter("IterativeBullRushBonuses", "Fighter");
-        attacker.Stats.BaseAttackBonus = 11;
+        attacker.Stats.BaseAttackBonusOverride = 11; // CHR-068: the plain setter is ignored for classed characters
         attacker.StartNewTurn();
 
         bool first = attacker.TryConsumeIterativeBullRushAttackAction(out int bab1, out int remaining1, out string reason1);
@@ -795,7 +807,7 @@ public static class GrappleDamageRulesTests
     private static void TestIterativeDisarmAttackBonusesConsumeInOrder()
     {
         var attacker = CreateTestCharacter("IterativeDisarmBonuses", "Fighter");
-        attacker.Stats.BaseAttackBonus = 11;
+        attacker.Stats.BaseAttackBonusOverride = 11; // CHR-068: the plain setter is ignored for classed characters
         attacker.StartNewTurn();
 
         bool first = attacker.TryConsumeIterativeDisarmAttackAction(out int bab1, out int remaining1, out string reason1);
@@ -814,7 +826,7 @@ public static class GrappleDamageRulesTests
     private static void TestStandardOnlyAllowsSingleIterativeDisarmAttack()
     {
         var attacker = CreateTestCharacter("StandardSingleDisarmIterative", "Fighter");
-        attacker.Stats.BaseAttackBonus = 11;
+        attacker.Stats.BaseAttackBonusOverride = 11; // CHR-068: the plain setter is ignored for classed characters
         attacker.StartNewTurn();
 
         attacker.Actions.UseMoveAction(); // Spend move first: only standard action remains.
@@ -827,6 +839,240 @@ public static class GrappleDamageRulesTests
         Assert(!second && !string.IsNullOrEmpty(reason2), "Additional iterative disarm attacks are unavailable after standard-only use");
 
         Cleanup(attacker);
+    }
+
+    // ===== Per-creature attack sequence (PHB p.143; CMB-102) =====
+
+    private static CharacterController CreateIterativeAttacker(string name)
+    {
+        var attacker = CreateTestCharacter(name, "Fighter");
+        attacker.Stats.BaseAttackBonusOverride = 11;
+        attacker.StartNewTurn();
+        return attacker;
+    }
+
+    private static void TestAttackSequenceFirstStepSpendsOnlyStandardAction()
+    {
+        var attacker = CreateIterativeAttacker("SequenceStandardThenFull");
+
+        bool first = attacker.TryCommitAttack(AttackStepKind.MainHand, out int step0, out _);
+        bool standardSpentAfterFirst = !attacker.Actions.HasStandardAction;
+        bool moveLeftAfterFirst = attacker.Actions.HasMoveAction;
+        ProgressiveAttackMode modeAfterFirst = attacker.ProgressiveAttackPool.Mode;
+
+        bool second = attacker.TryCommitAttack(AttackStepKind.MainHand, out int step1, out _);
+        bool moveSpentAfterSecond = !attacker.Actions.HasMoveAction;
+        ProgressiveAttackMode modeAfterSecond = attacker.ProgressiveAttackPool.Mode;
+
+        bool moveUsedBefore = attacker.Actions.MoveActionUsed;
+        bool standardUsedBefore = attacker.Actions.StandardActionUsed;
+        bool fullRoundUsedBefore = attacker.Actions.FullRoundActionUsed;
+        bool third = attacker.TryCommitAttack(AttackStepKind.MainHand, out int step2, out _);
+        bool thirdSpentNothing = attacker.Actions.MoveActionUsed == moveUsedBefore
+            && attacker.Actions.StandardActionUsed == standardUsedBefore
+            && attacker.Actions.FullRoundActionUsed == fullRoundUsedBefore;
+
+        Assert(first && step0 == 0 && standardSpentAfterFirst && moveLeftAfterFirst && modeAfterFirst == ProgressiveAttackMode.StandardAttackCommitted,
+            "First attack step spends only the standard action and leaves the move action (PHB p.143)");
+        Assert(second && step1 == 1 && moveSpentAfterSecond && modeAfterSecond == ProgressiveAttackMode.FullAttackCommitted,
+            "Second attack step spends the move action and makes the turn a full attack");
+        Assert(third && step2 == 2 && thirdSpentNothing, "Third attack step of a full attack spends no further action");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestAttackSequenceSecondStepRefusedAfterMoveAction()
+    {
+        var attacker = CreateIterativeAttacker("SequenceMoveThenAttack");
+        attacker.Actions.UseMoveAction();
+
+        bool first = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+        bool second = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out string reason);
+
+        Assert(first, "After a move action the creature can still make one attack (standard action)");
+        Assert(!second && !string.IsNullOrEmpty(reason), "After a move action a second attack is refused with a reason (no full attack after moving)");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestAttackSequenceFiveFootStepAllowsFullAttack()
+    {
+        var attacker = CreateIterativeAttacker("SequenceFiveFootStep");
+        attacker.Actions.HasMoved5Ft = true;
+        attacker.HasTakenFiveFootStep = true;
+
+        bool first = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+        bool second = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out string reason);
+
+        Assert(first && second, "A 5-foot step does not use the move action, so a full attack is still allowed (PHB p.144)");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestAttackSequenceOffHandThenMainHandEntersFullAttack()
+    {
+        var attacker = CreateIterativeAttacker("SequenceOffHandFirst");
+
+        bool offHand = attacker.TryCommitAttack(AttackStepKind.OffHand, out int offHandStep, out _);
+        bool mainHand = attacker.TryCommitAttack(AttackStepKind.MainHand, out int mainHandStep, out _);
+
+        Assert(offHand && offHandStep == -1, "An off-hand attack is committed without moving the main-hand cursor");
+        Assert(mainHand && mainHandStep == 0 && !attacker.Actions.HasMoveAction && attacker.ProgressiveAttackPool.IsFullAttack,
+            "A main-hand attack after an off-hand attack spends the move action and starts at the first iterative step");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestAttackSequenceIsPerCreature()
+    {
+        var attackerA = CreateIterativeAttacker("SequenceOwnerA");
+        var attackerB = CreateIterativeAttacker("SequenceOwnerB");
+
+        bool committedA = attackerA.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+        bool committedB = attackerB.TryCommitAttack(AttackStepKind.MainHand, out int stepB, out string reasonB);
+
+        Assert(committedA, "Creature A commits its first attack step");
+        Assert(committedB && stepB == 0 && attackerA.ProgressiveAttackPool.MainHandStepsUsed == 1,
+            "Creature B can still commit its own first attack step while A has an attack sequence");
+
+        Cleanup(attackerA, attackerB);
+    }
+
+    private static void TestAttackSequencePayingTwiceSpendsOnlyStandardAction()
+    {
+        var attacker = CreateIterativeAttacker("SequencePayTwice");
+
+        bool paid1 = attacker.TryPayForNextAttack(out _);
+        bool paid2 = attacker.TryPayForNextAttack(out _);
+        bool moveStillAvailable = attacker.Actions.HasMoveAction;
+        int step = attacker.RegisterAttackMade(AttackStepKind.MainHand);
+
+        Assert(paid1 && paid2 && moveStillAvailable && !attacker.Actions.HasStandardAction,
+            "Paying twice for the same attack (cancelled targeting, retry) spends only the standard action");
+        Assert(step == 0 && attacker.ProgressiveAttackPool.Mode == ProgressiveAttackMode.StandardAttackCommitted && !attacker.ProgressiveAttackPool.PendingStepPaid,
+            "Registering the paid attack records step 0 and clears the pending payment");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestAttackSequenceClearedByStartNewTurn()
+    {
+        var attacker = CreateIterativeAttacker("SequenceTurnReset");
+
+        attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+        attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+        attacker.TryPayForNextAttack(out _);
+        attacker.StartNewTurn();
+
+        AttackPool pool = attacker.ProgressiveAttackPool;
+        Assert(pool.Mode == ProgressiveAttackMode.None && pool.AttacksCommitted == 0 && pool.MainHandStepsUsed == 0
+            && pool.MainHandBudget == 0 && !pool.PendingStepPaid,
+            "StartNewTurn clears the attack-sequence mode, counters and pending payment");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestAttackSequenceSingleActionOnlyAllowsOneStep()
+    {
+        var attacker = CreateIterativeAttacker("SequenceSingleActionOnly");
+        attacker.Actions.SingleActionOnly = true;
+
+        int remainingBefore = attacker.GetRemainingMainHandAttackSteps();
+        bool first = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+        bool second = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out string reason);
+
+        Assert(remainingBefore == 1, "A creature limited to a single action shows one attack step remaining");
+        Assert(first && !second && !string.IsNullOrEmpty(reason), "A creature limited to a single action gets one attack step only");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestAttackSequenceSlowedCreatureGetsOneStep()
+    {
+        var attacker = CreateIterativeAttacker("SequenceSlowed");
+        attacker.ApplySlowEffect(2, null);
+
+        int remainingBefore = attacker.GetRemainingMainHandAttackSteps();
+        bool first = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out _);
+        bool second = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out string reason);
+
+        Assert(remainingBefore == 1, "A slowed creature shows one attack step remaining (PHB p.280)");
+        // Only the refused second attack is asserted. RAW a slowed creature takes a move or a standard
+        // action, not both (PHB p.280); its move action is still available here (CMB-095).
+        Assert(first && !second && !string.IsNullOrEmpty(reason),
+            "A slowed creature cannot turn its attack into a full attack (PHB p.280: no full-round actions)");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestAttackSequenceSingleAttackThenAttackUsesNextStep()
+    {
+        // A single standard attack (e.g. Fighting Defensively (Std)) is step 0 of the ladder, so a later
+        // Attack continues at the second iterative step instead of starting over (PHB p.143).
+        var attacker = CreateIterativeAttacker("SequenceSingleThenAttack");
+
+        bool paid = attacker.TryPayForNextAttack(out _);
+        int singleStep = attacker.RegisterAttackMade(AttackStepKind.MainHand);
+        bool second = attacker.TryCommitAttack(AttackStepKind.MainHand, out int step1, out _);
+        bool third = attacker.TryCommitAttack(AttackStepKind.MainHand, out int step2, out _);
+        bool fourth = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out string reason);
+
+        Assert(paid && singleStep == 0 && second && step1 == 1 && attacker.GetMainHandAttackStepBAB(step1) == 6,
+            "After a single standard attack, the next Attack is the second iterative step (+6)");
+        Assert(third && step2 == 2 && !fourth && !string.IsNullOrEmpty(reason),
+            "A single attack plus a later Attack never exceeds the iterative attacks (+11/+6/+1)");
+
+        Cleanup(attacker);
+    }
+
+    private static CharacterController CreateNaturalAttacker(string name, params (string label, int count)[] naturalAttacks)
+    {
+        var attacker = CreateIterativeAttacker(name);
+        attacker.Stats.NaturalAttacks.Clear();
+        foreach (var natural in naturalAttacks)
+        {
+            attacker.Stats.NaturalAttacks.Add(new NaturalAttackDefinition
+            {
+                Name = natural.label,
+                DamageDice = 6,
+                DamageCount = 1,
+                Count = natural.count
+            });
+        }
+
+        return attacker;
+    }
+
+    private static void TestAttackSequenceNaturalAttackThenTripRefusedWhenNaturalBudgetSpent()
+    {
+        // One bite: a trip replaces a melee attack (PHB p.141 Table 8-2 note 7), it is not added to it.
+        var wolf = CreateNaturalAttacker("SequenceNaturalBite", ("Bite", 1));
+
+        bool paid = wolf.TryPayForNextAttack(out _);
+        int biteStep = wolf.RegisterAttackMade(AttackStepKind.NaturalSequence);
+        bool canTrip = wolf.CanCommitAttack(AttackStepKind.MainHand, out string reason);
+
+        Assert(paid && biteStep == 0 && !canTrip && !string.IsNullOrEmpty(reason) && wolf.GetRemainingMainHandAttackSteps() == 0,
+            "A creature with one natural attack cannot trip after using it");
+
+        Cleanup(wolf);
+    }
+
+    private static void TestAttackSequenceTripReplacesOneNaturalAttack()
+    {
+        var bear = CreateNaturalAttacker("SequenceNaturalClawClawBite", ("Claw", 2), ("Bite", 1));
+
+        bool trip = bear.TryCommitAttack(AttackStepKind.MainHand, out int tripStep, out _);
+        bool natural1 = bear.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+        bool natural2 = bear.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+        bool natural3 = bear.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out string reason);
+
+        Assert(trip && tripStep == 0 && bear.ProgressiveAttackPool.MainHandBudget == 3,
+            "A trip by a natural-weapon creature uses one step of its natural-attack budget");
+        Assert(natural1 && natural2 && !natural3 && !string.IsNullOrEmpty(reason),
+            "After a trip replaces one of three natural attacks, only two natural attacks remain");
+
+        Cleanup(bear);
     }
 
     private static void TestBullRushChargeAppliesPlus2ToAttackerCheck()

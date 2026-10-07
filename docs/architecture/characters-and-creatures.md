@@ -39,7 +39,7 @@ Lazy getters (CharacterController.cs:1207-1251): `StatusEffectManager`, `Spellca
 |---|---|
 | 1-229 | File-level types: SpecialAttackType, GrappleActionType, AttackDamageMode, disarm/sunder option structs, GrappleCheckResult, BullRushCheckResult, CharacterTeam |
 | 230-600 | Team/control flags, `Active*Effect` properties, feint and grapple-link state |
-| 600-1180 | Power Attack / Rapid Shot / fighting-defensively toggles, lethal/nonlethal damage mode, iterative maneuver budgets, base damage profiles |
+| 600-1180 | Power Attack / Rapid Shot / fighting-defensively toggles, lethal/nonlethal damage mode, the per-creature attack-sequence executor (`TryCommitAttack`, `TryPayForNextAttack`, `RegisterAttackMade`), base damage profiles |
 | 1180-1410 | Component refs, lazy getters, `Ensure*()`, Awake |
 | 1410-3000 | Per-spell effect apply/tick/clear (Haste, Slow, Blur, Displacement, Blink, Invisibility, Glitterdust, False Life, Enfeeblement, Touch of Idiocy, ...) |
 | 3045-3430 | `Init`, grid occupancy and movement (`RefreshGridOccupancy`, `MoveToCell`) |

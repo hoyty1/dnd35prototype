@@ -542,6 +542,19 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
+        // The step is normally paid by StartAttackSequence/ContinueAttackSequence; paying again is a
+        // no-op then, and pays the move action if a maneuver or off-hand attack used that payment.
+        if (!attacker.TryPayForNextAttack(out string sequencePayReason, out bool sequenceEnteredFullAttack))
+        {
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot continue attacking: {sequencePayReason}."));
+            _gameManager.Combat_EndAttackSequence();
+            _gameManager.Combat_ShowActionChoices();
+            return;
+        }
+
+        if (sequenceEnteredFullAttack)
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
+
         ItemData attackWeapon = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown
             ? (_gameManager.Combat_GetEquippedWeapon() ?? attacker.GetEquippedMainWeapon())
             : attacker.GetEquippedMainWeapon();
@@ -580,7 +593,16 @@ public class CombatFlowService : MonoBehaviour
 
         if (useNaturalFullAttackStep)
         {
-            int naturalAttackIndex = _gameManager.Combat_GetTotalAttacksUsed();
+            // Next natural attack not already used this turn (natural-attack buttons mark theirs).
+            int naturalAttackIndex = _gameManager.Combat_ResolveNextUnusedNaturalAttackIndex(attacker, _gameManager.Combat_GetTotalAttacksUsed());
+            if (naturalAttackIndex < 0)
+            {
+                Debug.LogWarning($"[Attack][Sequence] {attacker.Stats.CharacterName} has no unused natural attack left; ending sequence.");
+                _gameManager.Combat_EndAttackSequence();
+                _gameManager.Combat_ShowActionChoices();
+                return;
+            }
+
             FullAttackResult naturalStep = attacker.FullAttack(
                 target,
                 isFlanking,
@@ -599,6 +621,7 @@ public class CombatFlowService : MonoBehaviour
             }
 
             result = naturalStep.Attacks[0];
+            _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(naturalAttackIndex);
             _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
 
             string naturalLabel = (naturalStep.AttackLabels != null && naturalStep.AttackLabels.Count > 0)
@@ -671,8 +694,7 @@ public class CombatFlowService : MonoBehaviour
             }
         }
 
-        _gameManager.Combat_SetTotalAttacksUsed(_gameManager.Combat_GetTotalAttacksUsed() + 1);
-        _gameManager.Combat_RegisterWeaponAttackCommitted(attacker);
+        attacker.RegisterAttackMade(useNaturalFullAttackStep ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
 
         if (_gameManager.Combat_HasMoreAttacksAvailable())
         {
@@ -742,31 +764,26 @@ public class CombatFlowService : MonoBehaviour
         bool moveActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.MoveActionUsed;
         bool fullRoundActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.FullRoundActionUsed;
         bool standardConvertedToMoveBeforeAttack = attacker.Actions != null && attacker.Actions.StandardConvertedToMove;
-        bool wasFirstWeaponAttackBeforeThis = _gameManager.Combat_GetWeaponAttacksCommittedThisTurn() <= 0;
+        bool wasFirstWeaponAttackBeforeThis = !_gameManager.Combat_HasStartedAttackingThisTurn(attacker);
 
         bool skipStandardCommit = _gameManager.Combat_ConsumeSkipNextSingleAttackStandardActionCommitFlag();
-        bool isAdditionalProgressiveAttack = _gameManager.Combat_GetWeaponAttacksCommittedThisTurn() >= 1;
 
-        if (isAdditionalProgressiveAttack)
+        // First attack of the turn pays the standard action, a later one the move action (PHB p.143).
+        if (skipStandardCommit)
         {
-            if (!_gameManager.Combat_TryEnterProgressiveFullAttackStage(attacker, "a follow-up attack"))
-            {
-                _gameManager.Combat_ShowActionChoices();
-                return;
-            }
-        }
-        else if (!skipStandardCommit)
-        {
-            if (!attacker.CommitStandardAction())
-            {
-                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} has no standard action available."));
-                _gameManager.Combat_ShowActionChoices();
-                return;
-            }
+            Debug.Log("[Attack][Thrown] Skipping standard action consumption for follow-up thrown attack after ending iterative melee sequence.");
         }
         else
         {
-            Debug.Log("[Attack][Thrown] Skipping standard action consumption for follow-up thrown attack after ending iterative melee sequence.");
+            if (!attacker.TryPayForNextAttack(out string payReason, out bool enteredFullAttack))
+            {
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot attack: {payReason}."));
+                _gameManager.Combat_ShowActionChoices();
+                return;
+            }
+
+            if (enteredFullAttack)
+                _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
         }
 
         ItemData attackWeapon = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown
@@ -846,7 +863,11 @@ public class CombatFlowService : MonoBehaviour
         if (attackWeapon != null && attackWeapon.IsProjectileWeapon)
             ConsumeAmmoForAttack(attacker, attackWeapon);
 
-        _gameManager.Combat_RegisterWeaponAttackCommitted(attacker);
+        // Every attack uses one step of the creature's attack ladder: a natural-button attack one
+        // natural attack, anything else (e.g. Fighting Defensively (Std)) a main-hand step, so a later
+        // Attack or maneuver cannot add attacks past the creature's iteratives or natural attacks
+        // (PHB p.141 Table 8-2 note 7, p.143).
+        attacker.RegisterAttackMade(useSelectedNaturalAttack ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
 
         if (useSelectedNaturalAttack)
             _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(selectedNaturalAttackIndex);

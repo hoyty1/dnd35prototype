@@ -266,106 +266,19 @@ public partial class GameManager
         return GetCurrentOffHandSunderAttackBonus(attacker);
     }
 
-    private bool TryStartMainHandSpecialManeuverSequence(CharacterController attacker, string maneuverLabel, out string reason)
-    {
-        reason = string.Empty;
-
-        if (attacker == null || attacker.Actions == null)
-        {
-            reason = "No action economy available.";
-            return false;
-        }
-
-        if (_isInAttackSequence)
-        {
-            if (_attackingCharacter == attacker)
-                return true;
-
-            reason = "Another attack sequence is currently active.";
-            return false;
-        }
-
-        int fullAttackBudget = Mathf.Max(1, attacker.GetIterativeAttackCount());
-        _attackingCharacter = attacker;
-        _equippedWeapon = attacker.GetEquippedMainWeapon();
-        _totalAttacksUsed = 0;
-        _totalAttackBudget = 0;
-        _attackSequenceConsumesFullRound = false;
-        _isInAttackSequence = true;
-        _currentAttackType = AttackType.Melee;
-
-        if (attacker.Actions.HasFullRoundAction)
-        {
-            attacker.Actions.UseFullRoundAction();
-            _totalAttackBudget = fullAttackBudget;
-            _attackSequenceConsumesFullRound = true;
-        }
-        else if (attacker.CommitStandardAction())
-        {
-            _totalAttackBudget = Mathf.Min(1, fullAttackBudget);
-            _attackSequenceConsumesFullRound = false;
-        }
-        else
-        {
-            EndAttackSequence();
-            reason = "No standard or full-round action remaining.";
-            return false;
-        }
-
-        int firstBaseBab = attacker.GetIterativeAttackBAB(0);
-        _currentAttackBAB = _isDualWielding ? firstBaseBab + _mainHandPenalty : firstBaseBab;
-        Debug.Log($"[{maneuverLabel}][Flow] Started shared attack sequence: actor={attacker.Stats.CharacterName}, budget={_totalAttackBudget}, firstBAB={CharacterStats.FormatMod(_currentAttackBAB)}");
-        return true;
-    }
-
-    private void AdvanceMainHandSequenceAfterSpecialManeuverUse(CharacterController attacker, string maneuverLabel)
-    {
-        if (!_isInAttackSequence || _attackingCharacter != attacker)
-            return;
-
-        _totalAttacksUsed++;
-        Debug.Log($"[{maneuverLabel}][Flow] Main-hand maneuver consumed iterative attack {_totalAttacksUsed}/{_totalAttackBudget}.");
-
-        if (_totalAttacksUsed == 1 && !_attackSequenceConsumesFullRound && _totalAttackBudget > 1)
-        {
-            if (attacker.Actions != null && attacker.Actions.HasMoveAction)
-            {
-                attacker.Actions.UseMoveAction();
-                _attackSequenceConsumesFullRound = true;
-                Debug.Log($"[{maneuverLabel}][Flow] Converted shared sequence to full-round after first maneuver attack.");
-            }
-            else
-            {
-                _totalAttackBudget = _totalAttacksUsed;
-                Debug.LogWarning($"[{maneuverLabel}][Flow] Could not convert to full-round; trimming maneuver attack budget.");
-            }
-        }
-
-        if (HasMoreAttacksAvailable())
-        {
-            int nextBaseBab = attacker.GetIterativeAttackBAB(_totalAttacksUsed);
-            _currentAttackBAB = _isDualWielding ? nextBaseBab + _mainHandPenalty : nextBaseBab;
-            Debug.Log($"[{maneuverLabel}][Flow] Prepared next main-hand maneuver BAB {CharacterStats.FormatMod(_currentAttackBAB)}.");
-        }
-        else
-        {
-            Debug.Log($"[{maneuverLabel}][Flow] Main-hand maneuver iterative attacks exhausted; ending shared sequence.");
-            EndAttackSequence();
-        }
-    }
+    // Trip, disarm, sunder and grapple replace one melee attack of an attack or full attack, at that
+    // attack's BAB (PHB p.141 Table 8-2 note 7, p.143). They are steps of the creature's own attack
+    // sequence (CharacterController.TryCommitAttack), so the first one spends only the standard action
+    // and a second attack or maneuver turns the turn into a full attack (CMB-102).
+    // The PC iterative bull rush (TryConsumeBullRushAttackAction) also uses these steps for now; bull
+    // rush is a standard action in RAW (PHB p.154), pending an owner decision (CMB-102).
 
     private bool CanUseMainHandManeuverAttackOption(CharacterController attacker, string maneuverLabel)
     {
         if (attacker == null || attacker.Actions == null)
             return false;
 
-        if (_isInAttackSequence && _attackingCharacter != null && _attackingCharacter != attacker)
-        {
-            Debug.Log($"[{maneuverLabel}][Flow] Cannot use maneuver: another actor owns the current attack sequence.");
-            return false;
-        }
-
-        return GetRemainingMainHandManeuverAttackActions(attacker) > 0;
+        return attacker.GetRemainingMainHandAttackSteps() > 0;
     }
 
     private int GetRemainingMainHandManeuverAttackActions(CharacterController attacker)
@@ -373,16 +286,7 @@ public partial class GameManager
         if (attacker == null || attacker.Actions == null)
             return 0;
 
-        if (_isInAttackSequence && _attackingCharacter == attacker)
-            return Mathf.Max(0, _totalAttackBudget - _totalAttacksUsed);
-
-        if (attacker.Actions.HasFullRoundAction)
-            return Mathf.Max(1, attacker.GetIterativeAttackCount());
-
-        if (attacker.Actions.HasStandardAction)
-            return 1;
-
-        return 0;
+        return attacker.GetRemainingMainHandAttackSteps();
     }
 
     private int GetCurrentMainHandManeuverAttackBonusForUI(CharacterController attacker)
@@ -390,30 +294,23 @@ public partial class GameManager
         if (attacker == null || attacker.Stats == null)
             return 0;
 
-        if (_isInAttackSequence && _attackingCharacter == attacker && HasMoreAttacksAvailable())
-            return _currentAttackBAB;
+        if (attacker.GetRemainingMainHandAttackSteps() <= 0)
+            return 0;
 
-        if (attacker.Actions == null)
-            return attacker.Stats.BaseAttackBonus;
-
-        if (attacker.Actions.HasFullRoundAction)
-        {
-            int firstBaseBab = attacker.GetIterativeAttackBAB(0);
-            if (_isDualWielding)
-                firstBaseBab += _mainHandPenalty;
-            return firstBaseBab;
-        }
-
-        if (attacker.Actions.HasStandardAction)
-            return attacker.Stats.BaseAttackBonus;
-
-        return 0;
+        int bab = attacker.GetMainHandAttackStepBAB(attacker.ProgressiveAttackPool.MainHandStepsUsed);
+        if (_isDualWielding && attacker == ActivePC)
+            bab += _mainHandPenalty;
+        return bab;
     }
 
-    private bool TryConsumeMainHandManeuverAttackAction(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out int attacksRemaining, out string reason)
+    /// <summary>
+    /// Commit one main-hand attack step for a maneuver that replaces an attack. Returns the BAB of
+    /// that step (with the PC dual-wield main-hand penalty) and ends the PC Attack-button flow when
+    /// no main-hand step remains.
+    /// </summary>
+    private bool TryCommitMainHandManeuverStep(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out string reason)
     {
         attackBonusUsed = 0;
-        attacksRemaining = 0;
         reason = string.Empty;
 
         if (attacker == null || attacker.Actions == null)
@@ -422,23 +319,30 @@ public partial class GameManager
             return false;
         }
 
-        bool hasActiveOwnedSequence = _isInAttackSequence
-            && _attackingCharacter == attacker
-            && HasMoreAttacksAvailable();
-
-        bool canStartSequence = !_isInAttackSequence
-            && TryStartMainHandSpecialManeuverSequence(attacker, maneuverLabel, out reason)
-            && HasMoreAttacksAvailable();
-
-        if (!hasActiveOwnedSequence && !canStartSequence)
+        if (!attacker.TryCommitAttack(AttackStepKind.MainHand, out int step, out reason))
         {
             if (string.IsNullOrWhiteSpace(reason))
                 reason = $"No {maneuverLabel.ToLowerInvariant()} attacks remaining this turn.";
             return false;
         }
 
-        attackBonusUsed = _currentAttackBAB;
-        AdvanceMainHandSequenceAfterSpecialManeuverUse(attacker, maneuverLabel);
+        attackBonusUsed = attacker.GetMainHandAttackStepBAB(step);
+        if (_isDualWielding && attacker == ActivePC)
+            attackBonusUsed += _mainHandPenalty;
+
+        if (_isInAttackSequence && _attackingCharacter == attacker && !HasMoreAttacksAvailable())
+            EndAttackSequence();
+
+        return true;
+    }
+
+    private bool TryConsumeMainHandManeuverAttackAction(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out int attacksRemaining, out string reason)
+    {
+        attacksRemaining = 0;
+
+        if (!TryCommitMainHandManeuverStep(attacker, maneuverLabel, out attackBonusUsed, out reason))
+            return false;
+
         attacksRemaining = GetRemainingMainHandManeuverAttackActions(attacker);
         Debug.Log($"[{maneuverLabel}][Flow] Consumed main-hand maneuver attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}; remaining={attacksRemaining}");
         return true;
@@ -586,25 +490,11 @@ public partial class GameManager
 
         if (!useOffHand)
         {
-            bool hasActiveMainHandSequence = _isInAttackSequence
-                && _attackingCharacter == attacker
-                && HasMoreAttacksAvailable();
-
-            bool canStartMainHandSequence = !_isInAttackSequence
-                && TryStartMainHandSpecialManeuverSequence(attacker, "Disarm", out reason)
-                && HasMoreAttacksAvailable();
-
-            if (!hasActiveMainHandSequence && !canStartMainHandSequence)
-            {
-                if (string.IsNullOrWhiteSpace(reason))
-                    reason = "No main-hand disarm attacks remaining this turn.";
+            if (!TryCommitMainHandManeuverStep(attacker, "Disarm", out attackBonusUsed, out reason))
                 return false;
-            }
 
-            attackBonusUsed = _currentAttackBAB;
             usedOffHand = false;
             disarmWeapon = attacker.GetEquippedMainWeapon();
-            AdvanceMainHandSequenceAfterSpecialManeuverUse(attacker, "Disarm");
             attacksRemaining = GetRemainingDisarmAttempts(attacker);
             Debug.Log($"[Disarm][Flow] Consumed main-hand disarm attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}.");
             return true;
@@ -626,6 +516,10 @@ public partial class GameManager
         int offHandBab = attacker.Stats != null ? attacker.Stats.BaseAttackBonus : 0;
         if (_isDualWielding)
             offHandBab += _offHandPenalty;
+
+        // The off-hand maneuver is one attack of the creature's sequence (PHB p.143).
+        if (!attacker.TryCommitAttack(AttackStepKind.OffHand, out _, out reason))
+            return false;
 
         attackBonusUsed = offHandBab;
         usedOffHand = true;
@@ -653,25 +547,11 @@ public partial class GameManager
 
         if (!useOffHand)
         {
-            bool hasActiveMainHandSequence = _isInAttackSequence
-                && _attackingCharacter == attacker
-                && HasMoreAttacksAvailable();
-
-            bool canStartMainHandSequence = !_isInAttackSequence
-                && TryStartMainHandSpecialManeuverSequence(attacker, "Sunder", out reason)
-                && HasMoreAttacksAvailable();
-
-            if (!hasActiveMainHandSequence && !canStartMainHandSequence)
-            {
-                if (string.IsNullOrWhiteSpace(reason))
-                    reason = "No main-hand sunder attacks remaining this turn.";
+            if (!TryCommitMainHandManeuverStep(attacker, "Sunder", out attackBonusUsed, out reason))
                 return false;
-            }
 
-            attackBonusUsed = _currentAttackBAB;
             usedOffHand = false;
             sunderWeapon = attacker.GetEquippedMainWeapon();
-            AdvanceMainHandSequenceAfterSpecialManeuverUse(attacker, "Sunder");
             attacksRemaining = GetRemainingSunderAttempts(attacker);
             Debug.Log($"[Sunder][Flow] Consumed main-hand sunder attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}.");
             return true;
@@ -693,6 +573,10 @@ public partial class GameManager
         int offHandBab = attacker.Stats != null ? attacker.Stats.BaseAttackBonus : 0;
         if (_isDualWielding)
             offHandBab += _offHandPenalty;
+
+        // The off-hand maneuver is one attack of the creature's sequence (PHB p.143).
+        if (!attacker.TryCommitAttack(AttackStepKind.OffHand, out _, out reason))
+            return false;
 
         attackBonusUsed = offHandBab;
         usedOffHand = true;

@@ -546,25 +546,6 @@ public class CharacterController : MonoBehaviour
     // Used for total-concealment targeting behavior.
     private readonly Dictionary<CharacterController, Vector2Int> _lastKnownTargetPositions = new Dictionary<CharacterController, Vector2Int>();
 
-    // Iterative grapple attack tracking (D&D 3.5):
-    // Some grapple actions can be used multiple times as attacks during a full attack sequence.
-    private readonly List<int> _grappleAttackBonusesThisTurn = new List<int>();
-    private int _grappleAttacksUsedThisTurn;
-    private int _grappleAttackBudgetThisTurn;
-    private bool _grappleAttackSequenceStarted;
-
-    // Iterative bull rush attack tracking (bull rush as attack action).
-    private readonly List<int> _bullRushAttackBonusesThisTurn = new List<int>();
-    private int _bullRushAttacksUsedThisTurn;
-    private int _bullRushAttackBudgetThisTurn;
-    private bool _bullRushAttackSequenceStarted;
-
-    // Iterative disarm attack tracking (disarm as attack action during a full attack sequence).
-    private readonly List<int> _disarmAttackBonusesThisTurn = new List<int>();
-    private int _disarmAttacksUsedThisTurn;
-    private int _disarmAttackBudgetThisTurn;
-    private bool _disarmAttackSequenceStarted;
-
     // Pin state tracking (D&D 3.5e):
     // - A character can be pinning one opponent.
     // - A character can be pinned by one opponent.
@@ -685,311 +666,233 @@ public class CharacterController : MonoBehaviour
         return EnsureCombatStats().GetOffHandAttackBAB(attackIndex);
     }
 
-    public bool CanUseIterativeGrappleAttackAction()
-    {
-        if (_grappleAttackSequenceStarted)
-            return _grappleAttacksUsedThisTurn < _grappleAttackBudgetThisTurn;
+    // ========== ATTACK-SEQUENCE EXECUTOR (PHB p.143, Table 8-2 note 7) ==========
+    // One per-creature attack sequence shared by the PC weapon flow, PC maneuvers, grapple
+    // sub-actions and the AI. State lives in ProgressiveAttackPool; see AttackPool for the rules.
 
-        return Actions != null && (Actions.HasFullRoundAction || Actions.HasStandardAction);
+    /// <summary>
+    /// Attack steps this turn. A creature fighting with its innate natural attacks (no main weapon)
+    /// has one step per natural attack, whichever kind of step comes first, so natural attacks and
+    /// maneuvers that replace one share a single cap. Otherwise the Haste-aware iterative count.
+    /// </summary>
+    public int GetMainHandAttackBudget(AttackStepKind kind)
+    {
+        if (kind == AttackStepKind.NaturalSequence || ShouldUseInnateNaturalAttackProfile(GetEquippedMainWeapon()))
+            return Mathf.Max(1, Stats != null ? Stats.GetTotalNaturalAttackCount() : 1);
+
+        return Mathf.Max(1, GetIterativeAttackCount());
     }
 
-    public int GetRemainingGrappleAttackActions()
+    /// <summary>
+    /// Highest step count usable by this kind of step. A main-hand step (weapon swing or a maneuver
+    /// that replaces an attack) uses an iterative BAB, so it can never go past the iterative ladder,
+    /// even for a natural-weapon creature with more natural attacks than iteratives.
+    /// </summary>
+    private int GetAttackStepLimit(AttackStepKind kind)
     {
-        if (_grappleAttackSequenceStarted)
-            return Mathf.Max(0, _grappleAttackBudgetThisTurn - _grappleAttacksUsedThisTurn);
+        AttackPool pool = ProgressiveAttackPool;
+        int limit = pool.MainHandBudget > 0 ? pool.MainHandBudget : GetMainHandAttackBudget(kind);
+        if (kind == AttackStepKind.MainHand)
+            limit = Mathf.Min(limit, Mathf.Max(1, GetIterativeAttackCount()));
+        return limit;
+    }
+
+    /// <summary>
+    /// True while this turn can still become (or already is) a full attack. A 5-foot step does not
+    /// use the move action, so it does not block a full attack (PHB p.143-144).
+    /// </summary>
+    public bool CanStillReachFullAttack()
+    {
+        if (ProgressiveAttackPool.IsFullAttack)
+            return true;
+
+        return Actions != null
+            && Actions.HasMoveAction
+            && !Actions.SingleActionOnly
+            && !HasActiveSlowEffect;
+    }
+
+    /// <summary>Can the action for the next attack be paid (or is it already paid)?</summary>
+    public bool CanPayForNextAttack(out string reason)
+    {
+        reason = string.Empty;
+        AttackPool pool = ProgressiveAttackPool;
+
+        if (pool.PendingStepPaid)
+            return true;
 
         if (Actions == null)
-            return 0;
-
-        if (Actions.HasFullRoundAction)
-            return GetAttackBonuses().Count;
-
-        if (Actions.HasStandardAction)
-            return 1;
-
-        return 0;
-    }
-
-    public int GetCurrentGrappleAttackBonus()
-    {
-        if (_grappleAttackSequenceStarted)
         {
-            if (_grappleAttacksUsedThisTurn >= _grappleAttackBudgetThisTurn || _grappleAttacksUsedThisTurn >= _grappleAttackBonusesThisTurn.Count)
-                return 0;
-            return _grappleAttackBonusesThisTurn[_grappleAttacksUsedThisTurn];
+            reason = "No action economy available.";
+            return false;
         }
 
-        if (Actions != null && !Actions.HasFullRoundAction && Actions.HasStandardAction)
-            return Stats != null ? Stats.BaseAttackBonus : 0;
+        switch (pool.Mode)
+        {
+            case ProgressiveAttackMode.None:
+                if (Actions.HasStandardAction)
+                    return true;
+                reason = "no standard action";
+                return false;
 
-        List<int> bonuses = GetAttackBonuses();
-        return bonuses.Count > 0 ? bonuses[0] : 0;
+            case ProgressiveAttackMode.StandardAttackCommitted:
+                if (HasActiveSlowEffect)
+                {
+                    reason = "slowed creatures cannot take full-round actions, so a second attack is not allowed (PHB p.280)";
+                    return false;
+                }
+
+                if (!Actions.HasMoveAction || Actions.SingleActionOnly)
+                {
+                    reason = "a second attack makes this a full attack and needs the unspent move action (PHB p.143)";
+                    return false;
+                }
+
+                return true;
+
+            default:
+                return true;
+        }
     }
 
-    public bool HasActiveIterativeGrappleAttackSequence()
+    /// <summary>Can one more attack step of this kind be committed this turn?</summary>
+    public bool CanCommitAttack(AttackStepKind kind, out string reason)
     {
-        return _grappleAttackSequenceStarted;
+        if (!CanPayForNextAttack(out reason))
+        {
+            if (string.IsNullOrEmpty(reason))
+                reason = "No attacks remaining this turn.";
+            return false;
+        }
+
+        if (kind == AttackStepKind.MainHand || kind == AttackStepKind.NaturalSequence)
+        {
+            if (ProgressiveAttackPool.MainHandStepsUsed >= GetAttackStepLimit(kind))
+            {
+                reason = "No attacks remaining this turn.";
+                return false;
+            }
+        }
+
+        reason = string.Empty;
+        return true;
     }
 
-    public bool HasRemainingIterativeGrappleAttacksInSequence()
+    public bool TryPayForNextAttack(out string reason)
     {
-        return _grappleAttackSequenceStarted && _grappleAttacksUsedThisTurn < _grappleAttackBudgetThisTurn;
+        return TryPayForNextAttack(out reason, out _);
     }
+
+    /// <summary>
+    /// Spend the action for the next attack: the standard action for the first, the move action
+    /// for the second (the turn becomes a full attack), nothing afterwards. Paying twice before the
+    /// attack is registered spends nothing more.
+    /// </summary>
+    public bool TryPayForNextAttack(out string reason, out bool enteredFullAttack)
+    {
+        enteredFullAttack = false;
+        reason = string.Empty;
+        AttackPool pool = ProgressiveAttackPool;
+
+        if (pool.PendingStepPaid)
+            return true;
+
+        if (Actions == null)
+        {
+            reason = "No action economy available.";
+            return false;
+        }
+
+        switch (pool.Mode)
+        {
+            case ProgressiveAttackMode.None:
+                if (!CommitStandardAction())
+                {
+                    reason = "no standard action";
+                    return false;
+                }
+
+                pool.MarkPaid(ProgressiveAttackMode.StandardAttackCommitted);
+                return true;
+
+            case ProgressiveAttackMode.StandardAttackCommitted:
+                if (!CanPayForNextAttack(out reason))
+                    return false;
+
+                Actions.UseMoveAction();
+                pool.MarkPaid(ProgressiveAttackMode.FullAttackCommitted);
+                enteredFullAttack = true;
+                return true;
+
+            default:
+                pool.MarkPaid(ProgressiveAttackMode.FullAttackCommitted);
+                return true;
+        }
+    }
+
+    /// <summary>Record an attack that was paid for. Returns the main-hand step index, or -1 for an off-hand attack.</summary>
+    public int RegisterAttackMade(AttackStepKind kind)
+    {
+        if (kind == AttackStepKind.MainHand || kind == AttackStepKind.NaturalSequence)
+            ProgressiveAttackPool.EnsureMainHandBudget(GetMainHandAttackBudget(kind));
+
+        return ProgressiveAttackPool.RegisterAttack(kind);
+    }
+
+    /// <summary>Check, pay for and record one attack step. Maneuvers and the AI use this one call.</summary>
+    public bool TryCommitAttack(AttackStepKind kind, out int mainHandStepIndex, out string reason)
+    {
+        mainHandStepIndex = -1;
+
+        if (!CanCommitAttack(kind, out reason))
+            return false;
+
+        if (!TryPayForNextAttack(out reason))
+            return false;
+
+        mainHandStepIndex = RegisterAttackMade(kind);
+        return true;
+    }
+
+    /// <summary>Main-hand steps still available this turn, given the actions left.</summary>
+    public int GetRemainingMainHandAttackSteps(AttackStepKind kind = AttackStepKind.MainHand)
+    {
+        if (!CanPayForNextAttack(out _))
+            return 0;
+
+        AttackPool pool = ProgressiveAttackPool;
+        int left = Mathf.Max(0, GetAttackStepLimit(kind) - pool.MainHandStepsUsed);
+
+        if (!CanStillReachFullAttack())
+        {
+            bool nextIsPaidOrFirst = pool.Mode == ProgressiveAttackMode.None || pool.PendingStepPaid;
+            left = Mathf.Min(left, nextIsPaidOrFirst ? 1 : 0);
+        }
+
+        return left;
+    }
+
+    public int GetMainHandAttackStepBAB(int stepIndex) => GetIterativeAttackBAB(stepIndex);
 
     public bool TryConsumeIterativeGrappleAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
-    {
-        attackBonusUsed = 0;
-        attacksRemaining = 0;
-        reason = string.Empty;
-
-        if (Actions == null)
-        {
-            reason = "No action economy available.";
-            return false;
-        }
-
-        if (!_grappleAttackSequenceStarted)
-        {
-            _grappleAttackBonusesThisTurn.Clear();
-            _grappleAttackBonusesThisTurn.AddRange(GetAttackBonuses());
-
-            if (Actions.HasFullRoundAction)
-            {
-                Actions.UseFullRoundAction();
-                _grappleAttackBudgetThisTurn = _grappleAttackBonusesThisTurn.Count;
-            }
-            else if (CommitStandardAction())
-            {
-                _grappleAttackBudgetThisTurn = Mathf.Min(1, _grappleAttackBonusesThisTurn.Count);
-            }
-            else
-            {
-                reason = "No standard or full-round action remaining.";
-                return false;
-            }
-
-            _grappleAttackBudgetThisTurn = Mathf.Max(0, _grappleAttackBudgetThisTurn);
-            _grappleAttacksUsedThisTurn = 0;
-            _grappleAttackSequenceStarted = true;
-        }
-
-        if (_grappleAttacksUsedThisTurn >= _grappleAttackBudgetThisTurn)
-        {
-            reason = "No grapple attacks remaining this turn.";
-            return false;
-        }
-
-        if (_grappleAttacksUsedThisTurn >= _grappleAttackBonusesThisTurn.Count)
-        {
-            reason = "No iterative attack bonus available for this grapple attack.";
-            return false;
-        }
-
-        attackBonusUsed = _grappleAttackBonusesThisTurn[_grappleAttacksUsedThisTurn];
-        _grappleAttacksUsedThisTurn++;
-        attacksRemaining = Mathf.Max(0, _grappleAttackBudgetThisTurn - _grappleAttacksUsedThisTurn);
-        return true;
-    }
-
-    public bool CanUseIterativeBullRushAttackAction()
-    {
-        if (_bullRushAttackSequenceStarted)
-            return _bullRushAttacksUsedThisTurn < _bullRushAttackBudgetThisTurn;
-
-        return Actions != null && (Actions.HasFullRoundAction || Actions.HasStandardAction);
-    }
-
-    public int GetRemainingBullRushAttackActions()
-    {
-        if (_bullRushAttackSequenceStarted)
-            return Mathf.Max(0, _bullRushAttackBudgetThisTurn - _bullRushAttacksUsedThisTurn);
-
-        if (Actions == null)
-            return 0;
-
-        if (Actions.HasFullRoundAction)
-            return GetAttackBonuses().Count;
-
-        if (Actions.HasStandardAction)
-            return 1;
-
-        return 0;
-    }
-
-    public int GetCurrentBullRushAttackBonus()
-    {
-        if (_bullRushAttackSequenceStarted)
-        {
-            if (_bullRushAttacksUsedThisTurn >= _bullRushAttackBudgetThisTurn || _bullRushAttacksUsedThisTurn >= _bullRushAttackBonusesThisTurn.Count)
-                return 0;
-            return _bullRushAttackBonusesThisTurn[_bullRushAttacksUsedThisTurn];
-        }
-
-        if (Actions != null && !Actions.HasFullRoundAction && Actions.HasStandardAction)
-            return Stats != null ? Stats.BaseAttackBonus : 0;
-
-        List<int> bonuses = GetAttackBonuses();
-        return bonuses.Count > 0 ? bonuses[0] : 0;
-    }
-
-    public bool HasRemainingIterativeBullRushAttacksInSequence()
-    {
-        return _bullRushAttackSequenceStarted && _bullRushAttacksUsedThisTurn < _bullRushAttackBudgetThisTurn;
-    }
+        => TryConsumeIterativeMainHandStep(out attackBonusUsed, out attacksRemaining, out reason);
 
     public bool TryConsumeIterativeBullRushAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
-    {
-        attackBonusUsed = 0;
-        attacksRemaining = 0;
-        reason = string.Empty;
-
-        if (Actions == null)
-        {
-            reason = "No action economy available.";
-            return false;
-        }
-
-        if (!_bullRushAttackSequenceStarted)
-        {
-            _bullRushAttackBonusesThisTurn.Clear();
-            _bullRushAttackBonusesThisTurn.AddRange(GetAttackBonuses());
-
-            if (Actions.HasFullRoundAction)
-            {
-                Actions.UseFullRoundAction();
-                _bullRushAttackBudgetThisTurn = _bullRushAttackBonusesThisTurn.Count;
-            }
-            else if (CommitStandardAction())
-            {
-                _bullRushAttackBudgetThisTurn = Mathf.Min(1, _bullRushAttackBonusesThisTurn.Count);
-            }
-            else
-            {
-                reason = "No standard or full-round action remaining.";
-                return false;
-            }
-
-            _bullRushAttackBudgetThisTurn = Mathf.Max(0, _bullRushAttackBudgetThisTurn);
-            _bullRushAttacksUsedThisTurn = 0;
-            _bullRushAttackSequenceStarted = true;
-        }
-
-        if (_bullRushAttacksUsedThisTurn >= _bullRushAttackBudgetThisTurn)
-        {
-            reason = "No bull rush attacks remaining this turn.";
-            return false;
-        }
-
-        if (_bullRushAttacksUsedThisTurn >= _bullRushAttackBonusesThisTurn.Count)
-        {
-            reason = "No iterative attack bonus available for this bull rush attack.";
-            return false;
-        }
-
-        attackBonusUsed = _bullRushAttackBonusesThisTurn[_bullRushAttacksUsedThisTurn];
-        _bullRushAttacksUsedThisTurn++;
-        attacksRemaining = Mathf.Max(0, _bullRushAttackBudgetThisTurn - _bullRushAttacksUsedThisTurn);
-        return true;
-    }
-
-    public bool CanUseIterativeDisarmAttackAction()
-    {
-        if (_disarmAttackSequenceStarted)
-            return _disarmAttacksUsedThisTurn < _disarmAttackBudgetThisTurn;
-
-        return Actions != null && (Actions.HasFullRoundAction || Actions.HasStandardAction);
-    }
-
-    public int GetRemainingDisarmAttackActions()
-    {
-        if (_disarmAttackSequenceStarted)
-            return Mathf.Max(0, _disarmAttackBudgetThisTurn - _disarmAttacksUsedThisTurn);
-
-        if (Actions == null)
-            return 0;
-
-        if (Actions.HasFullRoundAction)
-            return GetAttackBonuses().Count;
-
-        if (Actions.HasStandardAction)
-            return 1;
-
-        return 0;
-    }
-
-    public int GetCurrentDisarmAttackBonus()
-    {
-        if (_disarmAttackSequenceStarted)
-        {
-            if (_disarmAttacksUsedThisTurn >= _disarmAttackBudgetThisTurn || _disarmAttacksUsedThisTurn >= _disarmAttackBonusesThisTurn.Count)
-                return 0;
-            return _disarmAttackBonusesThisTurn[_disarmAttacksUsedThisTurn];
-        }
-
-        if (Actions != null && !Actions.HasFullRoundAction && Actions.HasStandardAction)
-            return Stats != null ? Stats.BaseAttackBonus : 0;
-
-        List<int> bonuses = GetAttackBonuses();
-        return bonuses.Count > 0 ? bonuses[0] : 0;
-    }
-
-    public bool HasRemainingIterativeDisarmAttacksInSequence()
-    {
-        return _disarmAttackSequenceStarted && _disarmAttacksUsedThisTurn < _disarmAttackBudgetThisTurn;
-    }
+        => TryConsumeIterativeMainHandStep(out attackBonusUsed, out attacksRemaining, out reason);
 
     public bool TryConsumeIterativeDisarmAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
+        => TryConsumeIterativeMainHandStep(out attackBonusUsed, out attacksRemaining, out reason);
+
+    private bool TryConsumeIterativeMainHandStep(out int attackBonusUsed, out int attacksRemaining, out string reason)
     {
         attackBonusUsed = 0;
         attacksRemaining = 0;
-        reason = string.Empty;
 
-        if (Actions == null)
-        {
-            reason = "No action economy available.";
+        if (!TryCommitAttack(AttackStepKind.MainHand, out int step, out reason))
             return false;
-        }
 
-        if (!_disarmAttackSequenceStarted)
-        {
-            _disarmAttackBonusesThisTurn.Clear();
-            _disarmAttackBonusesThisTurn.AddRange(GetAttackBonuses());
-
-            if (Actions.HasFullRoundAction)
-            {
-                Actions.UseFullRoundAction();
-                _disarmAttackBudgetThisTurn = _disarmAttackBonusesThisTurn.Count;
-            }
-            else if (CommitStandardAction())
-            {
-                _disarmAttackBudgetThisTurn = Mathf.Min(1, _disarmAttackBonusesThisTurn.Count);
-            }
-            else
-            {
-                reason = "No standard or full-round action remaining.";
-                return false;
-            }
-
-            _disarmAttackBudgetThisTurn = Mathf.Max(0, _disarmAttackBudgetThisTurn);
-            _disarmAttacksUsedThisTurn = 0;
-            _disarmAttackSequenceStarted = true;
-        }
-
-        if (_disarmAttacksUsedThisTurn >= _disarmAttackBudgetThisTurn)
-        {
-            reason = "No disarm attacks remaining this turn.";
-            return false;
-        }
-
-        if (_disarmAttacksUsedThisTurn >= _disarmAttackBonusesThisTurn.Count)
-        {
-            reason = "No iterative attack bonus available for this disarm attack.";
-            return false;
-        }
-
-        attackBonusUsed = _disarmAttackBonusesThisTurn[_disarmAttacksUsedThisTurn];
-        _disarmAttacksUsedThisTurn++;
-        attacksRemaining = Mathf.Max(0, _disarmAttackBudgetThisTurn - _disarmAttacksUsedThisTurn);
+        attackBonusUsed = GetMainHandAttackStepBAB(step);
+        attacksRemaining = GetRemainingMainHandAttackSteps();
         return true;
     }
 
@@ -10181,18 +10084,6 @@ public class CharacterController : MonoBehaviour
         Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered)
             || (Stats != null && Stats.IsSingleActionsOnly);
         ProgressiveAttackPool.Clear();
-        _grappleAttackBonusesThisTurn.Clear();
-        _grappleAttacksUsedThisTurn = 0;
-        _grappleAttackBudgetThisTurn = 0;
-        _grappleAttackSequenceStarted = false;
-        _bullRushAttackBonusesThisTurn.Clear();
-        _bullRushAttacksUsedThisTurn = 0;
-        _bullRushAttackBudgetThisTurn = 0;
-        _bullRushAttackSequenceStarted = false;
-        _disarmAttackBonusesThisTurn.Clear();
-        _disarmAttacksUsedThisTurn = 0;
-        _disarmAttackBudgetThisTurn = 0;
-        _disarmAttackSequenceStarted = false;
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them
 

@@ -354,16 +354,15 @@ public partial class GameManager : MonoBehaviour
 
     // Turn Undead targeted-confirmation state
 
-    // Unified iterative attack flow state (melee + thrown share one sequence)
+    // PC Attack-button UI state: true while the Attack button flow is active for _attackingCharacter.
+    // This is UI state, not rules state: the attack-sequence rules (steps used, budget, standard vs
+    // full attack) live on each creature's CharacterController.ProgressiveAttackPool (CMB-102).
     private bool _isInAttackSequence;
-    private int _totalAttackBudget;
-    private int _totalAttacksUsed;
     private CharacterController _attackingCharacter;
     private ItemData _equippedWeapon;
-    private bool _attackSequenceConsumesFullRound;
     private int _currentAttackBAB;
 
-    // Flexible off-hand attack flow state
+    // Flexible off-hand attack flow state (PC UI only; NPCs make no off-hand attacks, AI-055).
     // Dedicated off-hand flags, intentionally independent from main-hand sequence tracking.
     private bool _offHandAttackAvailableThisTurn;
     private bool _offHandAttackUsedThisTurn;
@@ -372,7 +371,7 @@ public partial class GameManager : MonoBehaviour
     private int _currentOffHandBAB;
     private ItemData _currentOffHandWeapon;
 
-    // Turn-scoped dual-wield choice state (first main-hand attack prompt)
+    // Turn-scoped dual-wield choice state (first main-hand attack prompt; PC UI only, AI-055)
     private bool _dualWieldingChoiceMade;
     private bool _isDualWielding;
     private int _mainHandPenalty;
@@ -381,8 +380,7 @@ public partial class GameManager : MonoBehaviour
 
     private bool _skipNextSingleAttackStandardActionCommit;
 
-    // Progressive house-rule attack tracking.
-    private int _weaponAttacksCommittedThisTurn;
+    // PC UI state: which natural-attack buttons were used this turn.
     private readonly HashSet<int> _usedNaturalAttackSequenceIndices = new HashSet<int>();
 
     // Iterative disarm flow state
@@ -4019,7 +4017,6 @@ public partial class GameManager : MonoBehaviour
         _pendingAttackType = AttackType.Melee;
         _pendingDisarmUseOffHandSelection = false;
         _pendingSunderUseOffHandSelection = false;
-        _weaponAttacksCommittedThisTurn = 0;
         _usedNaturalAttackSequenceIndices.Clear();
 
         Debug.Log($"[Turn][OffHand] Flags reset for {pc.Stats.CharacterName}: available={_offHandAttackAvailableThisTurn}, used={_offHandAttackUsedThisTurn}");
@@ -4262,8 +4259,13 @@ public partial class GameManager : MonoBehaviour
             {
                 if (HasMoreAttacksAvailable())
                 {
-                    int attacksRemaining = _totalAttackBudget - _totalAttacksUsed;
-                    CombatUI.SetTurnIndicator($"{pcName}'s Turn - Iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(_currentAttackBAB)}). Use Attack (Melee - Full Round) or Attack (Thrown - Full Round), or End Turn.");
+                    int attacksRemaining = pc.GetRemainingMainHandAttackSteps(
+                        UsesInnateNaturalAttackSequence(pc, _currentAttackType, pc.GetEquippedMainWeapon()) ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
+                    // From the creature's own sequence, so a maneuver step taken mid-sequence is counted.
+                    int nextStepBab = GetAttackSequenceBaseAttackBonus(pc, _currentAttackType, pc.ProgressiveAttackPool.MainHandStepsUsed);
+                    if (_isDualWielding && (_currentAttackType == AttackType.Melee || _currentAttackType == AttackType.Thrown))
+                        nextStepBab += _mainHandPenalty;
+                    CombatUI.SetTurnIndicator($"{pcName}'s Turn - Iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextStepBab)}). Use Attack (Melee - Full Round) or Attack (Thrown - Full Round), or End Turn.");
                 }
                 else
                 {
@@ -7529,7 +7531,7 @@ public partial class GameManager : MonoBehaviour
 
         Debug.Log("[Attack][Melee] Melee attack button pressed");
         Debug.Log($"[Attack][Sequence] isInSequence: {_isInAttackSequence}");
-        Debug.Log($"[Attack][Sequence] attacksUsed: {_totalAttacksUsed}");
+        Debug.Log($"[Attack][Sequence] attacksUsed: {pc.ProgressiveAttackPool.MainHandStepsUsed}");
         Debug.Log($"[Attack][DualWield] choiceMade: {_dualWieldingChoiceMade}");
         Debug.Log($"[Attack][DualWield] isDualWielding: {_isDualWielding}");
 
@@ -7556,7 +7558,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        bool isFirstMainHandAttack = !_isInAttackSequence && _totalAttacksUsed == 0;
+        bool isFirstMainHandAttack = !_isInAttackSequence && pc.ProgressiveAttackPool.MainHandStepsUsed == 0;
         if (isFirstMainHandAttack && !_dualWieldingChoiceMade && NeedsDualWieldingPrompt(pc))
         {
             Debug.Log("[Attack][DualWield] Showing dual wielding prompt before first main-hand attack.");
@@ -7621,23 +7623,13 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (_weaponAttacksCommittedThisTurn <= 0)
+        // A natural attack uses one step of the creature's natural-attack ladder, which maneuvers
+        // that replace an attack share (PHB p.141 Table 8-2 note 7, p.143).
+        if (!pc.CanCommitAttack(AttackStepKind.NaturalSequence, out string naturalPayReason))
         {
-            if (pc.Actions == null || !pc.Actions.HasStandardAction)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no standard action available for a natural attack."));
-                CombatUI?.UpdateActionButtons(pc);
-                return;
-            }
-        }
-        else if (!_attackSequenceConsumesFullRound)
-        {
-            if (pc.Actions == null || !pc.Actions.HasMoveAction)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot continue natural attacks after moving."));
-                CombatUI?.UpdateActionButtons(pc);
-                return;
-            }
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} cannot make a natural attack: {naturalPayReason}."));
+            CombatUI?.UpdateActionButtons(pc);
+            return;
         }
 
         if (!HasRemainingNaturalAttacks(pc))
@@ -7676,7 +7668,7 @@ public partial class GameManager : MonoBehaviour
 
         Debug.Log("[Attack][Thrown] Thrown attack button pressed");
         Debug.Log($"[Attack][Sequence] isInSequence: {_isInAttackSequence}");
-        Debug.Log($"[Attack][Sequence] attacksUsed: {_totalAttacksUsed}");
+        Debug.Log($"[Attack][Sequence] attacksUsed: {pc.ProgressiveAttackPool.MainHandStepsUsed}");
         Debug.Log($"[Attack][DualWield] choiceMade: {_dualWieldingChoiceMade}");
         Debug.Log($"[Attack][DualWield] isDualWielding: {_isDualWielding}");
 
@@ -7696,7 +7688,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        bool isFirstMainHandAttack = !_isInAttackSequence && _totalAttacksUsed == 0;
+        bool isFirstMainHandAttack = !_isInAttackSequence && pc.ProgressiveAttackPool.MainHandStepsUsed == 0;
         if (isFirstMainHandAttack && !_dualWieldingChoiceMade && NeedsDualWieldingPrompt(pc))
         {
             Debug.Log("[Attack][DualWield] Showing dual wielding prompt for thrown attack");
@@ -7859,7 +7851,7 @@ public partial class GameManager : MonoBehaviour
             return;
 
         Debug.Log("[Attack][OffHand] Off-hand attack button pressed");
-        Debug.Log($"[Attack][OffHand] used={_offHandAttackUsedThisTurn} inSequence={_isInAttackSequence} attacksUsed={_totalAttacksUsed}");
+        Debug.Log($"[Attack][OffHand] used={_offHandAttackUsedThisTurn} inSequence={_isInAttackSequence} attacksUsed={pc.ProgressiveAttackPool.MainHandStepsUsed}");
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "off-hand attacks"))
             return;
@@ -7931,7 +7923,7 @@ public partial class GameManager : MonoBehaviour
             return;
 
         Debug.Log("[Attack][OffHand][Thrown] Off-hand thrown attack button pressed");
-        Debug.Log($"[Attack][OffHand][Thrown] offHandUsed={_offHandAttackUsedThisTurn} inSequence={_isInAttackSequence} mainHandAttacksUsed={_totalAttacksUsed}");
+        Debug.Log($"[Attack][OffHand][Thrown] offHandUsed={_offHandAttackUsedThisTurn} inSequence={_isInAttackSequence} mainHandAttacksUsed={pc.ProgressiveAttackPool.MainHandStepsUsed}");
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "off-hand thrown attacks"))
             return;
@@ -8113,21 +8105,24 @@ public partial class GameManager : MonoBehaviour
             || !HasMoreAttacksAvailable())
             return false;
 
-        if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
-            return actor.Actions != null && actor.Actions.HasMoveAction;
-
-        return true;
+        return actor.CanPayForNextAttack(out _);
     }
 
     public bool IsIterativeAttackInFullRoundStage(CharacterController actor)
     {
-        return IsIterativeAttackSequenceActiveFor(actor) && _attackSequenceConsumesFullRound;
+        return IsIterativeAttackSequenceActiveFor(actor) && actor.ProgressiveAttackPool.IsFullAttack;
     }
 
     public string GetIterativeAttackButtonLabel(CharacterController actor, bool usingUnarmedStrike, string attackSourceLabel)
     {
-        if (IsIterativeAttackInFullRoundStage(actor))
+        AttackPool pool = actor != null ? actor.ProgressiveAttackPool : null;
+        if (IsIterativeAttackInFullRoundStage(actor) || (pool != null && pool.IsFullAttack))
             return "Attack (Full Round)";
+
+        // An earlier attack or maneuver this turn spent the standard action: the next attack turns
+        // the turn into a full attack and spends the move action (PHB p.143).
+        if (pool != null && pool.NextAttackNeedsMoveAction)
+            return "Attack (Full Attack: uses move)";
 
         return usingUnarmedStrike ? $"Attack (Standard, {attackSourceLabel})" : "Attack (Standard)";
     }
@@ -8143,44 +8138,7 @@ public partial class GameManager : MonoBehaviour
 
     public bool IsIterativeThrownAttackInFullRoundStage(CharacterController actor)
     {
-        return IsIterativeThrownAttackSequenceActiveFor(actor) && _attackSequenceConsumesFullRound;
-    }
-
-    private bool TryEnterProgressiveFullAttackStage(CharacterController attacker, string attemptedActionLabel)
-    {
-        if (attacker == null || attacker.Actions == null)
-            return false;
-
-        // First committed weapon attack only spends Standard action.
-        if (_weaponAttacksCommittedThisTurn <= 0)
-            return true;
-
-        // Already in full-attack stage this turn.
-        if (_attackSequenceConsumesFullRound)
-            return true;
-
-        if (!attacker.Actions.HasMoveAction)
-        {
-            string actionLabel = string.IsNullOrWhiteSpace(attemptedActionLabel) ? "another attack" : attemptedActionLabel;
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot continue attacking: {actionLabel} would require consuming the remaining move action."));
-            return false;
-        }
-
-        attacker.Actions.UseMoveAction();
-        _attackSequenceConsumesFullRound = true;
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
-        return true;
-    }
-
-    private void RegisterWeaponAttackCommitted(CharacterController attacker)
-    {
-        if (attacker == null)
-            return;
-
-        _weaponAttacksCommittedThisTurn = Mathf.Max(0, _weaponAttacksCommittedThisTurn) + 1;
-
-        if (_weaponAttacksCommittedThisTurn >= 2)
-            _attackSequenceConsumesFullRound = true;
+        return IsIterativeThrownAttackSequenceActiveFor(actor) && actor.ProgressiveAttackPool.IsFullAttack;
     }
 
     private int GetTotalNaturalAttackCount(CharacterController attacker)
@@ -8259,26 +8217,16 @@ public partial class GameManager : MonoBehaviour
         if (!actor.CanAttack())
             return false;
 
-        if (_isInAttackSequence && _attackingCharacter == actor)
-        {
-            if (!HasMoreAttacksAvailable())
-                return false;
-
-            if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
-                return actor.Actions != null && actor.Actions.HasMoveAction;
-
-            return true;
-        }
-
-        if (actor.Actions == null)
+        if (_isInAttackSequence && _attackingCharacter == actor && !HasMoreAttacksAvailable())
             return false;
 
-        // Off-hand-first flow: if off-hand already consumed the standard action,
-        // allow starting the main-hand iterative sequence by consuming move as full-round conversion.
-        if (_offHandAttackUsedThisTurn && _offHandAttackAvailableThisTurn && actor == ActivePC && actor.Actions.HasMoveAction)
-            return true;
-
-        return actor.Actions.HasStandardAction;
+        // The per-creature attack sequence decides: the first attack needs the standard action, a later
+        // one the move action (full attack), and the attack budget must not be spent (PHB p.143). A
+        // creature fighting with innate natural attacks steps through its natural attacks.
+        AttackStepKind stepKind = UsesInnateNaturalAttackSequence(actor, AttackType.Melee, actor.GetEquippedMainWeapon())
+            ? AttackStepKind.NaturalSequence
+            : AttackStepKind.MainHand;
+        return actor.CanCommitAttack(stepKind, out _);
     }
 
     public bool CanUsePrimaryAttackOption(CharacterController actor)
@@ -8298,24 +8246,10 @@ public partial class GameManager : MonoBehaviour
         if (weapon == null || !weapon.IsThrown || weapon.RangeIncrement <= 0)
             return false;
 
-        if (_isInAttackSequence)
-        {
-            if (_attackingCharacter != actor || !HasMoreAttacksAvailable())
-                return false;
-
-            if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
-                return actor.Actions != null && actor.Actions.HasMoveAction;
-
-            return true;
-        }
-
-        if (actor.Actions == null)
+        if (_isInAttackSequence && _attackingCharacter == actor && !HasMoreAttacksAvailable())
             return false;
 
-        if (_offHandAttackUsedThisTurn && _offHandAttackAvailableThisTurn && actor == ActivePC && actor.Actions.HasMoveAction)
-            return true;
-
-        return actor.Actions.HasStandardAction;
+        return actor.CanCommitAttack(AttackStepKind.MainHand, out _);
     }
 
     public bool CanUseThrownAttackOption(CharacterController actor)
@@ -8357,13 +8291,7 @@ public partial class GameManager : MonoBehaviour
         if (!HasRemainingNaturalAttacks(actor))
             return false;
 
-        if (_weaponAttacksCommittedThisTurn <= 0)
-            return actor.Actions != null && actor.Actions.HasStandardAction;
-
-        if (_attackSequenceConsumesFullRound)
-            return true;
-
-        return actor.Actions != null && actor.Actions.HasMoveAction;
+        return actor.CanCommitAttack(AttackStepKind.NaturalSequence, out _);
     }
 
     private bool IsOffHandAttackAvailable()
@@ -8417,37 +8345,15 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        if (_isInAttackSequence)
+        if (_isInAttackSequence && _attackingCharacter != actor)
         {
-            if (_attackingCharacter != actor)
-            {
-                Debug.Log($"[OffHand][CanUse] Denied: attack sequence belongs to {( _attackingCharacter != null && _attackingCharacter.Stats != null ? _attackingCharacter.Stats.CharacterName : "<none>")}, not {actor.Stats?.CharacterName ?? "<null>"}.");
-                return false;
-            }
-
-            if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound && !actor.Actions.HasMoveAction)
-            {
-                Debug.Log($"[OffHand][CanUse] Denied: second attack would require move action but {actor.Stats?.CharacterName ?? "<null>"} has no move action.");
-                return false;
-            }
-
-            Debug.Log($"[OffHand][CanUse] Allowed in active sequence for {actor.Stats?.CharacterName ?? "<null>"}.");
-            return true;
+            Debug.Log($"[OffHand][CanUse] Denied: another creature's attack sequence is active, not {actor.Stats?.CharacterName ?? "<null>"}'s.");
+            return false;
         }
 
-        if (_weaponAttacksCommittedThisTurn <= 0)
-        {
-            bool canUseStandard = actor.Actions.HasStandardAction;
-            Debug.Log($"[OffHand][CanUse] Outside sequence, first attack requires standard. allowed={canUseStandard}");
-            return canUseStandard;
-        }
-
-        if (_attackSequenceConsumesFullRound)
-            return true;
-
-        bool canUseMoveForSecondAttack = actor.Actions.HasMoveAction;
-        Debug.Log($"[OffHand][CanUse] Outside sequence, additional attack requires move. allowed={canUseMoveForSecondAttack}");
-        return canUseMoveForSecondAttack;
+        bool canPay = actor.CanPayForNextAttack(out string payReason);
+        Debug.Log($"[OffHand][CanUse] Attack-sequence payment check for {actor.Stats?.CharacterName ?? "<null>"}: allowed={canPay} {payReason}");
+        return canPay;
     }
 
     public bool CanUseOffHandThrownAttackOption(CharacterController actor)
@@ -8548,47 +8454,30 @@ public partial class GameManager : MonoBehaviour
 
         _attackingCharacter = attacker;
         _equippedWeapon = attacker.GetEquippedMainWeapon();
-
-        bool usingInnateNaturalAttacks = UsesInnateNaturalAttackSequence(attacker, attackType, _equippedWeapon);
-        _totalAttackBudget = usingInnateNaturalAttacks
-            ? Mathf.Max(1, attacker.Stats.GetTotalNaturalAttackCount())
-            : Mathf.Max(1, attacker.GetIterativeAttackCount());
-        _totalAttacksUsed = 0;
-        _attackSequenceConsumesFullRound = false;
         _isInAttackSequence = true;
 
+        bool usingInnateNaturalAttacks = UsesInnateNaturalAttackSequence(attacker, attackType, _equippedWeapon);
+        AttackPool pool = attacker.ProgressiveAttackPool;
+        pool.EnsureMainHandBudget(attacker.GetMainHandAttackBudget(usingInnateNaturalAttacks ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand));
+
         Debug.Log($"[Attack][Sequence] {attacker.Stats.CharacterName} starting attack sequence");
-        Debug.Log($"[Attack][Sequence] Total attacks available: {_totalAttackBudget}");
+        Debug.Log($"[Attack][Sequence] Attacks: {pool.MainHandStepsUsed}/{pool.MainHandBudget} used, mode={pool.Mode}");
         Debug.Log($"[Attack][Sequence] First attack type: {attackType}");
         Debug.Log($"[Attack][Sequence] Off-hand already used this turn: {_offHandAttackUsedThisTurn}");
 
-        bool offHandOpenedTurn = _offHandAttackUsedThisTurn && !attacker.Actions.HasStandardAction;
-        if (offHandOpenedTurn)
+        // Pays the standard action for the first attack of the turn, or the move action when an
+        // earlier attack (main-hand, off-hand or maneuver) was made this turn (PHB p.143).
+        if (!attacker.TryPayForNextAttack(out string payReason, out bool enteredFullAttack))
         {
-            if (attacker.Actions.HasMoveAction)
-            {
-                attacker.Actions.UseMoveAction();
-                _attackSequenceConsumesFullRound = true;
-                Debug.Log("[Attack][Sequence] Off-hand used first; consuming move action and entering full-round stage for main-hand iteratives.");
-            }
-            else
-            {
-                Debug.LogWarning($"[Attack][Sequence] Off-hand used first but {attacker.Stats.CharacterName} has no move action left; aborting sequence.");
-                EndAttackSequence();
-                CombatUI?.UpdateActionButtons(attacker);
-                return;
-            }
+            Debug.LogWarning($"[Attack][Sequence] {attacker.Stats.CharacterName} cannot start an attack: {payReason}; aborting sequence.");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot attack: {payReason}."));
+            EndAttackSequence();
+            CombatUI?.UpdateActionButtons(attacker);
+            return;
         }
-        else
-        {
-            if (!attacker.CommitStandardAction())
-            {
-                Debug.LogWarning($"[Attack][Sequence] Failed to consume standard action for {attacker.Stats.CharacterName}; aborting sequence.");
-                EndAttackSequence();
-                CombatUI?.UpdateActionButtons(attacker);
-                return;
-            }
-        }
+
+        if (enteredFullAttack)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
 
         PerformAttackByType(attacker, attackType);
     }
@@ -8613,15 +8502,16 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[Attack][Sequence] {attacker.Stats.CharacterName} continuing attack sequence");
         Debug.Log($"[Attack][Sequence] Attack type: {attackType}");
 
-        if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
+        if (!attacker.TryPayForNextAttack(out string payReason, out bool enteredFullAttack))
         {
-            if (!TryEnterProgressiveFullAttackStage(attacker, "a second attack"))
-            {
-                EndAttackSequence();
-                ShowActionChoices();
-                return;
-            }
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot continue attacking: {payReason}."));
+            EndAttackSequence();
+            ShowActionChoices();
+            return;
         }
+
+        if (enteredFullAttack)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
 
         PerformAttackByType(attacker, attackType);
     }
@@ -8660,8 +8550,9 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        int attackNumber = _totalAttacksUsed + 1;
-        int baseBab = GetAttackSequenceBaseAttackBonus(attacker, attackType, _totalAttacksUsed);
+        AttackPool pool = attacker.ProgressiveAttackPool;
+        int attackNumber = pool.MainHandStepsUsed + 1;
+        int baseBab = GetAttackSequenceBaseAttackBonus(attacker, attackType, pool.MainHandStepsUsed);
         int attackBab = baseBab;
 
         // Apply dual-wield penalty to main-hand iterative attacks.
@@ -8674,7 +8565,7 @@ public partial class GameManager : MonoBehaviour
         _currentAttackBAB = attackBab;
         _currentAttackType = attackType;
 
-        Debug.Log($"[Attack][Sequence] Performing attack #{attackNumber}/{_totalAttackBudget}");
+        Debug.Log($"[Attack][Sequence] Performing attack #{attackNumber}/{pool.MainHandBudget}");
         Debug.Log($"[Attack][Sequence] Attack type: {attackType}, Base BAB: {baseBab}, Final BAB: {attackBab}");
 
         _pendingAttackMode = PendingAttackMode.Single;
@@ -8687,8 +8578,9 @@ public partial class GameManager : MonoBehaviour
         if (!_isInAttackSequence || _attackingCharacter == null)
             return false;
 
-        bool hasMore = _totalAttacksUsed < _totalAttackBudget;
-        Debug.Log($"[Attack][Sequence] Attacks used: {_totalAttacksUsed}/{_totalAttackBudget}, hasMore: {hasMore}");
+        AttackPool pool = _attackingCharacter.ProgressiveAttackPool;
+        bool hasMore = pool.MainHandStepsUsed < pool.MainHandBudget;
+        Debug.Log($"[Attack][Sequence] Attacks used: {pool.MainHandStepsUsed}/{pool.MainHandBudget}, hasMore: {hasMore}");
         return hasMore;
     }
 
@@ -8701,7 +8593,7 @@ public partial class GameManager : MonoBehaviour
     private void EndAttackSequence()
     {
         Debug.Log("[Attack][Sequence] Ending attack sequence");
-        Debug.Log($"[Attack][Sequence] Final state before teardown: attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}, offHandUsed={_offHandAttackUsedThisTurn}, offHandAvailable={_offHandAttackAvailableThisTurn}, phase={CurrentPhase}");
+        Debug.Log($"[Attack][Sequence] Final state before teardown: attacksUsed={(_attackingCharacter != null ? _attackingCharacter.ProgressiveAttackPool.MainHandStepsUsed : 0)}/{(_attackingCharacter != null ? _attackingCharacter.ProgressiveAttackPool.MainHandBudget : 0)}, offHandUsed={_offHandAttackUsedThisTurn}, offHandAvailable={_offHandAttackAvailableThisTurn}, phase={CurrentPhase}");
 
         // Nuclear safety net: if attack flow ended and every enemy is dead, force victory handling.
         if (CurrentPhase == TurnPhase.PCTurn || CurrentPhase == TurnPhase.NPCTurn)
@@ -8737,18 +8629,12 @@ public partial class GameManager : MonoBehaviour
             Debug.Log($"[Attack][ForceCheck] Skipped force check due to phase={CurrentPhase}");
         }
 
-        _totalAttacksUsed = 0;
-        _totalAttackBudget = 0;
+        // Only the UI flow ends here. The creature's attack sequence (ProgressiveAttackPool) lives
+        // until StartNewTurn, so a sequence restarted later this turn continues at the next lower
+        // BAB and must be paid as a full attack (PHB p.143).
         _isInAttackSequence = false;
         _attackingCharacter = null;
         _equippedWeapon = null;
-
-        // Keep progressive full-attack commitment across single-attack UI refreshes.
-        // This must persist after the second committed attack so remaining natural attacks
-        // can still be selected even though no move action remains.
-        if (_weaponAttacksCommittedThisTurn <= 0)
-            _attackSequenceConsumesFullRound = false;
-
         _currentAttackBAB = 0;
 
         // Keep per-turn off-hand usage flag, but clear transient targeting state.
@@ -8779,7 +8665,6 @@ public partial class GameManager : MonoBehaviour
         _pendingAttackType = AttackType.Melee;
         _pendingDisarmUseOffHandSelection = false;
         _pendingSunderUseOffHandSelection = false;
-        _weaponAttacksCommittedThisTurn = 0;
         _usedNaturalAttackSequenceIndices.Clear();
     }
 

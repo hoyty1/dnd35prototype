@@ -1427,43 +1427,23 @@ public partial class GameManager
 
         Debug.Log($"[OffHand] HandleOffHandTargetClick attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} mode={(useThrownRange ? "Thrown" : "Melee")} weapon={offHandWeapon.Name} BAB={_currentOffHandBAB}");
 
-        if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
+        // The off-hand attack is one attack of the creature's sequence: the first attack of the turn
+        // pays the standard action, a later one the move action (full attack, PHB p.143).
+        if (!attacker.TryPayForNextAttack(out string offHandPayReason, out bool offHandEnteredFullAttack))
         {
-            if (!TryEnterProgressiveFullAttackStage(attacker, useThrownRange ? "an off-hand thrown attack" : "an off-hand attack"))
-            {
-                _isSelectingOffHandTarget = false;
-                _isSelectingOffHandThrownTarget = false;
-                _currentOffHandBAB = 0;
-                _currentOffHandWeapon = null;
-                ShowActionChoices();
-                return;
-            }
+            string modeLabel = useThrownRange ? "an off-hand thrown attack" : "an off-hand attack";
+            Debug.Log($"[OffHand] Early return: cannot pay for {modeLabel}: {offHandPayReason}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot make {modeLabel}: {offHandPayReason}."));
+            _isSelectingOffHandTarget = false;
+            _isSelectingOffHandThrownTarget = false;
+            _currentOffHandBAB = 0;
+            _currentOffHandWeapon = null;
+            ShowActionChoices();
+            return;
         }
-        else if (!_isInAttackSequence)
-        {
-            bool shouldConsumeStandardAction = attacker.Actions.HasStandardAction && !attacker.Actions.FullRoundActionUsed;
-            if (shouldConsumeStandardAction)
-            {
-                if (!attacker.CommitStandardAction())
-                {
-                    Debug.Log("[OffHand] Early return: failed to consume standard action at confirm-time.");
-                    string modeLabel = useThrownRange ? "off-hand thrown attack" : "off-hand attack";
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} could not commit a standard action for an {modeLabel}."));
-                    _isSelectingOffHandTarget = false;
-                    _isSelectingOffHandThrownTarget = false;
-                    _currentOffHandBAB = 0;
-                    _currentOffHandWeapon = null;
-                    ShowActionChoices();
-                    return;
-                }
 
-                Debug.Log($"[Attack][OffHand] Consumed standard action on confirm for {(useThrownRange ? "thrown" : "melee")} off-hand attack.");
-            }
-            else
-            {
-                Debug.Log($"[Attack][OffHand] Skipping standard action consumption (hasStandard={attacker.Actions.HasStandardAction}, fullRoundUsed={attacker.Actions.FullRoundActionUsed}, offHandAvailable={_offHandAttackAvailableThisTurn}, offHandUsed={_offHandAttackUsedThisTurn}).");
-            }
-        }
+        if (offHandEnteredFullAttack)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} commits to a full attack and spends their move action."));
 
         CurrentSubPhase = PlayerSubPhase.Animating;
 
@@ -1472,7 +1452,7 @@ public partial class GameManager
         Debug.Log("[OffHand] ExecuteOffHandAttack returned.");
 
         if (result != null)
-            RegisterWeaponAttackCommitted(attacker);
+            attacker.RegisterAttackMade(AttackStepKind.OffHand);
 
         if (result != null && result.Hit && result.TotalDamage > 0)
             CheckConcentrationOnDamage(target, result.TotalDamage);
@@ -1507,7 +1487,7 @@ public partial class GameManager
         Debug.Log("[OffHand] Off-hand attack used this turn");
         Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
         Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
-        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. inSequence={_isInAttackSequence} mainAttacksUsed={_totalAttacksUsed}/{_totalAttackBudget} thrown={useThrownRange}");
+        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. inSequence={_isInAttackSequence} mainAttacksUsed={attacker.ProgressiveAttackPool.MainHandStepsUsed}/{attacker.ProgressiveAttackPool.MainHandBudget} thrown={useThrownRange}");
 
         StartCoroutine(AfterAttackDelay(attacker, 1.2f));
     }
@@ -2364,7 +2344,7 @@ public partial class GameManager
     {
         string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "<null>";
         string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "<null>";
-        Debug.Log($"[AttackFlow] PerformIterativeSequenceAttack ENTER | attacker={attackerName} | target={targetName} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | inSequence={_isInAttackSequence} | attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}");
+        Debug.Log($"[AttackFlow] PerformIterativeSequenceAttack ENTER | attacker={attackerName} | target={targetName} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | inSequence={_isInAttackSequence} | attacksUsed={(attacker != null ? attacker.ProgressiveAttackPool.MainHandStepsUsed : 0)}/{(attacker != null ? attacker.ProgressiveAttackPool.MainHandBudget : 0)}");
 
         if (_combatFlowService != null)
         {
@@ -2642,7 +2622,7 @@ public partial class GameManager
             bool offHandThrownAvailable = CanUseOffHandThrownAttackOption(character);
             Debug.Log($"[TurnFlow] ShouldAutoEndTurn=false for controllable unit {character.Stats.CharacterName}. " +
                       $"Manual End Turn required. offHandAvailable={offHandAvailable} offHandThrownAvailable={offHandThrownAvailable} " +
-                      $"offHandGate={_offHandAttackAvailableThisTurn} offHandUsed={_offHandAttackUsedThisTurn} attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}");
+                      $"offHandGate={_offHandAttackAvailableThisTurn} offHandUsed={_offHandAttackUsedThisTurn} attacksUsed={character.ProgressiveAttackPool.MainHandStepsUsed}/{character.ProgressiveAttackPool.MainHandBudget}");
             return false;
         }
 
