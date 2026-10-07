@@ -149,7 +149,7 @@ There are 52 files, found with `grep -rlE '^\s*public partial class GameManager\
 | GameManager.CombatFlowAccessors.cs | 130 | `Combat_*` getters, setters and forwarders over private state. |
 | GameManager.LootCollection.cs | 800 | Post-combat loot, XP flow, level-up sequence, `ContinueToRestAndNextCombat`. |
 | GameManager.NPCSetup.cs | 818 | `SetupEnemyEncounter`, `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile`, spawn overrides. |
-| GameManager.NPCTurns.cs | 1,642 | `SingleNPCTurnFromInitiative`; summon AI; NPC attacks, full attacks and spellcasting (`TryNPCPerformSpellCast`); breath weapon; grab/trip helpers. |
+| GameManager.NPCTurns.cs | 1,853 | `SingleNPCTurnFromInitiative`; summon AI; NPC attacks, full attacks and spellcasting (`TryNPCPerformSpellCast`); breath weapon; grab/trip helpers. |
 | GameManager.TestConfigs.cs | 1,875 | 22 `Configure*TestParty` methods, `RestoreStandardPartyLayout`. |
 | GameManager.TestPanel.cs | 110 | F12 panel bridge: `TestCastSpellFromPanel`, `CleanupTestPanelCast`. |
 | GameManager.TreasureGeneration.cs | 158 | `GeneratePostCombatTreasure` (EL -> `TreasureGenerator.Generate`). Its `ShowTreasureUI` path has no external callers. |

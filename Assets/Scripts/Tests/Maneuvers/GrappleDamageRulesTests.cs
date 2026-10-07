@@ -73,8 +73,10 @@ public static class GrappleDamageRulesTests
         TestAttackSequenceSingleAttackThenAttackUsesNextStep();
         TestAttackSequenceNaturalAttackThenTripRefusedWhenNaturalBudgetSpent();
         TestAttackSequenceTripReplacesOneNaturalAttack();
+        TestAttackSequenceStepResolverUsesStepBab();
         TestManeuverActionCostTable();
         TestNpcManeuverCostsOneAttackStep();
+        TestNpcMeleeSequenceTripThenAttacks();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
         TestBullRushImprovedFeatAddsPlus4();
         TestBullRushDefenderUsesStrengthAndDwarfStability();
@@ -1077,6 +1079,45 @@ public static class GrappleDamageRulesTests
         Cleanup(bear);
     }
 
+    private static void TestAttackSequenceStepResolverUsesStepBab()
+    {
+        // CMB-102 / PC_NPC_PARITY step 6: the shared step resolver used by the PC iterative flow and
+        // the NPC melee sequence rolls a weapon step at that step's iterative BAB plus the caller's
+        // adjustment, and a natural step is that natural attack of the innate sequence.
+        var attacker = CreateIterativeAttacker("StepResolverWeapon");
+        var target = CreateWeakDefender("StepResolverTarget");
+        var bear = CreateNaturalAttacker("StepResolverNatural", ("Claw", 2), ("Bite", 1));
+        target.GridPosition = new Vector2Int(1, 0);
+        // Enough hit points that the earlier steps cannot drop it before the natural step.
+        target.Stats.AdjustMaxHP(500);
+        target.Stats.CurrentHP += 500;
+        try
+        {
+            CombatResult second = attacker.ResolveAttackSequenceStep(target, AttackStepKind.MainHand, 1,
+                false, 0, null, null, attacker.GetEquippedMainWeapon(), 0, out string secondLabel);
+            Assert(second != null && second.BreakdownBAB == 6 && secondLabel == "Attack 2 (BAB +6)",
+                "Shared step resolver: the second weapon step rolls at the second iterative BAB (+6)");
+
+            CombatResult adjusted = attacker.ResolveAttackSequenceStep(target, AttackStepKind.MainHand, 0,
+                false, 0, null, null, attacker.GetEquippedMainWeapon(), -2, out _);
+            Assert(adjusted != null && adjusted.BreakdownBAB == 9,
+                "Shared step resolver: the BAB adjustment (dual-wield main-hand penalty) is applied to the step BAB");
+
+            CombatResult bite = bear.ResolveAttackSequenceStep(target, AttackStepKind.NaturalSequence, 2,
+                false, 0, null, null, null, 0, out string biteLabel);
+            Assert(bite != null && bite.WeaponName == "Bite" && biteLabel != null && biteLabel.StartsWith("Bite"),
+                "Shared step resolver: natural step 2 of claw/claw/bite is the bite");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Shared step resolver check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(attacker, target, bear);
+        }
+    }
+
     private static void TestManeuverActionCostTable()
     {
         // PHB p.141 Table 8-2 note 7: disarm, grapple and trip replace a melee attack; sunder is a
@@ -1150,6 +1191,87 @@ public static class GrappleDamageRulesTests
         finally
         {
             Cleanup(npc, target);
+        }
+    }
+
+    private static FullAttackResult RunNpcMeleeSequence(GameManager gm, CharacterController npc, CharacterController target,
+        System.Func<CharacterController, CharacterController, bool> tryStepManeuver, out int maneuversUsed)
+    {
+        MethodInfo method = typeof(GameManager).GetMethod("PerformNPCMeleeAttackSequence", BindingFlags.Instance | BindingFlags.NonPublic);
+        object[] args = { npc, target, null, tryStepManeuver, false, 0, 0, null };
+        var result = (FullAttackResult)method.Invoke(gm, args);
+        maneuversUsed = (int)args[5];
+        return result;
+    }
+
+    private static void TestNpcMeleeSequenceTripThenAttacks()
+    {
+        // CMB-102: the NPC melee attack runs step by step, so a trip can replace the first attack and
+        // the remaining iteratives attack (+6, +1; PHB p.143, p.158). A trip-only evaluation is used
+        // so the test does not depend on the AI profile.
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; NPC melee sequence check needs Play mode");
+            return;
+        }
+
+        var npc = CreateIterativeAttacker("NpcMeleeSequence");
+        var target = CreateWeakDefender("NpcMeleeSequenceTarget");
+        var movedNpc = CreateIterativeAttacker("NpcMeleeSequenceMoved");
+        target.GridPosition = new Vector2Int(1, 0);
+        movedNpc.GridPosition = new Vector2Int(1, 1);
+        target.Stats.AdjustMaxHP(500);
+        target.Stats.CurrentHP += 500;
+        CharacterController bear = null;
+        CharacterController bearTarget = null;
+        try
+        {
+            int tripsTried = 0;
+            FullAttackResult full = RunNpcMeleeSequence(gm, npc, target,
+                (actor, stepTarget) => tripsTried++ == 0 && gm.TryNPCSpecialAttackByTypeForAI(actor, stepTarget, SpecialAttackType.Trip),
+                out int maneuvers);
+
+            Assert(maneuvers == 1 && full.Attacks.Count == 2
+                && full.Attacks[0].BreakdownBAB == 6 && full.Attacks[1].BreakdownBAB == 1
+                && npc.ProgressiveAttackPool.MainHandStepsUsed == 3 && npc.ProgressiveAttackPool.IsFullAttack,
+                "NPC melee sequence: a trip replaces the first attack and the next iteratives attack at +6 and +1 (CMB-102)");
+
+            movedNpc.Actions.UseMoveAction();
+            FullAttackResult afterMove = RunNpcMeleeSequence(gm, movedNpc, target, null, out _);
+            Assert(afterMove.Attacks.Count == 1 && afterMove.Attacks[0].BreakdownBAB == 11 && !movedNpc.ProgressiveAttackPool.IsFullAttack,
+                "NPC melee sequence: an NPC that used its move action makes one attack (PHB p.143)");
+
+            // A natural-weapon creature with one iterative (BAB +4): the trip replaces the first claw
+            // and the remaining claw and bite follow, as in the PC iterative flow.
+            bear = CreateNaturalAttacker("NpcMeleeSequenceNatural", ("Claw", 2), ("Bite", 1));
+            bear.Stats.BaseAttackBonusOverride = 4;
+            bearTarget = CreateWeakDefender("NpcMeleeSequenceNaturalTarget");
+            bear.GridPosition = new Vector2Int(4, 4);
+            bearTarget.GridPosition = new Vector2Int(5, 4);
+            bearTarget.Stats.AdjustMaxHP(500);
+            bearTarget.Stats.CurrentHP += 500;
+            int bearTripsTried = 0;
+            FullAttackResult natural = RunNpcMeleeSequence(gm, bear, bearTarget,
+                (actor, stepTarget) => bearTripsTried++ == 0 && gm.TryNPCSpecialAttackByTypeForAI(actor, stepTarget, SpecialAttackType.Trip),
+                out int bearManeuvers);
+            Assert(bearManeuvers == 1 && natural.Attacks.Count == 2
+                && natural.Attacks[0].WeaponName == "Claw" && natural.Attacks[1].WeaponName == "Bite"
+                && bear.ProgressiveAttackPool.MainHandStepsUsed == 3,
+                "NPC melee sequence: after a trip replaces the first of claw/claw/bite, the claw and bite follow (CMB-102)");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"NPC melee sequence check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            Cleanup(npc, target, movedNpc);
+            if (bear != null)
+                Cleanup(bear);
+            if (bearTarget != null)
+                Cleanup(bearTarget);
         }
     }
 

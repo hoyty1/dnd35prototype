@@ -603,16 +603,20 @@ public class CombatFlowService : MonoBehaviour
                 return;
             }
 
-            FullAttackResult naturalStep = attacker.FullAttack(
+            // Shared step resolver (PC_NPC_PARITY plan step 6; the NPC melee sequence uses it too).
+            result = attacker.ResolveAttackSequenceStep(
                 target,
+                AttackStepKind.NaturalSequence,
+                naturalAttackIndex,
                 isFlanking,
                 flankBonus,
                 partnerName,
                 rangeInfo,
-                startAttackIndex: naturalAttackIndex,
-                maxAttacks: 1);
+                attackWeapon,
+                0,
+                out string naturalStepLabel);
 
-            if (naturalStep == null || naturalStep.Attacks == null || naturalStep.Attacks.Count == 0)
+            if (result == null)
             {
                 Debug.LogWarning($"[Attack][Sequence] Natural attack step produced no attacks for {attacker.Stats.CharacterName} at index {naturalAttackIndex}; ending sequence.");
                 _gameManager.Combat_EndAttackSequence();
@@ -620,25 +624,39 @@ public class CombatFlowService : MonoBehaviour
                 return;
             }
 
-            result = naturalStep.Attacks[0];
             _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(naturalAttackIndex);
             _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
 
-            string naturalLabel = (naturalStep.AttackLabels != null && naturalStep.AttackLabels.Count > 0)
-                ? naturalStep.AttackLabels[0]
+            string naturalLabel = !string.IsNullOrEmpty(naturalStepLabel)
+                ? naturalStepLabel
                 : "Natural attack";
             attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} (Melee{strengthPenaltySuffix}) {naturalLabel}";
         }
         else
         {
-            result = attacker.Attack(
+            // Shared step resolver at the sequence cursor. The adjustment keeps the BAB this flow
+            // tracks (it includes the dual-wield main-hand penalty), so the roll is unchanged.
+            int weaponStep = _gameManager.Combat_GetTotalAttacksUsed();
+            int babAdjustment = _gameManager.Combat_GetCurrentAttackBAB() - attacker.GetMainHandAttackStepBAB(weaponStep);
+            result = attacker.ResolveAttackSequenceStep(
                 target,
+                AttackStepKind.MainHand,
+                weaponStep,
                 isFlanking,
                 flankBonus,
                 partnerName,
                 rangeInfo,
-                _gameManager.Combat_GetCurrentAttackBAB(),
-                attackWeapon);
+                attackWeapon,
+                babAdjustment,
+                out _);
+
+            if (result == null)
+            {
+                Debug.LogWarning($"[Attack][Sequence] {attacker.Stats.CharacterName} has no valid target for the attack step; ending sequence.");
+                _gameManager.Combat_EndAttackSequence();
+                _gameManager.Combat_ShowActionChoices();
+                return;
+            }
 
             _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
             _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);

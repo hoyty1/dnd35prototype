@@ -10934,8 +10934,15 @@ public partial class GameManager : MonoBehaviour
     public bool TryNPCSpecialAttackByTypeForAI(CharacterController npc, CharacterController target, SpecialAttackType attackType)
         => TryNPCSpecialAttackIfBeneficial(npc, target, attackType);
 
-    public IEnumerator NPCPerformAttackForAI(CharacterController npc, CharacterController target)
-        => NPCPerformAttack(npc, target);
+    /// <summary>
+    /// NPC attack action for AI routines. <paramref name="tryStepManeuver"/>, when given, may replace
+    /// any melee attack step with a maneuver (CMB-102); it returns true when it acted.
+    /// </summary>
+    public IEnumerator NPCPerformAttackForAI(
+        CharacterController npc,
+        CharacterController target,
+        Func<CharacterController, CharacterController, bool> tryStepManeuver = null)
+        => NPCPerformAttack(npc, target, tryStepManeuver);
 
     public bool TryNPCPerformSpellCastForAI(CharacterController npc, CharacterController target, SpellData spell)
         => TryNPCPerformSpellCast(npc, target, spell);

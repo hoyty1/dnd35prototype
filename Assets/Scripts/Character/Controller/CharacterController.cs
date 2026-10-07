@@ -874,6 +874,48 @@ public class CharacterController : MonoBehaviour
 
     public int GetMainHandAttackStepBAB(int stepIndex) => GetIterativeAttackBAB(stepIndex);
 
+    /// <summary>
+    /// Resolve one already-committed attack step of this creature's sequence (PHB p.143). Shared by
+    /// the PC iterative flow and the NPC melee sequence; the attack modifier comes from
+    /// BuildAttackBonus inside Attack/FullAttack. A natural step is the stepIndex-th natural attack
+    /// of the innate sequence; any other step is one Attack at that step's iterative BAB plus
+    /// <paramref name="babAdjustment"/> (the PC dual-wield main-hand penalty). Returns null when
+    /// nothing was resolved.
+    /// </summary>
+    public CombatResult ResolveAttackSequenceStep(
+        CharacterController target,
+        AttackStepKind kind,
+        int stepIndex,
+        bool isFlanking,
+        int flankBonus,
+        string partnerName,
+        RangeInfo rangeInfo,
+        ItemData weapon,
+        int babAdjustment,
+        out string stepLabel)
+    {
+        stepLabel = null;
+        if (target == null || target.Stats == null)
+            return null;
+
+        if (kind == AttackStepKind.NaturalSequence)
+        {
+            FullAttackResult naturalStep = FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo,
+                startAttackIndex: stepIndex, maxAttacks: 1);
+            if (naturalStep == null || naturalStep.Attacks == null || naturalStep.Attacks.Count == 0)
+                return null;
+
+            stepLabel = naturalStep.AttackLabels != null && naturalStep.AttackLabels.Count > 0
+                ? naturalStep.AttackLabels[0]
+                : $"Natural attack {stepIndex + 1}";
+            return naturalStep.Attacks[0];
+        }
+
+        int stepBab = GetMainHandAttackStepBAB(stepIndex) + babAdjustment;
+        stepLabel = $"Attack {stepIndex + 1} (BAB {CharacterStats.FormatMod(stepBab)})";
+        return Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, stepBab, weapon);
+    }
+
     public bool TryConsumeIterativeGrappleAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
         => TryConsumeIterativeMainHandStep(out attackBonusUsed, out attacksRemaining, out reason);
 

@@ -605,11 +605,8 @@ public class AIService : MonoBehaviour
             }
 
             // Fall back to normal melee attacks
-            bool usedSpecial = ShouldUseManeuver(npc, target) && TryExecutePreferredManeuver(npc, target, profile);
-            if (!usedSpecial)
-                yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, target));
-            else
-                yield return new WaitForSeconds(0.8f);
+            // Each melee attack step may be replaced by a maneuver (CMB-102).
+            yield return _gameManager.StartCoroutine(PerformMeleeAttackActionWithManeuvers(npc, target, profile));
         }
         else
         {
@@ -852,11 +849,8 @@ public class AIService : MonoBehaviour
         // ── Priority 6: Full melee attack ──
         if (npc.IsTargetInCurrentWeaponRange(target) && !target.Stats.IsDead)
         {
-            bool usedSpecial = ShouldUseManeuver(npc, target) && TryExecutePreferredManeuver(npc, target, dragonProfile);
-            if (!usedSpecial)
-                yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, target));
-            else
-                yield return new WaitForSeconds(0.8f);
+            // Each melee attack step may be replaced by a maneuver (CMB-102).
+            yield return _gameManager.StartCoroutine(PerformMeleeAttackActionWithManeuvers(npc, target, dragonProfile));
         }
         else
         {
@@ -1254,11 +1248,8 @@ public class AIService : MonoBehaviour
 
         if (npc.IsTargetInCurrentWeaponRange(target) && !target.Stats.IsDead)
         {
-            bool usedSpecial = ShouldUseManeuver(npc, target) && TryExecutePreferredManeuver(npc, target, profile);
-            if (!usedSpecial)
-                yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, target));
-            else
-                yield return new WaitForSeconds(0.8f);
+            // Each melee attack step may be replaced by a maneuver (CMB-102).
+            yield return _gameManager.StartCoroutine(PerformMeleeAttackActionWithManeuvers(npc, target, profile));
         }
         else
         {
@@ -2308,6 +2299,21 @@ public class AIService : MonoBehaviour
 
         return npc.Stats.STRMod >= 4
             && npc.CanPerformSpecialAttack(SpecialAttackType.Grapple);
+    }
+
+    /// <summary>
+    /// Attack action whose melee steps the AI may each replace with a maneuver (CMB-102): before every
+    /// step the usual maneuver evaluation runs (coup de grace, then the profile preference, then the
+    /// legacy chooser), so for example a trip with the first attack is followed by attacks on the
+    /// prone target. Trip, disarm, sunder and grapple use that step at its BAB
+    /// (ManeuverActionCost.ReplacesMeleeAttack); other maneuvers spend their own action and end it.
+    /// </summary>
+    private IEnumerator PerformMeleeAttackActionWithManeuvers(CharacterController npc, CharacterController target, AIProfile profile)
+    {
+        yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(
+            npc,
+            target,
+            (actor, stepTarget) => ShouldUseManeuver(actor, stepTarget) && TryExecutePreferredManeuver(actor, stepTarget, profile)));
     }
 
     private bool TryExecutePreferredManeuver(CharacterController npc, CharacterController target, AIProfile profile)
