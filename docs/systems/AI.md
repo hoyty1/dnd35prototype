@@ -44,9 +44,9 @@ Contents:
 
 **Biggest limitations.**
 
-1. **Narrow action set.** No double move, run, total defense, ready, delay, Power Attack, Combat Expertise, two-weapon fighting, Aid Another, standing up, weapon switching, item use, turning, class abilities such as Rage, Flurry of Blows or smite (11.8.7), spontaneous cure/inflict conversion, area spells or metamagic (section 9). Several PC executors for these are bound to the PC turn flow and cannot be called by the AI as they are (AI-054).
+1. **Narrow action set.** No double move, run, total defense, ready, delay, Power Attack, Combat Expertise, two-weapon fighting, Aid Another, dropping prone or crawling, weapon switching, item use, turning, class abilities such as Rage, Flurry of Blows or smite (11.8.7), spontaneous cure/inflict conversion, area spells or metamagic (section 9). Several PC executors for these are bound to the PC turn flow and cannot be called by the AI as they are (AI-054).
 2. **Asymmetries that favour NPCs.** Breath weapons and specials cost no action (AI-040, AI-053), monster ranged specials skip mitigation (AI-006) and silenced NPCs can cast (SPL-092). Casting (7.6), movement and maneuver attacks of opportunity (4.5) use the same helpers for PCs and NPCs.
-3. **Asymmetries that cripple NPCs.** A tripped NPC never stands up (CMB-074). Panicked, Turned, Pinned and Nauseated NPCs lose their whole turn before the AI runs (CMB-075). Breath weapons fire once per spawn (AI-032) and only for the Dragon profile (AI-033). Almost no monster can actually cast: the lich has no prepared spells (SPL-015), the vampire is not a spellcaster (CRE-030), class-levelled DMG spawns have no spell lists (ENC-021) and creature spell-like abilities do not exist (CRE-015, CRE-017).
+3. **Asymmetries that cripple NPCs.** A prone confused NPC never stands up and the AI never crawls (CMB-074; other prone NPCs, charmed ones included, stand at turn start). Panicked, Turned, Pinned and Nauseated NPCs lose their whole turn before the AI runs (CMB-075). Breath weapons fire once per spawn (AI-032) and only for the Dragon profile (AI-033). Almost no monster can actually cast: the lich has no prepared spells (SPL-015), the vampire is not a spellcaster (CRE-030), class-levelled DMG spawns have no spell lists (ENC-021) and creature spell-like abilities do not exist (CRE-015, CRE-017).
 4. **No decision layer.** Each routine is a fixed script. There is no comparison of the expected value of a spell, a breath, a full attack or a maneuver; `SelectBestAction` computes six results but its callers act only on `Charge` (AI-027). Profiles that set Trip trip every standing target in reach instead of attacking (AI-035).
 5. **No group play.** Every NPC scores alone. There is no focus fire, flank pairing, protection of casters, morale or retreat policy (AI-010).
 
@@ -79,7 +79,9 @@ Contents:
  AIService.ExecuteNPCTurn
    BeginNPCTurnForAI (ticks, regen, perception)
    HP<=0? -> end
-   Confused / Charmed / Fascinated / Frightened ----> BehaviorController (whole turn)
+   Confused / Charmed / Fascinated ----> BehaviorController (whole turn; charmed stands up first)
+   Prone (not grappling) -> TryStandUpFromProneForAI (move action, AoOs)
+   Frightened ----> BehaviorController (whole turn)
    Animate Rope escape
    SelectBestTarget ----------------------------+--> profile.ScoreTarget / GetTargetPriority
    (none -> search move)                        +--> perception terms, LastKnownPositionTracker
@@ -163,8 +165,8 @@ The `SkeletonCreatureTemplate` and `ZombieCreatureTemplate` registry adapters do
 Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3989):
 
 - **Panicked** creatures never flee (PHB ch.8 / DMG ch.8 Condition Summary: a panicked creature drops what it holds and flees). The Panicked branch of `FrightenedBehaviorController` is unreachable, so frightful presence that panics a creature just freezes it.
-- **Turned** undead never flee; `AIService.ExecuteTurnedUndeadTurn` (419) is unreachable. `TurnUndeadSystem` logs "continues fleeing" without moving anything.
-- **Fascinated**: the `ExecuteNPCTurn` Fascinated branch (90-105), including its "source dead, remove the condition" cleanup, is unreachable.
+- **Turned** undead never flee; `AIService.ExecuteTurnedUndeadTurn` (443) is unreachable. `TurnUndeadSystem` logs "continues fleeing" without moving anything.
+- **Fascinated**: the `ExecuteNPCTurn` Fascinated branch (99-114), including its "source dead, remove the condition" cleanup, is unreachable.
 - **Pinned** creatures lose their turn, so the pinned branch of `ChooseNPCGrappleAction` (break pin, escape) never runs for a pinned NPC. PHB ch.8 (Grapple) lets a pinned creature try to escape.
 - **Nauseated** creatures (swarm distraction) lose the whole turn; DMG ch.8 allows a single move action.
 - A skipped NPC also skips `BeginNPCTurnForAI`: no regeneration, no Melf's Acid Arrow tick, no `StartNewTurn`, no perception. `StartPCTurn` applies regeneration and acid arrow *before* its skip check. A troll at negative HP therefore never regenerates, while `AreAllNPCsDead` refuses to count a regenerating NPC at HP ≤ 0 as defeated (CORE-034).
@@ -178,22 +180,23 @@ Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3989):
 | 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
 | 3 | 66 | `CurrentHP <= 0` | end. A Disabled (0 HP) NPC never takes its single action (AI-053) |
 | 4 | 73 | Confused | d% roll; any result except ActNormally runs the controller and ends the turn |
-| 5 | 84 | Charmed | controller, end |
-| 6 | 90 | Fascinated | no action, end (unreachable, 3.2) |
-| 7 | 107 | Frightened (or Panicked, unreachable) | controller, end |
-| 8 | 113 | `TryExecuteAnimateRopeEscapeForNpc` | an NPC entangled by Animate Rope spends its standard action on STR/Escape Artist; turn continues |
-| 9 | 118-131 | `SelectBestTarget` | none: `ExecuteSearchTurnWhenNoTargets`, reselect; still none: end |
-| 10 | 133 | Turned and undead | `ExecuteTurnedUndeadTurn` (unreachable) |
-| 11 | 139 | `IsGrappling` | `AI_GrappleRestrictedTurn`, end |
-| 12 | 148 | `HasAuraAbility` | `ProcessAuraAbility` (free) |
-| 13 | 157-170 | Free-action ranged special ready | fire at the closest enemy in range (gibbering mouther Spittle) |
-| 14 | 174 | In a Resilient Sphere | end (no movement inside the sphere either) |
-| 15 | 182 | Profile is `SwarmAI` | `ExecuteSwarmTurn`, end |
-| 16 | 189 | Summoned creature | `AI_SummonedCreature`, end |
-| 17 | 197 | `HealerAIProfile` | Healer branch |
-| 18 | 260 | `DragonAIProfile` | `ExecuteDragonTurn` |
-| 19 | 267-278 | Other profile | DefensiveMelee; else RangedKiter if behaviour RangedKiter or `CombatStyle == Ranged`; else AggressiveMelee. `CombatStyle.Mixed` counts as melee |
-| 20 | 283-297 | No profile | switch on behaviour; `Ranged` and default go to AggressiveMelee (AI-003) |
+| 5 | 84 | Charmed | stands up first when prone, not grappling and not fascinated (same call as 6a; ends the turn if an AoO drops it), then controller, end |
+| 6 | 99 | Fascinated | no action, end (unreachable, 3.2) |
+| 6a | 119 | Prone and not `IsGrappling` | `GameManager.TryStandUpFromProneForAI` stands it up through `ResolveStandUpFromProne`, shared with the PC Stand Up button: spends the move action (or the standard converted to a move), AoOs from `ThreatSystem.GetStandUpAoOProvokers`, then removes Prone. Ends the turn if an AoO drops it. Stays prone, and cannot move, when `GetStandUpDisabledReason` refuses (CMB-074) |
+| 7 | 129 | Frightened (or Panicked, unreachable) | controller, end |
+| 8 | 135 | `TryExecuteAnimateRopeEscapeForNpc` | an NPC entangled by Animate Rope spends its standard action on STR/Escape Artist; turn continues |
+| 9 | 140-153 | `SelectBestTarget` | none: `ExecuteSearchTurnWhenNoTargets`, reselect; still none: end |
+| 10 | 155 | Turned and undead | `ExecuteTurnedUndeadTurn` (unreachable) |
+| 11 | 161 | `IsGrappling` | `AI_GrappleRestrictedTurn`, end |
+| 12 | 170 | `HasAuraAbility` | `ProcessAuraAbility` (free) |
+| 13 | 179-192 | Free-action ranged special ready | fire at the closest enemy in range (gibbering mouther Spittle) |
+| 14 | 196 | In a Resilient Sphere | end (no movement inside the sphere either) |
+| 15 | 204 | Profile is `SwarmAI` | `ExecuteSwarmTurn`, end |
+| 16 | 211 | Summoned creature | `AI_SummonedCreature`, end |
+| 17 | 219 | `HealerAIProfile` | Healer branch |
+| 18 | 282 | `DragonAIProfile` | `ExecuteDragonTurn` |
+| 19 | 289-300 | Other profile | DefensiveMelee; else RangedKiter if behaviour RangedKiter or `CombatStyle == Ranged`; else AggressiveMelee. `CombatStyle.Mixed` counts as melee |
+| 20 | 305-319 | No profile | switch on behaviour; `Ranged` and default go to AggressiveMelee (AI-003) |
 
 Side effects of the order: auras and free-action Spittle are skipped on any turn ended by gates 4-11 (AI-053). Gates 4-7 never consult profile or behaviour. Target selection (gate 9) runs before the grapple, swarm and summon checks, so it rolls Sanctuary saves for creatures that then ignore the result (AI-005).
 
@@ -628,7 +631,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 
 | ID | Issue |
 |---|---|
-| CMB-074 | NPCs never stand up; trip Prone has no duration and prone NPCs move at full speed |
+| CMB-074 | Confused turns never stand up from prone; the AI never crawls (narrowed 2026-10-07: other NPCs, charmed ones included, now stand up, and nobody moves normally while prone) |
 | CMB-075 | Conditions that prevent standard and full-round actions skip the turn before the AI: Panicked and Turned never flee, Pinned never escapes, Nauseated gets no move action, and skipped turns miss regeneration and acid-arrow ticks |
 | AI-032 | Breath weapons, ranged specials and terrain manipulation never recharge (their tick methods have no callers) |
 | AI-033 | Only the Dragon profile breathes; ankheg, behir, chimera, digester and gorgon never do |
@@ -789,7 +792,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 
 Ordered by how much they distort what the AI experiences:
 
-1. Rules parity on NPC paths: stand up (CMB-074), the turn-skip gate versus controllers (CMB-075), breath and special resolution through the standard pipeline with recharge (AI-032, AI-040, AI-006).
+1. Rules parity on NPC paths: the turn-skip gate versus controllers (CMB-075), stand up in confused turns and crawl (CMB-074), breath and special resolution through the standard pipeline with recharge (AI-032, AI-040, AI-006).
 2. Capability data that works: spells for the lich, vampire, DMG class levels and Spellcaster monsters (SPL-015, CRE-030, ENC-021), or an SLA system (CRE-015, CRE-017); ranged weapons actually equipped (ITM-004); null profiles mapped (AI-004); `Ranged` behaviour handled (AI-003).
 3. Plumbing: behaviour stored on the NPC instead of the parallel list (AI-015); one target filter `IsTargetableBy(attacker, target, action)` with cached ward saves used by every selector (AI-005, AI-049, AI-050); a decision trace log.
 

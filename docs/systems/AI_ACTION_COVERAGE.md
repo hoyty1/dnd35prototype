@@ -17,7 +17,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Charge | Used | Aggressive, Defensive, Dragon via `ShouldNPCCharge` + `ShouldPreferCharge`; pounce | Yes | Morale-typed +2; CMB-018 |
 | Seek flanking | Used | +3 movement term if `SeekFlanking` | Manual | flankers get +2 on melee attacks (RAW); no AC penalty on the target |
 | Cover, terrain, hazards | Never | `UseCover` unread; no cover system | No | paths through walls of fire, clouds, webs (inferred) |
-| Stand up / drop prone / crawl | Never | trip Prone has no duration; prone NPCs move at full speed | Yes | CMB-074 |
+| Stand up / drop prone / crawl | Partial | stands up at turn start when prone (`TryStandUpFromProneForAI`, move action, provokes; charmed NPCs too, not confused ones); never drops prone or crawls. Prone creatures get no ordinary movement (`GetCurrentMoveRangeSquares` is 0) | Yes | CMB-074 |
 | Escape entangle | Auto | `TryExecuteAnimateRopeEscapeForNpc`, standard action | Yes | CMB-055 |
 | Break Wall of Ice | Used | only when blocked and out of reach | Yes | |
 | Single attack | Used | after moving | Yes | |
@@ -81,6 +81,6 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Retreat, morale, surrender | Partial | 8.9 | n/a | AI-010; 11.8.5 |
 | Protect allies, focus fire | Never | each NPC scores alone | n/a | gap |
 
-**PC can, NPC cannot:** double move; free 5-foot steps (including step then full attack); stand up, drop prone, crawl; Power Attack; Rapid Shot; fighting defensively by choice; two-weapon and off-hand attacks; throw melee throwables; Cleave; Flurry, Rage, Bardic Music, Turn Undead, domain powers (including the Destruction smite); template smite outside summons; sunder, bull rush, overrun, feint; aid another and waking allies; trip or disarm as part of a full attack; spontaneous cure/inflict conversion; escape a grapple while not pinned; decline Improved Grab; area spells and metamagic; summoning; holding a touch charge; controlling a Flaming Sphere (`TryControlFlamingSphereForAI` has no callers); dismissing spells; imbued spells; potions, wands, scrolls; picking up or dropping items; weapon swaps; nonlethal damage.
+**PC can, NPC cannot:** double move; free 5-foot steps (including step then full attack); drop prone, crawl; Power Attack; Rapid Shot; fighting defensively by choice; two-weapon and off-hand attacks; throw melee throwables; Cleave; Flurry, Rage, Bardic Music, Turn Undead, domain powers (including the Destruction smite); template smite outside summons; sunder, bull rush, overrun, feint; aid another and waking allies; trip or disarm as part of a full attack; spontaneous cure/inflict conversion; escape a grapple while not pinned; decline Improved Grab; area spells and metamagic; summoning; holding a touch charge; controlling a Flaming Sphere (`TryControlFlamingSphereForAI` has no callers); dismissing spells; imbued spells; potions, wands, scrolls; picking up or dropping items; weapon swaps; nonlethal damage.
 
 **NPC-only advantages (all bugs or gaps):** breath and specials cost no action (AI-040, AI-053); melee routines path to an invisible target's true square (AI-051); monster ranged specials skip mitigation (AI-006); silenced NPCs can cast (SPL-092).

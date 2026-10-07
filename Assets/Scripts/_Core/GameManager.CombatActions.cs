@@ -1113,6 +1113,9 @@ public partial class GameManager
             yield break;
 
         int maxRange = GetWithdrawMoveRangeSquares(mover);
+        if (maxRange <= 0)
+            yield break; // prone, entangled in a web or otherwise unable to move (CMB-074)
+
         AoOPathResult pathResult = _movementService != null
             ? _movementService.FindPath(
                 mover,

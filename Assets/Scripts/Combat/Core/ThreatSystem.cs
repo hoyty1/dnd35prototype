@@ -694,6 +694,39 @@ public static class ThreatSystem
     }
 
     /// <summary>
+    /// The enemies that get an AoO when <paramref name="actor"/> stands up from prone (PHB p.143,
+    /// Table 8-2): every living enemy that threatens any square of its footprint and can still
+    /// make an AoO. Shared by the PC Stand Up button and the AI stand-up step (CMB-074).
+    /// </summary>
+    public static List<CharacterController> GetStandUpAoOProvokers(CharacterController actor, List<CharacterController> allCharacters)
+    {
+        var provokers = new List<CharacterController>();
+        if (actor == null || actor.Stats == null)
+            return provokers;
+
+        provokers = GetThreateningEnemies(actor.GridPosition, actor, allCharacters);
+        List<Vector2Int> footprint = actor.GetOccupiedSquares();
+        if (footprint != null)
+        {
+            for (int i = 0; i < footprint.Count; i++)
+            {
+                if (footprint[i] == actor.GridPosition)
+                    continue;
+
+                List<CharacterController> squareThreats = GetThreateningEnemies(footprint[i], actor, allCharacters);
+                for (int j = 0; j < squareThreats.Count; j++)
+                {
+                    if (!provokers.Contains(squareThreats[j]))
+                        provokers.Add(squareThreats[j]);
+                }
+            }
+        }
+
+        provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoO(enemy));
+        return provokers;
+    }
+
+    /// <summary>
     /// A hit from the initiation AoO foils a Grapple or Sunder attempt; Coup de Grace goes
     /// ahead unless the attacker is incapacitated. RAW differs (CMB-083).
     /// </summary>

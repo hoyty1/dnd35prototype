@@ -10,7 +10,8 @@ namespace Tests.Combat
 /// plus the PHB p.153 flanking bonus rule (flankers get +2 on melee attacks; the defender
 /// takes no AC penalty, CMB-001) and flanking sneak attack eligibility, and the shared
 /// attack-of-opportunity rules for movement and maneuvers (one AoO per opponent per movement,
-/// what stops a mover, who a grapple, sunder or coup de grace provokes) for PC and NPC sides.
+/// what stops a mover, who a grapple, sunder or coup de grace provokes) for PC and NPC sides,
+/// and the prone rules (standing up provokes; no ordinary movement while prone, CMB-074).
 /// Attach to any GameObject or call FlankingReachRulesTests.RunAllTests().
 /// </summary>
 public class FlankingReachRulesTests : MonoBehaviour
@@ -54,6 +55,12 @@ public class FlankingReachRulesTests : MonoBehaviour
         TestManeuverAoOProvokers(CharacterTeam.Enemy, ref passed, ref failed);
         TestManeuverAoOProvokers(CharacterTeam.Player, ref passed, ref failed);
         TestManeuverAoODisruption(ref passed, ref failed);
+
+        // Prone: standing up provokes, and prone creatures take no ordinary movement (CMB-074).
+        TestStandUpAoOProvokers(CharacterTeam.Enemy, ref passed, ref failed);
+        TestStandUpAoOProvokers(CharacterTeam.Player, ref passed, ref failed);
+        TestProneMovementAndStandUpRules(CharacterTeam.Enemy, ref passed, ref failed);
+        TestProneMovementAndStandUpRules(CharacterTeam.Player, ref passed, ref failed);
 
         Debug.Log($"[FlankReachTest] === RESULTS: {passed} passed, {failed} failed ===");
     }
@@ -317,6 +324,113 @@ public class FlankingReachRulesTests : MonoBehaviour
             "A hitting initiation AoO foils a grapple; a miss does not", ref passed, ref failed);
         Assert(!ThreatSystem.DoesManeuverAoODisruptAttempt(SpecialAttackType.CoupDeGrace, hit),
             "A hitting AoO does not by itself foil a coup de grace", ref passed, ref failed);
+    }
+
+    // ------------------------------------------------------------------------
+    // Prone (CMB-074): standing up is a move action that provokes from every
+    // threatening enemy (PHB p.143, Table 8-2), and a prone creature takes no
+    // ordinary movement; it stands first or crawls 5 ft (PHB p.142). The
+    // ResolveStandUpFromProne coroutine needs Play mode; these check the rules
+    // it and the AI stand-up step rely on, for an NPC and a PC alike.
+    // ------------------------------------------------------------------------
+
+    private static void TestStandUpAoOProvokers(CharacterTeam actorTeam, ref int passed, ref int failed)
+    {
+        CharacterTeam foeTeam = actorTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = actorTeam == CharacterTeam.Player ? "PC" : "NPC";
+        CharacterController actor = null;
+        CharacterController adjacentFoe = null;
+        CharacterController diagonalFoe = null;
+        CharacterController farFoe = null;
+        CharacterController ally = null;
+        CharacterController sideFoe = null;
+        try
+        {
+            actor = CreateTeamCharacter("StandUpActor", actorTeam, 0, 0);
+            adjacentFoe = CreateTeamCharacter("StandUpAdjacentFoe", foeTeam, 1, 0);
+            diagonalFoe = CreateTeamCharacter("StandUpDiagonalFoe", foeTeam, 1, 1);
+            farFoe = CreateTeamCharacter("StandUpFarFoe", foeTeam, 6, 6);
+            ally = CreateTeamCharacter("StandUpAlly", actorTeam, 0, 1);
+            actor.ApplyCondition(CombatConditionType.Prone, -1, "Trip");
+            var all = new List<CharacterController> { actor, adjacentFoe, diagonalFoe, farFoe, ally };
+
+            List<CharacterController> provokers = ThreatSystem.GetStandUpAoOProvokers(actor, all);
+            Assert(provokers.Count == 2 && provokers.Contains(adjacentFoe) && provokers.Contains(diagonalFoe)
+                && !provokers.Contains(farFoe) && !provokers.Contains(ally),
+                $"{side} standing up provokes from every threatening enemy and no one else (got {provokers.Count})",
+                ref passed, ref failed);
+
+            // Regression: an enemy with no AoO left this round gets none.
+            diagonalFoe.Stats.AttacksOfOpportunityUsed = diagonalFoe.Stats.MaxAttacksOfOpportunity;
+            List<CharacterController> spent = ThreatSystem.GetStandUpAoOProvokers(actor, all);
+            Assert(spent.Count == 1 && spent[0] == adjacentFoe,
+                $"{side} standing up skips an enemy whose AoOs are spent", ref passed, ref failed);
+
+            // A Large creature provokes from an enemy that threatens only its far squares.
+            sideFoe = CreateTeamCharacter("StandUpSideFoe", foeTeam, 2, 1);
+            var sideOnly = new List<CharacterController> { actor, sideFoe };
+            Assert(ThreatSystem.GetStandUpAoOProvokers(actor, sideOnly).Count == 0,
+                $"{side} Medium creature standing up is not threatened from two squares away", ref passed, ref failed);
+            actor.Stats.CurrentSizeCategory = SizeCategory.Large;
+            List<CharacterController> large = ThreatSystem.GetStandUpAoOProvokers(actor, sideOnly);
+            Assert(large.Count == 1 && large[0] == sideFoe,
+                $"{side} Large creature standing up provokes from an enemy threatening any square it occupies (got {large.Count})",
+                ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(
+                actor != null ? actor.gameObject : null,
+                adjacentFoe != null ? adjacentFoe.gameObject : null,
+                diagonalFoe != null ? diagonalFoe.gameObject : null,
+                farFoe != null ? farFoe.gameObject : null,
+                ally != null ? ally.gameObject : null,
+                sideFoe != null ? sideFoe.gameObject : null);
+        }
+    }
+
+    private static void TestProneMovementAndStandUpRules(CharacterTeam actorTeam, ref int passed, ref int failed)
+    {
+        string side = actorTeam == CharacterTeam.Player ? "PC" : "NPC";
+        GameObject gmObject = null;
+        CharacterController actor = null;
+        try
+        {
+            gmObject = new GameObject("ProneRulesTest_GameManager");
+            GameManager gm = gmObject.AddComponent<GameManager>();
+            actor = CreateTeamCharacter("ProneActor", actorTeam, 2, 2);
+
+            int standingRange = gm.GetCurrentMoveRangeSquares(actor);
+            Assert(standingRange > 0 && standingRange == actor.Stats.MoveRange,
+                $"{side} standing creature moves its full speed (got {standingRange})", ref passed, ref failed);
+            Assert(gm.GetStandUpDisabledReason(actor) == "Not prone",
+                $"{side} standing creature has nothing to stand up from", ref passed, ref failed);
+
+            actor.ApplyCondition(CombatConditionType.Prone, -1, "Trip");
+            Assert(gm.GetCurrentMoveRangeSquares(actor) == 0,
+                $"{side} prone creature has no ordinary movement (stand up or crawl instead)", ref passed, ref failed);
+            Assert(actor.Stats.MoveRange == standingRange,
+                $"{side} prone creature's speed itself is unchanged", ref passed, ref failed);
+            Assert(string.IsNullOrEmpty(gm.GetStandUpDisabledReason(actor)),
+                $"{side} prone creature with its move action can stand up", ref passed, ref failed);
+
+            // Standing up after a move needs the standard action converted to a move.
+            actor.Actions.UseMoveAction();
+            Assert(string.IsNullOrEmpty(gm.GetStandUpDisabledReason(actor)),
+                $"{side} prone creature can still stand up with its standard action as a move", ref passed, ref failed);
+            actor.Actions.UseStandardAction();
+            Assert(!string.IsNullOrEmpty(gm.GetStandUpDisabledReason(actor)),
+                $"{side} prone creature with no move or standard action left cannot stand up", ref passed, ref failed);
+
+            // Regression: once it stands, its full movement is back.
+            actor.RemoveCondition(CombatConditionType.Prone);
+            Assert(gm.GetCurrentMoveRangeSquares(actor) == standingRange,
+                $"{side} creature that stood up moves its full speed again", ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(actor != null ? actor.gameObject : null, gmObject);
+        }
     }
 
     private static void AssertThreatBand(string itemId, int expectedMin, int expectedMax, ref int passed, ref int failed)

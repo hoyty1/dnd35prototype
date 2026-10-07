@@ -7088,8 +7088,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        List<CharacterController> threateners = ThreatSystem.GetThreateningEnemies(pc.GridPosition, pc, GetAllCharacters());
-        threateners.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+        List<CharacterController> threateners = ThreatSystem.GetStandUpAoOProvokers(pc, GetAllCharacters());
 
         if (threateners.Count == 0)
         {
@@ -7137,13 +7136,66 @@ public partial class GameManager : MonoBehaviour
             yield break;
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} attempts to stand up..."));
+
+        var outcome = new StandUpOutcome();
+        yield return StartCoroutine(ResolveStandUpFromProne(pc, threateners, 0.8f, outcome));
+
+        if (outcome.Incapacitated)
+        {
+            EndActivePCTurn();
+            yield break;
+        }
+
+        ShowActionChoices();
+    }
+
+    /// <summary>What happened when a creature tried to stand up from prone.</summary>
+    private sealed class StandUpOutcome
+    {
+        public bool StoodUp;
+        public bool Incapacitated;
+    }
+
+    /// <summary>
+    /// Stands a prone creature up, for PCs and NPCs alike (PHB p.143 and Table 8-2, CMB-074).
+    /// It spends the move action (or the standard action converted to a move), then every
+    /// threatening enemy that can still make an AoO gets one
+    /// (<see cref="ThreatSystem.GetStandUpAoOProvokers"/>). The creature stands unless an AoO
+    /// incapacitates it or holds it down (newly grappled, pinned, paralyzed or otherwise
+    /// unable to move). Standing up is not movement, so Mobility (PHB p.98) gives no AC bonus here.
+    /// The caller has already checked <see cref="GetStandUpDisabledReason"/>.
+    /// </summary>
+    private IEnumerator ResolveStandUpFromProne(
+        CharacterController actor,
+        List<CharacterController> threateners,
+        float secondsAfterEachAoO,
+        StandUpOutcome outcome)
+    {
+        outcome.StoodUp = false;
+        outcome.Incapacitated = false;
+        if (actor == null || actor.Stats == null)
+        {
+            outcome.Incapacitated = true;
+            yield break;
+        }
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} attempts to stand up..."));
+        ConsumeMoveAction(actor);
+
+        // Dead, unconscious or dying stops the attempt. A creature left at exactly 0 HP is
+        // disabled, not helpless, so it still completes the move action it has already spent.
+        bool IsDroppedWhileStanding() => actor.IsDead || actor.Stats.IsDead || actor.IsUnconscious || actor.Stats.CurrentHP < 0;
+
+        // An AoO that paralyzes, pins or grapples the creature (or otherwise stops it moving)
+        // interrupts the stand-up like it interrupts movement (PHB p.137): it stays prone.
+        bool wasMovementBlocked = actor.Stats.MovementBlockedByCondition;
+        bool wasHeld = actor.HasCondition(CombatConditionType.Grappled) || actor.HasCondition(CombatConditionType.Pinned);
+        bool IsHeldDownByAoO() =>
+            (!wasMovementBlocked && actor.Stats.MovementBlockedByCondition)
+            || (!wasHeld && (actor.HasCondition(CombatConditionType.Grappled) || actor.HasCondition(CombatConditionType.Pinned)));
 
         if (threateners == null)
-        {
-            threateners = ThreatSystem.GetThreateningEnemies(pc.GridPosition, pc, GetAllCharacters());
-            threateners.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
-        }
+            threateners = ThreatSystem.GetStandUpAoOProvokers(actor, GetAllCharacters());
 
         if (threateners.Count > 0)
         {
@@ -7151,22 +7203,20 @@ public partial class GameManager : MonoBehaviour
 
             foreach (var enemy in threateners)
             {
-                if (pc.Stats.IsDead) break;
-                if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead) continue;
+                if (IsDroppedWhileStanding()) break;
+                if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy)) continue;
 
-                CombatResult aooResult = _movementService != null
-                    ? _movementService.TriggerAoO(enemy, pc)
-                    : ThreatSystem.ExecuteAoO(enemy, pc);
-                if (aooResult != null)
-                {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO (standing up): {aooResult.GetDetailedSummary()}"));
-                    UpdateAllStatsUI();
+                CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor);
+                if (aooResult == null)
+                    continue;
 
-                    if (aooResult.Hit && aooResult.TotalDamage > 0)
-                        CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
+                CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO (standing up): {aooResult.GetDetailedSummary()}"));
+                UpdateAllStatsUI();
 
-                    yield return new WaitForSeconds(0.8f);
-                }
+                if (aooResult.Hit && aooResult.TotalDamage > 0)
+                    CheckConcentrationOnDamage(actor, aooResult.TotalDamage);
+
+                yield return new WaitForSeconds(secondsAfterEachAoO);
             }
         }
         else
@@ -7174,24 +7224,53 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "(No enemies threaten - no attacks of opportunity)"));
         }
 
-        if (pc.Stats.IsDead)
+        if (IsDroppedWhileStanding())
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Death("", $"{pc.Stats.CharacterName} was slain while trying to stand up!"));
+            outcome.Incapacitated = true;
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("", $"{actor.Stats.CharacterName} was struck down while trying to stand up!"));
             UpdateAllStatsUI();
-            EndActivePCTurn();
             yield break;
         }
 
-        bool removed = pc.RemoveCondition(CombatConditionType.Prone);
-        if (removed)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{pc.Stats.CharacterName} stands up."));
+        if (IsHeldDownByAoO())
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} is held down by the attack and stays prone."));
+            RefreshFlankedConditions();
+            UpdateAllStatsUI();
+            InvalidatePreviewThreats();
+            yield break;
+        }
 
-        ConsumeMoveAction(pc);
+        if (actor.RemoveCondition(CombatConditionType.Prone))
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{actor.Stats.CharacterName} stands up."));
+        outcome.StoodUp = !actor.HasCondition(CombatConditionType.Prone);
 
         RefreshFlankedConditions();
         UpdateAllStatsUI();
         InvalidatePreviewThreats();
-        ShowActionChoices();
+    }
+
+    /// <summary>
+    /// AI stand-up step (CMB-074): a prone NPC that is allowed to stand up does so through the
+    /// same resolution as the PC Stand Up button. Leaves the NPC prone when standing is not
+    /// allowed (pinned, grappled, laughing, no move action left); it then cannot move, because
+    /// <see cref="GetCurrentMoveRangeSquares"/> is zero while prone. Callers re-check the NPC's
+    /// HP afterwards, because an AoO can drop it.
+    /// </summary>
+    public IEnumerator TryStandUpFromProneForAI(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || !npc.HasCondition(CombatConditionType.Prone))
+            yield break;
+
+        string reason = GetStandUpDisabledReason(npc);
+        if (!string.IsNullOrEmpty(reason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{npc.Stats.CharacterName} stays prone ({reason})."));
+            yield break;
+        }
+
+        var outcome = new StandUpOutcome();
+        yield return StartCoroutine(ResolveStandUpFromProne(npc, null, 0.5f, outcome));
     }
 
     private void ShowCrawlOptions(CharacterController pc)
@@ -10859,6 +10938,12 @@ public partial class GameManager : MonoBehaviour
             return 0;
 
         if (IsEntangledByWeb(target))
+            return 0;
+
+        // A prone creature takes no ordinary movement (move, run, charge, withdraw, forced flight):
+        // it stands up first or crawls 5 ft as its own move action (PHB p.142-143, CMB-074).
+        // Its speed is unchanged; only this movement budget is zero.
+        if (target.Stats.IsProne)
             return 0;
 
         return Mathf.Max(0, target.Stats.MoveRange);

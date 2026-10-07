@@ -1091,6 +1091,14 @@ public partial class GameManager
             return false;
         }
 
+        // A prone creature cannot charge: it must stand up first, which spends the move
+        // action a charge needs (PHB p.143, CMB-074). Shared by the PC button and the AI.
+        if (charger.HasCondition(CombatConditionType.Prone))
+        {
+            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Prone creatures cannot charge; stand up first."));
+            return false;
+        }
+
         if (!charger.HasMeleeWeaponEquipped())
         {
             if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Need a melee weapon (or natural/unarmed attack) to charge."));

@@ -83,6 +83,15 @@ public class AIService : MonoBehaviour
 
         if (_gameManager.TryGetCharmedTurnDecisionForAI(npc, out CharmedBehaviorController.CharmedTurnDecision charmedDecision))
         {
+            // A charmed creature still acts on its own, so it stands up first like any other
+            // prone NPC (CMB-074); a fascinated one takes no actions.
+            if (npc.HasCondition(CombatConditionType.Prone) && !npc.IsGrappling() && !npc.HasCondition(CombatConditionType.Fascinated))
+            {
+                yield return _gameManager.StartCoroutine(_gameManager.TryStandUpFromProneForAI(npc));
+                if (ThreatSystem.IsMoverIncapacitated(npc))
+                    yield break;
+            }
+
             yield return _gameManager.StartCoroutine(_gameManager.ExecuteCharmedTurnDecisionForAI(npc, charmedDecision));
             yield break;
         }
@@ -102,6 +111,19 @@ public class AIService : MonoBehaviour
 
             yield return new WaitForSeconds(0.25f);
             yield break;
+        }
+
+        // ── Stand up from prone (move action, provokes; PHB p.143, CMB-074) ──
+        // A prone creature cannot take ordinary movement, so it stands first through the same
+        // resolution as the PC Stand Up button. Grappling creatures stay down (grapple turn below).
+        if (npc.HasCondition(CombatConditionType.Prone) && !npc.IsGrappling())
+        {
+            yield return _gameManager.StartCoroutine(_gameManager.TryStandUpFromProneForAI(npc));
+            if (ThreatSystem.IsMoverIncapacitated(npc))
+            {
+                Debug.Log($"[AI] {npc.Stats.CharacterName} was dropped by an AoO while standing up — turn ended");
+                yield break;
+            }
         }
 
         if (_gameManager.TryGetFrightenedTurnDecisionForAI(npc, out FrightenedBehaviorController.FrightenedTurnDecision frightenedDecision))

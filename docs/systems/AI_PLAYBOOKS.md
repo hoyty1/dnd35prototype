@@ -75,12 +75,12 @@ Seven requests the owner is likely to make, each with the code to read first, wh
 - **What blocks it.**
   - AI-035: no odds or value test; profiles trip anything standing. A chooser needs P(success) from the opposed terms in `ResolveTrip` and a value for prone (+4 to hit for adjacent allies, -4 on the target's melee attacks, standing up provokes).
   - Trip, disarm and bull rush never provoke for anyone (CMB-014), so Improved Trip and Improved Disarm make no difference to risk. NPC grapple, sunder and coup de grace already provoke like the PC versions.
-  - CMB-074: a tripped NPC never stands up.
+  - A tripped NPC stands up at the start of its next turn (move action, provokes), so a trip costs it its full attack and its move; confused NPCs stay prone (CMB-074).
   - CMB-079: no counter-trip, no Improved Trip follow-up attack, no size limit.
   - CMB-014: the opposed-check math is wrong in several ways; fix it before tuning odds.
   - NPCs cannot trip or disarm as one attack of a full attack (the PC path uses a shared pool, `TryConsumeTripAttackAction`). NPC disarmers never pick up the dropped weapon and disarmed NPCs never re-arm (5.9).
   - Two choosers (AI-025); Sunder, BullRush and Overrun flags are never set and their target checks are placeholders (AI-014).
-- **Fix first.** CMB-014, CMB-074, AI-035; then CMB-079.
+- **Fix first.** CMB-014, AI-035; then CMB-079.
 - **Rules.** PHB ch.8, Special Attacks (Trip, Disarm); PHB ch.5 (Improved Trip, Improved Disarm); MM entries for free trips on a hit (for example the wolf).
 - **Test with.** `wolf_pack`, `beast_arena` (Tripper animals), `goblin_raiders` and `test_2_goblins` (Humanoid trips and disarms).
 
