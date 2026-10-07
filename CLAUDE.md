@@ -28,10 +28,10 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 ## Build, run, test
 
 - **Compile:** `bash tools/compile_check.sh` (about 5 s, `VERBOSE=1` lists warnings); expect `exit=0 errors=0 warnings=508`.
-- **Run:** open in 6000.4.0f1, open `MainScene`, Play. You cannot press Play: ask the owner or state what is unverified.
+- **Run:** open in 6000.4.0f1, open `MainScene`, Play. Through the Unity MCP you can enter and exit Play mode and run suites (`docs/TESTING.md` 3.1); hand play-testing of UI flows is still the owner's, so state what you did not verify.
 - **Fast party:** **Play Now!** or **Quick Start** on character creation.
 - **Dev tools:** the F12 Spell Testing Panel and `*_test` presets bypass normal rules; see `docs/TESTING.md` 4.2-4.3.
-- **Static suites** in `Assets/Scripts/Tests` (no test framework, no CI, never called): run via the temporary runner in `docs/TESTING.md` section 3, then delete it.
+- **Static suites** in `Assets/Scripts/Tests` (no test framework, no CI): run them in Play mode through the Unity MCP (`docs/TESTING.md` 3.1). Known failures: TST-007, TST-025, TST-027, TST-028.
 
 ## Code map
 
@@ -95,7 +95,7 @@ Where to look first:
 
 ## Current state
 
-- **Last feature commit 0dd8e76 (2026-06-01).** Unity reopened on this project 2026-10-03 with the Unity MCP attached (check console paths before trusting it).
+- **Branch `docs/cleanup-2026-10` (unmerged, 2026-10-07)** on top of 0dd8e76: docs rebuild, `.meta` tracking, the tactics inventory (`docs/systems/tactics/`) and AI roadmap step 1, rules fixes for shared actions (CMB-001, AI-034, SPL-007, CMB-005/073/076, SPL-006, CMB-074, CMB-014, CMB-043/002). Next is step 2, tags v2 (`docs/designs/enemy_ai_knowledge_and_personalities.md`). The Unity MCP is attached to this project (check console paths before trusting it).
 - **Metamagic/consumables thread mid-flight:** scrolls and wands now use the cast pipeline, F12 has metamagic toggles, and 0dd8e76 added Enlarge area doubling and `[Metamagic]` logging. Open: SPL-010, SPL-038, SPL-040, SPL-064.
 - **Repo hygiene (2026-10-03):** `.meta` files tracked; `.abacus.donotdelete` untracked (history purge only on request, REPO-012); creature token art kept for later (REPO-015); TMP re-import pending (REPO-002).
 - **Docs:** rebuilt 2026-10-03. All old docs are retired (`docs/archive/INDEX.md`); every finding is filed in `docs/issues/`; `docs/designs/` holds 3 unbuilt plans with status headers.

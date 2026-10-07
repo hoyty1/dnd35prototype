@@ -4,14 +4,14 @@
 
 This doc covers how to check changes in this project: the headless compile check, the hand-rolled static test suites under `Assets/Scripts/Tests`, and in-game manual testing. It replaces `Assets/Scripts/Tests/README.md`, `Assets/Scripts/Tests/AidAnother_ManualTestScenarios.md` and `Assets/Scripts/Tests/Combat/SleepSpell_ManualTestScenarios.md`.
 
-Nothing here was run in Play mode for this revision. Claims about runtime behavior come from reading the code. Known test problems are tracked with stable IDs in [issues/TST.md](issues/TST.md) (index: [KNOWN_ISSUES.md](KNOWN_ISSUES.md)); IDs from other areas point to the matching `issues/<PREFIX>.md` file.
+The suite results dated 2026-10-07 (section 3.1) come from a Play-mode run through the Unity MCP; other claims about runtime behavior come from reading the code. Known test problems are tracked with stable IDs in [issues/TST.md](issues/TST.md) (index: [KNOWN_ISSUES.md](KNOWN_ISSUES.md)); IDs from other areas point to the matching `issues/<PREFIX>.md` file.
 
 ## 1. Testing levels at a glance
 
 | Level | How to run | What it catches | What it misses |
 |---|---|---|---|
 | Compile check | `bash tools/compile_check.sh` (about 5-7 s, no Editor needed) | C# compile errors in all of Assembly-CSharp, test code included | Runtime behavior, scene/asset problems, Editor-folder code, player-build-only errors |
-| Static suites | Write a temporary hook (section 3) and run it in Play mode | Rule regressions in mechanics that have a suite | Anything without a suite (section 2.2); results go to the Console only |
+| Static suites | Run them in Play mode through the Unity MCP (section 3.1) or with a temporary hook (section 3) | Rule regressions in mechanics that have a suite | Anything without a suite (section 2.2); results go to the Console only |
 | Manual testing | Play `Assets/Scenes/MainScene.unity`, use presets and the F12 panel (section 4) | UI flow, targeting, AI, end-to-end combat | Anything you do not look at |
 
 ### Compile check
@@ -88,9 +88,13 @@ IDs refer to [issues/TST.md](issues/TST.md) unless another prefix is given.
 | `Tests.Classes.Phase3ClassTests` | `TestAllElevenClassesRegistered` expects 11 classes; `ClassRegistry.Init` registers 16 (11 PHB + 5 NPC classes) (TST-008). | `Tests/Classes/Phase3ClassTests.cs:613-616`, `Character/Classes/ClassRegistry.cs:29-46` |
 | `Tests.Classes.NPCTemplateSystemTests` | `TestAdeptSpellLookup`/`TestAdeptSpellLevelLookup` pass uppercase ids (`"CURE_LIGHT_WOUNDS"`, `"BLESS"`, `"CURE_MODERATE_WOUNDS"`); `AdeptSpellList` stores lowercase ids and uses case-sensitive `List.Contains`, so 4 assertions fail (TST-008). | `Tests/Classes/NPCTemplateSystemTests.cs:338-356`, `Character/Classes/NPC/AdeptSpellList.cs:40, 121-148` |
 | Placeholder passes | 38 `Assert(true, ...)` calls count as passes: TeamUtilityTests (all 10), SpellTargetingServiceTests 9, SpellUtilitiesTests 4, RapidShotTests 4, CounterspellRulesTests 3, EconomyServiceTests 2, NPCTemplateSystemTests 2, one each in AreaControlSpells, GhoulTouch, Scare, DispelMagicService (TST-003). | `grep -rn "Assert(true" Assets/Scripts/Tests` |
+| `Tests.Maneuvers.GrappleDamageRulesTests` | Iterative-maneuver tests assign `Stats.BaseAttackBonus`, which is ignored for classed characters (CHR-068); seven assertions check log text that was later rewritten; three expect the PHB pin release (CMB-089). 28 failures in Play mode on 2026-10-07 (TST-027). | `Tests/Maneuvers/GrappleDamageRulesTests.cs:95-110, 643-783` |
+| `Tests.Combat.RapidShotTests` | Four older tests expect the constructor to grant Rapid Shot, Point Blank Shot or Power Attack (TST-028). | `Tests/Combat/RapidShotTests.cs:68-112, 150-165` |
+| `Tests.AI.AIProfileFrameworkTests` | Stale archetype expectations, and the off-hand threat test sets sides with `IsPlayerControlled` instead of `Team` (TST-025). | `Tests/AI/AIProfileFrameworkTests.cs:919-953` |
+| `CauseFearRulesTests`, `ScareRulesTests` | Pass in edit mode, fail 6 and 1 in Play mode because the scene GameManager destroys the suite's own (TST-007). | `_Core/GameManager.cs:483-490` |
 | Probably stale (not run) | `MetamagicSystemTests` predates the metamagic rewrite (b5f7987), the DC fix (616bf32) and Enlarge-doubles-AoE (0dd8e76). `ReachWeaponRulesTests.cs:26` locks in halberd reach, which matches `ItemDatabase` but not the PHB. `DiceServiceTests.cs:61-62` has statistical assertions that can fail by chance (TST-015). | Last commit to `Assets/Scripts/Tests` is 40400b7 (2026-05-27) |
 
-Commit history shows repeated compile fixes in test files but no evidence the C# suites were ever run; the "295/295 pass" in 3f72970 refers to a Python port, `phase5_validation.py` (deleted from the repo root; read it with `git show 3f72970:phase5_validation.py`), not the C# tests.
+Commit history shows repeated compile fixes in test files but no evidence the C# suites were ever run; the "295/295 pass" in 3f72970 refers to a Python port, `phase5_validation.py` (deleted from the repo root; read it with `git show 3f72970:phase5_validation.py`), not the C# tests. The first recorded C# run is the 2026-10-07 MCP run in section 3.1.
 
 ### 2.6 Pitfalls
 
@@ -184,6 +188,63 @@ Reading results: enable only the Error filter in the Console to see `FAIL:` line
 An Editor `[MenuItem]` under an `Editor/` folder would also work, but suites need Play mode, and `compile_check.sh` skips `/Editor/` paths, so it would not be compile-checked.
 
 **Proposal (not implemented):** add `com.unity.test-framework` and a thin NUnit wrapper per suite that runs `RunAll()` in a `[UnityTest]` and fails on any logged error. An asmdef test assembly cannot reference the predefined Assembly-CSharp, so this either needs tests in the predefined Editor assembly or asmdefs for game code (a large refactor; `partial class GameManager` spans 52 files). Investigate before adopting.
+
+### 3.1 Running suites through the Unity MCP
+
+When the Unity MCP is attached to this project (check that the console paths it reports exist here), an agent can run suites without adding a file:
+
+1. Enter Play mode with `Unity_RunCommand` calling `EditorApplication.EnterPlaymode();`. Entering Play mode reloads the domain; the next MCP call runs after Play mode has started. Character creation is enough, because suites build their own characters.
+2. Run suites in one `Unity_RunCommand` and collect the results with a log hook:
+
+```csharp
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEditor;
+
+internal class CommandScript : IRunCommand
+{
+    public void Execute(ExecutionResult result)
+    {
+        if (!EditorApplication.isPlaying) { result.LogError("Enter Play mode first."); return; }
+        var fails = new List<string>();
+        int pass = 0;
+        Application.LogCallback hook = (msg, stack, type) =>
+        {
+            if (msg.Contains("FAIL") || msg.Contains("❌") || type == LogType.Exception) fails.Add(msg.Split('\n')[0]);
+            else if (msg.Contains("PASS") || msg.Contains("✅")) pass++;
+        };
+        Application.logMessageReceived += hook;
+        try { Tests.Combat.ScareRulesTests.RunAll(); }
+        catch (Exception ex) { fails.Add("threw: " + ex.Message); }
+        finally { Application.logMessageReceived -= hook; }
+        result.Log($"pass={pass} fail={fails.Count}");
+        foreach (string f in fails) result.Log(f);
+    }
+}
+```
+
+3. Exit with `EditorApplication.ExitPlaymode();`. Suites leave GameObjects in the running game, so restart Play mode before playing by hand.
+
+Notes:
+
+- Return the failure messages from the hook, as above. The Console keeps a limited window, and `Unity_GetConsoleLogs` output is too large to read whole (it is saved to a file; grep it).
+- Suites that `AddComponent<GameManager>()` behave differently in Play mode, where the scene GameManager destroys theirs (TST-007). Run those in edit mode inside a temporary additive scene: `var temp = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);`, run the suite, then `EditorSceneManager.CloseScene(temp, true);`. Suites that need `Awake` or `AreaEffectManager` (TST-009) still need Play mode.
+- Enter Play Mode Options are off (full domain reload), and script changes during Play mode recompile and continue. Exit Play mode before editing scripts.
+- `AssetDatabase.DeleteAsset` fails through the MCP ("User interactions are not supported").
+
+Run of 2026-10-07 (Play mode, after the AI roadmap step 1 rules fixes 2dc4d02..e9f6c84). No failure traced back to those fixes.
+
+| Suite | Pass | Fail | Cause of the failures |
+|---|---|---|---|
+| `Tests.AI.AIProfileFrameworkTests` | 43 | 3 | Stale expectations (TST-025) |
+| `Tests.Combat.CauseFearRulesTests` | 28 | 6 | Play mode only (TST-007); 36 pass, 0 fail in edit mode |
+| `Tests.Combat.ScareRulesTests` | 76 | 1 | Play mode only (TST-007); 77 pass, 0 fail in edit mode |
+| `Tests.Services.SpellUtilitiesTests` | 26 | 0 | |
+| `Tests.Services.ConcentrationServiceTests` | 34 | 0 | |
+| `Tests.Maneuvers.GrappleDamageRulesTests` | 130 | 28 | Ignored BAB writes, stale log text, pin release (TST-027, CHR-068, CMB-089) |
+| `Tests.Combat.FlankingReachRulesTests` | 80 | 0 | |
+| `Tests.Combat.RapidShotTests` | 48 | 6 | Class-granted feats assumed (TST-028) |
 
 ## 4. Manual testing
 
