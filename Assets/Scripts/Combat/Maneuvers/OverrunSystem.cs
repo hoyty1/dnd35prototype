@@ -405,34 +405,28 @@ public partial class GameManager
             onCancel: () => onResolved?.Invoke(false));
     }
 
-    private bool ResolveOverrunOpposedCheck(CharacterController attacker, CharacterController defender)
+    /// <summary>
+    /// PHB p.157 overrun block for the move-through overrun, using the same shared terms as the
+    /// targeted overrun (CharacterController.ResolveOverrun): attacker STR + special size
+    /// [+4 Improved Overrun] + condition modifiers against the defender's better of STR or DEX
+    /// + special size + stability (+4 for more than two legs or a stability trait) + condition
+    /// modifiers; ties go to the higher modifier, then a reroll. <paramref name="rollD20"/> is a
+    /// test hook: when set it supplies every d20 (attacker, defender, then tie rerolls).
+    /// </summary>
+    private bool ResolveOverrunOpposedCheck(CharacterController attacker, CharacterController defender, Func<int> rollD20 = null)
     {
-        int attackerRoll = DiceRoller.D20();
-        int attackerTotal = attackerRoll + attacker.Stats.STRMod + GetOverrunSizeModifier(attacker.Stats.CurrentSizeCategory);
+        int attackerRoll = rollD20 != null ? rollD20() : DiceRoller.D20();
+        int attackerModifier = attacker.GetOverrunAttackerCheckModifier();
+        int attackerTotal = attackerRoll + attackerModifier;
 
-        int defenderRoll = DiceRoller.D20();
-        int defenderAbility = Mathf.Max(defender.Stats.STRMod, defender.Stats.DEXMod);
-        int defenderTotal = defenderRoll + defenderAbility + GetOverrunSizeModifier(defender.Stats.CurrentSizeCategory);
+        int defenderRoll = rollD20 != null ? rollD20() : DiceRoller.D20();
+        int defenderModifier = defender.GetTripOrOverrunDefenderCheckModifier();
+        int defenderTotal = defenderRoll + defenderModifier;
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"Overrun: {attacker.Stats.CharacterName} ({attackerTotal}) vs {defender.Stats.CharacterName} ({defenderTotal})"));
-        return attackerTotal > defenderTotal;
-    }
-
-    private int GetOverrunSizeModifier(SizeCategory size)
-    {
-        switch (size)
-        {
-            case SizeCategory.Fine: return -16;
-            case SizeCategory.Diminutive: return -12;
-            case SizeCategory.Tiny: return -8;
-            case SizeCategory.Small: return -4;
-            case SizeCategory.Medium: return 0;
-            case SizeCategory.Large: return 4;
-            case SizeCategory.Huge: return 8;
-            case SizeCategory.Gargantuan: return 12;
-            case SizeCategory.Colossal: return 16;
-            default: return 0;
-        }
+        return rollD20 != null
+            ? CharacterController.DoesAttackerWinOpposedCheck(attackerTotal, attackerModifier, defenderTotal, defenderModifier, rollD20)
+            : CharacterController.DoesAttackerWinOpposedCheck(attackerTotal, attackerModifier, defenderTotal, defenderModifier);
     }
 
     private void ClearOverrunContinuationState()

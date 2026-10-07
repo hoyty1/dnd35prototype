@@ -65,6 +65,7 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
         target.CreatureType = source.CreatureType;
         target.NaturalArmorBonus = source.NaturalArmorBonus;
         target.MaterialComposition = source.MaterialComposition;
+        target.IsExceptionallyStable = source.IsExceptionallyStable;
 
         // Defenses
         target.DamageReductionAmount = source.DamageReductionAmount;

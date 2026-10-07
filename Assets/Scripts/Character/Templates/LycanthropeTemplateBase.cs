@@ -97,6 +97,7 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
         target.HasScent = source.HasScent;
         target.HasTripAttack = source.HasTripAttack;
         target.TripAttackCheckBonus = source.TripAttackCheckBonus;
+        target.IsExceptionallyStable = source.IsExceptionallyStable;
 
         // Display
         target.SpecialAbilities = source.SpecialAbilities;

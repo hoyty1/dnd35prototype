@@ -20,6 +20,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "phantom_fungus",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Phantom Fungus",
             ChallengeRating = "3",
             Level = 2,
@@ -61,6 +62,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "phase_spider",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Phase Spider",
             ChallengeRating = "5",
             Level = 5,

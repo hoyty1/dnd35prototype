@@ -540,6 +540,13 @@ public class NPCDefinition
     /// <summary>Zombie-style single actions only: can take move OR standard each turn, never both (except charge).</summary>
     public bool IsSingleActionsOnly;
     public bool IsSwarm;
+    /// <summary>
+    /// Exceptionally stable: +4 on checks to resist bull rush, trip and overrun (PHB p.154, p.157,
+    /// p.158). True when the MM description gives the creature more than two legs, or a named
+    /// stability trait (dwarves and duergar, PHB p.15, MM p.92). Copied to
+    /// <see cref="CharacterStats.IsExceptionallyStable"/>.
+    /// </summary>
+    public bool IsExceptionallyStable;
     public SwarmTraits SwarmTraits = new SwarmTraits();
     public bool CanMakeAttacksOfOpportunity = true;
     public int RegenerationAmount;
@@ -673,6 +680,7 @@ public class NPCDefinition
         clone.IsMindless = IsMindless;
         clone.IsSingleActionsOnly = IsSingleActionsOnly;
         clone.IsSwarm = IsSwarm;
+        clone.IsExceptionallyStable = IsExceptionallyStable;
         clone.SwarmTraits = SwarmTraits != null
             ? new SwarmTraits
             {

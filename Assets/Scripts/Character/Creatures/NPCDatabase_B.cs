@@ -37,6 +37,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "badger",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Badger",
             ChallengeRating = "1/2",
             Level = 1,
@@ -159,6 +160,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_bee",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Bee",
             ChallengeRating = "1",
             Level = 3,
@@ -209,6 +211,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_bombardier_beetle",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Bombardier Beetle",
             ChallengeRating = "2",
             Level = 2,
@@ -249,6 +252,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "black_bear",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Black Bear",
             ChallengeRating = "2",
             Level = 3,
@@ -282,6 +286,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "bison",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Bison",
             ChallengeRating = "2",
             Level = 5,
@@ -314,6 +319,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "boar",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Boar",
             ChallengeRating = "2",
             Level = 3,
@@ -429,6 +435,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "basilisk",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Basilisk",
             ChallengeRating = "5",
             Level = 6,
@@ -519,6 +526,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "behir",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Behir",
             ChallengeRating = "8",
             Level = 9,
@@ -861,6 +869,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "bulette",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Bulette",
             ChallengeRating = "7",
             Level = 9,

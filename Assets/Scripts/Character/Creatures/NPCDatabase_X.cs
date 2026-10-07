@@ -16,6 +16,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "average_xorn",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Average Xorn",
             ChallengeRating = "6",
             Level = 7,
@@ -59,6 +60,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "minor_xorn",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Minor Xorn",
             ChallengeRating = "3",
             Level = 3,
@@ -152,6 +154,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "elder_xorn",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Elder Xorn",
             ChallengeRating = "8",
             Level = 15,

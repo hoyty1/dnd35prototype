@@ -95,7 +95,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | SPL-112 (new) | Caster choices | NPC energy type forced to Fire, Fire Shield warm, Disguise Self own race, or a stale PC choice is inherited | PC | Med | GameManager.SpellCasting.cs:7008, 7061; Spells_F.cs:174 |
 | SPL-114 (new) | Components, concentration | NPC cast path skips pouch check, concentration tracking and casting-while-concentrating | NPC | Med | SpellCasting.cs:1691-1712, 1956, 2350-2356 |
 | CHR-070 (new) | Class choices | NPC clerics have no domains or spontaneous casting; NPC wizards cannot specialize or have familiars | PC | Med | NPCSetup.cs:445-756; SpellcastingComponent.cs:1048-1058 |
-| CRE-038 (new) | Racial traits | NPC members of PC races have no RaceData (sleep immunity, stability, racial attack, familiarity) | PC | Med | NPCSetup.cs:462-477; SpellUtilities.cs:164 |
+| CRE-038 (new) | Racial traits | NPC members of PC races have no RaceData (sleep immunity, racial attack, familiarity; NPC dwarves get stability from `IsExceptionallyStable` since 2026-10-07) | PC | Med | NPCSetup.cs:462-477; SpellUtilities.cs:164 |
 | CRE-039 (new) | Monster specials | Breath, auras, spittle, engulf, acid spray, frightful presence only on the AI turn | NPC | Med | AIService.cs:170-192, 735, 780 |
 | CRE-041 (new) | NPC max HP | CON (and Toughness) re-added to MM hp totals | NPC | Med | CharacterStats.cs:3444-3445, 2145 |
 | CRE-042 (new) | NPC monks | Fast movement double counted, unarmed strike as natural attacks, monk AC as natural armor | NPC | Med | NPCDatabase_M.cs:790-916 |
@@ -105,7 +105,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | CMB-075 | Turn-start order | Skipped NPC misses regeneration, Melf's, ChargePenalty expiry | depends | Med | GameManager.cs:3978-3989 vs NPCTurns.cs:46-49 |
 | CMB-017 | Cleave | NPCs never cleave; PCs only on defensive or natural single attacks | PC | Med | CombatFlowService.cs:887-947 |
 | CMB-018 | Charge end | Flanking only on NPC charge; bull-rush charge and Spirited Charge PC only | NPC | Med | SupportActions.cs:1674 vs 1968 |
-| CMB-015 | Overrun | Separate PC and NPC resolvers (AoO, check, prone, defender choice) | depends | Med | OverrunSystem.cs:307-406; CharacterController.cs:10292 |
+| CMB-015 | Overrun | Separate PC and NPC paths (AoO, prone, push, defender choice); the opposed check is shared since 2026-10-07 | depends | Med | OverrunSystem.cs (move-through, `ResolveOverrunOpposedCheck`); CharacterController.cs (`ResolveOverrun`) |
 | CMB-019 | Ammunition | Only PC attacks check and spend ammo | NPC | Med | CombatFlowService.cs:565-847 |
 | AI-055 | TWF, off-hand, flurry | No NPC executor | PC | Med | NPCTurns.cs:1213, 1286 |
 | SPL-091 | Summons | NPC summon spends the slot and does nothing | PC | Med | NPCTurns.cs:913-915 |

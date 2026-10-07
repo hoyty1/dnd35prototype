@@ -65,6 +65,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "unicorn",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Unicorn",
             ChallengeRating = "3",
             Level = 4,

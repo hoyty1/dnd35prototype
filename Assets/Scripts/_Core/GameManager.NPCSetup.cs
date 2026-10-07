@@ -507,6 +507,7 @@ public partial class GameManager
         stats.NaturalArmorBonus = def.NaturalArmorBonus;
         stats.HasTripAttack = def.HasTripAttack;
         stats.TripAttackCheckBonus = def.TripAttackCheckBonus;
+        stats.IsExceptionallyStable = def.IsExceptionallyStable;
         stats.HasImprovedGrab = def.HasImprovedGrab;
         stats.ImprovedGrabTriggerAttackName = def.ImprovedGrabTriggerAttackName;
         stats.HasPounce = def.HasPounce;

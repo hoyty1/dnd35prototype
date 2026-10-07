@@ -295,6 +295,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "lion",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Lion",
             ChallengeRating = "3",
             Level = 5,
@@ -349,6 +350,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_lion",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Lion",
             ChallengeRating = "5",
             Level = 8,
@@ -544,6 +546,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "leopard",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Leopard",
             ChallengeRating = "2",
             Level = 3,

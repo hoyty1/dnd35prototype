@@ -132,6 +132,7 @@ public static partial class NPCDatabase
         NPCDefinition def = new NPCDefinition
         {
             Id = id,
+            IsExceptionallyStable = true, // true dragons are four-legged (MM p.68): +4 vs bull rush, trip, overrun
             Name = displayName,
             Description = description,
             ChallengeRating = crStr,

@@ -216,6 +216,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "otyugh",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Otyugh",
             ChallengeRating = "4",
             Level = 6,

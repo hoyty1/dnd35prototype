@@ -101,6 +101,7 @@ There is no general modifier engine. Typed (`BonusType`) same-type non-stacking 
 
 Writers follow two patterns:
 - Items: Equipment/Inventory/Inventory.cs `RecalculateStats` (L449) resets each `Wondrous*`/`Ring*` field to 0 and then sets it, usually with `Mathf.Max` per bonus type.
+- Creature data: `CharacterStats.IsExceptionallyStable` (more than two legs or a stability trait, PHB p.154/157/158) is written once at spawn from `NPCDefinition.IsExceptionallyStable` by `InitializeNPCFromDefinition` (which also serves summons) and by the Lion's Shield summon builder (`LionsShieldBehavior`); its only reader is `CharacterController.GetManeuverStabilityBonus`, which also reads `RaceData.StabilityBonus` for PC dwarves, gives one +4 (never +8) and 0 to a rider (CMB-111; mounting is unreachable in play, CMB-031). That bonus feeds `RollBullRushDefenderCheck` and `GetTripOrOverrunDefenderCheckModifier`.
 - Spells: Spell/Components/StatusEffectManager.cs adds on apply and subtracts on removal (`DeflectionBonus`, ability fields such as `_stats.STR += bonus` in ApplyStatBonus) or sets and clears (`SpellACBonus`); some spells instead use a controller `Active*Effect` object or a condition.
 
 **To add a new bonus source:**
@@ -231,7 +232,7 @@ summon:     GameManager.SpawnSummonedCreature (Spell/Resolution/GameManager.Spel
 
 What `InitializeNPCFromDefinition` does:
 - Resolves the creature-type progression (Character/Creatures/CreatureTypeProgression.cs, 15 MM types) and computes BAB and HP from it unless overridden. Calls `new CharacterStats(...)` with `def.Level`, `def.CharacterClass` and no race, then sets `UseCreatureTypeProgression = true`. BAB and saves therefore come from creature type x HitDice (or `BaseAttackBonusOverride`); `NPCDefinition.BAB` and any class progression are ignored **[KI]**. The Undead progression uses Medium (3/4) BAB, and only the skeleton and zombie templates override it to Poor **[KI]**.
-- Copies natural attacks, tags, feats (raw strings), then `FeatManager.ApplyPassiveFeats`; size, natural armor, trip/grab/pounce/rake/scent, DR, resistances, immunities, mindless, swarm, SR, template smite flags, special-ability text.
+- Copies natural attacks, tags, feats (raw strings), then `FeatManager.ApplyPassiveFeats`; size, natural armor, trip/grab/pounce/rake/scent, exceptional stability (`IsExceptionallyStable`), DR, resistances, immunities, mindless, swarm, SR, template smite flags, special-ability text.
 - Calls `npc.Init`, then `Configure*` for regeneration, incorporeal, breath, secondary breath, frightful presence, engulf, ranged special, blood drain, terrain manipulation, stench and aura.
 - Sets team/control from `IsAlly`/`IsControllable`, equips `EquipmentIds` (random material upgrades at CR >= 1) and backpack items.
 - Dragons get an injected `ClassLevelEntry("Sorcerer", CL)`; any caster with spell lists gets a SpellcastingComponent. Adds StatusEffectManager, ConcentrationManager and `aiProfile = BuildRuntimeAIProfile(def)` (the Brute and Caster archetypes have no case and get null).

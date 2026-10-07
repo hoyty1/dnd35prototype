@@ -25,6 +25,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "yeth_hound",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Yeth Hound",
             ChallengeRating = "3",
             Level = 3,

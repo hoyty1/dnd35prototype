@@ -80,6 +80,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "stirge",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Stirge",
             ChallengeRating = "1/2",
             Level = 1,
@@ -189,6 +190,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = id,
+            IsExceptionallyStable = true, // monstrous scorpions and spiders: eight legs (MM p.287-289)
             Name = name,
             ChallengeRating = id switch
             {
@@ -261,6 +263,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = id,
+            IsExceptionallyStable = true, // monstrous scorpions and spiders: eight legs (MM p.287-289)
             Name = name,
             ChallengeRating = id switch
             {
@@ -342,6 +345,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "shadow_mastiff",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Shadow Mastiff",
             ChallengeRating = "5",
             Level = 4,
@@ -388,6 +392,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "shocker_lizard",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Shocker Lizard",
             ChallengeRating = "2",
             Level = 2,

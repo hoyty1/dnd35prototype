@@ -211,6 +211,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_centipede",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Centipede",
             ChallengeRating = "1/2",
             Level = 1,
@@ -253,6 +254,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_rat",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Rat",
             ChallengeRating = "1/3",
             Level = 1,
@@ -414,6 +416,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_wasp",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Wasp",
             ChallengeRating = "3",
             Level = 5,
@@ -459,6 +462,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_praying_mantis",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Praying Mantis",
             ChallengeRating = "3",
             Level = 4,
@@ -613,6 +617,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_stag_beetle",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Stag Beetle",
             ChallengeRating = "4",
             Level = 7,
@@ -649,6 +654,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_worker_ant",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Worker Ant",
             ChallengeRating = "1",
             Level = 2,
@@ -818,6 +824,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "gorgon",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Gorgon",
             ChallengeRating = "8",
             Level = 8,
@@ -1292,6 +1299,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_crocodile",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Crocodile",
             ChallengeRating = "4",
             Level = 7,

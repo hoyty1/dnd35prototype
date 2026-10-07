@@ -55,6 +55,13 @@ public static class ZombieTemplate
         zombie.CreatureType = "Undead";
         zombie.MaterialComposition = MaterialComposition.Organic; // still has flesh, unlike skeleton
 
+        // ── Stability (PHB p.154/157/158) ──
+        // Legs survive the template, so the clone keeps IsExceptionallyStable. A humanoid's flag can
+        // only come from a racial trait (dwarf or duergar stability), which a zombie loses along with
+        // the base creature's other non-attack special qualities (MM p.266).
+        if (SkeletonTemplate.IsHumanoidBase(baseCreature))
+            zombie.IsExceptionallyStable = false;
+
         // ── Hit Dice: DOUBLE racial HD, convert to d12 ──
         // Drop class HD, keep racial HD. Minimum 1 HD.
         int racialHD = Mathf.Max(1, baseCreature.HitDice);

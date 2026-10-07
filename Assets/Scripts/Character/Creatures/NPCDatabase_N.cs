@@ -20,6 +20,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "nightmare",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Nightmare",
             ChallengeRating = "5",
             Level = 6,

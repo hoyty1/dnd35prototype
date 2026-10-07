@@ -81,6 +81,11 @@ public static class GrappleDamageRulesTests
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
         TestBullRushImprovedFeatAddsPlus4();
         TestBullRushDefenderUsesStrengthAndDwarfStability();
+        TestExceptionallyStableCreatureData();
+        TestExceptionallyStableDefenderGetsPlus4();
+        TestStableDwarfGetsSinglePlus4AndNoneWhileMounted();
+        TestNpcSetupCopiesExceptionallyStable();
+        TestMoveThroughOverrunUsesSharedCheck();
         TestBullRushCheckIgnoresBaseAttackBonus();
         TestSpecialSizeModifierScale();
         TestTripAttackerModifierIsStrengthCheck();
@@ -1435,6 +1440,190 @@ public static class GrappleDamageRulesTests
         Assert(check.Total == expected, "Bull rush defender total is roll + STR + special size + stability (no BAB, no DEX)");
 
         Cleanup(defender);
+    }
+
+    // CMB-085: the PHB p.154/157/158 stability bonus comes from creature data. Database
+    // templates are shared, so every check below reads them or works on a clone (never mutates).
+    private static void TestExceptionallyStableCreatureData()
+    {
+        NPCDefinition worg = NPCDatabase.Get("worg");
+        NPCDefinition dwarf = NPCDatabase.Get("dwarf_warrior");
+        NPCDefinition human = NPCDatabase.Get("human_warrior");
+
+        Assert(worg != null && worg.IsExceptionallyStable, "Worg (four legs) is exceptionally stable in the NPC database");
+        Assert(dwarf != null && dwarf.IsExceptionallyStable, "NPC dwarf warrior has dwarf stability in the NPC database");
+        Assert(human != null && !human.IsExceptionallyStable, "Human warrior is not exceptionally stable");
+        Assert(NPCDatabase.Get("wolf") != null && NPCDatabase.Get("wolf").IsExceptionallyStable,
+            "Wolf summon alias inherits stability from wolf_pack_hunter");
+        Assert(NPCDatabase.Get("fiendish_dire_bear") != null && NPCDatabase.Get("fiendish_dire_bear").IsExceptionallyStable,
+            "Fiendish dire bear (a clone of the dire bear) inherits stability");
+        Assert(NPCDatabase.Get("skeleton_wolf") != null && NPCDatabase.Get("skeleton_wolf").IsExceptionallyStable,
+            "Wolf skeleton keeps the wolf's four legs");
+
+        if (worg == null)
+            return;
+
+        NPCDefinition clone = worg.Clone();
+        Assert(clone.IsExceptionallyStable, "NPCDefinition.Clone keeps IsExceptionallyStable");
+
+        clone.AppliedTemplateIds = new System.Collections.Generic.List<string> { "skeleton", "fiendish" };
+        NPCDefinition templated = CreatureTemplateRegistry.ApplyTemplatesClone(clone);
+        Assert(templated != null && templated.IsExceptionallyStable && templated.CreatureType == "Undead",
+            "A fiendish worg skeleton built through CreatureTemplateRegistry keeps stability");
+        Assert(worg.AppliedTemplateIds == null || worg.AppliedTemplateIds.Count == 0,
+            "Applying templates to a clone leaves the worg template untouched");
+
+        // A humanoid's flag comes from a racial trait, which the skeleton and zombie lose
+        // (MM p.226, p.266); a quadruped keeps its legs.
+        if (dwarf != null)
+        {
+            foreach (string undeadTemplate in new[] { "skeleton", "zombie" })
+            {
+                NPCDefinition dwarfClone = dwarf.Clone();
+                dwarfClone.AppliedTemplateIds = new System.Collections.Generic.List<string> { undeadTemplate };
+                NPCDefinition undeadDwarf = CreatureTemplateRegistry.ApplyTemplatesClone(dwarfClone);
+                Assert(undeadDwarf != null && undeadDwarf.CreatureType == "Undead" && !undeadDwarf.IsExceptionallyStable,
+                    $"A dwarf {undeadTemplate} loses dwarf stability (a racial trait, not legs)");
+            }
+
+            Assert(dwarf.IsExceptionallyStable, "Templating dwarf clones leaves the dwarf_warrior template stable");
+        }
+
+        NPCDefinition worgZombieClone = worg.Clone();
+        worgZombieClone.AppliedTemplateIds = new System.Collections.Generic.List<string> { "zombie" };
+        NPCDefinition worgZombie = CreatureTemplateRegistry.ApplyTemplatesClone(worgZombieClone);
+        Assert(worgZombie != null && worgZombie.IsExceptionallyStable, "A worg zombie keeps its four legs' stability");
+    }
+
+    private static void TestExceptionallyStableDefenderGetsPlus4()
+    {
+        var defender = CreateTestCharacter("StableDefender", "Fighter");
+        defender.Stats.Race = null;
+        defender.Stats.IsExceptionallyStable = false;
+
+        BullRushCheckResult plain = defender.RollBullRushDefenderCheck(fixedRoll: 10);
+        int plainTripOverrun = defender.GetTripOrOverrunDefenderCheckModifier();
+
+        defender.Stats.IsExceptionallyStable = true;
+        BullRushCheckResult stable = defender.RollBullRushDefenderCheck(fixedRoll: 10);
+        int stableTripOverrun = defender.GetTripOrOverrunDefenderCheckModifier();
+
+        Assert(plain.StabilityBonus == 0 && stable.StabilityBonus == 4,
+            "Exceptionally stable creature gets +4 on the bull rush defender check");
+        Assert(stable.Total == plain.Total + 4, "Bull rush defender total rises by exactly 4 with stability");
+        Assert(stableTripOverrun == plainTripOverrun + 4, "Trip and overrun defender modifier rises by exactly 4 with stability");
+
+        Cleanup(defender);
+    }
+
+    private static void TestStableDwarfGetsSinglePlus4AndNoneWhileMounted()
+    {
+        var dwarf = CreateTestCharacter("StableDwarf", "Fighter");
+        dwarf.Stats.Race = RaceDatabase.GetRace("Dwarf");
+        dwarf.Stats.IsExceptionallyStable = true;
+
+        Assert(dwarf.RollBullRushDefenderCheck(fixedRoll: 10).StabilityBonus == 4,
+            "A dwarf that also has the stability flag gets one +4, not +8");
+
+        MountDatabase.Init();
+        MountSystem.MountInstance horse = MountSystem.CreateMount(MountType.LightHorse);
+        string mountLog = MountSystem.TryMount(dwarf, horse);
+        bool mounted = MountSystem.IsMounted(dwarf);
+        Assert(mounted, "Test setup: the Medium dwarf mounts a Large light horse" + (mounted ? string.Empty : $" ({mountLog})"));
+        if (mounted)
+        {
+            Assert(dwarf.GetManeuverStabilityBonus() == 0
+                    && dwarf.RollBullRushDefenderCheck(fixedRoll: 10).StabilityBonus == 0,
+                "No stability bonus while riding (PHB p.15: only while standing on the ground)");
+            MountSystem.TryDismount(dwarf);
+            if (MountSystem.IsMounted(dwarf))
+                MountSystem.ForceDismount(dwarf, allowSoftFall: true);
+        }
+
+        Assert(!MountSystem.IsMounted(dwarf) && dwarf.GetManeuverStabilityBonus() == 4,
+            "Stability returns after dismounting");
+
+        Cleanup(dwarf);
+    }
+
+    // The move-through overrun (OverrunSystem, the PC path; CMB-015) uses the shared PHB p.157
+    // terms: stability and Improved Overrun count, and a tie goes to the higher modifier.
+    private static void TestMoveThroughOverrunUsesSharedCheck()
+    {
+        GameManager gm = GameManager.Instance;
+        MethodInfo check = typeof(GameManager).GetMethod("ResolveOverrunOpposedCheck", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (gm == null || check == null)
+        {
+            Assert(false, "Move-through overrun check uses the shared helpers (needs Play mode with a GameManager)");
+            return;
+        }
+
+        var attacker = CreateTestCharacter("MoveThroughOverrunner", "Fighter");
+        var defender = CreateTestCharacter("MoveThroughBlocker", "Fighter");
+        try
+        {
+            attacker.Stats.Race = null;
+            attacker.Stats.STR = 12; // +1
+            attacker.Stats.CurrentSizeCategory = SizeCategory.Medium;
+            attacker.Stats.Feats.Remove("Improved Overrun");
+            defender.Stats.Race = null;
+            defender.Stats.STR = 10; // +0
+            defender.Stats.DEX = 10; // +0
+            defender.Stats.CurrentSizeCategory = SizeCategory.Medium;
+            defender.Stats.IsExceptionallyStable = false;
+
+            bool Run(params int[] rolls)
+            {
+                int i = 0;
+                System.Func<int> d20 = () => i < rolls.Length ? rolls[i++] : 10;
+                return (bool)check.Invoke(gm, new object[] { attacker, defender, d20 });
+            }
+
+            int atkMod = attacker.GetOverrunAttackerCheckModifier();
+            int defMod = defender.GetTripOrOverrunDefenderCheckModifier();
+            Assert(Run(10, 10) == CharacterController.DoesAttackerWinOpposedCheck(10 + atkMod, atkMod, 10 + defMod, defMod, () => 10),
+                "Move-through overrun result matches the shared helpers");
+            Assert(Run(10, 10), "Move-through overrun: attacker +1 beats an unstable defender +0 on equal rolls");
+            Assert(Run(9, 10), "Move-through overrun: a tie goes to the higher modifier (the attacker), not the defender");
+
+            defender.Stats.IsExceptionallyStable = true;
+            Assert(!Run(10, 10), "Move-through overrun: defender stability (+4) applies");
+
+            attacker.Stats.Feats.Add("Improved Overrun");
+            Assert(Run(10, 10), "Move-through overrun: Improved Overrun (+4) applies to the attacker");
+        }
+        finally
+        {
+            Cleanup(attacker, defender);
+        }
+    }
+
+    private static void TestNpcSetupCopiesExceptionallyStable()
+    {
+        GameManager gm = GameManager.Instance;
+        MethodInfo init = typeof(GameManager).GetMethod("InitializeNPCFromDefinition", BindingFlags.Instance | BindingFlags.NonPublic);
+        NPCDefinition worg = NPCDatabase.Get("worg");
+        if (gm == null || init == null || worg == null)
+        {
+            Assert(false, "NPC setup copies IsExceptionallyStable (needs Play mode with a GameManager)");
+            return;
+        }
+
+        var go = new GameObject("StableWorg_GO");
+        var npc = go.AddComponent<CharacterController>();
+        go.AddComponent<InventoryComponent>();
+        try
+        {
+            init.Invoke(gm, new object[] { npc, worg.Clone(), new Vector2Int(-40, -40), null, null });
+            Assert(npc.Stats != null && npc.Stats.IsExceptionallyStable && npc.GetManeuverStabilityBonus() == 4,
+                "InitializeNPCFromDefinition copies IsExceptionallyStable, so a spawned worg gets +4");
+        }
+        finally
+        {
+            if (gm.Grid != null)
+                gm.Grid.ClearCreatureOccupancy(npc);
+            Cleanup(npc);
+        }
     }
 
     private static void TestBullRushCheckIgnoresBaseAttackBonus()

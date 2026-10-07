@@ -41,6 +41,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dog",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dog",
             ChallengeRating = "1/3",
             Level = 1,
@@ -74,6 +75,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "riding_dog",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Riding Dog",
             ChallengeRating = "1",
             Level = 2,
@@ -113,6 +115,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_rat",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Rat",
             ChallengeRating = "1/3",
             Level = 1,
@@ -184,6 +187,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_badger",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Badger",
             ChallengeRating = "2",
             Level = 3,
@@ -217,6 +221,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_weasel",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Weasel",
             ChallengeRating = "2",
             Level = 3,
@@ -453,6 +458,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "displacer_beast",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Displacer Beast",
             ChallengeRating = "4",
             Level = 6,
@@ -602,6 +608,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "drider",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Drider",
             ChallengeRating = "7",
             Level = 6,
@@ -681,6 +688,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "duergar",
+            IsExceptionallyStable = true, // MM p.92: duergar keep the dwarf stability trait
             Name = "Duergar",
             ChallengeRating = "1",
             Level = 1,
@@ -719,6 +727,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dwarf_warrior",
+            IsExceptionallyStable = true, // PHB p.15 / MM p.92: dwarf stability
             Name = "Dwarf Warrior",
             ChallengeRating = "1/2",
             Level = 1,
@@ -761,6 +770,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_boar",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Boar",
             ChallengeRating = "4",
             Level = 7,
@@ -883,6 +893,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_wolverine",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Wolverine",
             ChallengeRating = "4",
             Level = 5,

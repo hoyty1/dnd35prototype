@@ -138,6 +138,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = id,
+            IsExceptionallyStable = true, // monstrous centipedes: many legs (MM p.286)
             Name = name,
             ChallengeRating = id switch
             {
@@ -189,6 +190,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "crocodile",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Crocodile",
             ChallengeRating = "2",
             Level = 3,
@@ -257,6 +259,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "carrion_crawler",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Carrion Crawler",
             ChallengeRating = "4",
             Level = 3,
@@ -293,6 +296,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "celestial_lion",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Celestial Lion",
             ChallengeRating = "4",
             Level = 5,
@@ -545,6 +549,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "cheetah",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Cheetah",
             ChallengeRating = "2",
             Level = 3,
@@ -587,6 +592,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "chimera",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Chimera",
             ChallengeRating = "7",
             Level = 9,

@@ -586,6 +586,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_wolf",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Wolf",
             ChallengeRating = "3",
             Level = 6,
@@ -633,6 +634,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "tiger",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Tiger",
             Level = 6,
             CharacterClass = "Warrior",
@@ -675,6 +677,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_tiger",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Tiger",
             Level = 6,
             CharacterClass = "Warrior",
@@ -715,6 +718,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "brown_bear",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Brown Bear",
             Level = 6,
             CharacterClass = "Warrior",
@@ -750,6 +754,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_bear",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Bear",
             Level = 12,
             CharacterClass = "Warrior",
@@ -788,6 +793,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "wolf_pack_hunter",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Wolf",
             Level = 2,          // 2 HD animal
             CharacterClass = "Warrior",

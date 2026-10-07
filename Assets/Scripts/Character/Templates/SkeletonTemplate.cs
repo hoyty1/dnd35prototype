@@ -65,6 +65,14 @@ public static class SkeletonTemplate
         skel.CreatureType = "Undead";
         skel.MaterialComposition = MaterialComposition.Bone;
 
+        // ── Stability (PHB p.154/157/158) ──
+        // Legs survive the template (a wolf skeleton is still a quadruped), so the clone keeps
+        // IsExceptionallyStable. A humanoid has two legs, so its flag can only come from a racial
+        // trait (dwarf or duergar stability), and a skeleton loses the base creature's special
+        // qualities apart from extraordinary ones that improve its attacks (MM p.226).
+        if (IsHumanoidBase(baseCreature))
+            skel.IsExceptionallyStable = false;
+
         // ── Hit Dice ──
         // Drop class HD, keep racial HD. Minimum 1 HD.
         // For creatures with class levels, we use their racial HitDice field.
@@ -262,6 +270,18 @@ public static class SkeletonTemplate
                           "eye sockets glowing with faint necromantic energy.";
 
         return skel;
+    }
+
+    /// <summary>
+    /// True when the base creature is of the humanoid type (not monstrous humanoid). Humanoids have
+    /// two legs, so their <see cref="NPCDefinition.IsExceptionallyStable"/> can only come from a
+    /// racial stability trait, which the skeleton and zombie templates remove.
+    /// </summary>
+    public static bool IsHumanoidBase(NPCDefinition baseCreature)
+    {
+        string type = baseCreature?.CreatureType;
+        return !string.IsNullOrWhiteSpace(type)
+            && type.Trim().StartsWith("Humanoid", StringComparison.OrdinalIgnoreCase);
     }
 
     // ────────────────────────────────────────────
@@ -477,6 +497,7 @@ public static class SkeletonFactory
         var baseDef = new NPCDefinition
         {
             Id = "base_wolf",
+            IsExceptionallyStable = true, // four legs: +4 vs bull rush, trip, overrun (PHB p.154)
             Name = "Wolf",
             HitDice = 2,
             SizeCategory = SizeCategory.Medium,
@@ -628,6 +649,7 @@ public static class SkeletonFactory
         var baseDef = new NPCDefinition
         {
             Id = "base_warhorse",
+            IsExceptionallyStable = true, // four legs: +4 vs bull rush, trip, overrun (PHB p.154)
             Name = "Heavy Warhorse",
             HitDice = 4,
             SizeCategory = SizeCategory.Large,

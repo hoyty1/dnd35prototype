@@ -59,6 +59,7 @@ public sealed class ZombieCreatureTemplate : ICreatureTemplate
         // Type and properties
         target.CreatureType = source.CreatureType;
         target.NaturalArmorBonus = source.NaturalArmorBonus;
+        target.IsExceptionallyStable = source.IsExceptionallyStable;
 
         // Defenses
         target.DamageReductionAmount = source.DamageReductionAmount;

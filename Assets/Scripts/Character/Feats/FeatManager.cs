@@ -839,7 +839,8 @@ public static class FeatManager
     //   - CharacterController.RollBullRushAttackerCheck() (+4 from Improved Bull Rush)
     //   - CharacterCombatStats.GetGrappleModifier() (+4 from Improved Grapple)
     //   - CharacterController.ResolveSunder() (+4 from Improved Sunder)
-    //   - OverrunSystem.ResolveOverrunOpposedCheck() (+4 from Improved Overrun)
+    //   - CharacterController.GetOverrunAttackerCheckModifier() (+4 from Improved Overrun;
+    //     used by ResolveOverrun and OverrunSystem.ResolveOverrunOpposedCheck)
     //   - GameManager.CombatActions (AoO suppression via attackerIgnoresAoO flags)
 
     /// <summary>Does this character have Improved Bull Rush?</summary>

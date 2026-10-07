@@ -362,6 +362,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "monstrous_centipede_medium",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Monstrous Centipede (Medium)",
             Level = 1,
             CharacterClass = "Warrior",
@@ -391,6 +392,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "monstrous_scorpion_small",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Monstrous Scorpion (Small)",
             Level = 1,
             CharacterClass = "Warrior",
@@ -421,6 +423,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "monstrous_spider_small",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Monstrous Spider (Small)",
             Level = 1,
             CharacterClass = "Warrior",
@@ -450,6 +453,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "manticore",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Manticore",
             ChallengeRating = "5",
             Level = 6,
@@ -686,6 +690,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "monitor_lizard",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Monitor Lizard",
             ChallengeRating = "2",
             Level = 3,

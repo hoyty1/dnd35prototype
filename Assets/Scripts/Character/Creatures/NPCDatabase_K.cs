@@ -15,6 +15,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "krenshar",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Krenshar",
             ChallengeRating = "1",
             Level = 2,

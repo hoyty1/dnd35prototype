@@ -2208,6 +2208,15 @@ public class CharacterStats
     /// <summary>Creature-specific modifier applied to trip checks (e.g., wolves get +1).</summary>
     public int TripAttackCheckBonus;
 
+    /// <summary>
+    /// Exceptionally stable creature (more than two legs, or a stability trait): +4 on checks to
+    /// resist bull rush, trip and overrun (PHB p.154, p.157, p.158). Copied from
+    /// <see cref="NPCDefinition.IsExceptionallyStable"/>; read by
+    /// <c>CharacterController.GetManeuverStabilityBonus</c>. PC dwarves get the same +4 from
+    /// <c>RaceData.StabilityBonus</c>.
+    /// </summary>
+    public bool IsExceptionallyStable;
+
     /// <summary>Monster special: successful natural-attack hit can start a grapple as a free action.</summary>
     public bool HasImprovedGrab;
 

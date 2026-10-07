@@ -24,6 +24,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "giant_fire_beetle",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Giant Fire Beetle",
             ChallengeRating = "1/3",
             Level = 1,
@@ -55,6 +56,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "fiendish_dire_rat",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Fiendish Dire Rat",
             ChallengeRating = "1/3",
             Level = 1,

@@ -64,6 +64,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "wolverine",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Wolverine",
             ChallengeRating = "2",
             Level = 3,
@@ -131,6 +132,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "worg",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Worg",
             ChallengeRating = "2",
             Level = 4,

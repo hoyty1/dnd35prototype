@@ -178,7 +178,7 @@ There are 52 files, found with `grep -rlE '^\s*public partial class GameManager\
 | GameManager_DomainSpells.cs / _DomainAreaSpells.cs | 569 / 256 | Domain spells (Hold Animal, Heat Metal, ...) and domain area spells (Entangle, Spike Stones, ...). |
 | **Combat/Maneuvers/** (4) | | |
 | GrappleSystem.cs | 2,024 | Grapple suite (`OnGrapple*ButtonPressed`), also `OnOverrunButtonPressed`. |
-| OverrunSystem.cs | 952 | Overrun destination selection and resolution. |
+| OverrunSystem.cs | 943 | Overrun destination selection and resolution. |
 | StandardManeuvers.cs | 1,210 | Disarm and sunder, including dual-wield prompts; the shared bull rush push and follow (`ResolveBullRushPushAndFollow`, `ExecuteBullRushMovement`) and overrun's `TryPushTargetAway`; some trip/feint helpers. |
 | SupportActions.cs | 2,031 | Aid Another, Charge. |
 | **Combat/Special/** (2) | | |

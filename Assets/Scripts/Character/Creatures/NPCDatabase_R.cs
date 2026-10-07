@@ -149,6 +149,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "rust_monster",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Rust Monster",
             ChallengeRating = "3",
             Level = 5,

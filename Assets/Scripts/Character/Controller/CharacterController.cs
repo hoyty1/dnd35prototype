@@ -10281,13 +10281,29 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// +4 when resisting a bull rush, overrun or trip for creatures that are exceptionally stable
-    /// (PHB p.154, p.157, p.158). Only racial stability (dwarves) is modelled: there is no data
-    /// for creatures with more than two legs.
+    /// +4 when resisting a bull rush, overrun or trip for a creature that has more than two legs or
+    /// is otherwise exceptionally stable (PHB p.154, p.157, p.158). Stable comes from creature data
+    /// (<see cref="CharacterStats.IsExceptionallyStable"/>, set from the MM for NPCs, summons and
+    /// NPC dwarves) or racial stability (<see cref="RaceData.StabilityBonus"/>, PC dwarves). The
+    /// bonus is a single +4, never doubled. No bonus for a rider: dwarf stability needs the creature
+    /// on the ground (PHB p.15), and a rider is not standing on its own feet, so no creature gets
+    /// stability while riding (the mount keeps its own). Mounting is unreachable in play (CMB-031).
+    /// Flying and climbing are not tracked (CMB-111).
     /// </summary>
     public int GetManeuverStabilityBonus()
     {
-        return Stats != null && Stats.Race != null ? Stats.Race.StabilityBonus : 0;
+        if (Stats == null)
+            return 0;
+
+        bool stable = Stats.IsExceptionallyStable
+            || (Stats.Race != null && Stats.Race.StabilityBonus > 0);
+        if (!stable)
+            return 0;
+
+        if (MountSystem.IsMounted(this))
+            return 0;
+
+        return 4;
     }
 
     /// <summary>Strength-check modifier for the creature attempting a trip (PHB p.158).</summary>

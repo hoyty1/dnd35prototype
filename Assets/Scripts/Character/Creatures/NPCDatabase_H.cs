@@ -116,6 +116,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hell_hound",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Hell Hound",
             ChallengeRating = "3",
             Level = 4,
@@ -165,6 +166,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hippogriff",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Hippogriff",
             ChallengeRating = "2",
             Level = 3,
@@ -198,6 +200,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "huge_monstrous_centipede",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Huge Monstrous Centipede",
             ChallengeRating = "2",
             Level = 6,
@@ -316,6 +319,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hellcat",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Hellcat",
             ChallengeRating = "7",
             Level = 10,
@@ -522,6 +526,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hyena",
+            IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Hyena",
             ChallengeRating = "1",
             Level = 2,
