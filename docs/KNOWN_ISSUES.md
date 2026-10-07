@@ -29,18 +29,18 @@ Entries per section:
 | Section | Prefix | High | Med | Low | Total | Next ID |
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
-| [Runtime loop and core](issues/CORE.md) | CORE | 2 | 19 | 15 | 36 | CORE-037 |
-| [Combat](issues/CMB.md) | CMB | 3 | 37 | 42 | 82 | CMB-090 |
-| [Grid and movement](issues/GRID.md) | GRID | 1 | 7 | 9 | 17 | GRID-018 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 8 | 55 | 47 | 110 | SPL-112 |
-| [Characters, feats and classes](issues/CHR.md) | CHR | 7 | 25 | 36 | 68 | CHR-069 |
-| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 17 | 16 | 37 | CRE-038 |
+| [Runtime loop and core](issues/CORE.md) | CORE | 2 | 20 | 15 | 37 | CORE-038 |
+| [Combat](issues/CMB.md) | CMB | 3 | 47 | 48 | 98 | CMB-106 |
+| [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 10 | 19 | GRID-020 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 8 | 57 | 53 | 118 | SPL-120 |
+| [Characters, feats and classes](issues/CHR.md) | CHR | 9 | 26 | 37 | 72 | CHR-073 |
+| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 21 | 17 | 42 | CRE-043 |
 | [Encounters](issues/ENC.md) | ENC | 1 | 7 | 13 | 21 | ENC-022 |
-| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 31 | 33 | 68 | ITM-069 |
-| [AI](issues/AI.md) | AI | 1 | 19 | 35 | 55 | AI-057 |
+| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 32 | 34 | 70 | ITM-071 |
+| [AI](issues/AI.md) | AI | 1 | 19 | 36 | 56 | AI-058 |
 | [UI](issues/UI.md) | UI | 1 | 11 | 38 | 50 | UI-051 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 20 | 28 | TST-029 |
-| **All** | | 32 | 241 | 312 | 585 | |
+| **All** | | 34 | 261 | 329 | 624 | |
 
 ## Top issues
 
@@ -70,3 +70,5 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [ITM-004](issues/ITM.md) | High | Items, store, crafting and treasure | NPCs spawn without weapons and shields listed under MainHand, OffHand or Ranged | Yes |
 | [ITM-001](issues/ITM.md) | High | Items, store, crafting and treasure | Ring of Protection deflection accumulates on every stat recalculation | Yes |
 | [AI-001](issues/AI.md) | High | AI | NPCs never cast area spells, although AI scoring favours them | Yes |
+| [CHR-072](issues/CHR.md) | High | Characters, feats and classes | NPC classes and creature types grant no weapon or armor proficiency, so armed monsters take -4 (and armor check penalties) on attacks | Yes |
+| [CHR-071](issues/CHR.md) | High | Characters, feats and classes | PC Hit Dice stay at creation level, so HD-gated spells (Sleep, Color Spray) treat levelled PCs as level 1 | Yes |
