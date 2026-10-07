@@ -526,11 +526,11 @@ public class CombatUI : MonoBehaviour
         if (_bullRushExtraPushPanel == null || !_bullRushExtraPushPanel.activeSelf)
             return;
 
-        // Escape defaults to 0 extra squares.
+        // 0 = push 5 ft and stay, 1-9 = push that many squares and follow; Escape = stay.
 #if ENABLE_LEGACY_INPUT_MANAGER
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            OnBullRushExtraPushSelected(0);
+            CancelBullRushExtraPushChoice();
             return;
         }
 
@@ -538,7 +538,7 @@ public class CombatUI : MonoBehaviour
         {
             KeyCode alphaKey = (KeyCode)((int)KeyCode.Alpha0 + i);
             KeyCode keypadKey = (KeyCode)((int)KeyCode.Keypad0 + i);
-            if ((Input.GetKeyDown(alphaKey) || Input.GetKeyDown(keypadKey)) && i <= _bullRushExtraPushMaxExtraSquares)
+            if ((Input.GetKeyDown(alphaKey) || Input.GetKeyDown(keypadKey)) && i <= _bullRushPushMaxFollowSquares)
             {
                 OnBullRushExtraPushSelected(i);
                 return;
@@ -551,13 +551,13 @@ public class CombatUI : MonoBehaviour
         {
             if (keyboard.escapeKey.wasPressedThisFrame)
             {
-                OnBullRushExtraPushSelected(0);
+                CancelBullRushExtraPushChoice();
                 return;
             }
 
             for (int i = 0; i <= 9; i++)
             {
-                if (i > _bullRushExtraPushMaxExtraSquares)
+                if (i > _bullRushPushMaxFollowSquares)
                     continue;
 
                 bool pressed = false;
@@ -1288,31 +1288,8 @@ public class CombatUI : MonoBehaviour
         }
     }
 
-    public void ShowBullRushPushChoice(
-        CharacterController attacker,
-        CharacterController target,
-        int minSquares,
-        int maxSquares,
-        System.Action<int> onSelect,
-        System.Action onCancel = null)
-    {
-        // Backward-compatible wrapper: old API chose total squares, new UI chooses extra squares.
-        int min = Mathf.Max(1, minSquares);
-        int max = Mathf.Max(min, maxSquares);
-        int maxExtra = Mathf.Max(0, max - 1);
-
-        ShowBullRushExtraPushChoice(attacker, target, maxExtra,
-            onSelect: extraSquares =>
-            {
-                int totalSquares = 1 + Mathf.Max(0, extraSquares);
-                totalSquares = Mathf.Clamp(totalSquares, min, max);
-                onSelect?.Invoke(totalSquares);
-            },
-            onCancel: onCancel);
-    }
-
     private GameObject _bullRushExtraPushPanel;
-    private int _bullRushExtraPushMaxExtraSquares;
+    private int _bullRushPushMaxFollowSquares;
     private System.Action<int> _bullRushExtraPushOnSelect;
     private System.Action _bullRushExtraPushOnCancel;
 
@@ -1322,38 +1299,39 @@ public class CombatUI : MonoBehaviour
         Debug.Log($"[CombatUI][BullRushExtraPush] {eventName}{suffix}");
     }
 
+    /// <summary>
+    /// The single bull rush push decision for a controllable attacker (PHB p.154, CMB-098):
+    /// "Push 5 ft, stay" (onSelect(0)) or "N x 5 ft and follow" for N = 1..<paramref name="maxFollowSquares"/>
+    /// (onSelect(N): the attacker moves with the defender and pushes it N squares). Keys 0-9 pick an
+    /// option; Esc and the Cancel button push 5 ft and stay. GameManager.ResolveBullRushPushAndFollow
+    /// resolves the choice; non-controllable attackers make it through AIService.ChooseBullRushPush.
+    /// </summary>
     public void ShowBullRushExtraPushChoice(
         CharacterController attacker,
         CharacterController target,
-        int maxExtraSquares,
+        int maxFollowSquares,
         System.Action<int> onSelect,
         System.Action onCancel = null)
     {
         string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "<null-attacker>";
         string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "<null-target>";
 
-        int maxExtra = Mathf.Max(0, maxExtraSquares);
-        LogBullRushExtraPushLifecycle("SHOW_CALLED", $"attacker={attackerName}, target={targetName}, requestedMaxExtra={maxExtraSquares}, clampedMaxExtra={maxExtra}, frame={Time.frameCount}");
-
-        if (maxExtra <= 0)
-        {
-            LogBullRushExtraPushLifecycle("AUTO_SELECT_ZERO", $"reason=maxExtra<=0, frame={Time.frameCount}");
-            onSelect?.Invoke(0);
-            return;
-        }
+        int maxFollow = Mathf.Max(1, maxFollowSquares);
+        LogBullRushExtraPushLifecycle("SHOW_CALLED", $"attacker={attackerName}, target={targetName}, requestedMaxFollow={maxFollowSquares}, clampedMaxFollow={maxFollow}, frame={Time.frameCount}");
 
         HideSpecialStyleSelectionMenu();
         HideBullRushExtraPushChoice();
 
-        _bullRushExtraPushMaxExtraSquares = maxExtra;
+        _bullRushPushMaxFollowSquares = maxFollow;
         _bullRushExtraPushOnSelect = onSelect;
         _bullRushExtraPushOnCancel = onCancel;
 
         if (ActionPanel == null)
         {
-            LogBullRushExtraPushLifecycle("ACTION_PANEL_NULL", $"fallbackSelect=0, frame={Time.frameCount}");
-            _bullRushExtraPushOnSelect?.Invoke(0);
+            LogBullRushExtraPushLifecycle("ACTION_PANEL_NULL", $"fallbackSelect=stay, frame={Time.frameCount}");
+            System.Action<int> fallback = _bullRushExtraPushOnSelect;
             HideBullRushExtraPushChoice();
+            fallback?.Invoke(0);
             return;
         }
 
@@ -1391,7 +1369,7 @@ public class CombatUI : MonoBehaviour
         CreateBullRushExtraPushText(
             _bullRushExtraPushPanel.transform,
             "Header",
-            "How many extra squares would you like to push the target?",
+            $"Bull rush: push {targetName} 5 ft and stay, or move with it?",
             14,
             FontStyle.Bold,
             TextAnchor.MiddleLeft,
@@ -1400,7 +1378,7 @@ public class CombatUI : MonoBehaviour
         CreateBullRushExtraPushText(
             _bullRushExtraPushPanel.transform,
             "Info",
-            $"Base push: 1 square (5 feet)\nAdditional available: 0 to {maxExtra} squares",
+            $"Moving with the target pushes it up to {maxFollow * 5} ft; you follow into the squares it leaves. Both of you provoke attacks of opportunity (not from each other).",
             12,
             FontStyle.Normal,
             TextAnchor.MiddleLeft,
@@ -1409,25 +1387,28 @@ public class CombatUI : MonoBehaviour
         GameObject buttonContainer = new GameObject("ButtonContainer");
         buttonContainer.transform.SetParent(_bullRushExtraPushPanel.transform, false);
         var grid = buttonContainer.AddComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(52f, 42f);
+        grid.cellSize = new Vector2(150f, 34f);
         grid.spacing = new Vector2(6f, 6f);
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        grid.constraintCount = Mathf.Clamp(maxExtra + 1, 3, 8);
+        grid.constraintCount = 2;
         var buttonContainerLE = buttonContainer.AddComponent<LayoutElement>();
-        buttonContainerLE.minHeight = maxExtra > 5 ? 96f : 48f;
+        int rows = (maxFollow + 2) / 2;
+        buttonContainerLE.minHeight = rows * 34f + (rows - 1) * 6f;
 
         int createdOptionButtonCount = 0;
-        for (int extra = 0; extra <= maxExtra; extra++)
+        for (int option = 0; option <= maxFollow; option++)
         {
-            int extraCopy = extra;
-            int totalSquares = 1 + extraCopy;
-            int totalFeet = totalSquares * 5;
+            int optionCopy = option;
+            string keyHint = optionCopy <= 9 ? $"[{optionCopy}] " : string.Empty;
+            string label = optionCopy == 0
+                ? $"{keyHint}Push 5 ft, stay"
+                : $"{keyHint}{optionCopy * 5} ft and follow";
 
             Button optionButton = CreateSpecialStyleSelectionButton(
                 parent: buttonContainer.transform,
-                name: $"Extra_{extraCopy}",
-                label: extraCopy.ToString(),
-                backgroundColor: extraCopy == 0 ? new Color(0.3f, 0.3f, 0.34f, 1f) : new Color(0.45f, 0.33f, 0.12f, 1f),
+                name: optionCopy == 0 ? "Stay" : $"Follow_{optionCopy}",
+                label: label,
+                backgroundColor: optionCopy == 0 ? new Color(0.3f, 0.3f, 0.34f, 1f) : new Color(0.45f, 0.33f, 0.12f, 1f),
                 isInteractable: true);
 
             if (optionButton != null)
@@ -1436,49 +1417,24 @@ public class CombatUI : MonoBehaviour
                 Text labelText = optionButton.GetComponentInChildren<Text>();
                 if (labelText != null)
                 {
-                    labelText.fontSize = 24;
+                    labelText.fontSize = 14;
                     labelText.fontStyle = FontStyle.Bold;
                     labelText.color = Color.white;
                 }
 
-                optionButton.onClick.AddListener(() => OnBullRushExtraPushSelected(extraCopy));
-                optionButton.gameObject.name = $"Extra_{extraCopy}_{totalSquares}sq_{totalFeet}ft";
+                optionButton.onClick.AddListener(() => OnBullRushExtraPushSelected(optionCopy));
             }
         }
-
-        CreateBullRushExtraPushText(
-            _bullRushExtraPushPanel.transform,
-            "Footer",
-            "(Total push = 1 + extra squares)",
-            11,
-            FontStyle.Italic,
-            TextAnchor.MiddleLeft,
-            new Color(0.72f, 0.72f, 0.78f, 1f));
 
         Button cancelButton = CreateSpecialStyleSelectionButton(
             parent: _bullRushExtraPushPanel.transform,
             name: "Cancel",
-            label: "Cancel (default 0)",
+            label: "Cancel (push 5 ft, stay)",
             backgroundColor: new Color(0.35f, 0.16f, 0.16f, 1f),
             isInteractable: true);
 
         if (cancelButton != null)
-        {
-            cancelButton.onClick.AddListener(() =>
-            {
-                LogBullRushExtraPushLifecycle("CANCEL_CLICKED", $"hasCustomCancel={_bullRushExtraPushOnCancel != null}, frame={Time.frameCount}");
-                if (_bullRushExtraPushOnCancel != null)
-                {
-                    System.Action cancelCallback = _bullRushExtraPushOnCancel;
-                    HideBullRushExtraPushChoice();
-                    cancelCallback.Invoke();
-                }
-                else
-                {
-                    OnBullRushExtraPushSelected(0);
-                }
-            });
-        }
+            cancelButton.onClick.AddListener(CancelBullRushExtraPushChoice);
 
         _bullRushExtraPushPanel.SetActive(true);
         LogBullRushExtraPushLifecycle(
@@ -1499,18 +1455,35 @@ public class CombatUI : MonoBehaviour
         }
 
         _bullRushExtraPushPanel = null;
-        _bullRushExtraPushMaxExtraSquares = 0;
+        _bullRushPushMaxFollowSquares = 0;
         _bullRushExtraPushOnSelect = null;
         _bullRushExtraPushOnCancel = null;
     }
 
-    private void OnBullRushExtraPushSelected(int extraSquares)
+    /// <summary>0 = push 5 ft and stay; N = move with the defender and push N squares.</summary>
+    private void OnBullRushExtraPushSelected(int followSquares)
     {
-        int extra = Mathf.Clamp(extraSquares, 0, _bullRushExtraPushMaxExtraSquares);
-        LogBullRushExtraPushLifecycle("OPTION_SELECTED", $"requested={extraSquares}, clamped={extra}, maxExtra={_bullRushExtraPushMaxExtraSquares}, frame={Time.frameCount}");
+        int choice = Mathf.Clamp(followSquares, 0, _bullRushPushMaxFollowSquares);
+        LogBullRushExtraPushLifecycle("OPTION_SELECTED", $"requested={followSquares}, clamped={choice}, maxFollow={_bullRushPushMaxFollowSquares}, frame={Time.frameCount}");
         System.Action<int> callback = _bullRushExtraPushOnSelect;
         HideBullRushExtraPushChoice();
-        callback?.Invoke(extra);
+        callback?.Invoke(choice);
+    }
+
+    /// <summary>Esc or the Cancel button: push 5 ft and stay.</summary>
+    private void CancelBullRushExtraPushChoice()
+    {
+        LogBullRushExtraPushLifecycle("CANCEL", $"hasCustomCancel={_bullRushExtraPushOnCancel != null}, frame={Time.frameCount}");
+        if (_bullRushExtraPushOnCancel != null)
+        {
+            System.Action cancelCallback = _bullRushExtraPushOnCancel;
+            HideBullRushExtraPushChoice();
+            cancelCallback.Invoke();
+        }
+        else
+        {
+            OnBullRushExtraPushSelected(0);
+        }
     }
 
     private Text CreateBullRushExtraPushText(
@@ -1541,26 +1514,6 @@ public class CombatUI : MonoBehaviour
         le.minHeight = Mathf.Max(24f, fontSize + 8f);
 
         return txt;
-    }
-
-    public void ShowBullRushFollowChoice(
-        CharacterController attacker,
-        CharacterController target,
-        int pushedSquares,
-        System.Action<bool> onDecision)
-    {
-        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "Attacker";
-        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
-        int squares = Mathf.Max(1, pushedSquares);
-        int feet = squares * 5;
-
-        ShowConfirmationDialog(
-            title: "Bull Rush Follow",
-            message: $"{attackerName} pushed {targetName} {squares} square{(squares == 1 ? string.Empty : "s")} ({feet} feet).\nFollow into the vacated squares?",
-            confirmLabel: "Follow",
-            cancelLabel: "Stay",
-            onConfirm: () => onDecision?.Invoke(true),
-            onCancel: () => onDecision?.Invoke(false));
     }
 
     public bool IsSpecialStyleSelectionMenuOpen()

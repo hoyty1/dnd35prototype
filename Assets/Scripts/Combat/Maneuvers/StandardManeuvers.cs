@@ -796,238 +796,415 @@ public partial class GameManager
         _sunderAttemptNumber = 0;
     }
 
-    private int GetBullRushMaxPushSquares(SpecialAttackResult bullRushResult)
+    /// <summary>
+    /// The push and follow after a successful bull rush (PHB p.154), shared by the PC standard bull
+    /// rush (ExecuteSpecialAttack), the NPC executor (TryNPCSpecialAttackIfBeneficial) and the charge
+    /// bull rush (ResolveChargeBullRush). The attacker decides first: push the defender 5 ft and stay,
+    /// or move with it and push 1 to maxIfFollowing squares (1 + margin / 5, capped by the attacker's
+    /// movement limit; <see cref="BullRushRules"/>). An attacker that cannot move (limit 0: prone,
+    /// entangled, after a 5-foot step, a charge that used all its movement) is not asked and pushes
+    /// 5 ft. A controllable attacker picks in the CombatUI prompt, any other attacker through the AI
+    /// hook (AIService.ChooseBullRushPush, CMB-098). Then <see cref="ExecuteBullRushMovement"/> moves
+    /// both square by square with their AoOs. When an AoO drops either participant this checks
+    /// victory and the party's defeat (CORE-011). Synchronous apart from the PC prompt, so the NPC
+    /// path (onComplete null) finishes before this returns. <paramref name="onComplete"/> receives
+    /// true when the attacker ends the bull rush dead, dying or unconscious.
+    /// <paramref name="diagonalsMovedThisCharge"/> continues the 5-10-5 diagonal count of a charge
+    /// path; <paramref name="attackerAlreadyProvoked"/> lists opponents that already had a movement
+    /// opportunity against the attacker this action (the charge path and the bull rush initiation,
+    /// CMB-113), which get no further AoO as it follows.
+    /// </summary>
+    private void ResolveBullRushPushAndFollow(
+        CharacterController attacker,
+        CharacterController target,
+        SpecialAttackResult bullRushResult,
+        bool isCharge,
+        int squaresMovedThisCharge,
+        System.Action<bool> onComplete,
+        int diagonalsMovedThisCharge = 0,
+        ICollection<CharacterController> attackerAlreadyProvoked = null)
     {
-        if (bullRushResult == null || !bullRushResult.Success)
-            return 0;
-
-        int difference = Mathf.Max(0, bullRushResult.CheckTotal - bullRushResult.OpposedTotal);
-        int additionalSquares = difference / 5;
-        return 1 + additionalSquares;
-    }
-
-    private void ResolveBullRushPushAndFollow(CharacterController attacker, CharacterController target, SpecialAttackResult bullRushResult, System.Action onComplete)
-    {
-        if (attacker == null || target == null || bullRushResult == null || !bullRushResult.Success)
+        if (attacker == null || attacker.Stats == null || target == null || target.Stats == null
+            || bullRushResult == null || !bullRushResult.Success)
         {
-            onComplete?.Invoke();
+            onComplete?.Invoke(false);
             return;
         }
 
-        int difference = Mathf.Max(0, bullRushResult.CheckTotal - bullRushResult.OpposedTotal);
-        int maxExtraSquares = difference / 5;
+        int margin = bullRushResult.CheckTotal - bullRushResult.OpposedTotal;
+        Vector2Int direction = BullRushRules.GetPushDirection(attacker, target);
+        bool diagonal = direction.x != 0 && direction.y != 0;
+        int movementLimit = BullRushRules.GetMovementLimitSquares(attacker, isCharge, squaresMovedThisCharge);
+        int maxIfFollowing = BullRushRules.GetMaxPushSquares(margin, true, movementLimit, diagonal, isCharge ? diagonalsMovedThisCharge : 0);
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"Result: {attacker.Stats.CharacterName} wins ({bullRushResult.CheckTotal} vs {bullRushResult.OpposedTotal})"));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"Difference: {difference}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", maxIfFollowing > 0
+            ? $"Result: {attacker.Stats.CharacterName} wins ({bullRushResult.CheckTotal} vs {bullRushResult.OpposedTotal}, margin {margin}). "
+              + $"Push 5 ft and stay, or move with {target.Stats.CharacterName} up to {maxIfFollowing * 5} ft (movement limit {movementLimit * 5} ft)."
+            : $"Result: {attacker.Stats.CharacterName} wins ({bullRushResult.CheckTotal} vs {bullRushResult.OpposedTotal}, margin {margin}). "
+              + $"{attacker.Stats.CharacterName} cannot move with {target.Stats.CharacterName} now, so the push is 5 ft."));
 
-        void ExecuteSelectedExtraDistance(int chosenExtraSquares)
+        // Nothing to decide when the first square is already blocked.
+        if (Grid == null || !Grid.CanPlaceCreature(target.GridPosition + direction, target.GetVisualSquaresOccupied(), target))
         {
-            int clampedExtra = Mathf.Clamp(chosenExtraSquares, 0, maxExtraSquares);
-            int totalSquares = 1 + clampedExtra;
-            Debug.Log($"[GameManager][BullRushExtraPush] ExecuteSelectedExtraDistance chosen={chosenExtraSquares}, clamped={clampedExtra}, totalSquares={totalSquares}, maxExtraSquares={maxExtraSquares}, frame={Time.frameCount}");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{target.Stats.CharacterName} cannot be pushed; path is blocked."));
+            onComplete?.Invoke(false);
+            return;
+        }
 
-            if (clampedExtra <= 0)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} chooses to push 1 square (base only)"));
-            else
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} chooses to push {clampedExtra} extra square{(clampedExtra == 1 ? string.Empty : "s")} ({totalSquares} total)"));
+        void Execute(bool follow, int squares)
+        {
+            follow &= maxIfFollowing > 0;
+            int pushSquares = follow ? Mathf.Clamp(squares, 1, maxIfFollowing) : 1;
+            BullRushMovementOutcome movement = ExecuteBullRushMovement(attacker, target, direction, pushSquares, follow, attackerAlreadyProvoked);
+            bool attackerDown = ThreatSystem.IsMoverIncapacitated(attacker);
 
-            BullRushPushResolution pushResolution = ExecuteBullRushPush(attacker, target, totalSquares);
-            UpdateAllStatsUI();
-
-            if (!pushResolution.TargetMoved)
+            // CORE-011: an AoO during the push or follow may end the combat, on every path.
+            if (movement.SomeoneDropped && CurrentPhase != TurnPhase.CombatOver)
             {
-                onComplete?.Invoke();
-                return;
-            }
+                RegisterDefeatedEnemyForXP(target, "BullRush.MovementAoO");
+                RegisterDefeatedEnemyForXP(attacker, "BullRush.MovementAoO");
+                CheckCombatVictory("BullRush.MovementAoO", target);
 
-            if (attacker.IsControllable && CombatUI != null)
-            {
-                CombatUI.ShowBullRushFollowChoice(attacker, target, pushResolution.ActualSquares, shouldFollow =>
+                if (CurrentPhase != TurnPhase.CombatOver && AreAllPCsDead())
                 {
-                    if (shouldFollow)
-                        ExecuteBullRushFollow(attacker, pushResolution);
-                    else
-                        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} chooses not to follow."));
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+                    CombatUI?.SetActionButtonsVisible(false);
+                }
+            }
 
-                    UpdateAllStatsUI();
-                    onComplete?.Invoke();
-                });
-            }
-            else
-            {
-                ExecuteBullRushFollow(attacker, pushResolution);
-                UpdateAllStatsUI();
-                onComplete?.Invoke();
-            }
+            onComplete?.Invoke(attackerDown);
         }
 
-        if (maxExtraSquares > 0)
+        if (maxIfFollowing <= 0)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"Can push 0 to {maxExtraSquares} extra squares (base 1 + extra)"));
-
-            if (attacker.IsControllable && CombatUI != null)
-            {
-                Debug.Log($"[GameManager][BullRushExtraPush] Showing player choice UI. attacker={attacker.Stats.CharacterName}, target={target.Stats.CharacterName}, maxExtraSquares={maxExtraSquares}, actionPanelExists={CombatUI.ActionPanel != null}, actionPanelActiveSelf={(CombatUI.ActionPanel != null && CombatUI.ActionPanel.activeSelf)}, actionPanelActiveInHierarchy={(CombatUI.ActionPanel != null && CombatUI.ActionPanel.activeInHierarchy)}, frame={Time.frameCount}");
-
-                CombatUI.ShowBullRushExtraPushChoice(attacker, target, maxExtraSquares,
-                    onSelect: selectedExtraSquares =>
-                    {
-                        Debug.Log($"[GameManager][BullRushExtraPush] Player selected extra={selectedExtraSquares}, frame={Time.frameCount}");
-                        ExecuteSelectedExtraDistance(selectedExtraSquares);
-                    },
-                    onCancel: () =>
-                    {
-                        Debug.Log($"[GameManager][BullRushExtraPush] Player cancelled selection. Defaulting to 0 extra squares, frame={Time.frameCount}");
-                        ExecuteSelectedExtraDistance(0);
-                    });
-            }
-            else
-            {
-                Debug.Log($"[GameManager][BullRushExtraPush] Auto-selecting max extra for non-player attacker. attacker={attacker.Stats.CharacterName}, maxExtraSquares={maxExtraSquares}, frame={Time.frameCount}");
-                ExecuteSelectedExtraDistance(maxExtraSquares);
-            }
+            Execute(false, 1);
+            return;
         }
-        else
+
+        if (attacker.IsControllable && CombatUI != null)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Push 1 square (5 feet) - no extra available"));
-            ExecuteSelectedExtraDistance(0);
+            CombatUI.ShowBullRushExtraPushChoice(attacker, target, maxIfFollowing,
+                onSelect: followSquares => Execute(followSquares > 0, followSquares),
+                onCancel: () => Execute(false, 1));
+            return;
         }
+
+        int chosen = ChooseBullRushPushForAI(attacker, target, maxIfFollowing, out bool aiFollows);
+        Execute(aiFollows, chosen);
     }
 
-    private IEnumerator ResolveBullRushPushAndFollowCoroutine(CharacterController attacker, CharacterController target, SpecialAttackResult bullRushResult)
+    /// <summary>
+    /// Bull rush push decision for a non-controllable attacker (CMB-098): AIService.ChooseBullRushPush,
+    /// which asks the AI profile. Returns the squares to push (1 when not following).
+    /// </summary>
+    private int ChooseBullRushPushForAI(CharacterController attacker, CharacterController target, int maxIfFollowing, out bool follow)
+    {
+        if (_aiService != null)
+            return _aiService.ChooseBullRushPush(attacker, target, maxIfFollowing, out follow);
+
+        follow = true;
+        return Mathf.Max(1, maxIfFollowing);
+    }
+
+    /// <summary>Set by <see cref="ResolveBullRushPushAndFollowCoroutine"/> when the attacker ends the push dead, dying or unconscious.</summary>
+    private sealed class BullRushPushCoroutineOutcome
+    {
+        public bool AttackerIncapacitated;
+    }
+
+    private IEnumerator ResolveBullRushPushAndFollowCoroutine(
+        CharacterController attacker,
+        CharacterController target,
+        SpecialAttackResult bullRushResult,
+        bool isCharge,
+        int squaresMovedThisCharge,
+        int diagonalsMovedThisCharge = 0,
+        ICollection<CharacterController> attackerAlreadyProvoked = null,
+        BullRushPushCoroutineOutcome outcome = null)
     {
         bool finished = false;
-        ResolveBullRushPushAndFollow(attacker, target, bullRushResult, () => finished = true);
+        ResolveBullRushPushAndFollow(attacker, target, bullRushResult, isCharge, squaresMovedThisCharge,
+            attackerDown =>
+            {
+                if (outcome != null)
+                    outcome.AttackerIncapacitated = attackerDown;
+                finished = true;
+            },
+            diagonalsMovedThisCharge, attackerAlreadyProvoked);
 
         while (!finished)
             yield return null;
     }
 
-    /// <summary>
-    /// Direction "straight back" for a push (PHB p.154), from the side where the two footprints
-    /// touch rather than from the anchor squares, so multi-square creatures push along the axis
-    /// they face. Diagonal only when the footprints touch at a corner.
-    /// </summary>
-    private static Vector2Int GetPushDirection(CharacterController attacker, CharacterController target)
+    /// <summary>What <see cref="ExecuteBullRushMovement"/> did.</summary>
+    private struct BullRushMovementOutcome
     {
-        int attackerSize = Mathf.Max(1, attacker.GetVisualSquaresOccupied());
-        int targetSize = Mathf.Max(1, target.GetVisualSquaresOccupied());
-        Vector2Int a = attacker.GridPosition;
-        Vector2Int t = target.GridPosition;
-
-        int AxisSign(int attackerMin, int targetMin)
-        {
-            int attackerMax = attackerMin + attackerSize - 1;
-            int targetMax = targetMin + targetSize - 1;
-            if (targetMin > attackerMax) return 1;
-            if (targetMax < attackerMin) return -1;
-            return 0;
-        }
-
-        var direction = new Vector2Int(AxisSign(a.x, t.x), AxisSign(a.y, t.y));
-        if (direction == Vector2Int.zero)
-        {
-            // Overlapping footprints: fall back to the difference of the footprint centres.
-            float dx = (t.x + targetSize * 0.5f) - (a.x + attackerSize * 0.5f);
-            float dy = (t.y + targetSize * 0.5f) - (a.y + attackerSize * 0.5f);
-            direction = new Vector2Int(dx > 0f ? 1 : (dx < 0f ? -1 : 0), dy > 0f ? 1 : (dy < 0f ? -1 : 0));
-        }
-
-        return direction == Vector2Int.zero ? Vector2Int.right : direction;
+        public int Pushed;
+        public int Followed;
+        public bool SomeoneDropped;
     }
 
-    private BullRushPushResolution ExecuteBullRushPush(CharacterController attacker, CharacterController target, int squares)
+    /// <summary>
+    /// Moves the defender up to <paramref name="pushSquares"/> squares along <paramref name="direction"/>,
+    /// one square at a time (forced movement, markAsMoved false). The first square is the base 5-ft
+    /// push and needs no following. When the attacker follows, each step is one joint move: the
+    /// attacker moves into the squares the defender vacates, and every square beyond the first is
+    /// pushed only if the attacker moves with the defender on that step (PHB p.154). So the push
+    /// ends as soon as the attacker cannot follow: its footprint is blocked, an AoO stops it
+    /// (ThreatSystem.ShouldStopMovementAfterAoO) or it is incapacitated. Each step must fit the
+    /// mover's whole footprint (SquareGrid.CanPlaceCreature). Before each step each mover provokes
+    /// from every opponent threatening a square it leaves, except the other participant, at most
+    /// once per opponent per push and per follow (PHB p.154, p.138); the follow set starts from
+    /// <paramref name="attackerAlreadyProvoked"/>. Each such AoO may strike the other participant
+    /// instead (<see cref="ResolveBullRushAoO"/>). The push also stops when the defender is dead or
+    /// off the grid; pending the owner (CMB-115) a prone, dying or unconscious defender keeps being
+    /// pushed. Logs only what happened.
+    /// </summary>
+    private BullRushMovementOutcome ExecuteBullRushMovement(
+        CharacterController attacker,
+        CharacterController target,
+        Vector2Int direction,
+        int pushSquares,
+        bool follow,
+        ICollection<CharacterController> attackerAlreadyProvoked = null)
     {
-        var resolution = new BullRushPushResolution
-        {
-            RequestedSquares = Mathf.Max(1, squares),
-            OriginalTargetPosition = target.GridPosition,
-            FinalTargetPosition = target.GridPosition,
-            Direction = GetPushDirection(attacker, target)
-        };
+        string attackerName = attacker.Stats.CharacterName;
+        string targetName = target.Stats.CharacterName;
+        var outcome = new BullRushMovementOutcome();
 
-        // Each step must fit the target's whole footprint; its own squares do not block it.
-        int targetSize = target.GetVisualSquaresOccupied();
-        Vector2Int destination = target.GridPosition;
-        for (int i = 0; i < resolution.RequestedSquares; i++)
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", follow
+            ? $"{attackerName} moves with {targetName}, pushing up to {pushSquares} square{(pushSquares == 1 ? string.Empty : "s")} ({pushSquares * 5} feet)."
+            : $"{attackerName} pushes {targetName} 5 feet and stays."));
+
+        var pushProvoked = new HashSet<CharacterController>();
+        var followProvoked = attackerAlreadyProvoked != null
+            ? new HashSet<CharacterController>(attackerAlreadyProvoked)
+            : new HashSet<CharacterController>();
+        bool obstructed = false;
+        string pushStopReason = null;
+        string followStopReason = null;
+
+        for (int step = 1; step <= pushSquares; step++)
         {
-            Vector2Int next = destination + resolution.Direction;
-            if (Grid == null || !Grid.CanPlaceCreature(next, targetSize, target))
+            bool baseStep = step == 1;
+            if (IsBullRushDefenderGone(target))
             {
-                resolution.Obstructed = true;
+                pushStopReason = $"{targetName} is dead";
                 break;
             }
 
-            destination = next;
-            resolution.ActualSquares++;
+            Vector2Int targetNext = target.GridPosition + direction;
+            if (!CanBullRushMoverEnter(target, targetNext))
+            {
+                obstructed = true;
+                break;
+            }
+
+            // The attacker's half of the joint step, resolved first: past the base square the
+            // defender moves only if the attacker can move with it.
+            bool attackerMoves = follow;
+            Vector2Int attackerNext = attacker.GridPosition + direction;
+            if (follow)
+            {
+                string why = null;
+                if (ThreatSystem.IsMoverIncapacitated(attacker))
+                {
+                    why = "incapacitated";
+                }
+                else if (!CanBullRushFollowerEnter(attacker, target, attackerNext))
+                {
+                    why = "blocked path";
+                }
+                else
+                {
+                    ThreatSystem.MoverAoOSnapshot before = ThreatSystem.CaptureMoverState(attacker);
+                    outcome.SomeoneDropped |= ResolveBullRushStepAoOs(attacker, target, attackerNext, followProvoked, "following");
+                    if (ThreatSystem.ShouldStopMovementAfterAoO(attacker, before, out string stopReason))
+                        why = stopReason;
+                }
+
+                if (why != null)
+                {
+                    followStopReason = why;
+                    if (!baseStep)
+                        break;
+                    attackerMoves = false;
+                }
+            }
+
+            outcome.SomeoneDropped |= ResolveBullRushStepAoOs(target, attacker, targetNext, pushProvoked, "pushed");
+            if (IsBullRushDefenderGone(target))
+            {
+                pushStopReason = $"{targetName} is dead";
+                break;
+            }
+
+            // A push AoO that strays into the follower can drop it; past the base square that ends the push.
+            if (attackerMoves && ThreatSystem.IsMoverIncapacitated(attacker))
+            {
+                followStopReason = "incapacitated";
+                attackerMoves = false;
+                if (!baseStep)
+                    break;
+            }
+
+            SquareCell targetCell = Grid.GetCell(targetNext);
+            if (targetCell != null)
+                target.MoveToCell(targetCell, markAsMoved: false);
+            if (target.GridPosition != targetNext)
+            {
+                obstructed = true;
+                break;
+            }
+
+            outcome.Pushed++;
+
+            if (attackerMoves)
+            {
+                SquareCell attackerCell = Grid.GetCell(attackerNext);
+                if (attackerCell != null)
+                    attacker.MoveToCell(attackerCell);
+                if (attacker.GridPosition != attackerNext)
+                {
+                    followStopReason = "blocked path";
+                    break;
+                }
+
+                outcome.Followed++;
+            }
+
+            if (!follow || followStopReason != null)
+                break;
         }
 
-        if (resolution.ActualSquares <= 0)
+        int pushed = outcome.Pushed;
+        if (pushed > 0)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("↗", $"{targetName} is pushed back {pushed} square{(pushed == 1 ? string.Empty : "s")} ({pushed * 5} feet)."));
+        else if (obstructed)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{targetName} cannot be pushed; path is blocked."));
+
+        if (follow)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{target.Stats.CharacterName} cannot be pushed; path is blocked."));
-            return resolution;
+            int followed = outcome.Followed;
+            if (followed > 0)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attackerName} moves with {targetName} {followed} square{(followed == 1 ? string.Empty : "s")} ({followed * 5} feet)."));
+            if (followStopReason != null)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", (followed > 0
+                    ? $"{attackerName} stops moving with {targetName} ({followStopReason})"
+                    : $"{attackerName} cannot move with {targetName} ({followStopReason})")
+                    + (pushed > 0 && pushed < pushSquares ? $", so the push ends after {pushed * 5} feet." : ".")));
         }
 
-        SquareCell destinationCell = Grid.GetCell(destination);
-        if (destinationCell != null)
-            target.MoveToCell(destinationCell);
-
-        if (destinationCell == null || target.GridPosition != destination)
+        if (pushed > 0 && pushed < pushSquares && followStopReason == null)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{target.Stats.CharacterName} cannot be pushed; no valid destination."));
-            resolution.ActualSquares = 0;
-            resolution.FinalTargetPosition = resolution.OriginalTargetPosition;
-            return resolution;
+            string reason = pushStopReason ?? "obstacle reached";
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Push stops after {pushed} square{(pushed == 1 ? string.Empty : "s")} ({reason})."));
         }
 
-        resolution.FinalTargetPosition = destination;
-        int feet = resolution.ActualSquares * 5;
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↗", $"{target.Stats.CharacterName} is pushed back {resolution.ActualSquares} square{(resolution.ActualSquares == 1 ? string.Empty : "s")} ({feet} feet)."));
-
-        if (resolution.Obstructed && resolution.ActualSquares < resolution.RequestedSquares)
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Obstacle reached: push stops after {resolution.ActualSquares} square{(resolution.ActualSquares == 1 ? string.Empty : "s")}."));
-
-        return resolution;
+        UpdateAllStatsUI();
+        return outcome;
     }
 
-    private void ExecuteBullRushFollow(CharacterController attacker, BullRushPushResolution pushResolution)
+    /// <summary>
+    /// Resolves the AoOs one bull rush step provokes from <paramref name="mover"/> leaving its current
+    /// squares (ThreatSystem.AnalyzePathForAoOs for a one-square path). <paramref name="partner"/> (the
+    /// other bull rush participant) gets none, nor does an opponent already in
+    /// <paramref name="alreadyProvoked"/>. Returns true when an AoO left either participant at 0 HP or below.
+    /// </summary>
+    private bool ResolveBullRushStepAoOs(CharacterController mover, CharacterController partner, Vector2Int next, HashSet<CharacterController> alreadyProvoked, string context)
     {
-        if (attacker == null || pushResolution.ActualSquares <= 0)
-            return;
-
-        // The follower's whole footprint must fit at each step.
-        int attackerSize = attacker.GetVisualSquaresOccupied();
-        Vector2Int start = attacker.GridPosition;
-        Vector2Int current = start;
-        int movedSquares = 0;
-
-        for (int i = 0; i < pushResolution.ActualSquares; i++)
+        List<AoOThreatInfo> threats = ThreatSystem.AnalyzePathForAoOs(mover, new List<Vector2Int> { next }, GetAllCharacters());
+        bool dropped = false;
+        for (int i = 0; i < threats.Count; i++)
         {
-            Vector2Int next = current + pushResolution.Direction;
-            if (Grid == null || !Grid.CanPlaceCreature(next, attackerSize, attacker))
+            CharacterController provoker = threats[i] != null ? threats[i].Threatener : null;
+            if (provoker == null || provoker == partner || alreadyProvoked.Contains(provoker) || !ThreatSystem.CanMakeAoO(provoker))
+                continue;
+
+            alreadyProvoked.Add(provoker);
+            int moverHpBefore = mover.Stats.CurrentHP;
+            int partnerHpBefore = partner != null && partner.Stats != null ? partner.Stats.CurrentHP : 0;
+            ResolveBullRushAoO(provoker, mover, partner, isFromMovement: true, context: $"Bull Rush ({mover.Stats.CharacterName} {context})");
+            UpdateAllStatsUI();
+
+            if ((moverHpBefore > 0 && mover.Stats.CurrentHP <= 0)
+                || (partner != null && partner.Stats != null && partnerHpBefore > 0 && partner.Stats.CurrentHP <= 0))
+                dropped = true;
+
+            if (ThreatSystem.IsMoverIncapacitated(mover))
                 break;
-
-            current = next;
-            movedSquares++;
         }
 
-        if (movedSquares <= 0)
+        return dropped;
+    }
+
+    private bool CanBullRushMoverEnter(CharacterController mover, Vector2Int baseSquare)
+        => Grid != null && Grid.CanPlaceCreature(baseSquare, mover.GetVisualSquaresOccupied(), mover);
+
+    /// <summary>
+    /// Whether the follower fits at <paramref name="baseSquare"/> once the defender has moved one square
+    /// on (the defender's current squares count as free: both move the same way, so they never overlap).
+    /// </summary>
+    private bool CanBullRushFollowerEnter(CharacterController follower, CharacterController defender, Vector2Int baseSquare)
+        => Grid != null && Grid.CanPlaceCreature(baseSquare, follower.GetVisualSquaresOccupied(), follower,
+            additionalIgnoredOccupants: new List<CharacterController> { defender });
+
+    /// <summary>The push stops for a dead defender or one no longer in the combat.</summary>
+    private bool IsBullRushDefenderGone(CharacterController target)
+        => target == null || target.Stats == null || target.IsDead || target.Stats.IsDead || !IsActiveCombatant(target);
+
+    /// <summary>
+    /// Overrun's push after a successful targeted overrun: the defender 1 square away from the attacker,
+    /// then the attacker into the vacated square. No AoOs. Unchanged behaviour (CMB-116: RAW lets the
+    /// attacker move through instead).
+    /// </summary>
+    private void TryPushTargetAway(CharacterController attacker, CharacterController target, int squares, bool allowAttackerFollow)
+    {
+        if (attacker == null || target == null || target.Stats == null || Grid == null)
+            return;
+
+        Vector2Int direction = BullRushRules.GetPushDirection(attacker, target);
+        int pushed = 0;
+        for (int i = 0; i < Mathf.Max(1, squares); i++)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} cannot follow due to blocked path."));
-            return;
+            Vector2Int next = target.GridPosition + direction;
+            if (!CanBullRushMoverEnter(target, next))
+                break;
+            SquareCell cell = Grid.GetCell(next);
+            if (cell != null)
+                target.MoveToCell(cell);
+            if (target.GridPosition != next)
+                break;
+            pushed++;
         }
 
-        SquareCell followDestination = Grid.GetCell(current);
-        if (followDestination == null)
-            return;
-
-        attacker.MoveToCell(followDestination);
-        if (attacker.GridPosition == start)
+        if (pushed <= 0)
         {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} cannot follow due to blocked path."));
+            CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{target.Stats.CharacterName} cannot be pushed; path is blocked."));
             return;
         }
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} follows {movedSquares} square{(movedSquares == 1 ? string.Empty : "s")}."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("↗", $"{target.Stats.CharacterName} is pushed back {pushed} square{(pushed == 1 ? string.Empty : "s")} ({pushed * 5} feet)."));
+        if (!allowAttackerFollow || attacker.Stats == null)
+            return;
+
+        int followed = 0;
+        for (int i = 0; i < pushed; i++)
+        {
+            Vector2Int next = attacker.GridPosition + direction;
+            if (!CanBullRushMoverEnter(attacker, next))
+                break;
+            SquareCell cell = Grid.GetCell(next);
+            if (cell != null)
+                attacker.MoveToCell(cell);
+            if (attacker.GridPosition != next)
+                break;
+            followed++;
+        }
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", followed > 0
+            ? $"{attacker.Stats.CharacterName} follows {followed} square{(followed == 1 ? string.Empty : "s")}."
+            : $"{attacker.Stats.CharacterName} cannot follow due to blocked path."));
     }
 }

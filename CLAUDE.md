@@ -91,7 +91,7 @@ Where to look first:
 - Magic strings fail silently: case-sensitive `HasFeat` (CHR-030), duplicate NPC ids (CRE-022), unknown preset ids (ENC-012), sources matched by name (CORE-017).
 - Wand charges (ITM-034) and enhancement (ITM-035) are stored twice; update both.
 - `IsPC` means controllable (CORE-014); use `controller.IsDead` (CHR-031); never assign `Stats.Level` (CHR-034); the positional `CharacterStats` constructor takes WIS before INT (CHR-032).
-- 16 test suites reflect on private members by name; grep `Assets/Scripts/Tests` before renaming (TST-006).
+- 19 test files reflect on private members by name; grep `Assets/Scripts/Tests` before renaming (TST-006).
 - `_npcAIBehaviors` is index-parallel to `NPCs` (AI-015).
 
 ## Current state

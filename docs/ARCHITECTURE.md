@@ -179,7 +179,7 @@ There are 52 files, found with `grep -rlE '^\s*public partial class GameManager\
 | **Combat/Maneuvers/** (4) | | |
 | GrappleSystem.cs | 2,024 | Grapple suite (`OnGrapple*ButtonPressed`), also `OnOverrunButtonPressed`. |
 | OverrunSystem.cs | 952 | Overrun destination selection and resolution. |
-| StandardManeuvers.cs | 1,119 | Disarm and sunder, including dual-wield prompts; some bull rush/trip/feint helpers. |
+| StandardManeuvers.cs | 1,210 | Disarm and sunder, including dual-wield prompts; the shared bull rush push and follow (`ResolveBullRushPushAndFollow`, `ExecuteBullRushMovement`) and overrun's `TryPushTargetAway`; some trip/feint helpers. |
 | SupportActions.cs | 2,031 | Aid Another, Charge. |
 | **Combat/Special/** (2) | | |
 | TurnUndeadSystem.cs | 1,005 | Turn/rebuke undead and turned-state trackers. |
@@ -257,8 +257,8 @@ Assets/Scripts/
     CreatureClass/ (5), Familiar/ (1), Feats/ (3), Progression/ (3), Races/ (2),
     Religion/ (4), Skills/ (2), Specialization/ (1)
   Combat/
-    Core/ (13)           AttackCalculator, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility,
-                         DamageModel, dormant CombatStateMachine/InitiativeSystem
+    Core/ (14)           AttackCalculator, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility,
+                         DamageModel, BullRushRules, dormant CombatStateMachine/InitiativeSystem
     Conditions/ (11), Behaviors/ (4), Maneuvers/ (6), Special/ (3), Reactions/ (3),
     Mounts/ (4), StatusEffects/ (1), Logging/ (2), Utilities/ (2)
   Spell/ (1: BonusType)
@@ -356,5 +356,5 @@ A new AI need normally means adding a new `*ForAI` wrapper.
 
 - GameManager members: `grep -rn "void MethodName" Assets/Scripts`. Never assume a method is missing because `GameManager.cs` lacks it; 51 other files declare the class.
 - Button handlers: `grep -rn "On.*ButtonPressed" Assets/Scripts`. Most are bound in `SceneBootstrap.WireButtons`; a few are called from `ActionButtonPanel` and `CombatUI`.
-- Before renaming a private GameManager method, grep `Assets/Scripts/Tests`. Tests reach private members by name through reflection: 16 suites make about 48 GetMethod/GetField/GetProperty calls (recount before relying on it: `grep -rE "\.(GetMethod|GetField|GetProperty)\(" Assets/Scripts/Tests`). A rename breaks them with no compile error.
+- Before renaming a private GameManager method, grep `Assets/Scripts/Tests`. Tests reach private members by name through reflection: 19 test files make about 60 GetMethod/GetField/GetProperty calls (recount before relying on it: `grep -rE "\.(GetMethod|GetField|GetProperty)\(" Assets/Scripts/Tests`). A rename breaks them with no compile error.
 - Tests are static classes with `RunAll()`, except three MonoBehaviour suites (`FlankingReachRulesTests`, `RangeCalculatorTests`, `ReachWeaponRulesTests`) that run from `Start` but are attached to no scene. There is no NUnit, no Unity Test Framework package and no asmdef, so they compile into the game assembly and must be invoked manually; nothing calls `RunAll()` today. See [TESTING.md](TESTING.md).

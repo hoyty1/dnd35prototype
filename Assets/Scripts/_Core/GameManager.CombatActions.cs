@@ -898,27 +898,39 @@ public partial class GameManager
     /// <summary>
     /// Resolves the AoOs a maneuver provokes when it starts, for PCs and NPCs alike
     /// (rules in <see cref="ThreatSystem.GetManeuverAoOProvokers"/>). The caller has already
-    /// spent the action; on anything but Proceed the attempt is lost.
+    /// spent the action; on anything but Proceed the attempt is lost. Every opponent that makes
+    /// an AoO here is added to <paramref name="provokersOut"/> when given (the bull rush follow
+    /// gives them no second movement AoO, CMB-113).
     /// </summary>
     private ManeuverAoOOutcome ResolveManeuverInitiationAoOs(
         CharacterController attacker,
         CharacterController target,
         SpecialAttackType type,
-        ICollection<CharacterController> alreadyProvokedThisMove = null)
+        ICollection<CharacterController> alreadyProvokedThisMove = null,
+        ICollection<CharacterController> provokersOut = null)
     {
         if (attacker == null || attacker.Stats == null)
             return ManeuverAoOOutcome.AttackerIncapacitated;
 
         List<CharacterController> provokers = ThreatSystem.GetManeuverAoOProvokers(attacker, target, type, GetAllCharacters(), alreadyProvokedThisMove);
         string maneuverLabel = ThreatSystem.GetManeuverAoOLabel(type);
+        bool isBullRush = type == SpecialAttackType.BullRushAttack || type == SpecialAttackType.BullRushCharge;
 
         for (int i = 0; i < provokers.Count; i++)
         {
-            CombatResult maneuverAoO = ThreatSystem.ExecuteAoO(provokers[i], attacker);
+            // PHB p.154: during a bull rush an AoO against the attacker by anyone but the defender
+            // may strike the defender instead.
+            int targetHpBefore = target != null && target.Stats != null ? target.Stats.CurrentHP : 0;
+            CombatResult maneuverAoO = isBullRush && provokers[i] != target
+                ? ResolveBullRushAoO(provokers[i], attacker, target, isFromMovement: false, context: $"{maneuverLabel} initiation")
+                : ThreatSystem.ExecuteAoO(provokers[i], attacker);
             if (maneuverAoO == null)
                 continue;
 
-            CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{maneuverLabel} initiation AoO: {maneuverAoO.GetDetailedSummary()}"));
+            provokersOut?.Add(provokers[i]);
+
+            if (!isBullRush || provokers[i] == target)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{maneuverLabel} initiation AoO: {maneuverAoO.GetDetailedSummary()}"));
             UpdateAllStatsUI();
 
             if (attacker.IsDead || attacker.Stats.IsDead || attacker.IsUnconscious)
@@ -926,6 +938,20 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{attacker.Stats.CharacterName} is incapacitated while attempting to start {maneuverLabel.ToLowerInvariant()}."));
                 return ManeuverAoOOutcome.AttackerIncapacitated;
             }
+
+            // A strayed AoO can kill the defender; there is then nothing to push (CORE-011: check victory).
+            if (isBullRush && target != null && target.Stats != null && (target.IsDead || target.Stats.IsDead))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{target.Stats.CharacterName} falls before the bull rush lands."));
+                CheckCombatVictory("BullRush.InitiationAoO", target);
+                return ManeuverAoOOutcome.Disrupted;
+            }
+
+            // A strayed AoO that leaves the defender dying or unconscious may end the combat (CORE-011);
+            // otherwise the bull rush goes on against it, the same provisional choice as the push (CMB-115).
+            if (isBullRush && target != null && target.Stats != null && targetHpBefore > 0 && target.Stats.CurrentHP <= 0
+                && CheckCombatVictory("BullRush.InitiationAoO", target))
+                return ManeuverAoOOutcome.Disrupted;
 
             if (ThreatSystem.DoesManeuverAoODisruptAttempt(type, maneuverAoO))
             {
@@ -935,6 +961,53 @@ public partial class GameManager
         }
 
         return ManeuverAoOOutcome.Proceed;
+    }
+
+    /// <summary>
+    /// Test hook, null in play: when set, returns the d100 for <see cref="ResolveBullRushAoO"/>
+    /// instead of rolling, so tests can force or prevent misdirection. Behaviour-neutral.
+    /// </summary>
+    internal static Func<int> BullRushMisdirectionRollOverride;
+
+    /// <summary>
+    /// One AoO during a bull rush (PHB p.154): <paramref name="provoker"/> attacks
+    /// <paramref name="intended"/>, but when the provoker is not <paramref name="other"/> (the other
+    /// participant), a d100 roll of 1-25 makes the attack strike <paramref name="other"/> instead.
+    /// Shared by the initiation AoOs (intended = attacker, other = defender) and the push and follow
+    /// steps (ExecuteBullRushMovement). Mobility applies only to an AoO that hits the mover itself.
+    /// Returns the AoO result (its Defender is whoever was attacked), or null when none was made.
+    /// </summary>
+    private CombatResult ResolveBullRushAoO(
+        CharacterController provoker,
+        CharacterController intended,
+        CharacterController other,
+        bool isFromMovement = false,
+        string context = "Bull Rush")
+    {
+        if (provoker == null || intended == null || intended.Stats == null)
+            return null;
+
+        CharacterController victim = intended;
+        int roll = 0;
+        bool canStray = other != null && other != provoker && other != intended
+            && other.Stats != null && !other.IsDead && !other.Stats.IsDead;
+        if (canStray)
+        {
+            roll = BullRushMisdirectionRollOverride != null ? BullRushMisdirectionRollOverride() : Random.Range(1, 101);
+            if (roll <= 25)
+                victim = other;
+        }
+
+        bool strays = victim != intended;
+        CombatResult result = ThreatSystem.ExecuteAoO(provoker, victim, isFromMovement && !strays);
+        if (result == null)
+            return null;
+
+        if (strays)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠",
+                $"{provoker.Stats.CharacterName}'s attack of opportunity at {intended.Stats.CharacterName} strays into {other.Stats.CharacterName} (d100 {roll}, 1-25 misdirects during a bull rush)."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{context} AoO: {result.GetDetailedSummary()}"));
+        return result;
     }
 
     private IEnumerator ResolveAoOsAndMove(CharacterController pc, AoOPathResult pathResult, bool isWithdraw = false)
@@ -1898,7 +1971,8 @@ public partial class GameManager
         }
 
         // Shared with the NPC executor (TryNPCSpecialAttackIfBeneficial, CMB-076).
-        if (ResolveManeuverInitiationAoOs(attacker, target, type) != ManeuverAoOOutcome.Proceed)
+        var initiationProvokers = new HashSet<CharacterController>();
+        if (ResolveManeuverInitiationAoOs(attacker, target, type, provokersOut: initiationProvokers) != ManeuverAoOOutcome.Proceed)
         {
             Grid.ClearAllHighlights();
             _highlightedCells.Clear();
@@ -2016,7 +2090,15 @@ public partial class GameManager
         {
             if (type == SpecialAttackType.BullRushAttack || type == SpecialAttackType.BullRushCharge)
             {
-                ResolveBullRushPushAndFollow(attacker, target, result, () => FinalizeSpecialAttackResolution(attacker, target));
+                ResolveBullRushPushAndFollow(attacker, target, result, isCharge: type == SpecialAttackType.BullRushCharge, squaresMovedThisCharge: 0,
+                    onComplete: attackerDown =>
+                    {
+                        if (attackerDown)
+                            FinalizeSpecialAttackAttackerDropped(attacker);
+                        else
+                            FinalizeSpecialAttackResolution(attacker, target);
+                    },
+                    attackerAlreadyProvoked: initiationProvokers);
                 return;
             }
 
@@ -2035,6 +2117,10 @@ public partial class GameManager
 
         UpdateAllStatsUI();
 
+        // Already decided (for example by an AoO during a bull rush push, CORE-011).
+        if (CurrentPhase == TurnPhase.CombatOver)
+            return;
+
         if (target != null && target.Stats != null && target.Stats.IsDead && target.Team == CharacterTeam.Enemy && AreAllNPCsDead())
         {
             Debug.Log("[CombatEnd] Victory condition met after special attack resolution.");
@@ -2046,24 +2132,26 @@ public partial class GameManager
             StartCoroutine(AfterAttackDelay(attacker, 1.0f));
     }
 
-    private struct BullRushPushResolution
+    /// <summary>
+    /// End of a PC special attack whose attacker an AoO dropped during the resolution (a bull rush
+    /// push or follow): same cleanup as <see cref="FinalizeSpecialAttackResolution"/>, then the turn
+    /// ends, as when movement AoOs drop a PC (ResolveAoOsAndMove). The resolver has already run the
+    /// victory and defeat checks.
+    /// </summary>
+    private void FinalizeSpecialAttackAttackerDropped(CharacterController attacker)
     {
-        public Vector2Int Direction;
-        public Vector2Int OriginalTargetPosition;
-        public Vector2Int FinalTargetPosition;
-        public int RequestedSquares;
-        public int ActualSquares;
-        public bool Obstructed;
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        _isSelectingSpecialAttack = false;
+        UpdateAllStatsUI();
 
-        public bool TargetMoved => ActualSquares > 0;
-    }
+        if (CurrentPhase == TurnPhase.CombatOver)
+            return;
 
-
-    private void TryPushTargetAway(CharacterController attacker, CharacterController target, int squares, bool allowAttackerFollow)
-    {
-        BullRushPushResolution pushResolution = ExecuteBullRushPush(attacker, target, squares);
-        if (allowAttackerFollow)
-            ExecuteBullRushFollow(attacker, pushResolution);
+        string name = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "The attacker";
+        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{name} is incapacitated during the bull rush."));
+        if (IsPlayerTurn)
+            EndActivePCTurn();
     }
 
     private void CancelSpecialAttackTargeting()

@@ -1516,6 +1516,7 @@ public partial class GameManager
 
         // Resolve AoOs before each step (shared helper, PHB p.137) so the charge stops
         // in place if an AoO drops, trips or otherwise stops the charger.
+        Vector2Int chargeStart = charger.GridPosition;
         var provokedAoOs = CheckForAoO(charger, path);
         bool interruptedByAoO = false;
         var aooOutcome = new MovementAoOStepOutcome();
@@ -1558,7 +1559,8 @@ public partial class GameManager
         if (_pendingChargeBullRush)
         {
             var chargeBullRushOutcome = new ChargeBullRushOutcome();
-            yield return StartCoroutine(ResolveChargeBullRush(charger, target, BuildChargeProvokerSet(provokedAoOs), chargeBullRushOutcome));
+            yield return StartCoroutine(ResolveChargeBullRush(charger, target, BuildChargeProvokerSet(provokedAoOs),
+                SquareGridUtils.CalculatePathCost(chargeStart, path), CountDiagonalSteps(chargeStart, path), chargeBullRushOutcome));
             if (chargeBullRushOutcome.AttackerIncapacitated)
                 yield break;
         }
@@ -1784,7 +1786,25 @@ public partial class GameManager
         StartCoroutine(AfterAttackDelay(charger, 1.0f));
     }
 
-    /// <summary>Set by <see cref="ResolveChargeBullRush"/> when an initiation AoO drops the charger.</summary>
+    /// <summary>Diagonal steps on a path from <paramref name="start"/> (the 5-10-5 count a bull rush follow continues, PHB p.148).</summary>
+    private static int CountDiagonalSteps(Vector2Int start, List<Vector2Int> path)
+    {
+        int diagonals = 0;
+        Vector2Int previous = start;
+        if (path != null)
+        {
+            for (int i = 0; i < path.Count; i++)
+            {
+                if (SquareGridUtils.IsDiagonalStep(previous, path[i]))
+                    diagonals++;
+                previous = path[i];
+            }
+        }
+
+        return diagonals;
+    }
+
+    /// <summary>Set by <see cref="ResolveChargeBullRush"/> when an AoO drops the charger (at the bull rush's start or during its push and follow).</summary>
     private sealed class ChargeBullRushOutcome
     {
         public bool AttackerIncapacitated;
@@ -1818,10 +1838,16 @@ public partial class GameManager
     /// action and the charge AC penalty still spent. Then entering the defender's space provokes from
     /// each threatening enemy (not the defender with Improved Bull Rush) except those in
     /// <paramref name="provokedDuringCharge"/> (CMB-113); then the opposed Strength check at +2 and
-    /// the push. When an AoO drops the charger it clears the charge state, ends a PC turn and sets
-    /// <paramref name="outcome"/>.AttackerIncapacitated so the caller stops.
+    /// the push and follow, whose movement limit is twice the speed minus <paramref name="squaresMovedThisCharge"/>
+    /// (the charge path cost, PHB p.154-155; the follow continues the path's <paramref name="diagonalsMovedThisCharge"/>
+    /// diagonal count). Enemies that had an AoO during the charge or at the bull rush's start get none
+    /// as the charger follows (PHB p.138, CMB-113). When an AoO drops the charger, at the start or
+    /// during the push and follow, it clears the charge state, ends a PC turn and sets
+    /// <paramref name="outcome"/>.AttackerIncapacitated so the caller stops. When an initiation AoO
+    /// that strays into the defender ends the attempt (Disrupted), the charge ends here with its
+    /// full-round action and AC penalty spent.
     /// </summary>
-    private IEnumerator ResolveChargeBullRush(CharacterController charger, CharacterController target, HashSet<CharacterController> provokedDuringCharge, ChargeBullRushOutcome outcome = null)
+    private IEnumerator ResolveChargeBullRush(CharacterController charger, CharacterController target, HashSet<CharacterController> provokedDuringCharge, int squaresMovedThisCharge, int diagonalsMovedThisCharge, ChargeBullRushOutcome outcome = null)
     {
         if (!charger.CanBullRush(target, false, out string bullRushReason))
         {
@@ -1829,16 +1855,18 @@ public partial class GameManager
             yield break;
         }
 
-        if (ResolveManeuverInitiationAoOs(charger, target, SpecialAttackType.BullRushCharge, provokedDuringCharge) == ManeuverAoOOutcome.AttackerIncapacitated)
+        var initiationProvokers = new HashSet<CharacterController>();
+        ManeuverAoOOutcome initiationOutcome = ResolveManeuverInitiationAoOs(charger, target, SpecialAttackType.BullRushCharge, provokedDuringCharge, initiationProvokers);
+        if (initiationOutcome == ManeuverAoOOutcome.AttackerIncapacitated)
+        {
+            EndChargeBullRushForDroppedCharger(outcome);
+            yield break;
+        }
+
+        if (initiationOutcome == ManeuverAoOOutcome.Disrupted)
         {
             UpdateAllStatsUI();
-            _chargeTarget = null;
-            _pendingChargePath.Clear();
-            _pendingChargeBullRush = false;
-            if (outcome != null)
-                outcome.AttackerIncapacitated = true;
-            if (IsPlayerTurn)
-                EndActivePCTurn();
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName}'s charge ends without a bull rush."));
             yield break;
         }
 
@@ -1852,7 +1880,34 @@ public partial class GameManager
         CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Bull Rush (+2): {bullRushResult.Log}"));
 
         if (bullRushResult.Success)
-            yield return StartCoroutine(ResolveBullRushPushAndFollowCoroutine(charger, target, bullRushResult));
+        {
+            var alreadyProvoked = new HashSet<CharacterController>(initiationProvokers);
+            if (provokedDuringCharge != null)
+                alreadyProvoked.UnionWith(provokedDuringCharge);
+
+            var pushOutcome = new BullRushPushCoroutineOutcome();
+            yield return StartCoroutine(ResolveBullRushPushAndFollowCoroutine(charger, target, bullRushResult, isCharge: true,
+                squaresMovedThisCharge: squaresMovedThisCharge, diagonalsMovedThisCharge: diagonalsMovedThisCharge,
+                attackerAlreadyProvoked: alreadyProvoked, outcome: pushOutcome));
+            if (pushOutcome.AttackerIncapacitated)
+                EndChargeBullRushForDroppedCharger(outcome);
+        }
+    }
+
+    /// <summary>
+    /// A bull rush charge whose charger an AoO dropped: clear the charge state, end a PC turn (the
+    /// victory and defeat checks have run) and tell the caller to stop.
+    /// </summary>
+    private void EndChargeBullRushForDroppedCharger(ChargeBullRushOutcome outcome)
+    {
+        UpdateAllStatsUI();
+        _chargeTarget = null;
+        _pendingChargePath.Clear();
+        _pendingChargeBullRush = false;
+        if (outcome != null)
+            outcome.AttackerIncapacitated = true;
+        if (IsPlayerTurn)
+            EndActivePCTurn();
     }
 
     private void ApplyChargePenaltyUntilStartOfNextTurn(CharacterController actor)
@@ -1913,6 +1968,7 @@ public partial class GameManager
             : $"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!"));
 
         // Same shared AoO helper as the PC charge: each AoO resolves before its step.
+        Vector2Int chargeStart = npc.GridPosition;
         var provokedAoOs = CheckForAoO(npc, path);
         bool interruptedByAoO = false;
         var aooOutcome = new MovementAoOStepOutcome();
@@ -1959,7 +2015,8 @@ public partial class GameManager
         {
             // Same end of charge as the PC bull rush charge (ResolveChargeBullRush, CMB-102).
             var chargeBullRushOutcome = new ChargeBullRushOutcome();
-            yield return StartCoroutine(ResolveChargeBullRush(npc, target, BuildChargeProvokerSet(provokedAoOs), chargeBullRushOutcome));
+            yield return StartCoroutine(ResolveChargeBullRush(npc, target, BuildChargeProvokerSet(provokedAoOs),
+                SquareGridUtils.CalculatePathCost(chargeStart, path), CountDiagonalSteps(chargeStart, path), chargeBullRushOutcome));
             if (chargeBullRushOutcome.AttackerIncapacitated)
                 yield break;
         }

@@ -11229,16 +11229,14 @@ public class CharacterController : MonoBehaviour
             defenderCheck.Total, defenderCheck.Total - defenderCheck.BaseRoll);
 
         string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total, success);
-        int margin = Mathf.Max(0, attackerCheck.Total - defenderCheck.Total);
-        int maxPushSquares = success ? 1 + (margin / 5) : 0;
-        int pushFeet = success ? maxPushSquares * 5 : 0;
+        int margin = attackerCheck.Total - defenderCheck.Total;
 
         string header = chargeBonus > 0
             ? $"{Stats.CharacterName} charges and attempts to bull rush {target.Stats.CharacterName}"
             : $"{Stats.CharacterName} attempts to bull rush {target.Stats.CharacterName}";
 
         string outcome = success
-            ? $"{Stats.CharacterName} successfully bull rushes {target.Stats.CharacterName}. Can push 1 to {maxPushSquares} square{(maxPushSquares == 1 ? string.Empty : "s")} (5 to {pushFeet} ft)."
+            ? $"{Stats.CharacterName} successfully bull rushes {target.Stats.CharacterName} (wins by {margin}): push 5 ft, farther only by moving with the target (PHB p.154)."
             : $"{Stats.CharacterName} fails to bull rush {target.Stats.CharacterName}";
 
         string log = string.Join("\n\n", new[]
@@ -11257,7 +11255,7 @@ public class CharacterController : MonoBehaviour
             CheckTotal = attackerCheck.Total,
             OpposedRoll = defenderCheck.BaseRoll,
             OpposedTotal = defenderCheck.Total,
-            DamageDealt = pushFeet,
+            DamageDealt = 0,
             Log = log
         };
     }

@@ -3029,6 +3029,31 @@ public class AIService : MonoBehaviour
     }
 
     /// <summary>
+    /// The push decision after a successful bull rush by a non-controllable attacker (PHB p.154,
+    /// CMB-098): stay and push 5 ft (returns 1, follow false), or move with the defender and push
+    /// 1 to <paramref name="maxIfFollowing"/> squares. The attacker's AI profile decides
+    /// (AIProfile.ChooseBullRushPush); without a profile the attacker follows for the maximum.
+    /// Called by GameManager.ResolveBullRushPushAndFollow, the resolver the PC prompt also feeds.
+    /// </summary>
+    public int ChooseBullRushPush(CharacterController attacker, CharacterController target, int maxIfFollowing, out bool follow)
+    {
+        int max = Mathf.Max(1, maxIfFollowing);
+        AIProfile profile = GetProfile(attacker);
+        int squares;
+        if (profile != null)
+        {
+            squares = profile.ChooseBullRushPush(attacker, target, max, out follow);
+        }
+        else
+        {
+            follow = true;
+            squares = max;
+        }
+
+        return follow ? Mathf.Clamp(squares, 1, max) : 1;
+    }
+
+    /// <summary>
     /// Determines whether an NPC should use a charge action to reach a target.
     /// D&D 3.5e PHB p.154: Charge is a full-round action when target is beyond melee reach
     /// but reachable via a valid straight-line charge path.

@@ -99,7 +99,7 @@ To update, run `git pull` and reopen Unity.
 | WASD or arrows, left-drag | Pan the camera (`Utilities/CameraController.cs`) |
 | Mouse wheel, `=`/`-`, numpad +/- | Zoom. R resets the camera. |
 | Enter / Esc in the loot window | Loot All / close |
-| 0-9 / Esc in the bull rush prompt | Choose extra push squares / none |
+| 0-9 / Esc in the bull rush prompt | 0 pushes 5 ft and stays, N moves with the target and pushes it N squares / Esc pushes 5 ft and stays |
 | **F12** | Spell Testing Panel: cast spells directly with metamagic toggles, a +4 casting-stat boost and a temporary caster setup (`UI/Spells/SpellTestingPanel.cs`, `_Core/GameManager.TestPanel.cs`) |
 | **Left Ctrl+H** | Cycle the level-up HP mode Roll > Average > Maximum (`Utilities/DebugCommands.cs`; legacy input only) |
 

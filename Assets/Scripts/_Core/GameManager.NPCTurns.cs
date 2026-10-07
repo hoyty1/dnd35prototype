@@ -390,7 +390,8 @@ public partial class GameManager
         // Same initiation AoOs as the PC wrapper (CMB-076). A foiled attempt still spends
         // its action; an NPC dropped by the AoO ends its turn (callers return after this).
         int hpBeforeManeuverAoOs = npc.Stats.CurrentHP;
-        ManeuverAoOOutcome maneuverAoOOutcome = ResolveManeuverInitiationAoOs(npc, target, choice.Value);
+        var initiationProvokers = new HashSet<CharacterController>();
+        ManeuverAoOOutcome maneuverAoOOutcome = ResolveManeuverInitiationAoOs(npc, target, choice.Value, provokersOut: initiationProvokers);
         if (maneuverAoOOutcome != ManeuverAoOOutcome.Proceed)
         {
             // The PC wrapper spends its action before the AoOs, so an AoO that drops the PC to
@@ -428,16 +429,21 @@ public partial class GameManager
         if (result.Success)
         {
             if (choice.Value == SpecialAttackType.BullRushAttack || choice.Value == SpecialAttackType.BullRushCharge)
-                ResolveBullRushPushAndFollow(npc, target, result, onComplete: null);
+                ResolveBullRushPushAndFollow(npc, target, result, isCharge: false, squaresMovedThisCharge: 0, onComplete: null,
+                    attackerAlreadyProvoked: initiationProvokers);
             else if (choice.Value == SpecialAttackType.Overrun)
                 TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
         }
 
-        // A substitute already paid its attack step before the AoOs.
+        // A substitute already paid its attack step before the AoOs. An AoO during a bull rush push
+        // or follow that dropped the NPC costs no extra strenuous-action hit point either (the PC
+        // wrapper commits before any AoO).
         if (!replacesAttack)
         {
             if (choice.Value == SpecialAttackType.CoupDeGrace)
                 npc.Actions.UseFullRoundAction();
+            else if (hpBeforeManeuverAoOs > 0 && npc.Stats.CurrentHP <= 0)
+                npc.Actions.UseStandardAction();
             else
                 npc.CommitStandardAction();
         }

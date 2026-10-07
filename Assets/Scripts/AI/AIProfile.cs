@@ -283,6 +283,18 @@ namespace DND35.AI
         }
 
         /// <summary>
+        /// After a successful bull rush (PHB p.154): stay and push the defender 5 ft (follow false,
+        /// return 1), or move with it and push 1 to <paramref name="maxIfFollowing"/> squares (follow
+        /// true). Asked by AIService.ChooseBullRushPush for a non-controllable attacker; the PC
+        /// prompt makes the same choice (CMB-098). The default follows for the maximum.
+        /// </summary>
+        public virtual int ChooseBullRushPush(CharacterController self, CharacterController target, int maxIfFollowing, out bool follow)
+        {
+            follow = true;
+            return Mathf.Max(1, maxIfFollowing);
+        }
+
+        /// <summary>
         /// Placeholder for future overrun restrictions (size/path rules).
         /// </summary>
         protected virtual bool IsValidOverrunTarget(CharacterController target, CharacterController self)
