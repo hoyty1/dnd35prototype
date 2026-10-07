@@ -30,7 +30,7 @@ Entries per section:
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 2 | 19 | 15 | 36 | CORE-037 |
-| [Combat](issues/CMB.md) | CMB | 7 | 36 | 37 | 80 | CMB-081 |
+| [Combat](issues/CMB.md) | CMB | 6 | 37 | 38 | 81 | CMB-083 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 7 | 9 | 17 | GRID-018 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 10 | 54 | 47 | 111 | SPL-112 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 7 | 24 | 36 | 67 | CHR-068 |
@@ -40,7 +40,7 @@ Entries per section:
 | [AI](issues/AI.md) | AI | 1 | 20 | 35 | 56 | AI-057 |
 | [UI](issues/UI.md) | UI | 1 | 11 | 38 | 50 | UI-051 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 18 | 26 | TST-027 |
-| **All** | | 38 | 239 | 305 | 582 | |
+| **All** | | 37 | 240 | 306 | 583 | |
 
 ## Top issues
 
@@ -52,7 +52,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [CORE-034](issues/CORE.md) | High | Runtime loop and core | A downed regenerating or fast-healing enemy is never counted as defeated, so the fight cannot be won | Yes |
 | [ENC-001](issues/ENC.md) | High | Encounters | Enemies 6+ spawn off the grid and cannot move; more than 15 enemies are dropped | Yes |
 | [UI-001](issues/UI.md) | High | UI | Combat log adds about 50 pooled GameObjects on every log call (growth not measured) | Yes |
-| [CMB-001](issues/CMB.md) | High | Combat | Flanked targets get -2 AC against every attacker (effective +4 for flankers) | Yes |
 | [CMB-002](issues/CMB.md) | High | Combat | Full attacks use STR for ranged attacks and drop morale attack bonuses | Yes |
 | [CMB-003](issues/CMB.md) | High | Combat | Morale and situational damage bonuses never reach weapon damage | Yes |
 | [CMB-004](issues/CMB.md) | High | Combat | Critical hits multiply only weapon dice; coup de grace multiplies sneak attack | Yes |

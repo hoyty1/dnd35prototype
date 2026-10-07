@@ -533,11 +533,18 @@ public static class ThreatSystem
             Debug.Log($"[ThreatSystem] Mobility: {target.Stats.CharacterName} gains +4 dodge AC vs movement AoO (applied as -4 attack penalty)");
         }
 
-        // AoO is a single melee attack at full BAB (no flanking, no range).
+        // AoO is a single melee attack at full BAB (PHB p.137), so a threatener who flanks
+        // the target gets the +2 flanking bonus and flank-based sneak attack (PHB p.153;
+        // the defender's Flanked tag gives no AC penalty, CMB-001).
         // Prefer an actually melee-capable equipped weapon so an off-hand melee weapon
         // can still be used when the primary slot is currently ranged.
         ItemData aooWeapon = ResolveBestAoOWeapon(threatener);
-        CombatResult result = threatener.Attack(target, false, 0, null, null, null, aooWeapon, mobilityPenalty);
+        GameManager gm = GameManager.Instance;
+        List<CharacterController> allCombatants = gm != null ? gm.GetAllCharactersForAI() : null;
+        bool isFlanking = CombatUtils.IsAttackerFlanking(threatener, target, allCombatants, out CharacterController flankPartner);
+        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+        string flankPartnerName = flankPartner != null && flankPartner.Stats != null ? flankPartner.Stats.CharacterName : null;
+        CombatResult result = threatener.Attack(target, isFlanking, flankBonus, flankPartnerName, null, null, aooWeapon, mobilityPenalty);
 
         // Mark this as an AoO in the result for logging
         result.IsAttackOfOpportunity = true;

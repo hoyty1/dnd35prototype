@@ -15,7 +15,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | 5-foot step | Partial | kiter AoO avoidance; mid full attack (Animal, Dragon, UndeadTactical, UndeadIncorporeal) | Yes | never "step then full attack" |
 | Withdraw | Partial | DefensiveMelee <30% HP; Frightened | Yes | AI-010 |
 | Charge | Used | Aggressive, Defensive, Dragon via `ShouldNPCCharge` + `ShouldPreferCharge`; pounce | Yes | Morale-typed +2; CMB-018 |
-| Seek flanking | Used | +3 movement term if `SeekFlanking` | Manual | CMB-001 |
+| Seek flanking | Used | +3 movement term if `SeekFlanking` | Manual | flankers get +2 on melee attacks (RAW); no AC penalty on the target |
 | Cover, terrain, hazards | Never | `UseCover` unread; no cover system | No | paths through walls of fire, clouds, webs (inferred) |
 | Stand up / drop prone / crawl | Never | trip Prone has no duration; prone NPCs move at full speed | Yes | CMB-074 |
 | Escape entangle | Auto | `TryExecuteAnimateRopeEscapeForNpc`, standard action | Yes | CMB-055 |

@@ -767,7 +767,7 @@ public class CharacterSheetUI : MonoBehaviour
         if (stats.IsDisarmed)
             activeConditions.Add("Disarmed (-4 attack while unarmed)");
         if (stats.IsFlanked)
-            activeConditions.Add("Flanked (-2 AC)");
+            activeConditions.Add("Flanked (flanking melee attackers get +2 to hit)");
 
         if (hpState == HPState.Disabled)
             activeConditions.Add("Disabled (0 HP: can take one move OR one standard action)");

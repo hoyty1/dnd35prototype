@@ -763,9 +763,12 @@ public static class ConditionRules
             Type = CombatConditionType.Flanked,
             DisplayName = "Flanked",
             ShortLabel = "FL",
-            Description = "Enemies gain flanking bonuses.",
+            // PHB p.153: only the flanking attackers get +2 on melee attack rolls
+            // (CombatUtils.FlankingAttackBonus via IsAttackerFlanking). The defender takes
+            // no AC penalty, so this condition is a display tag only (CMB-001).
+            Description = "Display tag: flanking melee attackers get +2 to hit. No AC penalty.",
             StackingRule = ConditionStackingRule.Refresh,
-            ArmorClassModifier = -2,
+            ArmorClassModifier = 0,
             MovementMultiplier = 1f,
             GrantsCombatAdvantage = true
         });

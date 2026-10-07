@@ -908,9 +908,13 @@ public class CombatFlowService : MonoBehaviour
                     string cleaveFeatName = isGreatCleave ? "Great Cleave" : "Cleave";
                     _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"️ {cleaveFeatName}! {attacker.Stats.CharacterName} strikes {cleaveTarget.Stats.CharacterName}!"));
 
-                    // Cleave attack uses the same weapon at full BAB
-                    CombatResult cleaveResult = attacker.Attack(cleaveTarget, false, 0, null, null, null, attackWeapon);
-                    string cleaveLog = BuildAttackLog(attacker, false, null, cleaveResult);
+                    // Cleave attack uses the same weapon at full BAB. It is a melee attack,
+                    // so flanking the new target still grants +2 (PHB p.153, CMB-001).
+                    bool cleaveFlanking = CombatUtils.IsAttackerFlanking(attacker, cleaveTarget, _gameManager.Combat_GetAllCharacters(), out CharacterController cleavePartner);
+                    int cleaveFlankBonus = cleaveFlanking ? CombatUtils.FlankingAttackBonus : 0;
+                    string cleavePartnerName = cleavePartner != null && cleavePartner.Stats != null ? cleavePartner.Stats.CharacterName : null;
+                    CombatResult cleaveResult = attacker.Attack(cleaveTarget, cleaveFlanking, cleaveFlankBonus, cleavePartnerName, null, null, attackWeapon);
+                    string cleaveLog = BuildAttackLog(attacker, cleaveFlanking, cleavePartnerName, cleaveResult);
                     _gameManager.CombatUI?.ShowCombatLog(cleaveLog);
 
                     if (cleaveResult.Hit && cleaveResult.TotalDamage > 0)
@@ -1326,12 +1330,17 @@ public class CombatFlowService : MonoBehaviour
         int totalDamage = 0;
         bool anyKilled = false;
 
+        List<CharacterController> whirlwindCombatants = _gameManager.Combat_GetAllCharacters();
         foreach (var enemy in adjacentEnemies)
         {
             if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead) continue;
 
-            // Single melee attack at full BAB (no flanking for Whirlwind Attack)
-            CombatResult result = attacker.Attack(enemy, false, 0, null, null, null, null, 0, false);
+            // Single melee attack at full BAB against each target; each is a melee attack,
+            // so flanking that target grants +2 (PHB p.153; no defender AC penalty, CMB-001).
+            bool whirlFlanking = CombatUtils.IsAttackerFlanking(attacker, enemy, whirlwindCombatants, out CharacterController whirlPartner);
+            int whirlFlankBonus = whirlFlanking ? CombatUtils.FlankingAttackBonus : 0;
+            string whirlPartnerName = whirlPartner != null && whirlPartner.Stats != null ? whirlPartner.Stats.CharacterName : null;
+            CombatResult result = attacker.Attack(enemy, whirlFlanking, whirlFlankBonus, whirlPartnerName, null, null, null, 0, false);
             string line = $"  vs {enemy.Stats.CharacterName}: ";
 
             if (result.Hit)
