@@ -236,7 +236,7 @@ These types compile and some are even instantiated, but they do not drive behavi
 
 ### Folder map of Assets/Scripts
 
-There are 661 `.cs` files (about 293K lines). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
+There are 670 `.cs` files (about 302K lines, recounted 2026-10-07). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
 
 ```
 Assets/Scripts/
@@ -285,8 +285,9 @@ Assets/Scripts/
   World/ (2)             PlanarTravelSystem, CreatureTrapSystem (mostly inert)
   Utilities/ (12)        DiceRoller, CameraController, DebugCommands, IdentifierExtensions, ...
   Identifiers/ (2)       two editor-only ContextMenu smoke tests (the real ID types live elsewhere)
-  Tests/ (105)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
-                         and Scenarios/ (ScenarioFastMode, ScenarioSessionGuard; the scenario harness grows here)
+  Tests/ (114)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
+                         and Scenarios/ (the editor-only scenario harness: model, runner, trace, checks,
+                         expectations, fast mode, session guard, Catalog/ of scenario definitions)
 ```
 
 The empty legacy folders left by the reorganization (`Core/`, `Magic/`, `CombatSystems/`, `Classes/`, `Store/`, `Inventory/`, `UI/Panels/`) were removed on 2026-10-03. Resolve an old doc path such as `Magic/X.cs` by file name (`**/X.cs`).

@@ -415,7 +415,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | Before Inc 1 | **AI-053** | Every profile logs as "Default AI", so the trace cannot name Roles. |
 | | **AI-004** | Brute (29 definitions) and Caster get a null Role. |
 | | **AI-017** | `OnEnable` overwrites tuning, and instances leak on reused slots. Apply params after `OnEnable`, and destroy old instances. |
-| | **AI-018** | `CombatUI` null dereference at `AIService.cs:59-60`. The static-suite runner and its curated baseline exist since 2026-10-07 (TST-002 closed), but without the AI-018 fix the turn tests below cannot run headless. |
+| | **AI-018** | `CombatUI` null dereference at `AIService.cs:59-60`. The static-suite runner and its curated baseline exist since 2026-10-07 (TST-002 closed), but without the AI-018 fix the turn tests below cannot run headless. The Play-mode scenario harness (docs/TESTING.md 3.4, 2026-10-07) can run them in the real scene instead. |
 | | **AI-005 / AI-007** | `SelectBestTarget` re-rolls Sanctuary and Listen on every call, so cached decisions would still flip within a turn. |
 | | Tag leak / **AI-021** | `ClearAllTags` has no callers, and the position stores are never cleared, so state leaks across encounters on reused slots. |
 | Before Cowardly counts as "complete" | CMB-073 (fixed 2026-10-07) | NPC movement now provokes AoOs, so "avoid AoOs" has a real cost; the "AoO risk simulated" trace label is no longer needed. |

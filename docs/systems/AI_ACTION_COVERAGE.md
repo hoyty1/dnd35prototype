@@ -40,13 +40,13 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Avoid provoking: movement | Partial | path scoring | | |
 | Avoid provoking: ranged | Used | kiter risk model | Prompt | |
 | Avoid provoking: casting | Used | adjacency estimate picks or drops the spell; at cast time `ShouldCastDefensively` picks defensive (rolled) or normal (AoOs rolled) | Prompt + roll | |
-| Trip | Used | Humanoid, Berserk, Grappler, null profile, `HasTripAttack` summons; free trip on hit | Yes | AI-035, CMB-079; 11.8.4 |
-| Disarm | Used | Humanoid, Grappler, null profile (STR ≥3) | Yes | never picks weapons up; 11.8.4 |
+| Trip | Used | Humanoid, Berserk, Grappler, null profile, `HasTripAttack` summons; free trip on hit | Yes | AI-035, CMB-079, AI-058 (also against helpless targets); 11.8.4 |
+| Disarm | Used | Humanoid, Grappler, null profile (STR ≥3) | Yes | never picks weapons up; also against helpless targets (AI-058); 11.8.4 |
 | Trip or disarm within a full attack | Used | the NPC melee attack runs step by step and the maneuver evaluation may replace any weapon step at that step's BAB; the evaluation re-runs before each step, so profiles chain trip, disarm and grapple and attack only when none applies; after a grapple start the remaining steps become grapple actions (CMB-102, 2026-10-07). Natural-attack sequences substitute only at the first step and then make their remaining natural attacks; no charge or AoO substitutes | Yes (per-creature attack sequence: standard action first, full attack from the second step) | CMB-102, AI-035 |
 | Sunder, bull rush (attack or charge), overrun, feint, Improved Feint | Never | flags never set; the NPC executor supports the standard and the charge bull rush (`TryNPCSpecialAttackIfBeneficial`, `NPCExecuteCharge(..., bullRush)` through `ShouldNPCChargeBullRush`; the push decision is the profile hook `ChooseBullRushPush`) but nothing chooses them; feint has no AI path | Yes | AI-014, CMB-015 |
 | Aid another (+2 attack or AC, or wake a sleeping ally) | Never | `UseAidAnother` unread; executor is PC-bound | Yes | AI-026, AI-054; 11.8.1 |
 | Coup de grace | Used | profiles or data override, helpless adjacent | Yes | provokes from all threatening enemies, as for PCs; CMB-004 |
-| Grapple start / in-grapple | Used | 8.6 | Yes | CMB-033, CMB-083 |
+| Grapple start / in-grapple | Used | 8.6 | Yes | CMB-033, CMB-083, CMB-121 (cannot join a grapple in progress), AI-058 |
 | Grapple escape | Partial | animals <25% HP only in practice | Yes | CMB-075, AI-029 |
 | Improved Grab | Auto | free on hit | Prompt | |
 | Constrict, blood drain, swallow whole, trample | Never | text or unread data | n/a | CRE-031, CRE-018 |

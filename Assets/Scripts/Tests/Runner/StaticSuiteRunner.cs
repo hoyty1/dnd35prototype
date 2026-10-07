@@ -475,6 +475,8 @@ namespace Tests.Runner
             else if (EditorUtility.scriptCompilationFailed) refusal = "scripts have compile errors";
             else if (playing ? !EditorApplication.isPlayingOrWillChangePlaymode : EditorApplication.isPlayingOrWillChangePlaymode)
                 refusal = "Unity is entering or leaving Play mode";
+            else if (Tests.Scenarios.ScenarioRunner.IsRunActive)
+                refusal = "a scenario-harness run is in progress (" + Tests.Scenarios.ScenarioRunner.Instance.RunId + "); wait for it or call ScenarioHarness.Abort";
             else if (!o.AllowStaleCode) refusal = StaleCodeReason();
             if (refusal != null) return Refuse(report, mode, refusal);
 

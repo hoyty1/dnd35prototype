@@ -6,7 +6,7 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 
 ## Project
 
-- D&D 3.5e tactical combat prototype, Unity **6000.4.0f1** only (`F:/Unity/6000.4.0f1/Editor/Unity.exe`; ignore other editors under `F:/Unity/`). C# 9.0, one assembly (Assembly-CSharp), about 661 `.cs` files in `Assets/Scripts`, mostly global namespace.
+- D&D 3.5e tactical combat prototype, Unity **6000.4.0f1** only (`F:/Unity/6000.4.0f1/Editor/Unity.exe`; ignore other editors under `F:/Unity/`). C# 9.0, one assembly (Assembly-CSharp), about 670 `.cs` files in `Assets/Scripts`, mostly global namespace.
 - One scene, `Assets/Scenes/MainScene.unity`; `SceneBootstrap.Awake` (`Assets/Scripts/_Core/SceneBootstrap.cs`) builds grid, characters, UI and `GameManager` at runtime. No prefabs, no saves.
 - Written mostly by earlier AI agents; maintained by Claude for the owner, hoyty1.
 - **Goal (owner, 2026-10-03):** play as close to the 3.5e core rules (PHB/DMG/MM) as possible. Battles are randomized encounters based on the DMG random encounter rules. Between battles you manage the party by PHB/DMG rules. Enemy AI needs much more depth because the combat option space is vast. Prefer RAW unless the owner confirms a house rule.
@@ -33,6 +33,7 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 - **Fast party:** **Play Now!** or **Quick Start** on character creation.
 - **Dev tools:** the F12 Spell Testing Panel and `*_test` presets bypass normal rules; see `docs/TESTING.md` 4.2-4.3.
 - **Static suites** in `Assets/Scripts/Tests` (no test framework, no CI): run with Tools > DND Tests or `Tests.Runner.StaticSuiteRunner.RunFromCommand` through the Unity MCP (edit pass, then Play pass; `docs/TESTING.md` 3); results in `Logs/TestRunner/`. Known failures live in `tools/tests/static-suites.json`, curated 2026-10-07 with an issue ID for each; both passes must give verdict OK, and a fix removes its entry.
+- **Scenario harness** (`Assets/Scripts/Tests/Scenarios`, editor only): real fights in a fresh Play session through the Unity MCP, `Tests.Scenarios.ScenarioHarness.Start("smoke/*", "1-3", "repeat=2")`, then poll `Logs/Scenarios/<runId>/status.json` and read `summary.json` (`docs/TESTING.md` 3.4). Never in a Play session that ran static suites; never edit scripts during a run. AI-run party members take the NPC turn path.
 
 ## Code map
 

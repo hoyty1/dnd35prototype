@@ -257,7 +257,7 @@ A typical melee turn calls `SelectBestTarget` twice, a kiter three times; each c
 | UndeadIncorporeal | own: 10 + `max(0, 8-d)`; touch AC ≤11 +8, ≤13 +4, ≤15 +1, else -2; existing drain up to +8; Wizard or Cleric +3; isolation; tags |
 | Swarm | `100 - dist` (the swarm routine uses `ResolveTarget` instead) |
 
-Profile-path extras: unconscious enemies are dropped first if `ShouldIgnoreUnconsciousTargets` (only Animal) and a conscious one exists. Everyone else keeps hitting dying PCs.
+Profile-path extras: unconscious enemies are dropped first if `ShouldIgnoreUnconsciousTargets` (only Animal) and a conscious one exists. Everyone else keeps hitting dying PCs, and the maneuver chooser trips, disarms and grapples helpless targets (AI-058).
 
 **Perception adjustment (`GetPerceptionTargetingAdjustment`, 1925),** added in all scorers. Side effect: writes the second last-known store (AI-021). Invisible: -18, or with Scent +4 within 6 squares / -6 beyond. Unseen: -12, +4 back if tracked. Then `GetConcealmentTargetingAdjustment` (2001): miss chance 0% +50, below 50% -30, else -80 (-40 more if unseen, +20 if tracked), times `ConcealmentPenaltyMultiplier` (always 1). These ±50-120 terms dwarf every profile term (about 10-60), so the concealment tier decides the target almost always; within a tier, distance and threat decide.
 
@@ -671,6 +671,8 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | SPL-094 | Sanctuary and Hide from Undead are broken only by `NPCPerformAttack` and the PC attack path, not by charges, maneuvers or spells |
 | CMB-079 | Trip has no counter-trip, no Improved Trip follow-up attack and no size limit (PCs and NPCs) |
 | AI-054 | PC action executors (Aid Another, item use, area casting, Turn Undead) are bound to the PC turn flow, so the AI cannot reuse them |
+| AI-058 | `ShouldUseManeuver` never checks whether the target is helpless, so the AI trips, disarms and grapples unconscious enemies (seen in Play mode by the scenario harness) |
+| CMB-121 | A creature cannot join a grapple in progress; the refused attempt still uses the attack, and the chooser offers it again every round |
 
 ## 11. Extension points
 
@@ -787,7 +789,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 - **Capabilities are data the AI cannot see.** Spell-like abilities, stench, constrict, secondary breath and many MM specials exist only as text or unread fields; most monsters that should cast cannot. A deeper chooser has little to choose from until the capability data is executable.
 - **One-move horizon, no memory, no team.** Movement looks one move ahead, profiles are stateless except for dragons and swarms, and NPCs share nothing.
 - **Performance budget.** Per-cell A* already causes hitches; any search over action sequences needs a shared reachability flood and a cached threat map per turn first (AI-019).
-- **Testability.** No harness can run `ExecuteNPCTurn` headless (AI-018; the static-suite runner covers only the static suites), so behaviour changes are verified only by play. The seams for a Play-mode scenario harness exist (dice filter, a scripted-turn hook after the compulsion gates in `ExecuteNPCTurn`, event hooks; [TESTING.md](../TESTING.md) 3.3), but the harness itself is not built yet.
+- **Testability.** Nothing runs `ExecuteNPCTurn` headless (AI-018; the static-suite runner covers only the static suites). The Play-mode scenario harness ([TESTING.md](../TESTING.md) 3.4, built 2026-10-07) plays whole fights in the real scene with seeded and forced dice, a typed trace of every turn, attack, AoO, maneuver, move and condition, and rules invariants; actors can be AI-run, scripted (after the compulsion gates in `ExecuteNPCTurn`), idle or PC-driven. Its smoke runs already surfaced AI-058 (maneuvers on helpless targets) and CMB-121 (refused grapple joins), and confirmed CORE-011 in Play mode. Rules scenarios with scripted steps come next; until then, AI behaviour changes are checked by a seed sweep of an AI-vs-AI scenario plus reading the traces.
 
 ### 13.2 Prerequisites (fix before tuning behaviour)
 
