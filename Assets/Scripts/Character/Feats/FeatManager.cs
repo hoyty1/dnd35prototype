@@ -1043,7 +1043,7 @@ public static class FeatManager
         // Phase 2 Specialized Tactics feats
         if (HasFarShot(stats)) lines.Add("Far Shot: Range increment ×1.5 (projectile) or ×2 (thrown)");
         if (HasAnyRapidReload(stats)) lines.Add("Rapid Reload: Reduce crossbow reload time by one step");
-        if (HasImprovedBullRush(stats)) lines.Add("Improved Bull Rush: +4 bonus, no AoO on bull rush");
+        if (HasImprovedBullRush(stats)) lines.Add("Improved Bull Rush: +4 bonus, no AoO from the defender on bull rush");
         if (HasImprovedOverrun(stats)) lines.Add("Improved Overrun: +4 bonus, no AoO on overrun");
         if (HasImprovedSunder(stats)) lines.Add("Improved Sunder: +4 bonus, no AoO on sunder");
         if (HasImprovedGrapple(stats)) lines.Add("Improved Grapple: +4 bonus, no AoO on grapple");

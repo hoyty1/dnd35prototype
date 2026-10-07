@@ -157,6 +157,24 @@ public partial class GameManager
 
         if (summon.Stats != null && summon.Stats.HasTripAttack && !target.Stats.IsProne && summon.Actions.HasStandardAction)
         {
+            // A trip taken as an action (not the free trip after a bite) provokes like any
+            // other trip attempt (CMB-014); the shared helper is the one PCs use.
+            int hpBeforeTripAoOs = summon.Stats.CurrentHP;
+            ManeuverAoOOutcome summonTripAoOs = ResolveManeuverInitiationAoOs(summon, target, SpecialAttackType.Trip);
+            if (summonTripAoOs != ManeuverAoOOutcome.Proceed)
+            {
+                // As in TryNPCSpecialAttackIfBeneficial: a summon dropped by the AoO pays no
+                // extra strenuous-action hit point.
+                if (summonTripAoOs == ManeuverAoOOutcome.AttackerIncapacitated
+                    || (hpBeforeTripAoOs > 0 && summon.Stats.CurrentHP <= 0))
+                    summon.Actions.UseStandardAction();
+                else
+                    summon.CommitStandardAction();
+                UpdateAllStatsUI();
+                yield return new WaitForSeconds(0.65f);
+                yield break;
+            }
+
             var trip = summon.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
             CombatUI.ShowCombatLog(CombatLogHelper.Summon("✦", $"{GetSummonDisplayName(summon)} attempts Trip: {trip.Log}"));
 
@@ -254,7 +272,8 @@ public partial class GameManager
         if (!attackResult.Hit || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
             return;
 
-        SpecialAttackResult tripResult = attacker.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
+        // MM trip (Ex): no touch attack and no AoO (CMB-014).
+        SpecialAttackResult tripResult = attacker.ResolveFreeTripAttempt(target);
         string tripContext = tripResult.Success
             ? "free trip follow-up"
             : "free trip attempt failed";
@@ -312,13 +331,6 @@ public partial class GameManager
         {
             string npcName = npc.Stats != null ? npc.Stats.CharacterName : "<unknown>";
             Debug.Log($"[AI][SpecialAttack] {npcName} cannot perform forced {choice.Value} while in {npc.GetPrimaryWeaponType()} mode.");
-            return false;
-        }
-
-        if (choice == SpecialAttackType.Grapple && hasImprovedGrab)
-        {
-            string npcName = npc.Stats != null ? npc.Stats.CharacterName : "<unknown>";
-            Debug.Log($"[AI][SpecialAttack] {npcName} has Improved Grab; refusing forced standard Grapple action.");
             return false;
         }
 

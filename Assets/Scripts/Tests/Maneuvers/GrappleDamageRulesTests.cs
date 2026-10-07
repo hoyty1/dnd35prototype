@@ -6,7 +6,9 @@ namespace Tests.Maneuvers
 {
 /// <summary>
 /// Tests for D&D 3.5 grapple damage behavior:
-/// opposed grapple check, unarmed damage, lethal/nonlethal defaults, and monk exception.
+/// opposed grapple check, unarmed damage, lethal/nonlethal defaults, and monk exception;
+/// plus the shared opposed-maneuver math for trip, bull rush, overrun, disarm and the grapple
+/// touch attack (PHB p.154-158, CMB-014).
 /// Run via GrappleDamageRulesTests.RunAll() from a runtime test hook.
 /// </summary>
 public static class GrappleDamageRulesTests
@@ -53,14 +55,26 @@ public static class GrappleDamageRulesTests
         TestIterativeGrappleAttackBonusesConsumeInOrder();
         TestOpposedEscapeCountsAsIterativeGrappleAttackAction();
         TestStandardOnlyAllowsSingleIterativeGrappleAttack();
-        TestImprovedGrabCreatureCannotUseStandardGrappleAction();
+        TestImprovedGrabCreatureCanUseStandardGrappleAction();
         TestImprovedGrabCreatureCanStillUseIterativeGrappleActionsWhenAlreadyGrappling();
         TestIterativeBullRushAttackBonusesConsumeInOrder();
         TestIterativeDisarmAttackBonusesConsumeInOrder();
         TestStandardOnlyAllowsSingleIterativeDisarmAttack();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
         TestBullRushImprovedFeatAddsPlus4();
-        TestBullRushDefenderUsesBestStrengthOrDexAndDwarfStability();
+        TestBullRushDefenderUsesStrengthAndDwarfStability();
+        TestBullRushCheckIgnoresBaseAttackBonus();
+        TestSpecialSizeModifierScale();
+        TestTripAttackerModifierIsStrengthCheck();
+        TestTripDefenderUsesBestOfStrDexWithoutImprovedTrip();
+        TestOverrunCheckModifiers();
+        TestManeuverTouchAttackNaturalTwentyAndOne();
+        TestOpposedCheckTieBreaks();
+        TestFreeTripSkipsTouchAttack();
+        TestTripAttemptRollsTouchAttack();
+        TestDefenderImprovedDisarmGivesNoBonus();
+        TestImprovedDisarmDeniesCounterDisarm();
+        TestGrappleHoldFailsAgainstMuchLargerTarget();
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
 
@@ -672,10 +686,10 @@ public static class GrappleDamageRulesTests
         Cleanup(attacker);
     }
 
-    private static void TestImprovedGrabCreatureCannotUseStandardGrappleAction()
+    private static void TestImprovedGrabCreatureCanUseStandardGrappleAction()
     {
-        var attacker = CreateTestCharacter("ImprovedGrabNoStandardGrapple", "Fighter");
-        var defender = CreateWeakDefender("ImprovedGrabNoStandardGrappleTarget");
+        var attacker = CreateTestCharacter("ImprovedGrabStandardGrapple", "Fighter");
+        var defender = CreateWeakDefender("ImprovedGrabStandardGrappleTarget");
 
         attacker.Stats.HasImprovedGrab = true;
         attacker.StartNewTurn();
@@ -683,9 +697,10 @@ public static class GrappleDamageRulesTests
         bool canUseStandardGrapple = attacker.CanUseStandardGrapple();
         SpecialAttackResult result = attacker.ExecuteSpecialAttack(SpecialAttackType.Grapple, defender);
 
-        Assert(!canUseStandardGrapple, "Improved Grab creature is flagged as unable to use standard grapple action");
-        Assert(result != null && !result.Success, "Standard grapple attempt fails for Improved Grab creature");
-        Assert(result != null && result.Log.Contains("Improved Grab"), "Standard grapple failure log explains Improved Grab restriction");
+        // CMB-014: Improved Grab adds a free grapple on a hit; it does not remove the normal one.
+        Assert(canUseStandardGrapple, "Improved Grab creature can still use the standard grapple action");
+        Assert(result != null && result.Log.Contains("Touch attack"), "Improved Grab creature's standard grapple rolls the grab touch attack");
+        Assert(result != null && !result.Log.Contains("cannot initiate"), "Standard grapple is not refused for an Improved Grab creature");
 
         Cleanup(attacker, defender);
     }
@@ -774,8 +789,8 @@ public static class GrappleDamageRulesTests
         attacker.Stats.STR = 18;
         attacker.StartNewTurn();
 
-        BullRushCheckResult noCharge = attacker.RollBullRushAttackerCheck(11, chargeBonus: 0, fixedRoll: 10);
-        BullRushCheckResult withCharge = attacker.RollBullRushAttackerCheck(11, chargeBonus: 2, fixedRoll: 10);
+        BullRushCheckResult noCharge = attacker.RollBullRushAttackerCheck(chargeBonus: 0, fixedRoll: 10);
+        BullRushCheckResult withCharge = attacker.RollBullRushAttackerCheck(chargeBonus: 2, fixedRoll: 10);
 
         Assert(withCharge.Total == noCharge.Total + 2, "Bull Rush (Charge) applies +2 bonus to attacker opposed check");
 
@@ -789,16 +804,16 @@ public static class GrappleDamageRulesTests
         attacker.Stats.STR = 18;
         attacker.StartNewTurn();
 
-        BullRushCheckResult baseline = attacker.RollBullRushAttackerCheck(11, chargeBonus: 0, fixedRoll: 10);
+        BullRushCheckResult baseline = attacker.RollBullRushAttackerCheck(chargeBonus: 0, fixedRoll: 10);
         attacker.Stats.Feats.Add("Improved Bull Rush");
-        BullRushCheckResult withFeat = attacker.RollBullRushAttackerCheck(11, chargeBonus: 0, fixedRoll: 10);
+        BullRushCheckResult withFeat = attacker.RollBullRushAttackerCheck(chargeBonus: 0, fixedRoll: 10);
 
         Assert(withFeat.Total == baseline.Total + 4, "Improved Bull Rush adds +4 to attacker opposed check");
 
         Cleanup(attacker);
     }
 
-    private static void TestBullRushDefenderUsesBestStrengthOrDexAndDwarfStability()
+    private static void TestBullRushDefenderUsesStrengthAndDwarfStability()
     {
         var defender = CreateTestCharacter("BullRushDefender", "Fighter");
         defender.Stats.BaseAttackBonus = 6;
@@ -809,13 +824,236 @@ public static class GrappleDamageRulesTests
 
         BullRushCheckResult check = defender.RollBullRushDefenderCheck(fixedRoll: 10);
 
-        int expected = 10 + 6 + 4 + defender.GetGrappleSizeModifier() + 4;
-        Assert(check.UsesBestStrengthOrDexterity, "Bull rush defender check tracks STR/DEX best-of mode");
-        Assert(check.StrengthOrDexterityModifier == 4, "Bull rush defender uses higher of STR or DEX modifier");
+        // PHB p.154: opposed Strength checks; Dexterity and BAB do not apply (CMB-014).
+        int expected = 10 + defender.Stats.STRMod + defender.GetSpecialSizeModifier() + 4;
+        Assert(!check.UsesBestStrengthOrDexterity, "Bull rush defender check uses Strength, not the better of STR/DEX");
+        Assert(check.StrengthModifier == defender.Stats.STRMod, "Bull rush defender uses its STR modifier");
         Assert(check.StabilityBonus == 4, "Dwarf defender gains +4 stability bonus against bull rush");
-        Assert(check.Total == expected, "Bull rush defender total includes roll + BAB + best ability + size + stability");
+        Assert(check.Total == expected, "Bull rush defender total is roll + STR + special size + stability (no BAB, no DEX)");
 
         Cleanup(defender);
+    }
+
+    private static void TestBullRushCheckIgnoresBaseAttackBonus()
+    {
+        var lowBab = CreateTestCharacter("BullRushLowBab", "Fighter");
+        var highBab = CreateTestCharacter("BullRushHighBab", "Fighter");
+        lowBab.Stats.BaseAttackBonus = 0;
+        highBab.Stats.BaseAttackBonus = 15;
+
+        BullRushCheckResult low = lowBab.RollBullRushAttackerCheck(chargeBonus: 0, fixedRoll: 10);
+        BullRushCheckResult high = highBab.RollBullRushAttackerCheck(chargeBonus: 0, fixedRoll: 10);
+
+        Assert(low.Total == high.Total, "Bull rush attacker check ignores BAB (it is a Strength check)");
+        Assert(low.Total == 10 + lowBab.Stats.STRMod + lowBab.GetSpecialSizeModifier(), "Bull rush attacker total is roll + STR + special size");
+
+        Cleanup(lowBab, highBab);
+    }
+
+    private static void TestSpecialSizeModifierScale()
+    {
+        var creature = CreateTestCharacter("SpecialSizeScale", "Fighter");
+
+        creature.Stats.CurrentSizeCategory = SizeCategory.Small;
+        bool small = creature.GetSpecialSizeModifier() == -4 && creature.Stats.SizeModifier == 1;
+        creature.Stats.CurrentSizeCategory = SizeCategory.Large;
+        bool large = creature.GetSpecialSizeModifier() == 4 && creature.Stats.SizeModifier == -1;
+        creature.Stats.CurrentSizeCategory = SizeCategory.Huge;
+        bool huge = creature.GetSpecialSizeModifier() == 8;
+        creature.Stats.CurrentSizeCategory = SizeCategory.Medium;
+
+        Assert(small && large && huge, "Special size modifier is -4 Small, +4 Large, +8 Huge (not the attack size modifier)");
+
+        Cleanup(creature);
+    }
+
+    private static void TestTripAttackerModifierIsStrengthCheck()
+    {
+        var attacker = CreateTestCharacter("TripAttackerMods", "Fighter");
+        attacker.Stats.STR = 18; // +4
+        attacker.Stats.BaseAttackBonus = 10;
+        attacker.Stats.CurrentSizeCategory = SizeCategory.Large;
+        attacker.Stats.TripAttackCheckBonus = 11; // MM stat-block value: not added on top (it already counts STR and size)
+
+        int baseline = attacker.GetTripAttackerCheckModifier();
+        Assert(baseline == 4 + 4, "Trip Strength check = STR + special size; no BAB and no double-counted TripAttackCheckBonus");
+
+        attacker.Stats.Feats.Add("Improved Trip");
+        Assert(attacker.GetTripAttackerCheckModifier() == baseline + 4, "Improved Trip adds +4 to the tripper's Strength check");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestTripDefenderUsesBestOfStrDexWithoutImprovedTrip()
+    {
+        var defender = CreateTestCharacter("TripDefenderMods", "Fighter");
+        defender.Stats.STR = 8;   // -1
+        defender.Stats.DEX = 16;  // +3
+        defender.Stats.BaseAttackBonus = 12;
+        defender.Stats.CurrentSizeCategory = SizeCategory.Small;
+
+        int baseline = defender.GetTripOrOverrunDefenderCheckModifier();
+        Assert(baseline == 3 - 4, "Trip defender uses the better of STR/DEX plus special size, without BAB");
+
+        defender.Stats.Feats.Add("Improved Trip");
+        Assert(defender.GetTripOrOverrunDefenderCheckModifier() == baseline, "Regression: the defender's own Improved Trip gives no bonus to resist a trip");
+
+        defender.Stats.Race = RaceDatabase.GetRace("Dwarf");
+        Assert(defender.GetTripOrOverrunDefenderCheckModifier() == baseline + 4, "Dwarf stability adds +4 to resist a trip or overrun");
+
+        Cleanup(defender);
+    }
+
+    private static void TestOverrunCheckModifiers()
+    {
+        var attacker = CreateTestCharacter("OverrunAttackerMods", "Fighter");
+        attacker.Stats.STR = 16; // +3
+        int attackerBase = attacker.GetOverrunAttackerCheckModifier();
+        attacker.Stats.Feats.Add("Improved Overrun");
+        Assert(attackerBase == 3 && attacker.GetOverrunAttackerCheckModifier() == 7, "Overrun attacker: STR + special size, +4 with Improved Overrun");
+
+        var defender = CreateTestCharacter("OverrunDefenderMods", "Fighter");
+        defender.Stats.STR = 10; // +0
+        defender.Stats.DEX = 18; // +4
+        Assert(defender.GetTripOrOverrunDefenderCheckModifier() == 4, "Overrun defender uses DEX when it is better than STR (PHB p.157)");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestManeuverTouchAttackNaturalTwentyAndOne()
+    {
+        Assert(CharacterController.IsManeuverTouchAttackHit(20, 21, 40), "Natural 20 hits on a maneuver touch attack whatever the touch AC");
+        Assert(!CharacterController.IsManeuverTouchAttackHit(1, 30, 10), "Natural 1 misses on a maneuver touch attack whatever the total");
+        Assert(CharacterController.IsManeuverTouchAttackHit(10, 15, 15) && !CharacterController.IsManeuverTouchAttackHit(10, 14, 15),
+            "Otherwise the touch attack hits when the total meets the touch AC");
+    }
+
+    private static void TestOpposedCheckTieBreaks()
+    {
+        Assert(CharacterController.DoesAttackerWinOpposedCheck(15, 2, 14, 9, null), "Higher opposed total wins");
+        Assert(!CharacterController.DoesAttackerWinOpposedCheck(14, 9, 15, 2, null), "Lower opposed total loses");
+        Assert(CharacterController.DoesAttackerWinOpposedCheck(15, 5, 15, 3, null), "Tie goes to the higher modifier (attacker)");
+        Assert(!CharacterController.DoesAttackerWinOpposedCheck(15, 3, 15, 5, null), "Tie goes to the higher modifier (defender)");
+
+        int[] attackerWins = { 7, 7, 12, 9 };
+        int i = 0;
+        Assert(CharacterController.DoesAttackerWinOpposedCheck(15, 4, 15, 4, () => attackerWins[i++]),
+            "Equal totals and modifiers: both roll again until the tie breaks (attacker wins the reroll)");
+        int[] defenderWins = { 3, 18 };
+        int j = 0;
+        Assert(!CharacterController.DoesAttackerWinOpposedCheck(15, 4, 15, 4, () => defenderWins[j++]),
+            "Equal totals and modifiers: the defender can win the reroll");
+    }
+
+    private static void TestFreeTripSkipsTouchAttack()
+    {
+        var attacker = CreateTestCharacter("FreeTripAttacker", "Fighter");
+        var defender = CreateWeakDefender("FreeTripTarget");
+        attacker.Stats.STR = 30;                                 // +10
+        attacker.Stats.CurrentSizeCategory = SizeCategory.Large; // +4 special size
+        defender.Stats.STR = 1;
+        defender.Stats.DEX = 1;                                  // -5
+        defender.Stats.DeflectionBonus = 60;                     // touch AC out of reach
+
+        SpecialAttackResult result = attacker.ResolveFreeTripAttempt(defender);
+
+        // Attacker minimum 1 + 14 = 15 meets the defender maximum 20 - 5 = 15 and wins the tie on modifier.
+        Assert(result != null && result.Success, "Free trip after a hit needs no touch attack and wins the Strength check");
+        Assert(result != null && !result.Log.Contains("Touch attack"), "Free trip after a hit does not roll a touch attack");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestTripAttemptRollsTouchAttack()
+    {
+        var attacker = CreateTestCharacter("TripTouchAttacker", "Fighter");
+        var defender = CreateWeakDefender("TripTouchTarget");
+        defender.Stats.DeflectionBonus = 60; // touch AC includes deflection, so only a natural 20 hits
+
+        SpecialAttackResult result = attacker.ExecuteSpecialAttack(SpecialAttackType.Trip, defender);
+
+        Assert(result != null && result.Log.Contains("Touch attack") && result.Log.Contains($"touch AC {defender.Stats.TouchArmorClass}"),
+            "A trip attempt starts with a melee touch attack against the full touch AC");
+        Assert(result != null && (!result.Success || result.Log.Contains("natural 20")),
+            "A trip attempt against an unreachable touch AC succeeds only after a natural 20 touch attack");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestDefenderImprovedDisarmGivesNoBonus()
+    {
+        var attacker = CreateTestCharacter("DisarmFeatAttacker", "Fighter");
+        var defender = CreateTestCharacter("DisarmFeatDefender", "Fighter");
+        ItemData attackerSword = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+        ItemData defenderSword = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+
+        MethodInfo rollDisarm = typeof(CharacterController).GetMethod("RollDisarmCheck", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert(rollDisarm != null, "RollDisarmCheck is available for the disarm feat test");
+        if (rollDisarm == null)
+        {
+            Cleanup(attacker, defender);
+            return;
+        }
+
+        object[] args = { attacker, defender, attackerSword, defenderSword, EquipSlot.RightHand, 0, string.Empty, null, 0 };
+        int withoutFeat = GetDisarmModifier(rollDisarm.Invoke(null, args), "Defender");
+        defender.Stats.Feats.Add("Improved Disarm");
+        int withFeat = GetDisarmModifier(rollDisarm.Invoke(null, args), "Defender");
+        int attackerWithoutFeat = GetDisarmModifier(rollDisarm.Invoke(null, args), "Attacker");
+        attacker.Stats.Feats.Add("Improved Disarm");
+        int attackerWithFeat = GetDisarmModifier(rollDisarm.Invoke(null, args), "Attacker");
+
+        Assert(withFeat == withoutFeat, "Regression: the defender's own Improved Disarm adds nothing when resisting a disarm");
+        Assert(attackerWithFeat == attackerWithoutFeat + 4, "Improved Disarm adds +4 to the disarming creature's roll");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static int GetDisarmModifier(object disarmCheck, string side)
+    {
+        System.Type type = disarmCheck.GetType();
+        int total = (int)type.GetField(side + "Total").GetValue(disarmCheck);
+        int roll = (int)type.GetField(side + "Roll").GetValue(disarmCheck);
+        return total - roll;
+    }
+
+    private static void TestImprovedDisarmDeniesCounterDisarm()
+    {
+        var attacker = CreateWeakDefender("CounterDisarmAttacker");
+        var defender = CreateTestCharacter("CounterDisarmDefender", "Fighter");
+        ConfigureVeryWeakGrappler(attacker);
+        attacker.Stats.STR = 1;
+        ConfigureVeryStrongGrappler(defender);
+        attacker.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponDagger), EquipSlot.RightHand);
+        defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        attacker.Stats.Feats.Add("Improved Disarm");
+
+        // The weak attacker cannot win (its best total is below the defender's worst), so the
+        // attempt fails; with Improved Disarm the defender gets no counter-disarm (PHB p.95).
+        SpecialAttackResult result = attacker.ExecuteSpecialAttack(SpecialAttackType.Disarm, defender);
+
+        Assert(result != null && !result.Success, "Weak disarm attempt fails against a much stronger defender");
+        Assert(result != null && result.Log.Contains("gets no counter-disarm"), "Improved Disarm denies the defender's counter-disarm");
+        Assert(attacker.GetEquippedMainWeapon() != null, "The Improved Disarm attacker keeps its weapon after the failed attempt");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestGrappleHoldFailsAgainstMuchLargerTarget()
+    {
+        var attacker = CreateTestCharacter("GrappleTooLargeAttacker", "Fighter");
+        var defender = CreateWeakDefender("GrappleTooLargeTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+        defender.Stats.CurrentSizeCategory = SizeCategory.Huge; // two categories above Medium
+        attacker.StartNewTurn();
+
+        SpecialAttackResult result = attacker.ExecuteSpecialAttack(SpecialAttackType.Grapple, defender);
+
+        Assert(result != null && !result.Success, "Grapple hold automatically fails against a target two or more sizes larger");
+        Assert(!attacker.IsGrappling(), "No grapple is established against a much larger target");
+
+        Cleanup(attacker, defender);
     }
 
 }

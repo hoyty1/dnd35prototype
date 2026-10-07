@@ -228,12 +228,12 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 
 | # | Work item | Frequency | AI value | Gap | Issues |
 |---|---|---|---|---|---|
-| 1 | Shared-action rules fixes: maneuver math, morale on full attacks (NPC movement, maneuver and casting AoOs, casting Concentration and standing up from prone are done) | every encounter | High: legality and risk models are meaningless without them | High | CMB-014, CMB-002/CMB-043 |
+| 1 | Shared-action rules fixes: morale on full attacks (NPC movement, maneuver and casting AoOs, casting Concentration, standing up from prone and maneuver math are done) | every encounter | High: legality and risk models are meaningless without them | High | CMB-002/CMB-043 |
 | 2 | Executor split plus `ActionRegistry` skeleton (attack, full attack, charge, maneuvers, single-target spell, consumable, aid another, turn undead) | all | High: the precondition for everything below | High | AI-054, SPL-054, ITM-005 |
 | 3 | Enemy spell carriers: DMG class casters get spells; slot and known-spell caps; mis-slotting; vampire as Fighter; stale placeholder flag on SM I/II | every caster spawn (max NPC CL in tables is 5) | High | High | ENC-021, SPL-041, SPL-015, CRE-030, SPL-021, CRE-015 |
 | 4 | NPC area casting through the shared AoE core; true burst resolution | 77 in-scope entries cite AI-001 (62 Area spells in the DB) | High: sleep, color spray, web, fireball | High | AI-001, SPL-046, SPL-042 |
 | 5 | NPC-path effect parity: summon, dispel and escape do nothing; Prayer, Magic Vestment and Magic Weapon have no NPC handler; Hold Person/Monster have no per-round save (new); SR flags missing | about 30 P1/P2 spells | High | Med | SPL-091, SPL-057, new SPL (hold) |
-| 6 | Grapple family as triggers: Improved Grab (49, works), **Constrict (22, text only in 10 creature files)**, Rake (regrade, see section 3), grapple blood drain | 49+22+9 | High | Med | CMB-014, CRE-031, CMB-075 |
+| 6 | Grapple family as triggers: Improved Grab (49, works), **Constrict (22, text only in 10 creature files)**, Rake (regrade, see section 3), grapple blood drain | 49+22+9 | High | Med | CRE-031, CMB-075 |
 | 7 | Movement modes: fly 42 (+ fly variants), climb 10+2, swim 3+2+1, burrow 4, earth glide 6. Prerequisite for flyby, ink-cloud escape and burrow-ambush AI | 60+ | High (positioning) | High (no fly/swim/climb speed exists on `NPCDefinition`) | file new GRID/CRE issue; AI-019 |
 | 8 | SLA system (`SpecialAbilityEntry`) feeding spell actions | about 100 SLA ids (charm person, darkness, invisibility, stinking cloud, suggestion...) | High | High | CRE-015, CRE-017 |
 | 9 | Poison and disease riders: missing poison ids (Dex poisons, 14), swarm poison, real-time timing | 25+14+5 | Med | Med | CMB-007, CRE-014 |
@@ -260,7 +260,7 @@ n is the number of creatures in the 310-entry work list (192 CSV creatures and 1
 | # | Ability (index id) | n | Code | AI | Verified notes |
 |---|---|---|---|---|---|
 | 1 | Damage reduction (`ability_damage_reduction`) | 53 | partial | n/a | Generic DR id; the name shown ("10/evil and magic") is just the first instance. `DamageBypassTag` flags exist (`DamageModel.cs:10`). Template DR and SR by HD: CRE-008. |
-| 2 | Improved grab | 49 | implemented | yes | `HasImprovedGrab` + trigger attack name; inherits CMB-014. Per-creature grab and constrict values need an MM check. |
+| 2 | Improved grab | 49 | implemented | yes | `HasImprovedGrab` + trigger attack name; grab creatures may also grapple normally (CMB-014 fixed). Per-creature grab and constrict values need an MM check. |
 | 3 | Scent | 47 | partial | partial | Copied at spawn (`NPCSetup.cs:514`), read only for invisible-target scoring (`AIService.cs:1925-1946`). The hell hound entry's data_only/no rating was wrong. |
 | 4 | Flight | 42 | missing | partial | No fly speed exists on `NPCDefinition` (only `BaseSpeed`); flyers walk. |
 | 5 | Poison (injury, bite) | 25 | partial | yes | `PoisonOnHitId` is used by 13 attacks over 10 poison ids. Secondary damage timed in real seconds (CMB-007). |

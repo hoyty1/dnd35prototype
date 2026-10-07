@@ -183,7 +183,8 @@ public class BullRushCheckResult
         var sb = new StringBuilder();
         sb.AppendLine($"{CharacterName}'s bull rush check:");
         sb.AppendLine($"  Base roll: 1d20 = {BaseRoll}");
-        sb.AppendLine($"  BAB: {FormatSigned(BaseAttackBonus)}");
+        if (BaseAttackBonus != 0)
+            sb.AppendLine($"  BAB: {FormatSigned(BaseAttackBonus)}");
 
         if (UsesBestStrengthOrDexterity)
             sb.AppendLine($"  STR/DEX modifier: {FormatSigned(StrengthOrDexterityModifier)}");
@@ -9051,15 +9052,23 @@ public class CharacterController : MonoBehaviour
             result.AddAttackBuffDebuffModifier("Other condition modifiers", remainingConditionAttackBonus);
     }
 
-    private static string BuildOpposedResultLine(string actorName, int actorTotal, string opponentName, int opponentTotal)
+    private static string BuildOpposedResultLine(string actorName, int actorTotal, string opponentName, int opponentTotal, bool actorWins)
     {
-        if (actorTotal > opponentTotal)
-            return $"Result: {actorName} wins ({actorTotal} vs {opponentTotal})";
+        string tie = actorTotal == opponentTotal ? "Tie (higher modifier, then reroll) - " : string.Empty;
+        return actorWins
+            ? $"Result: {tie}{actorName} wins ({actorTotal} vs {opponentTotal})"
+            : $"Result: {tie}{opponentName} wins ({opponentTotal} vs {actorTotal})";
+    }
 
-        if (actorTotal == opponentTotal)
-            return $"Result: Tie - {opponentName} wins ({opponentTotal} vs {actorTotal})";
+    /// <summary>Opposed grapple check with the PHB p.156 tie rule (higher modifier, then reroll).</summary>
+    private static bool DoesAttackerWinGrappleCheck(GrappleCheckResult attackerCheck, GrappleCheckResult defenderCheck)
+    {
+        if (attackerCheck == null || defenderCheck == null)
+            return false;
 
-        return $"Result: {opponentName} wins ({opponentTotal} vs {actorTotal})";
+        return DoesAttackerWinOpposedCheck(
+            attackerCheck.Total, attackerCheck.Total - attackerCheck.BaseRoll,
+            defenderCheck.Total, defenderCheck.Total - defenderCheck.BaseRoll);
     }
 
     private static string BuildD20Formula(string label, int dieRoll, int modifier, int total)
@@ -9188,7 +9197,7 @@ public class CharacterController : MonoBehaviour
                 GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, context: GrappleCheckContext.EscapeGrapple);
                 GrappleCheckResult oppCheck = opponent.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
 
-                bool success = myCheck.Total > oppCheck.Total;
+                bool success = DoesAttackerWinGrappleCheck(myCheck, oppCheck);
                 bool escapedPinOnly = false;
                 if (success)
                 {
@@ -9217,7 +9226,7 @@ public class CharacterController : MonoBehaviour
                     $"{Stats.CharacterName} attempts to escape from grapple",
                     myCheck.GetBreakdown(),
                     oppCheck.GetBreakdown(),
-                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total) + "\n" + outcome
+                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total, success) + "\n" + outcome
                 });
 
                 return new SpecialAttackResult
@@ -9268,7 +9277,7 @@ public class CharacterController : MonoBehaviour
                 GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, grappleCheckPenalty, grappleCheckPenalty != 0 ? "Lethal damage without Monk/Improved Unarmed Strike" : null);
                 GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
 
-                bool success = myCheck.Total > oppCheck.Total;
+                bool success = DoesAttackerWinGrappleCheck(myCheck, oppCheck);
                 int finalDamageDealt = 0;
                 int rawDamage = 0;
                 var unarmed = GetUnarmedDamage();
@@ -9320,7 +9329,7 @@ public class CharacterController : MonoBehaviour
                         ? $"No penalty ({grappleDamageRuleReason})."
                         : "No penalty (nonlethal default).");
 
-                string resultLine = BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total);
+                string resultLine = BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total, success);
                 string outcomeLine = success
                     ? $"Damage: {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} = {rawDamage} {damageTypeLabel} ({opponent.Stats.CharacterName} takes {finalDamageDealt})."
                     : $"{Stats.CharacterName} fails to damage {opponent.Stats.CharacterName}.";
@@ -9393,7 +9402,7 @@ public class CharacterController : MonoBehaviour
                 GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride);
                 GrappleCheckResult oppCheck = opponent.RollGrappleCheck(context: GrappleCheckContext.ResistPin);
 
-                bool success = myCheck.Total > oppCheck.Total;
+                bool success = DoesAttackerWinGrappleCheck(myCheck, oppCheck);
                 if (success && TryGetGrappleLink(this, out GrappleLink link))
                 {
                     SetPinnedState(link, opponent, this);
@@ -9409,7 +9418,7 @@ public class CharacterController : MonoBehaviour
                     $"{Stats.CharacterName} attempts to pin {opponent.Stats.CharacterName}",
                     myCheck.GetBreakdown(),
                     oppCheck.GetBreakdown(),
-                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total) + "\n" + outcomeLine
+                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total, success) + "\n" + outcomeLine
                 });
 
                 return new SpecialAttackResult
@@ -9448,7 +9457,7 @@ public class CharacterController : MonoBehaviour
                 GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, context: GrappleCheckContext.BreakPin);
                 GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
 
-                bool success = myCheck.Total > oppCheck.Total;
+                bool success = DoesAttackerWinGrappleCheck(myCheck, oppCheck);
                 if (success && TryGetGrappleLink(this, out GrappleLink link))
                 {
                     ClearPinnedState(link);
@@ -9463,7 +9472,7 @@ public class CharacterController : MonoBehaviour
                     $"{Stats.CharacterName} attempts to break pin from {opponent.Stats.CharacterName}",
                     myCheck.GetBreakdown(),
                     oppCheck.GetBreakdown(),
-                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total) + "\n" + outcomeLine
+                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total, success) + "\n" + outcomeLine
                 });
 
                 return new SpecialAttackResult
@@ -9529,7 +9538,7 @@ public class CharacterController : MonoBehaviour
                     int oppRoll = DiceService.D20("Grapple opposed check (defender)");
                     int oppMod = currentOpponent.GetGrappleModifier();
                     int oppTotal = oppRoll + oppMod;
-                    bool beatThisOpponent = myTotal > oppTotal;
+                    bool beatThisOpponent = DoesAttackerWinOpposedCheck(myTotal, myFormulaModifier, oppTotal, oppMod);
                     beatAllOpponents &= beatThisOpponent;
 
                     if (oppTotal > highestOpposedTotal)
@@ -9733,14 +9742,14 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        bool grappleSuccess = myTotal >= oppTotal;
+        bool grappleSuccess = DoesAttackerWinOpposedCheck(myTotal, myModifier, oppTotal, oppModifier);
         var logLines = new List<string>
         {
             $"{Stats.CharacterName} attempts to use opponent's {opponentWeapon.Name}.",
             string.IsNullOrEmpty(selectionNote) ? string.Empty : selectionNote,
             BuildD20Formula($"{Stats.CharacterName} grapple check", myRoll, myModifier, myTotal),
             BuildD20Formula($"{opponent.Stats.CharacterName} grapple check", oppRoll, oppModifier, oppTotal),
-            BuildOpposedResultLine(Stats.CharacterName, myTotal, opponent.Stats.CharacterName, oppTotal)
+            BuildOpposedResultLine(Stats.CharacterName, myTotal, opponent.Stats.CharacterName, oppTotal, grappleSuccess)
         };
 
         int finalDamageDealt = 0;
@@ -10420,6 +10429,18 @@ public class CharacterController : MonoBehaviour
             };
         }
 
+        // The initiation AoO step can kill the target (e.g. Fire Shield retribution on its AoO
+        // hit); the shared resolver then does nothing, for PC and NPC callers alike.
+        if (target.IsDead || target.Stats.IsDead)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = type.ToString(),
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot perform {type}: {target.Stats.CharacterName} is dead."
+            };
+        }
+
         if (!CanPerformSpecialAttack(type))
         {
             string attackerName = Stats != null ? Stats.CharacterName : name;
@@ -10452,10 +10473,12 @@ public class CharacterController : MonoBehaviour
             case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot, disarmAttackBonusOverride, disarmAttackerWeaponOverride, disarmUsedOffHand, disarmDualWieldPenaltyForLog);
             case SpecialAttackType.Grapple: return ResolveGrapple(target, grappleAttackBonusOverride);
             case SpecialAttackType.Sunder: return ResolveSunder(target, sunderTargetSlot, sunderAttackBonusOverride, sunderAttackerWeaponOverride, sunderUsedOffHand, sunderDualWieldPenaltyForLog);
+            // bullRushAttackBonusOverride (the iterative attack slot spent) does not enter the
+            // check: bull rush is an opposed Strength check (PHB p.154, CMB-014).
             case SpecialAttackType.BullRushAttack:
-                return ResolveBullRush(target, bullRushAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0), chargeBonus: 0);
+                return ResolveBullRush(target, chargeBonus: 0);
             case SpecialAttackType.BullRushCharge:
-                return ResolveBullRush(target, Stats != null ? Stats.BaseAttackBonus : 0, chargeBonus: bullRushChargeBonusOverride == 0 ? 2 : bullRushChargeBonusOverride);
+                return ResolveBullRush(target, chargeBonus: bullRushChargeBonusOverride == 0 ? 2 : bullRushChargeBonusOverride);
             case SpecialAttackType.Overrun: return ResolveOverrun(target, defenderBlocks: true);
             case SpecialAttackType.Feint: return ResolveFeint(target);
             case SpecialAttackType.CoupDeGrace: return ResolveCoupDeGrace(target);
@@ -10503,7 +10526,120 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveTrip(CharacterController target, int? attackBonusOverride = null)
+    // ========== SHARED OPPOSED-MANEUVER MATH (CMB-014) ==========
+    // PHB p.154-158. Trip, bull rush and overrun are opposed Strength checks with the special
+    // size modifier (+4 per category above Medium, -4 per category below; p.156) and a +4
+    // stability bonus for the defender. Grapple checks use BAB + STR + special size. Disarm and
+    // sunder are opposed attack rolls. Ties follow the opposed-check rule (PHB p.64, and p.156
+    // for grapple): the higher modifier wins, then both roll again.
+
+    /// <summary>PHB p.156 special size modifier, used by grapple, bull rush, overrun and trip.</summary>
+    public int GetSpecialSizeModifier()
+    {
+        return GetGrappleSizeModifier();
+    }
+
+    /// <summary>
+    /// +4 when resisting a bull rush, overrun or trip for creatures that are exceptionally stable
+    /// (PHB p.154, p.157, p.158). Only racial stability (dwarves) is modelled: there is no data
+    /// for creatures with more than two legs.
+    /// </summary>
+    public int GetManeuverStabilityBonus()
+    {
+        return Stats != null && Stats.Race != null ? Stats.Race.StabilityBonus : 0;
+    }
+
+    /// <summary>Strength-check modifier for the creature attempting a trip (PHB p.158).</summary>
+    public int GetTripAttackerCheckModifier()
+    {
+        if (Stats == null)
+            return 0;
+
+        return Stats.STRMod + GetSpecialSizeModifier() + Stats.ConditionAbilityCheckModifier
+            + (Stats.HasFeat("Improved Trip") ? 4 : 0);
+    }
+
+    /// <summary>Check modifier for resisting a trip or overrun: the better of STR and DEX (PHB p.157-158).</summary>
+    public int GetTripOrOverrunDefenderCheckModifier()
+    {
+        if (Stats == null)
+            return 0;
+
+        return Mathf.Max(Stats.STRMod, Stats.DEXMod) + GetSpecialSizeModifier() + GetManeuverStabilityBonus()
+            + Stats.ConditionAbilityCheckModifier;
+    }
+
+    /// <summary>Strength-check modifier for the creature attempting an overrun (PHB p.157).</summary>
+    public int GetOverrunAttackerCheckModifier(int chargeBonus = 0)
+    {
+        if (Stats == null)
+            return 0;
+
+        return Stats.STRMod + GetSpecialSizeModifier() + Stats.ConditionAbilityCheckModifier + chargeBonus
+            + (Stats.HasFeat("Improved Overrun") ? 4 : 0);
+    }
+
+    /// <summary>Melee touch attack modifier used to start a trip or a grapple.</summary>
+    public int GetManeuverMeleeTouchAttackModifier(int? baseAttackBonusOverride = null)
+    {
+        if (Stats == null)
+            return 0;
+
+        int bab = baseAttackBonusOverride ?? Stats.BaseAttackBonus;
+        return bab + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty;
+    }
+
+    /// <summary>A natural 20 always hits and a natural 1 always misses (PHB p.134).</summary>
+    public static bool IsManeuverTouchAttackHit(int naturalRoll, int total, int touchArmorClass)
+    {
+        if (naturalRoll >= 20)
+            return true;
+        if (naturalRoll <= 1)
+            return false;
+        return total >= touchArmorClass;
+    }
+
+    /// <summary>
+    /// Opposed check winner (PHB p.64, p.156): the higher result wins; on a tie the higher
+    /// modifier wins; if the modifiers are equal both sides roll again.
+    /// </summary>
+    public static bool DoesAttackerWinOpposedCheck(int attackerTotal, int attackerModifier, int defenderTotal, int defenderModifier)
+    {
+        return DoesAttackerWinOpposedCheck(attackerTotal, attackerModifier, defenderTotal, defenderModifier,
+            () => DiceService.D20("Opposed check tie reroll"));
+    }
+
+    /// <summary>Testable overload: <paramref name="rollD20"/> supplies the tie-break rerolls.</summary>
+    public static bool DoesAttackerWinOpposedCheck(int attackerTotal, int attackerModifier, int defenderTotal, int defenderModifier, Func<int> rollD20)
+    {
+        if (attackerTotal != defenderTotal)
+            return attackerTotal > defenderTotal;
+
+        if (attackerModifier != defenderModifier)
+            return attackerModifier > defenderModifier;
+
+        // Equal modifiers: roll again until the tie breaks (bounded as a safeguard).
+        for (int i = 0; i < 100 && rollD20 != null; i++)
+        {
+            int attackerReroll = rollD20();
+            int defenderReroll = rollD20();
+            if (attackerReroll != defenderReroll)
+                return attackerReroll > defenderReroll;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Free trip after a hit (MM trip, e.g. a wolf's bite): no touch attack and no attack of
+    /// opportunity. The opposed Strength check is the normal one.
+    /// </summary>
+    public SpecialAttackResult ResolveFreeTripAttempt(CharacterController target)
+    {
+        return ResolveTrip(target, attackBonusOverride: null, freeTripAfterHit: true);
+    }
+
+    private SpecialAttackResult ResolveTrip(CharacterController target, int? attackBonusOverride = null, bool freeTripAfterHit = false)
     {
         if (Stats != null && Stats.IsSwarm)
         {
@@ -10528,16 +10664,49 @@ public class CharacterController : MonoBehaviour
         if (IsBlockedBySummonedContactBarrier(target, out _))
             return BuildSummonedContactBarrierResult(target, "Trip");
 
-        int atkRoll = DiceService.D20("Trip attack roll");
-        int defRoll = DiceService.D20("Trip defense roll");
-        int attackBonus = attackBonusOverride ?? Stats.BaseAttackBonus;
-        int atkTotal = atkRoll + attackBonus + Stats.STRMod + Stats.SizeModifier + Stats.TripAttackCheckBonus + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Trip") ? 4 : 0);
-        int defAbility = Mathf.Max(target.Stats.STRMod, target.Stats.DEXMod);
-        int defTotal = defRoll + target.Stats.BaseAttackBonus + defAbility + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + (target.Stats.HasFeat("Improved Trip") ? 4 : 0);
+        // PHB p.158 step 1: an unarmed melee touch attack (skipped for a free trip after a hit).
+        // BAB enters only this touch attack; the trip itself is an opposed Strength check.
+        string touchLine = string.Empty;
+        if (!freeTripAfterHit)
+        {
+            int touchRoll = DiceService.D20("Trip touch attack");
+            int touchModifier = GetManeuverMeleeTouchAttackModifier(attackBonusOverride);
+            int touchTotal = touchRoll + touchModifier;
+            int touchAC = target.Stats.TouchArmorClass;
+            bool touchHit = IsManeuverTouchAttackHit(touchRoll, touchTotal, touchAC);
+            touchLine = $"Touch attack: d20 {touchRoll} {CharacterStats.FormatMod(touchModifier)} = {touchTotal} vs touch AC {touchAC}"
+                + (touchRoll >= 20 ? " (natural 20)" : touchRoll <= 1 ? " (natural 1)" : string.Empty)
+                + (touchHit ? " → hit." : " → miss.");
 
-        bool success = atkTotal >= defTotal;
+            if (!touchHit)
+            {
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Trip",
+                    Success = false,
+                    CheckRoll = touchRoll,
+                    CheckTotal = touchTotal,
+                    OpposedTotal = touchAC,
+                    Log = $"{Stats.CharacterName} fails to trip {target.Stats.CharacterName}. {touchLine}"
+                };
+            }
+        }
+
+        int atkRoll = DiceService.D20("Trip Strength check");
+        int defRoll = DiceService.D20("Trip defense check");
+        int atkModifier = GetTripAttackerCheckModifier();
+        int defModifier = target.GetTripOrOverrunDefenderCheckModifier();
+        int atkTotal = atkRoll + atkModifier;
+        int defTotal = defRoll + defModifier;
+
+        bool success = DoesAttackerWinOpposedCheck(atkTotal, atkModifier, defTotal, defModifier);
         if (success)
             target.ApplyCondition(CombatConditionType.Prone, -1, Stats.CharacterName);
+
+        string checkLine = $"Str check {atkTotal} (d20 {atkRoll} {CharacterStats.FormatMod(atkModifier)}) vs "
+            + $"{target.Stats.CharacterName}'s Str/Dex check {defTotal} (d20 {defRoll} {CharacterStats.FormatMod(defModifier)})"
+            + (atkTotal == defTotal ? ", tie broken by modifier or reroll" : string.Empty);
+        string prefix = string.IsNullOrEmpty(touchLine) ? string.Empty : touchLine + " ";
 
         return new SpecialAttackResult
         {
@@ -10548,8 +10717,8 @@ public class CharacterController : MonoBehaviour
             OpposedRoll = defRoll,
             OpposedTotal = defTotal,
             Log = success
-                ? $"{Stats.CharacterName} trips {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) → PRONE (until standing). [BAB {CharacterStats.FormatMod(attackBonus)}]"
-                : $"{Stats.CharacterName} fails to trip {target.Stats.CharacterName}. ({atkTotal} vs {defTotal}) [BAB {CharacterStats.FormatMod(attackBonus)}]"
+                ? $"{Stats.CharacterName} trips {target.Stats.CharacterName}! {prefix}{checkLine} → PRONE (until standing)."
+                : $"{Stats.CharacterName} fails to trip {target.Stats.CharacterName}. {prefix}{checkLine}."
         };
     }
 
@@ -10624,8 +10793,13 @@ public class CharacterController : MonoBehaviour
         }
         else
         {
-            // D&D 3.5e: failed disarm grants exactly one immediate counter-disarm attempt.
-            if (TryGetDisarmTargetHeldItem(this, null, out ItemData counterTargetHeldItem, out EquipSlot counterTargetSlot))
+            // D&D 3.5e: failed disarm grants exactly one immediate counter-disarm attempt,
+            // unless the attacker has Improved Disarm (PHB p.95: no chance to disarm you).
+            if (Stats.HasFeat("Improved Disarm"))
+            {
+                logLines.Add($"Improved Disarm: {target.Stats.CharacterName} gets no counter-disarm attempt.");
+            }
+            else if (TryGetDisarmTargetHeldItem(this, null, out ItemData counterTargetHeldItem, out EquipSlot counterTargetSlot))
             {
                 ItemData counterAttackerHeldWeapon = target.GetEquippedMainWeapon();
                 bool counterDefenderHasLockedGauntlet = HasLockedGauntletEquipped(this);
@@ -10695,21 +10869,13 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Checks whether this character can initiate a standard Grapple maneuver.
-    /// Creatures with Improved Grab must initiate grapples through that ability only.
+    /// Checks whether this character can initiate a standard Grapple maneuver. Improved Grab
+    /// (MM p.310) adds a free, non-provoking grapple after a qualifying hit; it does not take
+    /// away the normal grapple attack, so Improved Grab creatures can use both (CMB-014).
     /// </summary>
     public bool CanUseStandardGrapple()
     {
-        if (Stats == null)
-            return false;
-
-        if (Stats.HasImprovedGrab)
-        {
-            Debug.Log($"[Grapple] {Stats.CharacterName} has Improved Grab and cannot use standard Grapple action.");
-            return false;
-        }
-
-        return true;
+        return Stats != null;
     }
 
     private SpecialAttackResult ResolveGrapple(CharacterController target, int? iterativeAttackBonusOverride = null)
@@ -10753,9 +10919,7 @@ public class CharacterController : MonoBehaviour
             {
                 ManeuverName = "Grapple",
                 Success = false,
-                Log = Stats.HasImprovedGrab
-                    ? $"{Stats.CharacterName} has Improved Grab and cannot initiate a standard grapple. Grapples must be triggered by Improved Grab after a qualifying hit."
-                    : $"{Stats.CharacterName} cannot initiate a standard grapple right now."
+                Log = $"{Stats.CharacterName} cannot initiate a standard grapple right now."
             };
         }
 
@@ -10784,8 +10948,10 @@ public class CharacterController : MonoBehaviour
         int touchStr = Stats.STRMod;
         int touchSize = Stats.SizeModifier;
         int touchCondition = Stats.ConditionAttackPenalty;
-        int touchTotal = touchRoll + attackBab + touchStr + touchSize + touchCondition;
-        int touchAC = CombatCalculationService.SimpleTouchAC(target.Stats);
+        int touchTotal = touchRoll + GetManeuverMeleeTouchAttackModifier(attackBab);
+        // Full touch AC (deflection, dodge, conditions...) and natural 20/1 (CMB-014).
+        int touchAC = target.Stats.TouchArmorClass;
+        bool touchHit = IsManeuverTouchAttackHit(touchRoll, touchTotal, touchAC);
 
         var touchBuilder = new StringBuilder();
         touchBuilder.AppendLine("Touch attack:");
@@ -10797,8 +10963,12 @@ public class CharacterController : MonoBehaviour
             touchBuilder.AppendLine($"  Condition modifiers: {touchCondition:+0;-#;+0}");
         touchBuilder.AppendLine($"  Total: {touchTotal}");
         touchBuilder.AppendLine($"  Target touch AC: {touchAC}");
+        if (touchRoll >= 20)
+            touchBuilder.AppendLine("  Natural 20: automatic hit");
+        else if (touchRoll <= 1)
+            touchBuilder.AppendLine("  Natural 1: automatic miss");
 
-        if (touchTotal < touchAC)
+        if (!touchHit)
         {
             string missLog = string.Join("\n\n", new[]
             {
@@ -10821,12 +10991,17 @@ public class CharacterController : MonoBehaviour
         GrappleCheckResult attackerCheck = RollGrappleCheck(attackBab);
         GrappleCheckResult defenderCheck = target.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
 
-        bool success = attackerCheck.Total > defenderCheck.Total;
+        // PHB p.156 step 3: the hold automatically fails against a target two or more size
+        // categories larger.
+        bool targetTooLarge = (int)target.Stats.CurrentSizeCategory - (int)Stats.CurrentSizeCategory >= 2;
+        bool success = !targetTooLarge && DoesAttackerWinGrappleCheck(attackerCheck, defenderCheck);
         string grapplePositioningLog = string.Empty;
         if (success)
             grapplePositioningLog = EstablishGrappleWith(target);
 
-        string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total);
+        string resultLine = targetTooLarge
+            ? $"Result: {target.Stats.CharacterName} is two or more size categories larger; the hold automatically fails."
+            : BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total, success);
         string outcomeLine = success
             ? $"{Stats.CharacterName} successfully grapples {target.Stats.CharacterName}!"
             : "Grapple attempt failed";
@@ -10905,13 +11080,13 @@ public class CharacterController : MonoBehaviour
 
         GrappleCheckResult attackerCheck = RollGrappleCheck();
         GrappleCheckResult defenderCheck = target.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
-        bool success = attackerCheck.Total > defenderCheck.Total;
+        bool success = DoesAttackerWinGrappleCheck(attackerCheck, defenderCheck);
 
         string grapplePositioningLog = string.Empty;
         if (success)
             grapplePositioningLog = EstablishGrappleWith(target);
 
-        string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total);
+        string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total, success);
         string outcomeLine = success
             ? $"{Stats.CharacterName} seizes {target.Stats.CharacterName} with Improved Grab!"
             : $"{Stats.CharacterName} fails to secure the grapple.";
@@ -11158,24 +11333,28 @@ public class CharacterController : MonoBehaviour
         return item != null;
     }
 
-    public BullRushCheckResult RollBullRushAttackerCheck(int bab, int chargeBonus = 0, int? fixedRoll = null)
+    /// <summary>
+    /// Bull rush attacker check (PHB p.154): an opposed Strength check, so no BAB. Special size
+    /// modifier, +2 when charging, +4 with Improved Bull Rush (CMB-014).
+    /// </summary>
+    public BullRushCheckResult RollBullRushAttackerCheck(int chargeBonus = 0, int? fixedRoll = null)
     {
         var result = new BullRushCheckResult
         {
             CharacterName = Stats != null ? Stats.CharacterName : name,
             BaseRoll = fixedRoll ?? DiceService.D20("Bull rush check"),
-            BaseAttackBonus = bab,
             StrengthModifier = Stats != null ? Stats.STRMod : 0,
-            SizeModifier = GetGrappleSizeModifier(),
+            SizeModifier = GetSpecialSizeModifier(),
             ChargeBonus = chargeBonus,
             UsesBestStrengthOrDexterity = false
         };
 
         if (Stats != null && Stats.HasFeat("Improved Bull Rush"))
             result.AddMiscModifier(4, "Improved Bull Rush feat");
+        if (Stats != null && Stats.ConditionAbilityCheckModifier != 0)
+            result.AddMiscModifier(Stats.ConditionAbilityCheckModifier, "Condition modifiers");
 
         result.Total = result.BaseRoll
-            + result.BaseAttackBonus
             + result.StrengthModifier
             + result.SizeModifier
             + result.ChargeBonus
@@ -11184,34 +11363,35 @@ public class CharacterController : MonoBehaviour
         return result;
     }
 
+    /// <summary>
+    /// Bull rush defender check (PHB p.154): Strength (not Dexterity), special size modifier and
+    /// +4 stability (CMB-014).
+    /// </summary>
     public BullRushCheckResult RollBullRushDefenderCheck(int? fixedRoll = null)
     {
-        int strengthMod = Stats != null ? Stats.STRMod : 0;
-        int dexterityMod = Stats != null ? Stats.DEXMod : 0;
-        int bestAbility = Mathf.Max(strengthMod, dexterityMod);
-        int stabilityBonus = (Stats != null && Stats.Race != null) ? Stats.Race.StabilityBonus : 0;
-
         var result = new BullRushCheckResult
         {
             CharacterName = Stats != null ? Stats.CharacterName : name,
             BaseRoll = fixedRoll ?? DiceService.D20("Bull rush defense"),
-            BaseAttackBonus = Stats != null ? Stats.BaseAttackBonus : 0,
-            StrengthOrDexterityModifier = bestAbility,
-            SizeModifier = GetGrappleSizeModifier(),
-            StabilityBonus = stabilityBonus,
-            UsesBestStrengthOrDexterity = true
+            StrengthModifier = Stats != null ? Stats.STRMod : 0,
+            SizeModifier = GetSpecialSizeModifier(),
+            StabilityBonus = GetManeuverStabilityBonus(),
+            UsesBestStrengthOrDexterity = false
         };
 
+        if (Stats != null && Stats.ConditionAbilityCheckModifier != 0)
+            result.AddMiscModifier(Stats.ConditionAbilityCheckModifier, "Condition modifiers");
+
         result.Total = result.BaseRoll
-            + result.BaseAttackBonus
-            + result.StrengthOrDexterityModifier
+            + result.StrengthModifier
             + result.SizeModifier
-            + result.StabilityBonus;
+            + result.StabilityBonus
+            + result.MiscModifier;
 
         return result;
     }
 
-    private SpecialAttackResult ResolveBullRush(CharacterController target, int attackBab, int chargeBonus)
+    private SpecialAttackResult ResolveBullRush(CharacterController target, int chargeBonus)
     {
         if (Stats != null && Stats.IsSwarm)
         {
@@ -11236,11 +11416,13 @@ public class CharacterController : MonoBehaviour
         if (IsBlockedBySummonedContactBarrier(target, out _))
             return BuildSummonedContactBarrierResult(target, "Bull Rush");
 
-        BullRushCheckResult attackerCheck = RollBullRushAttackerCheck(attackBab, chargeBonus);
+        BullRushCheckResult attackerCheck = RollBullRushAttackerCheck(chargeBonus);
         BullRushCheckResult defenderCheck = target.RollBullRushDefenderCheck();
-        bool success = attackerCheck.Total > defenderCheck.Total;
+        bool success = DoesAttackerWinOpposedCheck(
+            attackerCheck.Total, attackerCheck.Total - attackerCheck.BaseRoll,
+            defenderCheck.Total, defenderCheck.Total - defenderCheck.BaseRoll);
 
-        string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total);
+        string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total, success);
         int margin = Mathf.Max(0, attackerCheck.Total - defenderCheck.Total);
         int maxPushSquares = success ? 1 + (margin / 5) : 0;
         int pushFeet = success ? maxPushSquares * 5 : 0;
@@ -11300,13 +11482,14 @@ public class CharacterController : MonoBehaviour
         int atkRoll = DiceService.D20("Overrun attack roll");
         int defRoll = DiceService.D20("Overrun defense roll");
 
-        // D&D 3.5 overrun blocking check: opposed STR checks with size modifiers.
-        // Use grapple-size scale (+/-4 per size category step), not attack/AC size modifier.
-        int atkSizeMod = GetGrappleSizeModifier();
-        int defSizeMod = target.GetGrappleSizeModifier();
-        int atkTotal = atkRoll + Stats.STRMod + atkSizeMod + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Overrun") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.STRMod + defSizeMod + target.Stats.ConditionAttackPenalty;
-        bool success = atkTotal >= defTotal;
+        // PHB p.157 overrun block: the attacker's Strength check (special size modifier,
+        // +4 Improved Overrun) against the defender's Strength or Dexterity check, whichever is
+        // better, with special size modifier and +4 stability (CMB-014).
+        int atkModifier = GetOverrunAttackerCheckModifier();
+        int defModifier = target.GetTripOrOverrunDefenderCheckModifier();
+        int atkTotal = atkRoll + atkModifier;
+        int defTotal = defRoll + defModifier;
+        bool success = DoesAttackerWinOpposedCheck(atkTotal, atkModifier, defTotal, defModifier);
 
         if (success)
             target.ApplyCondition(CombatConditionType.Prone, 1, Stats.CharacterName);
@@ -11575,7 +11758,9 @@ public class CharacterController : MonoBehaviour
         int defHeldItemMod = GetDisarmHeldItemModifier(defenderHeldItem, treatUnarmedAsLight: false);
         int defNonMeleeHeldItemPenalty = GetDisarmNonMeleeHeldItemPenalty(defenderHeldItem);
         int defSizeDiffMod = GetDisarmSizeDifferenceModifier(defender, attacker);
-        int defImprovedDisarmMod = defender.Stats.HasFeat("Improved Disarm") ? 4 : 0;
+        // Improved Disarm helps only the creature making the disarm attempt (PHB p.95), so the
+        // defender never adds it here; a counter-disarm swaps the roles (CMB-014).
+        const int defImprovedDisarmMod = 0;
 
         int atkRoll = DiceService.D20("Disarm attack roll");
         int defRoll = DiceService.D20("Disarm defense roll");
@@ -11630,7 +11815,7 @@ public class CharacterController : MonoBehaviour
 
         return new DisarmCheckResult
         {
-            Success = atkTotal >= defTotal,
+            Success = DoesAttackerWinOpposedCheck(atkTotal, atkTotal - atkRoll, defTotal, defTotal - defRoll),
             AttackerRoll = atkRoll,
             AttackerTotal = atkTotal,
             DefenderRoll = defRoll,

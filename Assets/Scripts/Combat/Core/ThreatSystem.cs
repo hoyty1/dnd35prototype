@@ -557,7 +557,7 @@ public static class ThreatSystem
             && !target.Stats.IsDead
             && !target.HasCondition(CombatConditionType.Prone))
         {
-            SpecialAttackResult tripResult = threatener.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
+            SpecialAttackResult tripResult = threatener.ResolveFreeTripAttempt(target);
             Debug.Log($"[ThreatSystem] Free trip follow-up from AoO by {threatener.Stats.CharacterName}: Success={tripResult.Success} | {tripResult.Log}");
         }
 
@@ -652,10 +652,12 @@ public static class ThreatSystem
     }
 
     /// <summary>
-    /// Table 8-2 and PHB p.155-158 as currently implemented: Grapple and Sunder provoke from
-    /// the target unless the attacker has Improved Grapple or Improved Sunder; Coup de Grace
-    /// provokes from every threatening enemy (PHB p.153). Trip, Disarm and Bull Rush do not
-    /// provoke yet (CMB-014).
+    /// Table 8-2 and PHB p.154-158: Grapple, Sunder, Trip and Disarm provoke from the target
+    /// unless the attacker has Improved Grapple, Improved Sunder, Improved Trip or Improved
+    /// Disarm (trip is always the unarmed version here: trip weapons are not modelled).
+    /// Bull rush provokes from every enemy that threatens the attacker; Improved Bull Rush only
+    /// removes the defender's AoO (see <see cref="GetManeuverAoOProvokers"/>). Coup de Grace
+    /// provokes from every threatening enemy (PHB p.153).
     /// </summary>
     public static bool DoesManeuverProvokeAoO(SpecialAttackType type, CharacterController attacker)
     {
@@ -666,6 +668,12 @@ public static class ThreatSystem
                 return stats == null || !stats.HasFeat("Improved Grapple");
             case SpecialAttackType.Sunder:
                 return stats == null || !stats.HasFeat("Improved Sunder");
+            case SpecialAttackType.Trip:
+                return stats == null || !stats.HasFeat("Improved Trip");
+            case SpecialAttackType.Disarm:
+                return stats == null || !stats.HasFeat("Improved Disarm");
+            case SpecialAttackType.BullRushAttack:
+            case SpecialAttackType.BullRushCharge:
             case SpecialAttackType.CoupDeGrace:
                 return true;
             default:
@@ -673,21 +681,44 @@ public static class ThreatSystem
         }
     }
 
-    /// <summary>The enemies that get an AoO when <paramref name="attacker"/> starts this maneuver.</summary>
+    /// <summary>
+    /// The enemies that get an AoO when <paramref name="attacker"/> starts this maneuver.
+    /// <paramref name="excluded"/> lists enemies that already had their opportunity in the same
+    /// move (a bull rush at the end of a charge, PHB p.138: one AoO per opponent per move).
+    /// </summary>
     public static List<CharacterController> GetManeuverAoOProvokers(
         CharacterController attacker,
         CharacterController target,
         SpecialAttackType type,
-        List<CharacterController> allCharacters)
+        List<CharacterController> allCharacters,
+        ICollection<CharacterController> excluded = null)
     {
         var provokers = new List<CharacterController>();
         if (attacker == null || attacker.Stats == null || !DoesManeuverProvokeAoO(type, attacker))
             return provokers;
 
         if (type == SpecialAttackType.CoupDeGrace)
+        {
             provokers = GetThreateningEnemies(attacker.GridPosition, attacker, allCharacters);
-        else if (target != null && target.Stats != null && !target.Stats.IsDead)
+        }
+        else if (type == SpecialAttackType.BullRushAttack || type == SpecialAttackType.BullRushCharge)
+        {
+            // PHB p.154: moving into the defender's space provokes from each opponent that
+            // threatens you, including the defender; Improved Bull Rush spares only the defender.
+            provokers = GetEnemiesThreateningFootprint(attacker, allCharacters);
+            if (attacker.Stats.HasFeat("Improved Bull Rush"))
+                provokers.Remove(target);
+        }
+        else if (target != null && target.Stats != null && !target.Stats.IsDead
+            && GetEnemiesThreateningFootprint(attacker, allCharacters).Contains(target))
+        {
+            // Only a target that threatens the attacker gets the AoO (PHB p.137): a reach-weapon
+            // disarm or sunder against a foe that cannot reach back provokes nothing.
             provokers.Add(target);
+        }
+
+        if (excluded != null)
+            provokers.RemoveAll(enemy => excluded.Contains(enemy));
 
         provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoO(enemy));
         return provokers;
@@ -699,6 +730,14 @@ public static class ThreatSystem
     /// make an AoO. Shared by the PC Stand Up button and the AI stand-up step (CMB-074).
     /// </summary>
     public static List<CharacterController> GetStandUpAoOProvokers(CharacterController actor, List<CharacterController> allCharacters)
+    {
+        var provokers = GetEnemiesThreateningFootprint(actor, allCharacters);
+        provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoO(enemy));
+        return provokers;
+    }
+
+    /// <summary>Every enemy that threatens any square of <paramref name="actor"/>'s footprint.</summary>
+    private static List<CharacterController> GetEnemiesThreateningFootprint(CharacterController actor, List<CharacterController> allCharacters)
     {
         var provokers = new List<CharacterController>();
         if (actor == null || actor.Stats == null)
@@ -722,17 +761,29 @@ public static class ThreatSystem
             }
         }
 
-        provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoO(enemy));
         return provokers;
     }
 
     /// <summary>
-    /// A hit from the initiation AoO foils a Grapple or Sunder attempt; Coup de Grace goes
-    /// ahead unless the attacker is incapacitated. RAW differs (CMB-083).
+    /// Whether an initiation AoO stops the maneuver. A hit foils a Grapple or Sunder attempt
+    /// (RAW differs, CMB-083). A Disarm fails only if the AoO deals damage (PHB p.155). Trip,
+    /// Bull Rush and Coup de Grace go ahead unless the attacker is incapacitated.
     /// </summary>
     public static bool DoesManeuverAoODisruptAttempt(SpecialAttackType type, CombatResult aooResult)
     {
-        return type != SpecialAttackType.CoupDeGrace && aooResult != null && aooResult.Hit;
+        if (aooResult == null || !aooResult.Hit)
+            return false;
+
+        switch (type)
+        {
+            case SpecialAttackType.Grapple:
+            case SpecialAttackType.Sunder:
+                return true;
+            case SpecialAttackType.Disarm:
+                return aooResult.TotalDamage > 0;
+            default:
+                return false;
+        }
     }
 
     public static string GetManeuverAoOLabel(SpecialAttackType type)
@@ -741,6 +792,10 @@ public static class ThreatSystem
         {
             case SpecialAttackType.Grapple: return "Grapple";
             case SpecialAttackType.Sunder: return "Sunder";
+            case SpecialAttackType.Trip: return "Trip";
+            case SpecialAttackType.Disarm: return "Disarm";
+            case SpecialAttackType.BullRushAttack:
+            case SpecialAttackType.BullRushCharge: return "Bull Rush";
             case SpecialAttackType.CoupDeGrace: return "Coup de Grace";
             default: return type.ToString();
         }

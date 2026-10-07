@@ -900,12 +900,16 @@ public partial class GameManager
     /// (rules in <see cref="ThreatSystem.GetManeuverAoOProvokers"/>). The caller has already
     /// spent the action; on anything but Proceed the attempt is lost.
     /// </summary>
-    private ManeuverAoOOutcome ResolveManeuverInitiationAoOs(CharacterController attacker, CharacterController target, SpecialAttackType type)
+    private ManeuverAoOOutcome ResolveManeuverInitiationAoOs(
+        CharacterController attacker,
+        CharacterController target,
+        SpecialAttackType type,
+        ICollection<CharacterController> alreadyProvokedThisMove = null)
     {
         if (attacker == null || attacker.Stats == null)
             return ManeuverAoOOutcome.AttackerIncapacitated;
 
-        List<CharacterController> provokers = ThreatSystem.GetManeuverAoOProvokers(attacker, target, type, GetAllCharacters());
+        List<CharacterController> provokers = ThreatSystem.GetManeuverAoOProvokers(attacker, target, type, GetAllCharacters(), alreadyProvokedThisMove);
         string maneuverLabel = ThreatSystem.GetManeuverAoOLabel(type);
 
         for (int i = 0; i < provokers.Count; i++)
@@ -1900,6 +1904,11 @@ public partial class GameManager
             {
                 _pendingSunderUseOffHandSelection = false;
                 ClearSunderSequenceState();
+            }
+            else if (type == SpecialAttackType.Disarm)
+            {
+                _pendingDisarmUseOffHandSelection = false;
+                ClearDisarmSequenceState();
             }
             StartCoroutine(AfterAttackDelay(attacker, 0.8f));
             return;

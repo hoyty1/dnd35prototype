@@ -1516,6 +1516,30 @@ public partial class GameManager
 
         if (_pendingChargeBullRush)
         {
+            // PHB p.154: entering the defender's space provokes from each threatening enemy
+            // (not the defender with Improved Bull Rush). Enemies that already had their
+            // opportunity during this charge move do not get a second one (PHB p.138).
+            var chargeProvokers = new HashSet<CharacterController>();
+            if (provokedAoOs != null)
+            {
+                for (int i = 0; i < provokedAoOs.Count; i++)
+                {
+                    if (provokedAoOs[i] != null && provokedAoOs[i].Threatener != null)
+                        chargeProvokers.Add(provokedAoOs[i].Threatener);
+                }
+            }
+
+            if (ResolveManeuverInitiationAoOs(charger, target, SpecialAttackType.BullRushCharge, chargeProvokers) == ManeuverAoOOutcome.AttackerIncapacitated)
+            {
+                UpdateAllStatsUI();
+                _chargeTarget = null;
+                _pendingChargePath.Clear();
+                _pendingChargeBullRush = false;
+                if (IsPlayerTurn)
+                    EndActivePCTurn();
+                yield break;
+            }
+
             SpecialAttackResult bullRushResult = charger.ExecuteSpecialAttack(
                 SpecialAttackType.BullRushCharge,
                 target,

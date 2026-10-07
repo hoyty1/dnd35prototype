@@ -67,20 +67,20 @@ Seven requests the owner is likely to make, each with the code to read first, wh
 
 ## 11.8.4 "Make monsters trip and disarm"
 
-- **Start here.** `AIProfile.GetPreferredManeuver` (AI/AIProfile.cs:300-319) and `ManeuverPreferences` (AI/AIBehaviorData.cs); `AIService.ShouldUseManeuver` (2213) and `TryExecutePreferredManeuver`; `GameManager.TryNPCSpecialAttackIfBeneficial` (NPCTurns.cs:289, legacy chooser plus executor); `CharacterController.ResolveTrip` (10503) and `ResolveDisarm` (10553). Free trips: `GameManager.TryResolveFreeTripOnHit` (NPCTurns.cs:240) and `ThreatSystem.ExecuteAoO` (Combat/Core/ThreatSystem.cs:553-562).
+- **Start here.** `AIProfile.GetPreferredManeuver` (AI/AIProfile.cs:300-319) and `ManeuverPreferences` (AI/AIBehaviorData.cs); `AIService.ShouldUseManeuver` (2213) and `TryExecutePreferredManeuver`; `GameManager.TryNPCSpecialAttackIfBeneficial` (NPCTurns.cs:289, legacy chooser plus executor); `CharacterController.ResolveTrip` (10503) and `ResolveDisarm` (10553). Free trips: `GameManager.TryResolveFreeTripOnHit` and `ThreatSystem.ExecuteAoO`, both through `CharacterController.ResolveFreeTripAttempt` (no touch attack, no AoO).
 - **What exists.**
   - Deliberate trips and disarms by Humanoid, Berserk, Grappler and null-profile NPCs (6.2, 6.4). The maneuver replaces the attack, spends a standard action, and triggers melee reactions.
   - Free trip on any hit, including AoOs, for `HasTripAttack` creatures (wolves; lycanthropes copy it from the animal in `LycanthropeTemplate`); the Animal Tripper specialty charges to fish for it.
-  - Disarm moves the weapon to the attacker's free hand or the ground (`DropItemToGround`), and a failed disarm gives the defender one counter-disarm.
+  - Disarm moves the weapon to the attacker's free hand or the ground (`DropItemToGround`), and a failed disarm gives the defender one counter-disarm (none against Improved Disarm).
 - **What blocks it.**
   - AI-035: no odds or value test; profiles trip anything standing. A chooser needs P(success) from the opposed terms in `ResolveTrip` and a value for prone (+4 to hit for adjacent allies, -4 on the target's melee attacks, standing up provokes).
-  - Trip, disarm and bull rush never provoke for anyone (CMB-014), so Improved Trip and Improved Disarm make no difference to risk. NPC grapple, sunder and coup de grace already provoke like the PC versions.
+  - Trip and disarm provoke from the target unless the attacker has Improved Trip or Improved Disarm, and bull rush provokes from every threatening enemy (Improved Bull Rush spares only the defender); NPCs and PCs share `ResolveManeuverInitiationAoOs`. A risk model must now price that AoO.
   - A tripped NPC stands up at the start of its next turn (move action, provokes), so a trip costs it its full attack and its move; confused NPCs stay prone (CMB-074).
   - CMB-079: no counter-trip, no Improved Trip follow-up attack, no size limit.
-  - CMB-014: the opposed-check math is wrong in several ways; fix it before tuning odds.
+  - The opposed-check math now follows PHB p.154-158 (CMB-014 fixed): trip is a melee touch attack, then STR + special size [+4 Improved Trip] vs the better of STR/DEX + special size + stability; ties go to the higher modifier, then a reroll. The terms are exposed as `GetTripAttackerCheckModifier` and `GetTripOrOverrunDefenderCheckModifier`, so a chooser can compute P(success). Quadrupeds still lack their +4 stability (CMB-085).
   - NPCs cannot trip or disarm as one attack of a full attack (the PC path uses a shared pool, `TryConsumeTripAttackAction`). NPC disarmers never pick up the dropped weapon and disarmed NPCs never re-arm (5.9).
   - Two choosers (AI-025); Sunder, BullRush and Overrun flags are never set and their target checks are placeholders (AI-014).
-- **Fix first.** CMB-014, AI-035; then CMB-079.
+- **Fix first.** AI-035; then CMB-079.
 - **Rules.** PHB ch.8, Special Attacks (Trip, Disarm); PHB ch.5 (Improved Trip, Improved Disarm); MM entries for free trips on a hit (for example the wolf).
 - **Test with.** `wolf_pack`, `beast_arena` (Tripper animals), `goblin_raiders` and `test_2_goblins` (Humanoid trips and disarms).
 

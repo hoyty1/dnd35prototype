@@ -10,7 +10,8 @@ namespace Tests.Combat
 /// plus the PHB p.153 flanking bonus rule (flankers get +2 on melee attacks; the defender
 /// takes no AC penalty, CMB-001) and flanking sneak attack eligibility, and the shared
 /// attack-of-opportunity rules for movement and maneuvers (one AoO per opponent per movement,
-/// what stops a mover, who a grapple, sunder or coup de grace provokes) for PC and NPC sides,
+/// what stops a mover, who a grapple, sunder, trip, disarm, bull rush or coup de grace
+/// provokes, CMB-014) for PC and NPC sides,
 /// and the prone rules (standing up provokes; no ordinary movement while prone, CMB-074).
 /// Attach to any GameObject or call FlankingReachRulesTests.RunAllTests().
 /// </summary>
@@ -290,14 +291,53 @@ public class FlankingReachRulesTests : MonoBehaviour
             Assert(coup.Count == 2 && coup.Contains(target) && coup.Contains(sideFoe) && !coup.Contains(farFoe),
                 $"{side} coup de grace provokes from every threatening enemy (got {coup.Count})", ref passed, ref failed);
 
-            Assert(ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Trip, all).Count == 0,
-                $"{side} trip still does not provoke (CMB-014 unchanged)", ref passed, ref failed);
+            // CMB-014: trip and disarm provoke from the target (PHB p.155, p.158).
+            List<CharacterController> trip = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Trip, all);
+            Assert(trip.Count == 1 && trip[0] == target,
+                $"{side} trip provokes from the target only", ref passed, ref failed);
+
+            List<CharacterController> disarm = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Disarm, all);
+            Assert(disarm.Count == 1 && disarm[0] == target,
+                $"{side} disarm provokes from the target only", ref passed, ref failed);
+
+            // Regression: a target that does not threaten the attacker (e.g. out of reach of a
+            // reach-weapon disarm) gets no initiation AoO (PHB p.137).
+            Assert(ThreatSystem.GetManeuverAoOProvokers(attacker, farFoe, SpecialAttackType.Disarm, all).Count == 0
+                && ThreatSystem.GetManeuverAoOProvokers(attacker, farFoe, SpecialAttackType.Trip, all).Count == 0
+                && ThreatSystem.GetManeuverAoOProvokers(attacker, farFoe, SpecialAttackType.Sunder, all).Count == 0,
+                $"{side} a target that does not threaten the attacker gets no maneuver AoO", ref passed, ref failed);
+
+            // Bull rush provokes from every enemy that threatens the attacker (PHB p.154).
+            List<CharacterController> bullRush = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.BullRushAttack, all);
+            Assert(bullRush.Count == 2 && bullRush.Contains(target) && bullRush.Contains(sideFoe) && !bullRush.Contains(farFoe),
+                $"{side} bull rush provokes from every threatening enemy (got {bullRush.Count})", ref passed, ref failed);
+
+            // A charge bull rush skips enemies that already had their AoO during the charge move.
+            List<CharacterController> chargeBullRush = ThreatSystem.GetManeuverAoOProvokers(
+                attacker, target, SpecialAttackType.BullRushCharge, all, new HashSet<CharacterController> { sideFoe });
+            Assert(chargeBullRush.Count == 1 && chargeBullRush[0] == target,
+                $"{side} charge bull rush excludes enemies that already provoked during the charge", ref passed, ref failed);
 
             attacker.Stats.Feats.Add("Improved Grapple");
             attacker.Stats.Feats.Add("Improved Sunder");
+            attacker.Stats.Feats.Add("Improved Trip");
+            attacker.Stats.Feats.Add("Improved Disarm");
+            attacker.Stats.Feats.Add("Improved Bull Rush");
             Assert(ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Grapple, all).Count == 0
                 && ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Sunder, all).Count == 0,
                 $"{side} Improved Grapple and Improved Sunder remove the initiation AoO", ref passed, ref failed);
+            Assert(ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Trip, all).Count == 0
+                && ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Disarm, all).Count == 0,
+                $"{side} Improved Trip and Improved Disarm remove the initiation AoO", ref passed, ref failed);
+
+            // Improved Bull Rush spares only the defender's AoO; other threatening enemies still get one.
+            List<CharacterController> improvedBullRush = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.BullRushAttack, all);
+            Assert(improvedBullRush.Count == 1 && improvedBullRush[0] == sideFoe,
+                $"{side} Improved Bull Rush removes only the defender's AoO", ref passed, ref failed);
+
+            // Feint and overrun (own AoO path) are not initiation provokers here.
+            Assert(ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.Feint, all).Count == 0,
+                $"{side} feint does not provoke", ref passed, ref failed);
 
             // Regression: an enemy with no AoO left this round gets none.
             sideFoe.Stats.AttacksOfOpportunityUsed = sideFoe.Stats.MaxAttacksOfOpportunity;
@@ -324,6 +364,17 @@ public class FlankingReachRulesTests : MonoBehaviour
             "A hitting initiation AoO foils a grapple; a miss does not", ref passed, ref failed);
         Assert(!ThreatSystem.DoesManeuverAoODisruptAttempt(SpecialAttackType.CoupDeGrace, hit),
             "A hitting AoO does not by itself foil a coup de grace", ref passed, ref failed);
+
+        // CMB-014: a disarm fails only if the AoO deals damage (PHB p.155); trip and bull rush
+        // are not foiled by the AoO.
+        var damagingHit = new CombatResult { Hit = true, Damage = 4 };
+        var harmlessHit = new CombatResult { Hit = true, Damage = 6, FinalDamageDealt = 0, DRPrevented = 6 };
+        Assert(ThreatSystem.DoesManeuverAoODisruptAttempt(SpecialAttackType.Disarm, damagingHit)
+            && !ThreatSystem.DoesManeuverAoODisruptAttempt(SpecialAttackType.Disarm, harmlessHit),
+            "A disarm is foiled only by an AoO that deals damage", ref passed, ref failed);
+        Assert(!ThreatSystem.DoesManeuverAoODisruptAttempt(SpecialAttackType.Trip, damagingHit)
+            && !ThreatSystem.DoesManeuverAoODisruptAttempt(SpecialAttackType.BullRushAttack, damagingHit),
+            "A damaging AoO does not foil a trip or bull rush", ref passed, ref failed);
     }
 
     // ------------------------------------------------------------------------

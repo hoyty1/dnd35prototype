@@ -951,16 +951,8 @@ public class CombatUI : MonoBehaviour
             }
             else
             {
-                bool hideStandardGrappleForImprovedGrab = btn.name == "Grapple"
-                    && pc != null
-                    && pc.Stats != null
-                    && pc.Stats.HasImprovedGrab;
-                btn.gameObject.SetActive(!hideStandardGrappleForImprovedGrab);
-                if (hideStandardGrappleForImprovedGrab)
-                {
-                    Debug.Log($"[CombatUI][SpecialAttackMenu] button={btn.name} hidden for {pc.Stats.CharacterName}: Improved Grab creatures cannot use standard Grapple action.");
-                    continue;
-                }
+                // Improved Grab creatures may also grapple normally (CMB-014).
+                btn.gameObject.SetActive(true);
             }
 
             bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasFullRoundAction, hasGrappleAttackAvailable, hasBullRushAttackAvailable, hasTripAttackAvailable, hasDisarmAttackAvailable, hasSunderAttackAvailable, canImprovedFeintMove);
@@ -1053,11 +1045,7 @@ public class CombatUI : MonoBehaviour
         switch (button.name)
         {
             case "Grapple":
-                if (pc != null && pc.Stats != null && pc.Stats.HasImprovedGrab)
-                {
-                    label.text = "Grapple (Use Improved Grab on hit)";
-                }
-                else if (pc != null && isEnabled && GameManager.Instance != null)
+                if (pc != null && isEnabled && GameManager.Instance != null)
                 {
                     int remaining = GameManager.Instance.GetRemainingGrappleAttackActions(pc);
                     int currentBab = GameManager.Instance.GetCurrentGrappleAttackBonus(pc);
