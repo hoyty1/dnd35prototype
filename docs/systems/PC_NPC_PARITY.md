@@ -181,7 +181,7 @@ After step 12, `IsControllable` should only choose between UI input and AI choic
 - Allegiance checks: these use Team correctly (threat, flanking, shooting into melee, summon barrier, willing saves).
 
 **Not audited, or symmetric gaps:**
-- Nothing was run in Play mode.
+- The audit itself ran nothing in Play mode. Since then (2026-10-07) the scenario harness has run a few mechanics on both paths in Play mode (`rules/*`, [TESTING.md](../TESTING.md) 3.4): the same weapon modifiers on the NPC path (scripted) and the PC path (Attack buttons), +10 after a move and +10/+5 on a full attack (`rules/single-vs-full-attack` and `-ui`); a trip through the PC Special Attack menu with the same AoO, opposed check and result as the NPC executor (`rules/maneuver-trip`, `-trip-ui`); and the stand-up AoO and crawl (`rules/prone-*`).
 - Symmetric RAW gaps (not divergences): surprise and flat-footed, cover, line of effect for single targets, Ready, Delay and Total Defense, dominate control, unarmed-attack AoO, Tumble, massive damage, Hold per-round saves, Spiritual Weapon turns, uncanny dodge.
 - `PerformSingleAttackWithCrit` classifies any weapon with a range increment as ranged even in melee (CharacterController.cs:6207). This affects daggers and spears on both sides. It is a shared bug, filed as CMB-105.
 - Not traced:

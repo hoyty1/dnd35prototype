@@ -229,7 +229,8 @@ public partial class GameManager
     /// <summary>
     /// Returns the world to a clean pre-encounter state: combat reset, loot window closed, static
     /// per-combat state cleared, summons despawned (removed from NPCs and the parallel AI behaviour
-    /// list, AI-015), the defeated-enemy tracker cleared and every NPC pool slot deactivated.
+    /// list, AI-015), the defeated-enemy tracker cleared, every party and pool grapple released (the
+    /// static grapple links outlive a fight, CMB-038) and every NPC pool slot deactivated.
     /// Each step runs on its own, so one that throws does not skip the rest. Returns null when every
     /// step succeeded, else the failed steps; the harness should then record a dirty reset and start a
     /// fresh Play session. Summon GameObjects are removed with a deferred Destroy, so check that the
@@ -277,6 +278,18 @@ public partial class GameManager
             foreach (CharacterController summon in _summonedEnemies)
                 if (summon != null && !summons.Contains(summon))
                     summons.Add(summon);
+        });
+        // Grapple links are static and keyed by controller, and a halted fight never ends them (CMB-038):
+        // without this the reused party and pool controllers would start the next job still grappling.
+        // It runs before the summons are destroyed, so a link that involves a summon is ended too.
+        Step("ReleaseGrapples", () =>
+        {
+            var everyone = new List<CharacterController>(summons);
+            if (PCs != null) everyone.AddRange(PCs);
+            if (NPCs != null) everyone.AddRange(NPCs);
+            foreach (CharacterController cc in everyone)
+                if (cc != null)
+                    cc.ReleaseGrappleState("ScenarioHarness reset");
         });
         Step("ClearSummonLists", () =>
         {
@@ -341,6 +354,99 @@ public partial class GameManager
         sb.Append(" selectingSpecial=").Append(_isSelectingSpecialAttack);
         sb.Append(" pendingSpell=").Append(_pendingSpell != null ? _pendingSpell.SpellId : "none");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The PC prompt or selection the game is waiting on, or null when none is open: "aoo" (the AoO
+    /// confirmation), "ranged-retarget", "full-attack-5ft" or "submenu" (a special-style selection
+    /// menu). Other modal prompts (bull rush push and follow, Improved Grab, the disarm item choice,
+    /// the touch-spell prompt) are not listed; a scripted UI step that never settles reports them
+    /// through <see cref="Harness_DumpState"/> and the open UI scan.
+    /// </summary>
+    internal string Harness_PendingPrompt()
+    {
+        if (_waitingForAoOConfirmation)
+            return "aoo";
+        if (_isAwaitingRangedRetargetSelection)
+            return "ranged-retarget";
+        if (_isAwaitingFullAttackFiveFootStepSelection)
+            return "full-attack-5ft";
+        if (CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen())
+            return "submenu";
+        return null;
+    }
+
+    /// <summary>
+    /// Leaves a target or destination selection and returns to the action menu, as cancelling a
+    /// selection does (ShowActionChoices). Used when a scripted UI click picked no valid square.
+    /// </summary>
+    internal void Harness_CancelToActionChoices()
+    {
+        CombatUI?.HideSpecialAttackMenu();
+        ShowActionChoices();
+    }
+
+    /// <summary>
+    /// Presses the Special Attack button for the active PC and reports whether the menu is open
+    /// afterwards (the selecting flag set and the panel shown). Writes no game state of its own: a
+    /// selecting flag already set before the press (left by an earlier selection) is reported in
+    /// <paramref name="staleFlag"/>, not cleared, so the game's own guards still see it.
+    /// </summary>
+    internal bool Harness_OpenSpecialAttackMenu(out string staleFlag)
+    {
+        staleFlag = _isSelectingSpecialAttack ? "the special-attack selecting flag was already set before the press" : null;
+        OnSpecialAttackButtonPressed();
+        return _isSelectingSpecialAttack && CombatUI != null && CombatUI.Harness_IsSpecialAttackMenuOpen();
+    }
+
+    /// <summary>
+    /// Clicks the open Special Attack menu's button for <paramref name="type"/> (its onClick, as a
+    /// player's click does). False, with <paramref name="why"/>, when the menu has no such button or
+    /// the button is hidden or not interactable, so a scripted step cannot choose what a player could not.
+    /// </summary>
+    internal bool Harness_PressSpecialAttackButton(SpecialAttackType type, bool offHand, out string why)
+    {
+        string name = Harness_SpecialAttackButtonName(type, offHand);
+        if (name == null)
+        {
+            why = "the Special Attack menu has no button for " + type + (offHand ? " (off-hand)" : "");
+            return false;
+        }
+
+        UnityEngine.UI.Button button = CombatUI != null ? CombatUI.Harness_FindSpecialAttackButton(name) : null;
+        if (button == null)
+        {
+            why = "no '" + name + "' button in the open Special Attack menu";
+            return false;
+        }
+        if (!button.gameObject.activeInHierarchy || !button.interactable)
+        {
+            why = "the '" + name + "' button is " + (button.gameObject.activeInHierarchy ? "disabled" : "hidden");
+            return false;
+        }
+
+        why = null;
+        button.onClick.Invoke();
+        return true;
+    }
+
+    /// <summary>The Special Attack menu button name for a type (the names CombatUI.WireSpecialAttackMenu wires), or null.</summary>
+    private static string Harness_SpecialAttackButtonName(SpecialAttackType type, bool offHand)
+    {
+        switch (type)
+        {
+            case SpecialAttackType.Trip: return offHand ? null : "Trip";
+            case SpecialAttackType.Disarm: return offHand ? "Disarm (Off-Hand)" : "Disarm";
+            case SpecialAttackType.Grapple: return offHand ? null : "Grapple";
+            case SpecialAttackType.Sunder: return offHand ? "Sunder (Off-Hand)" : "Sunder";
+            case SpecialAttackType.BullRushAttack: return offHand ? null : "Bull Rush (Standard)";
+            case SpecialAttackType.BullRushCharge: return offHand ? null : "Bull Rush (Charge)";
+            case SpecialAttackType.Overrun: return offHand ? null : "Overrun";
+            case SpecialAttackType.Feint: return offHand ? null : "Feint";
+            case SpecialAttackType.CoupDeGrace: return offHand ? null : "Coup de Grace";
+            case SpecialAttackType.AidAnother: return offHand ? null : "Aid Another";
+            default: return null;
+        }
     }
 
     /// <summary>The Special Attack menu callback, as if the player picked <paramref name="type"/>.</summary>

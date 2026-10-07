@@ -535,7 +535,7 @@ Pitfalls:
 
 Files: `Character/Creatures/NPCDatabase.cs`, `NPCDatabaseCustom.cs`, `_Core/GameManager.cs`, `_Core/GameManager.TestConfigs.cs`, `_Core/GameManager.NPCSetup.cs`. Examples: 76ff4b2, 0ce24ae, 08e0be3, 7428faa, e44792a, 9d722f2.
 
-For an automated, repeatable check, prefer a scenario-harness definition over a new `*_test` preset: no GameManager flags, exact squares for every actor, AI-run, scripted, idle or PC-driven control, forced dice by context, and expectations checked against a trace. Add a `[ScenarioSource]` method in `Assets/Scripts/Tests/Scenarios/Catalog/<Area>Scenarios.cs` that returns `Scenario.Define(id, title)...Build()` definitions (see `Catalog/SmokeScenarios.cs`), confirm NPC ids with `NPCDatabase.Get`, and run it with `ScenarioHarness.Start(id, seeds, options)` ([TESTING.md](TESTING.md) 3.4).
+For an automated, repeatable check, prefer a scenario-harness definition over a new `*_test` preset: no GameManager flags, exact squares for every actor, AI-run, scripted, idle or PC-driven control, forced dice by context, and expectations checked against a trace. Add a `[ScenarioSource]` method in `Assets/Scripts/Tests/Scenarios/Catalog/<Area>Scenarios.cs` that returns `Scenario.Define(id, title)...Build()` definitions (see `Catalog/SmokeScenarios.cs`, and `Catalog/RulesScenarios.cs` for typed steps: `.Turn(actor, round, Step.Move(x, y), Step.Maneuver(type, target), ...)` with `Expect.StepStatus`), confirm NPC ids with `NPCDatabase.Get`, and run it with `ScenarioHarness.Start(id, seeds, options)` ([TESTING.md](TESTING.md) 3.4).
 
 Pitfalls:
 - Hard cap of 15 enemies (`SceneBootstrap.cs:119`); extras are dropped silently. Only 3 side panels.

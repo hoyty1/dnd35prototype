@@ -148,8 +148,8 @@ namespace Tests.Scenarios
         public bool RunnerFailed;
         public int FocusedFrames;
         public int UnfocusedFrames;
-        public CharacterController PendingUiEnd;
-        public int PendingUiEndFrame;
+        /// <summary>The Ui actor whose turn is being driven, or null (ScenarioSteps.cs).</summary>
+        public UiTurnDriver Ui;
         public readonly Dictionary<CharacterController, ActorSpec> SpecOf = new Dictionary<CharacterController, ActorSpec>();
         public readonly List<Waiver> Waivers = new List<Waiver>();
         public readonly List<KeyValuePair<Expectation, ExpectResult>> ExpectationResults = new List<KeyValuePair<Expectation, ExpectResult>>();
@@ -223,20 +223,34 @@ namespace Tests.Scenarios
                 return "ai";
             if ((spec.Control == Control.Scripted || spec.Control == Control.Idle) && IsFeared(a))
                 return "ai";
+            // The same test as GetScriptedTurn: no typed turn and no non-null coroutine script.
+            if (spec.Control == Control.Scripted && Def.AiWhenUnscripted.Contains(spec.Key)
+                && Def.FindTurn(spec.Key, Gm != null ? Gm.CurrentRound : 0) == null
+                && !(Def.Scripts.TryGetValue(spec.Key, out Func<ScenarioContext, CharacterController, IEnumerator> script) && script != null))
+                return "ai";
             return spec.Control.ToString().ToLowerInvariant();
         }
 
         public void OnTurnStarted(CharacterController a, string controller)
         {
-            if (controller == "ui")
-            {
-                // Ui steps come with the scripted step: with none, the turn is ended through the End Turn button path next frame.
-                PendingUiEnd = a;
-                PendingUiEndFrame = Time.frameCount;
-            }
+            if (controller != "ui")
+                return;
+            // The Ui driver runs the actor's typed steps for this round through the PC callbacks, from the next
+            // frame, and presses End Turn when they run out (at once when there are none).
+            List<Step> steps = null;
+            if (SpecOf.TryGetValue(a, out ActorSpec spec))
+                steps = Def.FindTurn(spec.Key, Gm != null ? Gm.CurrentRound : 0)?.Steps;
+            // The game can end a Ui turn inside a step (an actor incapacitated while standing up, say); the old
+            // driver then has not seen its turn pass yet, so flush it before the next one starts.
+            if (Ui != null && !Ui.Done)
+                Ui.Abandon("turn passed");
+            Ui = new UiTurnDriver(this, a, steps);
         }
 
-        /// <summary>ScenarioHooks.ScriptedTurn provider: null lets the AI run the turn.</summary>
+        /// <summary>
+        /// ScenarioHooks.ScriptedTurn provider: null lets the AI run the turn. For a Scripted actor: its typed steps
+        /// for the round, else its coroutine script, else an empty turn (the AI for AiWhenUnscripted actors).
+        /// </summary>
         public IEnumerator GetScriptedTurn(CharacterController actor)
         {
             if (Decided || actor == null || !SpecOf.TryGetValue(actor, out ActorSpec spec))
@@ -248,8 +262,13 @@ namespace Tests.Scenarios
                 return null;
             if (spec.Control == Control.Idle)
                 return EmptyTurn();
+            TurnScript turn = Def.FindTurn(spec.Key, Gm != null ? Gm.CurrentRound : 0);
+            if (turn != null)
+                return ScriptedSteps.RunAi(this, actor, turn.Steps);
             if (Def.Scripts.TryGetValue(spec.Key, out Func<ScenarioContext, CharacterController, IEnumerator> script) && script != null)
                 return script(Ctx, actor) ?? EmptyTurn();
+            if (Def.AiWhenUnscripted.Contains(spec.Key))
+                return null;
             return EmptyTurn();
         }
 
@@ -708,7 +727,7 @@ namespace Tests.Scenarios
                 if (!job.Decided && job.Options.WallCapSeconds > 0 && Time.realtimeSinceStartup - job.StartRealtime > job.Options.WallCapSeconds)
                     job.Decide(Outcome.Timeout, "wall-clock cap " + job.Options.WallCapSeconds + " s", false);
                 if (!job.Decided)
-                    TryRun(job, "ui-end", () => HandleUiTurn(job, gm), Outcome.Exception);
+                    TryRun(job, "ui-steps", () => HandleUiTurn(job, gm), Outcome.Exception);
                 WriteStatus(false);
             }
 
@@ -842,6 +861,12 @@ namespace Tests.Scenarios
                 foreach (KeyValuePair<string, int> kv in subs)
                     if (_baselineSubs.TryGetValue(kv.Key, out int b) && b != kv.Value)
                         problems.Add(kv.Key + " has " + kv.Value + " subscribers (baseline " + b + ")");
+
+            // Grapple links are static and outlive a fight (CMB-038); the reset releases them, so one left here is a
+            // leak. Read the table without IsGrappling, which would quietly end a link whose partner is gone.
+            List<string> holders = CharacterController.Harness_GrappleLinkHolders();
+            if (holders.Count > 0)
+                problems.Add("grapple link table still holds " + string.Join(", ", holders) + " (CMB-038)");
 
             string hooks = ScenarioHooks.DescribeSet();
             if (hooks != null)
@@ -1050,19 +1075,12 @@ namespace Tests.Scenarios
 
         private static void HandleUiTurn(ScenarioJob job, GameManager gm)
         {
-            CharacterController a = job.PendingUiEnd;
-            if (a == null || Time.frameCount <= job.PendingUiEndFrame)
+            UiTurnDriver ui = job.Ui;
+            if (ui == null)
                 return;
-            if (gm.CurrentCharacter != a)
-            {
-                job.PendingUiEnd = null;
-                return;
-            }
-            if (!gm.IsPlayerTurn || gm.ActivePC != a)
-                return;
-            job.PendingUiEnd = null;
-            job.Trace.Emit("step").Set("actor", job.Trace.KeyOf(a)).Set("step", "EndTurn").Set("note", "no Ui steps");
-            gm.OnEndTurnButtonPressed();
+            ui.Tick(gm);
+            if (ui.Done && job.Ui == ui)
+                job.Ui = null;
         }
 
         private JobResult Finalize(ScenarioJob job, GameManager gm)
@@ -1271,6 +1289,11 @@ namespace Tests.Scenarios
             o.Set("totals", Totals());
             if (RunVerdict != null)
                 o.Set("verdict", RunVerdict);
+            if (LoadErrors.Count > 0)
+                o.Set("loadErrors", LoadErrors);
+            List<string> inconclusive = InconclusiveIds();
+            if (inconclusive.Count > 0)
+                o.Set("inconclusiveIds", inconclusive);
             o.Set("summaryPath", Path.Combine(RunDir ?? "", "summary.json").Replace('\\', '/'));
             if (SummaryError != null)
                 o.Set("summaryError", SummaryError);
@@ -1280,6 +1303,11 @@ namespace Tests.Scenarios
                 o.Set("needsFresh", true).Set("dirtyReason", "static suites ran in this Play session");
             return o;
         }
+
+        /// <summary>Scenario ids whose seeds all came out Inconclusive: the run proved nothing for them.</summary>
+        private List<string> InconclusiveIds()
+            => Results.GroupBy(r => r.Id).Where(g => VerdictRules.Aggregate(g.Select(r => r.Verdict)) == Verdict.Inconclusive)
+                      .Select(g => g.Key).ToList();
 
         private JsonObj Totals()
         {
@@ -1344,7 +1372,12 @@ namespace Tests.Scenarios
             bool fail = Results.Any(r => r.Verdict == Verdict.Fail);
             bool xpass = Results.Any(r => r.Verdict == Verdict.XPass);
             bool repeatDiff = Results.Any(r => r.RepeatCheck == "differs");
-            RunVerdict = interrupted ? "INTERRUPTED" : error ? "ERROR" : fail ? "FAIL" : xpass ? "XPASS" : repeatDiff ? "NONDETERMINISTIC" : AbortRequested ? "ABORTED" : "OK";
+            // A catalog source that threw drops its remaining definitions, so the run may be a silent subset.
+            bool loadError = LoadErrors.Count > 0;
+            RunVerdict = interrupted ? "INTERRUPTED" : error ? "ERROR" : loadError ? "LOADERROR" : fail ? "FAIL" : xpass ? "XPASS" : repeatDiff ? "NONDETERMINISTIC" : AbortRequested ? "ABORTED" : "OK";
+            List<string> inconclusiveIds = InconclusiveIds();
+            if (RunVerdict == "OK" && inconclusiveIds.Count > 0)
+                RunVerdict = "OK (" + inconclusiveIds.Count + " inconclusive)";
 
             // Jobs without a result (a dirty session, an abort or an interruption stopped the run) and how to resume them.
             List<ScenarioJob> notRun = Jobs.Where(j => !j.ResultRecorded).ToList();
@@ -1368,6 +1401,7 @@ namespace Tests.Scenarios
              .Set("interrupted", InterruptReason)
              .Set("notRun", notRunList).Set("resume", resume)
              .Set("loadErrors", LoadErrors.Count > 0 ? LoadErrors : null)
+             .Set("inconclusiveIds", inconclusiveIds)
              .Set("totals", Totals()).Set("byId", byId)
              .Set("waiverHits", hits).Set("unusedWaivers", unused)
              .Set("needsFresh", SessionDirty).Set("dirtyReason", DirtyReason)

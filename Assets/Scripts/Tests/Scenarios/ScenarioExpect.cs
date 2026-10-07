@@ -62,6 +62,28 @@ namespace Tests.Scenarios
         public List<TraceEvent> Conds(string key = null, CombatConditionType? type = null)
             => Of("cond").Where(e => (key == null || e.Str("actor") == key) && (type == null || e.Get("type") is CombatConditionType t && t == type.Value)).ToList();
 
+        /// <summary>'step' events of <paramref name="actor"/> (null: any) whose label starts with <paramref name="stepPrefix"/> (null: any), in <paramref name="round"/> (null: any).</summary>
+        public List<TraceEvent> Steps(string actor = null, string stepPrefix = null, int? round = null)
+            => Of("step").Where(e => (actor == null || e.Str("actor") == actor)
+                && (stepPrefix == null || (e.Str("step") ?? "").StartsWith(stepPrefix, StringComparison.Ordinal))
+                && (round == null || e.Round == round.Value)).ToList();
+
+        /// <summary>Integer captures of <paramref name="regex"/>'s group 1 over the combat log lines, in order (round filter optional).</summary>
+        public List<KeyValuePair<TraceEvent, int>> LogInts(string regex, int? round = null)
+        {
+            var r = new Regex(regex, RegexOptions.CultureInvariant);
+            var list = new List<KeyValuePair<TraceEvent, int>>();
+            foreach (TraceEvent e in Of("log"))
+            {
+                if (round != null && e.Round != round.Value)
+                    continue;
+                Match m = r.Match(e.Str("text") ?? "");
+                if (m.Success && int.TryParse(m.Groups[1].Value, out int v))
+                    list.Add(new KeyValuePair<TraceEvent, int>(e, v));
+            }
+            return list;
+        }
+
         public List<TraceEvent> TurnsOf(string key) => Of("turn_start").Where(e => e.Str("actor") == key).ToList();
 
         public List<TraceEvent> Violations(bool includeWaived = false)
@@ -199,6 +221,49 @@ namespace Tests.Scenarios
                 return got.SequenceEqual(mods)
                     ? ExpectResult.Pass("mods [" + string.Join(",", got) + "]", seqs)
                     : ExpectResult.Fail("mods [" + string.Join(",", got) + "], expected [" + string.Join(",", mods) + "]", seqs);
+            };
+
+        /// <summary>
+        /// The <paramref name="nth"/> (0-based) step of <paramref name="actor"/> in <paramref name="round"/> whose label
+        /// starts with <paramref name="stepPrefix"/> ended with one of <paramref name="statuses"/> (done, refused, skipped, dropped).
+        /// </summary>
+        public static Func<TraceView, ExpectResult> StepStatus(string actor, int round, string stepPrefix, int nth, params string[] statuses)
+            => v =>
+            {
+                List<TraceEvent> steps = v.Steps(actor, stepPrefix, round);
+                if (steps.Count <= nth)
+                    return ExpectResult.Fail(actor + " has " + steps.Count + " '" + stepPrefix + "' steps in round " + round + ", expected at least " + (nth + 1));
+                TraceEvent e = steps[nth];
+                string st = e.Str("status");
+                return statuses.Contains(st)
+                    ? ExpectResult.Pass(e.Str("step") + " " + st, e.Seq)
+                    : ExpectResult.Fail(e.Str("step") + " " + st + (e.Str("note") != null ? " (" + e.Str("note") + ")" : "") + ", expected " + string.Join("|", statuses), e.Seq);
+            };
+
+        /// <summary>Every 'assert' event passed (inconclusive when there is none).</summary>
+        public static Func<TraceView, ExpectResult> AssertsPass()
+            => v =>
+            {
+                List<TraceEvent> asserts = v.Of("assert").ToList();
+                if (asserts.Count == 0)
+                    return ExpectResult.Inconclusive("no assert step ran");
+                TraceEvent bad = asserts.FirstOrDefault(e => !e.Bool("ok"));
+                return bad == null
+                    ? ExpectResult.Pass(asserts.Count + " asserts")
+                    : ExpectResult.Fail("assert '" + bad.Str("name") + "' failed" + (bad.Str("error") != null ? ": " + bad.Str("error") : ""), bad.Seq);
+            };
+
+        /// <summary>Every turn of <paramref name="actor"/> ran under <paramref name="controller"/> (ui, ai, scripted, idle).</summary>
+        public static Func<TraceView, ExpectResult> Controller(string actor, string controller)
+            => v =>
+            {
+                List<TraceEvent> turns = v.TurnsOf(actor);
+                if (turns.Count == 0)
+                    return ExpectResult.Fail("no turn of " + actor);
+                TraceEvent bad = turns.FirstOrDefault(e => e.Str("controller") != controller);
+                return bad == null
+                    ? ExpectResult.Pass(turns.Count + " " + controller + " turns")
+                    : ExpectResult.Fail(actor + " turn under " + bad.Str("controller"), bad.Seq);
             };
 
         public static Func<TraceView, ExpectResult> Custom(Func<TraceView, ExpectResult> check) => check;

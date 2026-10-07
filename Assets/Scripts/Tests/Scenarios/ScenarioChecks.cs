@@ -78,6 +78,20 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
+        /// True when a trace snapshot (TraceView.Final or a turn_start snap) shows the creature gone, dead, dying,
+        /// stable or unconscious. A missing snapshot is not "down" (false), so a trace defect fails the caller's check.
+        /// </summary>
+        public static bool IsDownSnapshot(JsonObj snap)
+        {
+            if (snap == null)
+                return false;
+            if (snap.Get("gone") is bool g && g)
+                return true;
+            object st = snap.Get("st");
+            return st is HPState s && (s == HPState.Dead || s == HPState.Dying || s == HPState.Stable || s == HPState.Unconscious);
+        }
+
+        /// <summary>
         /// Harness policy for combat end (owner decision 2026-10-07): a creature is out of the fight when it is dead,
         /// dying or unconscious. A creature at negative HP with regeneration or fast healing still counts until dead.
         /// A disabled creature still counts: at 0 HP (PHB p.145) or at negative HP with Diehard.

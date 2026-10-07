@@ -576,6 +576,20 @@ public class CharacterController : MonoBehaviour
 
     private static readonly Dictionary<CharacterController, GrappleLink> _grappleLinksByCharacter = new Dictionary<CharacterController, GrappleLink>();
 
+#if UNITY_EDITOR
+    /// <summary>
+    /// Editor-only, read-only (scenario harness clean check): one name per entry of the static grapple
+    /// link table ("&lt;destroyed&gt;" for a key whose object is gone). Unlike IsGrappling it never ends a link.
+    /// </summary>
+    internal static List<string> Harness_GrappleLinkHolders()
+    {
+        var names = new List<string>();
+        foreach (KeyValuePair<CharacterController, GrappleLink> kv in _grappleLinksByCharacter)
+            names.Add(kv.Key != null ? kv.Key.name : "<destroyed>");
+        return names;
+    }
+#endif
+
     /// <summary>Set Power Attack value, clamped to 0..BAB.</summary>
     public void SetPowerAttack(int value)
     {

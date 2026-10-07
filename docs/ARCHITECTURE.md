@@ -152,7 +152,7 @@ There are 53 files, found with `grep -rlE '^\s*public partial class GameManager\
 | GameManager.NPCTurns.cs | 1,853 | `SingleNPCTurnFromInitiative`; summon AI; NPC attacks, full attacks and spellcasting (`TryNPCPerformSpellCast`); breath weapon; grab/trip helpers. |
 | GameManager.TestConfigs.cs | 1,875 | 22 `Configure*TestParty` methods, `RestoreStandardPartyLayout`. |
 | GameManager.TestPanel.cs | 110 | F12 panel bridge: `TestCastSpellFromPanel`, `CleanupTestPanelCast`. |
-| GameManager.ScenarioHarness.cs | 473 | Editor-only (`#if UNITY_EDITOR`) `Harness_*` entry points for the scenario harness: build the party from creation data or exact `CharacterStats`, spawn enemies at exact squares, start, halt and reset combat, dump turn state, call the PC menu callbacks and answer the AoO prompt. No game code calls it. |
+| GameManager.ScenarioHarness.cs | 579 | Editor-only (`#if UNITY_EDITOR`) `Harness_*` entry points for the scenario harness: build the party from creation data or exact `CharacterStats`, spawn enemies at exact squares, start, halt and reset combat (the reset also releases grapple links, CMB-038), dump turn state and the open prompt, call the PC menu callbacks (open the Special Attack menu and click a maneuver button as a player would, pick a spell, cancel a selection) and answer the AoO prompt. No game code calls it. |
 | GameManager.TreasureGeneration.cs | 158 | `GeneratePostCombatTreasure` (EL -> `TreasureGenerator.Generate`). Its `ShowTreasureUI` path has no external callers. |
 | **Spell/Resolution/** (25) | | |
 | GameManager.SpellCasting.cs | 8,957 | Spell targeting and casting orchestration (`BeginPendingSpellTargeting`, `PerformSpellCast`), summon spawn and despawn, `TickSummonDurations`, `TickAllSpellDurations`. |
@@ -236,7 +236,7 @@ These types compile and some are even instantiated, but they do not drive behavi
 
 ### Folder map of Assets/Scripts
 
-There are 670 `.cs` files (about 302K lines, recounted 2026-10-07). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
+There are 672 `.cs` files (about 304K lines, recounted 2026-10-07). The layout comes from the Phase 5B reorganisation (commit 8a79a42, 2026-05-27), which was a pure directory move. An old path such as `Core/X.cs` or `Magic/X.cs` in a pre-2026-05-27 doc resolves by globbing `**/X.cs`. Counts below are `.cs` files.
 
 ```
 Assets/Scripts/
@@ -285,8 +285,8 @@ Assets/Scripts/
   World/ (2)             PlanarTravelSystem, CreatureTrapSystem (mostly inert)
   Utilities/ (12)        DiceRoller, CameraController, DebugCommands, IdentifierExtensions, ...
   Identifiers/ (2)       two editor-only ContextMenu smoke tests (the real ID types live elsewhere)
-  Tests/ (114)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
-                         and Scenarios/ (the editor-only scenario harness: model, runner, trace, checks,
+  Tests/ (116)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
+                         and Scenarios/ (the editor-only scenario harness: model, runner, trace, checks, steps,
                          expectations, fast mode, session guard, Catalog/ of scenario definitions)
 ```
 

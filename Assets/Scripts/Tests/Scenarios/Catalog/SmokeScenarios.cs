@@ -13,9 +13,9 @@ namespace Tests.Scenarios
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
         {
-            yield return Boot();
-            yield return TwoGoblinsAi("smoke/two-goblins-ai", "Quick Start party (AI-run) vs 2 goblins (AI), to the end", 20);
-            yield return TwoGoblinsAi("smoke/soak-mini", "Mini soak: the two-goblin fight, meant for a seed range (1-3)", 20, "soak");
+            yield return ScenarioCatalog.Safe("SmokeScenarios smoke/boot", Boot);
+            yield return ScenarioCatalog.Safe("SmokeScenarios smoke/two-goblins-ai", () => TwoGoblinsAi("smoke/two-goblins-ai", "Quick Start party (AI-run) vs 2 goblins (AI), to the end", 20));
+            yield return ScenarioCatalog.Safe("SmokeScenarios smoke/soak-mini", () => TwoGoblinsAi("smoke/soak-mini", "Mini soak: the two-goblin fight, meant for a seed range (1-3)", 20, "soak"));
         }
 
         private static ScenarioBuilder Party(ScenarioBuilder b, Control control)

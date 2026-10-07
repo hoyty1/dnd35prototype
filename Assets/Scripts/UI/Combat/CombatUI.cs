@@ -1587,6 +1587,23 @@ public class CombatUI : MonoBehaviour
         _specialAttackPanel.SetActive(false);
     }
 
+#if UNITY_EDITOR
+    /// <summary>Editor-only, read-only (scenario harness): whether the Special Attack menu panel is shown.</summary>
+    internal bool Harness_IsSpecialAttackMenuOpen()
+        => _specialAttackPanel != null && _specialAttackPanel.activeInHierarchy;
+
+    /// <summary>Editor-only, read-only (scenario harness): the Special Attack menu button named <paramref name="buttonName"/>, or null.</summary>
+    internal Button Harness_FindSpecialAttackButton(string buttonName)
+    {
+        if (_specialAttackPanel == null)
+            return null;
+        foreach (Button b in _specialAttackPanel.GetComponentsInChildren<Button>(true))
+            if (b != null && b.name == buttonName)
+                return b;
+        return null;
+    }
+#endif
+
     private void WireSpecialAttackMenu(System.Action<SpecialAttackType, bool> onSelect, System.Action onCancel)
     {
         if (_specialAttackPanel == null) return;

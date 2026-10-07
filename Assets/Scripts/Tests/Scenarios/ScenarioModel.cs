@@ -13,8 +13,11 @@ namespace Tests.Scenarios
     /// <summary>
     /// Who decides an actor's turns in a scenario.
     /// Ai: the game AI (AIService.ExecuteNPCTurn); a PC-slot actor is made non-controllable and gets a class AI profile.
-    /// Scripted: the AI turn path up to the compulsion gates, then the def's script for that actor (an empty turn when none).
-    /// Ui: a controllable PC driven through the PC menu callbacks (step scripts come later; with none the turn is ended).
+    /// Scripted: the AI turn path up to the compulsion gates, then the def's typed steps for that actor and round
+    /// (ScenarioDef.TurnScripts), else its coroutine script (ScenarioDef.Scripts), else an empty turn (or the AI, for
+    /// an actor listed in ScenarioDef.AiWhenUnscripted).
+    /// Ui: a controllable PC driven through the PC menu callbacks by its typed steps for the round; End Turn is pressed
+    /// when the steps run out (at once when there are none).
     /// Idle: the AI turn path with an empty turn (the actor takes no actions).
     /// </summary>
     public enum Control { Ai, Scripted, Ui, Idle }
@@ -197,11 +200,31 @@ namespace Tests.Scenarios
         /// <summary>Turn scripts for Scripted actors, by key: (context, actor) returns the turn coroutine. None means an empty turn.</summary>
         public Dictionary<string, Func<ScenarioContext, CharacterController, IEnumerator>> Scripts =
             new Dictionary<string, Func<ScenarioContext, CharacterController, IEnumerator>>();
+        /// <summary>Typed steps per (actor, round) for Scripted and Ui actors (ScenarioSteps.cs). Round 0 means every round without its own script.</summary>
+        public List<TurnScript> TurnScripts = new List<TurnScript>();
+        /// <summary>Scripted actors whose rounds without a typed script or coroutine are run by the AI instead of being empty.</summary>
+        public HashSet<string> AiWhenUnscripted = new HashSet<string>();
         public List<DiceForce> DiceForces = new List<DiceForce>();
         public List<Expectation> Expectations = new List<Expectation>();
         public List<Waiver> Waivers = new List<Waiver>();
         public bool RecordDice;
         public Action<ScenarioContext> OnSetup;
+
+        /// <summary>The typed script for <paramref name="key"/> in <paramref name="round"/> (a round-0 script applies to every round without its own), or null.</summary>
+        public TurnScript FindTurn(string key, int round)
+        {
+            TurnScript any = null;
+            foreach (TurnScript t in TurnScripts)
+            {
+                if (t.Actor != key)
+                    continue;
+                if (t.Round == round)
+                    return t;
+                if (t.Round == 0 && any == null)
+                    any = t;
+            }
+            return any;
+        }
 
         public ActorSpec Find(string key)
         {
@@ -288,6 +311,37 @@ namespace Tests.Scenarios
                     problems.Add("script for '" + k + "', whose control is " + a.Control);
             }
 
+            var turnKeys = new HashSet<string>();
+            foreach (TurnScript t in TurnScripts)
+            {
+                ActorSpec a = t != null ? Find(t.Actor) : null;
+                if (a == null)
+                {
+                    problems.Add("turn script for unknown actor '" + (t != null ? t.Actor : "null") + "'");
+                    continue;
+                }
+                if (a.Control != Control.Scripted && a.Control != Control.Ui)
+                    problems.Add("turn script for '" + t.Actor + "', whose control is " + a.Control + " (Scripted or Ui only)");
+                if (t.Round < 0)
+                    problems.Add("turn script for '" + t.Actor + "' has round " + t.Round);
+                if (!turnKeys.Add(t.Actor + "|" + t.Round))
+                    problems.Add("two turn scripts for '" + t.Actor + "' in round " + t.Round);
+                foreach (Step step in t.Steps)
+                {
+                    string problem = step == null ? "null step" : step.Problem(a.Control, this);
+                    if (problem != null)
+                        problems.Add(t.Actor + " r" + t.Round + ": " + problem);
+                }
+            }
+            foreach (string k in AiWhenUnscripted)
+            {
+                ActorSpec a = Find(k);
+                if (a == null || a.Control != Control.Scripted)
+                    problems.Add("AiWhenUnscripted '" + k + "' is not a Scripted actor");
+                else if (TurnScripts.Exists(t => t != null && t.Actor == k && t.Round == 0) || Scripts.ContainsKey(k))
+                    problems.Add("AiWhenUnscripted '" + k + "' has a round-0 turn script or a coroutine script, so the AI never runs");
+            }
+
             foreach (DiceForce f in DiceForces)
                 if (f.Sides < 2 || f.Value < 1 || f.Value > f.Sides)
                     problems.Add("dice force d" + f.Sides + "=" + f.Value + " is out of range");
@@ -372,6 +426,29 @@ namespace Tests.Scenarios
             return this;
         }
 
+        /// <summary>The typed steps <paramref name="actor"/> takes in <paramref name="round"/> (0: every round without its own script). The actor must be Scripted or Ui.</summary>
+        public ScenarioBuilder Turn(string actor, int round, params Step[] steps)
+        {
+            _def.TurnScripts.Add(new TurnScript { Actor = actor, Round = round, Steps = new List<Step>(steps ?? new Step[0]) });
+            return this;
+        }
+
+        /// <summary>Makes these actors Idle (the AI turn path with an empty turn).</summary>
+        public ScenarioBuilder Idle(params string[] keys)
+        {
+            foreach (string k in keys)
+                With(k, a => a.Control = Control.Idle);
+            return this;
+        }
+
+        /// <summary>Rounds without a typed script or coroutine are run by the AI for these Scripted actors (instead of an empty turn).</summary>
+        public ScenarioBuilder AiWhenUnscripted(params string[] keys)
+        {
+            foreach (string k in keys)
+                _def.AiWhenUnscripted.Add(k);
+            return this;
+        }
+
         public ScenarioBuilder Initiative(params string[] keys) { _def.InitiativeOrder = new List<string>(keys); return this; }
 
         /// <summary>Forces <paramref name="count"/> d<paramref name="sides"/> rolls (whose context contains <paramref name="ctx"/>, null for any) to <paramref name="value"/>; count -1 forces every one.</summary>
@@ -444,6 +521,24 @@ namespace Tests.Scenarios
 
         /// <summary>Rebuilds the catalog on next use (definitions are built fresh).</summary>
         public static void Reload() { _all = null; }
+
+        /// <summary>
+        /// Builds one definition for a catalog source, recording a builder that throws (an invalid definition) as a
+        /// load error and returning null (skipped), so one bad definition does not drop the rest of the source.
+        /// Wrap every <c>yield return</c> of a source in it.
+        /// </summary>
+        public static ScenarioDef Safe(string source, Func<ScenarioDef> build)
+        {
+            try
+            {
+                return build();
+            }
+            catch (Exception ex)
+            {
+                _loadErrors.Add(source + ": " + ex.GetType().Name + ": " + ex.Message);
+                return null;
+            }
+        }
 
         /// <summary>Scenarios whose id matches any of the comma-separated globs (* and ?), in catalog order.</summary>
         public static List<ScenarioDef> Find(string glob)
