@@ -228,7 +228,7 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 
 | # | Work item | Frequency | AI value | Gap | Issues |
 |---|---|---|---|---|---|
-| 1 | Shared-action rules fixes: morale on full attacks (NPC movement, maneuver and casting AoOs, casting Concentration, standing up from prone and maneuver math are done) | every encounter | High: legality and risk models are meaningless without them | High | CMB-002/CMB-043 |
+| 1 | Shared-action rules fixes: done (NPC movement, maneuver and casting AoOs, casting Concentration, standing up from prone, maneuver math, and one attack modifier for single, full, dual-wield and flurry attacks; not verified in Play mode). Left: rake and grapple weapon attacks | every encounter | High: legality and risk models are meaningless without them | Low | CMB-087 |
 | 2 | Executor split plus `ActionRegistry` skeleton (attack, full attack, charge, maneuvers, single-target spell, consumable, aid another, turn undead) | all | High: the precondition for everything below | High | AI-054, SPL-054, ITM-005 |
 | 3 | Enemy spell carriers: DMG class casters get spells; slot and known-spell caps; mis-slotting; vampire as Fighter; stale placeholder flag on SM I/II | every caster spawn (max NPC CL in tables is 5) | High | High | ENC-021, SPL-041, SPL-015, CRE-030, SPL-021, CRE-015 |
 | 4 | NPC area casting through the shared AoE core; true burst resolution | 77 in-scope entries cite AI-001 (62 Area spells in the DB) | High: sleep, color spray, web, fireball | High | AI-001, SPL-046, SPL-042 |

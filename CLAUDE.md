@@ -53,7 +53,7 @@ Where to look first:
 
 | Concern | Start at |
 |---|---|
-| Attack math | `CharacterController.Attack`/`FullAttack`/`DualWieldAttack`/`FlurryOfBlows` -> `PerformSingleAttackWithCrit`; `CombatFlowService.PerformPlayerAttack`; `GameManager.NPCPerformAttack` |
+| Attack math | `CharacterController.Attack`/`FullAttack`/`DualWieldAttack`/`FlurryOfBlows` (modifier from `BuildAttackBonus`) -> `PerformSingleAttackWithCrit`; `CombatFlowService.PerformPlayerAttack`; `GameManager.NPCPerformAttack` |
 | Damage | `CharacterStats.ApplyIncomingDamage` -> `TakeDamage`; `Combat/Core/DamageModel.cs` |
 | Conditions | `GameManager.ApplyCondition`, `ConditionService`, `ConditionManager`, `ConditionRules` |
 | Maneuvers, grapple | `CombatUI.ShowSpecialAttackMenu` -> `GameManager.OnSpecialAttackSelected` -> `GameManager.ExecuteSpecialAttack` (`GameManager.CombatActions.cs`); partials in `Combat/Maneuvers/*.cs`; `CharacterController.ExecuteSpecialAttack` -> `Resolve*` |
@@ -82,7 +82,7 @@ Where to look first:
 - A method missing from `GameManager.cs` is in another partial. Grep before adding a duplicate.
 - A new single-target spell handler goes in the PC chain, its `anyPriorHandled`/`anyClericHandled` flags, and `TryNPCPerformSpellCast` (SPL-054).
 - In `ApplySpellBuff`, special cases go above the generic `StatusEffectManager` branch (SPL-037).
-- Attack bonuses are summed in four places (CMB-043, root of CMB-002); spell bonuses all land in `Morale*` (SPL-026).
+- Weapon attack-roll terms go in `CharacterController.BuildAttackBonus` (CMB-043); rake and grapple weapon attacks still sum their own (CMB-087); spell bonuses all land in `Morale*` (SPL-026).
 - A new `CharacterStats` bonus field needs a writer and a reader in every formula (`docs/architecture/characters-and-creatures.md`).
 - `TakeDamage`/`CurrentHP -=` skip DR and resistance (SPL-004); use `ApplyIncomingDamage` and run victory/defeat checks (CORE-011).
 - `GameManager.Awake` runs before scene references are assigned (CORE-009); unassigned `CombatUI` fields fail silently (UI-013).

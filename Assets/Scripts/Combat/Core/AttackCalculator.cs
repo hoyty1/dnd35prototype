@@ -1,6 +1,122 @@
 using UnityEngine;
 
 // ============================================================================
+// Per-attack modifier breakdown shared by every weapon attack path (CMB-043)
+// ============================================================================
+
+/// <summary>
+/// Every term of one weapon attack roll's modifier, built by
+/// CharacterController.BuildAttackBonus and used by Attack, FullAttack (iterative and
+/// natural), DualWieldAttack and FlurryOfBlows so all of them add the same terms.
+/// Terms resolved inside PerformSingleAttackWithCrit (weapon enhancement or masterwork,
+/// True Strike, invisible attacker, helpless or blinded target, bane, Destruction smite)
+/// are not part of this struct.
+/// </summary>
+public struct AttackBonusBreakdown
+{
+    /// <summary>Base attack bonus step for this attack (BAB, an iterative step or a progressive-pool override).</summary>
+    public int BaseAttackBonus;
+    /// <summary>Penalty tied to the attack's place in a sequence: two-weapon fighting, flurry, secondary natural attack, Manyshot, Mobility AoO.</summary>
+    public int SequenceModifier;
+    /// <summary>Combat-log label for SequenceModifier (empty when the caller shows it another way).</summary>
+    public string SequenceLabel;
+    /// <summary>Ability modifier on the attack roll: DEX for ranged attacks and Weapon Finesse, otherwise STR (PHB p.134, p.102).</summary>
+    public int AbilityMod;
+    public string AbilityName;
+    public int SizeModifier;
+    public int FlankingBonus;
+    public int RacialBonus;
+    public int RangePenalty;
+    public int MountedRangedPenalty;
+    /// <summary>Feat terms (Power Attack, Point Blank Shot, Weapon Focus, Combat Expertise, Rapid Shot) plus Improved Critical.</summary>
+    public AttackCalculator.FeatModifiers Feats;
+    public int PronePenalty;
+    public int FightingDefensivelyPenalty;
+    public int ShootingIntoMeleePenalty;
+    public bool PreciseShotNegated;
+    public int WeaponNonProficiencyPenalty;
+    public int ArmorNonProficiencyPenalty;
+    /// <summary>CharacterStats.MoraleAttackBonus (Bless, Inspire Courage, charge or Pounce +2, other spell buffs; SPL-026).</summary>
+    public int MoraleBonus;
+    /// <summary>CharacterStats.ConditionAttackPenalty (Shaken, Sickened, Haste, Slow and other conditions).</summary>
+    public int ConditionModifier;
+    public int AidAnotherBonus;
+    public int DamageModePenalty;
+    public int SolidFogPenalty;
+    public int SolidFogDamagePenalty;
+    public int WondrousBowAttackBonus;
+    public int WondrousBowDamageBonus;
+    public int MagicStoneBonus;
+    /// <summary>Weapon threat range after Improved Critical.</summary>
+    public int CritThreatMin;
+    public int CritMultiplier;
+
+    /// <summary>The modifier passed to the attack roll.</summary>
+    public int Total =>
+        BaseAttackBonus + SequenceModifier + AbilityMod + SizeModifier + FlankingBonus + RacialBonus
+        + RangePenalty + MountedRangedPenalty + Feats.TotalFeatAttackModifier
+        + PronePenalty + FightingDefensivelyPenalty + ShootingIntoMeleePenalty
+        + WeaponNonProficiencyPenalty + ArmorNonProficiencyPenalty + MoraleBonus + ConditionModifier
+        + AidAnotherBonus + DamageModePenalty + SolidFogPenalty + WondrousBowAttackBonus + MagicStoneBonus;
+
+    /// <summary>BAB step + ability + size + sequence penalty: the figure shown in attack labels such as "Attack 2 (+6)".</summary>
+    public int LabelBonus => BaseAttackBonus + SequenceModifier + AbilityMod + SizeModifier;
+
+    /// <summary>Flat damage from feats, Solid Fog and Bracers of Archery.</summary>
+    public int FeatDamageBonus => Feats.TotalFeatDamageBonus + SolidFogDamagePenalty + WondrousBowDamageBonus;
+
+    /// <summary>
+    /// Copies the terms onto a CombatResult so its attack breakdown lists exactly what was added.
+    /// Morale and condition terms are listed by PerformSingleAttackWithCrit (AttachAttackBuffDebuffBreakdown).
+    /// Call after PerformSingleAttackWithCrit. Callers that show SequenceModifier as the
+    /// dual-wield/off-hand entry set SequenceLabel empty and fill BreakdownDualWieldPenalty themselves.
+    /// </summary>
+    public void ApplyToResult(CombatResult result, RangeInfo rangeInfo)
+    {
+        if (result == null)
+            return;
+
+        result.BreakdownBAB = BaseAttackBonus;
+        result.BreakdownAbilityMod = AbilityMod;
+        result.BreakdownAbilityName = AbilityName;
+        result.SizeAttackBonus = SizeModifier;
+        result.RacialAttackBonus = RacialBonus;
+        result.PowerAttackValue = Feats.PowerAttackPenalty != 0 ? -Feats.PowerAttackPenalty : 0;
+        result.PowerAttackDamageBonus = Feats.PowerAttackDamageBonus;
+        result.RapidShotActive = Feats.RapidShotActive;
+        result.PointBlankShotActive = Feats.PointBlankShotActive;
+        result.WeaponFocusBonus = Feats.WeaponFocusBonus;
+        result.WeaponSpecBonus = Feats.WeaponSpecDamageBonus;
+        result.CombatExpertisePenalty = Feats.CombatExpertisePenalty;
+        result.FightingDefensivelyAttackPenalty = FightingDefensivelyPenalty;
+        result.ShootingIntoMeleePenalty = ShootingIntoMeleePenalty;
+        result.PreciseShotNegated = PreciseShotNegated;
+        result.AidAnotherAttackBonus = AidAnotherBonus;
+        result.WeaponNonProficiencyPenalty = WeaponNonProficiencyPenalty;
+        result.ArmorNonProficiencyPenalty = ArmorNonProficiencyPenalty;
+        result.FeatDamageBonus = FeatDamageBonus;
+
+        if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
+        {
+            result.IsRangedAttack = true;
+            result.RangeDistanceFeet = rangeInfo.DistanceFeet;
+            result.RangeDistanceSquares = rangeInfo.SquareDistance;
+            result.RangeIncrementNumber = rangeInfo.IncrementNumber;
+            result.RangePenalty = rangeInfo.Penalty;
+        }
+
+        // Terms CombatResult has no dedicated field for.
+        if (SequenceModifier != 0 && !string.IsNullOrEmpty(SequenceLabel))
+            result.AddAttackBuffDebuffModifier(SequenceLabel, SequenceModifier);
+        result.AddAttackBuffDebuffModifier("prone", PronePenalty);
+        result.AddAttackBuffDebuffModifier("mounted ranged", MountedRangedPenalty);
+        result.AddAttackBuffDebuffModifier("Solid Fog", SolidFogPenalty);
+        result.AddAttackBuffDebuffModifier("Bracers of Archery", WondrousBowAttackBonus);
+        result.AddAttackBuffDebuffModifier("Magic Stone", MagicStoneBonus);
+    }
+}
+
+// ============================================================================
 // D&D 3.5 Attack Calculator - Centralized feat-based attack modifier logic
 // ============================================================================
 

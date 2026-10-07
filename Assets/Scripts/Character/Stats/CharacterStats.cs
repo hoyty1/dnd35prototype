@@ -945,11 +945,23 @@ public class CharacterStats
     public int[] GetFlurryOfBlowsBonuses()
     {
         if (!IsMonk) return new int[0];
-        // Flurry penalty by level: Lv1=-2, Lv2=-1, Lv3+=0
-        int monkLevel = GetClassLevel("Monk");
-        int flurryPenalty = monkLevel >= 3 ? 0 : (monkLevel >= 2 ? -1 : -2);
-        int bonus = BaseAttackBonus + STRMod + SizeModifier + flurryPenalty;
+        int bonus = BaseAttackBonus + STRMod + SizeModifier + FlurryOfBlowsAttackPenalty;
         return new int[] { bonus, bonus }; // Two attacks at same bonus
+    }
+
+    /// <summary>
+    /// Flurry of Blows penalty on every flurry attack, as coded: -2 at monk level 1, -1 at 2, 0 from 3.
+    /// Not RAW (CHR-003): PHB Table 3-10 implies -2 through level 4, -1 at 5-8 and 0 from 9.
+    /// FlurryOfBlows adds it on top of the shared attack modifier (CMB-043).
+    /// </summary>
+    public int FlurryOfBlowsAttackPenalty
+    {
+        get
+        {
+            if (!IsMonk) return 0;
+            int monkLevel = GetClassLevel("Monk");
+            return monkLevel >= 3 ? 0 : (monkLevel >= 2 ? -1 : -2);
+        }
     }
 
     // ========== BARBARIAN CLASS FEATURES (D&D 3.5) ==========
@@ -3788,12 +3800,17 @@ public class CharacterStats
         if (!IsValidNaturalAttack(attack))
             return BaseAttackBonus + STRMod + SizeModifier;
 
-        int bonus = BaseAttackBonus;
-        if (!attack.IsPrimary)
-            bonus -= 5;
+        return BaseAttackBonus + GetNaturalAttackSequencePenalty(attack) + STRMod + SizeModifier;
+    }
 
-        bonus += STRMod + SizeModifier;
-        return bonus;
+    /// <summary>
+    /// Attack penalty for a natural attack's place in the routine: -5 for a secondary attack (MM p.312), else 0.
+    /// </summary>
+    public int GetNaturalAttackSequencePenalty(NaturalAttackDefinition attack)
+    {
+        if (!IsValidNaturalAttack(attack) || attack.IsPrimary)
+            return 0;
+        return -5;
     }
 
     public DamageBonusSource GetDefaultNaturalAttackDamageSource(NaturalAttackDefinition attack)
@@ -4083,17 +4100,29 @@ public class CharacterStats
     /// </summary>
     public int[] GetIterativeAttackBonuses()
     {
-        var bonuses = new System.Collections.Generic.List<int>();
+        int[] steps = GetIterativeBaseAttackBonuses();
+        for (int i = 0; i < steps.Length; i++)
+            steps[i] += STRMod + SizeModifier;
+        return steps;
+    }
+
+    /// <summary>
+    /// The BAB step of each iterative attack, without ability or size: BAB +6 → [+6, +1].
+    /// CharacterController.FullAttack adds the shared attack modifier to each step (CMB-043).
+    /// </summary>
+    public int[] GetIterativeBaseAttackBonuses()
+    {
+        var steps = new System.Collections.Generic.List<int>();
         int bab = BaseAttackBonus;
         while (bab > 0)
         {
-            bonuses.Add(bab + STRMod + SizeModifier);
+            steps.Add(bab);
             bab -= 5;
         }
         // Always have at least one attack
-        if (bonuses.Count == 0)
-            bonuses.Add(BaseAttackBonus + STRMod + SizeModifier);
-        return bonuses.ToArray();
+        if (steps.Count == 0)
+            steps.Add(BaseAttackBonus);
+        return steps.ToArray();
     }
 
     /// <summary>

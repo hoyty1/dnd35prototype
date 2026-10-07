@@ -4735,6 +4735,121 @@ public class CharacterController : MonoBehaviour
         return bonus;
     }
 
+    // ========== SHARED ATTACK MODIFIER (CMB-043) ==========
+
+    /// <summary>
+    /// True when an attack with this weapon at this range is a ranged attack: a ranged weapon,
+    /// or a thrown weapon used at range. Shared by every weapon attack path.
+    /// </summary>
+    private static bool IsRangedWeaponAttack(ItemData weapon, RangeInfo rangeInfo)
+    {
+        if (weapon == null || rangeInfo == null || rangeInfo.IsMelee)
+            return false;
+
+        bool thrownAtRange = weapon.IsThrown && weapon.RangeIncrement > 0;
+        return weapon.WeaponCat == WeaponCategory.Ranged || thrownAtRange;
+    }
+
+    /// <summary>
+    /// Threat range and multiplier of the weapon actually used (PHB p.140), before Improved Critical.
+    /// Reads the weapon itself (plus Keen Edge style spell effects, as Inventory.ApplyWeaponStats does)
+    /// so off-hand and override weapons use their own crit. Unarmed and natural attacks are 20/x2.
+    /// </summary>
+    private static void ResolveWeaponCritProfile(ItemData weapon, out int baseThreatMin, out int critMultiplier)
+    {
+        if (weapon == null)
+        {
+            baseThreatMin = 20;
+            critMultiplier = 2;
+            return;
+        }
+
+        int threatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
+        if (weapon.ActiveSpellEffects != null)
+        {
+            foreach (var eff in weapon.ActiveSpellEffects)
+            {
+                if (eff != null && eff.CritThreatRangeModifier != 0)
+                    threatMin += eff.CritThreatRangeModifier;
+            }
+        }
+
+        baseThreatMin = Mathf.Clamp(threatMin, 2, 20);
+        critMultiplier = weapon.CritMultiplier > 0 ? weapon.CritMultiplier : 2;
+    }
+
+    /// <summary>Magic Stone: +1 enhancement on a sling attack while stones remain (PHB p.251).</summary>
+    private int GetMagicStoneAttackBonus(ItemData weapon, bool isRanged)
+    {
+        bool active = isRanged && weapon != null && weapon.Id == ItemIDs.SLING
+            && Stats.MagicStoneActive && Stats.MagicStoneCharges > 0;
+        return active ? 1 : 0;
+    }
+
+    /// <summary>
+    /// The one place a weapon attack roll's modifier is assembled (CMB-043). Attack, FullAttack
+    /// (iterative and natural), DualWieldAttack and FlurryOfBlows all call this, then set the
+    /// per-attack terms (BaseAttackBonus step, SequenceModifier, AidAnotherBonus, MagicStoneBonus).
+    /// Rules applied: ability is DEX for ranged attacks and Weapon Finesse, else STR (PHB p.134, p.102);
+    /// size (p.134); shooting into melee (p.140); prone (p.151); flanking (p.153); range increments (p.134);
+    /// mounted ranged (applied whenever mounted; RAW p.157 only while the mount double-moves or runs, CMB-031);
+    /// feats; morale and condition modifiers; non-proficiency.
+    /// </summary>
+    /// <param name="baseAttackBonus">BAB step for the first attack (callers overwrite per attack).</param>
+    /// <param name="isTwoHanded">Wielded two-handed (Power Attack doubles damage).</param>
+    /// <param name="rapidShotEnabled">Full attack with the Rapid Shot toggle on.</param>
+    public AttackBonusBreakdown BuildAttackBonus(CharacterController target, ItemData weapon, bool isRanged,
+        RangeInfo rangeInfo, bool isFlanking, int flankingBonus, int baseAttackBonus,
+        bool isTwoHanded, bool rapidShotEnabled = false)
+    {
+        bool isMelee = !isRanged;
+        bool hasRangeInfo = rangeInfo != null && !rangeInfo.IsMelee;
+
+        ResolveWeaponCritProfile(weapon, out int baseThreatMin, out int critMultiplier);
+        AttackCalculator.FeatModifiers feats = AttackCalculator.CalculateAllFeatModifiers(
+            Stats, weapon, isRanged, isMelee, isTwoHanded, PowerAttackValue,
+            rangeInfo != null ? rangeInfo.DistanceFeet : 0, hasRangeInfo,
+            WeaponDisablesStrengthDamageBonuses(weapon), baseThreatMin, rapidShotEnabled);
+
+        var b = new AttackBonusBreakdown
+        {
+            BaseAttackBonus = baseAttackBonus,
+            SequenceModifier = 0,
+            SequenceLabel = string.Empty,
+            AbilityMod = feats.AbilityMod,
+            AbilityName = feats.AbilityName,
+            SizeModifier = Stats.SizeModifier,
+            FlankingBonus = isFlanking ? flankingBonus : 0,
+            RacialBonus = target != null && target.Stats != null ? Stats.GetRacialAttackBonus(target.Stats) : 0,
+            RangePenalty = hasRangeInfo && rangeInfo.IsInRange ? rangeInfo.Penalty : 0,
+            MountedRangedPenalty = hasRangeInfo && MountSystem.IsMounted(this) ? MountedCombatSystem.GetMountedRangedPenalty(this) : 0,
+            Feats = feats,
+            PronePenalty = GetProneAttackModifier(isMelee),
+            FightingDefensivelyPenalty = IsFightingDefensively ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0,
+            WeaponNonProficiencyPenalty = Stats.GetWeaponNonProficiencyPenalty(weapon),
+            ArmorNonProficiencyPenalty = Stats.GetArmorNonProficiencyAttackPenalty(),
+            MoraleBonus = Stats.MoraleAttackBonus,
+            ConditionModifier = Stats.ConditionAttackPenalty,
+            AidAnotherBonus = 0,
+            DamageModePenalty = ResolveDamageModeAttackProfile(weapon).AttackPenalty,
+            SolidFogPenalty = isMelee ? Stats.SolidFogMeleeAttackPenalty : 0,
+            SolidFogDamagePenalty = isMelee ? Stats.SolidFogMeleeDamagePenalty : 0,
+            MagicStoneBonus = GetMagicStoneAttackBonus(weapon, isRanged),
+            CritThreatMin = feats.CritThreatMin,
+            CritMultiplier = critMultiplier
+        };
+
+        b.ShootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out bool preciseShotNegated);
+        b.PreciseShotNegated = preciseShotNegated;
+
+        // Bracers of Archery: competence bonus with bows only (arrows; DMG p.250).
+        bool isBow = isRanged && weapon != null && weapon.RequiresAmmoType == AmmunitionType.Arrow;
+        b.WondrousBowAttackBonus = isBow ? Stats.WondrousBowAttackBonus : 0;
+        b.WondrousBowDamageBonus = isBow ? Stats.WondrousBowDamageBonus : 0;
+
+        return b;
+    }
+
     /// <summary>
     /// Perform a single attack with flanking context and optional range info.
     /// Includes full D&D 3.5 critical hit mechanics, racial attack bonuses, and feat effects.
@@ -4770,19 +4885,6 @@ public class CharacterController : MonoBehaviour
                 DefenderHPBefore = 0,
                 DefenderHPAfter = 0
             };
-        }
-
-        // Calculate racial attack bonus against target
-        int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
-        int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
-
-        // Mounted ranged penalty: -4 (or -2 with Mounted Archery feat)
-        int mountedRangedPenalty = 0;
-        if (rangeInfo != null && !rangeInfo.IsMelee && MountSystem.IsMounted(this))
-        {
-            mountedRangedPenalty = MountedCombatSystem.GetMountedRangedPenalty(this);
-            if (mountedRangedPenalty != 0)
-                Debug.Log($"[Combat] {Stats.CharacterName} mounted ranged penalty: {mountedRangedPenalty}");
         }
 
         // Get equipped weapon for damage modifier and feat calculations
@@ -4832,95 +4934,41 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        bool isRanged = equippedWeapon != null
-                        && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || useThrownRange)
-                        && rangeInfo != null && !rangeInfo.IsMelee;
-        bool isMelee = !isRanged;
+        bool isRanged = IsRangedWeaponAttack(equippedWeapon, rangeInfo);
 
         // Last-known-position empty-square checks are resolved in PerformSingleAttackWithCrit()
         // so all attack entry points (single, full-attack, flurry, grapple strike, etc.) follow
         // the same rules and never roll against an empty square.
 
-        // === FEAT MODIFIERS (via AttackCalculator) ===
-        int distFeet = (rangeInfo != null) ? rangeInfo.DistanceFeet : 0;
-        bool hasValidRange = rangeInfo != null && !rangeInfo.IsMelee;
-        int baseCritMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
-        var featMods = AttackCalculator.CalculateAllFeatModifiers(
-            Stats, equippedWeapon, isRanged, isMelee,
-            IsWeaponTwoHanded(equippedWeapon), PowerAttackValue,
-            distFeet, hasValidRange,
-            WeaponDisablesStrengthDamageBonuses(equippedWeapon),
-            baseCritMin);
-
-        int powerAtkPenalty = featMods.PowerAttackPenalty;
-        int powerAtkDmgBonus = featMods.PowerAttackDamageBonus;
-        bool pointBlankActive = featMods.PointBlankShotActive;
-        int pbsAtkBonus = featMods.PointBlankShotAttackBonus;
-        int pbsDmgBonus = featMods.PointBlankShotDamageBonus;
-        int weaponFocusBonus = featMods.WeaponFocusBonus;
-        int weaponSpecBonus = featMods.WeaponSpecDamageBonus;
-        int abilityMod = featMods.AbilityMod;
-        string abilityName = featMods.AbilityName;
-        int combatExpertisePenalty = featMods.CombatExpertisePenalty;
-
-        if (abilityName == "DEX(Finesse)")
-            Debug.Log($"[Feats] {Stats.CharacterName}: Weapon Finesse active, using DEX {Stats.DEXMod} for attack");
-        if (combatExpertisePenalty != 0)
-            Debug.Log($"[Feats] {Stats.CharacterName}: Combat Expertise {combatExpertisePenalty} attack, +{-combatExpertisePenalty} AC");
-
-        // Prone: melee attacks take -4.
-        int proneAttackPenalty = GetProneAttackModifier(isMelee);
-
-        // Fighting Defensively: -4 attack rolls while stance is active.
-        int fightingDefensivelyPenalty = IsFightingDefensively ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0;
-
-        // Shooting into melee: -4 for ranged attacks against targets engaged with attacker allies.
-        bool preciseShotNegated = false;
-        int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
-
-        int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
-        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-        int moraleAttackBonus = Stats.MoraleAttackBonus;
-        int conditionAttackPenalty = Stats.ConditionAttackPenalty;
-        int solidFogAtkPenalty = isMelee ? Stats.SolidFogMeleeAttackPenalty : 0;
-        int solidFogDmgPenalty = isMelee ? Stats.SolidFogMeleeDamagePenalty : 0;
-        int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+        // Shared per-attack modifier (CMB-043): the same terms FullAttack, DualWieldAttack and FlurryOfBlows add.
+        AttackBonusBreakdown atkBonus = BuildAttackBonus(target, equippedWeapon, isRanged, rangeInfo,
+            isFlanking, flankingBonus, baseAttackBonusOverride ?? Stats.BaseAttackBonus,
+            IsWeaponTwoHanded(equippedWeapon));
+        // Caller-supplied penalty (two-weapon off-hand, Manyshot, Mobility AoO); shown as the dual-wield entry below.
+        atkBonus.SequenceModifier = additionalAttackModifier;
+        atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
         int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
 
-        int baseAttackBonusUsed = baseAttackBonusOverride ?? Stats.BaseAttackBonus;
+        if (atkBonus.AbilityName == "DEX(Finesse)")
+            Debug.Log($"[Feats] {Stats.CharacterName}: Weapon Finesse active, using DEX {Stats.DEXMod} for attack");
+        if (atkBonus.Feats.CombatExpertisePenalty != 0)
+            Debug.Log($"[Feats] {Stats.CharacterName}: Combat Expertise {atkBonus.Feats.CombatExpertisePenalty} attack, +{-atkBonus.Feats.CombatExpertisePenalty} AC");
+        if (atkBonus.MountedRangedPenalty != 0)
+            Debug.Log($"[Combat] {Stats.CharacterName} mounted ranged penalty: {atkBonus.MountedRangedPenalty}");
 
-        // Bracers of Archery: competence bonus to bow attack/damage (Phase 7)
-        // Bows use RequiresAmmoType == Arrow; crossbows use Bolt, slings use SlingBullet
-        bool isBowWeapon = isRanged && equippedWeapon != null && equippedWeapon.RequiresAmmoType == AmmunitionType.Arrow;
-        int wondrousBowAtkBonus = isBowWeapon ? Stats.WondrousBowAttackBonus : 0;
-        int wondrousBowDmgBonus = isBowWeapon ? Stats.WondrousBowDamageBonus : 0;
-
-        int totalAtkMod = baseAttackBonusUsed + abilityMod + Stats.SizeModifier
-                          + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
-                          + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                          + weaponNonProfPenalty + armorNonProfPenalty + moraleAttackBonus + conditionAttackPenalty
-                          + aidAnotherAttackBonus + damageModeProfile.AttackPenalty + additionalAttackModifier
-                          + solidFogAtkPenalty + wondrousBowAtkBonus + mountedRangedPenalty;
-
-        int critThreatMin = featMods.CritThreatMin;
-        int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
-
-        int totalFeatDmgBonus = featMods.TotalFeatDamageBonus + solidFogDmgPenalty + wondrousBowDmgBonus;
+        int totalAtkMod = atkBonus.Total;
+        int totalFeatDmgBonus = atkBonus.FeatDamageBonus;
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
         // D&D 3.5e Magic Stone: when firing a sling with active Magic Stone charges,
-        // override damage to 1d6+1, add +1 enhancement to attack, and mark as magical (PHB p.251)
-        bool magicStoneUsed = false;
-        if (isRanged && equippedWeapon != null && equippedWeapon.Id == ItemIDs.SLING
-            && Stats.MagicStoneActive && Stats.MagicStoneCharges > 0)
+        // override damage to 1d6+1; the +1 enhancement to attack is atkBonus.MagicStoneBonus (PHB p.251)
+        bool magicStoneUsed = atkBonus.MagicStoneBonus > 0;
+        if (magicStoneUsed)
         {
             damageDice = 6;
             damageCount = 1;
             bonusDamage = 1;
-            totalAtkMod += 1; // +1 enhancement bonus to attack
-            magicStoneUsed = true;
         }
 
         NaturalAttackDefinition naturalAttackForOnHit = null;
@@ -4931,50 +4979,22 @@ public class CharacterController : MonoBehaviour
         int hpBefore = target.Stats.CurrentHP;
 
         var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-            damageDice, damageCount, bonusDamage, critThreatMin, critMult,
+            damageDice, damageCount, bonusDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
             equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus,
             damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
-        result.RacialAttackBonus = racialAtkBonus;
-        result.SizeAttackBonus = Stats.SizeModifier;
-        result.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
-
-        int baseAttackWithoutAid = totalAtkMod - aidAnotherAttackBonus;
+        int baseAttackWithoutAid = totalAtkMod - atkBonus.AidAnotherBonus;
         string attackerNameForLog = Stats != null ? Stats.CharacterName : "Unknown";
         string targetNameForLog = target != null && target.Stats != null ? target.Stats.CharacterName : "Unknown";
-        Debug.Log($"[Attack] {attackerNameForLog} attacks {targetNameForLog}: d20={result.DieRoll} + base={baseAttackWithoutAid} + aid={aidAnotherAttackBonus} => total={result.TotalRoll} vs AC {result.TargetAC}");
-        result.PowerAttackDamageBonus = powerAtkDmgBonus;
-        result.PointBlankShotActive = pointBlankActive;
-        result.FeatDamageBonus = totalFeatDmgBonus;
-        result.WeaponFocusBonus = weaponFocusBonus;
-        result.WeaponSpecBonus = weaponSpecBonus;
-        result.CombatExpertisePenalty = combatExpertisePenalty;
-        result.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
-        result.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
-        result.PreciseShotNegated = preciseShotNegated;
-        result.AidAnotherAttackBonus = aidAnotherAttackBonus;
+        Debug.Log($"[Attack] {attackerNameForLog} attacks {targetNameForLog}: d20={result.DieRoll} + base={baseAttackWithoutAid} + aid={atkBonus.AidAnotherBonus} => total={result.TotalRoll} vs AC {result.TargetAC}");
+
+        atkBonus.ApplyToResult(result, rangeInfo);
         result.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
         result.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
-
-        // Breakdown fields for detailed logging
-        result.BreakdownBAB = baseAttackBonusUsed;
-        result.BreakdownAbilityMod = abilityMod;
-        result.BreakdownAbilityName = abilityName;
-        result.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
-        result.ArmorNonProficiencyPenalty = armorNonProfPenalty;
         result.IsDualWieldAttack = isOffHandAttack || additionalAttackModifier != 0;
         result.IsOffHandAttack = isOffHandAttack;
         result.BreakdownDualWieldPenalty = additionalAttackModifier;
 
-        // Store range info on result
-        if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
-        {
-            result.IsRangedAttack = true;
-            result.RangeDistanceFeet = rangeInfo.DistanceFeet;
-            result.RangeDistanceSquares = rangeInfo.SquareDistance;
-            result.RangeIncrementNumber = rangeInfo.IncrementNumber;
-            result.RangePenalty = rangeInfo.Penalty;
-        }
         result.WeaponName = attackLabel;
         result.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
 
@@ -5085,12 +5105,6 @@ public class CharacterController : MonoBehaviour
 
         result.DefenderHPBefore = target.Stats.CurrentHP;
 
-        int[] attackBonuses = Stats.GetIterativeAttackBonuses();
-        int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
-        int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
-        int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
-        int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
-
         // Get equipped weapon for damage modifier and feat calculations
         ItemData equippedWeapon = GetEquippedMainWeapon();
         if (!CanAttackWithWeapon(equippedWeapon, out string cannotAttackReason))
@@ -5101,59 +5115,15 @@ public class CharacterController : MonoBehaviour
             return result;
         }
 
-        bool useThrownRange = equippedWeapon != null
-            && equippedWeapon.IsThrown
-            && equippedWeapon.RangeIncrement > 0
-            && rangeInfo != null
-            && !rangeInfo.IsMelee;
-        bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || useThrownRange))
-                        && rangeInfo != null && !rangeInfo.IsMelee;
+        bool isRanged = IsRangedWeaponAttack(equippedWeapon, rangeInfo);
         bool isMelee = !isRanged;
-        int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
-        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-        int conditionAttackPenalty = Stats.ConditionAttackPenalty;
-        int solidFogAtkPenalty = isMelee ? Stats.SolidFogMeleeAttackPenalty : 0;
-        int solidFogDmgPenalty = isMelee ? Stats.SolidFogMeleeDamagePenalty : 0;
 
-        // === FEAT MODIFIERS (via AttackCalculator) - Full Attack ===
-        int fullAtkDistFeet = (rangeInfo != null) ? rangeInfo.DistanceFeet : 0;
-        var fullAtkFeatMods = AttackCalculator.CalculateAllFeatModifiers(
-            Stats, equippedWeapon, isRanged, isMelee,
-            IsWeaponTwoHanded(equippedWeapon), PowerAttackValue,
-            fullAtkDistFeet, rangeInfo != null && !rangeInfo.IsMelee,
-            WeaponDisablesStrengthDamageBonuses(equippedWeapon),
-            critThreatMin, RapidShotEnabled);
-
-        int powerAtkPenalty = fullAtkFeatMods.PowerAttackPenalty;
-        int powerAtkDmgBonus = fullAtkFeatMods.PowerAttackDamageBonus;
-        bool pointBlankActive = fullAtkFeatMods.PointBlankShotActive;
-        int pbsAtkBonus = fullAtkFeatMods.PointBlankShotAttackBonus;
-        int pbsDmgBonus = fullAtkFeatMods.PointBlankShotDamageBonus;
-        int weaponFocusBonus = fullAtkFeatMods.WeaponFocusBonus;
-        int weaponSpecBonus = fullAtkFeatMods.WeaponSpecDamageBonus;
-        int baseAbilityMod = fullAtkFeatMods.AbilityMod;
-        string baseAbilityName = fullAtkFeatMods.AbilityName;
-        int combatExpertisePenalty = fullAtkFeatMods.CombatExpertisePenalty;
-        critThreatMin = fullAtkFeatMods.CritThreatMin;
-        bool rapidShotActive = fullAtkFeatMods.RapidShotActive;
-        int rapidShotPenalty = fullAtkFeatMods.RapidShotPenalty;
-
-        // Prone: melee attacks take -4.
-        int proneAttackPenalty = GetProneAttackModifier(isMelee);
-
-        // Fighting Defensively: -4 attack while active.
-        int fightingDefensivelyPenalty = IsFightingDefensively ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0;
-
-        // Shooting into melee: -4 unless Precise Shot negates it.
-        bool preciseShotNegated = false;
-        int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
-
-        // Bracers of Archery: competence bonus to bow attack/damage (Phase 7)
-        bool fullAtkIsBow = isRanged && equippedWeapon != null && equippedWeapon.RequiresAmmoType == AmmunitionType.Arrow;
-        int fullAtkBowAtkBonus = fullAtkIsBow ? Stats.WondrousBowAttackBonus : 0;
-        int fullAtkBowDmgBonus = fullAtkIsBow ? Stats.WondrousBowDamageBonus : 0;
-
-        int totalFeatDmgBonus = fullAtkFeatMods.TotalFeatDamageBonus + solidFogDmgPenalty + fullAtkBowDmgBonus;
+        // Shared per-attack modifier (CMB-043): the same terms as a single Attack; each attack
+        // below only swaps in its BAB step, sequence penalty, Aid Another and Magic Stone.
+        AttackBonusBreakdown sequenceBonus = BuildAttackBonus(target, equippedWeapon, isRanged, rangeInfo,
+            isFlanking, flankingBonus, Stats.BaseAttackBonus, IsWeaponTwoHanded(equippedWeapon), RapidShotEnabled);
+        bool rapidShotActive = sequenceBonus.Feats.RapidShotActive;
+        int totalFeatDmgBonus = sequenceBonus.FeatDamageBonus;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
@@ -5181,15 +5151,13 @@ public class CharacterController : MonoBehaviour
                     if (target.Stats.IsDead)
                         break;
 
-                    int baseBonus = Stats.GetNaturalAttackBonus(naturalAttack);
-                    int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+                    // Every natural attack is at full BAB; secondary attacks take -5 (MM p.312).
+                    AttackBonusBreakdown atkBonus = sequenceBonus;
+                    atkBonus.BaseAttackBonus = Stats.BaseAttackBonus;
+                    atkBonus.SequenceModifier = Stats.GetNaturalAttackSequencePenalty(naturalAttack);
+                    atkBonus.SequenceLabel = "secondary natural attack";
+                    atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
                     int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-                    int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus
-                                 + powerAtkPenalty + weaponFocusBonus + combatExpertisePenalty
-                                 + proneAttackPenalty + fightingDefensivelyPenalty
-                                 + shootingIntoMeleePenalty + armorNonProfPenalty + conditionAttackPenalty
-                                 + aidAnotherAttackBonus + damageModeProfile.AttackPenalty
-                                 + solidFogAtkPenalty;
 
                     int hpBeforeAtk = target.Stats.CurrentHP;
                     bool useHalfStrength = !naturalAttack.IsPrimary;
@@ -5198,33 +5166,15 @@ public class CharacterController : MonoBehaviour
 
                     Stats.GetScaledNaturalAttackDamage(naturalAttack, out int naturalDamageCount, out int naturalDamageDice);
 
-                    CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
+                    CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
                         naturalDamageDice, naturalDamageCount, naturalDamageBonus,
-                        critThreatMin, critMult,
+                        atkBonus.CritThreatMin, atkBonus.CritMultiplier,
                         equippedWeapon, useHalfStrength, totalFeatDmgBonus, aidAnotherTargetAcBonus,
                         damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
-                    atk.RacialAttackBonus = racialAtkBonus;
-                    atk.SizeAttackBonus = Stats.SizeModifier;
-                    atk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
-                    atk.PowerAttackDamageBonus = powerAtkDmgBonus;
-                    atk.RapidShotActive = false;
-                    atk.PointBlankShotActive = false;
-                    atk.FeatDamageBonus = totalFeatDmgBonus;
-                    atk.WeaponFocusBonus = weaponFocusBonus;
-                    atk.WeaponSpecBonus = weaponSpecBonus;
-                    atk.CombatExpertisePenalty = combatExpertisePenalty;
-                    atk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
-                    atk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
-                    atk.PreciseShotNegated = preciseShotNegated;
-                    atk.AidAnotherAttackBonus = aidAnotherAttackBonus;
+                    atkBonus.ApplyToResult(atk, rangeInfo);
                     atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
                     atk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
-                    atk.BreakdownBAB = baseBonus;
-                    atk.BreakdownAbilityMod = Stats.STRMod;
-                    atk.BreakdownAbilityName = naturalAttack.IsPrimary ? "STR" : "STR (Secondary)";
-                    atk.WeaponNonProficiencyPenalty = 0;
-                    atk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
                     atk.WeaponName = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural attack" : naturalAttack.Name;
                     atk.BaseDamageDiceStr = $"{naturalDamageCount}d{naturalDamageDice}";
                     atk.DefenderHPBefore = hpBeforeAtk;
@@ -5235,7 +5185,7 @@ public class CharacterController : MonoBehaviour
                     result.Attacks.Add(atk);
                     string naturalLabel = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural" : naturalAttack.Name;
                     string roleLabel = naturalAttack.IsPrimary ? "Primary" : "Secondary";
-                    result.AttackLabels.Add($"{naturalLabel} {repeat + 1} ({roleLabel} {CharacterStats.FormatMod(baseBonus)})");
+                    result.AttackLabels.Add($"{naturalLabel} {repeat + 1} ({roleLabel} {CharacterStats.FormatMod(atkBonus.LabelBonus)})");
                     naturalAttacksExecuted++;
                 }
 
@@ -5251,18 +5201,19 @@ public class CharacterController : MonoBehaviour
 
         // === Debug Logging ===
         Debug.Log($"[FullAttack] {Stats.CharacterName}: FullAttack() called");
-        Debug.Log($"[FullAttack] Weapon: {(equippedWeapon != null ? equippedWeapon.Name : "(unarmed)")}, Ranged: {isRanged}");
-        Debug.Log($"[FullAttack] Feats: WF={weaponFocusBonus}, WS={weaponSpecBonus}, PA={powerAtkDmgBonus}, CE={combatExpertisePenalty}");
+        Debug.Log($"[FullAttack] Weapon: {(equippedWeapon != null ? equippedWeapon.Name : "(unarmed)")}, Ranged: {isRanged}, ability: {sequenceBonus.AbilityName} {CharacterStats.FormatMod(sequenceBonus.AbilityMod)}, morale: {CharacterStats.FormatMod(sequenceBonus.MoraleBonus)}");
+        Debug.Log($"[FullAttack] Feats: WF={sequenceBonus.Feats.WeaponFocusBonus}, WS={sequenceBonus.Feats.WeaponSpecDamageBonus}, PA={sequenceBonus.Feats.PowerAttackDamageBonus}, CE={sequenceBonus.Feats.CombatExpertisePenalty}");
         if (rapidShotActive) Debug.Log($"[FullAttack] Rapid Shot active: -2 penalty, +1 extra attack");
 
-        // Build the list of attack bonuses, inserting Rapid Shot extra attack
-        var allAttackBonuses = new List<int>(attackBonuses);
-        int baseAttackCount = allAttackBonuses.Count;
+        // Build the list of BAB steps, inserting the Rapid Shot extra attack
+        int[] babSteps = Stats.GetIterativeBaseAttackBonuses();
+        var allBabSteps = new List<int>(babSteps);
+        int baseAttackCount = allBabSteps.Count;
 
         if (rapidShotActive)
         {
-            allAttackBonuses.Insert(0, attackBonuses[0]);
-            Debug.Log($"[FullAttack] Rapid Shot: attack count {baseAttackCount} → {allAttackBonuses.Count}");
+            allBabSteps.Insert(0, babSteps[0]);
+            Debug.Log($"[FullAttack] Rapid Shot: attack count {baseAttackCount} → {allBabSteps.Count}");
         }
         else if (RapidShotEnabled && Stats.HasFeat("Rapid Shot") && !isRanged)
         {
@@ -5272,15 +5223,15 @@ public class CharacterController : MonoBehaviour
         // Haste grants one extra attack at highest BAB (PHB p.239)
         if (HasActiveHasteEffect && ActiveHasteEffect.GrantsExtraAttack)
         {
-            allAttackBonuses.Add(attackBonuses[0]);
-            Debug.Log($"[FullAttack] Haste: extra attack at highest BAB, attack count → {allAttackBonuses.Count}");
+            allBabSteps.Add(babSteps[0]);
+            Debug.Log($"[FullAttack] Haste: extra attack at highest BAB, attack count → {allBabSteps.Count}");
         }
 
         if (startAttackIndex < 0)
             startAttackIndex = 0;
 
         int attacksExecuted = 0;
-        for (int i = startAttackIndex; i < allAttackBonuses.Count; i++)
+        for (int i = startAttackIndex; i < allBabSteps.Count; i++)
         {
             if (attacksExecuted >= maxAttacks)
                 break;
@@ -5291,49 +5242,35 @@ public class CharacterController : MonoBehaviour
                 break;
             }
 
-            int baseBonus = allAttackBonuses[i];
-            int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+            AttackBonusBreakdown atkBonus = sequenceBonus;
+            atkBonus.BaseAttackBonus = allBabSteps[i];
+            atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
             int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-            int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                         + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
-                         + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                         + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty
-                         + aidAnotherAttackBonus + damageModeProfile.AttackPenalty
-                         + solidFogAtkPenalty + fullAtkBowAtkBonus;
-
-            // The base bonus from GetIterativeAttackBonuses already includes STRMod + SizeModifier.
-            if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
-            {
-                // Remove STR, add DEX (base bonus already has STRMod from GetIterativeAttackBonuses).
-                atkMod += (Stats.DEXMod - Stats.STRMod);
-            }
+            // Magic Stone charges run out mid-sequence, so re-check per attack (PHB p.251).
+            atkBonus.MagicStoneBonus = GetMagicStoneAttackBonus(equippedWeapon, isRanged);
 
             string label;
             if (rapidShotActive && i == 0)
-                label = $"Attack 1 (Rapid Shot, {CharacterStats.FormatMod(baseBonus)})";
+                label = $"Attack 1 (Rapid Shot, {CharacterStats.FormatMod(atkBonus.LabelBonus)})";
             else
-                label = $"Attack {i + 1} ({CharacterStats.FormatMod(baseBonus)})";
+                label = $"Attack {i + 1} ({CharacterStats.FormatMod(atkBonus.LabelBonus)})";
 
             int hpBeforeAtk = target.Stats.CurrentHP;
 
-            // D&D 3.5e Magic Stone: per-attack override for sling full attack (PHB p.251)
+            // D&D 3.5e Magic Stone: per-attack damage override for sling full attack (PHB p.251)
             int atkDamageDice = damageDice;
             int atkDamageCount = damageCount;
             int atkBonusDamage = bonusDamage;
-            int magicStoneAtkBonus = 0;
-            bool fullAtkMagicStoneUsed = false;
-            if (isRanged && equippedWeapon != null && equippedWeapon.Id == ItemIDs.SLING
-                && Stats.MagicStoneActive && Stats.MagicStoneCharges > 0)
+            bool fullAtkMagicStoneUsed = atkBonus.MagicStoneBonus > 0;
+            if (fullAtkMagicStoneUsed)
             {
                 atkDamageDice = 6;
                 atkDamageCount = 1;
                 atkBonusDamage = 1;
-                magicStoneAtkBonus = 1;
-                fullAtkMagicStoneUsed = true;
             }
 
-            CombatResult atk = PerformSingleAttackWithCrit(target, atkMod + magicStoneAtkBonus, isFlanking, flankingBonus, flankingPartnerName,
-                atkDamageDice, atkDamageCount, atkBonusDamage, critThreatMin, critMult,
+            CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
+                atkDamageDice, atkDamageCount, atkBonusDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
                 equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus,
                 damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
@@ -5353,39 +5290,10 @@ public class CharacterController : MonoBehaviour
                 }
             }
 
-            atk.RacialAttackBonus = racialAtkBonus;
-            atk.SizeAttackBonus = Stats.SizeModifier;
-            atk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
-            atk.PowerAttackDamageBonus = powerAtkDmgBonus;
-            atk.RapidShotActive = rapidShotActive;
-            atk.PointBlankShotActive = pointBlankActive;
-            atk.FeatDamageBonus = totalFeatDmgBonus;
-            atk.WeaponFocusBonus = weaponFocusBonus;
-            atk.WeaponSpecBonus = weaponSpecBonus;
-            atk.CombatExpertisePenalty = combatExpertisePenalty;
-            atk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
-            atk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
-            atk.PreciseShotNegated = preciseShotNegated;
-            atk.AidAnotherAttackBonus = aidAnotherAttackBonus;
+            atkBonus.ApplyToResult(atk, rangeInfo);
             atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
             atk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
 
-            // Breakdown fields
-            atk.BreakdownBAB = baseBonus;
-            atk.BreakdownAbilityMod = baseAbilityMod;
-            atk.BreakdownAbilityName = baseAbilityName;
-            atk.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
-            atk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
-
-            // Store range info on each attack result
-            if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
-            {
-                atk.IsRangedAttack = true;
-                atk.RangeDistanceFeet = rangeInfo.DistanceFeet;
-                atk.RangeDistanceSquares = rangeInfo.SquareDistance;
-                atk.RangeIncrementNumber = rangeInfo.IncrementNumber;
-                atk.RangePenalty = rangeInfo.Penalty;
-            }
             if (!fullAtkMagicStoneUsed)
                 atk.WeaponName = attackLabel;
             atk.BaseDamageDiceStr = $"{atkDamageCount}d{atkDamageDice}";
@@ -5662,110 +5570,40 @@ public class CharacterController : MonoBehaviour
         result.OffWeaponName = offWeapon.Name;
 
         var (mainPenalty, offPenalty, lightOff) = GetDualWieldPenalties();
-        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-        int mainWeaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(mainWeapon);
-        int offWeaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(offWeapon);
-
-        int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
-        int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
-
-        bool isRanged = rangeInfo != null && !rangeInfo.IsMelee;
-        bool isMelee = !isRanged;
-
-        // Power Attack (via AttackCalculator) - always one-handed while dual-wielding
-        AttackCalculator.CalculatePowerAttack(Stats, PowerAttackValue, isMelee,
-            false /* never two-handed in dual-wield */, WeaponDisablesStrengthDamageBonuses(mainWeapon),
-            out int powerAtkPenalty, out int powerAtkDmgBonus);
-
-        // Point Blank Shot (via AttackCalculator)
-        int dualDistFeet = (rangeInfo != null) ? rangeInfo.DistanceFeet : 0;
-        AttackCalculator.CalculatePointBlankShot(Stats, isRanged, dualDistFeet,
-            out bool pointBlankActive, out int pbsAtkBonus, out int pbsDmgBonus);
-
-        int mainWFBonus = FeatManager.GetWeaponFocusBonus(Stats, mainWeapon?.Name ?? "Unarmed");
-        int offWFBonus = FeatManager.GetWeaponFocusBonus(Stats, offWeapon?.Name ?? "Unarmed");
-        int mainWSBonus = FeatManager.GetWeaponSpecializationBonus(Stats, mainWeapon?.Name ?? "Unarmed");
-        int offWSBonus = FeatManager.GetWeaponSpecializationBonus(Stats, offWeapon?.Name ?? "Unarmed");
-
-        // Weapon Finesse (via AttackCalculator)
-        int finesseAtkAdjust = 0;
-        AttackCalculator.GetAttackAbilityModifier(Stats, mainWeapon, isRanged, out int abilityMod, out string abilityName);
-        if (isMelee && abilityName == "DEX(Finesse)")
-        {
-            finesseAtkAdjust = Stats.DEXMod - Stats.STRMod;
-            abilityName = "DEX"; // dual-wield labels use simpler name
-        }
-
-        // Combat Expertise (via AttackCalculator)
-        int combatExpertisePenalty = AttackCalculator.CalculateCombatExpertisePenalty(Stats, isMelee);
-
-        int proneAttackPenalty = GetProneAttackModifier(isMelee);
-        int fightingDefensivelyPenalty = IsFightingDefensively ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0;
-        bool preciseShotNegated = false;
-        int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
-        int solidFogAtkPenalty = isMelee ? Stats.SolidFogMeleeAttackPenalty : 0;
-        int solidFogDmgPenalty = isMelee ? Stats.SolidFogMeleeDamagePenalty : 0;
 
         // Main-hand attack
         if (canMainAttack)
         {
-            int mainAidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+            // Shared per-attack modifier (CMB-043), built for this hand's weapon. Each weapon is
+            // held in one hand, so Power Attack is never doubled while dual-wielding.
+            AttackBonusBreakdown mainBonus = BuildAttackBonus(target, mainWeapon, IsRangedWeaponAttack(mainWeapon, rangeInfo),
+                rangeInfo, isFlanking, flankingBonus, Stats.BaseAttackBonus, isTwoHanded: false);
+            mainBonus.SequenceModifier = mainPenalty; // shown as the "dual wield" entry
+            mainBonus.MagicStoneBonus = 0; // Magic Stone is resolved only by Attack and FullAttack
+            mainBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
             int mainAidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-            int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                             + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty
-                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                             + mainWeaponNonProfPenalty + armorNonProfPenalty + mainAidAnotherAttackBonus
-                             + mainDamageModeProfile.AttackPenalty + solidFogAtkPenalty;
             string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
-            int mainCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20);
-            int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
-            int totalMainFeatDmg = powerAtkDmgBonus + pbsDmgBonus + mainWSBonus + solidFogDmgPenalty;
+            int totalMainFeatDmg = mainBonus.FeatDamageBonus;
 
             GetScaledWeaponDamageDice(mainWeapon, out int mainDamageCount, out int mainDamageDice);
 
             int hpBeforeMain = target.Stats.CurrentHP;
-            CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-                mainDamageDice, mainDamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
+            CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
+                mainDamageDice, mainDamageCount, mainWeapon.BonusDamage, mainBonus.CritThreatMin, mainBonus.CritMultiplier,
                 mainWeapon, false, totalMainFeatDmg, mainAidAnotherTargetAcBonus,
                 mainDamageModeProfile.DealNonlethalDamage, mainDamageModeProfile.AttackPenalty, mainDamageModeProfile.PenaltySource);
 
-            mainAtk.RacialAttackBonus = racialAtkBonus;
-            mainAtk.SizeAttackBonus = Stats.SizeModifier;
-            mainAtk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
-            mainAtk.PowerAttackDamageBonus = powerAtkDmgBonus;
-            mainAtk.PointBlankShotActive = pointBlankActive;
-            mainAtk.FeatDamageBonus = totalMainFeatDmg;
-            mainAtk.WeaponFocusBonus = mainWFBonus;
-            mainAtk.WeaponSpecBonus = mainWSBonus;
-            mainAtk.CombatExpertisePenalty = combatExpertisePenalty;
-            mainAtk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
-            mainAtk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
-            mainAtk.AidAnotherAttackBonus = mainAidAnotherAttackBonus;
+            mainBonus.ApplyToResult(mainAtk, rangeInfo);
             mainAtk.AidAnotherTargetAcBonus = mainAidAnotherTargetAcBonus;
-            mainAtk.PreciseShotNegated = preciseShotNegated;
             mainAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
             mainAtk.WeaponName = mainWeapon.Name;
             mainAtk.BaseDamageDiceStr = $"{mainDamageCount}d{mainDamageDice}";
             mainAtk.IsDualWieldAttack = true;
             mainAtk.IsOffHandAttack = false;
-            mainAtk.BreakdownBAB = Stats.BaseAttackBonus;
-            mainAtk.BreakdownAbilityMod = abilityMod;
-            mainAtk.BreakdownAbilityName = abilityName;
             mainAtk.BreakdownDualWieldPenalty = mainPenalty;
-            mainAtk.WeaponNonProficiencyPenalty = mainWeaponNonProfPenalty;
-            mainAtk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
             mainAtk.DefenderHPBefore = hpBeforeMain;
             mainAtk.DefenderHPAfter = target.Stats.CurrentHP;
-
-            if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
-            {
-                mainAtk.IsRangedAttack = true;
-                mainAtk.RangeDistanceFeet = rangeInfo.DistanceFeet;
-                mainAtk.RangeDistanceSquares = rangeInfo.SquareDistance;
-                mainAtk.RangeIncrementNumber = rangeInfo.IncrementNumber;
-                mainAtk.RangePenalty = rangeInfo.Penalty;
-            }
 
             result.Attacks.Add(mainAtk);
             result.AttackLabels.Add(mainLabel);
@@ -5784,13 +5622,13 @@ public class CharacterController : MonoBehaviour
         // Off-hand attack
         if (!target.Stats.IsDead && canOffAttack)
         {
-            int offAidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+            // Same shared modifier for the off-hand weapon: its own Weapon Finesse, Weapon Focus and crit.
+            AttackBonusBreakdown offBonus = BuildAttackBonus(target, offWeapon, IsRangedWeaponAttack(offWeapon, rangeInfo),
+                rangeInfo, isFlanking, flankingBonus, Stats.BaseAttackBonus, isTwoHanded: false);
+            offBonus.SequenceModifier = offPenalty; // shown as the "off-hand" entry
+            offBonus.MagicStoneBonus = 0;
+            offBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
             int offAidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-            int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                            + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
-                            + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                            + offWeaponNonProfPenalty + armorNonProfPenalty + offAidAnotherAttackBonus
-                            + offDamageModeProfile.AttackPenalty + solidFogAtkPenalty;
             bool offHandShieldBash = IsShieldBashWeapon(offWeapon);
             string offLabel = offHandFromSpikedGauntlet
                 ? $"Attack 2 - Off Hand ({offWeapon.Name}, Hands Slot)"
@@ -5798,54 +5636,26 @@ public class CharacterController : MonoBehaviour
                     ? $"Attack 2 - Off Hand (Shield Bash: {offWeapon.Name})"
                     : $"Attack 2 - Off Hand ({offWeapon.Name})";
 
-            int offCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20);
-            int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
-            int totalOffFeatDmg = powerAtkDmgBonus + pbsDmgBonus + offWSBonus + solidFogDmgPenalty;
+            int totalOffFeatDmg = offBonus.FeatDamageBonus;
 
             GetScaledWeaponDamageDice(offWeapon, out int offDamageCount, out int offDamageDice);
 
             int hpBeforeOff = target.Stats.CurrentHP;
-            CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-                offDamageDice, offDamageCount, offWeapon.BonusDamage, offCritMin, offCritMult,
+            CombatResult offAtk = PerformSingleAttackWithCrit(target, offBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
+                offDamageDice, offDamageCount, offWeapon.BonusDamage, offBonus.CritThreatMin, offBonus.CritMultiplier,
                 offWeapon, true, totalOffFeatDmg, offAidAnotherTargetAcBonus,
                 offDamageModeProfile.DealNonlethalDamage, offDamageModeProfile.AttackPenalty, offDamageModeProfile.PenaltySource);
 
-            offAtk.RacialAttackBonus = racialAtkBonus;
-            offAtk.SizeAttackBonus = Stats.SizeModifier;
-            offAtk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
-            offAtk.PowerAttackDamageBonus = powerAtkDmgBonus;
-            offAtk.PointBlankShotActive = pointBlankActive;
-            offAtk.FeatDamageBonus = totalOffFeatDmg;
-            offAtk.AidAnotherAttackBonus = offAidAnotherAttackBonus;
+            offBonus.ApplyToResult(offAtk, rangeInfo);
             offAtk.AidAnotherTargetAcBonus = offAidAnotherTargetAcBonus;
-            offAtk.WeaponFocusBonus = offWFBonus;
-            offAtk.WeaponSpecBonus = offWSBonus;
-            offAtk.CombatExpertisePenalty = combatExpertisePenalty;
-            offAtk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
-            offAtk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
-            offAtk.PreciseShotNegated = preciseShotNegated;
             offAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
             offAtk.WeaponName = offWeapon.Name;
             offAtk.BaseDamageDiceStr = $"{offDamageCount}d{offDamageDice}";
             offAtk.IsDualWieldAttack = true;
             offAtk.IsOffHandAttack = true;
-            offAtk.BreakdownBAB = Stats.BaseAttackBonus;
-            offAtk.BreakdownAbilityMod = abilityMod;
-            offAtk.BreakdownAbilityName = abilityName;
             offAtk.BreakdownDualWieldPenalty = offPenalty;
-            offAtk.WeaponNonProficiencyPenalty = offWeaponNonProfPenalty;
-            offAtk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
             offAtk.DefenderHPBefore = hpBeforeOff;
             offAtk.DefenderHPAfter = target.Stats.CurrentHP;
-
-            if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
-            {
-                offAtk.IsRangedAttack = true;
-                offAtk.RangeDistanceFeet = rangeInfo.DistanceFeet;
-                offAtk.RangeDistanceSquares = rangeInfo.SquareDistance;
-                offAtk.RangeIncrementNumber = rangeInfo.IncrementNumber;
-                offAtk.RangePenalty = rangeInfo.Penalty;
-            }
 
             result.Attacks.Add(offAtk);
             result.AttackLabels.Add(offLabel);
@@ -12186,10 +11996,10 @@ public class CharacterController : MonoBehaviour
             return result;
         }
 
-        // Get flurry attack bonuses
+        // Flurry: two attacks at full BAB with the flurry penalty (PHB p.40-41).
+        // GetFlurryOfBlowsBonuses gives the count; the modifier itself comes from the shared builder.
         int[] flurryBonuses = Stats.GetFlurryOfBlowsBonuses();
-        Debug.Log($"[Monk] {Stats.CharacterName}: Flurry of Blows! {flurryBonuses.Length} attacks at " +
-                  $"{string.Join("/", System.Array.ConvertAll(flurryBonuses, b => CharacterStats.FormatMod(b)))}");
+        int flurryPenalty = Stats.FlurryOfBlowsAttackPenalty;
 
         // Use monk/unarmed fallback profile unless a monk weapon is equipped.
         var unarmedProfile = GetUnarmedDamage();
@@ -12199,16 +12009,12 @@ public class CharacterController : MonoBehaviour
 
         // Check for equipped weapon (quarterstaff is a monk weapon)
         ItemData equippedWeapon = EnsureInventory().GetRightHandEquippedWeapon();
-        int critThreatMin = 20;
-        int critMult = 2;
 
         if (equippedWeapon != null)
         {
             // Use weapon stats if equipped
             GetScaledWeaponDamageDice(equippedWeapon, out damageCount, out damageDice);
             bonusDamage = equippedWeapon.BonusDamage;
-            critThreatMin = equippedWeapon.CritThreatMin;
-            critMult = equippedWeapon.CritMultiplier;
             Debug.Log($"[Monk] Using weapon: {equippedWeapon.Name} ({damageCount}d{damageDice})");
         }
         else
@@ -12216,14 +12022,17 @@ public class CharacterController : MonoBehaviour
             Debug.Log($"[Monk] Using unarmed strike: {damageCount}d{damageDice}");
         }
 
-        int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
-        int proneAttackPenalty = GetProneAttackModifier(isMeleeAttack: true);
-        int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
-        int conditionAttackPenalty = Stats.ConditionAttackPenalty;
-        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-        int solidFogAtkPenalty = Stats.SolidFogMeleeAttackPenalty; // flurry is always melee
-        int solidFogDmgPenalty = Stats.SolidFogMeleeDamagePenalty;
+        // Shared per-attack modifier (CMB-043): flurry is a melee full attack, so it adds the same
+        // terms as any other attack (ability incl. Weapon Finesse, feats, morale, conditions) plus the flurry penalty.
+        AttackBonusBreakdown flurryBonus = BuildAttackBonus(target, equippedWeapon, false, null,
+            isFlanking, flankingBonus, Stats.BaseAttackBonus, IsWeaponTwoHanded(equippedWeapon));
+        flurryBonus.SequenceModifier = flurryPenalty;
+        flurryBonus.SequenceLabel = "Flurry of Blows";
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
+        int flurryFeatDmgBonus = flurryBonus.FeatDamageBonus;
+
+        Debug.Log($"[Monk] {Stats.CharacterName}: Flurry of Blows! {flurryBonuses.Length} attacks at " +
+                  $"{CharacterStats.FormatMod(flurryBonus.LabelBonus)} each (total modifier {CharacterStats.FormatMod(flurryBonus.Total)})");
 
         for (int i = 0; i < flurryBonuses.Length; i++)
         {
@@ -12233,24 +12042,21 @@ public class CharacterController : MonoBehaviour
                 break;
             }
 
-            int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+            AttackBonusBreakdown atkBonus = flurryBonus;
+            atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
             int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-            int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + proneAttackPenalty
-                       + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty + aidAnotherAttackBonus
-                       + damageModeProfile.AttackPenalty + solidFogAtkPenalty;
 
-            string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(flurryBonuses[i])})";
+            string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(atkBonus.LabelBonus)})";
             int hpBefore = target.Stats.CurrentHP;
 
-            CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
-                damageDice, damageCount, bonusDamage, critThreatMin, critMult,
-                equippedWeapon, false, solidFogDmgPenalty, aidAnotherTargetAcBonus,
+            CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
+                damageDice, damageCount, bonusDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
+                equippedWeapon, false, flurryFeatDmgBonus, aidAnotherTargetAcBonus,
                 damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
-            atk.RacialAttackBonus = racialAtkBonus;
-            atk.SizeAttackBonus = Stats.SizeModifier;
-            atk.AidAnotherAttackBonus = aidAnotherAttackBonus;
+            atkBonus.ApplyToResult(atk, null);
             atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
+            atk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
             if (equippedWeapon != null)
             {
                 atk.WeaponName = equippedWeapon.Name;
@@ -12261,8 +12067,6 @@ public class CharacterController : MonoBehaviour
                 atk.WeaponName = "Unarmed Strike";
                 atk.BaseDamageDiceStr = $"1d{damageDice}";
             }
-            atk.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
-            atk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
             atk.DefenderHPBefore = hpBefore;
             atk.DefenderHPAfter = target.Stats.CurrentHP;
 

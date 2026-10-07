@@ -21,7 +21,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Escape entangle | Auto | `TryExecuteAnimateRopeEscapeForNpc`, standard action | Yes | CMB-055 |
 | Break Wall of Ice | Used | only when blocked and out of reach | Yes | |
 | Single attack | Used | after moving | Yes | |
-| Full attack | Used | only if the NPC has not moved; adaptive retarget for some profiles | Yes | CMB-002, CMB-044 |
+| Full attack | Used | only if the NPC has not moved; adaptive retarget for some profiles; same attack modifier as a single attack (shared builder, CMB-043 fixed) | Yes | CMB-044 |
 | Two-weapon, off-hand, off-hand thrown | Never | no NPC dual-wield | Yes | AI-055 (off-hand math: CMB-008) |
 | Natural attacks | Auto | used only when no manufactured weapon is equipped; no choice between natural attacks | Yes (picks each natural attack) | CMB-077 |
 | Natural + weapon combination | Never | naturals only with no weapon | n/a | CMB-077 |

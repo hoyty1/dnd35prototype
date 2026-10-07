@@ -46,15 +46,15 @@ Lazy getters (CharacterController.cs:1207-1251): `StatusEffectManager`, `Spellca
 | 3430-3600 | Condition facade, negative levels |
 | 3593-4310 | Ability damage/drain, disease, poison, monster ability `Configure*` and ticks, ability-score-zero effects |
 | 4357-4700 | HP-state machine (`OnCurrentHPChanged`, `DetermineStateFromHPTransition`, `OnHPStateChanged`, `ProcessEndOfTurnHPState`), natural-attack on-hit riders |
-| 4703-5871 | `Attack` (4703), `FullAttack` (5066), `DualWieldAttack` (5629) |
-| 5872-6352 | Attack helpers: `GetSituationalTargetArmorClass`, DEX denial, feint, sneak-attack immunity |
-| 6353-7354 | `PerformSingleAttackWithCrit` (about 1,000 lines: concealment, crits, sneak attack, enchantments, damage) |
-| 7355-8220 | Weapon, reload, reach and size queries, visual scaling |
-| 8220-9090 | Grapple links, concealment and miss chance |
-| 9095-10280 | `ResolveGrappleAction` and sub-actions (three are "not yet implemented" stubs) |
-| 10281-10391 | `OnDeath`, `StartNewTurn` |
-| 10392-11934 | `ExecuteSpecialAttack` and maneuver resolvers (Trip, Disarm, Sunder, BullRush, Overrun, Feint) |
-| 11935-12261 | `FiveFootStep`, `FlurryOfBlows`, `ActivateRage`, counterspell readiness |
+| 4703-5680 | Shared attack modifier `BuildAttackBonus` (4800), `Attack` (4859), `FullAttack` (5089), `DualWieldAttack` (5540) |
+| 5681-6161 | Attack helpers: `GetSituationalTargetArmorClass`, DEX denial, feint, sneak-attack immunity |
+| 6162-7163 | `PerformSingleAttackWithCrit` (about 1,000 lines: concealment, crits, sneak attack, enchantments, damage) |
+| 7164-8029 | Weapon, reload, reach and size queries, visual scaling |
+| 8029-8899 | Grapple links, concealment and miss chance |
+| 8904-10089 | `ResolveGrappleAction` and sub-actions (three are "not yet implemented" stubs) |
+| 10090-10200 | `OnDeath`, `StartNewTurn` |
+| 10201-11743 | `ExecuteSpecialAttack` and maneuver resolvers (Trip, Disarm, Sunder, BullRush, Overrun, Feint) |
+| 11744-12252 | `FiveFootStep`, `FlurryOfBlows`, `ActivateRage`, counterspell readiness |
 
 ### Region map: CharacterStats.cs
 
@@ -87,13 +87,13 @@ Derived values are expression-bodied properties recomputed on every read. Nothin
 | AC | `ArmorClass` (L3178) | 10 + DEX (capped by MaxDexBonus, 0 if a condition denies DEX) + max(ArmorBonus + MagicVestment, SpellACBonus) + shield + natural + wondrous natural + size + monk + FeatAC (Dodge) + rage + deflection + condition + Haste/Slow + insight |
 | Situational AC | CharacterController.GetSituationalTargetArmorClass (L5953), then PerformSingleAttackWithCrit (~L6504-6637) | Invisibility, prone, pinned, fighting defensively, mounted; alignment-protection deflection; grapple/feint/blink DEX denial |
 | BAB | `BaseAttackBonus` (L2421) | `BaseAttackBonusOverride`, else creature-type progression if `UseCreatureTypeProgression`, else sum over `ClassLevels` of the hard-coded `CalculateClassBaseAttackBonus` (L1772) |
-| Attack roll | Summed inline in CharacterController.Attack (~L4895), FullAttack and DualWieldAttack separately | Attack: BAB + ability + size + flanking + racial + range + feat mods (AttackCalculator.CalculateAllFeatModifiers) + morale + conditions + aid another + ... FullAttack starts from `Stats.GetIterativeAttackBonuses`; DualWieldAttack starts from `Stats.AttackBonus` (BAB + STR + size + morale + conditions, L3214). `GetMeleeAttackBonus`/`GetRangedAttackBonus` are estimates for AI and AoO risk |
+| Attack roll | `CharacterController.BuildAttackBonus` returns an `AttackBonusBreakdown` (`Combat/Core/AttackCalculator.cs`); Attack, FullAttack (iterative and natural), DualWieldAttack and FlurryOfBlows all use it (CMB-043) | BAB step + sequence penalty (two-weapon, flurry, secondary natural -5, Manyshot/Mobility via `additionalAttackModifier`) + ability (DEX for ranged and Weapon Finesse, else STR) + size + flanking + racial + range + mounted ranged + feat mods (AttackCalculator.CalculateAllFeatModifiers) + prone + fighting defensively + shooting into melee + non-proficiency + morale + conditions + aid another + damage mode + Solid Fog + Bracers of Archery + Magic Stone. `PerformSingleAttackWithCrit` then adds enhancement/masterwork and target-side terms. Rake and grapple weapon attacks still sum their own (CMB-087). `Stats.AttackBonus` (BAB + STR + size + morale + conditions) is now read only for display and logs (character sheet, info panel, inventory, spawn logs); `GetMeleeAttackBonus`/`GetRangedAttackBonus` are estimates for AI and AoO risk |
 | Saves | L1865-1871 | Ability mod + class base (sum over classes using ICharacterClass good-save flags, or creature progression) + feat + morale + luck + max(ring, cloak) resistance + condition; Fort and Ref add the familiar bonus, Will adds rage instead |
 | HP | `MaxHP` (stored, private set, L2750); `TotalMaxHP` (L2133) | `MaxHP` is set by the constructor and changed by level-up, rage, inherent bonuses and `AdjustMaxHP`; it is not re-derived from CON. `TotalMaxHP` adds Toughness, `BonusMaxHP`, wondrous CON HP and familiar HP, minus 5 per negative level |
 | Damage taken | `ApplyIncomingDamage` (L4259) then `TakeDamage` (L4660) | Mitigation order: see the damage pipeline in [Attack resolution](combat-and-grid.md#attack-resolution). The `CurrentHP` setter fires `CurrentHPChanged`, which drives the controller's HP-state machine |
 
 - Constructor HP is `baseHitDieHP + max(1, CONmod) * level` (CharacterStats.cs:3430-3433). Character creation already includes CON in the value it passes, so CON is counted twice for created PCs and for class-leveled monsters **[KI]**.
-- FullAttack omits the morale bonus and DEX for ranged attacks (see [Attack resolution](combat-and-grid.md#attack-resolution)) **[KI]**. Any change to the attack sum must be made in Attack, FullAttack, DualWieldAttack and FlurryOfBlows (which builds its own sum from `GetFlurryOfBlowsBonuses`).
+- A change to an attack-roll term goes in `BuildAttackBonus` (and, if it needs a log entry, `AttackBonusBreakdown.ApplyToResult`); the four weapon attack paths pick it up. `PerformRakeAttacks` and the two grapple weapon attacks still need it separately **[KI]** (CMB-087).
 
 ### The bonus stacking model
 
@@ -106,7 +106,7 @@ Writers follow two patterns:
 **To add a new bonus source:**
 1. Add a public field on CharacterStats near the related fields (buff/item fields live around L2750-3315). Name it `<Source><BonusType><Target>`.
 2. Write it from exactly one owner: reset-and-set in `Inventory.RecalculateStats` for items, or apply/remove symmetrically in StatusEffectManager for spells.
-3. Add it to every formula that should read it: `ArmorClass` and `TouchArmorClass`, the three save properties, `GetSkillBonus`, `GetCasterLevel`, and for attack or damage the inline sums in CharacterController.Attack, FullAttack and FlurryOfBlows plus `Stats.AttackBonus` (which DualWieldAttack and the UI read) and `GetMeleeAttackBonus`/`GetRangedAttackBonus` (AI).
+3. Add it to every formula that should read it: `ArmorClass` and `TouchArmorClass`, the three save properties, `GetSkillBonus`, `GetCasterLevel`, for attack rolls `CharacterController.BuildAttackBonus` (shared by Attack, FullAttack, DualWieldAttack and FlurryOfBlows) plus the rake and grapple sums (CMB-087), `Stats.AttackBonus` (UI) and `GetMeleeAttackBonus`/`GetRangedAttackBonus` (AI); for weapon damage `PerformSingleAttackWithCrit` or the `featDamageBonus` it receives (`AttackBonusBreakdown.FeatDamageBonus`).
 4. Decide stacking explicitly (`Mathf.Max` against same-type fields).
 5. Grep for the new field. A field with a writer but no reader is a silent no-op; `WondrousCompetenceSaveBonus` and `WondrousCasterLevelBonus` (written by Inventory.cs, read nowhere) are current examples, and the computed property `DivineGraceBonus` likewise has no reader **[KI]**.
 
