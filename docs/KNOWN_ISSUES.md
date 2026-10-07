@@ -32,7 +32,7 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 2 | 19 | 15 | 36 | CORE-037 |
 | [Combat](issues/CMB.md) | CMB | 4 | 37 | 39 | 80 | CMB-085 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 7 | 9 | 17 | GRID-018 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 9 | 54 | 47 | 110 | SPL-112 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 8 | 55 | 47 | 110 | SPL-112 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 7 | 24 | 36 | 67 | CHR-068 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 17 | 16 | 37 | CRE-038 |
 | [Encounters](issues/ENC.md) | ENC | 1 | 7 | 13 | 21 | ENC-022 |
@@ -40,7 +40,7 @@ Entries per section:
 | [AI](issues/AI.md) | AI | 1 | 19 | 35 | 55 | AI-057 |
 | [UI](issues/UI.md) | UI | 1 | 11 | 38 | 50 | UI-051 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 18 | 26 | TST-027 |
-| **All** | | 34 | 239 | 307 | 580 | |
+| **All** | | 33 | 240 | 307 | 580 | |
 
 ## Top issues
 
@@ -65,7 +65,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [SPL-003](issues/SPL.md) | High | Spells and metamagic | Silence, Death Knell and Align Weapon never expire | Yes |
 | [SPL-004](issues/SPL.md) | High | Spells and metamagic | Custom spell damage bypasses energy resistance, immunity and DR | Yes |
 | [SPL-005](issues/SPL.md) | High | Spells and metamagic | Generic spell dice do not scale with caster level; Cure/Inflict ignore undead | Yes |
-| [SPL-006](issues/SPL.md) | High | Spells and metamagic | AoE, NPC, summon and Grease cast paths skip Blink, AoO, concentration and counterspell checks | Yes |
 | [SPL-037](issues/SPL.md) | High | Spells and metamagic | Spell-specific branches at the end of ApplySpellBuff never run | Yes |
 | [CRE-002](issues/CRE.md) | High | Creatures, templates and summoning | Spawned NPCs have no alignment, so smite, aligned weapons and alignment spells ignore them | Yes |
 | [CRE-004](issues/CRE.md) | High | Creatures, templates and summoning | Spawned NPCs ignore class BAB and saves | Yes |

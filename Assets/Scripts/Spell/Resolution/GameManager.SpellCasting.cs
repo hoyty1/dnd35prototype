@@ -171,8 +171,13 @@ public partial class GameManager
     {
         if (spellComp == null || spell == null) return false;
 
+        // The scroll and wand flags belong to the PC's pending cast. TryNPCPerformSpellCast also
+        // reaches this method (through the entangled and grappled helpers) with its own spell, so
+        // a flag left set by a cancelled PC scroll or wand cast must not spend that item here.
+        bool isPendingPCCast = ReferenceEquals(spell, _pendingSpell);
+
         // Scroll casts do not consume spell slots — the scroll IS the resource
-        if (_pendingScrollCastActive)
+        if (isPendingPCCast && _pendingScrollCastActive)
         {
             Debug.Log($"[ScrollCast] Skipping spell slot consumption — casting from scroll.");
             ConsumeScrollAfterCast(ActivePC);
@@ -180,7 +185,7 @@ public partial class GameManager
         }
 
         // Wand casts do not consume spell slots — the wand charge IS the resource
-        if (_pendingWandCastActive)
+        if (isPendingPCCast && _pendingWandCastActive)
         {
             Debug.Log($"[WandCast] Skipping spell slot consumption — casting from wand.");
             ConsumeWandChargeAfterCast(ActivePC);
@@ -8205,7 +8210,27 @@ public partial class GameManager
 
     private List<CharacterController> GetThreateningEnemiesForSpellcasting(CharacterController caster)
     {
-        var threatening = ThreatSystem.GetThreateningEnemies(caster.GridPosition, caster, GetAllCharacters());
+        // An enemy that threatens any square of the caster's footprint threatens a Large or
+        // bigger caster, not only one that threatens its base square.
+        List<CharacterController> allCharacters = GetAllCharacters();
+        var threatening = ThreatSystem.GetThreateningEnemies(caster.GridPosition, caster, allCharacters);
+        List<Vector2Int> footprint = caster.GetOccupiedSquares();
+        if (footprint != null)
+        {
+            for (int i = 0; i < footprint.Count; i++)
+            {
+                if (footprint[i] == caster.GridPosition)
+                    continue;
+
+                List<CharacterController> squareThreats = ThreatSystem.GetThreateningEnemies(footprint[i], caster, allCharacters);
+                for (int j = 0; j < squareThreats.Count; j++)
+                {
+                    if (!threatening.Contains(squareThreats[j]))
+                        threatening.Add(squareThreats[j]);
+                }
+            }
+        }
+
         threatening.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
         return threatening;
     }
@@ -8315,14 +8340,59 @@ public partial class GameManager
             CastDefensivelyDC = defensiveDC,
             ConcentrationBonus = concentrationBonus,
             SuccessChance = successChance,
-            OnCastDefensively = () => onResolved?.Invoke(AttemptCastDefensively(caster, spell)),
-            OnProceed = () => ResolveSpellcastAoOs(caster, spell, threateningEnemies, onResolved),
+            OnCastDefensively = () => onResolved?.Invoke(ResolveThreatenedSpellcast(caster, spell, threateningEnemies, castDefensively: true)),
+            OnProceed = () => onResolved?.Invoke(ResolveThreatenedSpellcast(caster, spell, threateningEnemies, castDefensively: false)),
             OnCancel = () =>
             {
                 _spellcastProvocationCancelled = true;
                 onResolved?.Invoke(false);
             }
         });
+    }
+
+    /// <summary>
+    /// Spellcasting provocation for a caster that decides without the player prompt (NPC turns and
+    /// AI-controlled characters such as charmed PCs). Same rule and rolls as the PC prompt (SPL-006):
+    /// the choice to cast defensively comes from <see cref="AISpellcastingStrategist.ShouldCastDefensively"/>,
+    /// then <see cref="ResolveThreatenedSpellcast"/> resolves it. Call after the slot is spent and before
+    /// the spell resolves. Returns true when the spell goes on to resolve; false means it is lost.
+    /// </summary>
+    private bool ResolveNPCSpellcastProvocation(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        List<CharacterController> threateningEnemies = GetThreateningEnemiesForSpellcasting(caster);
+        if (threateningEnemies == null || threateningEnemies.Count == 0)
+            return true;
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{caster.Stats.CharacterName} is casting {spell.Name} while threatened ({threateningEnemies.Count} adjacent)."));
+
+        bool castDefensively = AISpellcastingStrategist.ShouldCastDefensively(caster, spell);
+        return ResolveThreatenedSpellcast(caster, spell, threateningEnemies, castDefensively);
+    }
+
+    /// <summary>
+    /// Shared PC and NPC resolution of a spell cast while threatened (PHB p.140, Table 8-2 p.141).
+    /// Cast defensively: Concentration DC 15 + spell level, no AoOs, the spell is lost on a failure.
+    /// Otherwise every threatening enemy that can still make an AoO gets one before the spell
+    /// resolves; each hit forces Concentration DC 10 + damage + spell level or the spell is lost
+    /// (PHB p.69-70, Concentration). Resolves synchronously. Returns true when the spell proceeds.
+    /// </summary>
+    private bool ResolveThreatenedSpellcast(CharacterController caster, SpellData spell, List<CharacterController> threateningEnemies, bool castDefensively)
+    {
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (threateningEnemies == null || threateningEnemies.Count == 0)
+            return true;
+
+        if (castDefensively)
+            return AttemptCastDefensively(caster, spell);
+
+        bool canProceed = false;
+        ResolveSpellcastAoOs(caster, spell, threateningEnemies, proceed => canProceed = proceed);
+        return canProceed;
     }
 
     private void ResolveSpellcastAoOs(CharacterController caster, SpellData spell, List<CharacterController> threateningEnemies, System.Action<bool> onResolved)
@@ -8352,6 +8422,15 @@ public partial class GameManager
 
             CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"AoO vs spellcasting: {aooResult.GetDetailedSummary()}"));
 
+            // A caster the AoO kills or knocks unconscious (dying, stable) cannot finish casting.
+            // A disabled caster (0 HP) still rolls the damage Concentration check below.
+            if (caster.IsDead || caster.IsUnconscious || caster.Stats.IsDead)
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💀", $"{caster.Stats.CharacterName} is struck down while casting {spell.Name}!"));
+                onResolved?.Invoke(false);
+                return;
+            }
+
             if (aooResult.Hit && aooResult.TotalDamage > 0)
             {
                 // Existing concentration effects / held charges can also be disrupted by this damage.
@@ -8373,13 +8452,6 @@ public partial class GameManager
                     onResolved?.Invoke(false);
                     return;
                 }
-            }
-
-            if (caster.Stats.IsDead)
-            {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("💀", $"{caster.Stats.CharacterName} is slain while casting {spell.Name}!"));
-                onResolved?.Invoke(false);
-                return;
             }
         }
 

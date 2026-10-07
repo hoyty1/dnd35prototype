@@ -496,24 +496,38 @@ public static class AISpellcastingStrategist
         bool threatened = HasAdjacentEnemy(caster, allCombatants);
         if (!threatened) return 2; // Safe to cast normally
 
+        if (ShouldCastDefensively(caster, spell))
+            return 1; // Cast defensively
+
+        // Try lower-level alternative: score penalty for high-level spells in melee
+        // Caller should prefer lower-level spells
+        return 0;
+    }
+
+    /// <summary>
+    /// The AI's choice for a threatened caster: true = cast defensively (PHB p.140: Concentration
+    /// DC 15 + spell level, failure loses the spell), false = cast normally and provoke AoOs.
+    /// Defensive when the estimated success chance is at least <see cref="MIN_DEFENSIVE_CAST_SUCCESS"/>,
+    /// or when the caster is at 25% HP or less and the spell is a Healing or Escape spell.
+    /// <c>GameManager.ResolveNPCSpellcastProvocation</c> rolls this choice on the NPC cast path (SPL-006).
+    /// </summary>
+    public static bool ShouldCastDefensively(CharacterController caster, SpellData spell)
+    {
+        if (spell == null || caster == null || caster.Stats == null) return false;
+
         // Defensive casting: DC = 15 + spell level
         int dc = ConcentrationService.GetDefensiveCastingDC(spell.SpellLevel);
         int concentrationBonus = ConcentrationService.GetConcentrationBonus(caster);
         float successChance = ConcentrationService.CalculateSuccessChanceFraction(concentrationBonus, dc);
 
         if (successChance >= MIN_DEFENSIVE_CAST_SUCCESS)
-            return 1; // Cast defensively
+            return true;
 
         // Desperate: if caster is low HP and spell is critical (heal self), attempt anyway
         float hpPct = caster.Stats.TotalMaxHP > 0
             ? (float)caster.Stats.CurrentHP / caster.Stats.TotalMaxHP : 1f;
-        if (hpPct <= 0.25f && (spell.EffectType == SpellEffectType.Healing ||
-                                spell.EffectType == SpellEffectType.Escape))
-            return 1;
-
-        // Try lower-level alternative: score penalty for high-level spells in melee
-        // Caller should prefer lower-level spells
-        return 0;
+        return hpPct <= 0.25f && (spell.EffectType == SpellEffectType.Healing ||
+                                  spell.EffectType == SpellEffectType.Escape);
     }
 
     /// <summary>Get score modifier for spells cast while threatened (T1.3).</summary>

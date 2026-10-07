@@ -811,6 +811,15 @@ public partial class GameManager
         if (!npc.CommitStandardAction())
             return false;
 
+        // Entangled (DC 15 + level) and grappled/pinned (DC 20 + level) casting Concentration,
+        // as on the PC path; the helpers spend the slot when the spell is lost (SPL-006).
+        if (!ResolveEntangledSomaticCastingConcentration(npc, spellComp, spell, null, false, spell.SpellLevel, false, -1, null)
+            || !ResolveGrappledOrPinnedCastingConcentration(npc, spellComp, spell, null, false, spell.SpellLevel, false, -1, null))
+        {
+            UpdateAllStatsUI();
+            return true;
+        }
+
         bool consumed = spellComp.CastSpellFromSlot(spell);
         if (!consumed)
             return false;
@@ -834,6 +843,15 @@ public partial class GameManager
             }
         }
 
+        // PHB p.140: casting provokes AoOs from threatening enemies unless cast defensively;
+        // same rolls as the PC prompt, with the AI choosing whether to cast defensively (SPL-006).
+        // The slot is already spent, so a failed check or a disrupting hit loses the spell.
+        if (!ResolveNPCSpellcastProvocation(npc, spell))
+        {
+            UpdateAllStatsUI();
+            return true;
+        }
+
         BreakInvisibilityOnHostileSpellCast(npc, spell, target, null);
 
         // ── COUNTERSPELL CHECK (NPC spell cast path) ──
@@ -843,6 +861,13 @@ public partial class GameManager
             Debug.Log($"[Counterspell] NPC {npc.Stats.CharacterName}'s {spell.Name} was countered! No effect.");
             UpdateAllStatsUI();
             return true; // Spell was cast (slot consumed) but countered
+        }
+
+        // Ring of Counterspells (DMG p.230) on the target, as on the PC path (SPL-006).
+        if (CounterspellManager.TryRingCounterspell(target, spell))
+        {
+            UpdateAllStatsUI();
+            return true;
         }
 
         bool skipFriendlyTouchAttackRoll = spell.IsMeleeTouchSpell() && IsFriendlyTarget(npc, target);

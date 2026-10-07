@@ -39,7 +39,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Take AoOs | Auto | `ThreatSystem.ExecuteAoO` when something provokes, before the mover leaves the square | Auto | CMB-084 |
 | Avoid provoking: movement | Partial | path scoring | | |
 | Avoid provoking: ranged | Used | kiter risk model | Prompt | |
-| Avoid provoking: casting | Partial | adjacency estimate; never rolled | Prompt + roll | SPL-006 |
+| Avoid provoking: casting | Used | adjacency estimate picks or drops the spell; at cast time `ShouldCastDefensively` picks defensive (rolled) or normal (AoOs rolled) | Prompt + roll | |
 | Trip | Used | Humanoid, Berserk, Grappler, null profile, `HasTripAttack` summons; free trip on hit | Yes | AI-035, CMB-079, CMB-014; 11.8.4 |
 | Disarm | Used | Humanoid, Grappler, null profile (STR ≥3) | Yes | never picks weapons up; 11.8.4 |
 | Trip or disarm within a full attack | Never | a maneuver replaces the whole attack action | Yes (shared attack pool) | |
@@ -83,4 +83,4 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 
 **PC can, NPC cannot:** double move; free 5-foot steps (including step then full attack); stand up, drop prone, crawl; Power Attack; Rapid Shot; fighting defensively by choice; two-weapon and off-hand attacks; throw melee throwables; Cleave; Flurry, Rage, Bardic Music, Turn Undead, domain powers (including the Destruction smite); template smite outside summons; sunder, bull rush, overrun, feint; aid another and waking allies; trip or disarm as part of a full attack; spontaneous cure/inflict conversion; escape a grapple while not pinned; decline Improved Grab; area spells and metamagic; summoning; holding a touch charge; controlling a Flaming Sphere (`TryControlFlamingSphereForAI` has no callers); dismissing spells; imbued spells; potions, wands, scrolls; picking up or dropping items; weapon swaps; nonlethal damage.
 
-**NPC-only advantages (all bugs or gaps):** casting never provokes and needs no Concentration (SPL-006); breath and specials cost no action (AI-040, AI-053); melee routines path to an invisible target's true square (AI-051); monster ranged specials skip mitigation (AI-006); silenced NPCs can cast (SPL-092).
+**NPC-only advantages (all bugs or gaps):** breath and specials cost no action (AI-040, AI-053); melee routines path to an invisible target's true square (AI-051); monster ranged specials skip mitigation (AI-006); silenced NPCs can cast (SPL-092).

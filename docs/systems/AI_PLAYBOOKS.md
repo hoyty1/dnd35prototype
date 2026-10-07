@@ -42,9 +42,9 @@ Seven requests the owner is likely to make, each with the code to read first, wh
   2. Routing: a profiled wizard casts only on the RangedKiter routine (Evoker, Lich, Ranged profiles or `RangedKiter` behaviour). `SpellcasterAIProfile` is Melee and never casts (AI-002, AI-038).
   3. Area casting: `TryNPCPerformSpellCast` rejects `TargetType.Area` while `SelectSpell` still picks area spells, so a caster that prefers Fireball does nothing better (AI-001, 7.2). `PerformAoESpellCast` cannot be called by an NPC (AI-054); build an NPC area path that takes caster, spell and cells explicitly and shares the per-target resolution.
   4. Placement: `EvaluateAOECast` only centres the burst on the chosen target. There is no search over aim points (generalise the breath search) and no line-of-effect filter in the AI estimate.
-  5. Rules gaps on the NPC path: SPL-006 (no AoO or Concentration for NPC casts), SPL-038 (metamagic ignored by the Fireball resolver), SPL-027 (area buffs without a handler skip saves and SR), SPL-024 and SPL-025 (Haste gives double bonuses and overwrites Mage Armor), AI-046 (SR estimate), SPL-092 (Silence ignored).
+  5. Rules gaps on the NPC path: SPL-038 (metamagic ignored by the Fireball resolver), SPL-027 (area buffs without a handler skip saves and SR), SPL-024 and SPL-025 (Haste gives double bonuses and overwrites Mage Armor), AI-046 (SR estimate), SPL-092 (Silence ignored).
   6. "Sensibly": there is no score floor and no comparison with a weapon attack (7.2), school priority ×10 dominates (AI-022), and the multi-round plan store is never filled (AI-011). Haste before Fireball is encouraged only by the round 1-2 pre-buff bonus. A 3rd-level slot also competes with the fixed "conserve 3rd+ level" penalty.
-- **Fix first.** AI-001 (with AI-054), SPL-041 and SPL-015, AI-002; then SPL-006 and SPL-024.
+- **Fix first.** AI-001 (with AI-054), SPL-041 and SPL-015, AI-002; then SPL-024. An NPC area path must keep the AoO and Concentration rolls the single-target NPC path now makes (`ResolveNPCSpellcastProvocation`).
 - **Rules.** PHB ch.11 (Fireball, Haste); PHB ch.10 (aiming a spell, area, spell resistance); PHB ch.8 (casting provokes, Concentration).
 - **Test with.** `dragon_red_adult` (7th-level sorcerer), `npc_magic_missile_test` for the cast path. No preset has an enemy wizard able to cast 3rd-level spells.
 

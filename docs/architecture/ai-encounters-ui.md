@@ -110,9 +110,10 @@ AIService.TryExecuteSpellcastAction (2340)       requires a standard action and 
     score = SpellcasterAIProfile.ScoreSpell      school priority x10 + EvaluateAOECast + strategist
          or AISpellcastingStrategist.ScoreSpellComprehensive (no caster profile)
   AISpellcastingStrategist.EvaluateDefensiveCasting  0 = try SelectLowerLevelAlternative else abort,
-                                                     1 = "cast defensively" (only logged)
+                                                     1 = "cast defensively" (logged; rolled at cast time)
   AISpellcastingStrategist.SelectBestSpellTarget     self / ally (lowest HP, frontliner) / enemy
-  GameManager.TryNPCPerformSpellCastForAI -> TryNPCPerformSpellCast (_Core/GameManager.NPCTurns.cs:758)
+  GameManager.TryNPCPerformSpellCastForAI -> TryNPCPerformSpellCast (_Core/GameManager.NPCTurns.cs:779)
+    ResolveNPCSpellcastProvocation                 if threatened: ShouldCastDefensively -> defensive roll or AoOs
 ```
 
 `TryExecuteSpellcastAction` has callers only in the Healer branch (AIService.cs:231, 245), `ExecuteDragonTurn` (651) and `ExecuteRangedKiterTurn` (896, 970). The only other NPC cast path is a charmed NPC healing its charmer (Combat/Behaviors/CharmedBehaviorController.cs:91).
@@ -134,7 +135,7 @@ The full option-by-option list (PHB ch.8 actions, maneuvers, spells, items, mons
 - **Cast area spells.** `TryNPCPerformSpellCast` returns false for any `SpellTargetType.Area` spell (GameManager.NPCTurns.cs:787-788). The profile and the strategist still score AoE spells, so a caster can pick Fireball, fail to cast it, and fall back to another action in silence.
 - **Cast from the melee routines.** `ExecuteAggressiveMeleeTurn` and `ExecuteDefensiveMeleeTurn` never call `TryExecuteSpellcastAction`. A Spellcaster-archetype monster that keeps the default AggressiveMelee behavior never casts. Examples are mind_flayer (NPCDatabase_M.cs:600) and vampire (NPCDatabase_V.cs:242, Vampire profile with CombatStyle Melee). The Lich reaches RangedKiter because its profile sets `CombatStyle.Ranged`, but it still never casts: its prepared list is assigned to slots by position and starts at 1st level, so no spell lands in a matching slot (SPL-015). See [Who can cast](../systems/AI.md#71-who-can-cast) in systems/AI.md.
 - **Counterspell.** `AIService.TryAIReadyCounterspell` (2660) has no callers, and no player UI calls `CharacterController.ReadyCounterspell` (CharacterController.cs:12137); only tests do. `DispelMagicService.TryResolveCounterspell` therefore never finds a readied caster in normal play.
-- **Rules deviations.** NPC casting never provokes an AoO and never rolls a defensive Concentration check (see the `TryNPCPerformSpellCast` row in [Cast pipelines](spells.md#cast-pipelines)). Monster special attacks (Spittle, swarm damage) bypass the normal attack and damage math. These and the other AI rules gaps are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
+- **Rules deviations.** The NPC cast path skips components, metamagic and concentration tracking (see the `TryNPCPerformSpellCast` row in [Cast pipelines](spells.md#cast-pipelines)); it does provoke and roll Concentration like the PC path. Monster special attacks (Spittle, swarm damage) bypass the normal attack and damage math. These and the other AI rules gaps are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 - **Consumables.** `AIConsumableManager` is used only in Tests/Classes/NPCTemplateSystemTests.cs, so NPCs never use potions, scrolls or wands.
 
 ## Encounters: the four sources
