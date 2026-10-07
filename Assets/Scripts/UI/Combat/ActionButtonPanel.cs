@@ -637,8 +637,6 @@ public class ActionButtonPanel : MonoBehaviour
             specialAttackLabel = canImprovedFeintMove ? "Special Attack (Std / Feint Move)" : "Special Attack (Standard)";
         else if (context.HasGrappleAttackAvailable && context.Gm != null)
             specialAttackLabel = $"Special Attack (Grapple BAB {CharacterStats.FormatMod(context.Gm.GetCurrentGrappleAttackBonus(pc))}, {context.Gm.GetRemainingGrappleAttackActions(pc)} left)";
-        else if (context.HasBullRushAttackAvailable && context.Gm != null)
-            specialAttackLabel = $"Special Attack (Bull Rush BAB {CharacterStats.FormatMod(context.Gm.GetCurrentBullRushAttackBonus(pc))}, {context.Gm.GetRemainingBullRushAttackActions(pc)} left)";
         else if (context.HasTripAttackAvailable && context.Gm != null)
             specialAttackLabel = $"Special Attack (Trip BAB {CharacterStats.FormatMod(context.Gm.GetCurrentTripAttackBonus(pc))}, {context.Gm.GetRemainingTripAttackActions(pc)} left)";
         else if (context.HasDisarmAttackAvailable && context.Gm != null)

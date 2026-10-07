@@ -548,7 +548,7 @@ public class AIService : MonoBehaviour
         AIActionType action = SelectBestAction(npc, target, preferAggression: true);
         if (action == AIActionType.Charge)
         {
-            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target));
+            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target, ShouldNPCChargeBullRush(npc, target)));
             yield break;
         }
 
@@ -812,7 +812,7 @@ public class AIService : MonoBehaviour
         AIActionType action = SelectBestAction(npc, target, preferAggression: true);
         if (action == AIActionType.Charge)
         {
-            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target));
+            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target, ShouldNPCChargeBullRush(npc, target)));
             yield break;
         }
 
@@ -1185,7 +1185,7 @@ public class AIService : MonoBehaviour
         AIActionType action = SelectBestAction(npc, target, preferAggression: false);
         if (action == AIActionType.Charge)
         {
-            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target));
+            yield return _gameManager.StartCoroutine(_gameManager.NPCExecuteChargeForAI(npc, target, ShouldNPCChargeBullRush(npc, target)));
             yield break;
         }
 
@@ -3012,6 +3012,20 @@ public class AIService : MonoBehaviour
             logCallback?.Invoke($"{npcName} attempts to locate concealed targets:");
             tracker.AttemptListenChecks(concealedTrackedEnemies, _gameManager);
         }
+    }
+
+    /// <summary>
+    /// True when the NPC's profile asks for bull rushes and a bull rush charge at this target is
+    /// legal (PHB p.154-155, CMB-102). Asked only after ShouldNPCCharge has chosen a weapon charge, so
+    /// an NPC with no melee weapon, or whose only legal charge is a bull rush, never considers one
+    /// (AI-014). No shipped profile sets AttemptBullRush yet.
+    /// </summary>
+    public bool ShouldNPCChargeBullRush(CharacterController npc, CharacterController target)
+    {
+        AIProfile profile = GetProfile(npc);
+        return profile?.Maneuvers?.AttemptBullRush == true
+            && _gameManager != null
+            && _gameManager.CanChargeTargetForAI(npc, target, true);
     }
 
     /// <summary>

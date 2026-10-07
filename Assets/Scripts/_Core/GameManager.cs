@@ -4278,12 +4278,6 @@ public partial class GameManager : MonoBehaviour
                 int nextBab = GetCurrentGrappleAttackBonus(pc);
                 CombatUI.SetTurnIndicator($"{pcName}'s Turn - Grapple attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Special Attack → Grapple, or End Turn.");
             }
-            else if (CanUseBullRushAttackOption(pc))
-            {
-                int attacksRemaining = GetRemainingBullRushAttackActions(pc);
-                int nextBab = GetCurrentBullRushAttackBonus(pc);
-                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Bull Rush (Attack) attempts remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Special Attack → Bull Rush (Attack), or End Turn.");
-            }
             else if (CanUseTripAttackOption(pc))
             {
                 int attacksRemaining = GetRemainingTripAttackActions(pc);
@@ -8814,7 +8808,7 @@ public partial class GameManager : MonoBehaviour
                 : (type == SpecialAttackType.Grapple
                     ? "Need at least one remaining grapple attack"
                     : (type == SpecialAttackType.BullRushAttack
-                        ? "Need at least one remaining bull rush attack"
+                        ? "Need a standard action (bull rush cannot be used while grappling)"
                         : (type == SpecialAttackType.Trip
                             ? "Need at least one remaining trip attack"
                             : (type == SpecialAttackType.Disarm
@@ -10919,8 +10913,16 @@ public partial class GameManager : MonoBehaviour
     public bool CanChargeTargetForAI(CharacterController npc, CharacterController target)
         => CanChargeTarget(npc, target, logFailures: false);
 
+    /// <summary>Charge legality for the AI; forBullRush plans a bull rush charge (PHB p.154, CMB-102).</summary>
+    public bool CanChargeTargetForAI(CharacterController npc, CharacterController target, bool forBullRush)
+        => CanChargeTarget(npc, target, logFailures: false, forBullRush: forBullRush);
+
     public IEnumerator NPCExecuteChargeForAI(CharacterController npc, CharacterController target)
         => NPCExecuteCharge(npc, target);
+
+    /// <summary>NPC charge; bullRush ends it with the shared charge bull rush (ResolveChargeBullRush).</summary>
+    public IEnumerator NPCExecuteChargeForAI(CharacterController npc, CharacterController target, bool bullRush)
+        => NPCExecuteCharge(npc, target, bullRush);
 
     public IEnumerator MoveCharacterAlongComputedPathForAI(CharacterController mover, Vector2Int destination, float secondsPerStep)
         => MoveCharacterAlongComputedPath(mover, destination, secondsPerStep);

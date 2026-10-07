@@ -58,7 +58,6 @@ public static class GrappleDamageRulesTests
         TestStandardOnlyAllowsSingleIterativeGrappleAttack();
         TestImprovedGrabCreatureCanUseStandardGrappleAction();
         TestImprovedGrabCreatureCanStillUseIterativeGrappleActionsWhenAlreadyGrappling();
-        TestIterativeBullRushAttackBonusesConsumeInOrder();
         TestIterativeDisarmAttackBonusesConsumeInOrder();
         TestStandardOnlyAllowsSingleIterativeDisarmAttack();
         TestAttackSequenceFirstStepSpendsOnlyStandardAction();
@@ -75,6 +74,8 @@ public static class GrappleDamageRulesTests
         TestAttackSequenceTripReplacesOneNaturalAttack();
         TestAttackSequenceStepResolverUsesStepBab();
         TestManeuverActionCostTable();
+        TestBullRushIsAStandardAction();
+        TestBullRushTargetLimits();
         TestNpcManeuverCostsOneAttackStep();
         TestNpcMeleeSequenceTripThenAttacks();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
@@ -789,25 +790,6 @@ public static class GrappleDamageRulesTests
         Cleanup(attacker, defender);
     }
 
-    private static void TestIterativeBullRushAttackBonusesConsumeInOrder()
-    {
-        var attacker = CreateTestCharacter("IterativeBullRushBonuses", "Fighter");
-        attacker.Stats.BaseAttackBonusOverride = 11; // CHR-068: the plain setter is ignored for classed characters
-        attacker.StartNewTurn();
-
-        bool first = attacker.TryConsumeIterativeBullRushAttackAction(out int bab1, out int remaining1, out string reason1);
-        bool second = attacker.TryConsumeIterativeBullRushAttackAction(out int bab2, out int remaining2, out string reason2);
-        bool third = attacker.TryConsumeIterativeBullRushAttackAction(out int bab3, out int remaining3, out string reason3);
-        bool fourth = attacker.TryConsumeIterativeBullRushAttackAction(out int bab4, out int remaining4, out string reason4);
-
-        Assert(first && second && third, "BAB +11 character can consume 3 iterative bull rush attacks in one sequence");
-        Assert(bab1 == 11 && bab2 == 6 && bab3 == 1, "Iterative bull rush attacks use BAB progression +11/+6/+1");
-        Assert(remaining1 == 2 && remaining2 == 1 && remaining3 == 0, "Iterative bull rush attack remaining counter decreases each use");
-        Assert(!fourth && !string.IsNullOrEmpty(reason4), "No additional iterative bull rush attack is available after budget is exhausted");
-
-        Cleanup(attacker);
-    }
-
     private static void TestIterativeDisarmAttackBonusesConsumeInOrder()
     {
         var attacker = CreateTestCharacter("IterativeDisarmBonuses", "Fighter");
@@ -1135,16 +1117,142 @@ public static class GrappleDamageRulesTests
             && !ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.Feint)
             && !ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.CoupDeGrace),
             "Bull rush, overrun, feint and coup de grace do not replace a melee attack");
+    }
 
-        bool onlyBullRushException = true;
-        foreach (SpecialAttackType type in System.Enum.GetValues(typeof(SpecialAttackType)))
+    private static void TestBullRushIsAStandardAction()
+    {
+        // PHB p.141 Table 8-2 and p.154: bull rush is a standard action (or part of a charge) for
+        // every creature; it never replaces one attack of a full attack (CMB-102).
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
         {
-            bool expected = type == SpecialAttackType.BullRushAttack;
-            if (ManeuverActionCost.PcUiAlsoReplacesAttack(type) != expected)
-                onlyBullRushException = false;
+            Debug.Log("  [SKIP] GameManager.Instance is null; bull rush action cost check needs Play mode");
+            return;
         }
-        Assert(onlyBullRushException,
-            "Only the PC Bull Rush (Attack) uses an attack step as an interim exception (CMB-102, owner decision pending)");
+
+        var attacker = CreateIterativeAttacker("BullRushStandardAction");
+        var moved = CreateIterativeAttacker("BullRushStandardActionMoved");
+        CharacterController farTarget = null;
+        try
+        {
+            Assert(gm.CanUseBullRushAttackOption(attacker),
+                "A fresh creature can bull rush (standard action available)");
+
+            bool committed = attacker.TryCommitAttack(AttackStepKind.MainHand, out _, out string why);
+            Assert(committed && !gm.CanUseBullRushAttackOption(attacker),
+                $"After one attack spends the standard action the creature cannot bull rush (PHB p.154) {why}");
+
+            moved.Actions.UseMoveAction();
+            Assert(gm.CanUseBullRushAttackOption(moved),
+                "A creature that spent only its move action can still bull rush as its standard action");
+
+            // The NPC executor runs the shared legality check before any cost or AoO.
+            farTarget = CreateWeakDefender("BullRushStandardActionFarTarget");
+            moved.GridPosition = new Vector2Int(0, 0);
+            farTarget.GridPosition = new Vector2Int(2, 0);
+            bool farBullRush = gm.TryNPCSpecialAttackByTypeForAI(moved, farTarget, SpecialAttackType.BullRushAttack);
+            bool farRefusedForAdjacency = !moved.CanBullRush(farTarget, false, out string farReason)
+                && farReason != null && farReason.Contains("not adjacent");
+            Assert(!farBullRush && moved.Actions.HasStandardAction && farRefusedForAdjacency,
+                $"NPC bull rush at a target two squares away is refused by CanBullRush's adjacency rule and spends nothing ({farReason})");
+
+            // The same creature and target once adjacent: the executor now bull rushes and spends the
+            // standard action, so the refusal above came from adjacency. AI-run so the push and
+            // follow choices resolve without the PC prompts.
+            moved.IsControllable = false;
+            farTarget.GridPosition = new Vector2Int(1, 0);
+            bool nearBullRush = gm.TryNPCSpecialAttackByTypeForAI(moved, farTarget, SpecialAttackType.BullRushAttack);
+            Assert(nearBullRush && !moved.Actions.HasStandardAction,
+                "NPC bull rush at an adjacent target is attempted and spends the standard action (PHB p.154)");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Bull rush action cost check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            // A successful push or follow moves the actors on the live grid; clear their occupancy.
+            if (gm.Grid != null)
+            {
+                gm.Grid.ClearCreatureOccupancy(moved);
+                if (farTarget != null)
+                    gm.Grid.ClearCreatureOccupancy(farTarget);
+            }
+
+            Cleanup(attacker, moved, farTarget);
+        }
+    }
+
+    private static void TestBullRushTargetLimits()
+    {
+        // Shared legality for PC and NPC (CharacterController.CanBullRush): at most one size category
+        // larger (PHB p.154), not a swarm (MM p.316), not incorporeal (MM p.311), not while grappling
+        // (PHB p.156), and adjacent (the bull rusher enters the defender's space). Positions are set
+        // directly; the check reads footprints from GridPosition and size.
+        var attacker = CreateTestCharacter("BullRushLimitsAttacker", "Fighter");
+        var target = CreateWeakDefender("BullRushLimitsTarget");
+        CharacterController grappler = null;
+        CharacterController grappled = null;
+        CharacterController grappleVictim = null;
+        try
+        {
+            attacker.GridPosition = new Vector2Int(0, 0);
+            target.GridPosition = new Vector2Int(1, 0);
+
+            Assert(attacker.CanBullRush(target, false, out string mediumReason),
+                $"Medium vs adjacent Medium is allowed {mediumReason}");
+
+            target.Stats.SetBaseSizeCategory(SizeCategory.Large);
+            Assert(attacker.CanBullRush(target, false, out string largeReason),
+                $"Medium vs adjacent Large (one category larger) is allowed (PHB p.154) {largeReason}");
+
+            target.Stats.SetBaseSizeCategory(SizeCategory.Huge);
+            Assert(!attacker.CanBullRush(target, false, out _),
+                "Medium vs Huge (two categories larger) is refused (PHB p.154)");
+
+            attacker.Stats.SetBaseSizeCategory(SizeCategory.Small);
+            target.Stats.SetBaseSizeCategory(SizeCategory.Large);
+            Assert(!attacker.CanBullRush(target, false, out _),
+                "Small vs Large (two categories larger) is refused (PHB p.154)");
+
+            attacker.Stats.SetBaseSizeCategory(SizeCategory.Medium);
+            target.Stats.SetBaseSizeCategory(SizeCategory.Medium);
+
+            target.Stats.IsSwarm = true;
+            Assert(!attacker.CanBullRush(target, false, out _), "A swarm cannot be bull rushed (MM p.316)");
+            target.Stats.IsSwarm = false;
+
+            target.ConfigureIncorporeal(true);
+            Assert(!attacker.CanBullRush(target, false, out _), "An incorporeal creature cannot be bull rushed (MM p.311)");
+            target.ConfigureIncorporeal(false);
+
+            target.GridPosition = new Vector2Int(2, 0);
+            Assert(!attacker.CanBullRush(target, false, out _), "A target two squares away is refused (must enter its space)");
+            Assert(attacker.CanBullRush(target, true, out string chargeReason),
+                $"The charge planner leaves adjacency to the charge path {chargeReason}");
+            target.GridPosition = new Vector2Int(1, 0);
+
+            grappler = CreateTestCharacter("BullRushLimitsGrappler", "Fighter");
+            grappleVictim = CreateWeakDefender("BullRushLimitsGrappleVictim");
+            grappled = CreateWeakDefender("BullRushLimitsOther");
+            grappler.GridPosition = new Vector2Int(5, 5);
+            grappleVictim.GridPosition = new Vector2Int(6, 5);
+            grappled.GridPosition = new Vector2Int(5, 6);
+            ForceGrappleState(grappler, grappleVictim);
+            if (grappler.IsGrappling())
+                Assert(!grappler.CanBullRush(grappled, false, out _), "A grappling creature cannot bull rush (PHB p.156)");
+            else
+                Debug.Log("  [SKIP] Could not set up a grapple; grappling bull rush refusal not checked");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Bull rush target limits check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            Cleanup(attacker, target, grappler, grappled, grappleVictim);
+        }
     }
 
     private static void TestNpcManeuverCostsOneAttackStep()
@@ -1161,6 +1269,8 @@ public static class GrappleDamageRulesTests
 
         var npc = CreateIterativeAttacker("NpcManeuverStepCost");
         var target = CreateWeakDefender("NpcManeuverStepCostTarget");
+        // Adjacent, so the bull rush below is refused for its action cost, not by CanBullRush's adjacency rule.
+        target.GridPosition = new Vector2Int(1, 0);
         try
         {
             bool firstTrip = gm.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.Trip);

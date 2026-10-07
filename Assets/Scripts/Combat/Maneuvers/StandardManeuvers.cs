@@ -270,9 +270,8 @@ public partial class GameManager
     // attack's BAB (PHB p.141 Table 8-2 note 7, p.143). They are steps of the creature's own attack
     // sequence (CharacterController.TryCommitAttack), so the first one spends only the standard action
     // and a second attack or maneuver turns the turn into a full attack (CMB-102).
-    // The list lives in ManeuverActionCost.ReplacesMeleeAttack. The PC iterative bull rush
-    // (TryConsumeBullRushAttackAction) also uses these steps for now (ManeuverActionCost.PcUiAlsoReplacesAttack);
-    // bull rush is a standard action in RAW (PHB p.154), pending an owner decision (CMB-102).
+    // The list lives in ManeuverActionCost.ReplacesMeleeAttack. Bull rush and overrun are not on it:
+    // they are standard actions or part of a charge (PHB p.154, p.157).
 
     private bool CanUseMainHandManeuverAttackOption(CharacterController attacker, string maneuverLabel)
     {
@@ -399,34 +398,11 @@ public partial class GameManager
         return TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason);
     }
 
-    // While ManeuverActionCost.PcUiUsesAttackStep(BullRushAttack) is true the PC bull rush uses a
-    // main-hand attack step (CMB-102 interim); otherwise it is a standard action at full BAB (PHB p.154).
+    // Bull rush is a standard action (or the end of a charge) for every creature, never one attack
+    // of a full attack (PHB p.141 Table 8-2, p.154; CMB-102). Target legality is
+    // CharacterController.CanBullRush.
     public bool CanUseBullRushAttackOption(CharacterController attacker)
-    {
-        if (ManeuverActionCost.PcUiUsesAttackStep(SpecialAttackType.BullRushAttack))
-            return CanUseMainHandManeuverAttackOption(attacker, "BullRushAttack");
-
-        return attacker != null && attacker.Actions != null && attacker.Actions.HasStandardAction;
-    }
-
-    public int GetRemainingBullRushAttackActions(CharacterController attacker)
-    {
-        if (ManeuverActionCost.PcUiUsesAttackStep(SpecialAttackType.BullRushAttack))
-            return GetRemainingMainHandManeuverAttackActions(attacker);
-
-        return CanUseBullRushAttackOption(attacker) ? 1 : 0;
-    }
-
-    public int GetCurrentBullRushAttackBonus(CharacterController attacker)
-    {
-        if (ManeuverActionCost.PcUiUsesAttackStep(SpecialAttackType.BullRushAttack))
-            return GetCurrentMainHandManeuverAttackBonusForUI(attacker);
-
-        return CanUseBullRushAttackOption(attacker) && attacker.Stats != null ? attacker.Stats.BaseAttackBonus : 0;
-    }
-
-    private bool TryConsumeBullRushAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
-        => TryConsumeMainHandManeuverAttackAction(attacker, "BullRushAttack", out attackBonusUsed, out attacksRemaining, out reason);
+        => attacker?.Actions != null && attacker.Actions.HasStandardAction && !attacker.IsGrappling();
 
     public bool CanUseTripAttackOption(CharacterController attacker)
         => CanUseMainHandManeuverAttackOption(attacker, "Trip");
@@ -927,6 +903,39 @@ public partial class GameManager
             yield return null;
     }
 
+    /// <summary>
+    /// Direction "straight back" for a push (PHB p.154), from the side where the two footprints
+    /// touch rather than from the anchor squares, so multi-square creatures push along the axis
+    /// they face. Diagonal only when the footprints touch at a corner.
+    /// </summary>
+    private static Vector2Int GetPushDirection(CharacterController attacker, CharacterController target)
+    {
+        int attackerSize = Mathf.Max(1, attacker.GetVisualSquaresOccupied());
+        int targetSize = Mathf.Max(1, target.GetVisualSquaresOccupied());
+        Vector2Int a = attacker.GridPosition;
+        Vector2Int t = target.GridPosition;
+
+        int AxisSign(int attackerMin, int targetMin)
+        {
+            int attackerMax = attackerMin + attackerSize - 1;
+            int targetMax = targetMin + targetSize - 1;
+            if (targetMin > attackerMax) return 1;
+            if (targetMax < attackerMin) return -1;
+            return 0;
+        }
+
+        var direction = new Vector2Int(AxisSign(a.x, t.x), AxisSign(a.y, t.y));
+        if (direction == Vector2Int.zero)
+        {
+            // Overlapping footprints: fall back to the difference of the footprint centres.
+            float dx = (t.x + targetSize * 0.5f) - (a.x + attackerSize * 0.5f);
+            float dy = (t.y + targetSize * 0.5f) - (a.y + attackerSize * 0.5f);
+            direction = new Vector2Int(dx > 0f ? 1 : (dx < 0f ? -1 : 0), dy > 0f ? 1 : (dy < 0f ? -1 : 0));
+        }
+
+        return direction == Vector2Int.zero ? Vector2Int.right : direction;
+    }
+
     private BullRushPushResolution ExecuteBullRushPush(CharacterController attacker, CharacterController target, int squares)
     {
         var resolution = new BullRushPushResolution
@@ -934,20 +943,16 @@ public partial class GameManager
             RequestedSquares = Mathf.Max(1, squares),
             OriginalTargetPosition = target.GridPosition,
             FinalTargetPosition = target.GridPosition,
-            Direction = target.GridPosition - attacker.GridPosition
+            Direction = GetPushDirection(attacker, target)
         };
 
-        resolution.Direction.x = Mathf.Clamp(resolution.Direction.x, -1, 1);
-        resolution.Direction.y = Mathf.Clamp(resolution.Direction.y, -1, 1);
-        if (resolution.Direction == Vector2Int.zero)
-            resolution.Direction = Vector2Int.right;
-
+        // Each step must fit the target's whole footprint; its own squares do not block it.
+        int targetSize = target.GetVisualSquaresOccupied();
         Vector2Int destination = target.GridPosition;
         for (int i = 0; i < resolution.RequestedSquares; i++)
         {
             Vector2Int next = destination + resolution.Direction;
-            SquareCell nextCell = Grid.GetCell(next);
-            if (nextCell == null || nextCell.IsOccupied)
+            if (Grid == null || !Grid.CanPlaceCreature(next, targetSize, target))
             {
                 resolution.Obstructed = true;
                 break;
@@ -957,8 +962,6 @@ public partial class GameManager
             resolution.ActualSquares++;
         }
 
-        resolution.FinalTargetPosition = destination;
-
         if (resolution.ActualSquares <= 0)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{target.Stats.CharacterName} cannot be pushed; path is blocked."));
@@ -966,7 +969,10 @@ public partial class GameManager
         }
 
         SquareCell destinationCell = Grid.GetCell(destination);
-        if (destinationCell == null)
+        if (destinationCell != null)
+            target.MoveToCell(destinationCell);
+
+        if (destinationCell == null || target.GridPosition != destination)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"{target.Stats.CharacterName} cannot be pushed; no valid destination."));
             resolution.ActualSquares = 0;
@@ -974,7 +980,7 @@ public partial class GameManager
             return resolution;
         }
 
-        target.MoveToCell(destinationCell);
+        resolution.FinalTargetPosition = destination;
         int feet = resolution.ActualSquares * 5;
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("↗", $"{target.Stats.CharacterName} is pushed back {resolution.ActualSquares} square{(resolution.ActualSquares == 1 ? string.Empty : "s")} ({feet} feet)."));
 
@@ -989,14 +995,16 @@ public partial class GameManager
         if (attacker == null || pushResolution.ActualSquares <= 0)
             return;
 
-        Vector2Int current = attacker.GridPosition;
+        // The follower's whole footprint must fit at each step.
+        int attackerSize = attacker.GetVisualSquaresOccupied();
+        Vector2Int start = attacker.GridPosition;
+        Vector2Int current = start;
         int movedSquares = 0;
 
         for (int i = 0; i < pushResolution.ActualSquares; i++)
         {
             Vector2Int next = current + pushResolution.Direction;
-            SquareCell nextCell = Grid.GetCell(next);
-            if (nextCell == null || nextCell.IsOccupied)
+            if (Grid == null || !Grid.CanPlaceCreature(next, attackerSize, attacker))
                 break;
 
             current = next;
@@ -1014,6 +1022,12 @@ public partial class GameManager
             return;
 
         attacker.MoveToCell(followDestination);
+        if (attacker.GridPosition == start)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} cannot follow due to blocked path."));
+            return;
+        }
+
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{attacker.Stats.CharacterName} follows {movedSquares} square{(movedSquares == 1 ? string.Empty : "s")}."));
     }
 }

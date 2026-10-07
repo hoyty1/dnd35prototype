@@ -97,16 +97,18 @@ public sealed class AttackPool
 /// <summary>
 /// What a combat maneuver costs in the attack sequence. One switch case per maneuver type, so
 /// including or excluding a type is a one-line change on the NPC side (CMB-102). Read by the AI
-/// (GameManager.TryNPCSpecialAttackIfBeneficial, ShouldUseManeuver) and, for bull rush only, by the PC
-/// wrapper (GameManager.ExecuteSpecialAttack). The PC branches and availability helpers for trip,
-/// disarm, sunder and grapple still hard-code them as attack steps: change them with the table.
+/// (GameManager.TryNPCSpecialAttackIfBeneficial, ShouldUseManeuver). The PC branches and availability
+/// helpers for trip, disarm, sunder and grapple still hard-code them as attack steps: change them with
+/// the table.
 /// </summary>
 public static class ManeuverActionCost
 {
     /// <summary>
     /// Maneuvers that may replace one melee attack of an attack or full attack, at that attack's
     /// BAB (PHB p.141 Table 8-2 note 7). They cost one main-hand step of
-    /// <see cref="CharacterController.TryCommitAttack"/>.
+    /// <see cref="CharacterController.TryCommitAttack"/>. Bull rush and overrun are not in this set:
+    /// for every creature, PC or NPC, they are a standard action or part of a charge (PHB p.154,
+    /// p.157), never one attack of a full attack and never an attack of opportunity.
     /// </summary>
     public static bool ReplacesMeleeAttack(SpecialAttackType type)
     {
@@ -121,23 +123,4 @@ public static class ManeuverActionCost
                 return false;
         }
     }
-
-    /// <summary>
-    /// CMB-102 interim PC-only exception pending the owner: the PC "Bull Rush (Attack)" option still
-    /// uses a main-hand attack step. Delete the case line to make the PC bull rush a standard action.
-    /// </summary>
-    public static bool PcUiAlsoReplacesAttack(SpecialAttackType type)
-    {
-        switch (type)
-        {
-            case SpecialAttackType.BullRushAttack:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    /// <summary>True when the PC UI charges this maneuver as one attack step.</summary>
-    public static bool PcUiUsesAttackStep(SpecialAttackType type)
-        => ReplacesMeleeAttack(type) || PcUiAlsoReplacesAttack(type);
 }

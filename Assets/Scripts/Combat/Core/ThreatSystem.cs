@@ -683,8 +683,10 @@ public static class ThreatSystem
 
     /// <summary>
     /// The enemies that get an AoO when <paramref name="attacker"/> starts this maneuver.
-    /// <paramref name="excluded"/> lists enemies that already had their opportunity in the same
-    /// move (a bull rush at the end of a charge, PHB p.138: one AoO per opponent per move).
+    /// <paramref name="excluded"/> lists enemies that get no AoO here because they already had one
+    /// during the same charge move (a bull rush at the end of a charge). That is an interpretation
+    /// pending the owner (CMB-113): PHB p.138 makes leaving several threatened squares in one move a
+    /// single opportunity, but entering the defender's space (PHB p.154) may be a separate one.
     /// </summary>
     public static List<CharacterController> GetManeuverAoOProvokers(
         CharacterController attacker,

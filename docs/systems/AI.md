@@ -620,7 +620,7 @@ From [issues/AI.md](../issues/AI.md), AI-001 to AI-031 (AI-032 to AI-054 were fi
 - **Casting:** AI-001 (no area spells or metamagic, High), AI-002 (melee routines never cast), AI-011 (planning stores never filled), AI-022 (score scales), AI-028 (unused strategist statics).
 - **Routing and data:** AI-003 (`Ranged` behaviour unhandled), AI-004 (Brute and Caster have no profile), AI-015 (index-parallel `_npcAIBehaviors`), AI-016 (raw team checks, Neutral), AI-017 (profile leak, `OnEnable` overwrites, dragon per-turn state), AI-031 (enum docs lie).
 - **Targeting and perception:** AI-005 (ward saves re-rolled), AI-007 (Listen re-rolled), AI-021 (two last-known stores).
-- **Monster abilities:** AI-006 (specials bypass the pipeline), AI-008 (secondary breath), AI-013 (status and aura mappings), AI-014 (bull rush/overrun placeholders).
+- **Monster abilities:** AI-006 (specials bypass the pipeline), AI-008 (secondary breath), AI-013 (status and aura mappings), AI-014 (overrun target placeholder; bull rush and overrun never chosen).
 - **Missing behaviour:** AI-009 (consumables), AI-010 (flee thresholds, lich aura), AI-012 (difficulty unused).
 - **Structure and performance:** AI-018 (`CombatUI` null derefs), AI-019 (A* per cell), AI-020 (3,504-line god class), AI-023 (hard-coded delays), AI-024 (two-way coupling via `*ForAI`), AI-025 (duplicate maneuver choosers), AI-026 (unread settings), AI-027 (`SelectBestAction` results other than `Charge` are ignored; if morale is built, wire in its `Retreat` result instead of reducing it to a charge test, 13.3), AI-029 (uncalled members), AI-030 (dead `ShouldNPCUseCharge`).
 

@@ -919,9 +919,6 @@ public class CharacterController : MonoBehaviour
     public bool TryConsumeIterativeGrappleAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
         => TryConsumeIterativeMainHandStep(out attackBonusUsed, out attacksRemaining, out reason);
 
-    public bool TryConsumeIterativeBullRushAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
-        => TryConsumeIterativeMainHandStep(out attackBonusUsed, out attacksRemaining, out reason);
-
     public bool TryConsumeIterativeDisarmAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
         => TryConsumeIterativeMainHandStep(out attackBonusUsed, out attacksRemaining, out reason);
 
@@ -7320,11 +7317,14 @@ public class CharacterController : MonoBehaviour
             case SpecialAttackType.Disarm:
             case SpecialAttackType.Grapple:
             case SpecialAttackType.Sunder:
-            case SpecialAttackType.BullRushAttack:
-            case SpecialAttackType.BullRushCharge:
             case SpecialAttackType.Overrun:
             case SpecialAttackType.CoupDeGrace:
                 return CanPerformSpecialMeleeAttacks();
+            // Bull rush needs no weapon: it is a body push resolved by Strength (PHB p.154).
+            // Target legality is CanBullRush.
+            case SpecialAttackType.BullRushAttack:
+            case SpecialAttackType.BullRushCharge:
+                return true;
             default:
                 return true;
         }
@@ -10150,7 +10150,6 @@ public class CharacterController : MonoBehaviour
         EquipSlot? disarmTargetSlot = null,
         int? disarmAttackBonusOverride = null,
         int? grappleAttackBonusOverride = null,
-        int? bullRushAttackBonusOverride = null,
         int bullRushChargeBonusOverride = 0,
         ItemData disarmAttackerWeaponOverride = null,
         int? tripAttackBonusOverride = null,
@@ -10216,8 +10215,7 @@ public class CharacterController : MonoBehaviour
             case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot, disarmAttackBonusOverride, disarmAttackerWeaponOverride, disarmUsedOffHand, disarmDualWieldPenaltyForLog);
             case SpecialAttackType.Grapple: return ResolveGrapple(target, grappleAttackBonusOverride);
             case SpecialAttackType.Sunder: return ResolveSunder(target, sunderTargetSlot, sunderAttackBonusOverride, sunderAttackerWeaponOverride, sunderUsedOffHand, sunderDualWieldPenaltyForLog);
-            // bullRushAttackBonusOverride (the iterative attack slot spent) does not enter the
-            // check: bull rush is an opposed Strength check (PHB p.154, CMB-014).
+            // Bull rush is an opposed Strength check; BAB does not enter it (PHB p.154, CMB-014).
             case SpecialAttackType.BullRushAttack:
                 return ResolveBullRush(target, chargeBonus: 0);
             case SpecialAttackType.BullRushCharge:
@@ -11134,25 +11132,90 @@ public class CharacterController : MonoBehaviour
         return result;
     }
 
-    private SpecialAttackResult ResolveBullRush(CharacterController target, int chargeBonus)
+    /// <summary>
+    /// Shared bull rush legality for PCs and NPCs (PHB p.154, CMB-102). Spends nothing. Refuses when
+    /// the target is missing, dead or this creature; the target is a swarm (MM p.316); this creature
+    /// is a swarm (interpretation, see below); either side is incorporeal (MM p.311); this creature
+    /// is grappling or pinned (PHB p.156); the target is more than one size category larger; or the
+    /// target is not adjacent (the bull rusher must enter its space).
+    /// <paramref name="atEndOfCharge"/> true is for the charge planner only, which calls it before
+    /// the move: it skips the adjacency rule, which the charge endpoints satisfy. The bull rush itself
+    /// (ResolveBullRush, ResolveChargeBullRush) always checks with false, after the move.
+    /// </summary>
+    public bool CanBullRush(CharacterController target, bool atEndOfCharge, out string reason)
     {
-        if (Stats != null && Stats.IsSwarm)
+        reason = null;
+        if (target == null || target.Stats == null || target == this)
         {
-            return new SpecialAttackResult
-            {
-                ManeuverName = "Bull Rush",
-                Success = false,
-                Log = $"{Stats.CharacterName} cannot bull rush while in swarm form."
-            };
+            reason = "no valid target";
+            return false;
         }
 
-        if (target != null && target.Stats != null && target.Stats.IsSwarm)
+        if (target.IsDead || target.Stats.IsDead)
+        {
+            reason = $"{target.Stats.CharacterName} is dead";
+            return false;
+        }
+
+        // Interpretation kept from the old ResolveBullRush, not stated RAW: MM p.316 says a swarm
+        // cannot be bull rushed and makes no standard melee attacks, but does not bar a swarm from
+        // bull rushing. Pending an owner decision (CMB-112).
+        if (Stats != null && Stats.IsSwarm)
+        {
+            reason = "a swarm cannot bull rush";
+            return false;
+        }
+
+        if (target.Stats.IsSwarm)
+        {
+            reason = $"{target.Stats.CharacterName} is a swarm and cannot be bull rushed";
+            return false;
+        }
+
+        if (IsIncorporeal)
+        {
+            reason = "an incorporeal creature cannot physically push another";
+            return false;
+        }
+
+        if (target.IsIncorporeal)
+        {
+            reason = $"{target.Stats.CharacterName} is incorporeal and cannot be pushed";
+            return false;
+        }
+
+        if (IsGrappling() || IsPinned())
+        {
+            reason = "cannot bull rush while grappling";
+            return false;
+        }
+
+        // SizeCategory runs Fine..Colossal: the target may be at most one category larger.
+        if ((int)target.GetCurrentSizeCategory() - (int)GetCurrentSizeCategory() > 1)
+        {
+            reason = $"{target.Stats.CharacterName} is more than one size category larger";
+            return false;
+        }
+
+        if (!atEndOfCharge && GetMinimumDistanceToTarget(target, chebyshev: true) != 1)
+        {
+            reason = $"{target.Stats.CharacterName} is not adjacent";
+            return false;
+        }
+
+        return true;
+    }
+
+    private SpecialAttackResult ResolveBullRush(CharacterController target, int chargeBonus)
+    {
+        // Checked after any charge move, so adjacency applies here too (PHB p.154).
+        if (!CanBullRush(target, false, out string bullRushReason))
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Bull Rush",
                 Success = false,
-                Log = $"{target.Stats.CharacterName} is a swarm and cannot be bull rushed."
+                Log = $"{(Stats != null ? Stats.CharacterName : name)} cannot bull rush: {bullRushReason}."
             };
         }
 

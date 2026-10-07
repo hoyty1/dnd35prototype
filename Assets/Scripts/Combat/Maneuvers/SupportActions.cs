@@ -947,10 +947,10 @@ public partial class GameManager
             return;
 
         CharacterController target = hovered.Occupant;
-        if (!CanChargeTarget(ActivePC, target, logFailures: false))
+        if (!CanChargeTarget(ActivePC, target, logFailures: false, forBullRush: _pendingChargeBullRush))
             return;
 
-        var previewPath = GetChargePath(ActivePC, target);
+        var previewPath = GetChargePath(ActivePC, target, _pendingChargeBullRush);
         int pathCost = SquareGridUtils.CalculatePathCost(ActivePC.GridPosition, previewPath);
         CombatUI.SetTurnIndicator($"CHARGE ready: {target.Stats.CharacterName} ({pathCost * 5} ft). Click target to preview and confirm.");
     }
@@ -984,7 +984,8 @@ public partial class GameManager
             return;
         }
 
-        if (!charger.HasMeleeWeaponEquipped())
+        // A bull rush needs no weapon (PHB p.154).
+        if (!_pendingChargeBullRush && !charger.HasMeleeWeaponEquipped())
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName} needs a melee weapon (or natural/unarmed attack) to charge."));
             return;
@@ -1032,7 +1033,7 @@ public partial class GameManager
             if (GetChargeStartingDistanceSquares(charger, candidate) <= ChargeBlockedDistanceSquares)
                 continue;
 
-            if (CanChargeTarget(charger, candidate, logFailures: false))
+            if (CanChargeTarget(charger, candidate, logFailures: false, forBullRush: _pendingChargeBullRush))
                 list.Add(candidate);
         }
 
@@ -1058,7 +1059,7 @@ public partial class GameManager
         return charger.GetMinimumDistanceToTarget(target, chebyshev: true);
     }
 
-    public bool CanChargeTarget(CharacterController charger, CharacterController target, bool logFailures = true)
+    public bool CanChargeTarget(CharacterController charger, CharacterController target, bool logFailures = true, bool forBullRush = false)
     {
         if (charger == null || target == null || charger == target) return false;
         if (charger.Stats == null || target.Stats == null || target.Stats.IsDead) return false;
@@ -1099,7 +1100,17 @@ public partial class GameManager
             return false;
         }
 
-        if (!charger.HasMeleeWeaponEquipped())
+        // A bull rush needs no weapon (PHB p.154); it needs the shared size, swarm, incorporeal and
+        // grappling rules instead. Adjacency is the charge path's job (endpoints touch the target).
+        if (forBullRush)
+        {
+            if (!charger.CanBullRush(target, true, out string bullRushReason))
+            {
+                if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"Cannot bull rush {target.Stats.CharacterName}: {bullRushReason}."));
+                return false;
+            }
+        }
+        else if (!charger.HasMeleeWeaponEquipped())
         {
             if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Need a melee weapon (or natural/unarmed attack) to charge."));
             return false;
@@ -1122,7 +1133,7 @@ public partial class GameManager
             return false;
         }
 
-        if (!TryBuildChargePath(charger, target, out _, out _, out ChargePathFailureReason failureReason))
+        if (!TryBuildChargePath(charger, target, out _, out _, out ChargePathFailureReason failureReason, forBullRush))
         {
             if (logFailures)
             {
@@ -1146,9 +1157,9 @@ public partial class GameManager
         return true;
     }
 
-    public List<Vector2Int> GetChargePath(CharacterController charger, CharacterController target)
+    public List<Vector2Int> GetChargePath(CharacterController charger, CharacterController target, bool forBullRush = false)
     {
-        if (TryBuildChargePath(charger, target, out List<Vector2Int> path, out _, out _))
+        if (TryBuildChargePath(charger, target, out List<Vector2Int> path, out _, out _, forBullRush))
             return path;
 
         return new List<Vector2Int>();
@@ -1159,7 +1170,8 @@ public partial class GameManager
         CharacterController target,
         out List<Vector2Int> bestPath,
         out int bestPathCost,
-        out ChargePathFailureReason failureReason)
+        out ChargePathFailureReason failureReason,
+        bool forBullRush = false)
     {
         bestPath = null;
         bestPathCost = int.MaxValue;
@@ -1184,7 +1196,7 @@ public partial class GameManager
         int shortestReachableCost = int.MaxValue;
         Vector2Int bestEndpoint = default;
 
-        foreach (Vector2Int endpoint in GetChargeEndpointCandidates(charger, target, moverSizeSquares))
+        foreach (Vector2Int endpoint in GetChargeEndpointCandidates(charger, target, moverSizeSquares, forBullRush))
         {
             AoOPathResult pathResult = FindPath(
                 charger,
@@ -1246,10 +1258,12 @@ public partial class GameManager
         return false;
     }
 
-    private IEnumerable<Vector2Int> GetChargeEndpointCandidates(CharacterController charger, CharacterController target, int moverSizeSquares)
+    private IEnumerable<Vector2Int> GetChargeEndpointCandidates(CharacterController charger, CharacterController target, int moverSizeSquares, bool forBullRush = false)
     {
         if (charger == null || target == null || Grid == null)
             yield break;
+
+        List<Vector2Int> targetSquares = forBullRush ? target.GetOccupiedSquares() : null;
 
         foreach (var kvp in Grid.Cells)
         {
@@ -1258,7 +1272,14 @@ public partial class GameManager
             if (endpoint == charger.GridPosition)
                 continue;
 
-            if (!CombatUtils.CanThreatenTargetFromPosition(charger, endpoint, target))
+            if (forBullRush)
+            {
+                // A bull rush enters the defender's space, so the charge ends adjacent to it
+                // (PHB p.154), whatever the charger's reach.
+                if (!IsFootprintAdjacentToSquares(charger.GetOccupiedSquaresAt(endpoint), targetSquares))
+                    continue;
+            }
+            else if (!CombatUtils.CanThreatenTargetFromPosition(charger, endpoint, target))
                 continue;
 
             if (!Grid.CanTraversePathNode(endpoint, moverSizeSquares, charger, isDestinationNode: true, allowThroughAllies: true))
@@ -1266,6 +1287,26 @@ public partial class GameManager
 
             yield return endpoint;
         }
+    }
+
+    /// <summary>True when the nearest pair of squares is exactly one square apart (Chebyshev).</summary>
+    private static bool IsFootprintAdjacentToSquares(List<Vector2Int> moverSquares, List<Vector2Int> targetSquares)
+    {
+        if (moverSquares == null || targetSquares == null)
+            return false;
+
+        int minDistance = int.MaxValue;
+        for (int i = 0; i < moverSquares.Count; i++)
+        {
+            for (int j = 0; j < targetSquares.Count; j++)
+            {
+                int distance = SquareGridUtils.GetChebyshevDistance(moverSquares[i], targetSquares[j]);
+                if (distance < minDistance)
+                    minDistance = distance;
+            }
+        }
+
+        return minDistance == 1;
     }
 
     private static bool IsBetterChargeEndpoint(Vector2Int candidate, Vector2Int currentBest, Vector2Int targetPos)
@@ -1315,11 +1356,11 @@ public partial class GameManager
             return;
 
         CharacterController target = cell.Occupant;
-        if (!CanChargeTarget(charger, target, logFailures: true))
+        if (!CanChargeTarget(charger, target, logFailures: true, forBullRush: _pendingChargeBullRush))
             return;
 
         _chargeTarget = target;
-        _pendingChargePath = GetChargePath(charger, target);
+        _pendingChargePath = GetChargePath(charger, target, _pendingChargeBullRush);
 
         CurrentSubPhase = PlayerSubPhase.ConfirmingChargePath;
         ShowChargePathPreview(charger, target);
@@ -1352,7 +1393,7 @@ public partial class GameManager
     private void ShowChargePathPreview(CharacterController charger, CharacterController target)
     {
         if (charger == null || target == null) return;
-        if (!CanChargeTarget(charger, target, logFailures: false)) return;
+        if (!CanChargeTarget(charger, target, logFailures: false, forBullRush: _pendingChargeBullRush)) return;
 
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
@@ -1445,14 +1486,14 @@ public partial class GameManager
     {
         Debug.Log($"[Charge] Starting charge attack | attacker={charger?.Stats?.CharacterName ?? charger?.name ?? "<null>"} | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | frame={Time.frameCount}");
 
-        if (!CanChargeTarget(charger, target, logFailures: true))
+        if (!CanChargeTarget(charger, target, logFailures: true, forBullRush: _pendingChargeBullRush))
         {
             ShowActionChoices();
             yield break;
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        List<Vector2Int> path = GetChargePath(charger, target);
+        List<Vector2Int> path = GetChargePath(charger, target, _pendingChargeBullRush);
         if (path == null || path.Count == 0)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Charge aborted: invalid path."));
@@ -1516,38 +1557,10 @@ public partial class GameManager
 
         if (_pendingChargeBullRush)
         {
-            // PHB p.154: entering the defender's space provokes from each threatening enemy
-            // (not the defender with Improved Bull Rush). Enemies that already had their
-            // opportunity during this charge move do not get a second one (PHB p.138).
-            var chargeProvokers = new HashSet<CharacterController>();
-            if (provokedAoOs != null)
-            {
-                for (int i = 0; i < provokedAoOs.Count; i++)
-                {
-                    if (provokedAoOs[i] != null && provokedAoOs[i].Threatener != null)
-                        chargeProvokers.Add(provokedAoOs[i].Threatener);
-                }
-            }
-
-            if (ResolveManeuverInitiationAoOs(charger, target, SpecialAttackType.BullRushCharge, chargeProvokers) == ManeuverAoOOutcome.AttackerIncapacitated)
-            {
-                UpdateAllStatsUI();
-                _chargeTarget = null;
-                _pendingChargePath.Clear();
-                _pendingChargeBullRush = false;
-                if (IsPlayerTurn)
-                    EndActivePCTurn();
+            var chargeBullRushOutcome = new ChargeBullRushOutcome();
+            yield return StartCoroutine(ResolveChargeBullRush(charger, target, BuildChargeProvokerSet(provokedAoOs), chargeBullRushOutcome));
+            if (chargeBullRushOutcome.AttackerIncapacitated)
                 yield break;
-            }
-
-            SpecialAttackResult bullRushResult = charger.ExecuteSpecialAttack(
-                SpecialAttackType.BullRushCharge,
-                target,
-                bullRushChargeBonusOverride: 2);
-            CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Bull Rush (+2): {bullRushResult.Log}"));
-
-            if (bullRushResult.Success)
-                yield return StartCoroutine(ResolveBullRushPushAndFollowCoroutine(charger, target, bullRushResult));
         }
         else
         {
@@ -1771,6 +1784,77 @@ public partial class GameManager
         StartCoroutine(AfterAttackDelay(charger, 1.0f));
     }
 
+    /// <summary>Set by <see cref="ResolveChargeBullRush"/> when an initiation AoO drops the charger.</summary>
+    private sealed class ChargeBullRushOutcome
+    {
+        public bool AttackerIncapacitated;
+    }
+
+    /// <summary>
+    /// Enemies that already had an AoO during this charge move; entering the defender's space gives
+    /// them none. Interpretation kept from the old charge code, pending the owner (CMB-113): PHB p.138
+    /// makes leaving several squares in one move a single opportunity, but the bull rush entry
+    /// (PHB p.154) may be a separate one for a creature with Combat Reflexes.
+    /// </summary>
+    private static HashSet<CharacterController> BuildChargeProvokerSet(List<AoOThreatInfo> provokedAoOs)
+    {
+        var chargeProvokers = new HashSet<CharacterController>();
+        if (provokedAoOs != null)
+        {
+            for (int i = 0; i < provokedAoOs.Count; i++)
+            {
+                if (provokedAoOs[i] != null && provokedAoOs[i].Threatener != null)
+                    chargeProvokers.Add(provokedAoOs[i].Threatener);
+            }
+        }
+
+        return chargeProvokers;
+    }
+
+    /// <summary>
+    /// The end of a bull rush charge, shared by the PC (ExecuteCharge) and NPC (NPCExecuteCharge)
+    /// charges (PHB p.154-155, CMB-102). First the shared legality check now that the charger stands
+    /// at the endpoint (adjacency included); a refusal logs and stops here, with the full-round
+    /// action and the charge AC penalty still spent. Then entering the defender's space provokes from
+    /// each threatening enemy (not the defender with Improved Bull Rush) except those in
+    /// <paramref name="provokedDuringCharge"/> (CMB-113); then the opposed Strength check at +2 and
+    /// the push. When an AoO drops the charger it clears the charge state, ends a PC turn and sets
+    /// <paramref name="outcome"/>.AttackerIncapacitated so the caller stops.
+    /// </summary>
+    private IEnumerator ResolveChargeBullRush(CharacterController charger, CharacterController target, HashSet<CharacterController> provokedDuringCharge, ChargeBullRushOutcome outcome = null)
+    {
+        if (!charger.CanBullRush(target, false, out string bullRushReason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{charger.Stats.CharacterName}'s charge ends without a bull rush: {bullRushReason}."));
+            yield break;
+        }
+
+        if (ResolveManeuverInitiationAoOs(charger, target, SpecialAttackType.BullRushCharge, provokedDuringCharge) == ManeuverAoOOutcome.AttackerIncapacitated)
+        {
+            UpdateAllStatsUI();
+            _chargeTarget = null;
+            _pendingChargePath.Clear();
+            _pendingChargeBullRush = false;
+            if (outcome != null)
+                outcome.AttackerIncapacitated = true;
+            if (IsPlayerTurn)
+                EndActivePCTurn();
+            yield break;
+        }
+
+        // A bull rush is a melee attack for turning (same as the standard bull rush and the charge attack).
+        ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
+
+        SpecialAttackResult bullRushResult = charger.ExecuteSpecialAttack(
+            SpecialAttackType.BullRushCharge,
+            target,
+            bullRushChargeBonusOverride: 2);
+        CombatUI.ShowCombatLog(CombatLogHelper.Damage("⚡", $"Charge Bull Rush (+2): {bullRushResult.Log}"));
+
+        if (bullRushResult.Success)
+            yield return StartCoroutine(ResolveBullRushPushAndFollowCoroutine(charger, target, bullRushResult));
+    }
+
     private void ApplyChargePenaltyUntilStartOfNextTurn(CharacterController actor)
     {
         if (actor == null || actor.Stats == null)
@@ -1807,12 +1891,12 @@ public partial class GameManager
     private bool ShouldNPCUseCharge(CharacterController npc, CharacterController target)
         => _aiService != null ? _aiService.ShouldNPCCharge(npc, target) : false;
 
-    private IEnumerator NPCExecuteCharge(CharacterController npc, CharacterController target)
+    private IEnumerator NPCExecuteCharge(CharacterController npc, CharacterController target, bool bullRush = false)
     {
-        if (!CanChargeTarget(npc, target, logFailures: false))
+        if (!CanChargeTarget(npc, target, logFailures: false, forBullRush: bullRush))
             yield break;
 
-        List<Vector2Int> path = GetChargePath(npc, target);
+        List<Vector2Int> path = GetChargePath(npc, target, bullRush);
         if (path == null || path.Count == 0)
             yield break;
 
@@ -1824,7 +1908,9 @@ public partial class GameManager
 
         npc.Actions.UseFullRoundAction();
 
-        CombatUI.ShowCombatLog(CombatLogHelper.Warning("", $"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!"));
+        CombatUI.ShowCombatLog(CombatLogHelper.Warning("", bullRush
+            ? $"🏇 {npc.Stats.CharacterName} charges and attempts a bull rush on {target.Stats.CharacterName}!"
+            : $"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!"));
 
         // Same shared AoO helper as the PC charge: each AoO resolves before its step.
         var provokedAoOs = CheckForAoO(npc, path);
@@ -1863,12 +1949,21 @@ public partial class GameManager
         bool isFlankingCharge = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
         int flankingBonus = isFlankingCharge ? CombatUtils.FlankingAttackBonus : 0;
 
-        bool usedPounce = npc.Stats != null
+        bool usedPounce = !bullRush
+            && npc.Stats != null
             && npc.Stats.HasPounce
             && npc.Stats.HasNaturalAttacks
             && npc.GetEquippedMainWeapon() == null;
 
-        if (usedPounce)
+        if (bullRush)
+        {
+            // Same end of charge as the PC bull rush charge (ResolveChargeBullRush, CMB-102).
+            var chargeBullRushOutcome = new ChargeBullRushOutcome();
+            yield return StartCoroutine(ResolveChargeBullRush(npc, target, BuildChargeProvokerSet(provokedAoOs), chargeBullRushOutcome));
+            if (chargeBullRushOutcome.AttackerIncapacitated)
+                yield break;
+        }
+        else if (usedPounce)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Summon("🐅", $"{npc.Stats.CharacterName} uses Pounce!"));
             npc.Stats.MoraleAttackBonus += 2;

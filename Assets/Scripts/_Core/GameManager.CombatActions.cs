@@ -1549,7 +1549,7 @@ public partial class GameManager
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int maxRange = (type == SpecialAttackType.Feint || type == SpecialAttackType.CoupDeGrace)
+        int maxRange = (type == SpecialAttackType.Feint || type == SpecialAttackType.CoupDeGrace || type == SpecialAttackType.BullRushAttack)
             ? 1
             : attacker.GetMeleeMaxAttackDistance();
         if (maxRange < 1) maxRange = 1;
@@ -1557,6 +1557,7 @@ public partial class GameManager
         int sizePadding = Mathf.Max(0, attacker.GetVisualSquaresOccupied() - 1);
         List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, maxRange + sizePadding);
         bool hasTarget = false;
+        bool hasRefusedBullRushTarget = false;
 
         foreach (var c in allCells)
         {
@@ -1564,7 +1565,8 @@ public partial class GameManager
             if (!TeamUtility.IsEnemy(attacker, c.Occupant)) continue;
 
             int distance = attacker.GetMinimumDistanceToTarget(c.Occupant, chebyshev: true);
-            bool inRange = (type == SpecialAttackType.Feint || type == SpecialAttackType.CoupDeGrace)
+            // Bull rush enters the defender's space, so it needs an adjacent target (PHB p.154).
+            bool inRange = (type == SpecialAttackType.Feint || type == SpecialAttackType.CoupDeGrace || type == SpecialAttackType.BullRushAttack)
                 ? distance == 1
                 : attacker.CanMeleeAttackDistance(distance);
 
@@ -1583,6 +1585,18 @@ public partial class GameManager
             {
                 bool hasDisarmableWeapon = c.Occupant.HasDisarmableWeaponEquipped();
                 c.SetHighlight(hasDisarmableWeapon ? HighlightType.Attack : HighlightType.AttackDeadZone);
+                _highlightedCells.Add(c);
+                hasTarget = true;
+                continue;
+            }
+
+            if (type == SpecialAttackType.BullRushAttack)
+            {
+                // Shared legality (size, swarm, incorporeal, grappling): gray targets are refused.
+                bool canBullRush = attacker.CanBullRush(c.Occupant, false, out _);
+                if (!canBullRush)
+                    hasRefusedBullRushTarget = true;
+                c.SetHighlight(canBullRush ? HighlightType.Attack : HighlightType.AttackDeadZone);
                 _highlightedCells.Add(c);
                 hasTarget = true;
                 continue;
@@ -1620,6 +1634,10 @@ public partial class GameManager
                 CombatUI.SetTurnIndicator("SPECIAL: Disarm - red targets are valid, gray targets have no disarmable weapon (Right-click/Esc to cancel)");
             else if (type == SpecialAttackType.Sunder)
                 CombatUI.SetTurnIndicator("SPECIAL: Sunder - red targets are valid, gray targets have no sunderable item (Right-click/Esc to cancel)");
+            else if (type == SpecialAttackType.BullRushAttack)
+                CombatUI.SetTurnIndicator(hasRefusedBullRushTarget
+                    ? "SPECIAL: Bull Rush (standard action) - red targets are valid; gray targets are too large, incorporeal or swarms (Right-click/Esc to cancel)"
+                    : "SPECIAL: Bull Rush (standard action) - select an adjacent target (Right-click/Esc to cancel)");
             else if (type == SpecialAttackType.CoupDeGrace)
                 CombatUI.SetTurnIndicator("SPECIAL: Coup de Grace - red targets are helpless and vulnerable to critical hits (Right-click/Esc to cancel)");
             else
@@ -1669,6 +1687,18 @@ public partial class GameManager
     {
         if (attacker == null || target == null) { ShowActionChoices(); return; }
 
+        // Shared bull rush legality (CMB-102) before any side effect, so a refused (gray) target
+        // costs nothing and does not break turning, as on the NPC executor.
+        if (type == SpecialAttackType.BullRushAttack && !attacker.CanBullRush(target, false, out string bullRushReason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot bull rush {target.Stats.CharacterName}: {bullRushReason}."));
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            _isSelectingSpecialAttack = false;
+            ShowActionChoices();
+            return;
+        }
+
         CurrentSubPhase = PlayerSubPhase.Animating;
 
         bool specialAttackCountsAsMeleeFearBreak = type == SpecialAttackType.Trip
@@ -1688,7 +1718,6 @@ public partial class GameManager
         int disarmDualWieldPenaltyForLog = 0;
         ItemData disarmAttackerWeaponOverride = null;
         int? grappleAttackBonusOverride = null;
-        int? bullRushAttackBonusOverride = null;
         int? tripAttackBonusOverride = null;
         int? sunderAttackBonusOverride = null;
         int sunderAttackBonusUsed = 0;
@@ -1827,36 +1856,17 @@ public partial class GameManager
             actionLabel = $"attack BAB {CharacterStats.FormatMod(grappleAttackBonusUsed)} ({grappleAttacksRemaining} remaining)";
             Debug.Log($"[GameManager][Grapple] Shared-pool consume success actor={attacker.Stats.CharacterName} usedBAB={CharacterStats.FormatMod(grappleAttackBonusUsed)} remaining={grappleAttacksRemaining}");
         }
-        else if (type == SpecialAttackType.BullRushAttack && !ManeuverActionCost.PcUiUsesAttackStep(type))
+        else if (type == SpecialAttackType.BullRushAttack)
         {
-            // Bull rush is a standard action in RAW (PHB p.154), not an attack substitute.
+            // Bull rush is a standard action for every creature (PHB p.154, CMB-102), never one
+            // attack of a full attack. Its legality was checked at the top of this method.
             if (!attacker.CommitStandardAction())
             {
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Bull Rush (Attack): standard action already spent."));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot bull rush: standard action already spent."));
                 ShowActionChoices();
                 return;
             }
             actionLabel = "standard action";
-        }
-        else if (type == SpecialAttackType.BullRushAttack)
-        {
-            // CMB-102 interim: the PC bull rush still uses a main-hand attack step
-            // (ManeuverActionCost.PcUiAlsoReplacesAttack), pending the owner.
-            Debug.Log($"[GameManager][BullRushAttack] Attempting shared-pool consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} full={attacker.Actions.HasFullRoundAction} remaining={GetRemainingBullRushAttackActions(attacker)}");
-            if (!TryConsumeBullRushAttackAction(attacker, out int bullRushBabUsed, out int bullRushAttacksRemaining, out string bullRushConsumeReason))
-            {
-                string reason = string.IsNullOrWhiteSpace(bullRushConsumeReason)
-                    ? "no eligible attack remaining"
-                    : bullRushConsumeReason;
-                Debug.LogWarning($"[GameManager][BullRushAttack] Shared-pool consume failed actor={attacker.Stats.CharacterName} reason={reason}");
-                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Bull Rush (Attack): {reason}."));
-                ShowActionChoices();
-                return;
-            }
-
-            bullRushAttackBonusOverride = bullRushBabUsed;
-            actionLabel = $"attack BAB {CharacterStats.FormatMod(bullRushBabUsed)} ({bullRushAttacksRemaining} remaining)";
-            Debug.Log($"[GameManager][BullRushAttack] Shared-pool consume success actor={attacker.Stats.CharacterName} usedBAB={CharacterStats.FormatMod(bullRushBabUsed)} remaining={bullRushAttacksRemaining}");
         }
         else if (type == SpecialAttackType.Trip)
         {
@@ -1915,7 +1925,6 @@ public partial class GameManager
             disarmTargetSlot,
             disarmAttackBonusOverride,
             grappleAttackBonusOverride,
-            bullRushAttackBonusOverride,
             bullRushChargeBonusOverride: type == SpecialAttackType.BullRushCharge ? 2 : 0,
             disarmAttackerWeaponOverride: disarmAttackerWeaponOverride,
             tripAttackBonusOverride: tripAttackBonusOverride,
@@ -1940,17 +1949,6 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} grapple attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
             else
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no grapple attacks remaining this turn."));
-        }
-        else if (type == SpecialAttackType.BullRushAttack)
-        {
-            int attacksRemaining = GetRemainingBullRushAttackActions(attacker);
-            int nextBab = GetCurrentBullRushAttackBonus(attacker);
-            Debug.Log($"[GameManager][BullRushAttack] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingSharedPool={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} phase={CurrentPhase} subPhase={CurrentSubPhase}");
-
-            if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has {attacksRemaining} Bull Rush (Attack) attempt(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)})."));
-            else
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↻", $"{attacker.Stats.CharacterName} has no Bull Rush (Attack) attempts remaining this turn."));
         }
         else if (type == SpecialAttackType.Trip)
         {
@@ -2640,18 +2638,17 @@ public partial class GameManager
         }
 
         bool hasRemainingGrappleAttempts = CanUseGrappleAttackOption(character);
-        bool hasRemainingBullRushAttempts = CanUseBullRushAttackOption(character);
         bool hasRemainingTripAttempts = CanUseTripAttackOption(character);
         bool hasRemainingDisarmAttempts = CanUseDisarmAttackOption(character);
         bool hasRemainingCoupDeGraceAttempt = CanUseCoupDeGraceAttackOption(character);
 
         bool hasIterativeWeaponAttackSequence = _isInAttackSequence && _attackingCharacter == character;
 
-        if (hasRemainingGrappleAttempts || hasRemainingBullRushAttempts || hasRemainingTripAttempts || hasRemainingDisarmAttempts || hasRemainingCoupDeGraceAttempt || hasIterativeWeaponAttackSequence)
+        if (hasRemainingGrappleAttempts || hasRemainingTripAttempts || hasRemainingDisarmAttempts || hasRemainingCoupDeGraceAttempt || hasIterativeWeaponAttackSequence)
         {
             Debug.Log(
                 $"[TurnFlow] ShouldAutoEndTurn=false for {character.Stats.CharacterName}: " +
-                $"iterativeRemaining(g={hasRemainingGrappleAttempts}, br={hasRemainingBullRushAttempts}, trip={hasRemainingTripAttempts}, d={hasRemainingDisarmAttempts}, cdg={hasRemainingCoupDeGraceAttempt}, atk={hasIterativeWeaponAttackSequence})");
+                $"iterativeRemaining(g={hasRemainingGrappleAttempts}, trip={hasRemainingTripAttempts}, d={hasRemainingDisarmAttempts}, cdg={hasRemainingCoupDeGraceAttempt}, atk={hasIterativeWeaponAttackSequence})");
             return false;
         }
 

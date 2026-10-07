@@ -978,7 +978,7 @@ public class CombatUI : MonoBehaviour
             case "Grapple":
                 enabled = hasGrappleAttackAvailable;
                 break;
-            case "Bull Rush (Attack)":
+            case "Bull Rush (Standard)":
                 enabled = hasBullRushAttackAvailable;
                 break;
             case "Bull Rush (Charge)":
@@ -1026,7 +1026,8 @@ public class CombatUI : MonoBehaviour
                 enabled &= pc.HasMeleeWeaponEquipped();
             else if (buttonName == "Sunder (Off-Hand)")
                 enabled &= pc.HasOffHandWeaponEquipped();
-            if (buttonName == "Bull Rush (Attack)" || buttonName == "Bull Rush (Charge)" || buttonName == "Trip")
+            // Bull rush needs no weapon (PHB p.154); trip keeps the melee gate.
+            if (buttonName == "Trip")
                 enabled &= pc.HasMeleeWeaponEquipped();
         }
 
@@ -1057,17 +1058,11 @@ public class CombatUI : MonoBehaviour
                 }
                 break;
 
-            case "Bull Rush (Attack)":
-                if (pc != null && isEnabled && GameManager.Instance != null)
-                {
-                    int remaining = GameManager.Instance.GetRemainingBullRushAttackActions(pc);
-                    int currentBab = GameManager.Instance.GetCurrentBullRushAttackBonus(pc);
-                    label.text = $"Bull Rush (Attack) (BAB {CharacterStats.FormatMod(currentBab)}, {remaining} left)";
-                }
-                else
-                {
-                    label.text = "Bull Rush (Attack) (No attacks)";
-                }
+            // Bull rush is a standard action for every creature (PHB p.154, CMB-102).
+            case "Bull Rush (Standard)":
+                label.text = isEnabled
+                    ? "Bull Rush (standard action)"
+                    : "Bull Rush (no standard action)";
                 break;
 
             case "Trip":
@@ -1627,7 +1622,7 @@ public class CombatUI : MonoBehaviour
         CreateSpecialButton("Grapple", "Grapple");
         CreateSpecialButton("Sunder", "Sunder");
         CreateSpecialButton("Sunder (Off-Hand)", "Sunder (Off-Hand)");
-        CreateSpecialButton("Bull Rush (Attack)", "Bull Rush (Attack)");
+        CreateSpecialButton("Bull Rush (Standard)", "Bull Rush (standard action)");
         CreateSpecialButton("Bull Rush (Charge)", "Bull Rush (Charge)");
         CreateSpecialButton("Overrun", "Overrun");
         CreateSpecialButton("Feint", "Feint");
@@ -1655,7 +1650,7 @@ public class CombatUI : MonoBehaviour
                 case "Grapple": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Grapple"); onSelect?.Invoke(SpecialAttackType.Grapple, false); }); break;
                 case "Sunder": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Sunder"); onSelect?.Invoke(SpecialAttackType.Sunder, false); }); break;
                 case "Sunder (Off-Hand)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Sunder (Off-Hand)"); onSelect?.Invoke(SpecialAttackType.Sunder, true); }); break;
-                case "Bull Rush (Attack)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Attack)"); onSelect?.Invoke(SpecialAttackType.BullRushAttack, false); }); break;
+                case "Bull Rush (Standard)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Standard)"); onSelect?.Invoke(SpecialAttackType.BullRushAttack, false); }); break;
                 case "Bull Rush (Charge)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Charge)"); onSelect?.Invoke(SpecialAttackType.BullRushCharge, false); }); break;
                 case "Overrun": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Overrun"); onSelect?.Invoke(SpecialAttackType.Overrun, false); }); break;
                 case "Feint": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Feint"); onSelect?.Invoke(SpecialAttackType.Feint, false); }); break;

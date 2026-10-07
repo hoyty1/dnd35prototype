@@ -274,11 +274,12 @@ namespace DND35.AI
         }
 
         /// <summary>
-        /// Placeholder for future bull rush restrictions (size/path rules).
+        /// Shared bull rush legality (size, swarm, incorporeal, grappling, adjacency; PHB p.154),
+        /// the same check the PC wrapper uses (CharacterController.CanBullRush, CMB-102).
         /// </summary>
         protected virtual bool IsValidBullRushTarget(CharacterController target, CharacterController self)
         {
-            return target != null && self != null;
+            return self != null && self.CanBullRush(target, false, out _);
         }
 
         /// <summary>

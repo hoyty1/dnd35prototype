@@ -349,6 +349,23 @@ public partial class GameManager
             target = coupTarget;
         }
 
+        // A charge bull rush is a charge, not an action here: it goes through
+        // NPCExecuteChargeForAI(npc, target, bullRush: true), as the PC's goes through the charge mode.
+        if (choice.Value == SpecialAttackType.BullRushCharge)
+        {
+            Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName}: BullRushCharge is resolved by the charge executor, not as a standing maneuver.");
+            return false;
+        }
+
+        // Same bull rush legality as the PC wrapper (size, swarm, incorporeal, grappling,
+        // adjacency; PHB p.154), checked before any cost or AoO (CMB-102).
+        if (choice.Value == SpecialAttackType.BullRushAttack
+            && !npc.CanBullRush(target, false, out string bullRushReason))
+        {
+            Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot bull rush {target?.Stats?.CharacterName ?? "<null>"}: {bullRushReason}");
+            return false;
+        }
+
         // Trip, disarm, sunder and grapple replace one melee attack (PHB p.141 Table 8-2 note 7):
         // one step of the NPC's own attack sequence at that step's BAB, paid before the AoOs as the
         // PC wrapper does (CMB-102). Other maneuvers still cost a standard action (or the full round
