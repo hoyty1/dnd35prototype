@@ -73,6 +73,8 @@ public static class GrappleDamageRulesTests
         TestAttackSequenceSingleAttackThenAttackUsesNextStep();
         TestAttackSequenceNaturalAttackThenTripRefusedWhenNaturalBudgetSpent();
         TestAttackSequenceTripReplacesOneNaturalAttack();
+        TestManeuverActionCostTable();
+        TestNpcManeuverCostsOneAttackStep();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
         TestBullRushImprovedFeatAddsPlus4();
         TestBullRushDefenderUsesStrengthAndDwarfStability();
@@ -1073,6 +1075,82 @@ public static class GrappleDamageRulesTests
             "After a trip replaces one of three natural attacks, only two natural attacks remain");
 
         Cleanup(bear);
+    }
+
+    private static void TestManeuverActionCostTable()
+    {
+        // PHB p.141 Table 8-2 note 7: disarm, grapple and trip replace a melee attack; sunder is a
+        // melee attack (PHB p.158, owner decision 2026-10-07). Bull rush (p.154) and overrun
+        // (p.157) are standard actions or part of a charge, feint (p.155) a standard action, and a
+        // coup de grace a full-round action (CMB-102).
+        Assert(ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.Trip)
+            && ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.Disarm)
+            && ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.Sunder)
+            && ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.Grapple),
+            "Trip, disarm, sunder and grapple replace one melee attack");
+        Assert(!ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.BullRushAttack)
+            && !ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.BullRushCharge)
+            && !ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.Overrun)
+            && !ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.Feint)
+            && !ManeuverActionCost.ReplacesMeleeAttack(SpecialAttackType.CoupDeGrace),
+            "Bull rush, overrun, feint and coup de grace do not replace a melee attack");
+
+        bool onlyBullRushException = true;
+        foreach (SpecialAttackType type in System.Enum.GetValues(typeof(SpecialAttackType)))
+        {
+            bool expected = type == SpecialAttackType.BullRushAttack;
+            if (ManeuverActionCost.PcUiAlsoReplacesAttack(type) != expected)
+                onlyBullRushException = false;
+        }
+        Assert(onlyBullRushException,
+            "Only the PC Bull Rush (Attack) uses an attack step as an interim exception (CMB-102, owner decision pending)");
+    }
+
+    private static void TestNpcManeuverCostsOneAttackStep()
+    {
+        // CMB-102: an NPC trip goes through the shared attack sequence (TryNPCSpecialAttackIfBeneficial):
+        // the first one spends only the standard action, a second one turns the turn into a full attack
+        // (PHB p.143), and a bull rush is a standard action, never an attack step (PHB p.154).
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; NPC maneuver cost check needs Play mode");
+            return;
+        }
+
+        var npc = CreateIterativeAttacker("NpcManeuverStepCost");
+        var target = CreateWeakDefender("NpcManeuverStepCostTarget");
+        try
+        {
+            bool firstTrip = gm.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.Trip);
+            Assert(firstTrip
+                && npc.ProgressiveAttackPool.MainHandStepsUsed == 1
+                && npc.ProgressiveAttackPool.Mode == ProgressiveAttackMode.StandardAttackCommitted
+                && !npc.Actions.HasStandardAction
+                && npc.Actions.HasMoveAction,
+                "NPC trip costs one attack step and only the standard action; the move action stays (CMB-102)");
+
+            bool bullRush = gm.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.BullRushAttack);
+            Assert(!bullRush
+                && npc.ProgressiveAttackPool.MainHandStepsUsed == 1
+                && npc.Actions.HasMoveAction,
+                "NPC bull rush after an attack is refused and spends nothing: it needs a standard action (PHB p.154)");
+
+            bool secondTrip = gm.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.Trip);
+            Assert(secondTrip
+                && npc.ProgressiveAttackPool.MainHandStepsUsed == 2
+                && npc.ProgressiveAttackPool.IsFullAttack
+                && !npc.Actions.HasMoveAction,
+                "A second NPC trip is the next step and turns the turn into a full attack (PHB p.143)");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"NPC maneuver cost check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(npc, target);
+        }
     }
 
     private static void TestBullRushChargeAppliesPlus2ToAttackerCheck()

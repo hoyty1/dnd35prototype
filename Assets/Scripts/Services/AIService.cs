@@ -2262,7 +2262,9 @@ public class AIService : MonoBehaviour
 
         if (npc.IsGrappling())
             return false;
-        if (!npc.Actions.HasStandardAction)
+        // Trip, disarm, sunder and grapple need only the next attack step (CMB-102);
+        // TryNPCSpecialAttackIfBeneficial enforces the exact cost of the chosen type.
+        if (!npc.Actions.HasStandardAction && !npc.CanCommitAttack(AttackStepKind.MainHand, out _))
             return false;
 
         if (profile != null)

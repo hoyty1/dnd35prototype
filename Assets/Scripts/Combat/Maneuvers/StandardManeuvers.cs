@@ -270,8 +270,9 @@ public partial class GameManager
     // attack's BAB (PHB p.141 Table 8-2 note 7, p.143). They are steps of the creature's own attack
     // sequence (CharacterController.TryCommitAttack), so the first one spends only the standard action
     // and a second attack or maneuver turns the turn into a full attack (CMB-102).
-    // The PC iterative bull rush (TryConsumeBullRushAttackAction) also uses these steps for now; bull
-    // rush is a standard action in RAW (PHB p.154), pending an owner decision (CMB-102).
+    // The list lives in ManeuverActionCost.ReplacesMeleeAttack. The PC iterative bull rush
+    // (TryConsumeBullRushAttackAction) also uses these steps for now (ManeuverActionCost.PcUiAlsoReplacesAttack);
+    // bull rush is a standard action in RAW (PHB p.154), pending an owner decision (CMB-102).
 
     private bool CanUseMainHandManeuverAttackOption(CharacterController attacker, string maneuverLabel)
     {
@@ -398,14 +399,31 @@ public partial class GameManager
         return TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason);
     }
 
+    // While ManeuverActionCost.PcUiUsesAttackStep(BullRushAttack) is true the PC bull rush uses a
+    // main-hand attack step (CMB-102 interim); otherwise it is a standard action at full BAB (PHB p.154).
     public bool CanUseBullRushAttackOption(CharacterController attacker)
-        => CanUseMainHandManeuverAttackOption(attacker, "BullRushAttack");
+    {
+        if (ManeuverActionCost.PcUiUsesAttackStep(SpecialAttackType.BullRushAttack))
+            return CanUseMainHandManeuverAttackOption(attacker, "BullRushAttack");
+
+        return attacker != null && attacker.Actions != null && attacker.Actions.HasStandardAction;
+    }
 
     public int GetRemainingBullRushAttackActions(CharacterController attacker)
-        => GetRemainingMainHandManeuverAttackActions(attacker);
+    {
+        if (ManeuverActionCost.PcUiUsesAttackStep(SpecialAttackType.BullRushAttack))
+            return GetRemainingMainHandManeuverAttackActions(attacker);
+
+        return CanUseBullRushAttackOption(attacker) ? 1 : 0;
+    }
 
     public int GetCurrentBullRushAttackBonus(CharacterController attacker)
-        => GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+    {
+        if (ManeuverActionCost.PcUiUsesAttackStep(SpecialAttackType.BullRushAttack))
+            return GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+
+        return CanUseBullRushAttackOption(attacker) && attacker.Stats != null ? attacker.Stats.BaseAttackBonus : 0;
+    }
 
     private bool TryConsumeBullRushAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
         => TryConsumeMainHandManeuverAttackAction(attacker, "BullRushAttack", out attackBonusUsed, out attacksRemaining, out reason);

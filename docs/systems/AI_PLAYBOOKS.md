@@ -67,9 +67,9 @@ Seven requests the owner is likely to make, each with the code to read first, wh
 
 ## 11.8.4 "Make monsters trip and disarm"
 
-- **Start here.** `AIProfile.GetPreferredManeuver` (AI/AIProfile.cs:300-319) and `ManeuverPreferences` (AI/AIBehaviorData.cs); `AIService.ShouldUseManeuver` (2213) and `TryExecutePreferredManeuver`; `GameManager.TryNPCSpecialAttackIfBeneficial` (NPCTurns.cs:289, legacy chooser plus executor); `CharacterController.ResolveTrip` (10503) and `ResolveDisarm` (10553). Free trips: `GameManager.TryResolveFreeTripOnHit` and `ThreatSystem.ExecuteAoO`, both through `CharacterController.ResolveFreeTripAttempt` (no touch attack, no AoO).
+- **Start here.** `AIProfile.GetPreferredManeuver` (AI/AIProfile.cs:300-319) and `ManeuverPreferences` (AI/AIBehaviorData.cs); `AIService.ShouldUseManeuver` (2250) and `TryExecutePreferredManeuver`; `GameManager.TryNPCSpecialAttackIfBeneficial` (NPCTurns.cs:306, legacy chooser plus executor; action cost from `ManeuverActionCost`); `CharacterController.ResolveTrip` (10343) and `ResolveDisarm` (10426). Free trips: `GameManager.TryResolveFreeTripOnHit` and `ThreatSystem.ExecuteAoO`, both through `CharacterController.ResolveFreeTripAttempt` (no touch attack, no AoO).
 - **What exists.**
-  - Deliberate trips and disarms by Humanoid, Berserk, Grappler and null-profile NPCs (6.2, 6.4). The maneuver replaces the attack, spends a standard action, and triggers melee reactions.
+  - Deliberate trips and disarms by Humanoid, Berserk, Grappler and null-profile NPCs (6.2, 6.4). The maneuver costs one attack step at that step's BAB (the first step spends the standard action; CMB-102), the NPC then stops attacking, and it triggers melee reactions.
   - Free trip on any hit, including AoOs, for `HasTripAttack` creatures (wolves; lycanthropes copy it from the animal in `LycanthropeTemplate`); the Animal Tripper specialty charges to fish for it.
   - Disarm moves the weapon to the attacker's free hand or the ground (`DropItemToGround`), and a failed disarm gives the defender one counter-disarm (none against Improved Disarm).
 - **What blocks it.**

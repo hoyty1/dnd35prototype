@@ -155,33 +155,36 @@ public partial class GameManager
         if (!summon.IsTargetInCurrentWeaponRange(target) || target.Stats.IsDead)
             yield break;
 
-        if (summon.Stats != null && summon.Stats.HasTripAttack && !target.Stats.IsProne && summon.Actions.HasStandardAction)
+        // A trip taken as an action (not the free trip after a bite) replaces one melee attack
+        // (PHB p.141 Table 8-2 note 7, p.158): one step of the summon's attack sequence at that
+        // step's BAB, paid before the AoOs as the PC wrapper does (CMB-102). It provokes like any
+        // other trip attempt (CMB-014); the shared helper is the one PCs use. One trip, then stop.
+        // A failed commit falls through to the smite and attack paths.
+        int summonTripStep = -1;
+        string summonTripWhy = null;
+        bool summonTrips = summon.Stats != null && summon.Stats.HasTripAttack && !target.Stats.IsProne
+            && summon.CanCommitAttack(AttackStepKind.MainHand, out _)
+            && summon.TryCommitAttack(AttackStepKind.MainHand, out summonTripStep, out summonTripWhy);
+        if (!summonTrips && summonTripWhy != null)
+            Debug.Log($"[AI][Summon] {summon.Stats.CharacterName} cannot trip as an attack: {summonTripWhy}");
+
+        if (summonTrips)
         {
-            // A trip taken as an action (not the free trip after a bite) provokes like any
-            // other trip attempt (CMB-014); the shared helper is the one PCs use.
-            int hpBeforeTripAoOs = summon.Stats.CurrentHP;
             ManeuverAoOOutcome summonTripAoOs = ResolveManeuverInitiationAoOs(summon, target, SpecialAttackType.Trip);
             if (summonTripAoOs != ManeuverAoOOutcome.Proceed)
             {
-                // As in TryNPCSpecialAttackIfBeneficial: a summon dropped by the AoO pays no
-                // extra strenuous-action hit point.
-                if (summonTripAoOs == ManeuverAoOOutcome.AttackerIncapacitated
-                    || (hpBeforeTripAoOs > 0 && summon.Stats.CurrentHP <= 0))
-                    summon.Actions.UseStandardAction();
-                else
-                    summon.CommitStandardAction();
                 UpdateAllStatsUI();
                 yield return new WaitForSeconds(0.65f);
                 yield break;
             }
 
-            var trip = summon.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
+            var trip = summon.ExecuteSpecialAttack(SpecialAttackType.Trip, target,
+                tripAttackBonusOverride: summon.GetMainHandAttackStepBAB(summonTripStep));
             CombatUI.ShowCombatLog(CombatLogHelper.Summon("✦", $"{GetSummonDisplayName(summon)} attempts Trip: {trip.Log}"));
 
             // Melee reaction effects (Fire Shield, Thorns, etc.) — trip is a melee maneuver
             MeleeReactionService.TriggerReactions(summon, target, null);
 
-            summon.CommitStandardAction();
             UpdateAllStatsUI();
             yield return new WaitForSeconds(0.65f);
             yield break;
@@ -322,7 +325,9 @@ public partial class GameManager
         if (npc.IsGrappling() && (!forcedChoice.HasValue || forcedChoice.Value != SpecialAttackType.CoupDeGrace))
             return false;
 
-        if (!npc.Actions.HasStandardAction && !hasCoupOption)
+        // A maneuver that replaces an attack only needs the next attack step (CMB-102); the exact
+        // cost per type is checked once the choice is known.
+        if (!npc.Actions.HasStandardAction && !hasCoupOption && !npc.CanCommitAttack(AttackStepKind.MainHand, out _))
             return false;
 
         SpecialAttackType? choice = forcedChoice;
@@ -370,6 +375,27 @@ public partial class GameManager
             target = coupTarget;
         }
 
+        // Trip, disarm, sunder and grapple replace one melee attack (PHB p.141 Table 8-2 note 7):
+        // one step of the NPC's own attack sequence at that step's BAB, paid before the AoOs as the
+        // PC wrapper does (CMB-102). Other maneuvers still cost a standard action (or the full round
+        // for a coup de grace).
+        bool replacesAttack = ManeuverActionCost.ReplacesMeleeAttack(choice.Value);
+        int? stepBab = null;
+        if (replacesAttack)
+        {
+            if (!npc.TryCommitAttack(AttackStepKind.MainHand, out int step, out string why))
+            {
+                Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice.Value} as an attack: {why}");
+                return false;
+            }
+
+            stepBab = npc.GetMainHandAttackStepBAB(step);
+        }
+        else if (choice.Value != SpecialAttackType.CoupDeGrace && !npc.Actions.HasStandardAction)
+        {
+            return false;
+        }
+
         // Same initiation AoOs as the PC wrapper (CMB-076). A foiled attempt still spends
         // its action; an NPC dropped by the AoO ends its turn (callers return after this).
         int hpBeforeManeuverAoOs = npc.Stats.CurrentHP;
@@ -380,18 +406,28 @@ public partial class GameManager
             // 0 HP costs no extra strenuous-action hit point; match that for a dropped NPC.
             bool droppedByAoO = maneuverAoOOutcome == ManeuverAoOOutcome.AttackerIncapacitated
                 || (hpBeforeManeuverAoOs > 0 && npc.Stats.CurrentHP <= 0);
-            if (choice.Value == SpecialAttackType.CoupDeGrace)
-                npc.Actions.UseFullRoundAction();
-            else if (droppedByAoO)
-                npc.Actions.UseStandardAction();
-            else
-                npc.CommitStandardAction();
+            // A substitute already paid its attack step above.
+            if (!replacesAttack)
+            {
+                if (choice.Value == SpecialAttackType.CoupDeGrace)
+                    npc.Actions.UseFullRoundAction();
+                else if (droppedByAoO)
+                    npc.Actions.UseStandardAction();
+                else
+                    npc.CommitStandardAction();
+            }
 
             UpdateAllStatsUI();
             return true;
         }
 
-        var result = npc.ExecuteSpecialAttack(choice.Value, target);
+        var result = npc.ExecuteSpecialAttack(
+            choice.Value,
+            target,
+            disarmAttackBonusOverride: choice.Value == SpecialAttackType.Disarm ? stepBab : null,
+            grappleAttackBonusOverride: choice.Value == SpecialAttackType.Grapple ? stepBab : null,
+            tripAttackBonusOverride: choice.Value == SpecialAttackType.Trip ? stepBab : null,
+            sunderAttackBonusOverride: choice.Value == SpecialAttackType.Sunder ? stepBab : null);
         CombatUI.ShowCombatLog(CombatLogHelper.Death("☠", $"{npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}"));
 
         // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
@@ -406,10 +442,14 @@ public partial class GameManager
                 TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
         }
 
-        if (choice.Value == SpecialAttackType.CoupDeGrace)
-            npc.Actions.UseFullRoundAction();
-        else
-            npc.CommitStandardAction();
+        // A substitute already paid its attack step before the AoOs.
+        if (!replacesAttack)
+        {
+            if (choice.Value == SpecialAttackType.CoupDeGrace)
+                npc.Actions.UseFullRoundAction();
+            else
+                npc.CommitStandardAction();
+        }
 
         UpdateAllStatsUI();
         return true;

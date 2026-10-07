@@ -1827,8 +1827,21 @@ public partial class GameManager
             actionLabel = $"attack BAB {CharacterStats.FormatMod(grappleAttackBonusUsed)} ({grappleAttacksRemaining} remaining)";
             Debug.Log($"[GameManager][Grapple] Shared-pool consume success actor={attacker.Stats.CharacterName} usedBAB={CharacterStats.FormatMod(grappleAttackBonusUsed)} remaining={grappleAttacksRemaining}");
         }
+        else if (type == SpecialAttackType.BullRushAttack && !ManeuverActionCost.PcUiUsesAttackStep(type))
+        {
+            // Bull rush is a standard action in RAW (PHB p.154), not an attack substitute.
+            if (!attacker.CommitStandardAction())
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot perform Bull Rush (Attack): standard action already spent."));
+                ShowActionChoices();
+                return;
+            }
+            actionLabel = "standard action";
+        }
         else if (type == SpecialAttackType.BullRushAttack)
         {
+            // CMB-102 interim: the PC bull rush still uses a main-hand attack step
+            // (ManeuverActionCost.PcUiAlsoReplacesAttack), pending the owner.
             Debug.Log($"[GameManager][BullRushAttack] Attempting shared-pool consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} full={attacker.Actions.HasFullRoundAction} remaining={GetRemainingBullRushAttackActions(attacker)}");
             if (!TryConsumeBullRushAttackAction(attacker, out int bullRushBabUsed, out int bullRushAttacksRemaining, out string bullRushConsumeReason))
             {
