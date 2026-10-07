@@ -22,14 +22,14 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Break Wall of Ice | Used | only when blocked and out of reach | Yes | |
 | Single attack | Used | after moving | Yes | |
 | Full attack | Used | only if the NPC has not moved; adaptive retarget for some profiles | Yes | CMB-002, CMB-044 |
-| Two-weapon, off-hand, off-hand thrown | Never | no NPC dual-wield | Yes | CMB-008 |
+| Two-weapon, off-hand, off-hand thrown | Never | no NPC dual-wield | Yes | AI-055 (off-hand math: CMB-008) |
 | Natural attacks | Auto | used only when no manufactured weapon is equipped; no choice between natural attacks | Yes (picks each natural attack) | CMB-077 |
 | Natural + weapon combination | Never | naturals only with no weapon | n/a | CMB-077 |
 | Ranged attack | Used | any routine with a ranged weapon equipped; kiter manages AoO risk | Yes | ITM-004 strips many bows |
 | Thrown weapons | Partial | only `WeaponCat == Ranged` items | Yes | CMB-019 |
 | Switch weapons, draw, pick up, drop held item | Never | only the UndeadMindless free re-equip; disarmed NPCs never re-arm | Partial (pick up, drop) | ITM-005 |
 | Reload | Partial | forced when unloaded; ends the turn | Yes | CMB-032 |
-| Power Attack, Rapid Shot | Never | `UsePowerAttack` unread | Yes | AI-026 |
+| Power Attack, Rapid Shot | Never | `UsePowerAttack` unread; no NPC caller of `SetRapidShot` | Yes | AI-026 (Power Attack), AI-055 (Rapid Shot) |
 | Combat Expertise | Never | never written | No | CHR-021, AI-031 |
 | Fight defensively | Partial | cornered Frightened only | Yes | UI-007 |
 | Total defense | Never | no code | No | gap |

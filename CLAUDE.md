@@ -10,7 +10,7 @@ Working agreement for AI agents. It loads every session, so it stays short; dept
 - One scene, `Assets/Scenes/MainScene.unity`; `SceneBootstrap.Awake` (`Assets/Scripts/_Core/SceneBootstrap.cs`) builds grid, characters, UI and `GameManager` at runtime. No prefabs, no saves.
 - Written mostly by earlier AI agents; maintained by Claude for the owner, hoyty1.
 - **Goal (owner, 2026-10-03):** play as close to the 3.5e core rules (PHB/DMG/MM) as possible. Battles are randomized encounters based on the DMG random encounter rules. Between battles you manage the party by PHB/DMG rules. Enemy AI needs much more depth because the combat option space is vast. Prefer RAW unless the owner confirms a house rule.
-- **Enemy AI work:** start at `docs/systems/AI.md` (requests: `AI_PLAYBOOKS.md`; option matrix: `AI_ACTION_COVERAGE.md`); rules fidelity: `docs/systems/RULES_COVERAGE.md`.
+- **Enemy AI work:** start at `docs/systems/AI.md` (requests: `AI_PLAYBOOKS.md`; option matrix: `AI_ACTION_COVERAGE.md`; level 1-8 tactics inventory and action-catalog design: `docs/systems/tactics/README.md`); rules fidelity: `docs/systems/RULES_COVERAGE.md`.
 
 ## Ground rules
 
@@ -111,3 +111,4 @@ Where to look first:
 - `docs/designs/`: older unbuilt plans.
 - `docs/archive/INDEX.md`: retired docs via `git show`.
 - `docs/systems/*.md`: per-system content, 3.5e status, backlog (AI, rules, encounters, party, spells, creatures, items).
+- `docs/systems/tactics/`: level 1-8 tactics inventory (actions, spells, creatures, summons) and the proposed action-catalog design; sampled verification only.
