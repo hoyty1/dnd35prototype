@@ -100,7 +100,7 @@ public partial class GameManager
 
         bool lowHP = summon.Stats != null && summon.Stats.TotalMaxHP > 0 && summon.Stats.CurrentHP <= Mathf.CeilToInt(summon.Stats.TotalMaxHP * 0.30f);
 
-        if (lowHP && _aiService != null)
+        if (lowHP && _aiService != null && summon.Actions.HasMoveAction)
         {
             SquareCell retreat = _aiService.EvaluateMovementOptions(summon, target.GridPosition, retreat: true);
             if (retreat != null && retreat.Coords != summon.GridPosition)

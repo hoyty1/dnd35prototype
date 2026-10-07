@@ -526,7 +526,8 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        if (!npc.IsTargetInCurrentWeaponRange(target))
+        // Moving needs the move action (AI-034): after a search move the NPC does not move again.
+        if (!npc.IsTargetInCurrentWeaponRange(target) && npc.Actions.HasMoveAction)
         {
             SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, profile);
             if (bestCell != null)
@@ -788,8 +789,9 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
-        // Move toward target if not in range (priority 3: movement evaluator respects AoO avoidance)
-        if (!npc.IsTargetInCurrentWeaponRange(target))
+        // Move toward target if not in range (priority 3: movement evaluator respects AoO avoidance).
+        // Needs the move action (AI-034): a breath-positioning move already spent it.
+        if (!npc.IsTargetInCurrentWeaponRange(target) && npc.Actions.HasMoveAction)
         {
             SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, dragonProfile);
             if (bestCell != null)
@@ -1183,7 +1185,8 @@ public class AIService : MonoBehaviour
             }
         }
 
-        if (!npc.IsTargetInCurrentWeaponRange(target))
+        // Moving needs the move action (AI-034).
+        if (!npc.IsTargetInCurrentWeaponRange(target) && npc.Actions.HasMoveAction)
         {
             SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, profile);
             if (bestCell != null)

@@ -203,7 +203,7 @@ Side effects of the order: auras and free-action Spittle are skipped on any turn
 - Exception: `CharmedBehaviorController.TryMoveAdjacentToCaster` and `TryMoveTowardTarget` start the move without awaiting it, wait 0.35 s and act, so the attack or heal may resolve mid-walk (AI-042).
 - **Re-check HP after every movement yield.** Routines test `CurrentHP <= 0` after each move; `MoveAlongPath` also stops per step at HP ≤ 0. Wall of Fire, Wall of Ice breaches and similar can kill a mover.
 - Pacing: 41 `WaitForSeconds` literals in AIService (0.2-0.8 s), 17 in NPCTurns.cs (0.35-1.0 s), more in controllers and GrappleSystem. Movement is 0.08 s per square (`PlayerMoveSecondsPerStep`, CombatActions.cs:619), charge 0.06. No speed setting (AI-023).
-- **Action economy is advisory.** Movement helpers never spend actions; each caller calls `npc.Actions.UseMoveAction()`, which never fails (Combat/Core/ActionEconomy.cs:87). AggressiveMelee, DefensiveMelee and the Dragon melee fallback move without testing `HasMoveAction`, so after a search move or a failed breath reposition an NPC moves twice and still attacks (AI-034). Use `CharacterController.CommitStandardAction()` for standard actions; it handles the Disabled single-action rule.
+- **Action economy is the caller's job.** Movement helpers never spend actions; each AI routine tests `npc.Actions.HasMoveAction` before moving and then calls `npc.Actions.UseMoveAction()`, which returns false and changes nothing when no move action is left (Combat/Core/ActionEconomy.cs). After a search move or a breath-positioning move, the melee approach is skipped; no routine double-moves (a second move would be an explicit `ConvertStandardToMove`). Specials that spend no action remain (AI-053). Use `CharacterController.CommitStandardAction()` for standard actions; it handles the Disabled single-action rule.
 
 ### 3.5 How a turn ends
 
@@ -297,7 +297,7 @@ Used by 293 of 389 effective NPC definitions.
 
 1. Standard-action ranged special in range → fire, end.
 2. `SelectBestAction(preferAggression:true)`; only `Charge` is used (AI-027) → `NPCExecuteChargeForAI`, end.
-3. Out of weapon reach → `EvaluateMovementOptions`, move, `UseMoveAction` (no `HasMoveAction` check, AI-034), `ActivateTerrainManipulation` (log only, CRE-013).
+3. Out of weapon reach and `HasMoveAction` → `EvaluateMovementOptions`, move, `UseMoveAction`, `ActivateTerrainManipulation` (log only, CRE-013).
 4. Re-target with `SelectBestTarget` (may differ from the target moved toward).
 5. In reach: Engulf if adjacent and able; else `ShouldUseManeuver && TryExecutePreferredManeuver`; else `NPCPerformAttackForAI`.
 6. Out of reach: post-move ranged special, else `TryAIWallInteraction` (Wall of Ice), else the standard action is wasted (no double move).
@@ -309,7 +309,7 @@ Never casts (AI-002), never runs or double-moves, never uses Total Defense, Powe
 1. Resets per-turn breath state on the profile instance (AI-017).
 2. If at most 2 enemies are adjacent (`IsTooCloseForCasting`) and `IsSpellcaster`: `TryExecuteSpellcastAction`; success ends the turn. No score floor, so cantrips can pre-empt breath every turn (AI-037).
 3. Breath ready: `DragonAIProfile.FindBestBreathPosition` tries the current square plus every reachable placeable cell (A* per cell), and every enemy as the aim point; picks most enemy hits, then fewest ally hits (0 allowed, `MaxAcceptableAllyHits`), then not moving; needs at least 1 enemy (`MinEnemiesForBreath`). Moves if needed, re-evaluates from the actual square, breathes, then retreats one move if an enemy is adjacent (block duplicated, AI-020). Positioning ignores AoOs and multi-square footprints.
-4. If breath is not viable, falls through to melee with the move possibly already spent; the melee move does not check `HasMoveAction` (AI-034). Then charge, approach, re-target, maneuver or attack.
+4. If breath is not viable, falls through to melee with the move possibly already spent. Then charge (needs a full-round action), approach only if `HasMoveAction`, re-target, maneuver or attack.
 
 Secondary breath is never evaluated (AI-008); `PreferBreathThreshold` is unread (AI-026). Breath recharge never ticks (AI-032).
 
@@ -328,7 +328,7 @@ Secondary breath is never evaluated (AI-008); `PreferBreathThreshold` is unread 
 1. Target `SelectLowestHPEnemy` (unfiltered, AI-049); fall back to the passed target.
 2. Charge if chosen; the `Retreat` result of `SelectBestAction` is ignored.
 3. HP < 30% (hard-coded, AI-010) and a full-round action → withdraw (`EvaluateWithdrawRetreatDestination` + withdraw move with first-square AoO suppression), end.
-4. Advance (no `HasMoveAction` check), re-target with `SelectBestTarget`, maneuver or attack, else wall interaction.
+4. Advance if `HasMoveAction`, re-target with `SelectBestTarget`, maneuver or attack, else wall interaction.
 
 The enum docs promise Combat Expertise and holding position; neither exists (AI-031).
 
@@ -342,11 +342,11 @@ Sticky target via `SwarmAI.ResolveTarget`. Moves directly onto the target's squa
 
 ### 5.7 `GameManager.AI_SummonedCreature` (NPCTurns.cs:79)
 
-Reached only by non-controllable summons (PC-cast summons are controllable and get PC turns; swarm summons go to the swarm routine first). Target by `SummonCommand` (AttackNearest / ProtectCaster; ProtectCaster is effectively unreachable, CRE-032). Retreat at ≤30% HP (not a withdraw). Advance, re-target. Standard-action trip for `HasTripAttack` summons (contradicts the Animal profile's "free trip on hit only"), else a once-only template smite (Morale bonus fields, CMB-003), else `NPCPerformAttack`. Never casts or breathes; ignores behaviour and profile routing.
+Reached only by non-controllable summons (PC-cast summons are controllable and get PC turns; swarm summons go to the swarm routine first). Target by `SummonCommand` (AttackNearest / ProtectCaster; ProtectCaster is effectively unreachable, CRE-032). Retreat at ≤30% HP (not a withdraw) if a move action is left. Advance if a move action is left, re-target. Standard-action trip for `HasTripAttack` summons (contradicts the Animal profile's "free trip on hit only"), else a once-only template smite (Morale bonus fields, CMB-003), else `NPCPerformAttack`. Never casts or breathes; ignores behaviour and profile routing.
 
 ### 5.8 Search, Turned, grapple-restricted
 
-- `ExecuteSearchTurnWhenNoTargets` (300): needs a move action; moves to the cell nearest a tracked last-known square, else toward the map centre with 0-4 random noise. The turn continues if a target appears, and the next routine moves again (AI-034).
+- `ExecuteSearchTurnWhenNoTargets` (300): needs a move action; moves to the cell nearest a tracked last-known square, else toward the map centre with 0-4 random noise. The turn continues if a target appears; the next routine cannot move again (move action spent) but can still attack in reach.
 - `ExecuteTurnedUndeadTurn` (419): flee one move from the turner; unreachable (3.2).
 - `AI_GrappleRestrictedTurn` (GrappleSystem.cs:1633): see 8.8.
 
@@ -633,7 +633,6 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | CMB-075 | Conditions that prevent standard and full-round actions skip the turn before the AI: Panicked and Turned never flee, Pinned never escapes, Nauseated gets no move action, and skipped turns miss regeneration and acid-arrow ticks |
 | AI-032 | Breath weapons, ranged specials and terrain manipulation never recharge (their tick methods have no callers) |
 | AI-033 | Only the Dragon profile breathes; ankheg, behir, chimera, digester and gorgon never do |
-| AI-034 | Routines move without checking `HasMoveAction`, so NPCs can move twice and still attack |
 | AI-035 | Trip-flagged profiles and null-profile NPCs trip every standing target in reach instead of attacking |
 | CMB-076 | NPC maneuvers (including grapple, sunder and coup de grace) never provoke |
 | AI-036 | The Mirror Image priority target overrides all targeting map-wide, before exclusions and reach filters |
@@ -677,7 +676,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 
 1. Add the value to `NPCAIBehavior` (NPCDatabase.cs:808) and fix its XML doc (AI-031).
 2. Route it in `ExecuteNPCTurn`: the profile branch (267-278), the no-profile switch (283-297), and the Healer PhysicalAttack sub-branch if relevant. Dragon, swarm and summon routing bypass behaviour.
-3. Write `private IEnumerator ExecuteXTurn(CharacterController npc, CharacterController target)` following AggressiveMelee: HP check on entry; charge via `SelectBestAction`; `EvaluateMovementOptions` → `MoveCharacterAlongComputedPathForAI(npc, cell, GetPlayerMoveSecondsPerStepForAI())`; **HP check after every movement yield**; **test `HasMoveAction` before moving** (AI-034) and call `UseMoveAction`; re-target; maneuver or `NPCPerformAttackForAI` (it chooses full vs single attack); fallback `TryAIWallInteraction`. Call `TryExecuteSpellcastAction` if it should cast. Start nested coroutines with `_gameManager.StartCoroutine` and `yield return` them.
+3. Write `private IEnumerator ExecuteXTurn(CharacterController npc, CharacterController target)` following AggressiveMelee: HP check on entry; charge via `SelectBestAction`; `EvaluateMovementOptions` → `MoveCharacterAlongComputedPathForAI(npc, cell, GetPlayerMoveSecondsPerStepForAI())`; **HP check after every movement yield**; **test `HasMoveAction` before moving** and call `UseMoveAction` (it returns false when no move is left); re-target; maneuver or `NPCPerformAttackForAI` (it chooses full vs single attack); fallback `TryAIWallInteraction`. Call `TryExecuteSpellcastAction` if it should cast. Start nested coroutines with `_gameManager.StartCoroutine` and `yield return` them.
 4. Set `AIBehavior` in data and in the other writers (2.4). The value reaches the AI through `_npcAIBehaviors`; keep it aligned (AI-015).
 
 ### 11.2 Add a profile
@@ -734,7 +733,7 @@ Worked playbooks for likely requests (flanking and Aid Another, area spells and 
 
 | Suite | Covers |
 |---|---|
-| `Tests.AI.AIProfileFrameworkTests.RunAll` (34 tests, no callers) | profile scoring (Berserk, Ranged, Animal), maneuver preferences, coup de grace defaults, NPC data archetypes, Evoker/Abjurer/Spellcaster AoE settings, Healer priorities, concealment tiers, ThreatSystem estimates, swarm targeting. 2-3 tests are stale (TST-025) |
+| `Tests.AI.AIProfileFrameworkTests.RunAll` (38 test methods, no callers) | profile scoring (Berserk, Ranged, Animal), maneuver preferences, coup de grace defaults, NPC data archetypes, Evoker/Abjurer/Spellcaster AoE settings, Healer priorities, concealment tiers, ThreatSystem estimates, swarm targeting, `ActionEconomy.UseMoveAction` failure and the one-move gate. 2-3 tests are stale (TST-025) |
 | `Tests.Classes.NPCTemplateSystemTests` | configurator class maps and `AIConsumableManager` (test-only paths; TST-003, TST-008) |
 | `Tests.Combat.MirrorImageRulesTests`, `CauseFearRulesTests`, `MediumConditionRulesTests` | Mirror Image priority target, Frightened decision, confusion d% distribution |
 
@@ -782,7 +781,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 
 - **Decisions are encoded as control flow.** The routine order (cast, then breath, then move, then attack) *is* the decision. Adding an option means adding a branch to each routine that should consider it, which is why engulf, specials and breath each live in one routine only. `SelectBestAction`/`EvaluateAttackOptions` and `EvaluateBestManeuver` are vestiges of a scoring layer that was never finished (AI-025, AI-027); `SelectBestAction`'s `Retreat` result is worth keeping for morale (13.3).
 - **Scores are not comparable.** Target scores, movement scores, spell scores and maneuver preferences use unrelated scales (and visibility swamps targeting). There is no common unit such as expected damage, expected HP removed, or expected conditions imposed, so "spell versus full attack versus breath" cannot be compared.
-- **The rules engine is asymmetric.** NPC paths skip AoOs on movement, maneuvers and casting, skip Concentration and parts of the save and damage pipeline, and do not enforce action economy. Any smarter AI built on top would optimise against rules the player does not share. These asymmetries are also the main source of "the AI feels wrong" reports that are not AI bugs.
+- **The rules engine is asymmetric.** NPC paths skip AoOs on movement, maneuvers and casting, skip Concentration and parts of the save and damage pipeline, and let some specials spend no action (AI-053). Any smarter AI built on top would optimise against rules the player does not share. These asymmetries are also the main source of "the AI feels wrong" reports that are not AI bugs.
 - **Capabilities are data the AI cannot see.** Spell-like abilities, stench, constrict, secondary breath and many MM specials exist only as text or unread fields; most monsters that should cast cannot. A deeper chooser has little to choose from until the capability data is executable.
 - **One-move horizon, no memory, no team.** Movement looks one move ahead, profiles are stateless except for dragons and swarms, and NPCs share nothing.
 - **Performance budget.** Per-cell A* already causes hitches; any search over action sequences needs a shared reachability flood and a cached threat map per turn first (AI-019).
@@ -792,7 +791,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 
 Ordered by how much they distort what the AI experiences:
 
-1. Rules parity on NPC paths: movement AoOs (CMB-073), stand up (CMB-074), the turn-skip gate versus controllers (CMB-075), maneuver and casting AoOs and Concentration (CMB-076, SPL-006), Control saves (SPL-007), action-economy enforcement (AI-034), breath and special resolution through the standard pipeline with recharge (AI-032, AI-040, AI-006).
+1. Rules parity on NPC paths: movement AoOs (CMB-073), stand up (CMB-074), the turn-skip gate versus controllers (CMB-075), maneuver and casting AoOs and Concentration (CMB-076, SPL-006), Control saves (SPL-007), breath and special resolution through the standard pipeline with recharge (AI-032, AI-040, AI-006).
 2. Capability data that works: spells for the lich, vampire, DMG class levels and Spellcaster monsters (SPL-015, CRE-030, ENC-021), or an SLA system (CRE-015, CRE-017); ranged weapons actually equipped (ITM-004); null profiles mapped (AI-004); `Ranged` behaviour handled (AI-003).
 3. Plumbing: behaviour stored on the NPC instead of the parallel list (AI-015); one target filter `IsTargetableBy(attacker, target, action)` with cached ward saves used by every selector (AI-005, AI-049, AI-050); a decision trace log.
 

@@ -84,11 +84,21 @@ public class ActionEconomy
 
     // ========== ACTION USAGE ==========
 
-    public void UseMoveAction()
+    /// <summary>
+    /// Spend the move action. Returns false, and changes nothing, when no move action is left
+    /// (already used, full-round action taken, or the single action of a disabled turn spent).
+    /// A second move must be an explicit <see cref="ConvertStandardToMove"/> (PHB ch.8 double move).
+    /// Existing callers may ignore the result.
+    /// </summary>
+    public bool UseMoveAction()
     {
+        if (!HasMoveAction)
+            return false;
+
         MoveActionUsed = true;
         if (SingleActionOnly)
             StandardConvertedToMove = true;
+        return true;
     }
 
     public void UseStandardAction()

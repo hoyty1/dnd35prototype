@@ -59,6 +59,10 @@ namespace Tests.AI
             TestThreatSystemCountsOffHandMeleeThreateners();
             TestSwarmAISticksToCurrentTargetUntilDead();
             TestIndiscriminateSwarmAITargetsNearestCreature();
+            TestUseMoveActionReportsFailureOnceSpent();
+            TestUseMoveActionFailsAfterFullRoundAction();
+            TestUseMoveActionRespectsDisabledSingleAction();
+            TestSecondMoveAfterSearchNeedsExplicitDoubleMove();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -1017,6 +1021,76 @@ namespace Tests.AI
                     enemy != null ? enemy.gameObject : null,
                     profile);
             }
+        }
+
+        // ── Action economy (AI-034): UseMoveAction reports failure; AI moves gate on HasMoveAction ──
+
+        private static void TestUseMoveActionReportsFailureOnceSpent()
+        {
+            var actions = new ActionEconomy();
+            bool first = actions.UseMoveAction();
+            bool second = actions.UseMoveAction();
+
+            Assert(first && !second,
+                "UseMoveAction succeeds once per turn and then reports failure",
+                $"(first={first}, second={second})");
+            Assert(actions.HasStandardAction && !actions.StandardConvertedToMove,
+                "A failed UseMoveAction does not silently convert or spend the standard action",
+                $"(hasStandard={actions.HasStandardAction}, converted={actions.StandardConvertedToMove})");
+        }
+
+        private static void TestUseMoveActionFailsAfterFullRoundAction()
+        {
+            var actions = new ActionEconomy();
+            actions.UseFullRoundAction();
+            bool used = actions.UseMoveAction();
+
+            Assert(!used && !actions.MoveActionUsed,
+                "UseMoveAction fails after a full-round action and leaves state unchanged",
+                $"(used={used}, moveUsed={actions.MoveActionUsed})");
+        }
+
+        private static void TestUseMoveActionRespectsDisabledSingleAction()
+        {
+            var moveFirst = new ActionEconomy { SingleActionOnly = true };
+            bool moved = moveFirst.UseMoveAction();
+            Assert(moved && !moveFirst.HasStandardAction,
+                "Disabled: a move action uses the turn's single action",
+                $"(moved={moved}, hasStandard={moveFirst.HasStandardAction})");
+
+            var standardFirst = new ActionEconomy { SingleActionOnly = true };
+            standardFirst.UseStandardAction();
+            bool movedAfterStandard = standardFirst.UseMoveAction();
+            Assert(!movedAfterStandard,
+                "Disabled: UseMoveAction fails after the single standard action",
+                $"(movedAfterStandard={movedAfterStandard})");
+        }
+
+        private static void TestSecondMoveAfterSearchNeedsExplicitDoubleMove()
+        {
+            // Regression for AI-034: a search (or breath-positioning) move spends the move action;
+            // the melee routine's approach is gated on HasMoveAction, so it must not move again
+            // and the standard action stays available for the attack. A second move is only the
+            // explicit double-move conversion, which then costs the standard action.
+            var actions = new ActionEconomy();
+            actions.UseMoveAction(); // search move
+
+            Assert(!actions.HasMoveAction && actions.HasStandardAction,
+                "After a search move the AI move gate is closed and the attack remains",
+                $"(hasMove={actions.HasMoveAction}, hasStandard={actions.HasStandardAction})");
+
+            bool secondMove = actions.UseMoveAction();
+            Assert(!secondMove && actions.HasStandardAction,
+                "A second UseMoveAction cannot buy a free move",
+                $"(secondMove={secondMove}, hasStandard={actions.HasStandardAction})");
+
+            Assert(actions.CanConvertStandardToMove,
+                "Double move stays available as an explicit conversion",
+                $"(canConvert={actions.CanConvertStandardToMove})");
+            actions.ConvertStandardToMove();
+            Assert(!actions.HasStandardAction && actions.AllMainActionsSpent,
+                "Double move spends the standard action, leaving no attack",
+                $"(hasStandard={actions.HasStandardAction}, allSpent={actions.AllMainActionsSpent})");
         }
     }
 }

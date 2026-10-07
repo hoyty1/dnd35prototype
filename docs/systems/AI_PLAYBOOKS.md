@@ -22,7 +22,7 @@ Seven requests the owner is likely to make, each with the code to read first, wh
   - Flanking is worth the RAW +2 on melee attacks (plus sneak attack for rogues); the Flanked condition is a display tag with no AC effect.
   - `ExecuteAidAnother` cannot be called by an NPC (AI-054) and `AddAidBonus` is private. Split out a rules core that takes (aider, ally, enemy, type) and returns the result, keep the PC wrapper for the menus, and add a `*ForAI` wrapper (11.3).
 - **Decision to build.** Aid Another pays when the aider's own expected damage against the enemy is lower than the ally's gain from +2 attack (or the expected damage prevented by +2 AC), and both threaten the same enemy. Waking an adjacent sleeping ally is a simpler first rule and matters against PC Sleep spells.
-- **Fix first.** AI-035, CMB-073, AI-034; then AI-054 for Aid Another.
+- **Fix first.** AI-035, CMB-073; then AI-054 for Aid Another.
 - **Rules.** PHB ch.8, Combat Modifiers (Flanking) and Special Attacks (Aid Another).
 - **Test with.** `test_2_goblins`, `goblin_raiders`, `sleep_spell_test` (includes the wake-ally flow), or the Custom Encounter Builder with three or more goblins against one PC.
 

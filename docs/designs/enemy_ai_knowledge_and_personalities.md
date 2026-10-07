@@ -421,7 +421,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | Before Cowardly counts as "complete" | **CMB-073** (High) | NPC movement never provokes AoOs, so "avoid AoOs" changes nothing. Until it lands, the trace labels it "AoO risk simulated". |
 | | **AI-047** | The healer never moves to touch (the shaman example). |
 | | **AI-010**, **CMB-075** | `FleeHealthThreshold` is unread, and the turn-skip gate pre-empts Panicked creatures. Withdraw needs both. |
-| | **AI-002**, **AI-034** | Casters on melee routines never cast; move actions are not checked. |
+| | **AI-002** | Casters on melee routines never cast. |
 | | **ENC-021** | DMG casters have no spells, so the Healer and Caster traits cannot act. |
 | Before Inc 2 | **AI-051** | Routines path to the true square of unseen targets (`AIService.cs:531, 882, 1188`). |
 | | **AI-036** | The Mirror Image override bypasses all scoring. |
@@ -476,7 +476,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 
 ### Increment 3: stances, withdraw and healer movement (large; rules-gated)
 
-- **Prerequisites:** CMB-073, AI-047, AI-010, CMB-075, AI-034 and ENC-021 (for adept spells).
+- **Prerequisites:** CMB-073, AI-047, AI-010, CMB-075 and ENC-021 (for adept spells).
 - **Build:**
   - `ChooseBehavior` at `NPCTurns.cs:62` with stance desires and hysteresis.
   - The healer branch generalised into a Support stance for any NPC with a castable heal or buff.
