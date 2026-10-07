@@ -108,7 +108,7 @@ Test encounter presets: in encounter selection, 22 preset IDs (for example `grap
 ## Testing
 
 - **Compile check:** `bash tools/compile_check.sh` compiles Assembly-CSharp headlessly with Unity's bundled Roslyn in about 5 s. It needs Unity to have opened the project once (for `Library/Bee`) and the editor at `F:/Unity/<version>/Editor`, or `UNITY_DIR` set. At 0dd8e76 it reports 0 errors and 508 warnings.
-- **Runtime suites:** `Assets/Scripts/Tests` holds 101 files: 94 static suites with `RunAll()`, the `ServiceTestRunner` aggregator (also `RunAll()`, runs 9 Services suites), 3 MonoBehaviour suites whose `Start()` calls `RunAllTests()`, and 3 utility files. There is no Unity Test Framework and nothing runs them automatically. Call one from a temporary MonoBehaviour in Play mode and filter the Console for errors; each failure is a `Debug.LogError`. Some suites are stale or contain placeholder asserts.
+- **Runtime suites:** `Assets/Scripts/Tests` holds 98 static suites (95 with `RunAll()`, 3 MonoBehaviour suites with `RunAllTests()`), the old `ServiceTestRunner` aggregator, the committed runner `Tests/Runner/StaticSuiteRunner.cs`, and 3 utility files. There is no Unity Test Framework and no CI. Run them in the Editor with **Tools > DND Tests** (an edit pass, then a Play pass); results go to `Logs/TestRunner/` and are compared with the known-failures baseline `tools/tests/static-suites.json`. Some suites are stale or contain placeholder asserts.
 - Details are in [docs/TESTING.md](docs/TESTING.md).
 
 ## Documentation map

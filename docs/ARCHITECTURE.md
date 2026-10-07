@@ -284,7 +284,7 @@ Assets/Scripts/
   World/ (2)             PlanarTravelSystem, CreatureTrapSystem (mostly inert)
   Utilities/ (12)        DiceRoller, CameraController, DebugCommands, IdentifierExtensions, ...
   Identifiers/ (2)       two editor-only ContextMenu smoke tests (the real ID types live elsewhere)
-  Tests/ (101)           14 domain subfolders of static RunAll() suites (+ README.md, manual .md scenarios)
+  Tests/ (103)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
 ```
 
 The empty legacy folders left by the reorganization (`Core/`, `Magic/`, `CombatSystems/`, `Classes/`, `Store/`, `Inventory/`, `UI/Panels/`) were removed on 2026-10-03. Resolve an old doc path such as `Magic/X.cs` by file name (`**/X.cs`).
@@ -357,4 +357,4 @@ A new AI need normally means adding a new `*ForAI` wrapper.
 - GameManager members: `grep -rn "void MethodName" Assets/Scripts`. Never assume a method is missing because `GameManager.cs` lacks it; 51 other files declare the class.
 - Button handlers: `grep -rn "On.*ButtonPressed" Assets/Scripts`. Most are bound in `SceneBootstrap.WireButtons`; a few are called from `ActionButtonPanel` and `CombatUI`.
 - Before renaming a private GameManager method, grep `Assets/Scripts/Tests`. Tests reach private members by name through reflection: 19 test files make about 60 GetMethod/GetField/GetProperty calls (recount before relying on it: `grep -rE "\.(GetMethod|GetField|GetProperty)\(" Assets/Scripts/Tests`). A rename breaks them with no compile error.
-- Tests are static classes with `RunAll()`, except three MonoBehaviour suites (`FlankingReachRulesTests`, `RangeCalculatorTests`, `ReachWeaponRulesTests`) that run from `Start` but are attached to no scene. There is no NUnit, no Unity Test Framework package and no asmdef, so they compile into the game assembly and must be invoked manually; nothing calls `RunAll()` today. See [TESTING.md](TESTING.md).
+- Tests are static classes with `RunAll()`, except three MonoBehaviour suites (`FlankingReachRulesTests`, `RangeCalculatorTests`, `ReachWeaponRulesTests`) that run from `Start` but are attached to no scene. There is no NUnit, no Unity Test Framework package and no asmdef, so they compile into the game assembly. No game code calls `RunAll()`; the editor-only `Tests.Runner.StaticSuiteRunner` (Tools > DND Tests, or `RunFromCommand` through the Unity MCP) runs them against `tools/tests/static-suites.json`. See [TESTING.md](TESTING.md).

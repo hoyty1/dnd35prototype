@@ -4,14 +4,14 @@
 
 This doc covers how to check changes in this project: the headless compile check, the hand-rolled static test suites under `Assets/Scripts/Tests`, and in-game manual testing. It replaces `Assets/Scripts/Tests/README.md`, `Assets/Scripts/Tests/AidAnother_ManualTestScenarios.md` and `Assets/Scripts/Tests/Combat/SleepSpell_ManualTestScenarios.md`.
 
-The suite results dated 2026-10-07 (section 3.1) come from a Play-mode run through the Unity MCP; other claims about runtime behavior come from reading the code. Known test problems are tracked with stable IDs in [issues/TST.md](issues/TST.md) (index: [KNOWN_ISSUES.md](KNOWN_ISSUES.md)); IDs from other areas point to the matching `issues/<PREFIX>.md` file.
+The suite results dated 2026-10-07 (section 3.2) come from Play-mode and edit-mode runs through the Unity MCP; other claims about runtime behavior come from reading the code. Known test problems are tracked with stable IDs in [issues/TST.md](issues/TST.md) (index: [KNOWN_ISSUES.md](KNOWN_ISSUES.md)); IDs from other areas point to the matching `issues/<PREFIX>.md` file.
 
 ## 1. Testing levels at a glance
 
 | Level | How to run | What it catches | What it misses |
 |---|---|---|---|
 | Compile check | `bash tools/compile_check.sh` (about 5-7 s, no Editor needed) | C# compile errors in all of Assembly-CSharp, test code included | Runtime behavior, scene/asset problems, Editor-folder code, player-build-only errors |
-| Static suites | Run them in Play mode through the Unity MCP (section 3.1) or with a temporary hook (section 3) | Rule regressions in mechanics that have a suite | Anything without a suite (section 2.2); results go to the Console only |
+| Static suites | The committed runner `Tests.Runner.StaticSuiteRunner`: menu **Tools > DND Tests**, or `RunFromCommand` through the Unity MCP (section 3); an edit pass, then a Play pass | Rule regressions in mechanics that have a suite, compared against the known-failures baseline `tools/tests/static-suites.json` | Anything without a suite (section 2.2); suites that pass on a bug |
 | Manual testing | Play `Assets/Scenes/MainScene.unity`, use presets and the F12 panel (section 4) | UI flow, targeting, AI, end-to-end combat | Anything you do not look at |
 
 ### Compile check
@@ -32,14 +32,14 @@ Run it after every code change. All test files compile into the game assembly, s
 There is no test framework: no `com.unity.test-framework` in `Packages/manifest.json`, no `.asmdef`, no `[Test]` attributes. A suite is a plain class:
 
 - `public static class <Name>Tests` in namespace `Tests.<Folder>` (`Tests.AI`, `.Character`, `.Classes`, `.Combat`, `.Feats`, `.Inventory`, `.Magic`, `.Maneuvers`, `.Mounts`, `.Services`, `.Utilities`). Exceptions in the global namespace: `CraftingSystemTests`, `Phase5IntegrationTests`, `RodTests`.
-- Entry point `public static void RunAll()` (94 suites). It resets private static `_passed`/`_failed`, logs a header such as `====== SLEEP SPELL RULES TESTS ======`, calls the database `Init()` methods (all idempotent), runs `private static void TestXxx()` methods, and logs a summary such as `====== ... Results: N passed, M failed ======` (the format varies; see section 3). It returns nothing.
+- Entry point `public static void RunAll()` (95 suites). It resets private static `_passed`/`_failed`, logs a header such as `====== SLEEP SPELL RULES TESTS ======`, calls the database `Init()` methods (all idempotent), runs `private static void TestXxx()` methods, and logs a summary such as `====== ... Results: N passed, M failed ======` (the format varies; the runner reads the counters directly, section 3). It returns nothing.
 - Most suites have their own private `Assert(bool condition, string testName, string detail = "")` that logs `  PASS: <name>` with `Debug.Log` or `  FAIL: <name> <detail>` with `Debug.LogError` (example: `Tests/Combat/SleepSpellRulesTests.cs:37-49`). Variants (`AssertEqual`, `AssertTrue`, ...) follow the same pattern. Exception: `Phase5IntegrationTests` logs `FAIL:` with plain `Debug.Log`, so its failures do not show under the Console Error filter.
 - 19 suites also expose a snake_case alias such as `class_level_feature_progression_test() => RunAll()` (`Tests/Character/ClassLevelFeatureProgressionTests.cs:15`). Nothing calls them.
 - Tests build characters with `new GameObject()` + `AddComponent<CharacterController>()` + `CharacterController.Init(stats, pos, null, null)` + `InventoryComponent.Init(stats)`, clean up with `Object.DestroyImmediate` in `finally`, and reach private members through `System.Reflection` (19 test files, about 60 `GetMethod`/`GetField`/`GetProperty` reflection calls; TST-006).
 
 ### 2.2 Inventory
 
-102 `.cs` files, 98 suites, about 31.9K lines, about 1,150 `Test*` methods. List them with `find Assets/Scripts/Tests -name '*Tests.cs' | sort`; recount before quoting numbers.
+103 `.cs` files, 98 suites, about 31.9K lines, about 1,150 `Test*` methods. List them with `find Assets/Scripts/Tests -name '*Tests.cs' | sort`; recount before quoting numbers.
 
 | Folder | Suites | Contents |
 |---|---|---|
@@ -56,15 +56,17 @@ There is no test framework: no `com.unity.test-framework` in `Packages/manifest.
 | Maneuvers | 5 | BullRushRules (pure push rules anywhere; push-and-follow scenarios need Play mode), CoupDeGraceRules, GrappleDamageRules, OverrunRules, SunderInventoryRemoval |
 | Mounts | 1 | MountSystemTests |
 | Services | 13 + runner | AttackCalculator, CombatCalculationService, CombatLogHelper, ConcentrationService, DiceService, DispelMagicService, EconomyService, SavingThrowResolver, SpellCastingHelper, SpellResolutionService, SpellTargetingService, SpellUtilities, TeamUtility; plus ServiceTestRunner |
+| Runner | 0 | StaticSuiteRunner, the committed runner (section 3) |
 | Utilities | 0 | TestHelpers, MockCharacterFactory, TestFixtures |
 
 No suite covers wand or scroll use in combat (only `CraftingSystemTests` scroll/wand pricing and `NPCTemplateSystemTests.TestConsumableManagerWandEligibility`), the store UI (`EconomyServiceTests` covers gold and buy/sell price only), treasure generation, pathfinding, MovementService, TurnService/initiative order, the save DC actually computed under metamagic (`MetamagicSystemTests` checks effective spell level only), dragon abilities, or any UI.
 
 ### 2.3 Runners that exist
 
-- `Tests.Services.ServiceTestRunner.RunAll()` runs 9 suites in sequence: SpellUtilities, SpellCastingHelper, TeamUtility, ConcentrationService, DispelMagicService, CombatLogHelper, SpellTargetingService, CombatCalculationService, DiceService. It skips AttackCalculatorTests, EconomyServiceTests, SavingThrowResolverTests and SpellResolutionServiceTests, has no exception isolation (one throw stops the rest), and its header comment ("Phase 5C", 8 suites, assertion counts) is stale (TST-024). Nothing calls it.
-- Three suites are MonoBehaviours whose `Start()` calls `public static void RunAllTests()`: `Tests.Combat.FlankingReachRulesTests`, `RangeCalculatorTests`, `ReachWeaponRulesTests`. They log `[FlankReachTest] PASS/FAIL ...` style lines. None is attached to a scene or prefab. You can add one as a component for a local run; do not commit that scene change.
-- Nothing else. No production code calls any `RunAll` (TST-002). `Encounters/DungeonEncounterTableExamples.RunAll()` is an example dump, not a test.
+- **`Tests.Runner.StaticSuiteRunner`** (`Assets/Scripts/Tests/Runner/StaticSuiteRunner.cs`, all inside `#if UNITY_EDITOR`, not in an `Editor/` folder so the compile check covers it) discovers and runs every suite. Section 3 describes it.
+- `Tests.Services.ServiceTestRunner.RunAll()` runs 9 suites in sequence: SpellUtilities, SpellCastingHelper, TeamUtility, ConcentrationService, DispelMagicService, CombatLogHelper, SpellTargetingService, CombatCalculationService, DiceService. The committed runner supersedes it and does not discover it (its name does not end in `Tests`). It has no exception isolation and a stale header comment (TST-024). Nothing calls it.
+- Three suites are MonoBehaviours whose `Start()` calls `public static void RunAllTests()`: `Tests.Combat.FlankingReachRulesTests`, `RangeCalculatorTests`, `ReachWeaponRulesTests`. They are attached to nothing; the runner calls `RunAllTests()` directly and reads their `N passed, M failed` summary line, because they have no `_passed`/`_failed` fields.
+- No production code calls any `RunAll`. `Encounters/DungeonEncounterTableExamples.RunAll()` is an example dump, not a test; the runner skips it by name.
 
 ### 2.4 Shared helpers
 
@@ -84,7 +86,7 @@ IDs refer to [issues/TST.md](issues/TST.md) unless another prefix is given.
 | Suite | Problem | Evidence |
 |---|---|---|
 | `Tests.Combat.CharmPersonRulesTests` | Reflects on `SpellCaster.GetSaveModifier` with 6 arguments; the method now takes 8 (two `out` params added in 19e8765). `Invoke` throws `TargetParameterCountException` and the suite aborts without a summary line (TST-001). | `Tests/Combat/CharmPersonRulesTests.cs:166-196`, `Spell/Casting/SpellCaster.cs:971-979` |
-| `Phase5IntegrationTests` | Asserts `MaxLevel == 9`, `EffectiveMaxLevel == 9` and tables for levels 1-9. Level 9 was removed in 6008d6f; `MaxLevel` is 8 and the CSV has levels 1-8. Also writes `phase5_6_test_results.txt` to the project root (not git-ignored). See ENC-007 ([issues/ENC.md](issues/ENC.md)) and TST-012. | `Tests/Encounters/Phase5IntegrationTests.cs:136-160, 82-83`; `Encounters/DungeonEncounterTableManager.cs:57` |
+| `Phase5IntegrationTests` | Asserts `MaxLevel == 9`, `EffectiveMaxLevel == 9` and tables for levels 1-9. Level 9 was removed in 6008d6f; `MaxLevel` is 8 and the CSV has levels 1-8. Its results dump goes to the git-ignored `Logs/phase5_6_test_results.txt`. See ENC-007 ([issues/ENC.md](issues/ENC.md)). | `Tests/Encounters/Phase5IntegrationTests.cs:136-160`; `Encounters/DungeonEncounterTableManager.cs:57` |
 | `Tests.Classes.Phase3ClassTests` | `TestAllElevenClassesRegistered` expects 11 classes; `ClassRegistry.Init` registers 16 (11 PHB + 5 NPC classes) (TST-008). | `Tests/Classes/Phase3ClassTests.cs:613-616`, `Character/Classes/ClassRegistry.cs:29-46` |
 | `Tests.Classes.NPCTemplateSystemTests` | `TestAdeptSpellLookup`/`TestAdeptSpellLevelLookup` pass uppercase ids (`"CURE_LIGHT_WOUNDS"`, `"BLESS"`, `"CURE_MODERATE_WOUNDS"`); `AdeptSpellList` stores lowercase ids and uses case-sensitive `List.Contains`, so 4 assertions fail (TST-008). | `Tests/Classes/NPCTemplateSystemTests.cs:338-356`, `Character/Classes/NPC/AdeptSpellList.cs:40, 121-148` |
 | Placeholder passes | 38 `Assert(true, ...)` calls count as passes: TeamUtilityTests (all 10), SpellTargetingServiceTests 9, SpellUtilitiesTests 4, RapidShotTests 4, CounterspellRulesTests 3, EconomyServiceTests 2, NPCTemplateSystemTests 2, one each in AreaControlSpells, GhoulTouch, Scare, DispelMagicService (TST-003). | `grep -rn "Assert(true" Assets/Scripts/Tests` |
@@ -94,19 +96,19 @@ IDs refer to [issues/TST.md](issues/TST.md) unless another prefix is given.
 | `CauseFearRulesTests`, `ScareRulesTests` | Pass in edit mode, fail 6 and 1 in Play mode because the scene GameManager destroys the suite's own (TST-007). | `_Core/GameManager.cs:483-490` |
 | Probably stale (not run) | `MetamagicSystemTests` predates the metamagic rewrite (b5f7987), the DC fix (616bf32) and Enlarge-doubles-AoE (0dd8e76). `ReachWeaponRulesTests.cs:26` locks in halberd reach, which matches `ItemDatabase` but not the PHB. `DiceServiceTests.cs:61-62` has statistical assertions that can fail by chance (TST-015). | Last commit to `Assets/Scripts/Tests` is 40400b7 (2026-05-27) |
 
-Commit history shows repeated compile fixes in test files but no evidence the C# suites were ever run; the "295/295 pass" in 3f72970 refers to a Python port, `phase5_validation.py` (deleted from the repo root; read it with `git show 3f72970:phase5_validation.py`), not the C# tests. The first recorded C# run is the 2026-10-07 MCP run in section 3.1.
+Commit history shows repeated compile fixes in test files but no evidence the C# suites were ever run; the "295/295 pass" in 3f72970 refers to a Python port, `phase5_validation.py` (deleted from the repo root; read it with `git show 3f72970:phase5_validation.py`), not the C# tests. The first recorded C# run is the 2026-10-07 MCP run in section 3.2.
 
 ### 2.6 Pitfalls
 
 IDs refer to [issues/TST.md](issues/TST.md) unless another prefix is given.
 
 - **GameManager singleton.** 14 suites call `new GameObject().AddComponent<GameManager>()`. `GameManager.Awake` (`_Core/GameManager.cs:483-490`) schedules `Destroy` on the new object and returns early if `GameManager.Instance` already exists (in MainScene, SceneBootstrap creates one), so the test instance has no services; tests patch `_conditionService` in by reflection. In a scene without a GameManager the test instance becomes `Instance`, runs the full Awake, and `Instance` is left pointing at a destroyed object after cleanup (nothing resets it). `DispelMagicRulesTests.cs:244-273` takes a different branch depending on which case applies. Results can depend on the scene (TST-007, TST-005).
-- **SquareGrid.Instance is overwritten.** `SquareGrid.Awake` sets `Instance = this` unconditionally (`Grid/SquareGrid.cs:25-28`). Six suites add their own SquareGrid, so after a run `SquareGrid.Instance` points at a destroyed grid. Code that falls back to it (`CharacterController.CurrentGrid`, `CharacterController.cs:11762`, `GameManager.cs:5180, 5385, 5471`) is affected. Restart Play mode after running suites before playtesting (GRID-010, [issues/GRID.md](issues/GRID.md)).
-- **Static state.** Databases, `ItemDatabase` registrations and `UnityEngine.Random` state are static and persist for the whole Play session (Enter Play Mode Options are off, so a new Play session resets them). Suites that call `Random.InitState(seed)` never restore the previous state, and `DiceService.Roll` uses `UnityEngine.Random` directly with no seeding API (TST-010).
+- **SquareGrid.Instance is overwritten.** `SquareGrid.Awake` sets `Instance = this` unconditionally (`Grid/SquareGrid.cs:25-28`). Six suites add their own SquareGrid, so after a run `SquareGrid.Instance` points at a destroyed grid. Code that falls back to it (`CharacterController.CurrentGrid`, `CharacterController.cs:11762`, `GameManager.cs:5180, 5385, 5471`) is affected. The runner puts `SquareGrid.Instance` back after each suite; a suite called by hand does not. Restart Play mode after running suites before playtesting (GRID-010, [issues/GRID.md](issues/GRID.md)).
+- **Static state.** Databases, `ItemDatabase` registrations and `UnityEngine.Random` state are static and persist for the whole Play session (Enter Play Mode Options are off, so a new Play session resets them). Suites that call `Random.InitState(seed)` never restore the previous state, and `DiceService.Roll` uses `UnityEngine.Random` directly with no seeding API (TST-010). The runner seeds each suite and restores `Random.state` after the pass, restores `GameManager.Instance` and `SquareGrid.Instance` when a suite replaced them, and destroys root GameObjects a suite left behind. It does not reset static databases, registrations or other static fields, so suites can still affect each other and the game in the same Play session.
 - **GameSettings auto-creates a GameObject.** `GameSettings.Instance` (`_Core/GameSettings.cs:22-38`) creates a `GameSettings` object if none exists. `CharacterStats.ApplyPendingLevelUp` reads it to pick the HP mode (default Roll, random), so level-up HP in tests such as `MulticlassSkillRulesTests` is random. Left Ctrl+H (`Utilities/DebugCommands.cs`, self-bootstrapped via `RuntimeInitializeOnLoadMethod`) cycles Roll/Average/Maximum in Play mode.
 - **Rings, rods and wondrous items are not in ItemDatabase after `ItemDatabase.Init()` alone.** `SceneBootstrap.cs:1036-1063` calls `RingDatabase.Init`, `WondrousItemDatabase.Init`, `RodDatabase.Init` and then `RegisterAllRingsInItemDatabase` / `RegisterAllInItemDatabase`. A test that looks those items up through `ItemDatabase.Get` must do the same.
 - **Play mode is required** for some suites: `AreaEffectManager.Instance` calls `DontDestroyOnLoad` (`Spell/AreaEffects/AreaEffectManager.cs:13-21`), which only works in Play mode; `ConcealmentRulesTests` uses it directly (indirect use from other suites not checked) (TST-009).
-- **Exceptions are not isolated.** Only 3 test files contain a `catch`. One exception skips the rest of that suite and its summary line (TST-014).
+- **Exceptions inside a suite.** Only 3 test files contain a `catch`, so one exception skips the rest of that suite and its summary line. The runner catches it, records the exception type, message and three stack frames, still reads the suite's counters, and goes on with the next suite.
 - **Reflection breaks at runtime, not compile time.** Renaming private members such as `GameManager._conditionService`, `_activeSummons`, `_mirrorImageStates`, or `CharacterController.EstablishGrappleWith` breaks tests silently. About 18 test files make about 48 `GetMethod`/`GetField`/`GetProperty` calls. Grep `Assets/Scripts/Tests` for the member name before renaming (TST-006).
 - **Namespace shadowing.** Inside any `Tests.*` namespace, `Inventory` resolves to the namespace `Tests.Inventory`; write `global::Inventory` for the class (TST-011).
 - **CharacterStats constructor order** is `..., str, dex, con, wis, intelligence, cha, ...` (WIS before INT, `Character/Stats/CharacterStats.cs:3345`). Use named arguments.
@@ -121,85 +123,89 @@ IDs refer to [issues/TST.md](issues/TST.md) unless another prefix is given.
 5. Prefer public API. If reflection is unavoidable, `Assert` that the `MethodInfo`/`FieldInfo` is not null instead of silently returning a default.
 6. Do not add `Assert(true, ...)` placeholders. If something cannot be tested yet, log a warning that does not count as a pass.
 7. If you seed `UnityEngine.Random`, save `Random.state` first and restore it in `finally`.
-8. Run the compile check, then run the suite with the hook in section 3 and paste the summary line into your change notes.
+8. Run the compile check, then run the suite with the runner (`RunFromCommand("filter=<Name>Tests")`, section 3) and paste its line from `static-<mode>.txt` into your change notes. Add an entry for the suite to `tools/tests/static-suites.json` (`needs`, and any known failures with their issue IDs), or the runner reports it as NEW.
 
-## 3. How to run suites today
+## 3. Running suites
 
-There is no runner, menu item or CI. Use a temporary MonoBehaviour. The example below compiles against 0dd8e76 (checked with the compile-check toolchain; it adds no warnings). Save it as, for example, `Assets/Scripts/Tests/TempTestRunner.cs`, edit the `Suites` list, and delete it before committing.
+`Tests.Runner.StaticSuiteRunner` (`Assets/Scripts/Tests/Runner/StaticSuiteRunner.cs`) is the committed runner. The whole file is inside `#if UNITY_EDITOR`, so it does not ship in player builds; it is not in an `Editor/` folder, so `compile_check.sh` compiles it.
 
-```csharp
-#if UNITY_EDITOR
-using System;
-using UnityEngine;
+**Entry points.**
 
-// TEMPORARY runner. Do not commit. In Play mode press F10, or use the
-// component's context menu "Run test suites" on the TempTestRunner object.
-public class TempTestRunner : MonoBehaviour
-{
-    private static readonly (string name, Action run)[] Suites =
-    {
-        ("SleepSpellRulesTests", Tests.Combat.SleepSpellRulesTests.RunAll),
-        ("FlankingReachRulesTests", Tests.Combat.FlankingReachRulesTests.RunAllTests),
-        ("ServiceTestRunner", Tests.Services.ServiceTestRunner.RunAll),
-        ("RodTests", RodTests.RunAll), // global namespace
-        ("BullRushRulesTests", Tests.Maneuvers.BullRushRulesTests.RunAll), // scenarios need Play mode
-    };
+- Menu **Tools > DND Tests > Run Static Suites (current mode)**, **List Static Suites** and **Write Proposed Baseline**. Each logs its summary to the Console.
+- From a Unity MCP `CommandScript`: `Tests.Runner.StaticSuiteRunner.RunFromCommand("<options>")` returns a summary of at most about 4,000 characters (verdict, totals, the non-passing suites, file paths). `ListSuites()` lists every discovered suite with its `needs` and reports NEW and MISSING suites. `Run(StaticRunOptions)` returns the full `StaticRunReport`. The types are public because the MCP's script assembly cannot see internal members.
+- `StaticSuiteRunner.RanInPlayModeThisDomain` is true once a Play pass ran in this domain (it resets when Play mode is entered again).
 
-    private int _errorLogs;
+**Discovery.** Every non-nested type in Assembly-CSharp whose name ends in `Tests` and declares a parameterless `public static void RunAll()` (preferred) or `RunAllTests()`, sorted by full name. That gives 98 suites today (95 `RunAll`, 3 `RunAllTests`). `ServiceTestRunner` and `DungeonEncounterTableExamples` do not end in `Tests` and are not run.
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void Bootstrap()
-    {
-        var go = new GameObject("TempTestRunner");
-        go.AddComponent<TempTestRunner>();
-        DontDestroyOnLoad(go);
-    }
+**Mode gating.** Each suite's `needs` comes from the baseline (`play`, `edit`, `either`, `unknown`; a suite missing from the baseline counts as `unknown`).
 
-    private void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.F10)) RunSuites();
-    }
+- A Play pass runs `play`, `either` and `unknown` suites. It records whether a scene `GameManager` existed (`sceneGameManager`) and warns when it did not.
+- An edit pass runs only `edit` suites (CauseFear and Scare, which fail in Play mode because of TST-007). It runs inside a temporary additive scene that becomes the active scene, then restores the previous active scene and closes the temporary one without saving. It never saves a scene.
+- `all=true` ignores the gate and baseline skips; suites run in the wrong mode are marked `modeMismatch`.
 
-    private void OnLog(string message, string stack, LogType type)
-    {
-        if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert) _errorLogs++;
-    }
+**Refusals** (verdict `REFUSED`, nothing runs, only `static-<mode>.txt` is written, so the JSON of an interrupted pass stays resumable): Unity is compiling; scripts have compile errors; Unity is entering or leaving Play mode; `STALE_CODE`; a resume that does not match (see `after=`); or, in an edit pass, the temporary scene cannot be created (for example while an untitled scene is open). `STALE_CODE` means the loaded code may not be what is on disk: a `.cs` file under `Assets` is newer than both `Library/ScriptAssemblies/Assembly-CSharp.dll` and the last edit-mode script import, or the dll was rebuilt after the domain loaded. Whether Unity recompiles an edit made during Play mode depends on the per-user preference *Script Changes While Playing*, so the runner checks instead of assuming. A file whose timestamp changed without a content change (for example after `touch`) is not reimported by `AssetDatabase.Refresh()` and keeps tripping the check; once a refresh compiled nothing, pass `allowStaleCode=true`.
 
-    [ContextMenu("Run test suites")]
-    private void RunSuites()
-    {
-        Application.logMessageReceived += OnLog;
-        foreach (var (name, run) in Suites)
-        {
-            int before = _errorLogs;
-            try { run(); }
-            catch (Exception ex) { Debug.LogError($"[TempTestRunner] {name} threw (summary line missing)"); Debug.LogException(ex); }
-            Debug.Log($"[TempTestRunner] {name}: {_errorLogs - before} error log(s)");
-        }
-        Application.logMessageReceived -= OnLog;
-    }
-}
-#endif
-```
+**Isolation, per suite.**
 
-Steps: open `Assets/Scenes/MainScene.unity`, press Play, and press F10 once the character-creation screen is up (suites build their own characters, so no party is needed). The bootstrap needs no scene edit. F10 is unused elsewhere (only F12 is bound). Stop Play mode afterwards (see the pitfalls in 2.6).
+- Suite logs are captured by swapping `Debug.unityLogger.logHandler` (plus `Application.logMessageReceived` for engine messages) and are not echoed to the Console unless `echo=true`, so Console Error Pause does not stop a run. With `echo=true` the suites' FAIL `LogError` lines reach the Console, and Error Pause can leave Play mode paused after the call; the summary then shows `paused=true`, and `ExitPlaymode` still works.
+- Exceptions are caught; the result records the type, message and three stack frames, and the run goes on.
+- When the seed is not 0, `UnityEngine.Random` is seeded with `seed XOR FNV-1a(full name)` before the suite. The state from before the pass is restored at the end.
+- New root GameObjects in the loaded scenes (and, in Play mode, the DontDestroyOnLoad scene) are counted in `leakedCount`, named in `leaked` (first 10) and destroyed (`cleanupLeaks=false` keeps them).
+- Known game leaks are destroyed too but reported as one aggregated `knownLeaks` entry per name, for example `PooledLogMsg x588 (UI-001, destroyed)`. These are the UI-001 orphans: every combat log call rebuilds `CombatLogPanel`'s pool and leaves its 50 prewarmed lines at the scene root. `ObjectPool.Get` skips destroyed entries, so destroying them does not break the combat log.
+- Lazily created singletons that keep a static `Instance` are kept and listed under `singletonsCreated` (with `xN` when more than one): `AreaEffectManager`, `WindEffectManager`, `ExperienceCalculator`, `GameSettings`, `DebugCommands`.
+- `GameManager.Instance` and `SquareGrid.Instance` are put back if the suite replaced them (TST-007, GRID-010); the result lists them under `restored`.
+- Files that appear in the project root during a suite are listed under `strayFiles`. Only names on the runner's allowlist (`phase5_6_test_results.txt`, the old Phase5 dump) are deleted; any other file is marked `(kept)`, because it may not belong to the suite.
+- The runner does not reset static databases, registrations or other static fields.
 
-Reading results: enable only the Error filter in the Console to see `FAIL:` lines and exceptions (except `Phase5IntegrationTests`, which logs failures as plain `Debug.Log`). For summary lines search `passed` (case-insensitive): 81 suites print `Results:`, 13 print `RESULTS`, and `MetamagicSystemTests`, `NPCTemplateSystemTests` and `RodTests` use other formats. A suite with no summary line threw. The per-suite error count includes any `Debug.LogError` from production code, not just `FAIL:` lines, and misses `Phase5IntegrationTests` failures. An agent without Editor access can read the same output from `%LOCALAPPDATA%\Unity\Editor\Editor.log` after the user runs the suites.
+**Counts.** The runner reads the suite's private static `_passed`/`_failed` fields (also after a throw). Without them it uses the last `N passed, M failed` line, else it counts PASS/FAIL marker lines. `noSummary` flags a suite with counters but no summary line that did not throw.
 
-An Editor `[MenuItem]` under an `Editor/` folder would also work, but suites need Play mode, and `compile_check.sh` skips `/Editor/` paths, so it would not be compile-checked.
+**Failure labels.** Each captured line that matches `[Tag] FAIL:`, `[FAIL]`, `❌` or `✗` becomes a label: the tag and markers are stripped and duplicates merged, at most 60 kept. `failureCounts` (parallel to `failures`) records how many FAIL lines carried each label, so an assertion text used twice (RapidShot's "Rogue should have Rapid Shot feat") counts twice. Other error logs and exceptions are counted as `errorLogCount` with 5 samples; they are informational only.
 
-**Proposal (not implemented):** add `com.unity.test-framework` and a thin NUnit wrapper per suite that runs `RunAll()` in a `[UnityTest]` and fails on any logged error. An asmdef test assembly cannot reference the predefined Assembly-CSharp, so this either needs tests in the predefined Editor assembly or asmdefs for game code (a large refactor; `partial class GameManager` spans 52 files). Investigate before adopting.
+**Options** (space-separated `key=value` tokens):
+
+| Option | Meaning |
+|---|---|
+| `filter=A,B` | Run only suites whose full name contains one of the entries (case-insensitive) |
+| `all=true` | Ignore the mode gate and baseline skips |
+| `seed=N` | Seed base; the default is the baseline's `seed` (20261007); `seed=0` leaves the RNG unseeded |
+| `echo=true` | Also send suite logs to the Console; FAIL lines then trigger Console Error Pause, which can leave Play mode paused (`ExitPlaymode` still works) |
+| `cleanupLeaks=false` | Keep leaked root objects |
+| `maxSeconds=S` | Stop starting new suites after S seconds; the report has `complete=false` and `resumeAfter`, and the TXT and summary print the full resume options |
+| `after=<FullName>` | Resume: run only suites sorted after this one and merge into the existing report of the same mode. Refused unless that report is incomplete, `after` equals its `resumeAfter` or `currentSuite`, and `filter`, `seed` and `all` match; copy the printed `resume with ...` options. The report records `resumedFrom` |
+| `writeBaseline=true` | Also write `Logs/TestRunner/static-baseline-proposed.json` |
+| `allowStaleCode=true` | Run despite a `STALE_CODE` refusal |
+
+**Result files** in `Logs/TestRunner/` (git-ignored by `/[Ll]ogs/`):
+
+- `static-<play|edit>.json`: the full report (`JsonUtility`). It is written when the pass starts, before each suite (with `currentSuite` set to it) and after each suite, with `complete=false` and `resumeAfter` = the last suite with a result until the pass ends. If Unity froze or crashed, `currentSuite` names the suite that hung. Fields: runId, startedUtc, unityMode, sceneGameManager, seedBase, filter, all, after, resumedFrom, maxSeconds, codeLoadedUtc, durationMs, complete, verdict, resumeAfter, currentSuite, totals, newSuites, missingSuites, warnings, and per suite: status (`pass`, `fail`, `error`, `skipped`), skipReason, modeMismatch, countSource, passed, failed, noSummary, seed, durationMs, exception, failures, failureCounts, errorLogCount and samples, leaked, leakedCount, knownLeaks, singletonsCreated, restored, strayFiles and the baseline diff.
+- `static-<mode>.txt`: overwritten with a `RUNNING` header when the pass starts, so an old result is never mistaken for the current one. At the end: a header with run id, mode, seed, scene GameManager, totals and verdict; one line per suite run, for example `FAIL  Tests.Combat.RapidShotTests  48/54  known 0  new 6  0.0s`; then the sections REGRESSIONS, STALE, NEW/MISSING, LEAKS and WARNINGS. Read this first.
+- `static-<mode>.log`: every captured line, with a `### <suite>` separator per suite, written at the end (a `RUNNING` line until then). After a resumed run it holds only the suites of the last call.
+- The summary's last line lists the files this call wrote; a refusal writes only the TXT.
+
+**Baseline** (`tools/tests/static-suites.json`, versioned, outside `Assets` so it has no `.meta`): `{ "version": 1, "seed": 20261007, "suites": [ ... ] }` with one entry per suite: `type` (full name), `needs`, `skip` (non-empty text skips the suite unless `all=true`), `expectThrow` (an exception type name, for example `TargetParameterCountException` for CharmPerson, TST-001), `passed`, `failed`, `flakyFailures`, `knownFailures` (a list of `{ "match", "issue" }`, where `match` is an ordinal prefix of a failure label and `issue` an issue ID) and `notes`. The runner never writes this file; `writeBaseline=true` writes a proposal to curate by hand: new failure labels get the issue `TODO`, and an exception seen in the run becomes `expectThrow` with `TODO: issue ID for <Exception>` appended to `notes`. The loader warns about known failures with an empty or `TODO` issue, and about an `expectThrow` whose `notes` have no issue ID (or a `TODO`).
+
+**Verdicts.**
+
+- A suite is a REGRESSION when it throws without a matching `expectThrow`, or when its failures not explained by a known label exceed `flakyFailures`. Unexplained = the larger of (unmatched labels + labels beyond the cap) and (the suite's failure count minus the FAIL lines whose label matched, capped at the failure count). Failures without a FAIL line therefore count as unexplained; suites that print each failure twice (Crafting, Rod, Phase5) are not penalized.
+- A suite with no baseline entry (NEW) that fails or throws counts as a REGRESSION too and is listed under REGRESSIONS with `(no baseline entry)`.
+- It is STALE when a known failure was not seen, or when `expectThrow` is set and it did not throw.
+- A drop in total assertions against the baseline counts is a warning.
+- The pass verdict is REGRESSION, else STALE, else OK. It is `NO_BASELINE` when the file is missing (a malformed file is reported and the run continues without a comparison) and `REFUSED` when the pass could not start (see Refusals). NEW (discovered, no entry) and MISSING (entry, not discovered) suites are listed; a NEW suite changes the verdict only when it fails or throws.
+
+The baseline committed with the runner (2026-10-07) has the `needs` of every suite but no counts or known failures yet, so every failing suite currently shows as a REGRESSION. Curating it from a full run is the next step.
 
 ### 3.1 Running suites through the Unity MCP
 
-When the Unity MCP is attached to this project (check that the console paths it reports exist here), an agent can run suites without adding a file:
+When the Unity MCP is attached to this project (check that `Application.dataPath` and the console paths it reports are under `F:/DNDPrototype`):
 
-1. Enter Play mode with `Unity_RunCommand` calling `EditorApplication.EnterPlaymode();`. Entering Play mode reloads the domain; the next MCP call runs after Play mode has started. Character creation is enough, because suites build their own characters.
-2. Run suites in one `Unity_RunCommand` and collect the results with a log hook:
+1. In edit mode, after script changes, call `AssetDatabase.Refresh();` and check `!EditorApplication.isCompiling` and `!EditorUtility.scriptCompilationFailed` in the next call.
+2. Edit pass: `result.Log(Tests.Runner.StaticSuiteRunner.RunFromCommand(""));`.
+3. `EditorApplication.EnterPlaymode();`. Entering Play mode reloads the domain; the next MCP call runs once Play mode has started. Character creation is enough, because suites build their own characters.
+4. Play pass: `result.Log(Tests.Runner.StaticSuiteRunner.RunFromCommand(""));`. For a full pass add `maxSeconds=<S>` and resume with the printed `resume with ...` options until `complete` is true. S is not measured yet: neither the MCP command timeout nor the length of a full pass is known (the recorded filtered passes took 0.1 to 0.3 s); start with about 200 and record the real numbers in 3.2.
+5. Read `Logs/TestRunner/static-play.txt` (and the JSON for detail) with the Read tool.
+6. `EditorApplication.ExitPlaymode();`. Suites leave static state behind, so do not play by hand, and never run the scenario harness, in a Play session that ran suites.
 
 ```csharp
-using System;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 
@@ -208,31 +214,26 @@ internal class CommandScript : IRunCommand
     public void Execute(ExecutionResult result)
     {
         if (!EditorApplication.isPlaying) { result.LogError("Enter Play mode first."); return; }
-        var fails = new List<string>();
-        int pass = 0;
-        Application.LogCallback hook = (msg, stack, type) =>
-        {
-            if (msg.Contains("FAIL") || msg.Contains("❌") || type == LogType.Exception) fails.Add(msg.Split('\n')[0]);
-            else if (msg.Contains("PASS") || msg.Contains("✅")) pass++;
-        };
-        Application.logMessageReceived += hook;
-        try { Tests.Combat.ScareRulesTests.RunAll(); }
-        catch (Exception ex) { fails.Add("threw: " + ex.Message); }
-        finally { Application.logMessageReceived -= hook; }
-        result.Log($"pass={pass} fail={fails.Count}");
-        foreach (string f in fails) result.Log(f);
+        result.Log(Tests.Runner.StaticSuiteRunner.RunFromCommand("filter=ScareRulesTests,RapidShotTests"));
     }
 }
 ```
 
-3. Exit with `EditorApplication.ExitPlaymode();`. Suites leave GameObjects in the running game, so restart Play mode before playing by hand.
-
 Notes:
 
-- Return the failure messages from the hook, as above. The Console keeps a limited window, and `Unity_GetConsoleLogs` output is too large to read whole (it is saved to a file; grep it).
-- Suites that `AddComponent<GameManager>()` behave differently in Play mode, where the scene GameManager destroys theirs (TST-007). Run those in edit mode inside a temporary additive scene: `var temp = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);`, run the suite, then `EditorSceneManager.CloseScene(temp, true);`. Suites that need `Awake` or `AreaEffectManager` (TST-009) still need Play mode.
-- Enter Play Mode Options are off (full domain reload), and script changes during Play mode recompile and continue. Exit Play mode before editing scripts.
+- The MCP refuses some namespaces in a `CommandScript` (for example `System.Reflection`); call the runner's public API instead.
+- `Unity_GetConsoleLogs` output is too large to read whole; the runner's files are the record.
+- Enter Play Mode Options are off (full domain reload). Exit Play mode before editing scripts. Whether Unity recompiles an edit made during Play mode depends on the per-user preference *Script Changes While Playing*; on 2026-10-07 it did not, and the old code kept running. The runner refuses with `STALE_CODE` in that case.
+- If Unity freezes in a suite (an endless loop, a stack overflow), the owner has to kill and restart it. Then read `currentSuite` in `Logs/TestRunner/static-play.json`, add a `skip` for that suite to the baseline with the reason, and resume with the options for `after=<currentSuite>` (same filter and seed); the runner warns that the suite has no result.
 - `AssetDatabase.DeleteAsset` fails through the MCP ("User interactions are not supported").
+
+### 3.2 Recorded runs
+
+Run of 2026-10-07 with the committed runner (Unity 6000.4.0f1 through the MCP, seed 20261007). Edit pass: CauseFear 36 pass, 0 fail and Scare 77 pass, 0 fail, verdict OK; the active scene was not dirty and the temporary scene was closed. Play pass with `filter=SpellUtilitiesTests,FlankingReachRulesTests,RapidShotTests,CharmPersonRulesTests`: SpellUtilities 26/0, FlankingReach 80/0, RapidShot 48/6 (TST-028; a REGRESSION until the baseline lists it), CharmPerson an error with `TargetParameterCountException` (TST-001, matching `expectThrow`). Two runs with the same seed and one with `seed=0` gave identical counts; a run split by `maxSeconds` and resumed with `after=` merged to the same totals. `Phase5IntegrationTests` gave 158/3 (ENC-007), wrote its dump to `Logs/` and left nothing in the project root. The other 91 suites were not run with the runner yet.
+
+Rerun of 2026-10-07 after the runner review fixes (occurrence-counted failure labels, UI-001 orphans destroyed, stray files only deleted on an allowlist, `RUNNING` and `currentSuite` markers, checked resume, `STALE_CODE` refusal, NEW failing suites as regressions). Edit pass: CauseFear 36/0 and Scare 77/0, OK, active scene not dirty. A `touch` of the runner file made the next edit pass refuse with `STALE_CODE`; `AssetDatabase.Refresh()` then compiled nothing and the refusal stayed, as documented above. `after=` on a complete report and `after=` without the original filter were refused. Play pass, same four-suite filter: SpellUtilities 26/0, FlankingReach 80/0 (588 `PooledLogMsg` UI-001 orphans destroyed; the later suites in the same session ran normally), RapidShot 48/6 (5 labels, "Rogue should have Rapid Shot feat" counted twice), CharmPerson `TargetParameterCountException`. A `maxSeconds=0.01` pass resumed twice with the printed options merged to the same 162/6; a simulated freeze (the JSON edited to `currentSuite=RapidShotTests`) resumed with `after=` that suite and warned that it had no result. `Phase5IntegrationTests` 158/3 (each label counted twice, because the suite prints its failures again at the end), no file left in the project root. Unity was left in edit mode.
+
+The runs below predate the committed runner and used an ad hoc log hook.
 
 Run of 2026-10-07 (Play mode, after the AI roadmap step 1 rules fixes 2dc4d02..e9f6c84). No failure traced back to those fixes.
 
@@ -253,7 +254,7 @@ Run of `GrappleDamageRulesTests` on 2026-10-07 after the per-creature attack seq
 
 Run of 2026-10-07 after NPC maneuvers started paying one attack step (CMB-102 step 2; `TestManeuverActionCostTable` added, 191 assertions): `GrappleDamageRulesTests` 180 pass, 11 fail; `AIProfileFrameworkTests` 43 pass, 3 fail (TST-025, unchanged). All iterative-maneuver, attack-sequence and maneuver-cost assertions passed. The grapple failures are the TST-027 causes: 7 stale log texts, 3 pin-duration assertions and 1 chance failure (grapple damage with a weapon equipped). An earlier run in the same session, whose summary line was cut off, also showed the two Improved Unarmed Strike nonlethal assertions failing by chance. A re-run after adding `TestNpcManeuverCostsOneAttackStep` (194 assertions): 184 pass, 10 fail, all TST-027 (7 stale log texts, 3 pin-duration); the three NPC maneuver-cost assertions passed.
 
-Run of 2026-10-07 after the NPC melee attack started running step by step (CMB-102 step 3; `TestAttackSequenceStepResolverUsesStepBab` and `TestNpcMeleeSequenceTripThenAttacks` added, 199 assertions): `GrappleDamageRulesTests` 188 pass, 11 fail; `AIProfileFrameworkTests` 43 pass, 3 fail (TST-025, unchanged). The five new assertions passed (shared step resolver BAB, adjustment and natural step; NPC trip replacing the first attack followed by attacks at +6 and +1; one attack after the move action). The grapple failures are TST-027: 7 stale log texts, 3 pin-duration assertions and 1 chance failure (non-monk lethal grapple damage). `TestNpcMeleeSequenceTripThenAttacks` calls the private `GameManager.PerformNPCMeleeAttackSequence` by reflection (TST-006). A re-run after the review fixes (a natural-weapon creature keeps its remaining natural attacks after a substitute; one more assertion, 200 in all): `GrappleDamageRulesTests` 187 pass, 13 fail, with the new claw/claw/bite assertion passing; the failures are TST-027 (7 stale log texts, 3 pin-duration assertions) plus 3 chance failures (Monk default grapple damage, unarmed grapple damage dice, Use Opponent's Weapon success). `AIProfileFrameworkTests` 43 pass, 3 fail (TST-025, unchanged). A second `GrappleDamageRulesTests` run in the same Play session showed more pin and chance failures, as expected from objects left by the first run (section 3.1).
+Run of 2026-10-07 after the NPC melee attack started running step by step (CMB-102 step 3; `TestAttackSequenceStepResolverUsesStepBab` and `TestNpcMeleeSequenceTripThenAttacks` added, 199 assertions): `GrappleDamageRulesTests` 188 pass, 11 fail; `AIProfileFrameworkTests` 43 pass, 3 fail (TST-025, unchanged). The five new assertions passed (shared step resolver BAB, adjustment and natural step; NPC trip replacing the first attack followed by attacks at +6 and +1; one attack after the move action). The grapple failures are TST-027: 7 stale log texts, 3 pin-duration assertions and 1 chance failure (non-monk lethal grapple damage). `TestNpcMeleeSequenceTripThenAttacks` calls the private `GameManager.PerformNPCMeleeAttackSequence` by reflection (TST-006). A re-run after the review fixes (a natural-weapon creature keeps its remaining natural attacks after a substitute; one more assertion, 200 in all): `GrappleDamageRulesTests` 187 pass, 13 fail, with the new claw/claw/bite assertion passing; the failures are TST-027 (7 stale log texts, 3 pin-duration assertions) plus 3 chance failures (Monk default grapple damage, unarmed grapple damage dice, Use Opponent's Weapon success). `AIProfileFrameworkTests` 43 pass, 3 fail (TST-025, unchanged). A second `GrappleDamageRulesTests` run in the same Play session showed more pin and chance failures, as expected from objects left by the first run (section 2.6).
 
 Run of 2026-10-07 after bull rush became a standard action or charge end for every creature (CMB-102; the iterative bull rush test and the `PcUiAlsoReplacesAttack` assertion deleted, `TestBullRushIsAStandardAction` and `TestBullRushTargetLimits` added, 209 assertions; then the review fixes: footprint-aware push and follow, the post-move legality check in `ResolveChargeBullRush`, the PC refusal before the turning break, and the NPC executor refusing a standing `BullRushCharge`): `GrappleDamageRulesTests` 196 pass, 13 fail (an earlier run in the same session had 16 failures, all of the same TST-027 kinds); `FlankingReachRulesTests` 80 pass, 0 fail. All 14 new bull rush assertions passed: standard action cost for a fresh, an attacking and a moved creature; the NPC executor refusing a target two squares away through `CanBullRush`'s adjacency rule without spending anything, then bull rushing the same target once adjacent and spending the standard action; Medium vs Large allowed; Medium vs Huge, Small vs Large, swarm, incorporeal, two squares away and a grappling attacker refused; the charge planner leaving adjacency to the path. All 13 failures are TST-027 kinds: stale log texts (the 4 pinner block messages, unarmed grapple damage, Use Opponent's Weapon), the 3 pin-duration assertions, and chance failures in the Improved Unarmed Strike and Monk grapple damage. No NPC bull rush charge was run, no Large push was exercised in a test, and the PC bull rush buttons were not clicked in Play mode.
 

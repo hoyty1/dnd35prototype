@@ -17,8 +17,9 @@ using UnityEngine;
 ///   7. Cascade logic (01-10 easier, 91-100 harder)
 ///   8. Edge cases (high dice variance, boundary rolls)
 ///
-/// Run with Phase5IntegrationTests.RunAll() from any MonoBehaviour or console.
-/// Results are saved to phase5_6_test_results.txt in the project root.
+/// Run through Tests.Runner.StaticSuiteRunner (docs/TESTING.md section 3) or call
+/// Phase5IntegrationTests.RunAll() directly. Results are also saved to
+/// Logs/phase5_6_test_results.txt under the project folder (git-ignored).
 ///
 /// Phase 5: Random Encounter Generator.
 /// </summary>
@@ -79,7 +80,9 @@ public static class Phase5IntegrationTests
 
         try
         {
-            string outputPath = Path.Combine(Application.dataPath, "..", "phase5_6_test_results.txt");
+            string logsDir = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Logs");
+            Directory.CreateDirectory(logsDir);
+            string outputPath = Path.Combine(logsDir, "phase5_6_test_results.txt");
             File.WriteAllText(outputPath, result);
             Debug.Log($"[Phase5Tests] Results saved to: {outputPath}");
         }
