@@ -195,4 +195,40 @@ public static class SpellUtilities
             || string.Equals(id, SpellNames.SCARE, StringComparison.Ordinal)
             || string.Equals(id, SpellNames.FEAR, StringComparison.Ordinal);
     }
+
+    // ════════════════════════════════════════════════════════════
+    //  Saving Throw Outcome (single-target cast paths)
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// True when the target's successful save means a single-target spell's tracked effect
+    /// is not applied. Shared by the PC path (PerformSpellCast) and the NPC path
+    /// (TryNPCPerformSpellCast) so both follow one rule (SPL-007).
+    ///
+    /// Hostile effects whose save is "negates" (Hold Person, Charm Person, Slow, Confusion and so on)
+    /// carry EffectType Debuff or Control: SpellCategoryClassifier.ReclassifyAll rewrites many Debuff
+    /// spells to Control at database init, so both count. Blur (Will negates, harmless) is negated
+    /// when an unwilling target saves.
+    ///
+    /// Not negated: Cause Fear (PHB p.208) and Scare (PHB p.274) have Will partial saves (shaken for
+    /// 1 round), resolved by their own handlers; nonintelligent undead get no save against
+    /// Command Undead (PHB p.211), so a rolled save does not count.
+    /// </summary>
+    public static bool IsEffectNegatedBySave(SpellData spell, SpellResult result, bool commandUndeadTargetIsNonintelligent)
+    {
+        if (spell == null || result == null) return false;
+        if (!result.RequiredSave || !result.SaveSucceeded) return false;
+
+        string id = spell.SpellId;
+        if (string.Equals(id, SpellNames.CAUSE_FEAR, StringComparison.Ordinal)
+            || string.Equals(id, SpellNames.SCARE, StringComparison.Ordinal))
+            return false;
+
+        if (commandUndeadTargetIsNonintelligent && string.Equals(id, SpellNames.COMMAND_UNDEAD, StringComparison.Ordinal))
+            return false;
+
+        return spell.EffectType == SpellEffectType.Debuff
+            || spell.EffectType == SpellEffectType.Control
+            || string.Equals(id, SpellNames.BLUR, StringComparison.Ordinal);
+    }
 }

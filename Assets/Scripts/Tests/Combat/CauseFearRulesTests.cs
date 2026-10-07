@@ -32,6 +32,7 @@ public static class CauseFearRulesTests
         TestCauseFearSuccessfulSaveAppliesShaken();
         TestCauseFearHighHdIsTooPowerful();
         TestCauseFearUndeadIsImmune();
+        TestCauseFearBlockedSpellAppliesNothing();
         TestFrightenedBehaviorDecisionTracksFearSource();
 
         Debug.Log($"====== Cause Fear Rules Results: {_passed} passed, {_failed} failed ======");
@@ -338,6 +339,47 @@ public static class CauseFearRulesTests
             Assert(!string.IsNullOrWhiteSpace(result.NoEffectReason) && result.NoEffectReason.ToLowerInvariant().Contains("immune"),
                 "Undead immunity sets explicit no-effect reason",
                 $"reason={result.NoEffectReason}");
+        }
+        finally
+        {
+            DestroyController(caster);
+            DestroyController(target);
+            Object.DestroyImmediate(gm.gameObject);
+        }
+    }
+
+    private static void TestCauseFearBlockedSpellAppliesNothing()
+    {
+        // Spell resistance (or spell failure, or a Lesser Globe) stops the spell before any save:
+        // SpellCaster.Cast returns Success=false with no save rolled. The handler must claim the
+        // spell (so ApplySpellBuff does not run) but apply neither frightened nor shaken.
+        ConditionService service;
+        GameManager gm = BuildGameManagerWithConditionService(out service);
+        CharacterController caster = null;
+        CharacterController target = null;
+
+        try
+        {
+            caster = CreateController(BuildStats("Wizard", "Wizard", 3, 3), CharacterTeam.Enemy, new Vector2Int(1, 1));
+            target = CreateController(BuildStats("Elf", "Fighter", 2, 2), CharacterTeam.Player, new Vector2Int(3, 1));
+            gm.NPCs.Add(caster);
+            gm.PCs.Add(target);
+
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.CAUSE_FEAR);
+            SpellResult result = new SpellResult
+            {
+                Spell = spell,
+                CasterName = caster.Stats.CharacterName,
+                TargetName = target.Stats.CharacterName,
+                RequiredSave = false,
+                SaveSucceeded = false,
+                Success = false
+            };
+
+            bool handled = InvokeResolveCauseFear(gm, caster, target, spell, result);
+            Assert(handled, "Cause Fear blocked by SR is claimed by its handler");
+            Assert(!service.HasCondition(target, CombatConditionType.Frightened), "Cause Fear blocked by SR does not frighten");
+            Assert(!service.HasCondition(target, CombatConditionType.Shaken), "Cause Fear blocked by SR does not shake");
         }
         finally
         {

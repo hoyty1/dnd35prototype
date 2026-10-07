@@ -160,7 +160,7 @@ Project-specific conditions with no DMG counterpart: Asleep, Charmed, HideousLau
 | Blindsight, blindsense, tremorsense, scent | Minimal | Text and tags; scent is only an AI targeting term | |
 | Breath weapon | Partial | Dragon AI only, once per combat, damage skips mitigation | AI-008, AI-032, AI-033, AI-040 |
 | Change shape, alternate form | Missing | Lycanthrope forms and Wild Shape are missing | CRE-011, CHR-020 |
-| Charm and compulsion | Partial | Charmed and Confused controllers; NPC Control spells take effect on a successful save | SPL-007, AI-042 |
+| Charm and compulsion | Partial | Charmed and Confused controllers; targeted Control spells respect a successful save on both PC and NPC paths (not verified in Play mode) | AI-042 |
 | Concealment, invisibility | Mostly | Miss chances, Listen pinpointing; no line of sight | GRID-009, CMB-068 |
 | Damage reduction, energy resistance and immunity | Partial | Weapon damage pipeline works; DR bypass cannot express "and"; custom spell damage (Fireball, Cone of Cold and others), breath weapons and monster special attacks call `TakeDamage` and skip resistance, immunity and DR | CMB-030, SPL-004, CMB-011, AI-006 |
 | Darkvision, low-light vision | Minimal | Racial data; there is no illumination model | |
@@ -198,7 +198,7 @@ These change outcomes in normal play and are not labelled as house rules. Treat 
 | Crits multiply only weapon dice; crit immunity ignored on normal crits; paralyzed targets auto-crit | PHB ch.8 critical hits; MM creature types | CMB-004, CMB-064, CMB-065 |
 | Conditions and spell durations tick at the round boundary (GameManager.OnNewRound), not on each creature's or caster's turn | PHB ch.8 and ch.10 durations | CMB-006, SPL-032 |
 | No surprise round; nobody is ever flat-footed | PHB ch.8 surprise | CMB-028 |
-| NPC movement, maneuvers and casting never provoke; NPC Control spells ignore saves | PHB ch.8 | SPL-006, SPL-007, CMB-073, CMB-076 |
+| NPC movement, maneuvers and casting never provoke | PHB ch.8 | SPL-006, CMB-073, CMB-076 |
 | CON hit points counted twice at creation; hard-coded BAB and hit-die tables | PHB ch.3 | CHR-001, CHR-002 |
 | Bonuses hand-summed outside spell effects; all spell bonuses treated as morale | PHB glossary, bonus types | CHR-010, SPL-025, SPL-026 |
 | Save DC differs by cast path; generic spell dice ignore caster level | PHB ch.10 | SPL-001, SPL-005 |
@@ -234,7 +234,7 @@ Ordered by how often each gap affects play: every attack first, then every turn,
 Items 1-6 are also the prerequisites for deeper enemy AI: an AI that scores options needs attack, damage, condition and spell outcomes that follow the same rules for both sides, and creatures whose abilities actually execute. [AI 13](AI.md#13-toward-deeper-ai-analysis-for-the-owner-to-decide) gives the options for the decision layer itself.
 
 1. **Weapon attack and damage math (every attack).** Crit damage and crit immunity, full-attack modifiers, morale damage, typed energy riders. One `AttackModifierBuilder` used by `Attack`, `FullAttack`, `DualWieldAttack` and `FlurryOfBlows` removes a family of bugs. Start: CMB-043, CMB-004, CMB-002, CMB-003, CMB-011, CMB-064, CMB-065; [combat: attack resolution](../architecture/combat-and-grid.md#attack-resolution).
-2. **Rules parity on NPC paths (every enemy turn).** NPC movement AoOs, maneuver and casting AoOs, Concentration, Control saves, standing up, the turn-skip gate. Smarter AI built on asymmetric rules optimizes against rules the player does not share. Start: [AI 13.2](AI.md#132-prerequisites-fix-before-tuning-behaviour), SPL-006, SPL-007, CMB-073, CMB-074, CMB-075, CMB-076.
+2. **Rules parity on NPC paths (every enemy turn).** NPC movement AoOs, maneuver and casting AoOs, Concentration, standing up, the turn-skip gate. Smarter AI built on asymmetric rules optimizes against rules the player does not share. Start: [AI 13.2](AI.md#132-prerequisites-fix-before-tuning-behaviour), SPL-006, CMB-073, CMB-074, CMB-075, CMB-076.
 3. **Turn-relative durations (every condition and buff).** Expire conditions and spell effects relative to the creature's or caster's turn; normalize the 54 legacy durations; fix the never-expiring flags. Start: CMB-006, SPL-032, SPL-002, SPL-003, CMB-009.
 4. **Character math foundations (every character, every fight).** CON HP, BAB and hit dice from `ICharacterClass`, unapplied save bonuses, racial traits, typed bonus stacking. Start: CHR-001, CHR-002, CHR-018, CHR-019, CHR-010, SPL-025, SPL-026.
 5. **Spawned-creature correctness (every encounter).** Alignment, class BAB and saves, single template application, weapons in MainHand/Ranged slots, Undead BAB, NPC-class proficiencies. Start: [CREATURES 8](CREATURES.md#8-gaps-and-backlog-toward-mmdmg-fidelity) item 1; CRE-002, CRE-004, CRE-001, ITM-004, CRE-009.

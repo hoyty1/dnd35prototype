@@ -32,7 +32,7 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 2 | 19 | 15 | 36 | CORE-037 |
 | [Combat](issues/CMB.md) | CMB | 6 | 37 | 38 | 81 | CMB-083 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 7 | 9 | 17 | GRID-018 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 10 | 54 | 47 | 111 | SPL-112 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 9 | 54 | 47 | 110 | SPL-112 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 7 | 24 | 36 | 67 | CHR-068 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 17 | 16 | 37 | CRE-038 |
 | [Encounters](issues/ENC.md) | ENC | 1 | 7 | 13 | 21 | ENC-022 |
@@ -40,7 +40,7 @@ Entries per section:
 | [AI](issues/AI.md) | AI | 1 | 19 | 35 | 55 | AI-057 |
 | [UI](issues/UI.md) | UI | 1 | 11 | 38 | 50 | UI-051 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 18 | 26 | TST-027 |
-| **All** | | 37 | 239 | 306 | 582 | |
+| **All** | | 36 | 239 | 306 | 581 | |
 
 ## Top issues
 
@@ -74,4 +74,3 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [ITM-004](issues/ITM.md) | High | Items, store, crafting and treasure | NPCs spawn without weapons and shields listed under MainHand, OffHand or Ranged | Yes |
 | [ITM-001](issues/ITM.md) | High | Items, store, crafting and treasure | Ring of Protection deflection accumulates on every stat recalculation | Yes |
 | [AI-001](issues/AI.md) | High | AI | NPCs never cast area spells, although AI scoring favours them | Yes |
-| [SPL-007](issues/SPL.md) | High | Spells and metamagic | NPC-cast Control spells take effect even when the target saves | Yes |

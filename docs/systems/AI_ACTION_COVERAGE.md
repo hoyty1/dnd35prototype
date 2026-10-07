@@ -63,7 +63,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Destruction domain smite | Never | NPCs have no domains | Yes (Domain Power button; the +4 attack applies, the damage bonus never does) | CHR-005; 11.8.7 |
 | Domain powers | Never | NPCs have no domains | Yes (Strength, Destruction, Death, Sun, Travel, Plant, Luck, elemental turning) | CHR-023, CHR-062 |
 | Lay on Hands, Wild Shape, Favored Enemy and other data-only class features | Never | | No | CHR-020, CHR-053 |
-| Single-target damage/debuff/control spell | Used | kiter, dragon, healer | Yes | SPL-005, SPL-007, AI-046 |
+| Single-target damage/debuff/control spell | Used | kiter, dragon, healer | Yes | SPL-005, AI-046 |
 | Area spells, metamagic | Never | refused at cast | Yes | AI-001; 11.8.2 |
 | Heal, buff | Partial | adjacent or self only | Yes | AI-047; 11.8.6 |
 | Spontaneous cure/inflict conversion | Never | PC cast path only (GameManager.SpellCasting.cs:193) | Yes | 11.8.6 |
@@ -83,4 +83,4 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 
 **PC can, NPC cannot:** double move; free 5-foot steps (including step then full attack); stand up, drop prone, crawl; Power Attack; Rapid Shot; fighting defensively by choice; two-weapon and off-hand attacks; throw melee throwables; Cleave; Flurry, Rage, Bardic Music, Turn Undead, domain powers (including the Destruction smite); template smite outside summons; sunder, bull rush, overrun, feint; aid another and waking allies; trip or disarm as part of a full attack; spontaneous cure/inflict conversion; escape a grapple while not pinned; decline Improved Grab; area spells and metamagic; summoning; holding a touch charge; controlling a Flaming Sphere (`TryControlFlamingSphereForAI` has no callers); dismissing spells; imbued spells; potions, wands, scrolls; picking up or dropping items; weapon swaps; nonlethal damage.
 
-**NPC-only advantages (all bugs or gaps):** movement never provokes (CMB-073); maneuvers never provoke (CMB-076); casting never provokes and needs no Concentration (SPL-006); Control spells ignore saves (SPL-007); breath and specials cost no action (AI-040, AI-053); melee routines path to an invisible target's true square (AI-051); monster ranged specials skip mitigation (AI-006); silenced NPCs can cast (SPL-092).
+**NPC-only advantages (all bugs or gaps):** movement never provokes (CMB-073); maneuvers never provoke (CMB-076); casting never provokes and needs no Concentration (SPL-006); breath and specials cost no action (AI-040, AI-053); melee routines path to an invisible target's true square (AI-051); monster ranged specials skip mitigation (AI-006); silenced NPCs can cast (SPL-092).

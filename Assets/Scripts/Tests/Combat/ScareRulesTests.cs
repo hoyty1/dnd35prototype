@@ -35,6 +35,7 @@ public static class ScareRulesTests
         TestFearPenalties();
         TestMindAffectingImmunity();
         TestFearEscalation();
+        TestHandlerBlockedSpellAndPartialSave();
 
         Debug.Log($"====== Scare Rules Results: {_passed} passed, {_failed} failed ======");
     }
@@ -117,7 +118,10 @@ public static class ScareRulesTests
         Assert(spell.School == "Necromancy", "Scare school is Necromancy");
         Assert(spell.AllowsSavingThrow, "Scare allows saving throw");
         Assert(spell.SavingThrowType == "Will", "Scare save is Will");
-        Assert(spell.EffectType == SpellEffectType.Debuff, "Scare is a debuff");
+        // SpellCategoryClassifier.ReclassifyAll stores Scare as Control at init (SPL-068); either type is
+        // treated as hostile and save-negatable by SpellUtilities.IsEffectNegatedBySave.
+        Assert(spell.EffectType == SpellEffectType.Debuff || spell.EffectType == SpellEffectType.Control,
+            "Scare is a debuff or control spell", $"got {spell.EffectType}");
         Assert(spell.RangeCategory == SpellRangeCategory.Medium, "Scare range is Medium");
         Assert(!spell.IsPlaceholder, "Scare is not a placeholder",
             spell.IsPlaceholder ? $"PlaceholderReason: {spell.PlaceholderReason}" : "");
@@ -320,6 +324,50 @@ public static class ScareRulesTests
         // Panicked is the cap
         Assert(ScareEffectData.EscalateFear(FearLevel.Panicked, FearLevel.Frightened) == FearLevel.Panicked,
             "Panicked + Frightened = Panicked (capped)");
+    }
+
+    // ======================== HANDLER (PC and NPC single-target paths) ========================
+
+    private static void TestHandlerBlockedSpellAndPartialSave()
+    {
+        // TryResolveScareSpellEffect runs on both PerformSpellCast and TryNPCPerformSpellCast (SPL-007).
+        // Spell resistance / spell failure / Lesser Globe (Success=false, no save rolled) means no effect;
+        // a successful Will save means shaken 1 round, not frightened (PHB p.274 via cause fear p.208).
+        MethodInfo resolve = typeof(GameManager).GetMethod("TryResolveScareSpellEffect", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert(resolve != null, "TryResolveScareSpellEffect exists");
+        if (resolve == null) return;
+
+        GameObject gmObject = new GameObject("ScareTest_GameManager");
+        GameManager gm = gmObject.AddComponent<GameManager>();
+        CharacterController caster = null;
+        CharacterController blockedTarget = null;
+        CharacterController savedTarget = null;
+
+        try
+        {
+            caster = CreateController(BuildStats("Sorcerer", "Sorcerer", 3, 3), CharacterTeam.Enemy, new Vector2Int(1, 1));
+            blockedTarget = CreateController(BuildStats("Elf", "Fighter", 2, 2), CharacterTeam.Player, new Vector2Int(3, 1));
+            savedTarget = CreateController(BuildStats("Dwarf", "Fighter", 2, 2), CharacterTeam.Player, new Vector2Int(4, 1));
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.SCARE);
+
+            var blocked = new SpellResult { Spell = spell, RequiredSave = false, SaveSucceeded = false, Success = false };
+            object handledBlocked = resolve.Invoke(gm, new object[] { caster, blockedTarget, spell, blocked });
+            Assert(handledBlocked is bool hb && hb, "Scare blocked by SR is claimed by its handler");
+            Assert(!blockedTarget.HasActiveScareEffect, "Scare blocked by SR applies no fear effect");
+
+            var saved = new SpellResult { Spell = spell, RequiredSave = true, SaveSucceeded = true, Success = true };
+            object handledSaved = resolve.Invoke(gm, new object[] { caster, savedTarget, spell, saved });
+            Assert(handledSaved is bool hs && hs, "Scare successful save is claimed by its handler");
+            Assert(savedTarget.HasActiveScareEffect && !savedTarget.ActiveScareEffect.IsFrightened,
+                "Scare successful save leaves the target shaken, not frightened");
+        }
+        finally
+        {
+            DestroyController(caster);
+            DestroyController(blockedTarget);
+            DestroyController(savedTarget);
+            Object.DestroyImmediate(gmObject);
+        }
     }
 }
 }

@@ -2092,26 +2092,10 @@ public partial class GameManager
                                         _pendingSpell.EffectType == SpellEffectType.Illusion ||
                                         _pendingSpell.EffectType == SpellEffectType.Wall;
 
-            bool causeFearSaveReduced = IsCauseFearSpell(_pendingSpell) && result.RequiredSave && result.SaveSucceeded;
-            bool scareSaveReduced = IsScareSpell(_pendingSpell) && result.RequiredSave && result.SaveSucceeded;
-            bool blurSaveNegated = _pendingSpell != null
-                                   && string.Equals(_pendingSpell.SpellId, SpellNames.BLUR, StringComparison.Ordinal)
-                                   && result.RequiredSave
-                                   && result.SaveSucceeded;
-
-            // D&D 3.5e PHB p.211: Command Undead — nonintelligent undead get no saving throw.
-            bool commandUndeadNoSaveOverride = _pendingSpell != null
-                && _pendingSpell.SpellId == SpellNames.COMMAND_UNDEAD
-                && target != null && !target.IsIntelligentUndead();
-
-            bool effectNegatedBySave = ((_pendingSpell.EffectType == SpellEffectType.Debuff ||
-                                        _pendingSpell.EffectType == SpellEffectType.Control)
-                                       || blurSaveNegated)
-                                       && result.RequiredSave
-                                       && result.SaveSucceeded
-                                       && !causeFearSaveReduced
-                                       && !scareSaveReduced
-                                       && !commandUndeadNoSaveOverride;
+            // Shared with TryNPCPerformSpellCast (SPL-007): Debuff and Control saves negate;
+            // Cause Fear and Scare are partial; nonintelligent undead get no save vs Command Undead.
+            bool effectNegatedBySave = SpellUtilities.IsEffectNegatedBySave(
+                _pendingSpell, result, target != null && !target.IsIntelligentUndead());
             if (effectNegatedBySave)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{target.Stats.CharacterName} resists {_pendingSpell.Name} with a successful {result.SaveType} save."));
@@ -5620,6 +5604,11 @@ public partial class GameManager
 
         CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("✨", $"{casterName} casts Cause Fear on {targetName}."));
 
+        // Spell failure, spell resistance (PHB p.177; Cause Fear SR: Yes) or a Lesser Globe already
+        // stopped the spell: claim it so no later handler applies it, but apply nothing.
+        if (result != null && !result.Success)
+            return true;
+
         if (!SpellTargetingService.IsLivingCreature(target))
         {
             if (result != null)
@@ -5883,6 +5872,11 @@ public partial class GameManager
 
         // Check mind-affecting immunity
         if (result != null && result.MindAffectingImmunityBlocked)
+            return true;
+
+        // Spell failure, spell resistance (PHB p.177; Scare SR: Yes) or a Lesser Globe already
+        // stopped the spell: claim it so no later handler applies it, but apply nothing.
+        if (result != null && !result.Success)
             return true;
 
         // Must be a living creature

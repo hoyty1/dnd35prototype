@@ -1,4 +1,5 @@
 using System;
+using DND35e.Identifiers;
 using UnityEngine;
 
 namespace Tests.Services
@@ -36,6 +37,15 @@ public static class SpellUtilitiesTests
         TestIsFearSpell_Fear();
         TestIsFearSpell_NonFear();
         TestIsFearSpell_Null();
+
+        // Save negation shared by the PC and NPC single-target cast paths (SPL-007)
+        TestSaveNegates_ControlSaved();
+        TestSaveNegates_DebuffSaved();
+        TestSaveNegates_ControlFailedOrNoSave();
+        TestSaveNegates_PartialSavesNotNegated();
+        TestSaveNegates_CommandUndead();
+        TestSaveNegates_BuffAndBlur();
+        TestSaveNegates_ReclassifiedHoldPerson();
 
         // Mock-required tests (documented but skipped without live CharacterController)
         TestCastingAbilityModifier_Wizard();
@@ -123,6 +133,101 @@ public static class SpellUtilitiesTests
     {
         bool result = SpellUtilities.IsFearSpell(null);
         Assert(!result, "IsFearSpell(null)==false");
+    }
+
+    // ──────────────────────────────────────────────
+    //  IsEffectNegatedBySave (SPL-007)
+    //  A successful save against a "negates" spell means no effect (PHB p.177).
+    //  SpellCategoryClassifier turns many Debuff spells into Control, so both
+    //  types must be negated, on the PC and NPC paths alike.
+    // ──────────────────────────────────────────────
+
+    private static SpellData MakeSpell(string spellId, SpellEffectType effectType)
+    {
+        var spell = MakeSpell(spellId);
+        spell.EffectType = effectType;
+        return spell;
+    }
+
+    private static SpellResult MakeSaveResult(bool requiredSave, bool saveSucceeded)
+    {
+        return new SpellResult { Success = true, RequiredSave = requiredSave, SaveSucceeded = saveSucceeded };
+    }
+
+    private static void TestSaveNegates_ControlSaved()
+    {
+        // Regression: before SPL-007 the NPC path negated only Debuff, so a saved Hold Person still paralyzed.
+        bool negated = SpellUtilities.IsEffectNegatedBySave(
+            MakeSpell(SpellNames.HOLD_PERSON, SpellEffectType.Control), MakeSaveResult(true, true), false);
+        Assert(negated, "SaveNegates: Control spell (Hold Person) negated on a successful save");
+    }
+
+    private static void TestSaveNegates_DebuffSaved()
+    {
+        bool negated = SpellUtilities.IsEffectNegatedBySave(
+            MakeSpell(SpellNames.GHOUL_TOUCH, SpellEffectType.Debuff), MakeSaveResult(true, true), false);
+        Assert(negated, "SaveNegates: Debuff spell negated on a successful save");
+    }
+
+    private static void TestSaveNegates_ControlFailedOrNoSave()
+    {
+        SpellData hold = MakeSpell(SpellNames.HOLD_PERSON, SpellEffectType.Control);
+        Assert(!SpellUtilities.IsEffectNegatedBySave(hold, MakeSaveResult(true, false), false),
+            "SaveNegates: Control spell applies on a failed save");
+        Assert(!SpellUtilities.IsEffectNegatedBySave(hold, MakeSaveResult(false, false), false),
+            "SaveNegates: Control spell applies when no save was rolled");
+        Assert(!SpellUtilities.IsEffectNegatedBySave(null, MakeSaveResult(true, true), false)
+               && !SpellUtilities.IsEffectNegatedBySave(hold, null, false),
+            "SaveNegates: null spell or result is not negated");
+    }
+
+    private static void TestSaveNegates_PartialSavesNotNegated()
+    {
+        // Cause Fear (PHB p.208) and Scare (PHB p.274): Will partial, shaken 1 round on a save.
+        Assert(!SpellUtilities.IsEffectNegatedBySave(
+                MakeSpell(SpellNames.CAUSE_FEAR, SpellEffectType.Control), MakeSaveResult(true, true), false),
+            "SaveNegates: Cause Fear save is partial, not negated");
+        Assert(!SpellUtilities.IsEffectNegatedBySave(
+                MakeSpell(SpellNames.SCARE, SpellEffectType.Control), MakeSaveResult(true, true), false),
+            "SaveNegates: Scare save is partial, not negated");
+    }
+
+    private static void TestSaveNegates_CommandUndead()
+    {
+        // PHB p.211: nonintelligent undead get no save; intelligent undead save normally (Will negates).
+        SpellData command = MakeSpell(SpellNames.COMMAND_UNDEAD, SpellEffectType.Control);
+        Assert(!SpellUtilities.IsEffectNegatedBySave(command, MakeSaveResult(true, true), true),
+            "SaveNegates: Command Undead vs nonintelligent undead ignores the rolled save");
+        Assert(SpellUtilities.IsEffectNegatedBySave(command, MakeSaveResult(true, true), false),
+            "SaveNegates: Command Undead vs intelligent undead is negated on a save");
+    }
+
+    private static void TestSaveNegates_BuffAndBlur()
+    {
+        // Harmless buffs keep their old behaviour (willing allies auto-fail via forceTargetToFailSave).
+        Assert(!SpellUtilities.IsEffectNegatedBySave(
+                MakeSpell(SpellNames.MAGE_ARMOR, SpellEffectType.Buff), MakeSaveResult(true, true), false),
+            "SaveNegates: Buff spell is not negated by this rule");
+        Assert(SpellUtilities.IsEffectNegatedBySave(
+                MakeSpell(SpellNames.BLUR, SpellEffectType.Buff), MakeSaveResult(true, true), false),
+            "SaveNegates: Blur negated when an unwilling target saves");
+    }
+
+    private static void TestSaveNegates_ReclassifiedHoldPerson()
+    {
+        // Integration: the database reclassifies Hold Person to Control at init (the root of SPL-007).
+        SpellDatabase.Init();
+        SpellData hold = SpellDatabase.GetSpell(SpellNames.HOLD_PERSON);
+        if (hold == null)
+        {
+            Assert(false, "SaveNegates: Hold Person registered in SpellDatabase");
+            return;
+        }
+
+        Assert(hold.EffectType == SpellEffectType.Control,
+            "SaveNegates: database Hold Person is Control after reclassification", $"got {hold.EffectType}");
+        Assert(SpellUtilities.IsEffectNegatedBySave(hold, MakeSaveResult(true, true), false),
+            "SaveNegates: database Hold Person negated on a successful save");
     }
 
     // ──────────────────────────────────────────────
