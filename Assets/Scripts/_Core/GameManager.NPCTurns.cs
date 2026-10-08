@@ -995,6 +995,8 @@ public partial class GameManager
         if (!npc.CommitStandardAction())
             return false;
 
+        ScenarioHooks.SpellCast?.Invoke(npc, target, spell);
+
         // Entangled (DC 15 + level) and grappled/pinned (DC 20 + level) casting Concentration,
         // as on the PC path; the helpers spend the slot when the spell is lost (SPL-006).
         if (!ResolveEntangledSomaticCastingConcentration(npc, spellComp, spell, null, false, spell.SpellLevel, false, -1, null)

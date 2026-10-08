@@ -22,7 +22,11 @@ namespace Tests.Scenarios
         public int Sweep;
         public bool RecordDice;
         public bool Keep;
-        public float WallCapSeconds = 120f;
+        public float WallCapSeconds = DefaultWallCapSeconds;
+        /// <summary>True when the options set wallCap (it then overrides a definition's own cap).</summary>
+        public bool WallCapSet;
+
+        public const float DefaultWallCapSeconds = 120f;
 
         public static RunOptions Parse(string text, out string error)
         {
@@ -65,6 +69,7 @@ namespace Tests.Scenarios
                     case "wallcap":
                         if (!float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out float wc) || wc < 5f) { error = "wallCap must be at least 5 seconds"; return null; }
                         o.WallCapSeconds = wc;
+                        o.WallCapSet = true;
                         break;
                     default:
                         error = "unknown option '" + key + "'";
@@ -76,7 +81,8 @@ namespace Tests.Scenarios
 
         public override string ToString()
             => "mode=" + Mode + (MaxRounds.HasValue ? ";maxRounds=" + MaxRounds : "") + ";repeat=" + Repeat
-               + (Sweep > 0 ? ";sweep=" + Sweep : "") + (RecordDice ? ";record=dice" : "") + (Keep ? ";keep" : "");
+               + (Sweep > 0 ? ";sweep=" + Sweep : "") + (RecordDice ? ";record=dice" : "") + (Keep ? ";keep" : "")
+               + (WallCapSet ? ";wallCap=" + WallCapSeconds.ToString(CultureInfo.InvariantCulture) : "");
     }
 
     /// <summary>The result of one job, as written to summary.json.</summary>
@@ -101,6 +107,10 @@ namespace Tests.Scenarios
         public List<string> Violations = new List<string>();
         public List<string> Expectations = new List<string>();
         public List<string> Notes = new List<string>();
+        /// <summary>Per-job soak record (scenarios tagged "soak"; SoakStats), or null.</summary>
+        public JsonObj Soak;
+        /// <summary>What GenerateActors produced for this job, or null.</summary>
+        public JsonObj Generated;
 
         public JsonObj ToJson()
         {
@@ -114,6 +124,10 @@ namespace Tests.Scenarios
             o.Set("expectations", Expectations).Set("violations", Violations);
             if (Notes.Count > 0)
                 o.Set("notes", Notes);
+            if (Generated != null)
+                o.Set("generated", Generated);
+            if (Soak != null)
+                o.Set("soak", Soak.Set("wallSec", WallSec));
             return o;
         }
     }
@@ -126,6 +140,7 @@ namespace Tests.Scenarios
         public int Rep;
         public int Index;
         public int MaxRounds;
+        public float WallCapSeconds;
         public RunOptions Options;
         public ScenarioRunner Runner;
         public GameManager Gm;
@@ -157,6 +172,10 @@ namespace Tests.Scenarios
         public int Unwaived;
         public int Waived;
         public int HookErrorViolations;
+        /// <summary>The definition's GenerateActors result for this job (Def is then a per-job copy), or null.</summary>
+        public GeneratedActors Generated;
+        /// <summary>Orphaned combat-log objects destroyed during this job (UI-001).</summary>
+        public int LogLeakSwept;
 
         public bool Decided => Outcome != Outcome.None;
 
@@ -289,6 +308,8 @@ namespace Tests.Scenarios
         public enum RunState { Idle, Running, Done, Interrupted }
 
         internal static ScenarioRunner Instance;
+        /// <summary>Raised once when a run finishes normally (after its summary is written; not on an interruption).</summary>
+        internal static event Action<ScenarioRunner> RunEnded;
         internal static bool SessionDirty;
         internal static string DirtyReason;
         private static bool _booted;
@@ -296,6 +317,8 @@ namespace Tests.Scenarios
         private static int _baselineNpcCount = -1;
 
         public const int PhaseFrameTimeout = 600;
+        /// <summary>Frames between sweeps of the combat-log leak (UI-001) while a job runs.</summary>
+        public const int LogLeakSweepFrames = 30;
         public static readonly string[] DefaultParty = { "Fighter", "Rogue", "Cleric", "Wizard" };
 
         internal RunState State = RunState.Idle;
@@ -367,6 +390,7 @@ namespace Tests.Scenarios
                             Rep = rep,
                             Index = index++,
                             MaxRounds = options.MaxRounds ?? def.MaxRounds,
+                            WallCapSeconds = options.WallCapSet ? options.WallCapSeconds : def.WallCapSeconds ?? options.WallCapSeconds,
                             Options = options,
                             Runner = this
                         });
@@ -425,6 +449,16 @@ namespace Tests.Scenarios
             Application.logMessageReceived -= OnAnyLog;
             if (Instance == this && State == RunState.Running)
                 Instance = null;
+        }
+
+        /// <summary>
+        /// Writes a live run out as interrupted now (summary, soak rows and status) instead of in OnApplicationQuit,
+        /// which runs after EditorApplication's ExitingPlayMode: the batch driver merges the rows right away.
+        /// </summary>
+        internal void InterruptNow(string reason)
+        {
+            if (State == RunState.Running)
+                MarkInterrupted(reason);
         }
 
         private void MarkInterrupted(string reason)
@@ -576,6 +610,8 @@ namespace Tests.Scenarios
             WriteStatus(true);
             EditorApplication.update -= EditorTick;
             Application.logMessageReceived -= OnAnyLog;
+            try { RunEnded?.Invoke(this); }
+            catch (Exception ex) { Debug.LogWarning("[ScenarioHarness] RunEnded handler: " + ex); }
         }
 
         /// <summary>An exception escaped a job phase: end the job as Exception with a result, clean up, and stop the run (the session is dirty).</summary>
@@ -724,8 +760,10 @@ namespace Tests.Scenarios
                     break;
                 }
                 job.Checks.Frame();
-                if (!job.Decided && job.Options.WallCapSeconds > 0 && Time.realtimeSinceStartup - job.StartRealtime > job.Options.WallCapSeconds)
-                    job.Decide(Outcome.Timeout, "wall-clock cap " + job.Options.WallCapSeconds + " s", false);
+                if ((Time.frameCount - job.StartFrame) % LogLeakSweepFrames == 0)
+                    job.LogLeakSwept += SweepLogLeak();
+                if (!job.Decided && job.WallCapSeconds > 0 && Time.realtimeSinceStartup - job.StartRealtime > job.WallCapSeconds)
+                    job.Decide(Outcome.Timeout, "wall-clock cap " + job.WallCapSeconds + " s", false);
                 if (!job.Decided)
                     TryRun(job, "ui-steps", () => HandleUiTurn(job, gm), Outcome.Exception);
                 WriteStatus(false);
@@ -749,6 +787,9 @@ namespace Tests.Scenarios
 
             // k. Cleanup (the wall time and frames below include it)
             Cleanup(job, gm);
+            job.LogLeakSwept += SweepLogLeak();
+            if (job.LogLeakSwept > 0)
+                result.Notes.Add("destroyed " + job.LogLeakSwept + " inactive PooledLogMsg objects (UI-001)");
             result.WallSec = Time.realtimeSinceStartup - job.StartRealtime;
             result.Frames = Time.frameCount - job.StartFrame;
             result.FocusedFrames = job.FocusedFrames;
@@ -759,6 +800,36 @@ namespace Tests.Scenarios
                 DirtyReason = job.Def.Id + " s" + job.Seed + " ended " + job.Outcome;
             }
             yield return null;
+        }
+
+        /// <summary>
+        /// Destroys every inactive "PooledLogMsg" root object. Almost all of them are left behind by UI-001
+        /// (CombatLogPanel rebuilds its 50-line pool on each log call); the current pool's free entries are inactive
+        /// roots too and go with them, which is harmless only while UI-001 rebuilds the pool on every call. Remove or
+        /// narrow this sweep when UI-001 is fixed. Without it a Play session gathers about 6,000 of them per fight
+        /// (175,466 after 28 soak fights on 2026-10-07) and the frame rate falls below 1 frame per second. The pool's
+        /// Get skips destroyed entries (the static-suite runner sweeps the same way, TESTING.md 3). It never
+        /// touches game state or the RNG, so traces and hashes do not change. Returns the number destroyed.
+        /// </summary>
+        internal static int SweepLogLeak()
+        {
+            int n = 0;
+            try
+            {
+                foreach (GameObject go in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
+                {
+                    if (go != null && !go.activeSelf && go.name == "PooledLogMsg")
+                    {
+                        Destroy(go);
+                        n++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[ScenarioHarness] log-leak sweep: " + ex.Message);
+            }
+            return n;
         }
 
         private static bool TryRun(ScenarioJob job, string phase, Action body, Outcome onFail = Outcome.SetupFailed)
@@ -887,6 +958,22 @@ namespace Tests.Scenarios
             _hpModeSaved = true;
             GameSettings.Instance.hpCalculationMode = HPCalculationMode.Average;
 
+            // Per-job actors, drawn first after seeding so the same seed gives the same actors.
+            if (def.GenerateActors != null)
+            {
+                GeneratedActors gen = def.GenerateActors(job.Ctx);
+                if (gen == null)
+                    throw new InvalidOperationException("GenerateActors returned nothing");
+                job.Generated = gen;
+                ScenarioDef concrete = def.WithExtraActors(gen.Actors);
+                List<string> problems = concrete.Validate();
+                if (problems.Count > 0)
+                    throw new InvalidOperationException("generated actors are invalid: " + string.Join("; ", problems));
+                job.Def = concrete;
+                job.Ctx.Def = concrete;
+                def = concrete;
+            }
+
             CharacterController[] slots = { gm.PC1, gm.PC2, gm.PC3, gm.PC4 };
             _savedControl.Clear();
             foreach (CharacterController pc in slots)
@@ -1007,7 +1094,7 @@ namespace Tests.Scenarios
             // g. Trace, checks, dice, input, log, fast mode
             job.Trace = new ScenarioTrace(job, gm);
             job.Ctx.Trace = job.Trace;
-            job.Checks = new ScenarioChecks(job, gm) { WallClockCapSeconds = job.Options.WallCapSeconds };
+            job.Checks = new ScenarioChecks(job, gm) { WallClockCapSeconds = job.WallCapSeconds };
             foreach (ActorSpec spec in def.Actors)
             {
                 CharacterController c = job.Ctx.Actors[spec.Key];
@@ -1056,6 +1143,8 @@ namespace Tests.Scenarios
                 throw new InvalidOperationException("fast mode '" + job.Options.Mode + "' refused");
 
             job.Trace.EmitMeta(job.Options.Mode);
+            if (job.Generated != null)
+                job.Trace.Emit("generated").Set("info", job.Generated.Info);
             foreach (ActorSpec spec in def.Actors)
                 job.Trace.EmitActor(spec.Key, job.Ctx.Actors[spec.Key], spec);
         }
@@ -1139,6 +1228,10 @@ namespace Tests.Scenarios
 
             result.Rounds = trace.Events.Where(e => e.Ev == "round").Select(e => e.Int("n")).DefaultIfEmpty(0).Max();
             result.Events = trace.Events.Count;
+            if (job.Generated != null)
+                result.Generated = job.Generated.Info;
+            if (job.Def.Tags.Contains(SoakStats.Tag))
+                result.Soak = SoakStats.ForJob(trace.Events, job.Outcome, result.Rounds);
             List<string> lines = trace.HashLines();
             result.Hash = ScenarioTrace.Hash(lines);
 
@@ -1209,6 +1302,11 @@ namespace Tests.Scenarios
                 }
                 catch (Exception ex) { job.Notes.Add("cleanup reset: " + ex.Message); }
                 try { gm.Harness_RestorePartyAfterCombat(); } catch (Exception ex) { job.Notes.Add("cleanup rest: " + ex.Message); }
+            }
+            if (job.Generated != null && job.Generated.Cleanup != null)
+            {
+                try { job.Generated.Cleanup(); }
+                catch (Exception ex) { job.Notes.Add("generated cleanup: " + ex.Message); }
             }
 
             foreach (KeyValuePair<CharacterController, (CharacterTeam team, bool controllable, DND35.AI.AIProfile profile)> kv in _savedControl)
@@ -1352,7 +1450,8 @@ namespace Tests.Scenarios
 
             var unused = new List<string>();
             var hits = new JsonObj();
-            var usedDefs = Jobs.Select(j => j.Def).Distinct().ToList();
+            // Generated actors give each job its own copy of the definition; the waivers are shared, so one per id.
+            var usedDefs = Jobs.Select(j => j.Def).GroupBy(d => d.Id).Select(g => g.First()).ToList();
             foreach (Waiver w in KnownIssueWaivers.Global)
             {
                 string key = "global " + w;
@@ -1405,8 +1504,14 @@ namespace Tests.Scenarios
              .Set("totals", Totals()).Set("byId", byId)
              .Set("waiverHits", hits).Set("unusedWaivers", unused)
              .Set("needsFresh", SessionDirty).Set("dirtyReason", DirtyReason)
-             .Set("wallSec", Time.realtimeSinceStartup - _runStartRealtime)
-             .Set("results", Results.Select(r => r.ToJson()).ToList());
+             .Set("wallSec", Time.realtimeSinceStartup - _runStartRealtime);
+            if (Results.Any(r => r.Soak != null))
+            {
+                s.Set("soak", SoakStats.Aggregate(Results.Where(r => r.Soak != null).ToList()));
+                try { SoakStats.WriteRows(RunDir, Results); }
+                catch (Exception ex) { Debug.LogWarning("[ScenarioHarness] soak rows: " + ex.Message); }
+            }
+            s.Set("results", Results.Select(r => r.ToJson()).ToList());
             SummaryJson = Json.Serialize(s);
             try
             {

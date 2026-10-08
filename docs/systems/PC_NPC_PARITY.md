@@ -100,7 +100,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | CRE-041 (new) | NPC max HP | CON (and Toughness) re-added to MM hp totals | NPC | Med | CharacterStats.cs:3444-3445, 2145 |
 | CRE-042 (new) | NPC monks | Fast movement double counted, unarmed strike as natural attacks, monk AC as natural armor | NPC | Med | NPCDatabase_M.cs:790-916 |
 | ITM-069 (new) | Equipment changes | Free for PCs via the sheet; only mindless undead NPCs can re-equip (free) | PC | Med | InventoryUI.cs:576-606; UndeadMindlessAIProfile.cs:93-126 |
-| CORE-037 (new) | Defeat test | PCs list plus HP>0 vs Team plus regeneration exception | NPC | Med | GameManager.cs:3388-3446 |
+| CORE-037 (new) | Defeat test | PCs list plus HP>0 vs Team plus regeneration exception; seen in the soak (TESTING.md 3.5): a defeat declared with a disabled cleric still in, and 7 sides out at positive HP never ended | NPC | Med | GameManager.cs:3388-3446 |
 | CORE-011 | Victory after kill | AI-run killers (summons) never trigger victory; seen in Play mode on 2026-10-07 with AI-run party members by the scenario harness ([TESTING.md](../TESTING.md) 3.4) | neither | Med | NPCTurns.cs:1307-1320 |
 | CMB-075 | Turn-start order | Skipped NPC misses regeneration, Melf's, ChargePenalty expiry | depends | Med | GameManager.cs:3978-3989 vs NPCTurns.cs:46-49 |
 | CMB-017 | Cleave | NPCs never cleave; PCs only on defensive or natural single attacks | PC | Med | CombatFlowService.cs:887-947 |
@@ -181,7 +181,7 @@ After step 12, `IsControllable` should only choose between UI input and AI choic
 - Allegiance checks: these use Team correctly (threat, flanking, shooting into melee, summon barrier, willing saves).
 
 **Not audited, or symmetric gaps:**
-- The audit itself ran nothing in Play mode. Since then (2026-10-07) the scenario harness has run a few mechanics on both paths in Play mode (`rules/*`, [TESTING.md](../TESTING.md) 3.4): the same weapon modifiers on the NPC path (scripted) and the PC path (Attack buttons), +10 after a move and +10/+5 on a full attack (`rules/single-vs-full-attack` and `-ui`); a trip through the PC Special Attack menu with the same AoO, opposed check and result as the NPC executor (`rules/maneuver-trip`, `-trip-ui`); and the stand-up AoO and crawl (`rules/prone-*`).
+- The audit itself ran nothing in Play mode. Since then (2026-10-07) the scenario harness has run a few mechanics on both paths in Play mode (`rules/*`, [TESTING.md](../TESTING.md) 3.4): the same weapon modifiers on the NPC path (scripted) and the PC path (Attack buttons), +10 after a move and +10/+5 on a full attack (`rules/single-vs-full-attack` and `-ui`); a trip through the PC Special Attack menu with the same AoO, opposed check and result as the NPC executor (`rules/maneuver-trip`, `-trip-ui`); and the stand-up AoO and crawl (`rules/prone-*`). The AI-vs-AI soak (TESTING.md 3.5) runs the Quick Start party on the NPC path only, so it measures AI behaviour and the NPC executors, not parity; its new `cast` trace event is raised by the NPC cast path alone.
 - Symmetric RAW gaps (not divergences): surprise and flat-footed, cover, line of effect for single targets, Ready, Delay and Total Defense, dominate control, unarmed-attack AoO, Tumble, massive damage, Hold per-round saves, Spiritual Weapon turns, uncanny dodge.
 - `PerformSingleAttackWithCrit` classifies any weapon with a range increment as ranged even in melee (CharacterController.cs:6207). This affects daggers and spears on both sides. It is a shared bug, filed as CMB-105.
 - Not traced:

@@ -289,8 +289,10 @@ namespace Tests.Scenarios
                 if (byPos.TryGetValue(c.GridPosition, out CharacterController other))
                 {
                     // Grapplers share a square (PHB p.156), and a creature may end its move in a helpless
-                    // creature's square (PHB p.148, Ending Your Movement).
-                    bool allowed = SafeGrappling(c) || SafeGrappling(other) || IsHelpless(c) || IsHelpless(other);
+                    // creature's square (PHB p.148, Ending Your Movement). A swarm can occupy the same space as a
+                    // creature of any size (MM p.237 and p.316, the swarm subtype).
+                    bool allowed = SafeGrappling(c) || SafeGrappling(other) || IsHelpless(c) || IsHelpless(other)
+                        || (c.Stats != null && c.Stats.IsSwarm) || (other.Stats != null && other.Stats.IsSwarm);
                     if (!allowed)
                         Violation(GridInv, when + ": " + key + " and " + _job.Trace.KeyOf(other) + " share " + c.GridPosition, c);
                 }

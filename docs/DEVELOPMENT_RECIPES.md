@@ -27,7 +27,7 @@ Step-by-step procedures for the common changes in this project: which files to t
 - Magic: [Add a spell (data)](#add-a-spell-data) · [Implement a single-target, touch or self spell effect](#implement-a-single-target-touch-or-self-spell-effect) · [Implement an area spell](#implement-an-area-spell) · [Make NPCs cast a spell, and test a spell](#make-npcs-cast-a-spell-and-test-a-spell) · [Add a metamagic feat](#add-a-metamagic-feat)
 - Combat and characters: [Add a condition](#add-a-condition) · [Add a feat with a combat effect](#add-a-feat-with-a-combat-effect) · [Add a class feature](#add-a-class-feature) · [Add a combat maneuver](#add-a-combat-maneuver) · [Add a combat-log message](#add-a-combat-log-message)
 - Items and economy: [Add a mundane weapon, armor or shield](#add-a-mundane-weapon-armor-or-shield) · [Add a weapon or armor special ability](#add-a-weapon-or-armor-special-ability) · [Add a wondrous item](#add-a-wondrous-item) · [Add a ring](#add-a-ring) · [Add a rod](#add-a-rod) · [Add a staff](#add-a-staff) · [Add a scroll, potion or wand](#add-a-scroll-potion-or-wand) · [Add an item to the store](#add-an-item-to-the-store) · [Make an item craftable](#make-an-item-craftable)
-- Creatures and encounters: [Add a monster or NPC](#add-a-monster-or-npc) · [Add a creature template](#add-a-creature-template) · [Add creature token art](#add-creature-token-art) · [Add an encounter preset or test scenario](#add-an-encounter-preset-or-test-scenario) · [Change dungeon, random or custom encounters](#change-dungeon-random-or-custom-encounters)
+- Creatures and encounters: [Add a monster or NPC](#add-a-monster-or-npc) · [Add a creature template](#add-a-creature-template) · [Add creature token art](#add-creature-token-art) · [Add an encounter preset or test scenario](#add-an-encounter-preset-or-test-scenario) · [Add a combat scenario](#add-a-combat-scenario) · [Change dungeon, random or custom encounters](#change-dungeon-random-or-custom-encounters)
 - UI: [Add a combat action button](#add-a-combat-action-button) · [Add a UI panel](#add-a-ui-panel)
 
 # Magic
@@ -535,7 +535,7 @@ Pitfalls:
 
 Files: `Character/Creatures/NPCDatabase.cs`, `NPCDatabaseCustom.cs`, `_Core/GameManager.cs`, `_Core/GameManager.TestConfigs.cs`, `_Core/GameManager.NPCSetup.cs`. Examples: 76ff4b2, 0ce24ae, 08e0be3, 7428faa, e44792a, 9d722f2.
 
-For an automated, repeatable check, prefer a scenario-harness definition over a new `*_test` preset: no GameManager flags, exact squares for every actor, AI-run, scripted, idle or PC-driven control, forced dice by context, and expectations checked against a trace. Add a `[ScenarioSource]` method in `Assets/Scripts/Tests/Scenarios/Catalog/<Area>Scenarios.cs` that returns `Scenario.Define(id, title)...Build()` definitions (see `Catalog/SmokeScenarios.cs`, and `Catalog/RulesScenarios.cs` for typed steps: `.Turn(actor, round, Step.Move(x, y), Step.Maneuver(type, target), ...)` with `Expect.StepStatus`), confirm NPC ids with `NPCDatabase.Get`, and run it with `ScenarioHarness.Start(id, seeds, options)` ([TESTING.md](TESTING.md) 3.4).
+For an automated, repeatable check, prefer a scenario-harness definition over a new `*_test` preset (recipe: [Add a combat scenario](#add-a-combat-scenario)): no GameManager flags, exact squares for every actor, AI-run, scripted, idle or PC-driven control, forced dice by context, and expectations checked against a trace. Add a `[ScenarioSource]` method in `Assets/Scripts/Tests/Scenarios/Catalog/<Area>Scenarios.cs` that returns `Scenario.Define(id, title)...Build()` definitions (see `Catalog/SmokeScenarios.cs`, and `Catalog/RulesScenarios.cs` for typed steps: `.Turn(actor, round, Step.Move(x, y), Step.Maneuver(type, target), ...)` with `Expect.StepStatus`), confirm NPC ids with `NPCDatabase.Get`, and run it with `ScenarioHarness.Start(id, seeds, options)` ([TESTING.md](TESTING.md) 3.4).
 
 Pitfalls:
 - Hard cap of 15 enemies (`SceneBootstrap.cs:119`); extras are dropped silently. Only 3 side panels.
@@ -543,6 +543,39 @@ Pitfalls:
 - Unknown NPC ids are caught only at spawn (slot deactivated). `GetEncounterPreset` returns the FIRST preset for an unknown id, so a typo loads the wrong fight.
 - Every `_isXxx` flag must be reset in `ApplyRandomEncounter`, or it leaks into random, custom and dungeon encounters.
 - `ConfigureXxxTestParty` overwrites PC1-PC4; `RestoreStandardPartyLayout` only re-activates them, so a later normal fight probably keeps the test characters.
+
+## Add a combat scenario
+
+A scenario is an automated Play-mode fight for the scenario harness ([TESTING.md](TESTING.md) 3.4-3.5): real turn order, AI and rules code, exact squares, seeded dice, and expectations checked against a typed trace. Use it to pin a rule, reproduce a bug, or measure AI behaviour.
+
+1. **Pick the file.** Add a `[ScenarioSource] public static IEnumerable<ScenarioDef> All()` method (or extend one) in `Assets/Scripts/Tests/Scenarios/Catalog/<Area>Scenarios.cs`, inside `#if UNITY_EDITOR` and namespace `Tests.Scenarios`. Wrap every `yield return` in `ScenarioCatalog.Safe("<Class> <id>", () => ...)` so one invalid definition becomes a load error instead of dropping the rest.
+2. **Build it.**
+   ```csharp
+   yield return ScenarioCatalog.Safe("RulesScenarios rules/my-rule", () =>
+       Scenario.Define("rules/my-rule", "What it shows (PHB p.NNN)")
+           .Tags("rules").Covers("CMB-NNN", "PHB p.NNN").MaxRounds(2)
+           .Pc("hero", ActorSource.Stats(() => BuildFighter(6)), 8, 10, Control.Scripted) // your CharacterStats helper
+           .Npc("orc", "orc_warrior", 9, 10, Control.Idle)
+           .Initiative("hero", "orc")
+           .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Trip, "orc")) // the trip takes the attack action's one attack (PHB p.158)
+           .Force(20, 15, "Trip touch attack")
+           .Expect("The trip provokes before it resolves (PHB p.158)",
+               Expect.AoOBefore("orc", "hero", e => e.Ev == "maneuver"))
+           .Build());
+   ```
+3. **Actor sources and slot limits.** `ActorSource.QuickStart(class)` (a class Quick Start character, 3rd level, through the real creation path), `ActorSource.Stats(() => stats)` (an exact `CharacterStats`; set BAB through `BaseAttackBonusOverride`, CHR-068) and NPC ids (`.Npc(key, id, x, y)`; confirm the id with `NPCDatabase.Get`). At most 4 party-slot actors (QuickStart and Stats, on the Player team) and 15 NPCs on the 20x20 grid, one actor per square. A definition can also make actors per job with `.GenerateActors(ctx => new GeneratedActors { ... })` after the RNG is seeded (see `Catalog/SoakScenarios.cs`); use `ActorSource.Npc(id, label)` for ids registered per job, and unregister them in `Cleanup`.
+4. **Choose who decides each turn.** `Control.Ai` (the game AI; a party-slot actor gets a class AI profile and takes the NPC path), `Control.Scripted` (typed steps through the same `*ForAI` executors the AI uses; `.AiWhenUnscripted(key)` hands its other rounds to the AI), `Control.Ui` (a controllable PC driven through the PC buttons and cell clicks; use it to test the PC path) or `Control.Idle` (takes no actions). Steps are `Step.Move`, `Withdraw`, `FiveFootStep`, `StandUp`, `Crawl`, `DropProne`, `Attack`, `AttackAgain`, `FullAttack`, `Maneuver`, `GrappleAction`, `Cast`, `Charge`, `AnswerAoO`, `Pass`, `EndTurn`, `Assert` and `Wait`; a step the actor's path cannot run is a build error (the table in TESTING.md 3.4). Test a mechanic on both paths when PCs and NPCs share it ([systems/PC_NPC_PARITY.md](systems/PC_NPC_PARITY.md)).
+5. **Pin the dice that decide the branch, nothing else.** `.Force(sides, value, ctxSubstring, count)` matches the `DiceService` context (for example "Trip touch attack"); context-free `DiceRoller` dice match by sides only, and the raw `Random.Range` sites of TST-033 cannot be forced. When a branch depends on dice you cannot pin, run a seed range or `sweep=N` and return `ExpectResult.Inconclusive(...)` from seeds where the branch did not happen; a scenario whose seeds are all Inconclusive is listed in `inconclusiveIds`.
+6. **Expect structure, not golden traces.** Check events and their order with `Expect.Count`, `None`, `All`, `Any`, `AoOBefore`, `ModSequence`, `StepStatus`, `Controller`, `Outcome` or a custom `v => ...` over the `TraceView`, and put the rule cite in the expectation name. Never compare whole traces or hashes across code changes: any added or removed `Random` call shifts every later roll.
+7. **Waivers and XFail need an issue ID.** `.Waive(issueId, invariant, detailRegex)` accepts a known invariant break (the job becomes Known), and `.ExpectXFail(issueId, name, check)` marks an expectation expected to fail until that issue is fixed (a pass is reported as XPASS). Never waive without a filed issue; delete the waiver or XFail when the issue is fixed (unused waivers are listed in `unusedWaivers`).
+8. **Ad-hoc definitions.** For a one-off check, build the definition inline in an MCP `CommandScript` and call `ScenarioHarness.Start(def, seeds, options)`; no new file or recompile.
+9. **Run it.** Compile check, `AssetDatabase.Refresh()` in edit mode, a fresh Play session, `ScenarioHarness.Start("rules/my-rule", "1-5")`, then poll `Logs/Scenarios/<runId>/status.json` and read `summary.json` and the per-job JSONL traces next to it. Or from edit mode, `ScenarioHarness.QueueFresh("rules/my-rule,soak/*", "1-5", "")` runs each filter in its own fresh session and writes `Logs/Scenarios/batch.json`. Add the new scenario to the rules table in TESTING.md 3.4.
+
+Pitfalls:
+- Never run scenarios in a Play session that ran static suites (the harness answers `needsFresh`), and never edit scripts or call `AssetDatabase.Refresh` while a run is going.
+- A scripted actor bypasses the AI's automatic stand-up and grapple turn; a grappling scripted actor cannot move or make ordinary attacks.
+- Prompts other than the AoO confirmation (bull rush push and follow, Improved Grab, disarm item choice, the touch-spell prompt) soft-lock a Ui actor.
+- `ScenarioHooks` must stay null outside the harness, and rules code must never read it.
 
 ## Change dungeon, random or custom encounters
 

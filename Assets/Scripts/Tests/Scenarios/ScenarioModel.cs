@@ -53,6 +53,8 @@ namespace Tests.Scenarios
         public string ClassName { get; private set; }
         public Func<CharacterStats> Build { get; private set; }
         public string NpcId { get; private set; }
+        /// <summary>Optional stable name for the trace (an Npc source whose id is generated per job, e.g. a DMG spawn id).</summary>
+        public string Label { get; private set; }
 
         /// <summary>True for QuickStart and Stats actors, which take a party (PC) slot.</summary>
         public bool IsPcSlot => Kind != ActorSourceKind.Npc;
@@ -70,13 +72,20 @@ namespace Tests.Scenarios
         public static ActorSource Npc(string npcId)
             => new ActorSource { Kind = ActorSourceKind.Npc, NpcId = npcId };
 
+        /// <summary>
+        /// An NPC id registered for this job only (for example a DungeonEncounterSpawner "spawn_..." id, whose counter
+        /// differs between sessions). The trace shows <paramref name="label"/> instead of the id, so hashes stay comparable.
+        /// </summary>
+        public static ActorSource Npc(string npcId, string label)
+            => new ActorSource { Kind = ActorSourceKind.Npc, NpcId = npcId, Label = label };
+
         public override string ToString()
         {
             switch (Kind)
             {
                 case ActorSourceKind.QuickStart: return "quickstart:" + ClassName;
                 case ActorSourceKind.Stats: return "stats";
-                default: return "npc:" + NpcId;
+                default: return "npc:" + (Label ?? NpcId);
             }
         }
 
@@ -185,6 +194,20 @@ namespace Tests.Scenarios
         public string XFailIssue;
     }
 
+    /// <summary>
+    /// Actors a scenario generates per job (<see cref="ScenarioDef.GenerateActors"/>), for example a DMG random
+    /// encounter: the actors, an optional cleanup run after the job's reset, and a description for the trace
+    /// ("encounter" event) and the job result.
+    /// </summary>
+    public sealed class GeneratedActors
+    {
+        public List<ActorSpec> Actors = new List<ActorSpec>();
+        /// <summary>Runs in the job's cleanup, after the world reset (for example to unregister per-job NPC ids).</summary>
+        public Action Cleanup;
+        /// <summary>What was generated (name, level, creature list); written to the trace and to the job result.</summary>
+        public JsonObj Info = new JsonObj();
+    }
+
     /// <summary>A scenario: actors on exact squares, who controls them, forced dice, expectations and waivers.</summary>
     public sealed class ScenarioDef
     {
@@ -209,6 +232,26 @@ namespace Tests.Scenarios
         public List<Waiver> Waivers = new List<Waiver>();
         public bool RecordDice;
         public Action<ScenarioContext> OnSetup;
+        /// <summary>
+        /// Optional per-job actors, generated at setup right after the RNG is seeded with the job seed (so the same
+        /// seed gives the same actors) and before anything spawns. They join <see cref="Actors"/> in a per-job copy of
+        /// this definition, which is validated again (keys, squares, slot limits). Their keys must not be named by
+        /// static parts of the definition (scripts, initiative), which are validated before generation.
+        /// </summary>
+        public Func<ScenarioContext, GeneratedActors> GenerateActors;
+        /// <summary>Wall-clock cap per job in seconds when the run options do not set wallCap (null: the 120 s default).</summary>
+        public float? WallCapSeconds;
+
+        /// <summary>A copy for one job with <paramref name="extra"/> actors appended (the lists are new, the rest is shared).</summary>
+        internal ScenarioDef WithExtraActors(IEnumerable<ActorSpec> extra)
+        {
+            var d = (ScenarioDef)MemberwiseClone();
+            d.Actors = new List<ActorSpec>(Actors);
+            if (extra != null)
+                d.Actors.AddRange(extra);
+            d.GenerateActors = null;
+            return d;
+        }
 
         /// <summary>The typed script for <paramref name="key"/> in <paramref name="round"/> (a round-0 script applies to every round without its own), or null.</summary>
         public TurnScript FindTurn(string key, int round)
@@ -242,6 +285,8 @@ namespace Tests.Scenarios
                 problems.Add("missing id");
             if (MaxRounds < 1)
                 problems.Add("MaxRounds must be at least 1");
+            if (WallCapSeconds.HasValue && WallCapSeconds.Value < 5f)
+                problems.Add("WallCapSeconds must be at least 5");
 
             var keys = new HashSet<string>();
             var squares = new Dictionary<Vector2Int, string>();
@@ -395,6 +440,10 @@ namespace Tests.Scenarios
         public ScenarioBuilder MaxRounds(int rounds) { _def.MaxRounds = rounds; return this; }
         public ScenarioBuilder RecordDice(bool on = true) { _def.RecordDice = on; return this; }
         public ScenarioBuilder OnSetup(Action<ScenarioContext> setup) { _def.OnSetup = setup; return this; }
+        /// <summary>Per-job actors generated after seeding (see <see cref="ScenarioDef.GenerateActors"/>).</summary>
+        public ScenarioBuilder GenerateActors(Func<ScenarioContext, GeneratedActors> generate) { _def.GenerateActors = generate; return this; }
+        /// <summary>The wall-clock cap per job when the run options do not set wallCap.</summary>
+        public ScenarioBuilder WallCap(float seconds) { _def.WallCapSeconds = seconds; return this; }
 
         /// <summary>A party (PC-slot) actor from a QuickStart or Stats source.</summary>
         public ScenarioBuilder Pc(string key, ActorSource source, int x, int y, Control control = Control.Ai)

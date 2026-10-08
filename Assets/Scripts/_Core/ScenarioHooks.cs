@@ -6,7 +6,7 @@ using UnityEngine;
 /// <summary>
 /// Test instrumentation. Every member is null or false in normal play; rules code must never read these values.
 /// The scenario harness (editor only) sets them to observe or steer a fight: force dice through
-/// <see cref="RollFilter"/>, record attacks, maneuvers, moves, conditions and phase changes, script
+/// <see cref="RollFilter"/>, record attacks, maneuvers, NPC casts, moves, conditions and phase changes, script
 /// turns, and force the initiative head. Raise sites are single null-conditional calls, so the game
 /// behaves identically while the hooks are null.
 ///
@@ -39,6 +39,13 @@ public static class ScenarioHooks
 
     /// <summary>A spell cast while threatened: caster, spell, cast defensively, spell proceeds, threatener count.</summary>
     public static Action<CharacterController, SpellData, bool, bool, int> ThreatenedCast;
+
+    /// <summary>
+    /// An NPC-path cast begins (GameManager.TryNPCPerformSpellCast, right after the standard action is committed,
+    /// before Concentration, spell failure, AoOs or counterspells decide whether it goes off): caster, target, spell.
+    /// The PC cast pipelines do not raise it.
+    /// </summary>
+    public static Action<CharacterController, CharacterController, SpellData> SpellCast;
 
     /// <summary>A position change: mover, from, to, movement type ("move", "path-move", "teleport", ...).</summary>
     public static Action<CharacterController, Vector2Int, Vector2Int, string> Moved;
@@ -110,6 +117,13 @@ public static class ScenarioHooks
     {
         if (handler == null) return null;
         return (a, b) => { try { handler(a, b); } catch (Exception ex) { RecordError(name, ex); } };
+    }
+
+    /// <summary>Wraps a hook handler so an exception is recorded instead of escaping into rules code.</summary>
+    public static Action<T1, T2, T3> Safe<T1, T2, T3>(string name, Action<T1, T2, T3> handler)
+    {
+        if (handler == null) return null;
+        return (a, b, c) => { try { handler(a, b, c); } catch (Exception ex) { RecordError(name, ex); } };
     }
 
     /// <summary>Wraps a hook handler so an exception is recorded instead of escaping into rules code.</summary>
@@ -195,6 +209,7 @@ public static class ScenarioHooks
         if (AoOResolved != null) set.Add(nameof(AoOResolved));
         if (ManeuverResolved != null) set.Add(nameof(ManeuverResolved));
         if (ThreatenedCast != null) set.Add(nameof(ThreatenedCast));
+        if (SpellCast != null) set.Add(nameof(SpellCast));
         if (Moved != null) set.Add(nameof(Moved));
         if (ConditionChanged != null) set.Add(nameof(ConditionChanged));
         if (CombatLog != null) set.Add(nameof(CombatLog));
@@ -214,6 +229,7 @@ public static class ScenarioHooks
         AoOResolved = null;
         ManeuverResolved = null;
         ThreatenedCast = null;
+        SpellCast = null;
         Moved = null;
         ConditionChanged = null;
         CombatLog = null;

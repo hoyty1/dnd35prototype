@@ -117,6 +117,8 @@ namespace Tests.Scenarios
             {
                 var idle = new JsonObj();
                 idle.Set("state", "idle").Set("playing", Application.isPlaying).Set("needsFresh", ScenarioRunner.SessionDirty);
+                if (ScenarioBatchDriver.HasState)
+                    idle.Set("batch", ScenarioBatchDriver.PollStatus());
                 return Json.Serialize(idle);
             }
 
@@ -127,8 +129,46 @@ namespace Tests.Scenarios
             JsonObj o = runner.StatusObject();
             o.Set("framesSinceLastPoll", _lastPollFrame < 0 ? 0 : Time.frameCount - _lastPollFrame);
             _lastPollFrame = Time.frameCount;
+            if (ScenarioBatchDriver.HasState)
+                o.Set("batch", ScenarioBatchDriver.PollStatus());
             return Json.Serialize(o);
         }
+
+        /// <summary>
+        /// Edit mode only: queues one fresh Play session per comma-separated filter (seeds and options as for
+        /// <see cref="Start(string,string,string)"/>, applied to each) and enters Play mode. Each session starts its
+        /// run when GameManager is ready, records the summary path and exits Play mode; the next entry gets a new
+        /// session. Option perSession=N (handled here, not passed to Start) also splits the seeds into sessions of
+        /// N seeds each, for long soaks (the combat log slows a session down, UI-001); the batch then merges the soak
+        /// statistics of its runs into Logs/Scenarios/soak-&lt;batchId&gt;.json. At most 50 entries. Poll in edit mode with <see cref="Poll"/> (field "batch") or read
+        /// Logs/Scenarios/batch.json. See docs/TESTING.md 3.5.
+        /// </summary>
+        public static string QueueFresh(string filters, string seeds = "1", string options = "")
+            => ScenarioBatchDriver.QueueFresh(filters, seeds, options);
+
+        /// <summary>
+        /// Merges the soak statistics of finished runs (comma-separated run ids, each with a soak-rows.tsv), for a soak
+        /// split over several fresh Play sessions; writes Logs/Scenarios/soak-report-&lt;time&gt;.json and returns it.
+        /// Works in edit and Play mode.
+        /// </summary>
+        public static string SoakReport(string runIds)
+        {
+            List<string> ids = (runIds ?? "").Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            if (ids.Count == 0)
+                return Error("no run ids");
+            JsonObj report = SoakStats.MergeRuns(ids);
+            string path = Path.Combine(ScenarioRunner.ScenariosDir, "soak-report-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) + ".json");
+            report.Set("path", path.Replace('\\', '/'));
+            string json = Json.Serialize(report);
+            Json.WriteFileAtomic(path, json);
+            return json;
+        }
+
+        /// <summary>Empties the fresh-session queue (a run in progress still finishes, then Play mode exits).</summary>
+        public static string ClearQueue() => ScenarioBatchDriver.ClearQueue();
+
+        /// <summary>Restarts a batch paused by an interrupted run (edit mode).</summary>
+        public static string ResumeQueue() => ScenarioBatchDriver.Resume();
 
         /// <summary>The summary of <paramref name="runId"/> (null: the current or last run in this Play session).</summary>
         public static string Result(string runId = null)

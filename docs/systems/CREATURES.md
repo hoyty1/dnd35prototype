@@ -124,7 +124,7 @@ Status key: **Implemented** = has a runtime effect that matches the rule in outl
 | DR, energy resistance and immunity | `DamageReduction*`, `DamageResistances`, `DamageImmunities`, `Immunities` | 93 / 27 / 88 | Implemented | Damage pipeline (CharacterStats.ApplyIncomingDamage). Special-attack and swarm damage bypass it | AI-006 |
 | Spell resistance | `SpellResistance` | 46 | Implemented | Spell pipeline (Spell/Casting/SpellCaster.cs) | |
 | Incorporeal | `IsIncorporeal` | 6 (allip, ghost, shadow, greater shadow, spectre, wraith) | Partial | Its only combat effect is a flat 50% miss chance in `CharacterController.GetMissChance` | CMB-025 |
-| Swarm | `IsSwarm` + `SwarmTraits` | 6 (bat, rat, spider, centipede, hellwasp, locust) | Partial | SwarmAI/IndiscriminateSwarmAI; flat 6 damage; distraction | CRE-007, CRE-014 |
+| Swarm | `IsSwarm` + `SwarmTraits` | 6 (bat, rat, spider, centipede, hellwasp, locust) | Partial | SwarmAI/IndiscriminateSwarmAI; flat 6 damage; distraction; trip, grapple and bull rush refused. Swarms still threaten and make AoOs, and targeted spells affect them (seen in the soak, TESTING.md 3.5) | CRE-007, CRE-014, CMB-123, SPL-121, AI-059 |
 | Spell-like abilities | `KnownSpellIds` (no SLA type) | Among MM entries only the lich, vampire and the 33 dragons with CL > 0 list spells, and those are class or sorcerer spells, not SLAs | Mostly text | No SLA type exists (uses per day, at will). The Spellcaster or Caster archetype is set on 14 MM creatures that have **no** spells: aboleth, beholder, couatl, dark naga, drider, efreeti, formian taskmaster, green slaad, mind flayer, ogre mage, rakshasa, spirit naga, succubus, yuan-ti abomination. The vampire's spells are lost because its class is Fighter | CRE-015, CRE-017, CRE-030, AI-002, AI-004 |
 
 ### Ability backlog (verified status per monster)
@@ -346,7 +346,8 @@ Ordered by impact on "fights play like 3.5e".
    - Metallic gases (AI-008).
    - Stench and grapple blood drain (CRE-031).
    - `BonusElementalDamage*`.
-   - Swarm damage dice and poison (CRE-007, CRE-014).
+   - Swarm damage dice and poison (CRE-007, CRE-014); swarm AoOs and targeted-spell immunity (CMB-123, SPL-121).
+   - Allips and wraiths spawn dead (CRE-044).
    - Engulf (CMB-024).
    - Terrain manipulation, which needs movement cost first (CRE-013).
    - Regeneration with energy suppression and nonlethal conversion, plus a separate fast-healing field.

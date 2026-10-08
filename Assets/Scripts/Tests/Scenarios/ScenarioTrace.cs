@@ -91,7 +91,7 @@ namespace Tests.Scenarios
     /// <summary>Minimal JSON writer (no Newtonsoft): strings, numbers (invariant culture), bools, Vector2Int, JsonObj, lists.</summary>
     public static class Json
     {
-        private static readonly HashSet<string> HashExcluded = new HashSet<string> { "f", "utc", "gitHead", "wallSec", "rep", "diag" };
+        private static readonly HashSet<string> HashExcluded = new HashSet<string> { "f", "utc", "gitHead", "wallSec", "rep", "diag", "mode" };
 
         public static bool IsHashExcluded(string key) => HashExcluded.Contains(key);
 
@@ -205,7 +205,7 @@ namespace Tests.Scenarios
     /// </summary>
     internal sealed class ScenarioTrace
     {
-        public const string HarnessVersion = "1";
+        public const string HarnessVersion = "2";
 
         private readonly ScenarioJob _job;
         private readonly GameManager _gm;
@@ -416,6 +416,7 @@ namespace Tests.Scenarios
             ScenarioHooks.AoOResolved = ScenarioHooks.Safe<CharacterController, CharacterController, string, CombatResult>("Trace.AoO", OnAoO);
             ScenarioHooks.ManeuverResolved = ScenarioHooks.Safe<CharacterController, CharacterController, SpecialAttackType, SpecialAttackResult>("Trace.Maneuver", OnManeuver);
             ScenarioHooks.ThreatenedCast = ScenarioHooks.Safe<CharacterController, SpellData, bool, bool, int>("Trace.ThreatenedCast", OnThreatenedCast);
+            ScenarioHooks.SpellCast = ScenarioHooks.Safe<CharacterController, CharacterController, SpellData>("Trace.SpellCast", OnSpellCast);
             ScenarioHooks.Moved = ScenarioHooks.Safe<CharacterController, Vector2Int, Vector2Int, string>("Trace.Moved", OnMoved);
             ScenarioHooks.ConditionChanged = ScenarioHooks.Safe<CharacterController, CombatConditionType, bool, int, string>("Trace.Condition", OnCondition);
             ScenarioHooks.CombatLog = ScenarioHooks.Safe<string>("Trace.Log", OnLog);
@@ -654,6 +655,20 @@ namespace Tests.Scenarios
                 // spell (success false), so only a spell that still goes off with the caster down is a violation.
                 .Set("casterDownAfter", ScenarioChecks.IsDown(caster))
                 .Set("attackerDown", success && ScenarioChecks.IsDown(caster));
+            _job.Checks.OnActed(caster, ev, "cast");
+        }
+
+        /// <summary>An NPC-path cast begins (the standard action is committed; whether the spell goes off comes later).</summary>
+        private void OnSpellCast(CharacterController caster, CharacterController target, SpellData spell)
+        {
+            if (Closed)
+                return;
+            TraceEvent ev = Emit("cast")
+                .Set("by", KeyOf(caster))
+                .Set("target", KeyOf(target))
+                .Set("spell", spell != null ? spell.SpellId : null)
+                .Set("level", spell != null ? spell.SpellLevel : 0)
+                .Set("attackerDown", ScenarioChecks.IsDown(caster));
             _job.Checks.OnActed(caster, ev, "cast");
         }
 
