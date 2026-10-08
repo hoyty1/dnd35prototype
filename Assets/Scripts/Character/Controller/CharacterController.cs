@@ -566,7 +566,9 @@ public class CharacterController : MonoBehaviour
         public CharacterController Defender;
         public CharacterController PinnedCharacter;
         public CharacterController PinMaintainer;
-        public int PinExpiresAfterMaintainerTurnStartCount;
+        // PHB p.156: a pin holds the opponent for 1 round. The round is up when the maintainer's turn-start
+        // count reaches this value (its next turn); 0 = no maintainer. See IsPinRenewalDue (CMB-120).
+        public int PinRoundEndsAtMaintainerTurnStart;
 
         public CharacterController GetOpponent(CharacterController actor)
         {
@@ -8321,7 +8323,8 @@ public class CharacterController : MonoBehaviour
 
         link.PinnedCharacter = pinned;
         link.PinMaintainer = maintainer;
-        link.PinExpiresAfterMaintainerTurnStartCount = 0;
+        // PHB p.156: the pin lasts 1 round, until the maintainer's next turn starts (a renewal restarts it).
+        link.PinRoundEndsAtMaintainerTurnStart = maintainer != null ? maintainer._turnsStartedCount + 1 : 0;
 
         if (maintainer != null)
             maintainer.SetPinningOpponent(pinned);
@@ -8352,7 +8355,7 @@ public class CharacterController : MonoBehaviour
 
         link.PinnedCharacter = null;
         link.PinMaintainer = null;
-        link.PinExpiresAfterMaintainerTurnStartCount = 0;
+        link.PinRoundEndsAtMaintainerTurnStart = 0;
     }
 
     private static void EndGrappleLink(GrappleLink link, string reason)
@@ -8410,7 +8413,7 @@ public class CharacterController : MonoBehaviour
             Defender = target,
             PinnedCharacter = null,
             PinMaintainer = null,
-            PinExpiresAfterMaintainerTurnStartCount = 0
+            PinRoundEndsAtMaintainerTurnStart = 0
         };
 
         RegisterGrappleLink(link);
@@ -8546,11 +8549,41 @@ public class CharacterController : MonoBehaviour
         _pinnedOpponent = null;
     }
 
+    /// <summary>
+    /// PHB p.156 (owner decision 2026-10-07, CMB-120): a pin holds the opponent for 1 round, so its round is up
+    /// when the pinner's next turn starts. The pin is still in place on that turn only so the pinner can pin
+    /// again: Pin Opponent then renews it for another round (failure ends the pin, not the grapple), Release
+    /// Pinned Opponent still releases it, any other grapple action lets it lapse first
+    /// (<see cref="ResolveGrappleAction"/>), and a pin still due at the end of that turn ends
+    /// (<see cref="ProcessPinnedDurationAtTurnEnd"/>). Shared by the PC grapple menu, the action buttons and the AI.
+    /// </summary>
+    public bool IsPinRenewalDue()
+    {
+        if (!IsPinningOpponent())
+            return false;
+
+        if (!TryGetGrappleLink(this, out GrappleLink link) || link == null)
+            return false;
+
+        return link.PinRoundEndsAtMaintainerTurnStart > 0 && _turnsStartedCount >= link.PinRoundEndsAtMaintainerTurnStart;
+    }
+
+    /// <summary>
+    /// True while this character holds a pin whose round is not yet up: the pinner restrictions of PHB p.156
+    /// apply (only damage, use the opponent's weapon, move, disarm a small object or release the pin).
+    /// False on the pinner's renewal turn (<see cref="IsPinRenewalDue"/>), when the pin is about to end.
+    /// </summary>
+    public bool IsHoldingPinThisRound()
+    {
+        return IsPinningOpponent() && !IsPinRenewalDue();
+    }
+
     public bool IsGrappleActionBlockedWhilePinning(GrappleActionType actionType, out string blockedReason)
     {
         blockedReason = string.Empty;
 
-        if (!IsPinningOpponent())
+        // On the renewal turn the pinner may pin again or do anything else (the pin then lapses first; CMB-120).
+        if (!IsHoldingPinThisRound())
             return false;
 
         switch (actionType)
@@ -9128,11 +9161,91 @@ public class CharacterController : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Resolves one grapple action for a PC or an NPC. On the pinner's renewal turn (<see cref="IsPinRenewalDue"/>)
+    /// every action except Pin Opponent (the renewal) and Release Pinned Opponent first lets the pin lapse, because
+    /// its 1 round is up (PHB p.156; CMB-120); the lapse is the first line of the result's log. An action that would
+    /// resolve to nothing for this pinner (<see cref="IsGrappleActionNoOpForPinner"/>) leaves the pin in place.
+    /// </summary>
     public SpecialAttackResult ResolveGrappleAction(
         GrappleActionType actionType,
         AttackDamageMode? grappleDamageModeOverride = null,
         EquipSlot? opponentWeaponHandSlotOverride = null,
         int? iterativeAttackBonusOverride = null)
+    {
+        string lapseLog = string.Empty;
+        if (actionType != GrappleActionType.PinOpponent
+            && actionType != GrappleActionType.ReleasePinnedOpponent
+            && IsPinRenewalDue()
+            && !IsGrappleActionNoOpForPinner(actionType))
+        {
+            lapseLog = LetDuePinLapse();
+        }
+
+        SpecialAttackResult result = ResolveGrappleActionCore(actionType, grappleDamageModeOverride, opponentWeaponHandSlotOverride, iterativeAttackBonusOverride);
+        if (result != null && !string.IsNullOrEmpty(lapseLog))
+            result.Log = string.IsNullOrEmpty(result.Log) ? lapseLog : lapseLog + "\n\n" + result.Log;
+        return result;
+    }
+
+    /// <summary>
+    /// True for a grapple action that resolves to nothing for a pinner (no check, no attack): Break Pin (a pinner
+    /// is not pinned), the Draw a Light Weapon, Retrieve a Spell Component and Disarm Small Object stubs (CMB-033),
+    /// and the weapon attacks it cannot make. Such an action does not cost a due pin (CMB-120).
+    /// </summary>
+    private bool IsGrappleActionNoOpForPinner(GrappleActionType actionType)
+    {
+        switch (actionType)
+        {
+            case GrappleActionType.BreakPin:
+                return !IsPinned();
+            case GrappleActionType.DrawLightWeapon:
+            case GrappleActionType.RetrieveSpellComponent:
+            case GrappleActionType.DisarmSmallObject:
+                return true;
+            case GrappleActionType.AttackWithLightWeapon:
+                return !CanAttackWithLightWeaponWhileGrappling(out _, out _);
+            case GrappleActionType.AttackUnarmed:
+                return !CanAttackUnarmedWhileGrappling(out _);
+            case GrappleActionType.UseOpponentWeapon:
+            {
+                CharacterController opponent = GetPinnedOpponent();
+                List<DisarmableHeldItemOption> options = opponent != null ? opponent.GetEquippedLightHandWeaponOptions() : null;
+                return options == null || options.Count == 0;
+            }
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Lets this character's pin lapse when its 1 round is up (<see cref="IsPinRenewalDue"/>; PHB p.156, CMB-120)
+    /// and returns the log line, or an empty string when no pin was due. Called by every action the pinner takes
+    /// on its renewal turn other than pinning again or releasing: grapple actions (<see cref="ResolveGrappleAction"/>)
+    /// and spellcasting (GameManager.ResolveGrappledOrPinnedCastingConcentration, shared by the PC and NPC cast paths).
+    /// </summary>
+    public string LetDuePinLapseIfDue()
+    {
+        return IsPinRenewalDue() ? LetDuePinLapse() : string.Empty;
+    }
+
+    /// <summary>Ends a pin whose round is up (CMB-120) and returns the log line; empty when nothing was pinned.</summary>
+    private string LetDuePinLapse()
+    {
+        if (!TryGetGrappleLink(this, out GrappleLink link) || link == null || link.PinnedCharacter == null)
+            return string.Empty;
+
+        CharacterController pinned = link.PinnedCharacter;
+        ClearPinnedState(link);
+        string pinnedName = pinned != null && pinned.Stats != null ? pinned.Stats.CharacterName : "the opponent";
+        return $"{Stats.CharacterName} does not pin {pinnedName} again: the pin ends after its 1 round (PHB p.156). The grapple continues.";
+    }
+
+    private SpecialAttackResult ResolveGrappleActionCore(
+        GrappleActionType actionType,
+        AttackDamageMode? grappleDamageModeOverride,
+        EquipSlot? opponentWeaponHandSlotOverride,
+        int? iterativeAttackBonusOverride)
     {
         if (!TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out bool opponentPinned))
         {
@@ -9403,13 +9516,16 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                if (isPinning)
+                // PHB p.156 (CMB-120): the pin lasts 1 round; on the pinner's next turn it may pin again
+                // (renewal). Before then the opponent is already held for this round.
+                bool isRenewal = isPinning && opponentPinned && IsPinRenewalDue();
+                if (isPinning && !isRenewal)
                 {
                     return new SpecialAttackResult
                     {
                         ManeuverName = "Pin Opponent",
                         Success = false,
-                        Log = $"{Stats.CharacterName} is already pinning {opponent.Stats.CharacterName}."
+                        Log = $"{Stats.CharacterName} already holds {opponent.Stats.CharacterName} pinned this round."
                     };
                 }
 
@@ -9423,23 +9539,39 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
+                // A renewal is a new pin attempt: the 1-round pin is over, so it ends before the checks and the
+                // defender does not resist with the Pinned condition's modifiers (PHB p.156-157). A failed renewal
+                // therefore leaves the pin ended and the grapple in place (owner decision 2026-10-07, CMB-120).
+                bool hasLink = TryGetGrappleLink(this, out GrappleLink link);
+                if (isRenewal && hasLink)
+                    ClearPinnedState(link);
+
                 GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride);
                 GrappleCheckResult oppCheck = opponent.RollGrappleCheck(context: GrappleCheckContext.ResistPin);
 
                 bool success = DoesAttackerWinGrappleCheck(myCheck, oppCheck);
-                if (success && TryGetGrappleLink(this, out GrappleLink link))
+                if (success && hasLink)
                 {
+                    // A renewal restarts the 1-round duration (SetPinnedState).
                     SetPinnedState(link, opponent, this);
                     RemoveConditionIfPresent(this, CombatConditionType.Pinned);
                 }
 
-                string outcomeLine = success
-                    ? $"{opponent.Stats.CharacterName} is pinned!"
-                    : $"{Stats.CharacterName} fails to pin {opponent.Stats.CharacterName}.";
+                string outcomeLine;
+                if (isRenewal)
+                    outcomeLine = success
+                        ? $"{opponent.Stats.CharacterName} stays pinned for another round!"
+                        : $"{Stats.CharacterName} fails to keep {opponent.Stats.CharacterName} pinned. The pin ends; the grapple continues.";
+                else
+                    outcomeLine = success
+                        ? $"{opponent.Stats.CharacterName} is pinned!"
+                        : $"{Stats.CharacterName} fails to pin {opponent.Stats.CharacterName}.";
 
                 string log = string.Join("\n\n", new[]
                 {
-                    $"{Stats.CharacterName} attempts to pin {opponent.Stats.CharacterName}",
+                    isRenewal
+                        ? $"{Stats.CharacterName} attempts to pin {opponent.Stats.CharacterName} again (the pin's 1 round is up)"
+                        : $"{Stats.CharacterName} attempts to pin {opponent.Stats.CharacterName}",
                     myCheck.GetBreakdown(),
                     oppCheck.GetBreakdown(),
                     BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total, success) + "\n" + outcomeLine
@@ -10367,6 +10499,27 @@ public class CharacterController : MonoBehaviour
             ClearPinnedState(link);
             if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && pinnedNoMaintainer != null && pinnedNoMaintainer.Stats != null)
                 GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Pin on {pinnedNoMaintainer.Stats.CharacterName} ends because the controlling grappler can no longer maintain it."));
+            return;
+        }
+
+        // PHB p.156 (CMB-120): the pin held for 1 round. It ends at the end of the pinner's next turn unless the
+        // pinner pinned again that turn; it also ends when the pinner's turn passed while it could not act
+        // (that turn may have been skipped without StartNewTurn, so the round counter alone would miss it).
+        if (link.PinMaintainer != this)
+            return;
+
+        bool couldNotAct = !CanTakeTurnActions() || !CanTakeActions();
+        if (!IsPinRenewalDue() && !couldNotAct)
+            return;
+
+        CharacterController pinned = link.PinnedCharacter;
+        ClearPinnedState(link);
+        if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && pinned != null && pinned.Stats != null)
+        {
+            string why = couldNotAct
+                ? $"{Stats.CharacterName} cannot act to hold it"
+                : $"{Stats.CharacterName} did not pin again this turn";
+            GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Pin on {pinned.Stats.CharacterName} ends after 1 round ({why}). The grapple continues."));
         }
     }
 

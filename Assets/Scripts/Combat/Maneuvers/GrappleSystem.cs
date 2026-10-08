@@ -97,7 +97,9 @@ public partial class GameManager
         if (character == null)
             return false;
 
-        if (character.IsPinningOpponent())
+        // The pinner restrictions apply while the pin's round lasts; on the renewal turn every action is open
+        // and Pin Opponent renews the pin (PHB p.156, CMB-120).
+        if (character.IsHoldingPinThisRound())
         {
             return action == GrappleActionType.DamageOpponent
                 || action == GrappleActionType.UseOpponentWeapon
@@ -112,6 +114,16 @@ public partial class GameManager
                 || action == GrappleActionType.EscapeArtist;
         }
 
+        // On the renewal turn, actions that resolve to nothing for the pinner are not offered (Break Pin: the
+        // pinner is not pinned; the two not-implemented stubs), so a misclick does not spend the attack (CMB-120).
+        if (character.IsPinRenewalDue()
+            && (action == GrappleActionType.BreakPin
+                || action == GrappleActionType.DrawLightWeapon
+                || action == GrappleActionType.RetrieveSpellComponent))
+        {
+            return false;
+        }
+
         return true;
     }
 
@@ -121,7 +133,7 @@ public partial class GameManager
         if (character == null)
             return actions;
 
-        if (character.IsPinningOpponent())
+        if (character.IsHoldingPinThisRound())
         {
             actions.Add(GrappleActionType.DamageOpponent);
             actions.Add(GrappleActionType.UseOpponentWeapon);
@@ -311,6 +323,12 @@ public partial class GameManager
     {
         if (caster == null || spell == null)
             return false;
+
+        // A pinner that casts on its renewal turn does not pin again, so the pin's 1 round ends before the spell
+        // (PHB p.156, CMB-120). Every PC and NPC cast pipeline passes through here once the cast is committed.
+        string pinLapse = caster.LetDuePinLapseIfDue();
+        if (!string.IsNullOrEmpty(pinLapse))
+            CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", pinLapse));
 
         if (!TryGetGrappledOrPinnedState(caster, out string conditionLabel))
             return true;
@@ -1032,7 +1050,9 @@ public partial class GameManager
 
         opponent = liveOpponent;
         BeginGrappleContextMenuDisplayLock(actor);
-        bool isPinning = actor.IsPinningOpponent();
+        // On the pinner's renewal turn the full menu shows, with Pin as the renewal (PHB p.156, CMB-120).
+        bool isPinning = actor.IsHoldingPinThisRound();
+        bool pinRenewalDue = actor.IsPinRenewalDue();
 
         var options = new List<(GrappleActionType Action, string Label, bool Enabled, string DisabledMessage)>();
 
@@ -1145,13 +1165,24 @@ public partial class GameManager
                     hasOpponentLightWeapon && CanUseGrappleAttackOption(actor),
                     hasOpponentLightWeapon ? string.Empty : $"{opponent.Stats.CharacterName} has no equipped light weapon."));
 
-                AddOption(GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)");
+                if (pinRenewalDue)
+                    AddOption(GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} again (opposed grapple check; success holds the pin another round, failure ends it; any other action lets it end)");
+                else
+                    AddOption(GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)");
                 AddOption(GrappleActionType.BreakPin, $"Break pin (opposed grapple check vs {opponent.Stats.CharacterName})");
                 AddOption(GrappleActionType.DrawLightWeapon, "Draw a Light Weapon (Not yet implemented)");
                 AddOption(GrappleActionType.RetrieveSpellComponent, "Retrieve a Spell Component (Not yet implemented)");
                 AddOption(GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)");
                 AddOption(GrappleActionType.OpposedGrappleEscape, $"Break grapple (opposed grapple check vs {opponent.Stats.CharacterName})");
                 AddOption(GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist) vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})");
+                if (pinRenewalDue && opponentPinned)
+                {
+                    options.Add((
+                        GrappleActionType.ReleasePinnedOpponent,
+                        $"Release {opponent.Stats.CharacterName} from pin (free action, ends the grapple)",
+                        true,
+                        string.Empty));
+                }
             }
         }
 
@@ -1766,6 +1797,11 @@ public partial class GameManager
                 return GrappleActionType.EscapeArtist;
         }
 
+        // PHB p.156 (CMB-120): a pin lasts 1 round. On its renewal turn an AI pinner pins again first when that
+        // pays (ShouldNPCRenewDuePin); otherwise it takes the pinning choices below, which let the pin lapse.
+        if (npc.IsPinRenewalDue() && legalActions.Contains(GrappleActionType.PinOpponent) && ShouldNPCRenewDuePin(npc, opponent))
+            return GrappleActionType.PinOpponent;
+
         bool isPinning = npc.IsPinningOpponent();
         if (isPinning)
         {
@@ -1813,6 +1849,41 @@ public partial class GameManager
         return legalActions[UnityEngine.Random.Range(0, legalActions.Count)];
     }
 
+    /// <summary>
+    /// AI evaluation for a due pin (PHB p.156, CMB-120). Pinning again costs an attack and deals no damage, so the AI
+    /// renews only when it keeps a grapple attack for damage this turn, or when holding the target helps its side:
+    /// another able ally of the pinner is in the fight and the target is a spellcaster (a pinned creature cannot cast)
+    /// or that ally is adjacent to the target (pinned: -4 AC against it and no Dex bonus). Otherwise a one-attack
+    /// pinner in a lone fight would renew every round and neither creature would ever act or take damage, because a
+    /// pinned creature loses its turn (CMB-075).
+    /// </summary>
+    private bool ShouldNPCRenewDuePin(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null || target.Stats == null)
+            return false;
+
+        if (GetRemainingGrappleAttackActions(npc) >= 2)
+            return true;
+
+        bool hasAbleAlly = false;
+        bool allyAdjacentToTarget = false;
+        List<CharacterController> all = GetAllCharacters();
+        for (int i = 0; i < all.Count; i++)
+        {
+            CharacterController other = all[i];
+            if (other == null || other == npc || other == target || other.Stats == null || other.IsDead)
+                continue;
+            if (!TeamUtility.IsAlly(npc, other) || !other.CanTakeTurnActions() || !other.CanTakeActions())
+                continue;
+
+            hasAbleAlly = true;
+            if (other.GetMinimumDistanceToTarget(target, chebyshev: true) <= 1)
+                allyAdjacentToTarget = true;
+        }
+
+        return hasAbleAlly && (target.Stats.IsSpellcaster || allyAdjacentToTarget);
+    }
+
     private static bool IsPredatoryAnimalGrapplerProfile(CharacterController npc, out AnimalAIProfile animalProfile)
     {
         animalProfile = npc != null ? npc.aiProfile as AnimalAIProfile : null;
@@ -1844,6 +1915,14 @@ public partial class GameManager
 
         if (animalProfile.ShouldAttemptEmergencyGrappleEscape(npc))
         {
+            // A pinner gets out for free by releasing its pin, which ends the grapple (PHB p.157, CMB-089),
+            // instead of spending an attack on an escape check against its own pinned victim (CMB-120).
+            if (npc.IsPinningOpponent() && legalActions.Contains(GrappleActionType.ReleasePinnedOpponent))
+            {
+                chosenAction = GrappleActionType.ReleasePinnedOpponent;
+                return true;
+            }
+
             if (legalActions.Contains(GrappleActionType.BreakPin))
             {
                 chosenAction = GrappleActionType.BreakPin;
@@ -1892,7 +1971,13 @@ public partial class GameManager
         }
 
         // A pinning predator keeps the hold and deals grapple damage (falls through to DamageOpponent below):
-        // releasing the pin would end the grapple (PHB p.157, CMB-089).
+        // releasing the pin would end the grapple (PHB p.157, CMB-089). On its renewal turn it pins again
+        // first when that pays, as ChooseNPCGrappleAction does (PHB p.156, CMB-120).
+        if (npc.IsPinRenewalDue() && legalActions.Contains(GrappleActionType.PinOpponent) && ShouldNPCRenewDuePin(npc, npc.GetPinnedOpponent()))
+        {
+            chosenAction = GrappleActionType.PinOpponent;
+            return true;
+        }
 
         if (!opponentPinned && legalActions.Contains(GrappleActionType.AttackUnarmed))
         {
@@ -2001,7 +2086,7 @@ public partial class GameManager
             return actions;
         }
 
-        if (npc.IsPinningOpponent())
+        if (npc.IsHoldingPinThisRound())
         {
             TryAdd(GrappleActionType.DamageOpponent);
             TryAdd(GrappleActionType.UseOpponentWeapon);

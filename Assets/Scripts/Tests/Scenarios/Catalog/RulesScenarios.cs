@@ -36,6 +36,10 @@ namespace Tests.Scenarios
     /// Bull rush AoOs (owner decision 2026-10-07): entering the defender's space is the bull rush's own provocation
     /// (PHB p.154), separate from movement; moving out of squares one opponent threatens counts as one opportunity for
     /// the whole round (PHB p.138), and a creature makes one AoO a round, 1 + DEX modifier with Combat Reflexes (PHB p.92).
+    /// Pin duration (owner decision 2026-10-07, CMB-120; PHB p.156): a pin holds the opponent for 1 round; on the
+    /// pinner's next turn it may pin again (an opposed check in place of an attack) to hold it another round, and
+    /// a pin not renewed that turn ends while the grapple goes on. The AI renews only when that pays (a grapple attack
+    /// left for damage, or an able ally and a caster or adjacent ally); a lone one-attack pinner deals damage instead.
     /// The AI maneuver stopgap (owner decision 2026-10-07, AI-060) is an AI decision limit, not a rule: after a
     /// maneuver lands the AI attacks with its remaining steps, and it does not retry a failed maneuver type against
     /// the same target that turn.
@@ -43,7 +47,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 38;
+        public const int Count = 41;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -76,6 +80,9 @@ namespace Tests.Scenarios
             yield return S("single-vs-full-attack-ui", () => SingleVsFull(true));
             yield return S("pin-release-ends-grapple", PinRelease);
             yield return S("pin-release-5ft", PinReleaseFiveFootStep);
+            yield return S("pin-duration-ui", PinDurationUi);
+            yield return S("pin-duration-ai", PinDurationAi);
+            yield return S("pin-duration-ai-one-attack", PinDurationAiOneAttack);
             yield return S("npc-maneuver-replaces-iterative", NpcManeuverReplacesIterative);
             yield return S("maneuver-replaces-natural", () => ManeuverReplacesNatural(false));
             yield return S("maneuver-replaces-natural-multiattack", () => ManeuverReplacesNatural(true));
@@ -887,6 +894,132 @@ namespace Tests.Scenarios
                         if (HasCond(s, "Grappled") || HasCond(s, "Pinned"))
                             return ExpectResult.Fail(s.Get("k") + " still grappled or pinned");
                     return ExpectResult.Pass("hero at " + Pos(h) + ", orc at " + Pos(o));
+                })
+                .Build();
+        }
+
+        // ── Pin duration (CMB-120) ──────────────────────────────────────
+
+        private static ScenarioDef PinDurationUi()
+        {
+            return Rules("rules/pin-duration-ui", "A pin lasts 1 round; pinning again on the next turn holds it another round, otherwise it ends and the grapple goes on (PHB p.156, CMB-120)")
+                .Covers("CMB-120", "CMB-089", "PHB p.156", "PC_NPC_PARITY")
+                .MaxRounds(4)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Ui)
+                .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
+                .Tweak("hero", StripOffHand)
+                .Initiative("hero", "orc")
+                // Every grapple check is a 20 for both sides; ties go to the higher modifier (the hero's +13).
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", -1)
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Turn("orc", 0, Step.Pass())
+                .Turn("hero", 2, Step.GrappleAction("Pin"))
+                .Turn("hero", 3, Step.GrappleAction("Pin"))
+                // Round 4: no steps, so the hero ends the turn without pinning again.
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("Round 2 pins, round 3 pins again", Expect.All(
+                    Expect.StepStatus("hero", 2, "GrappleAction(Pin)", 0, "done"),
+                    Expect.StepStatus("hero", 3, "GrappleAction(Pin)", 0, "done")))
+                .Expect("The orc is pinned on its round-2 turn and still pinned when the hero's round-3 turn starts", v =>
+                {
+                    JsonObj o2 = v.Snapshot("orc", 2, "orc"), o3 = v.Snapshot("orc", 3, "hero");
+                    if (!HasCond(o2, "Pinned")) return ExpectResult.Fail("orc not pinned on its round-2 turn");
+                    return HasCond(o3, "Pinned") ? ExpectResult.Pass("pinned at both") : ExpectResult.Fail("the pin ended before the hero could pin again");
+                })
+                .Expect("Pinning again on the next turn holds the orc another round (PHB p.156)", v =>
+                {
+                    List<TraceEvent> renewed = v.Log("stays pinned for another round").Where(e => e.Round == 3).ToList();
+                    if (renewed.Count == 0) return ExpectResult.Fail("no renewal log in round 3");
+                    JsonObj o3 = v.Snapshot("orc", 3, "orc");
+                    return HasCond(o3, "Pinned") ? ExpectResult.Pass("orc pinned on its round-3 turn", renewed[0].Seq) : ExpectResult.Fail("orc not pinned on its round-3 turn", renewed[0].Seq);
+                })
+                .Expect("Without a new pin the pin ends at the end of the hero's round-4 turn; the grapple goes on", v =>
+                {
+                    List<TraceEvent> ended = v.Log("ends after 1 round").Where(e => e.Round == 4).ToList();
+                    if (ended.Count == 0) return ExpectResult.Fail("no pin-end log in round 4");
+                    JsonObj h4 = v.Snapshot("orc", 4, "hero"), o4 = v.Snapshot("orc", 4, "orc");
+                    if (!HasCond(h4, "Pinned")) return ExpectResult.Fail("the pin had already ended when the hero's round-4 turn started", ended[0].Seq);
+                    if (o4 == null) return ExpectResult.Inconclusive("no orc turn in round 4");
+                    return !HasCond(o4, "Pinned") && HasCond(o4, "Grappled")
+                        ? ExpectResult.Pass("orc grappled, not pinned, on its round-4 turn", ended[0].Seq)
+                        : ExpectResult.Fail("orc round 4: pinned " + HasCond(o4, "Pinned") + ", grappled " + HasCond(o4, "Grappled"), ended[0].Seq);
+                })
+                .Build();
+        }
+
+        private static ScenarioDef PinDurationAi()
+        {
+            return Rules("rules/pin-duration-ai", "An AI pinner with a second attack this turn pins again on its next turn before anything else (PHB p.156, CMB-120)")
+                .Covers("CMB-120", "PHB p.156", "PC_NPC_PARITY")
+                .MaxRounds(5)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Initiative("hero", "dummy")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", -1)
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "dummy"))
+                .Turn("dummy", 0, Step.Pass())
+                .AiWhenUnscripted("hero")
+                // The AI pins at its own discretion (ChooseNPCGrappleAction), so a seed range is needed.
+                .Expect("Each hero turn that starts with the dummy pinned begins with Pin Opponent, which holds the pin", v =>
+                {
+                    var r = new System.Text.RegularExpressions.Regex(@"Hero chooses grapple action \[(\w+)\]");
+                    int checkedRounds = 0;
+                    foreach (TraceEvent turn in v.TurnsOf("hero"))
+                    {
+                        int round = turn.Round;
+                        if (!HasCond(v.Snapshot("dummy", round, "hero"), "Pinned"))
+                            continue;
+                        TraceEvent first = v.Of("log").FirstOrDefault(e => e.Round == round && e.Seq > turn.Seq && r.IsMatch(e.Str("text") ?? ""));
+                        if (first == null) return ExpectResult.Fail("no grapple choice in round " + round, turn.Seq);
+                        string action = r.Match(first.Str("text")).Groups[1].Value;
+                        if (action != "PinOpponent") return ExpectResult.Fail("round " + round + " began with " + action, first.Seq);
+                        JsonObj d = v.Snapshot("dummy", round, "dummy");
+                        if (d != null && !HasCond(d, "Pinned")) return ExpectResult.Fail("the won renewal of round " + round + " did not hold the pin", first.Seq);
+                        checkedRounds++;
+                    }
+                    return checkedRounds > 0 ? ExpectResult.Pass(checkedRounds + " renewal turn(s)") : ExpectResult.Inconclusive("the AI never started a turn with the dummy pinned");
+                })
+                .Build();
+        }
+
+        private static ScenarioDef PinDurationAiOneAttack()
+        {
+            return Rules("rules/pin-duration-ai-one-attack", "A lone AI pinner with one attack deals grapple damage on its next turn instead of renewing, so the pin ends (PHB p.156, CMB-120)")
+                .Covers("CMB-120", "CMB-075", "PHB p.156", "PC_NPC_PARITY")
+                .MaxRounds(8)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 4, "Improved Grapple")), 10, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Initiative("hero", "dummy")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", -1)
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "dummy"))
+                .Turn("dummy", 0, Step.Pass())
+                .AiWhenUnscripted("hero")
+                // BAB +4 gives one attack a round (PHB p.141); no ally and a non-caster target, so renewing would only
+                // trade grapple damage for a turn the pinned dummy loses anyway (CMB-075). The AI pins at its own
+                // discretion (ChooseNPCGrappleAction), so a seed range is needed.
+                .Expect("Each hero turn that starts with the dummy pinned deals grapple damage, and the pin ends", v =>
+                {
+                    var r = new System.Text.RegularExpressions.Regex(@"Hero chooses grapple action \[(\w+)\]");
+                    int checkedRounds = 0;
+                    foreach (TraceEvent turn in v.TurnsOf("hero"))
+                    {
+                        int round = turn.Round;
+                        if (!HasCond(v.Snapshot("dummy", round, "hero"), "Pinned"))
+                            continue;
+                        TraceEvent first = v.Of("log").FirstOrDefault(e => e.Round == round && e.Seq > turn.Seq && r.IsMatch(e.Str("text") ?? ""));
+                        if (first == null) return ExpectResult.Fail("no grapple choice in round " + round, turn.Seq);
+                        string action = r.Match(first.Str("text")).Groups[1].Value;
+                        if (action != "DamageOpponent") return ExpectResult.Fail("round " + round + " began with " + action, first.Seq);
+                        if (!v.Log("does not pin").Any(e => e.Round == round)) return ExpectResult.Fail("no pin-lapse log in round " + round, first.Seq);
+                        if (!v.Log("attempts to damage").Any(e => e.Round == round)) return ExpectResult.Fail("no grapple damage attempt in round " + round, first.Seq);
+                        JsonObj d = v.Snapshot("dummy", round, "dummy");
+                        if (d != null && HasCond(d, "Pinned")) return ExpectResult.Fail("the dummy is still pinned on its round-" + round + " turn", first.Seq);
+                        checkedRounds++;
+                    }
+                    return checkedRounds > 0 ? ExpectResult.Pass(checkedRounds + " lapse turn(s)") : ExpectResult.Inconclusive("the AI never started a turn with the dummy pinned");
                 })
                 .Build();
         }

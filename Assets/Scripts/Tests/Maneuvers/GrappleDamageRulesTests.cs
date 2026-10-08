@@ -1,6 +1,7 @@
 using System.Reflection;
 using UnityEngine;
 using DND35e.Identifiers;
+using DND35.AI.Profiles;
 
 namespace Tests.Maneuvers
 {
@@ -42,6 +43,16 @@ public static class GrappleDamageRulesTests
         TestPinnedAcPenaltyAppliesOnlyVsNonGrappler();
         TestPinExpiresAtMaintainerEndOfNextTurnWithoutMaintenance();
         TestMaintainPinExtendsDurationAcrossTurns();
+        TestPinRenewalOnlyOnPinnersNextTurn();
+        TestFailedPinRenewalEndsPinKeepsGrapple();
+        TestOtherActionOnRenewalTurnLetsPinLapse();
+        TestAiRenewsDuePin();
+        TestPinRenewalDefenderResistsWithoutPinnedPenalty();
+        TestPinEndsWhenPinnerCouldNotAct();
+        TestNoOpActionOnRenewalTurnKeepsPin();
+        TestSpellOnRenewalTurnLetsPinLapse();
+        TestAiOneAttackPinnerLetsDuePinLapse();
+        TestPredatorRenewsDuePinAndReleasesWhenFleeing();
         TestGrappleDamageUsesUnarmedStrikeDamageEvenWithWeaponEquipped();
         TestUseOpponentWeaponFailsWhenOpponentHasNoLightWeapon();
         TestUseOpponentWeaponUsesSelectedRightHandLightWeaponWithoutTransfer();
@@ -461,6 +472,332 @@ public static class GrappleDamageRulesTests
 
         Cleanup(attacker, defender);
     }
+
+    // ===== Pin duration (PHB p.156: a pin lasts 1 round; owner decision 2026-10-07, CMB-120) =====
+
+    private static void TestPinRenewalOnlyOnPinnersNextTurn()
+    {
+        var attacker = CreateTestCharacter("GrapplePinRenewTiming", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinRenewTimingTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "CMB-120: initial pin succeeds before the renewal-timing test");
+        Assert(attacker.IsHoldingPinThisRound() && !attacker.IsPinRenewalDue(), "CMB-120: in the turn of the pin the pinner holds it and no renewal is due");
+        Assert(attacker.IsGrappleActionBlockedWhilePinning(GrappleActionType.AttackUnarmed, out _), "CMB-120: the pinner restrictions apply while the pin's round lasts");
+
+        SpecialAttackResult samePin = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(samePin != null && !samePin.Success && defender.HasCondition(CombatConditionType.Pinned), "CMB-120: pinning again in the same turn is refused and the pin stays");
+
+        attacker.StartNewTurn();
+        Assert(attacker.IsPinRenewalDue() && !attacker.IsHoldingPinThisRound(), "CMB-120: on the pinner's next turn the renewal is due");
+        Assert(defender.HasCondition(CombatConditionType.Pinned), "CMB-120: the opponent is still pinned when the pinner's next turn starts, so the pinner can pin again");
+        Assert(!attacker.IsGrappleActionBlockedWhilePinning(GrappleActionType.AttackUnarmed, out _)
+            && !attacker.IsGrappleActionBlockedWhilePinning(GrappleActionType.PinOpponent, out _),
+            "CMB-120: on the renewal turn the pinner restrictions are lifted and Pin Opponent is allowed");
+
+        SpecialAttackResult renew = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(renew != null && renew.Success && defender.HasCondition(CombatConditionType.Pinned), "CMB-120: a won renewal keeps the opponent pinned");
+        Assert(attacker.IsHoldingPinThisRound() && !attacker.IsPinRenewalDue(), "CMB-120: a renewal restarts the 1-round duration");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestFailedPinRenewalEndsPinKeepsGrapple()
+    {
+        var attacker = CreateTestCharacter("GrapplePinRenewFail", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinRenewFailTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "CMB-120: initial pin succeeds before the failed-renewal test");
+
+        // Swap the strengths so the renewal check is lost whatever the dice.
+        ConfigureVeryWeakGrappler(attacker);
+        ConfigureVeryStrongGrappler(defender);
+        attacker.StartNewTurn();
+
+        SpecialAttackResult renew = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(renew != null && !renew.Success, "CMB-120: a lost renewal check fails");
+        Assert(!defender.HasCondition(CombatConditionType.Pinned) && defender.GetPinnedBy() == null && !attacker.IsPinningOpponent(),
+            "CMB-120: a failed renewal ends the pin");
+        Assert(attacker.IsGrappling() && defender.IsGrappling()
+            && attacker.HasCondition(CombatConditionType.Grappled) && defender.HasCondition(CombatConditionType.Grappled),
+            "CMB-120: a failed renewal leaves the grapple in place");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestOtherActionOnRenewalTurnLetsPinLapse()
+    {
+        var attacker = CreateTestCharacter("GrapplePinLapse", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinLapseTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "CMB-120: initial pin succeeds before the lapse test");
+
+        attacker.StartNewTurn();
+        SpecialAttackResult damage = attacker.ResolveGrappleAction(GrappleActionType.DamageOpponent, AttackDamageMode.Nonlethal);
+        Assert(damage != null && damage.Log != null && damage.Log.Contains("does not pin"), "CMB-120: another grapple action on the renewal turn logs the lapse of the pin");
+        Assert(!defender.HasCondition(CombatConditionType.Pinned) && !attacker.IsPinningOpponent(), "CMB-120: another grapple action on the renewal turn lets the pin end first");
+        Assert(attacker.IsGrappling() && defender.IsGrappling(), "CMB-120: the lapsed pin leaves the grapple in place");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestAiRenewsDuePin()
+    {
+        GameManager gm = GameManager.Instance;
+        MethodInfo choose = typeof(GameManager).GetMethod("ChooseNPCGrappleAction", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(choose != null, "CMB-120: GameManager.ChooseNPCGrappleAction exists for the AI renewal test");
+        if (gm == null || choose == null)
+        {
+            if (gm == null)
+                Debug.Log("  [SKIP] GameManager.Instance is null; the AI renewal check needs Play mode");
+            return;
+        }
+
+        var npc = CreateTestCharacter("GrapplePinAiRenew", "Fighter");
+        var pc = CreateWeakDefender("GrapplePinAiRenewTarget");
+        ConfigureVeryStrongGrappler(npc);
+        ConfigureVeryWeakGrappler(pc);
+
+        ForceGrappleState(npc, pc);
+        SpecialAttackResult pinResult = npc.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "CMB-120: initial AI pin succeeds before the AI renewal test");
+
+        npc.StartNewTurn();
+        object choice = choose.Invoke(gm, new object[] { npc, pc, false, true });
+        Assert(choice is GrappleActionType chosen && chosen == GrappleActionType.PinOpponent,
+            "CMB-120: an AI pinner with a grapple attack left after renewing pins again on its renewal turn (got " + (choice ?? "null") + ")");
+
+        Cleanup(npc, pc);
+    }
+
+    private static void TestPinRenewalDefenderResistsWithoutPinnedPenalty()
+    {
+        var attacker = CreateTestCharacter("GrapplePinRenewDefTotal", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinRenewDefTotalTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        try
+        {
+            // Every grapple check d20 is a 10, so the totals differ only by their modifiers.
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? 10 : natural;
+
+            ForceGrappleState(attacker, defender);
+            SpecialAttackResult freshPin = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(freshPin != null && freshPin.Success && freshPin.OpposedRoll == 10, "CMB-120: the fresh pin succeeds with the forced d20 before the renewal-total test");
+
+            attacker.StartNewTurn();
+            SpecialAttackResult renewal = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(renewal != null && renewal.Success && renewal.OpposedRoll == 10, "CMB-120: the renewal succeeds with the forced d20");
+            Assert(freshPin != null && renewal != null && renewal.OpposedTotal == freshPin.OpposedTotal,
+                "CMB-120: the defender resists a renewal with the same total as a fresh pin, without the Pinned modifiers (fresh "
+                + (freshPin != null ? freshPin.OpposedTotal.ToString() : "?") + ", renewal " + (renewal != null ? renewal.OpposedTotal.ToString() : "?") + ")");
+            Assert(defender.HasCondition(CombatConditionType.Pinned) && attacker.IsHoldingPinThisRound(), "CMB-120: the won renewal pins the defender again");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(attacker, defender);
+        }
+    }
+
+    private static void TestPinEndsWhenPinnerCouldNotAct()
+    {
+        var attacker = CreateTestCharacter("GrapplePinNoAct", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinNoActTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "CMB-120: initial pin succeeds before the could-not-act test");
+
+        // A turn skipped because the pinner cannot act never calls StartNewTurn; only its turn end runs.
+        attacker.ApplyCondition(CombatConditionType.Stunned, 2, "CMB-120 test");
+        Assert(!attacker.CanTakeActions(), "CMB-120: the stunned pinner cannot act (precondition)");
+        attacker.ProcessPinnedDurationAtTurnEnd();
+        Assert(!defender.HasCondition(CombatConditionType.Pinned) && !attacker.IsPinningOpponent() && defender.GetPinnedBy() == null,
+            "CMB-120: a pin ends at the end of a pinner turn in which the pinner could not act");
+        Assert(attacker.IsGrappling() && defender.IsGrappling(), "CMB-120: the grapple goes on after the pin ends for a pinner that could not act");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestNoOpActionOnRenewalTurnKeepsPin()
+    {
+        var attacker = CreateTestCharacter("GrapplePinNoOp", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinNoOpTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "CMB-120: initial pin succeeds before the no-op action test");
+
+        attacker.StartNewTurn();
+        SpecialAttackResult breakPin = attacker.ResolveGrappleAction(GrappleActionType.BreakPin);
+        Assert(breakPin != null && !breakPin.Success && breakPin.Log != null && !breakPin.Log.Contains("does not pin"),
+            "CMB-120: Break Pin by a pinner resolves to nothing and does not let the due pin lapse");
+        SpecialAttackResult draw = attacker.ResolveGrappleAction(GrappleActionType.DrawLightWeapon);
+        Assert(draw != null && draw.Log != null && !draw.Log.Contains("does not pin"), "CMB-120: a not-implemented stub does not let the due pin lapse");
+        Assert(defender.HasCondition(CombatConditionType.Pinned) && attacker.IsPinRenewalDue(), "CMB-120: after no-op actions the pin is still due for renewal");
+
+        GameManager gm = GameManager.Instance;
+        if (gm != null)
+        {
+            Assert(!gm.CanUseGrappleAction(attacker, GrappleActionType.BreakPin)
+                && !gm.CanUseGrappleAction(attacker, GrappleActionType.DrawLightWeapon)
+                && !gm.CanUseGrappleAction(attacker, GrappleActionType.RetrieveSpellComponent),
+                "CMB-120: the renewal turn does not offer Break Pin or the not-implemented stubs");
+            Assert(gm.CanUseGrappleAction(attacker, GrappleActionType.PinOpponent)
+                && gm.CanUseGrappleAction(attacker, GrappleActionType.ReleasePinnedOpponent),
+                "CMB-120: the renewal turn offers Pin again and Release");
+        }
+        else
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; the renewal-turn menu check needs Play mode");
+        }
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestSpellOnRenewalTurnLetsPinLapse()
+    {
+        GameManager gm = GameManager.Instance;
+        MethodInfo concentration = typeof(GameManager).GetMethod("ResolveGrappledOrPinnedCastingConcentration", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(concentration != null, "CMB-120: GameManager.ResolveGrappledOrPinnedCastingConcentration exists for the spell-lapse test");
+        if (gm == null || concentration == null)
+        {
+            if (gm == null)
+                Debug.Log("  [SKIP] GameManager.Instance is null; the spell-lapse check needs Play mode");
+            return;
+        }
+
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE);
+        Assert(spell != null, "CMB-120: Magic Missile exists for the spell-lapse test");
+        if (spell == null)
+            return;
+
+        var attacker = CreateTestCharacter("GrapplePinSpellLapse", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinSpellLapseTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+        attacker.Stats.CON = 30; // the forced 20 then passes the grappled Concentration check, so no slot is spent
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        try
+        {
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => sides == 20 ? 20 : natural;
+
+            ForceGrappleState(attacker, defender);
+            SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(pinResult != null && pinResult.Success, "CMB-120: initial pin succeeds before the spell-lapse test");
+
+            // In the turn of the pin a cast does not touch the pin.
+            concentration.Invoke(gm, new object[] { attacker, null, spell, null, false, spell.SpellLevel, false, -1, null });
+            Assert(defender.HasCondition(CombatConditionType.Pinned) && attacker.IsHoldingPinThisRound(), "CMB-120: a cast in the turn of the pin leaves the pin in place");
+
+            attacker.StartNewTurn();
+            concentration.Invoke(gm, new object[] { attacker, null, spell, null, false, spell.SpellLevel, false, -1, null });
+            Assert(!defender.HasCondition(CombatConditionType.Pinned) && !attacker.IsPinningOpponent(),
+                "CMB-120: casting a spell on the renewal turn lets the pin lapse before the spell resolves (shared PC/NPC cast step)");
+            Assert(attacker.IsGrappling() && defender.IsGrappling(), "CMB-120: the grapple goes on after a cast lets the pin lapse");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(attacker, defender);
+        }
+    }
+
+    private static void TestAiOneAttackPinnerLetsDuePinLapse()
+    {
+        GameManager gm = GameManager.Instance;
+        MethodInfo choose = typeof(GameManager).GetMethod("ChooseNPCGrappleAction", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(choose != null, "CMB-120: GameManager.ChooseNPCGrappleAction exists for the one-attack AI test");
+        if (gm == null || choose == null)
+        {
+            if (gm == null)
+                Debug.Log("  [SKIP] GameManager.Instance is null; the one-attack AI check needs Play mode");
+            return;
+        }
+
+        var npc = CreateTestCharacter("GrapplePinAiOneAttack", "Fighter");
+        var pc = CreateWeakDefender("GrapplePinAiOneAttackTarget");
+        ConfigureVeryStrongGrappler(npc);
+        ConfigureVeryWeakGrappler(pc);
+
+        ForceGrappleState(npc, pc);
+        SpecialAttackResult pinResult = npc.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "CMB-120: initial AI pin succeeds before the one-attack test");
+
+        npc.Stats.BaseAttackBonusOverride = 5; // one attack a round (PHB p.141), no ally, a non-caster target
+        npc.StartNewTurn();
+        Assert(gm.GetRemainingGrappleAttackActions(npc) == 1, "CMB-120: the one-attack pinner has a single grapple attack (precondition, got " + gm.GetRemainingGrappleAttackActions(npc) + ")");
+        object choice = choose.Invoke(gm, new object[] { npc, pc, false, true });
+        Assert(choice is GrappleActionType chosen && chosen == GrappleActionType.DamageOpponent,
+            "CMB-120: a lone one-attack AI pinner deals grapple damage instead of renewing, so the pin lapses (got " + (choice ?? "null") + ")");
+
+        Cleanup(npc, pc);
+    }
+
+    private static void TestPredatorRenewsDuePinAndReleasesWhenFleeing()
+    {
+        GameManager gm = GameManager.Instance;
+        MethodInfo choose = typeof(GameManager).GetMethod("ChooseNPCGrappleAction", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(choose != null, "CMB-120: GameManager.ChooseNPCGrappleAction exists for the predator test");
+        if (gm == null || choose == null)
+        {
+            if (gm == null)
+                Debug.Log("  [SKIP] GameManager.Instance is null; the predator renewal check needs Play mode");
+            return;
+        }
+
+        var npc = CreateTestCharacter("GrapplePinPredator", "Fighter");
+        var pc = CreateWeakDefender("GrapplePinPredatorTarget");
+        ConfigureVeryStrongGrappler(npc);
+        ConfigureVeryWeakGrappler(pc);
+        npc.Stats.HasPounce = true;
+        npc.Stats.HasImprovedGrab = true;
+        npc.Stats.HasRake = true;
+        AnimalAIProfile profile = ScriptableObject.CreateInstance<AnimalAIProfile>();
+        npc.aiProfile = profile;
+
+        try
+        {
+            ForceGrappleState(npc, pc);
+            SpecialAttackResult pinResult = npc.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(pinResult != null && pinResult.Success, "CMB-120: initial predator pin succeeds before the predator test");
+
+            npc.StartNewTurn();
+            Assert(profile.ShouldPrioritizeLethalNaturalGrappleAttacks(npc), "CMB-120: the test creature uses the predatory grapple routine (precondition)");
+            object choice = choose.Invoke(gm, new object[] { npc, pc, false, true });
+            Assert(choice is GrappleActionType renew && renew == GrappleActionType.PinOpponent,
+                "CMB-120: a predator with attacks to spare pins again on its renewal turn (got " + (choice ?? "null") + ")");
+
+            npc.Stats.CurrentHP = 1; // below 25%: the emergency escape branch
+            object fleeing = choose.Invoke(gm, new object[] { npc, pc, false, true });
+            Assert(fleeing is GrappleActionType flee && flee == GrappleActionType.ReleasePinnedOpponent,
+                "CMB-120: a badly wounded predator that pins releases its pin (free, ends the grapple) instead of an escape check (got " + (fleeing ?? "null") + ")");
+        }
+        finally
+        {
+            Cleanup(npc, pc);
+            Object.DestroyImmediate(profile);
+        }
+    }
     private static void TestGrappleDamageUsesUnarmedStrikeDamageEvenWithWeaponEquipped()
     {
         var attacker = CreateTestCharacter("GrappleUnarmedDice", "Fighter");
@@ -676,8 +1013,21 @@ public static class GrappleDamageRulesTests
         Assert(pinResult != null && pinResult.Success, "Pin succeeds before free-release validation");
 
         attacker.StartNewTurn();
+        Vector2Int attackerPosBefore = attacker.GridPosition;
+        Vector2Int defenderPosBefore = defender.GridPosition;
+        Assert(attacker.IsPinRenewalDue(), "CMB-120: the release below happens on the pinner's renewal turn");
+        if (GameManager.Instance != null)
+            Assert(GameManager.Instance.CanUseGrappleAction(attacker, GrappleActionType.ReleasePinnedOpponent), "CMB-120: Release Pinned Opponent is offered on the renewal turn");
         SpecialAttackResult releaseResult = attacker.ResolveGrappleAction(GrappleActionType.ReleasePinnedOpponent);
         Assert(releaseResult != null && releaseResult.Success, "Release succeeds at the start of the pinner's turn");
+        Assert(releaseResult != null && releaseResult.Log != null && !releaseResult.Log.Contains("does not pin"),
+            "CMB-120: releasing on the renewal turn is not preceded by a pin lapse");
+        Assert(!attacker.IsGrappling() && !defender.IsGrappling()
+            && !attacker.HasCondition(CombatConditionType.Grappled) && !defender.HasCondition(CombatConditionType.Grappled)
+            && !defender.HasCondition(CombatConditionType.Pinned),
+            "CMB-089/CMB-120: a release on the renewal turn ends the grapple for both creatures");
+        Assert(attacker.GridPosition == attackerPosBefore && defender.GridPosition == defenderPosBefore,
+            "CMB-089/CMB-120: a release on the renewal turn moves neither creature");
         Assert(CharacterController.IsFreeGrappleAction(GrappleActionType.ReleasePinnedOpponent),
             "Releasing a pin is a free action in the shared PC/AI action-cost helper (PHB p.157)");
         Assert(!CharacterController.IsFreeGrappleAction(GrappleActionType.PinOpponent)

@@ -128,7 +128,8 @@ public class ActionButtonPanel : MonoBehaviour
         public CharacterController GrappleOpponent;
         public bool ActorPinnedInGrappleState;
         public bool OpponentPinnedByActor;
-        public bool IsPinningOpponent;
+        public bool IsPinningOpponent;   // holding a pin whose round is not up (pinner restrictions apply)
+        public bool PinRenewalDue;       // the pinner's next turn: Pin renews the pin, anything else ends it (CMB-120)
         public bool HasGrappleAttackAvailable;
         public bool HasBullRushAttackAvailable;
         public bool HasTripAttackAvailable;
@@ -242,7 +243,8 @@ public class ActionButtonPanel : MonoBehaviour
         context.GrappleOpponent = grappleOpponent;
         context.ActorPinnedInGrappleState = actorPinnedInGrappleState;
         context.OpponentPinnedByActor = opponentPinnedByActor;
-        context.IsPinningOpponent = pc.IsPinningOpponent();
+        context.IsPinningOpponent = pc.IsHoldingPinThisRound();
+        context.PinRenewalDue = pc.IsPinRenewalDue();
 
         context.HasGrappleAttackAvailable = context.Gm != null && context.Gm.CanUseGrappleAttackOption(pc);
         context.HasBullRushAttackAvailable = context.Gm != null && context.Gm.CanUseBullRushAttackOption(pc);
@@ -1002,7 +1004,9 @@ public class ActionButtonPanel : MonoBehaviour
         states.Set(GrapplePinButton, new ActionButtonState(
             context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && !context.ShowOnlyPinnerActions,
             canPin,
-            canPin ? $"Grapple: Pin Opponent ({context.IterativeTag})" : "Grapple: Pin Opponent (No attacks left)"));
+            canPin
+                ? (context.PinRenewalDue ? $"Grapple: Pin Again ({context.IterativeTag})" : $"Grapple: Pin Opponent ({context.IterativeTag})")
+                : "Grapple: Pin Opponent (No attacks left)"));
 
         // Deprecated for current pin model: pinned creatures now use escape actions only.
         states.Set(GrappleBreakPinButton, new ActionButtonState(false, false));
@@ -1073,9 +1077,10 @@ public class ActionButtonPanel : MonoBehaviour
             canDisarmSmallObject,
             canDisarmSmallObject ? $"Disarm Small Object ({context.GrappleOpponentName})" : "Disarm Small Object (Used/Blocked)"));
 
-        bool canReleasePin = context.IsGrappling && context.ShowOnlyPinnerActions && context.OpponentPinnedByActor;
+        bool releaseVisible = context.IsGrappling && (context.ShowOnlyPinnerActions || (context.PinRenewalDue && !context.ShowOnlyPinnedEscapeActions));
+        bool canReleasePin = releaseVisible && context.OpponentPinnedByActor;
         states.Set(GrappleReleasePinnedButton, new ActionButtonState(
-            context.IsGrappling && context.ShowOnlyPinnerActions,
+            releaseVisible,
             canReleasePin,
             canReleasePin ? $"Release {context.GrappleOpponentName} from Pin" : "Release Pin (N/A)"));
     }

@@ -1263,22 +1263,10 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 225,
-      "failed": 10,
+      "passed": 390,
+      "failed": 7,
       "flakyFailures": 0,
       "knownFailures": [
-        {
-          "match": "Pin expires at end of maintainer's next turn if not maintained",
-          "issue": "CMB-120"
-        },
-        {
-          "match": "Maintain pin action succeeds on subsequent turn",
-          "issue": "CMB-120"
-        },
-        {
-          "match": "Maintained pin eventually expires when not maintained again",
-          "issue": "CMB-120"
-        },
         {
           "match": "Grapple damage log identifies unarmed grapple damage",
           "issue": "TST-027"
@@ -1308,7 +1296,7 @@
           "issue": "TST-027"
         }
       ],
-      "notes": "Deterministic since the helpers set BaseAttackBonusOverride (CHR-068): the same 10 assertions fail with all 67 seeds swept on 2026-10-07. CMB-120: the pin never expires and cannot be re-pinned, so the 3 pin-duration checks fail. TST-027: 7 checks of rewritten log text."
+      "notes": "Deterministic since the helpers set BaseAttackBonusOverride (CHR-068): the same assertions fail with all 67 seeds swept on 2026-10-07, and with seeds 1-30 after CMB-120. TST-027: 7 checks of rewritten log text. The 3 pin-duration checks pass since CMB-120 (1-round pin, renewal on the pinner's next turn). The pass count also takes in assertions added by CMB-085, CMB-102 and CMB-106, whose commits did not refresh it."
     },
     {
       "type": "Tests.Maneuvers.OverrunRulesTests",
