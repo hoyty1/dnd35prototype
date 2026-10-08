@@ -80,6 +80,8 @@ public static class SkeletonTemplate
         skel.HitDice = racialHD;
         skel.Level = 0;
         skel.CharacterClass = null;
+        // The template drops the class levels, so no class grants proficiency (CHR-072).
+        skel.ClassLevelsAreRacialHitDice = true;
 
         // ── Abilities (modify before HP calc) ──
         // DEX +2, CON = none, INT = none, WIS = 10, CHA = 1

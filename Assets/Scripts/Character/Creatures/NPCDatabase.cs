@@ -638,6 +638,62 @@ public class NPCDefinition
     public List<EquipmentSlotPair> EquipmentIds = new List<EquipmentSlotPair>();
     public List<string> BackpackItemIds = new List<string>();
 
+    // --- Weapon and armor proficiency (CHR-072; applied by CreatureProficiency.ApplyFromDefinition) ---
+    // Every weapon in EquipmentIds and BackpackItemIds, and the armor in the Armor slot, count as described in the
+    // entry; the fields below add what the MM entry names but the definition does not carry as an item.
+
+    /// <summary>
+    /// Item ids of weapons the MM entry names that the definition does not carry (the gnoll's battleaxe and shortbow,
+    /// which it attacks with through natural-attack stand-ins). The creature is proficient with them.
+    /// </summary>
+    public List<string> EntryWeaponIds = new List<string>();
+
+    /// <summary>
+    /// The heaviest armor the MM entry describes the creature wearing when the definition does not carry it (the
+    /// gnoll's and the bugbear's leather armor). None when the entry names no armor beyond what it carries.
+    /// </summary>
+    public ArmorCategory EntryArmorCategory = ArmorCategory.None;
+
+    /// <summary>Shield proficiency from a racial trait in the entry, without armor proficiency (lizardfolk, MM p.169).</summary>
+    public bool EntryShieldProficiency;
+
+    /// <summary>
+    /// Generally humanoid in form: an aberration, elemental or dragon of that shape is proficient with all simple
+    /// weapons and the weapons in its entry (MM p.305, p.308), a construct with the weapons in its entry only (MM p.307).
+    /// Without it these types use natural weapons only.
+    /// </summary>
+    public bool IsHumanoidForm;
+
+    /// <summary>
+    /// The creature keeps humanoid racial Hit Dice beside real class levels: a gnoll, bugbear, lizardfolk or troglodyte
+    /// (more than 1 racial HD, MM p.310) given a class by <see cref="CreatureClassEngine.ApplyClassToDefinition"/>. Its
+    /// racial HD still carry the humanoid type's simple weapons, worn armor and entry weapons (CHR-072). False for a
+    /// 1-HD humanoid, whose class level replaces its racial HD.
+    /// </summary>
+    public bool HasRacialHumanoidHitDice;
+
+    /// <summary>
+    /// True when <see cref="CharacterClass"/> only stands in for racial Hit Dice (CRE-024), so it grants no class
+    /// proficiency; false when the levels are real class levels. Null derives it: an empty class, or a Warrior class on
+    /// a creature that is not a humanoid, is a stand-in. Humanoids with more than 1 racial Hit Die (gnoll, bugbear,
+    /// lizardfolk, troglodyte; MM p.310) set it to true, since a 1-HD humanoid's level is a real warrior level.
+    /// <see cref="CreatureClassEngine.ApplyClassToDefinition"/> sets it to false.
+    /// </summary>
+    public bool? ClassLevelsAreRacialHitDice;
+
+    /// <summary>Resolves <see cref="ClassLevelsAreRacialHitDice"/> (see there).</summary>
+    public bool ResolveClassLevelsAreRacialHitDice()
+    {
+        if (ClassLevelsAreRacialHitDice.HasValue)
+            return ClassLevelsAreRacialHitDice.Value;
+        if (string.IsNullOrWhiteSpace(CharacterClass))
+            return true;
+        if (!string.Equals(CharacterClass, "Warrior", System.StringComparison.OrdinalIgnoreCase))
+            return false;
+        return !(CreatureTypeProgressionDatabase.TryParseCreatureType(CreatureType, out CreatureTypeId type)
+                 && type == CreatureTypeId.Humanoid);
+    }
+
     // Team/control flags
     public bool IsAlly = false;
     public bool IsControllable = false;
@@ -749,6 +805,14 @@ public class NPCDefinition
         clone.BackpackItemIds = BackpackItemIds != null
             ? new List<string>(BackpackItemIds)
             : new List<string>();
+        clone.EntryWeaponIds = EntryWeaponIds != null
+            ? new List<string>(EntryWeaponIds)
+            : new List<string>();
+        clone.EntryArmorCategory = EntryArmorCategory;
+        clone.EntryShieldProficiency = EntryShieldProficiency;
+        clone.IsHumanoidForm = IsHumanoidForm;
+        clone.ClassLevelsAreRacialHitDice = ClassLevelsAreRacialHitDice;
+        clone.HasRacialHumanoidHitDice = HasRacialHumanoidHitDice;
 
         // Deep-clone monster special ability definitions
         clone.BreathWeapon = BreathWeapon?.Clone();

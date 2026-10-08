@@ -88,6 +88,6 @@ public class ExpertClass : ICharacterClass
     /// <summary>All skills are class skills for Expert (DMG p.110).</summary>
     public static bool AllSkillsAreClassSkills => true;
 
-    /// <summary>Simple weapon proficiency and light armor proficiency.</summary>
-    public static bool HasLightArmorProficiency => true;
+    // Weapon and armor proficiency (all simple weapons, light armor, no shields; DMG p.109) lives in the CharacterStats
+    // class tables (CHR-072).
 }

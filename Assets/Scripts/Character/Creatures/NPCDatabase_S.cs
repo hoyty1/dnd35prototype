@@ -677,6 +677,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Warrior",
             CreatureType = "Fey",
+            EntryWeaponIds = new List<string> { "dagger", "shortbow" }, // MM p.219: head butt, dagger and shortbow
             CharacterAlignment = Alignment.ChaoticNeutral,
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,

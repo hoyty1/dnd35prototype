@@ -739,6 +739,9 @@ public partial class GameManager
         stats.SourceNpcDefinitionId = def.Id;
         stats.ChallengeRating = def.ChallengeRating;
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Humanoid" : def.CreatureType;
+        // Weapon and armor proficiency from the creature type and the MM entry; real class levels add the class
+        // tables in CharacterStats (CHR-072).
+        CreatureProficiency.ApplyFromDefinition(stats, def);
         stats.MaterialComposition = def.MaterialComposition;
         stats.SetBaseSizeCategory(def.SizeCategory);
         stats.IsTallCreature = def.IsTallCreature;

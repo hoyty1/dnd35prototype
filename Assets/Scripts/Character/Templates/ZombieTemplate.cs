@@ -69,6 +69,8 @@ public static class ZombieTemplate
         zombie.HitDice = doubledHD;
         zombie.Level = 0;
         zombie.CharacterClass = null;
+        // The template drops the class levels, so no class grants proficiency (CHR-072).
+        zombie.ClassLevelsAreRacialHitDice = true;
 
         // ── Abilities (modify before HP calc) ──
         // STR +2, DEX -2, CON = none, INT = none, WIS = 10, CHA = 1

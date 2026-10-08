@@ -150,6 +150,17 @@
       "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character; needs a scene GameManager"
     },
     {
+      "type": "Tests.Character.NpcProficiencyTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 65,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CHR-072: NPC class (DMG p.108-109) and creature-type (MM p.305-317) weapon and armor proficiency through the PC checks; spawns through InitializeNPCFromDefinition, so needs a scene GameManager; equips MainHand weapons itself (ITM-004) and allows for the spawned BAB (CRE-004); a missing item id fails a check"
+    },
+    {
       "type": "Tests.Character.NpcFeatDataTests",
       "needs": "either",
       "skip": "",
@@ -187,7 +198,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 16,
+      "passed": 22,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],

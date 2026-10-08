@@ -615,6 +615,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Aberration",
+            IsHumanoidForm = true, // humanoid upper body wielding daggers and a shortbow (MM p.89): simple weapons (MM p.305)
             CharacterAlignment = Alignment.ChaoticEvil,
             HitDice = 6,
             SizeCategory = SizeCategory.Large,

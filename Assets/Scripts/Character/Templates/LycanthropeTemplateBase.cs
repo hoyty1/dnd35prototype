@@ -101,6 +101,14 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
         target.TripTriggerAttackName = source.TripTriggerAttackName;
         target.IsExceptionallyStable = source.IsExceptionallyStable;
 
+        // Proficiency data (CHR-072; CreatureProficiency.ApplyFromDefinition)
+        target.EntryWeaponIds = source.EntryWeaponIds;
+        target.EntryArmorCategory = source.EntryArmorCategory;
+        target.EntryShieldProficiency = source.EntryShieldProficiency;
+        target.IsHumanoidForm = source.IsHumanoidForm;
+        target.ClassLevelsAreRacialHitDice = source.ClassLevelsAreRacialHitDice;
+        target.HasRacialHumanoidHitDice = source.HasRacialHumanoidHitDice;
+
         // Display
         target.SpecialAbilities = source.SpecialAbilities;
         target.CreatureTags = source.CreatureTags;

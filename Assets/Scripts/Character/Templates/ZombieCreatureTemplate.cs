@@ -61,6 +61,14 @@ public sealed class ZombieCreatureTemplate : ICreatureTemplate
         target.NaturalArmorBonus = source.NaturalArmorBonus;
         target.IsExceptionallyStable = source.IsExceptionallyStable;
 
+        // Proficiency data (CHR-072; CreatureProficiency.ApplyFromDefinition)
+        target.EntryWeaponIds = source.EntryWeaponIds;
+        target.EntryArmorCategory = source.EntryArmorCategory;
+        target.EntryShieldProficiency = source.EntryShieldProficiency;
+        target.IsHumanoidForm = source.IsHumanoidForm;
+        target.ClassLevelsAreRacialHitDice = source.ClassLevelsAreRacialHitDice;
+        target.HasRacialHumanoidHitDice = source.HasRacialHumanoidHitDice;
+
         // Defenses
         target.DamageReductionAmount = source.DamageReductionAmount;
         target.DamageReductionBypass = source.DamageReductionBypass;

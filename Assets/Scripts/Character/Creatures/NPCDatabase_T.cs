@@ -28,6 +28,8 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            ClassLevelsAreRacialHitDice = true, // 2 humanoid racial HD, not warrior levels (MM p.246, p.310)
+            EntryWeaponIds = new List<string> { "club", "javelin" }, // MM p.246: club and javelin; no armor
             HitDice = 2,
             BABOverride = BABProgression.Medium,
             SizeCategory = SizeCategory.Medium,

@@ -53,7 +53,7 @@ public class CommonerClass : ICharacterClass
     // UI — dull brown theme
     public Color TitleColor => new Color(0.55f, 0.45f, 0.3f);
     public Color ButtonColor => new Color(0.35f, 0.28f, 0.18f);
-    public string InfoText => "Hit Die: d4 | BAB: Poor\nAll Saves: Poor\n• Simple weapons only\n• No armor proficiency\n• NPC class (Peasant)";
+    public string InfoText => "Hit Die: d4 | BAB: Poor\nAll Saves: Poor\n• One simple weapon\n• No armor proficiency\n• NPC class (Peasant)";
 
     public void InitFeats(CharacterStats stats) { }
 
@@ -64,6 +64,6 @@ public class CommonerClass : ICharacterClass
     /// <summary>Commoner has no special abilities whatsoever (DMG p.109).</summary>
     public static bool HasSpecialAbilities => false;
 
-    /// <summary>Simple weapon proficiency only (one weapon, not all simple).</summary>
-    public static bool HasSimpleWeaponProficiency => true;
+    // Weapon proficiency: one simple weapon, no armor or shields (DMG p.109). An NPC commoner is proficient with the
+    // weapon its definition carries (CreatureProficiency, CHR-072); the class tables in CharacterStats grant nothing.
 }

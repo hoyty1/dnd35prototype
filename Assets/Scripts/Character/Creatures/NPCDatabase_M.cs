@@ -591,6 +591,7 @@ public static partial class NPCDatabase
             Level = 8,
             CharacterClass = "Warrior",
             CreatureType = "Aberration",
+            IsHumanoidForm = true, // humanoid-shaped (MM p.186): simple weapons (MM p.305)
             CharacterAlignment = Alignment.LawfulEvil,
             HitDice = 8,
             SizeCategory = SizeCategory.Medium,

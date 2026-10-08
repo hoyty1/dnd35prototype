@@ -2105,8 +2105,38 @@ public class CharacterStats
         return false;
     }
 
-    /// <summary>Extra individual weapon proficiencies granted by domain powers or other features (display names).</summary>
+    /// <summary>
+    /// Extra individual weapon proficiencies granted by domain powers, a creature's Monster Manual entry (the weapons it
+    /// is described as using, set by <see cref="CreatureProficiency.ApplyFromDefinition"/>, CHR-072) or other features.
+    /// Matched against a weapon's display name or its item id.
+    /// </summary>
     public List<string> ExtraWeaponProficiencies = new List<string>();
+
+    // ========== CREATURE-TYPE PROFICIENCY (MM p.305-317, CHR-072) ==========
+    // Set only by CreatureProficiency.ApplyFromDefinition when a creature is built from an NPCDefinition; PCs keep the
+    // defaults, so their proficiency comes from class, race and ExtraWeaponProficiencies alone.
+
+    /// <summary>
+    /// The class whose levels only stand in for racial Hit Dice (CRE-024: most monsters carry a placeholder Warrior
+    /// level, and an empty class falls back to Fighter). The class proficiency tables ignore it, so a gnoll or an ogre
+    /// gets the proficiencies of its creature type, not of a Warrior. Null when every class level is real.
+    /// </summary>
+    public string RacialHitDiceStandInClass;
+
+    /// <summary>The creature type grants all simple weapons (MM type traits: humanoids without a class, fey, giants, monstrous humanoids, outsiders, undead, humanoid-shaped aberrations, elementals and dragons).</summary>
+    public bool CreatureTypeSimpleWeaponProficiency;
+
+    /// <summary>The creature type grants all martial weapons (MM type traits: giants and outsiders).</summary>
+    public bool CreatureTypeMartialWeaponProficiency;
+
+    /// <summary>
+    /// The heaviest armor the creature is proficient with through its type: the armor its entry describes it wearing,
+    /// and all lighter types (MM type traits). None when the type grants no armor.
+    /// </summary>
+    public ArmorCategory CreatureArmorProficiency = ArmorCategory.None;
+
+    /// <summary>Shield proficiency from the creature type (any armor proficiency, MM type traits) or a racial trait in the entry (lizardfolk, MM p.169). Tower shields excluded.</summary>
+    public bool CreatureShieldProficiency;
 
     /// <summary>Chosen skill for Skill Focus.</summary>
     public string SkillFocusChoice;
@@ -5433,58 +5463,86 @@ public class CharacterStats
         "balance", "climb", "escape_artist", "hide", SpellNames.JUMP, "move_silently", "sleight_of_hand", "swim", "tumble"
     };
 
+    // Class proficiency tables. PHB classes: PHB chapter 3 class entries (the ranger has light armor only, p.47; the
+    // paladin and the ranger have shields except tower shields, p.44, p.47; the sorcerer's list is CHR-075). NPC classes (DMG p.108-109, CHR-072): the
+    // warrior and the aristocrat are proficient with all simple and martial weapons, all armor and shields; the adept
+    // with simple weapons only; the expert with simple weapons and light armor, not shields; the commoner with one
+    // simple weapon (the one its entry carries, through ExtraWeaponProficiencies) and no armor. Whether the NPC
+    // classes' "shields" include tower shields is an open owner question (CHR-072), so they are not granted.
+    private static readonly string[] SimpleWeaponClasses = { "Barbarian", "Bard", "Cleric", "Fighter", "Paladin", "Ranger", "Rogue", "Warrior", "Aristocrat", "Adept", "Expert" };
+    private static readonly string[] MartialWeaponClasses = { "Barbarian", "Fighter", "Paladin", "Ranger", "Warrior", "Aristocrat" };
+    private static readonly string[] LightArmorClasses = { "Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Paladin", "Ranger", "Rogue", "Warrior", "Aristocrat", "Expert" };
+    private static readonly string[] MediumArmorClasses = { "Barbarian", "Cleric", "Druid", "Fighter", "Paladin", "Warrior", "Aristocrat" };
+    private static readonly string[] HeavyArmorClasses = { "Cleric", "Fighter", "Paladin", "Warrior", "Aristocrat" };
+    private static readonly string[] ShieldClasses = { "Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Paladin", "Ranger", "Warrior", "Aristocrat" };
+    private static readonly string[] TowerShieldClasses = { "Fighter" };
+
     private bool HasAnyClass(string[] classNames)
     {
         EnsureMulticlassDataInitialized();
         for (int i = 0; i < classNames.Length; i++)
         {
-            if (HasClass(classNames[i]))
+            if (HasProficiencyGrantingClass(classNames[i]))
                 return true;
         }
 
         return false;
     }
 
-    /// <summary>Whether this character has broad simple weapon proficiency (all simple weapons).</summary>
+    /// <summary>
+    /// True when this character has real levels in <paramref name="className"/>: a class that only stands in for racial
+    /// Hit Dice (<see cref="RacialHitDiceStandInClass"/>, CRE-024) grants no proficiency (CHR-072).
+    /// </summary>
+    private bool HasProficiencyGrantingClass(string className)
+    {
+        if (!string.IsNullOrEmpty(RacialHitDiceStandInClass)
+            && string.Equals(className, RacialHitDiceStandInClass, System.StringComparison.OrdinalIgnoreCase))
+            return false;
+        return HasClass(className);
+    }
+
+    /// <summary>Whether this character has broad simple weapon proficiency (all simple weapons): class or creature type.</summary>
     public bool HasSimpleWeaponProficiency()
     {
-        return HasAnyClass(new[] { "Barbarian", "Bard", "Cleric", "Fighter", "Paladin", "Ranger", "Rogue" });
+        return CreatureTypeSimpleWeaponProficiency || HasAnyClass(SimpleWeaponClasses);
     }
 
-    /// <summary>Whether this character has broad martial weapon proficiency (all martial weapons).</summary>
+    /// <summary>Whether this character has broad martial weapon proficiency (all martial weapons): class or creature type.</summary>
     public bool HasMartialWeaponProficiency()
     {
-        return HasAnyClass(new[] { "Barbarian", "Fighter", "Paladin", "Ranger" });
+        return CreatureTypeMartialWeaponProficiency || HasAnyClass(MartialWeaponClasses);
     }
 
-    /// <summary>Armor proficiency: light armor.</summary>
+    /// <summary>Armor proficiency: light armor (class, or creature type and worn armor).</summary>
     public bool HasLightArmorProficiency()
     {
-        return HasAnyClass(new[] { "Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Paladin", "Ranger", "Rogue" });
+        return CreatureArmorProficiency >= ArmorCategory.Light && CreatureArmorProficiency <= ArmorCategory.Heavy
+            || HasAnyClass(LightArmorClasses);
     }
 
-    /// <summary>Armor proficiency: medium armor.</summary>
+    /// <summary>Armor proficiency: medium armor (class, or creature type and worn armor).</summary>
     public bool HasMediumArmorProficiency()
     {
-        return HasAnyClass(new[] { "Barbarian", "Cleric", "Druid", "Fighter", "Paladin", "Ranger" });
+        return CreatureArmorProficiency == ArmorCategory.Medium || CreatureArmorProficiency == ArmorCategory.Heavy
+            || HasAnyClass(MediumArmorClasses);
     }
 
-    /// <summary>Armor proficiency: heavy armor.</summary>
+    /// <summary>Armor proficiency: heavy armor (class, or creature type and worn armor).</summary>
     public bool HasHeavyArmorProficiency()
     {
-        return HasAnyClass(new[] { "Cleric", "Fighter", "Paladin" });
+        return CreatureArmorProficiency == ArmorCategory.Heavy || HasAnyClass(HeavyArmorClasses);
     }
 
-    /// <summary>Armor proficiency: shields (excluding tower shield).</summary>
+    /// <summary>Armor proficiency: shields (excluding tower shield): class, or creature type.</summary>
     public bool HasShieldProficiency()
     {
-        return HasAnyClass(new[] { "Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Paladin", "Ranger" });
+        return CreatureShieldProficiency || HasAnyClass(ShieldClasses);
     }
 
-    /// <summary>Armor proficiency: tower shield.</summary>
+    /// <summary>Armor proficiency: tower shield (class only).</summary>
     public bool HasTowerShieldProficiency()
     {
-        return HasAnyClass(new[] { "Fighter", "Paladin" });
+        return HasAnyClass(TowerShieldClasses);
     }
 
     /// <summary>
@@ -5505,13 +5563,16 @@ public class CharacterStats
         if (HasClassSpecificWeaponProficiency(weaponId))
             return true;
 
-        // Extra proficiencies granted by domain powers or other features (matched by display name)
+        // Extra proficiencies granted by domain powers, the creature's MM entry or other features (matched by display
+        // name, which a masterwork or special-material copy keeps, or by item id)
         if (ExtraWeaponProficiencies != null && ExtraWeaponProficiencies.Count > 0)
         {
             string weaponName = weapon.Name ?? "";
             for (int ep = 0; ep < ExtraWeaponProficiencies.Count; ep++)
             {
-                if (string.Equals(ExtraWeaponProficiencies[ep], weaponName, System.StringComparison.OrdinalIgnoreCase))
+                string extra = ExtraWeaponProficiencies[ep];
+                if (string.Equals(extra, weaponName, System.StringComparison.OrdinalIgnoreCase)
+                    || NormalizeItemKey(extra) == weaponId)
                     return true;
             }
         }

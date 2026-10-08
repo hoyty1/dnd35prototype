@@ -155,9 +155,18 @@ public static class CreatureClassEngine
         int classHP = CalculateClassHP(classDef.HitDie, conMod, levels);
         def.BaseHitDieHP += classHP;
 
+        // A humanoid with more than 1 racial HD keeps them beside the class, and with them the humanoid type's
+        // proficiencies (MM p.310); record that before the class overwrites the stand-in marker (CHR-072).
+        if (oldHD > 1 && def.ResolveClassLevelsAreRacialHitDice()
+            && CreatureTypeProgressionDatabase.TryParseCreatureType(def.CreatureType, out CreatureTypeId baseType)
+            && baseType == CreatureTypeId.Humanoid)
+            def.HasRacialHumanoidHitDice = true;
+
         // Store class info
         def.CharacterClass = classDef.ClassName;
         def.Level = levels;
+        // The class replaces any racial-HD stand-in class, so its levels are real and grant proficiency (CHR-072).
+        def.ClassLevelsAreRacialHitDice = false;
 
         // Add class name to special abilities for display
         def.SpecialAbilities.Add($"{classDef.ClassName} {levels}");

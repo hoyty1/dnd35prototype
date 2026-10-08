@@ -297,6 +297,9 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            ClassLevelsAreRacialHitDice = true, // 2 humanoid racial HD, not warrior levels (MM p.130, p.310)
+            EntryWeaponIds = new List<string> { "battleaxe", "shortbow" }, // MM p.130; attacks through the battleaxe stand-in
+            EntryArmorCategory = ArmorCategory.Light, // leather armor and heavy steel shield (MM p.130), not carried
             HitDice = 2,
             BABOverride = BABProgression.Medium,
             SizeCategory = SizeCategory.Medium,

@@ -18,6 +18,8 @@ namespace Tests.Scenarios
     /// - target_dummy: Commoner 1, Medium, base hit-die HP 50, natural armor -4, no feats, no weapon.
     /// - wolf: Animal 2, Medium, STR 13, BAB 1, HasTripAttack (MM p.283), Weapon Focus and Track.
     /// - goblin: the 1-HD MM goblin of the smoke scenarios.
+    /// - orc_warrior (checked 2026-10-08 for CHR-072): Warrior 1, Medium, STR 17, scale mail and greataxe; it spawns with BAB +0
+    ///   (CRE-004) and the goblin with its +1 BAB override.
     /// - formian_taskmaster: Outsider 6 HD, Medium, STR 17, DEX 16, IsExceptionallyStable (four legs, MM p.108-110;
     ///   owner decision 2026-10-07, CMB-085).
     /// - barghest: Outsider 6 HD, Medium, STR 17, DEX 15, not stable (only its wolf form would be, and the game models
@@ -102,7 +104,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 100;
+        public const int Count = 101;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -209,6 +211,7 @@ namespace Tests.Scenarios
             yield return S("large-encounter-goblins", LargeEncounterGoblins);
             yield return S("large-encounter-sizes", LargeEncounterSizes);
             yield return S("ring-deflection", RingDeflection);
+            yield return S("npc-proficiency", NpcProficiency);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -4464,6 +4467,66 @@ namespace Tests.Scenarios
                 return true;
             ctx.Note("ring-deflection mismatch: " + what + ": got " + got + ", expected " + want);
             return false;
+        }
+
+        // ── NPC weapon and armor proficiency (CHR-072; DMG p.109, MM p.310) ──
+
+        /// <summary>
+        /// A goblin and an orc warrior, each a 1-HD humanoid whose level is a real warrior level (MM p.310), attack a
+        /// sturdy dummy once with their weapons through the AI path. A warrior is proficient with all simple and
+        /// martial weapons, armor and shields (DMG p.109), so neither attack carries the -4 non-proficiency penalty
+        /// or the armor and shield check penalties: the trace modifiers are the MM's, goblin morningstar +2 (BAB +1,
+        /// Small +1, MM p.133; leather armor and a light wooden shield) and the orc's +4 (BAB +1, STR +3). The MM orc
+        /// (p.203) attacks with a falchion at +4 in studded leather; orc_warrior's greataxe and scale mail are database
+        /// gear, a martial weapon with the same +4 at the same STR and BAB. The spawned orc's BAB is +0 (CRE-004), so its
+        /// expected modifier is +3. Both are fractional-CR creatures, so their gear is never upgraded to masterwork at spawn. The
+        /// two stand side by side east of the dummy, so neither flanks it. Before the fix the goblin was at -3 and the
+        /// orc at -5 (-4 for the weapon plus the light shield's or scale mail's check penalty).
+        /// </summary>
+        private static ScenarioDef NpcProficiency()
+        {
+            return Rules("rules/npc-proficiency", "Warrior-class goblin and orc attack at their MM bonuses, without non-proficiency penalties (DMG p.109, MM p.310, CHR-072)")
+                .Covers("CHR-072", "DMG p.109", "MM p.310", "MM p.133", "MM p.203")
+                .MaxRounds(1)
+                .Pc("dummy", ActorSource.Stats(() => FighterOfRace("Dummy", "Human")), 10, 10, Control.Scripted)
+                .Npc("goblin", "goblin", 11, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 11, Control.Scripted)
+                .Tweak("dummy", SturdyDummy)
+                .Initiative("goblin", "orc", "dummy")
+                .Turn("goblin", 1, Step.Attack("dummy"))
+                .Turn("orc", 1, Step.Attack("dummy"))
+                .Turn("dummy", 0, Step.Pass())
+                .Expect("The goblin's attack step is done", Expect.StepStatus("goblin", 1, "Attack", 0, "done"))
+                .Expect("The orc's attack step is done", Expect.StepStatus("orc", 1, "Attack", 0, "done"))
+                .Expect("The goblin's morningstar attack is +2 (MM p.133)", v => SingleWeaponAttackMod(v, "goblin", "morningstar", 2, 1))
+                .Expect("The orc's greataxe attack is +4 at the MM's BAB (MM p.203 falchion +4; the greataxe is database gear)", v => SingleWeaponAttackMod(v, "orc", "greataxe", 4, 1))
+                .Build();
+        }
+
+        /// <summary>
+        /// Passes when <paramref name="key"/> made one round-1 attack on the dummy with <paramref name="weapon"/> at the
+        /// MM modifier <paramref name="mmMod"/>, shifted by the spawned BAB's difference from the MM's
+        /// <paramref name="mmBab"/> (CRE-004: the orc warrior's warrior level follows the humanoid's 3/4 progression, BAB
+        /// +0 at 1 HD; the goblin's data overrides its BAB to +1).
+        /// </summary>
+        private static ExpectResult SingleWeaponAttackMod(TraceView v, string key, string weapon, int mmMod, int mmBab)
+        {
+            int bab = ActorInt(v, key, "bab");
+            if (bab == int.MinValue)
+                return ExpectResult.Fail("no actor event for " + key);
+            int mod = mmMod - mmBab + bab;
+            List<TraceEvent> attacks = v.Attacks(key, "dummy", false, 1);
+            int[] seqs = attacks.Select(e => e.Seq).ToArray();
+            if (attacks.Count != 1)
+                return ExpectResult.Fail(attacks.Count + " attacks by " + key, seqs);
+            string used = attacks[0].Str("weapon") ?? "";
+            if (used.IndexOf(weapon, StringComparison.OrdinalIgnoreCase) < 0)
+                return ExpectResult.Fail("weapon " + used, seqs);
+            int got = attacks[0].Int("mod");
+            string babNote = bab == mmBab ? "" : " (spawned BAB " + bab + ", MM " + mmBab + ", CRE-004)";
+            return got == mod
+                ? ExpectResult.Pass(used + ", mod " + got + babNote, seqs)
+                : ExpectResult.Fail(used + ", mod " + got + ", expected " + mod + babNote, seqs);
         }
 
         private static Vector2Int? ActorPos(TraceView v, string key)

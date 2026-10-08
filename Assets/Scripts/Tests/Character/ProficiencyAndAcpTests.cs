@@ -32,6 +32,7 @@ public static class ProficiencyAndAcpTests
         TestMaxDexLimitedByArmorOnly();
         TestShieldDoesNotCapDexWhenUnarmored();
         TestWeaponProficiencyLookupByName();
+        TestPhbPaladinAndRangerLists();
 
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
     }
@@ -48,6 +49,31 @@ public static class ProficiencyAndAcpTests
             _failed++;
             Debug.LogError($"  FAIL: {testName} {detail}");
         }
+    }
+
+    /// <summary>PHB p.44: paladins have shields except tower shields; p.47: rangers have light armor and shields except tower shields.</summary>
+    private static void TestPhbPaladinAndRangerLists()
+    {
+        var paladin = MakeChar("Paladin");
+        Assert(paladin.HasShieldProficiency() && !paladin.HasTowerShieldProficiency(),
+            "Paladin is proficient with shields but not tower shields (PHB p.44)");
+        Assert(paladin.HasHeavyArmorProficiency(), "Paladin is proficient with all armor (PHB p.44)");
+
+        var ranger = MakeChar("Ranger");
+        Assert(ranger.HasLightArmorProficiency() && !ranger.HasMediumArmorProficiency() && !ranger.HasHeavyArmorProficiency(),
+            "Ranger is proficient with light armor only (PHB p.47)");
+        Assert(ranger.HasShieldProficiency() && !ranger.HasTowerShieldProficiency(),
+            "Ranger is proficient with shields but not tower shields (PHB p.47)");
+
+        var towerShield = ItemDatabase.GetItem(ItemIDs.TOWER_SHIELD);
+        paladin.EquippedShieldItem = towerShield;
+        Assert(towerShield != null && paladin.GetArmorNonProficiencyAttackPenalty() < 0,
+            "Paladin with a tower shield takes its attack penalty (PHB p.44)",
+            "penalty " + paladin.GetArmorNonProficiencyAttackPenalty());
+
+        var breastplate = ItemDatabase.GetItem(ItemIDs.BREASTPLATE);
+        Assert(breastplate != null && !ranger.IsProficientWithArmor(breastplate),
+            "Ranger is not proficient with a breastplate (medium armor, PHB p.47)");
     }
 
     private static CharacterStats MakeChar(string className)

@@ -470,6 +470,8 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            ClassLevelsAreRacialHitDice = true, // 2 humanoid racial HD, not warrior levels (MM p.169, p.310)
+            EntryShieldProficiency = true, // racial trait: proficient with simple weapons and shields (MM p.169)
             CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 2,
             BABOverride = BABProgression.Medium,

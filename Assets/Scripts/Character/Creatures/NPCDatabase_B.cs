@@ -130,6 +130,9 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            ClassLevelsAreRacialHitDice = true, // 3 humanoid racial HD, not warrior levels (MM p.29, p.310)
+            EntryWeaponIds = new List<string> { "morningstar", "javelin" }, // MM p.29; attacks through the morningstar stand-in
+            EntryArmorCategory = ArmorCategory.Light, // leather armor and light wooden shield (MM p.29), not carried
             HitDice = 3,
             BABOverride = BABProgression.Medium,
             SizeCategory = SizeCategory.Medium,

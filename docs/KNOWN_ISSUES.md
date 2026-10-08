@@ -33,14 +33,14 @@ Entries per section:
 | [Combat](issues/CMB.md) | CMB | 3 | 58 | 65 | 126 | CMB-157 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 8 | 58 | 54 | 120 | SPL-122 |
-| [Characters, feats and classes](issues/CHR.md) | CHR | 9 | 27 | 38 | 74 | CHR-075 |
-| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 26 | 20 | 50 | CRE-052 |
+| [Characters, feats and classes](issues/CHR.md) | CHR | 8 | 28 | 40 | 76 | CHR-077 |
+| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 28 | 22 | 54 | CRE-056 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 3 | 33 | 35 | 71 | ITM-074 |
 | [AI](issues/AI.md) | AI | 1 | 19 | 40 | 60 | AI-062 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 25 | 32 | TST-036 |
-| **All** | | 29 | 278 | 365 | 672 | |
+| **All** | | 28 | 281 | 369 | 678 | |
 
 ## Top issues
 
@@ -65,5 +65,4 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [CRE-004](issues/CRE.md) | High | Creatures, templates and summoning | Spawned NPCs ignore class BAB and saves | Yes |
 | [ITM-004](issues/ITM.md) | High | Items, store, crafting and treasure | NPCs spawn without weapons and shields listed under MainHand, OffHand or Ranged | Yes |
 | [AI-001](issues/AI.md) | High | AI | NPCs never cast area spells, although AI scoring favours them | Yes |
-| [CHR-072](issues/CHR.md) | High | Characters, feats and classes | NPC classes and creature types grant no weapon or armor proficiency, so armed monsters take -4 (and armor check penalties) on attacks | Yes |
 | [CHR-071](issues/CHR.md) | High | Characters, feats and classes | PC Hit Dice stay at creation level, so HD-gated spells (Sleep, Color Spray) treat levelled PCs as level 1 | Yes |

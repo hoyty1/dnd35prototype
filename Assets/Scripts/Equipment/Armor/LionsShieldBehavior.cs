@@ -277,6 +277,7 @@ public class LionsShieldBehavior : SpecificItemBehavior
         stats.ChallengeRating = def.ChallengeRating;
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Animal" : def.CreatureType;
         stats.CanMakeAttacksOfOpportunity = def.CanMakeAttacksOfOpportunity;
+        CreatureProficiency.ApplyFromDefinition(stats, def);
 
         foreach (string tag in def.CreatureTags)
             stats.CreatureTags.Add(tag);
