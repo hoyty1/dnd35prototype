@@ -294,6 +294,11 @@ public sealed class CharmedBehaviorController
         if (gameManager == null || actor == null || caster == null)
             return false;
 
+        // No movement budget (prone, webbed or grappling, PHB p.156): FindPath would still allow one square.
+        int moveRange = gameManager.GetCurrentMoveRangeSquares(actor);
+        if (moveRange <= 0)
+            return false;
+
         Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(caster.GridPosition);
         Vector2Int best = actor.GridPosition;
         int bestDistance = int.MaxValue;
@@ -307,7 +312,7 @@ public sealed class CharmedBehaviorController
             if (gameManager.Grid == null || !gameManager.Grid.CanPlaceCreature(candidate, actor.GetVisualSquaresOccupied(), actor))
                 continue;
 
-            AoOPathResult pathResult = gameManager.FindPath(actor, candidate, avoidThreats: false, maxRangeOverride: gameManager.GetCurrentMoveRangeSquares(actor));
+            AoOPathResult pathResult = gameManager.FindPath(actor, candidate, avoidThreats: false, maxRangeOverride: moveRange);
             if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
                 continue;
 

@@ -631,28 +631,16 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 24,
-      "failed": 5,
+      "passed": 27,
+      "failed": 2,
       "flakyFailures": 0,
       "knownFailures": [
-        {
-          "match": "Sphere repositions to adjacent square closest to caster",
-          "issue": "SPL-120"
-        },
         {
           "match": "Cast log documents 2d6 damage and control hint",
           "issue": "TST-030"
         },
         {
-          "match": "Sphere can be moved between two stationary enemies",
-          "issue": "SPL-120"
-        },
-        {
           "match": "Sphere stops one square before second enemy on impact",
-          "issue": "SPL-120"
-        },
-        {
-          "match": "Sphere marks moved state after reposition",
           "issue": "SPL-120"
         }
       ],
@@ -1263,7 +1251,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 390,
+      "passed": 410,
       "failed": 7,
       "flakyFailures": 0,
       "knownFailures": [

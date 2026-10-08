@@ -1100,6 +1100,14 @@ public partial class GameManager
             return false;
         }
 
+        // No normal movement while grappling (PHB p.156); the charge budget below would otherwise
+        // still allow the 2-square minimum. Shared by the PC button and the AI.
+        if (charger.IsGrappling())
+        {
+            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Grappling creatures cannot charge."));
+            return false;
+        }
+
         // A bull rush needs no weapon (PHB p.154); it needs the shared size, swarm, incorporeal and
         // grappling rules instead. Adjacency is the charge path's job (endpoints touch the target).
         if (forBullRush)

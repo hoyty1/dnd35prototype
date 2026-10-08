@@ -239,7 +239,13 @@ public class SquareGrid : MonoBehaviour
         if (start == destination) return result;
 
         moverSizeSquares = Mathf.Max(1, moverSizeSquares);
-        if (!CanPlaceCreature(start, moverSizeSquares, mover))
+        // The start only has to be on the grid. The mover is already there, and it may share that square with
+        // another creature: after a pin release ends a grapple both stay in one square (PHB p.157, CMB-089) and
+        // either leaves with its own movement (CMB-122); a Flaming Sphere leaves the creature it rolled onto.
+        // Where the path may go and end is checked per node (CanTraversePathNode: a move never ends in an
+        // occupied square, PHB p.148). Grapplers also share squares; they are held by their movement budget
+        // (GameManager.GetCurrentMoveRangeSquares is 0 while grappling, PHB p.156), not by this check.
+        if (!CanPlaceCreature(start, moverSizeSquares, mover, ignoreOtherOccupants: true))
             return result;
 
         // A* data structures

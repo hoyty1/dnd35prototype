@@ -10892,6 +10892,27 @@ public partial class GameManager : MonoBehaviour
         if (target == null || target.Stats == null)
             return 0;
 
+        // A grappling creature (grappler, grappled or pinned) takes no ordinary movement (move,
+        // run, charge, withdraw, forced flight): it moves only with the grapple's own move action
+        // (PHB p.156-157), which reads GetMoveRangeSquaresIgnoringGrapple. Grapplers usually share
+        // a square, and path-finding accepts a shared start square (CMB-122), so this budget is
+        // what keeps them in the grapple. Shared by the PC UI, the AI and the compulsion controllers.
+        if (target.IsGrappling())
+            return 0;
+
+        return GetMoveRangeSquaresIgnoringGrapple(target);
+    }
+
+    /// <summary>
+    /// Movement budget before the grapple rule: web, prone and speed only. Used by the grapple's
+    /// own "move at half speed" action (PHB p.157); everything else reads
+    /// <see cref="GetCurrentMoveRangeSquares"/>.
+    /// </summary>
+    public int GetMoveRangeSquaresIgnoringGrapple(CharacterController target)
+    {
+        if (target == null || target.Stats == null)
+            return 0;
+
         if (IsEntangledByWeb(target))
             return 0;
 

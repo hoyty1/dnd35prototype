@@ -692,6 +692,8 @@ namespace Tests.Scenarios
             if (Closed)
                 return;
             Emit("cond").Set("actor", KeyOf(target)).Set("type", type).Set("added", added).Set("rounds", rounds).Set("source", source);
+            if (type == CombatConditionType.Pinned)
+                _job.Checks?.OnPinChanged(target, added);
         }
 
         private void OnLog(string message)

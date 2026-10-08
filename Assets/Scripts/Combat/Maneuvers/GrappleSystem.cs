@@ -392,7 +392,12 @@ public partial class GameManager
 
         // Only an escape (PHB p.157) moves the escaper into an adjacent space. Releasing a pin also ends
         // the grapple (PHB p.157, CMB-089) but grants the releaser no movement: both creatures stay where
-        // they are and the releaser leaves with its own move or 5-foot step, provoking normally.
+        // they are, and either one leaves with its own move, withdraw, charge or 5-foot step
+        // (SquareGrid.FindPathAoOAware accepts a shared start square, CMB-122). Nothing forces the other
+        // out: it may stay in that square until it moves, and no move may end in an occupied square. The
+        // leaver provokes as the threat rules stand: the creature it shares the square with does not threaten
+        // that square, so the first step out never provokes from it, and neither can melee the other while
+        // they share it (CMB-131).
         bool wasEscapeAction = actionType == GrappleActionType.EscapeArtist
             || actionType == GrappleActionType.OpposedGrappleEscape;
         if (!wasEscapeAction)
@@ -582,7 +587,7 @@ public partial class GameManager
             return;
         }
 
-        int halfSpeedRange = Mathf.Max(0, GetCurrentMoveRangeSquares(actor) / 2);
+        int halfSpeedRange = Mathf.Max(0, GetMoveRangeSquaresIgnoringGrapple(actor) / 2);
         if (halfSpeedRange <= 0)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} has no available movement (half speed is 0 squares). Grapple move action is spent."));

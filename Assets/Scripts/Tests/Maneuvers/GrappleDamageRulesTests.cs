@@ -63,6 +63,9 @@ public static class GrappleDamageRulesTests
         TestEscapeFromPinMaintainsGrapple_OpposedEscape();
         TestReleasePinnedOpponentEndsEntireGrapple();
         TestReleasePinnedOpponentIsFreeAndGrantsNoStep();
+        TestPathLeavesSquareSharedAfterPinRelease();
+        TestLargePathLeavesSquareSharedAfterPinRelease();
+        TestGrapplerTakesNoNormalMovement();
         TestSilentAndStillMetamagicRemoveVerbalAndSomaticComponents();
         TestIterativeGrappleAttackBonusesConsumeInOrder();
         TestOpposedEscapeCountsAsIterativeGrappleAttackAction();
@@ -1050,6 +1053,185 @@ public static class GrappleDamageRulesTests
         }
 
         Cleanup(attacker, defender);
+    }
+
+    // ===== Leaving a square shared after a pin release (CMB-122; PHB p.148, p.157) =====
+
+    private static void TestPathLeavesSquareSharedAfterPinRelease()
+    {
+        var attacker = CreateTestCharacter("GrappleReleaseLeave", "Fighter");
+        var defender = CreateWeakDefender("GrappleReleaseLeaveTarget");
+        var blocker = CreateTestCharacter("GrappleReleaseLeaveBlocker", "Fighter");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+        defender.SetTeam(CharacterTeam.Enemy);
+        blocker.SetTeam(CharacterTeam.Enemy);
+
+        SquareGrid previousGrid = SquareGrid.Instance;
+        var gridGo = new GameObject("GrappleReleaseLeave_Grid");
+        SquareGrid grid = gridGo.AddComponent<SquareGrid>();
+        try
+        {
+            grid.Width = 8;
+            grid.Height = 8;
+            grid.GenerateGrid();
+
+            ForceGrappleState(attacker, defender);
+            SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            SpecialAttackResult releaseResult = attacker.ResolveGrappleAction(GrappleActionType.ReleasePinnedOpponent);
+            Assert(pinResult != null && pinResult.Success && releaseResult != null && releaseResult.Success
+                && !attacker.IsGrappling() && !defender.IsGrappling(),
+                "CMB-122: pin and release succeed before the shared-square path test");
+
+            // Both stay in one square after the release (CMB-089); an enemy stands two squares east.
+            var shared = new Vector2Int(3, 3);
+            var blockerSquare = new Vector2Int(5, 3);
+            grid.SetCreatureOccupancy(attacker, shared, 1);
+            grid.SetCreatureOccupancy(defender, shared, 1);
+            grid.SetCreatureOccupancy(blocker, blockerSquare, 1);
+
+            foreach (CharacterController mover in new[] { attacker, defender })
+            {
+                string who = mover == attacker ? "the releaser (PC side)" : "the released creature (NPC side)";
+                var destination = new Vector2Int(3, 6);
+                AoOPathResult path = grid.FindPathAoOAware(shared, destination, null, 6, 1, mover);
+                bool reaches = path != null && path.Path != null && path.Path.Count > 0 && path.Path[path.Path.Count - 1] == destination;
+                Assert(reaches && !path.Path.Contains(shared) && SquareGridUtils.IsAdjacent(shared, path.Path[0]),
+                    "CMB-122: " + who + " finds a path out of the square shared after a pin release");
+            }
+
+            // Leaving is allowed; ending a move in an occupied square still is not (PHB p.148).
+            AoOPathResult ontoEnemy = grid.FindPathAoOAware(shared, blockerSquare, null, 6, 1, attacker);
+            Assert(ontoEnemy == null || ontoEnemy.Path == null || ontoEnemy.Path.Count == 0 || ontoEnemy.Path[ontoEnemy.Path.Count - 1] != blockerSquare,
+                "CMB-122: a move from the shared square still cannot end in an enemy's square");
+            AoOPathResult intoShared = grid.FindPathAoOAware(blockerSquare, shared, null, 6, 1, blocker);
+            Assert(intoShared == null || intoShared.Path == null || intoShared.Path.Count == 0 || intoShared.Path[intoShared.Path.Count - 1] != shared,
+                "CMB-122: no other creature can end its move in the shared square");
+            Assert(!grid.CanPlaceCreature(shared, 1, attacker) && !grid.CanPlaceCreature(shared, 1, defender),
+                "CMB-122: the shared square stays occupied by the other creature, so neither can re-enter it once it leaves");
+        }
+        finally
+        {
+            Object.DestroyImmediate(gridGo);
+            // SquareGrid.Awake replaced the static Instance; put the previous grid back (GRID-010).
+            typeof(SquareGrid).GetProperty("Instance", BindingFlags.Public | BindingFlags.Static)?.SetValue(null, previousGrid);
+            Cleanup(attacker, defender, blocker);
+        }
+    }
+
+    private static void TestLargePathLeavesSquareSharedAfterPinRelease()
+    {
+        var large = CreateTestCharacter("GrappleReleaseLeaveLarge", "Fighter");
+        var medium = CreateWeakDefender("GrappleReleaseLeaveMedium");
+        medium.SetTeam(CharacterTeam.Enemy);
+        large.Stats.CurrentSizeCategory = SizeCategory.Large;
+
+        SquareGrid previousGrid = SquareGrid.Instance;
+        var gridGo = new GameObject("GrappleReleaseLeaveLarge_Grid");
+        SquareGrid grid = gridGo.AddComponent<SquareGrid>();
+        try
+        {
+            grid.Width = 10;
+            grid.Height = 10;
+            grid.GenerateGrid();
+
+            // A Large grappler at base (3,3) covers (3..4, 3..4); the Medium creature was left in the corner square
+            // (4,4) of that footprint when the pin release ended the grapple (CMB-089).
+            var largeBase = new Vector2Int(3, 3);
+            var mediumSquare = new Vector2Int(4, 4);
+            grid.SetCreatureOccupancy(large, largeBase, 2);
+            grid.SetCreatureOccupancy(medium, mediumSquare, 1);
+            System.Collections.Generic.List<Vector2Int> largeFootprint = grid.GetOccupiedSquares(largeBase, 2);
+
+            // The Large creature leaves away from the Medium one, and also around it to the far side.
+            foreach (Vector2Int destination in new[] { new Vector2Int(0, 0), new Vector2Int(7, 3) })
+            {
+                AoOPathResult path = grid.FindPathAoOAware(largeBase, destination, null, 8, 2, large);
+                bool reaches = path != null && path.Path != null && path.Path.Count > 0 && path.Path[path.Path.Count - 1] == destination;
+                bool endClear = reaches && !grid.GetOccupiedSquares(destination, 2).Contains(mediumSquare);
+                Assert(reaches && endClear,
+                    "CMB-122: a Large creature finds a path from its footprint, shared with a Medium creature, to " + destination + " and ends clear of it");
+            }
+
+            // The Medium creature leaves the Large footprint without ending in it.
+            var mediumDestination = new Vector2Int(4, 7);
+            AoOPathResult mediumPath = grid.FindPathAoOAware(mediumSquare, mediumDestination, null, 6, 1, medium);
+            bool mediumReaches = mediumPath != null && mediumPath.Path != null && mediumPath.Path.Count > 0
+                && mediumPath.Path[mediumPath.Path.Count - 1] == mediumDestination;
+            Assert(mediumReaches && !largeFootprint.Contains(mediumDestination),
+                "CMB-122: a Medium creature finds a path out of the Large footprint it shared after a pin release");
+
+            AoOPathResult ontoLarge = grid.FindPathAoOAware(mediumSquare, new Vector2Int(3, 3), null, 6, 1, medium);
+            Assert(ontoLarge == null || ontoLarge.Path == null || ontoLarge.Path.Count == 0 || !largeFootprint.Contains(ontoLarge.Path[ontoLarge.Path.Count - 1]),
+                "CMB-122: the Medium creature's move cannot end in another square of the Large footprint (PHB p.148)");
+        }
+        finally
+        {
+            Object.DestroyImmediate(gridGo);
+            typeof(SquareGrid).GetProperty("Instance", BindingFlags.Public | BindingFlags.Static)?.SetValue(null, previousGrid);
+            Cleanup(large, medium);
+        }
+    }
+
+    // ===== No normal movement while grappling (PHB p.156) =====
+
+    private static void TestGrapplerTakesNoNormalMovement()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; the grappler movement-budget check needs Play mode");
+            return;
+        }
+
+        var attacker = CreateTestCharacter("GrappleNoMove", "Fighter");
+        var defender = CreateWeakDefender("GrappleNoMoveTarget");
+        defender.SetTeam(CharacterTeam.Enemy);
+        try
+        {
+            int speedBefore = gm.GetCurrentMoveRangeSquares(defender);
+            ForceGrappleState(attacker, defender);
+            Assert(attacker.IsGrappling() && defender.IsGrappling(), "PHB p.156: the grapple is set up for the movement-budget test");
+
+            // Grapplers share a square and path-finding accepts a shared start (CMB-122), so the movement budget is
+            // what keeps both from leaving by ordinary movement (move, run, withdraw, charge, forced flight).
+            Assert(speedBefore > 0 && gm.GetCurrentMoveRangeSquares(attacker) == 0 && gm.GetCurrentMoveRangeSquares(defender) == 0,
+                "PHB p.156: a grappling creature (grappler and grappled) has no ordinary movement budget");
+            Assert(gm.GetMoveRangeSquaresIgnoringGrapple(attacker) > 0,
+                "PHB p.157: the grapple's own move action still reads the creature's speed");
+            Assert(!gm.CanChargeTargetForAI(attacker, defender) && !gm.CanChargeTargetForAI(defender, attacker),
+                "PHB p.156: a grappling creature cannot charge");
+
+            // A frightened grappler cannot flee; the controller falls to its cornered branch (cower or fight defensively).
+            MethodInfo flee = typeof(FrightenedBehaviorController).GetMethod("FindBestFleeCell", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert(flee != null, "FrightenedBehaviorController.FindBestFleeCell exists for the grappler flee test");
+            if (flee != null)
+            {
+                foreach (bool withdraw in new[] { true, false })
+                {
+                    object cell = flee.Invoke(null, new object[] { gm, defender, attacker.GridPosition, withdraw, false, -1 });
+                    Assert(cell == null, "PHB p.156: a frightened grappler finds no " + (withdraw ? "withdraw" : "flee") + " square");
+                }
+            }
+
+            // A confused grappler told to flee (also the confused PC's forced turn) finds no square to move to.
+            MethodInfo confusedMove = typeof(ConfusedBehaviorController).GetMethod("FindBestMovementCell", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert(confusedMove != null, "ConfusedBehaviorController.FindBestMovementCell exists for the grappler flee test");
+            if (confusedMove != null)
+            {
+                var cell = confusedMove.Invoke(null, new object[] { gm, defender, attacker.GridPosition, true }) as SquareCell;
+                Assert(cell == null || cell.Coords == defender.GridPosition, "PHB p.156: a confused grappler finds no square to flee to");
+            }
+
+            defender.ReleaseGrappleState("test cleanup");
+            Assert(!defender.IsGrappling() && gm.GetCurrentMoveRangeSquares(defender) == speedBefore,
+                "The movement budget returns once the grapple ends");
+        }
+        finally
+        {
+            attacker.ReleaseGrappleState("test cleanup");
+            Cleanup(attacker, defender);
+        }
     }
 
     private static void TestSilentAndStillMetamagicRemoveVerbalAndSomaticComponents()

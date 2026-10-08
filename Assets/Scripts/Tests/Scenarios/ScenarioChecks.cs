@@ -40,6 +40,17 @@ namespace Tests.Scenarios
         private readonly Dictionary<CharacterController, int> _aooSinceTurn = new Dictionary<CharacterController, int>();
         private readonly Dictionary<CharacterController, CharacterTeam> _team = new Dictionary<CharacterController, CharacterTeam>();
         private readonly Dictionary<CharacterController, int> _speedSquaresAtTurnStart = new Dictionary<CharacterController, int>();
+        // Pairs left in one square by a pin release, with that square. Releasing a pin ends the grapple and moves
+        // neither creature (PHB p.157, CMB-089); nothing forces either out until it moves (CMB-122), so the grid
+        // invariant accepts the pair in that square until one of them leaves it. Only a pin release grants this: an
+        // escape must move the escaper (PHB p.157), so a grapple ended any other way still has to separate them.
+        // Keyed both ways round, (a, b) and (b, a).
+        private readonly Dictionary<(CharacterController, CharacterController), Vector2Int> _grappleSharedSquares
+            = new Dictionary<(CharacterController, CharacterController), Vector2Int>();
+        // Pinned creature -> its pinner, while the Pinned condition is on (see OnPinChanged).
+        private readonly Dictionary<CharacterController, CharacterController> _pinnedBy = new Dictionary<CharacterController, CharacterController>();
+        // (pinned, pinner) pairs whose pin just ended; ResolveEndedPins sorts a release from a lapse or an escape.
+        private readonly List<(CharacterController, CharacterController)> _pinsEnded = new List<(CharacterController, CharacterController)>();
         private bool _singleActionAtTurnStart;
         private CharacterController _openTurn;
         private int _ownMoveSquares;
@@ -249,8 +260,56 @@ namespace Tests.Scenarios
             }
         }
 
+        /// <summary>
+        /// Trace hook for the Pinned condition. The pinner is linked before the condition is applied, and the condition
+        /// is removed while the grapple link still exists, so an ended pin is only resolved at the next check.
+        /// </summary>
+        public void OnPinChanged(CharacterController pinned, bool added)
+        {
+            if (pinned == null)
+                return;
+            if (added)
+            {
+                CharacterController pinner = null;
+                try { pinner = pinned.GetPinnedBy(); } catch (Exception) { }
+                if (pinner != null)
+                    _pinnedBy[pinned] = pinner;
+                return;
+            }
+            if (_pinnedBy.TryGetValue(pinned, out CharacterController by))
+            {
+                _pinnedBy.Remove(pinned);
+                _pinsEnded.Add((pinned, by));
+            }
+        }
+
+        /// <summary>
+        /// An ended pin after which neither creature grapples and both still share a square was a release (CMB-089):
+        /// record the allowance. A pin that lapsed, was renewed or was escaped leaves the grapple on, so it grants none.
+        /// </summary>
+        private void ResolveEndedPins()
+        {
+            if (_pinsEnded.Count == 0)
+                return;
+            foreach ((CharacterController a, CharacterController b) in _pinsEnded)
+            {
+                if (a == null || b == null || a.Stats == null || b.Stats == null)
+                    continue;
+                if (SafeGrappling(a) || SafeGrappling(b) || a.GridPosition != b.GridPosition)
+                    continue;
+                _grappleSharedSquares[(a, b)] = a.GridPosition;
+                _grappleSharedSquares[(b, a)] = a.GridPosition;
+            }
+            _pinsEnded.Clear();
+        }
+
+        /// <summary>True when <paramref name="a"/> and <paramref name="b"/> share the square a pin release left them in.</summary>
+        private bool InSquareLeftByGrapple(CharacterController a, CharacterController b)
+            => _grappleSharedSquares.TryGetValue((a, b), out Vector2Int sq) && sq == a.GridPosition && sq == b.GridPosition;
+
         private void CheckState(string when)
         {
+            ResolveEndedPins();
             SquareGrid grid = _gm.Grid;
             var byPos = new Dictionary<Vector2Int, CharacterController>();
             foreach (CharacterController c in _job.Trace.KnownActors)
@@ -286,12 +345,31 @@ namespace Tests.Scenarios
                     if (cell != null && !cell.ContainsOccupant(c))
                         Violation(GridInv, when + ": " + key + " at " + c.GridPosition + " is not in that square's occupancy", c);
                 }
+                // Grapple opponents stay together: a grappling creature takes no ordinary movement (PHB p.156) and the
+                // grapple's own move drags its opponents along (PHB p.157). Natural reach is allowed for a holder at reach.
+                if (SafeGrappling(c))
+                {
+                    List<CharacterController> opponents = null;
+                    try { c.TryGetActiveGrappleOpponents(out opponents); } catch (Exception) { opponents = null; }
+                    if (opponents != null)
+                        foreach (CharacterController o in opponents)
+                        {
+                            if (o == null || o.Stats == null || !IsActive(o) || o.IsDead || o.Stats.IsDead)
+                                continue;
+                            int apart = c.GetMinimumDistanceToTarget(o, chebyshev: true);
+                            int allowedApart = Math.Max(1, Math.Max(c.Stats.GetNaturalReachSquares(), o.Stats.GetNaturalReachSquares()));
+                            if (apart > allowedApart)
+                                Violation(GridInv, when + ": grapple opponents " + key + " and " + _job.Trace.KeyOf(o) + " are " + apart + " squares apart", c);
+                        }
+                }
                 if (byPos.TryGetValue(c.GridPosition, out CharacterController other))
                 {
-                    // Grapplers share a square (PHB p.156), and a creature may end its move in a helpless
-                    // creature's square (PHB p.148, Ending Your Movement). A swarm can occupy the same space as a
-                    // creature of any size (MM p.237 and p.316, the swarm subtype).
-                    bool allowed = SafeGrappling(c) || SafeGrappling(other) || IsHelpless(c) || IsHelpless(other)
+                    // Grapplers share a square (PHB p.156), and two creatures whose grapple a pin release ended
+                    // stay in that square until one moves out (PHB p.157, CMB-089, CMB-122). A creature may end its
+                    // move in a helpless creature's square (PHB p.148, Ending Your Movement). A swarm can occupy the
+                    // same space as a creature of any size (MM p.237 and p.316, the swarm subtype).
+                    bool allowed = SafeGrappling(c) || SafeGrappling(other) || InSquareLeftByGrapple(c, other)
+                        || IsHelpless(c) || IsHelpless(other)
                         || (c.Stats != null && c.Stats.IsSwarm) || (other.Stats != null && other.Stats.IsSwarm);
                     if (!allowed)
                         Violation(GridInv, when + ": " + key + " and " + _job.Trace.KeyOf(other) + " share " + c.GridPosition, c);
@@ -374,6 +452,7 @@ namespace Tests.Scenarios
 
         public void OnActed(CharacterController actor, TraceEvent ev, string what)
         {
+            ResolveEndedPins();
             if (ev.Bool("attackerDown"))
                 Violation(NoActWhenDown, _job.Trace.KeyOf(actor) + " resolved a " + what + " while down", actor);
 
@@ -391,6 +470,17 @@ namespace Tests.Scenarios
 
         public void OnMove(CharacterController mover, TraceEvent ev)
         {
+            // A creature that left the square a pin release left it in loses that allowance; coming back is a new move.
+            ResolveEndedPins();
+            if (mover != null && _grappleSharedSquares.Count > 0)
+            {
+                var stale = new List<(CharacterController, CharacterController)>();
+                foreach (KeyValuePair<(CharacterController, CharacterController), Vector2Int> kv in _grappleSharedSquares)
+                    if ((kv.Key.Item1 == mover || kv.Key.Item2 == mover) && kv.Value != mover.GridPosition)
+                        stale.Add(kv.Key);
+                foreach ((CharacterController, CharacterController) k in stale)
+                    _grappleSharedSquares.Remove(k);
+            }
             string type = ev.Str("type");
             bool own = type == "move" || type == "path-move";
             if (!own)
