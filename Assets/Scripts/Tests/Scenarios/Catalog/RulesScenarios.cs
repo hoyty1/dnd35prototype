@@ -94,11 +94,15 @@ namespace Tests.Scenarios
     /// bite (wolf p.283, dire wolf p.66, worg p.257, hyena p.274, shadow mastiff p.222, yeth hound p.262, werewolf
     /// p.174) or, for the cheetah, the claw or bite (p.271): no touch attack, no AoO, and a failed attempt lets the
     /// opponent make no trip back. A hit with any other natural attack, a weapon or an unarmed strike starts no trip.
+    /// Combat end (owner definition 2026-10-07; CORE-011, CORE-034, CORE-037, CORE-001): no RAW rule defines it. A
+    /// creature is out when it is dead, dying or unconscious, a regenerating one too, and a petrified creature counts as
+    /// unconscious (PHB p.311, DMG p.301); a disabled creature (0 HP, PHB p.145) is still in; a side is out when every
+    /// active member of its team is out, allies and summons included.
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 92;
+        public const int Count = 97;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -197,6 +201,11 @@ namespace Tests.Scenarios
             yield return S("grapple-natural-attacks", GrappleNaturalAttacksAi);
             yield return S("grapple-natural-attacks-ui", GrappleNaturalAttacksUi);
             yield return S("grapple-natural-checks-ui", GrappleNaturalChecksUi);
+            yield return S("combat-end-victory-ai", () => CombatEndVictory(false));
+            yield return S("combat-end-victory-ui", () => CombatEndVictory(true));
+            yield return S("combat-end-defeat-ally", CombatEndDefeatAlly);
+            yield return S("combat-end-petrified-victory", () => CombatEndPetrified(false));
+            yield return S("combat-end-petrified-defeat", () => CombatEndPetrified(true));
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -3957,6 +3966,193 @@ namespace Tests.Scenarios
             var gen = new GeneratedActors();
             gen.Info.Set("slots", "0-4").Set("earlier", string.Join(",", SlotReuseTraitIds));
             return gen;
+        }
+
+        // ── Combat end (CORE-011, CORE-034, CORE-037, CORE-001) ─────────
+
+        private static TraceEvent FirstCombatOver(TraceView v)
+            => v.Of("phase").FirstOrDefault(e => e.Get("to") is GameManager.TurnPhase t && t == GameManager.TurnPhase.CombatOver);
+
+        /// <summary>
+        /// The last enemy still in the fight is a target dummy at 0 HP (disabled, so still in: PHB p.145); the other two
+        /// are out from the start: a troll dying at -3 HP (it has regeneration, CORE-034) and an orc asleep at full HP
+        /// (the Unconscious condition, CORE-037). The fighter's first hit drops the dummy below 0 and the game itself
+        /// declares the victory from the attack that dropped it (CORE-011): inside the NPC attack path for an AI-run
+        /// party member, through the PC menu check after the Attack button for a Ui hero.
+        /// </summary>
+        private static ScenarioDef CombatEndVictory(bool ui)
+        {
+            string key = ui ? "hero" : "fighter";
+            ScenarioBuilder b = Rules(ui ? "rules/combat-end-victory-ui" : "rules/combat-end-victory-ai",
+                    "The attack that drops the last enemy still in ends the fight; dying, regenerating and sleeping enemies are out (CORE-011, CORE-034, CORE-037)"
+                    + (ui ? ", through the PC buttons" : ""))
+                .Covers("CORE-011", "CORE-034", "CORE-037", "PHB p.145", "PC_NPC_PARITY")
+                .MaxRounds(3)
+                .Pc(key, ActorSource.Stats(() => Fighter(ui ? "Hero" : "Fighter", 4)), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Idle)
+                .Npc("troll", "troll", 16, 3, Control.Idle)
+                .Npc("orc", "orc_warrior", 16, 15, Control.Idle)
+                .Hp("dummy", 0)
+                .Hp("troll", -3)
+                .StartCondition("orc", CombatConditionType.Unconscious, -1)
+                .Tweak(key, StripOffHand)
+                .Initiative(key, "dummy", "troll", "orc");
+            if (ui)
+                b.Turn(key, 0, Step.Attack("dummy"), Step.EndTurn());
+            else
+                b.Turn(key, 0, Step.Attack("dummy"));
+
+            b.Expect("The game declares the victory itself", Expect.Outcome(Outcome.Victory))
+             .Expect("The fight goes on while the disabled dummy is at 0 HP (PHB p.145): no end before the fighter's first hit", v =>
+                {
+                    TraceEvent over = FirstCombatOver(v);
+                    TraceEvent hit = v.Of("attack").FirstOrDefault(e => e.Str("attacker") == key && e.Bool("hit"));
+                    if (over == null) return ExpectResult.Fail("no CombatOver");
+                    if (hit == null) return ExpectResult.Fail("no hit by " + key, over.Seq);
+                    return v.Before(hit.Seq, over.Seq)
+                        ? ExpectResult.Pass("hit #" + hit.Seq + ", CombatOver #" + over.Seq)
+                        : ExpectResult.Fail("CombatOver #" + over.Seq + " before the hit #" + hit.Seq, over.Seq);
+                })
+             .Expect("The victory is declared from the attack that dropped the dummy, not at a later turn boundary (CORE-011)", v =>
+                {
+                    TraceEvent over = FirstCombatOver(v);
+                    if (over == null) return ExpectResult.Fail("no CombatOver");
+                    var by = over.Get("by") as List<string>;
+                    string text = by != null ? string.Join(" < ", by) : "";
+                    if (text.IndexOf("NextInitiativeTurn", StringComparison.Ordinal) >= 0 || text.IndexOf("SingleNPCTurnFromInitiative", StringComparison.Ordinal) >= 0)
+                        return ExpectResult.Fail("declared at the turn boundary: " + text, over.Seq);
+                    if (text.IndexOf("EvaluateCombatEnd", StringComparison.Ordinal) < 0)
+                        return ExpectResult.Fail("not through EvaluateCombatEnd: " + text, over.Seq);
+                    // CallerFrames keeps 3 GameManager frames: HandleCombatVictoryDetected < EvaluateCombatEnd < the caller. On the
+                    // NPC path that is the melee sequence itself; on the PC path the attack flow's own check
+                    // (CombatFlowService -> Combat_CheckCombatVictory -> CheckCombatVictory), not the end-of-turn safety net
+                    // (EndActivePCTurn -> EndAttackSequence) and not the menu after the attack (ShowActionChoices).
+                    string expected = ui ? "CheckCombatVictory" : "PerformNPCMeleeAttackSequence";
+                    return text.IndexOf(expected, StringComparison.Ordinal) >= 0
+                        ? ExpectResult.Pass(text, over.Seq)
+                        : ExpectResult.Fail("by " + text + ", expected " + expected, over.Seq);
+                })
+             .Expect("The victory comes before the attacker's turn ends (no end-turn step or turn_end by it first)", v =>
+                {
+                    TraceEvent over = FirstCombatOver(v);
+                    if (over == null) return ExpectResult.Fail("no CombatOver");
+                    TraceEvent endStep = v.Of("step").FirstOrDefault(e => e.Str("actor") == key && e.Str("kind") == "EndTurn");
+                    TraceEvent turnEnd = v.Of("turn_end").FirstOrDefault(e => e.Str("actor") == key);
+                    if (endStep != null && v.Before(endStep.Seq, over.Seq))
+                        return ExpectResult.Fail("end-turn step #" + endStep.Seq + " before CombatOver #" + over.Seq, over.Seq);
+                    if (turnEnd != null && v.Before(turnEnd.Seq, over.Seq))
+                        return ExpectResult.Fail("turn_end #" + turnEnd.Seq + " before CombatOver #" + over.Seq, over.Seq);
+                    return ExpectResult.Pass("CombatOver #" + over.Seq + " inside the turn", over.Seq);
+                })
+             .Expect("The troll is dying, not dead, and the orc still asleep at positive HP when the fight ends (both count as out)", v =>
+                {
+                    JsonObj troll = v.Final("troll");
+                    JsonObj orc = v.Final("orc");
+                    if (troll == null || orc == null) return ExpectResult.Fail("missing final snapshot");
+                    bool trollOk = troll.Get("st") is HPState ts && ts != HPState.Dead && troll.Get("hp") is int th && th < 0;
+                    bool orcOk = orc.Get("hp") is int oh && oh > 0 && HasCond(orc, "Unconscious");
+                    string conds = string.Join(",", (orc.Get("conds") as List<string>) ?? new List<string>());
+                    return trollOk && orcOk
+                        ? ExpectResult.Pass("troll " + troll.Get("hp") + "/" + troll.Get("st") + ", orc " + orc.Get("hp") + " " + conds)
+                        : ExpectResult.Fail("troll " + troll.Get("hp") + "/" + troll.Get("st") + ", orc " + orc.Get("hp") + " conds " + conds);
+                });
+            if (ui)
+                b.Expect("The hero's turns are Ui turns", Expect.Controller(key, "ui"));
+            return b.Build();
+        }
+
+        /// <summary>
+        /// Defeat counts the whole party team (CORE-037): the hero at 1 HP and a Player-team goblin ally at 0 HP
+        /// (disabled, still in: PHB p.145) away from it, both idle, against an AI orc berserker next to the hero. The
+        /// first of them going down (the orc picks) does not end the fight while the other is still in; the defeat comes
+        /// when the orc drops the second too, and the game opens its defeat screen (CORE-001), whose combat log line the
+        /// trace shows.
+        /// </summary>
+        private static ScenarioDef CombatEndDefeatAlly()
+        {
+            return Rules("rules/combat-end-defeat-ally", "Defeat waits until every party-team member is out, a disabled ally included, then opens the defeat screen (CORE-037, CORE-001)")
+                .Covers("CORE-037", "CORE-001", "CORE-011", "PHB p.145", "PC_NPC_PARITY")
+                .MaxRounds(8)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 1)), 10, 10, Control.Idle)
+                .Npc("ally", "goblin", 4, 10, Control.Idle, CharacterTeam.Player)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Ai)
+                .Hp("hero", 1)
+                .Hp("ally", 0)
+                .Initiative("orc", "hero", "ally")
+                .Expect("The game declares the defeat itself (a stalemate, the orc never dropping both, is inconclusive)", v =>
+                {
+                    if (v.Outcome == Outcome.Defeat) return ExpectResult.Pass("outcome Defeat");
+                    if (v.Outcome == Outcome.Stalemate) return ExpectResult.Inconclusive("stalemate: the orc did not drop both in time");
+                    return ExpectResult.Fail("outcome " + v.Outcome + " (" + v.OutcomeReason + ")");
+                })
+                .Expect("Both party-team members are out when the fight ends", v =>
+                {
+                    if (v.Outcome != Outcome.Defeat) return ExpectResult.Inconclusive("no defeat");
+                    bool hero = ScenarioChecks.IsDownSnapshot(v.Final("hero"));
+                    bool ally = ScenarioChecks.IsDownSnapshot(v.Final("ally"));
+                    return hero && ally ? ExpectResult.Pass("hero and ally down") : ExpectResult.Fail("hero down " + hero + ", ally down " + ally);
+                })
+                .Expect("The first party-team member down does not end the fight: a turn starts with one of them down and the other still in", v =>
+                {
+                    if (v.Outcome != Outcome.Defeat) return ExpectResult.Inconclusive("no defeat");
+                    foreach (TraceEvent ts in v.Of("turn_start"))
+                    {
+                        if (!(ts.Get("snap") is List<JsonObj> snaps)) continue;
+                        JsonObj hero = snaps.FirstOrDefault(o => o.Get("k") as string == "hero");
+                        JsonObj ally = snaps.FirstOrDefault(o => o.Get("k") as string == "ally");
+                        if (hero == null || ally == null) continue;
+                        bool heroDown = ScenarioChecks.IsDownSnapshot(hero);
+                        bool allyDown = ScenarioChecks.IsDownSnapshot(ally);
+                        if (heroDown != allyDown)
+                            return ExpectResult.Pass("turn #" + ts.Seq + " (" + ts.Str("actor") + ") starts with " + (heroDown ? "the hero" : "the ally") + " down and the other in", ts.Seq);
+                    }
+                    return ExpectResult.Fail("no turn started with exactly one of them down");
+                })
+                .Expect("The defeat screen opened (its combat log line, CORE-001)", v =>
+                {
+                    if (v.Outcome != Outcome.Defeat) return ExpectResult.Inconclusive("no defeat");
+                    return v.Log("DEFEAT! Every hero is dead, dying or unconscious").Count > 0
+                        ? ExpectResult.Pass("defeat line logged")
+                        : ExpectResult.Fail("no defeat log line");
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// A petrified creature is considered unconscious (PHB glossary p.311, DMG condition summary p.301), so it is out
+        /// of the fight at full HP (owner definition 2026-10-07). A hero and an orc, both idle; one of them starts
+        /// petrified (the condition the cockatrice, the basilisk and medusa gazes and Flesh to Stone apply). The game
+        /// ends the fight at the first check, before anyone attacks: victory when the orc is the petrified one, defeat
+        /// with the defeat screen (CORE-001) when the hero is.
+        /// </summary>
+        private static ScenarioDef CombatEndPetrified(bool partyPetrified)
+        {
+            string stone = partyPetrified ? "hero" : "orc";
+            ScenarioBuilder b = Rules(partyPetrified ? "rules/combat-end-petrified-defeat" : "rules/combat-end-petrified-victory",
+                    "A side turned to stone is out of the fight: petrified counts as unconscious (PHB p.311, DMG p.301; CORE-037)")
+                .Covers("CORE-037", "CORE-011", "PHB p.311", "DMG p.301", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 4)), 10, 10, Control.Idle)
+                .Npc("orc", "orc_warrior", 14, 10, Control.Idle)
+                .StartCondition(stone, CombatConditionType.Petrified, -1)
+                .Initiative("hero", "orc")
+                .Expect("The game declares the " + (partyPetrified ? "defeat" : "victory") + " itself",
+                    Expect.Outcome(partyPetrified ? Outcome.Defeat : Outcome.Victory))
+                .Expect("Nobody attacks: the fight ends at the first check", Expect.None("attack", null))
+                .Expect("The " + stone + " is petrified, alive and at full HP when the fight ends", v =>
+                {
+                    JsonObj s = v.Final(stone);
+                    if (s == null) return ExpectResult.Fail("no final snapshot");
+                    bool ok = HasCond(s, "Petrified") && s.Get("hp") is int hp && hp > 0 && !(s.Get("st") is HPState st && st == HPState.Dead);
+                    return ok ? ExpectResult.Pass(stone + " " + s.Get("hp") + "/" + s.Get("st") + " petrified")
+                              : ExpectResult.Fail(stone + " " + s.Get("hp") + "/" + s.Get("st") + " conds " + string.Join(",", (s.Get("conds") as List<string>) ?? new List<string>()));
+                });
+            if (partyPetrified)
+                b.Expect("The defeat screen opened (its combat log line, CORE-001)", v =>
+                    v.Log("DEFEAT! Every hero is dead, dying or unconscious").Count > 0
+                        ? ExpectResult.Pass("defeat line logged")
+                        : ExpectResult.Fail("no defeat log line"));
+            return b.Build();
         }
     }
 }

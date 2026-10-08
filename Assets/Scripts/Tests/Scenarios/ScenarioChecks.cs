@@ -89,8 +89,10 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// True when a trace snapshot (TraceView.Final or a turn_start snap) shows the creature gone, dead, dying,
-        /// stable or unconscious. A missing snapshot is not "down" (false), so a trace defect fails the caller's check.
+        /// True when a trace snapshot (TraceView.Final or a turn_start snap) shows the creature gone or out of the fight
+        /// by the game's own predicate (the snapshot's "out" flag, <see cref="CombatEndRules.IsOutOfFight"/>: dead,
+        /// dying, stable, unconscious, petrified or asleep). A snapshot without the flag falls back to its HP state and
+        /// conditions. A missing snapshot is not "down" (false), so a trace defect fails the caller's check.
         /// </summary>
         public static bool IsDownSnapshot(JsonObj snap)
         {
@@ -98,73 +100,47 @@ namespace Tests.Scenarios
                 return false;
             if (snap.Get("gone") is bool g && g)
                 return true;
+            if (snap.Get("out") is bool o)
+                return o;
             object st = snap.Get("st");
-            return st is HPState s && (s == HPState.Dead || s == HPState.Dying || s == HPState.Stable || s == HPState.Unconscious);
-        }
-
-        /// <summary>
-        /// Harness policy for combat end (owner decision 2026-10-07): a creature is out of the fight when it is dead,
-        /// dying or unconscious. A creature at negative HP with regeneration or fast healing still counts until dead.
-        /// A disabled creature still counts: at 0 HP (PHB p.145) or at negative HP with Diehard.
-        /// </summary>
-        public static bool IsOutOfFight(CharacterController c)
-        {
-            if (c == null || c.Stats == null || c.IsDead || c.Stats.IsDead)
+            if (st is HPState s && (s == HPState.Dead || s == HPState.Dying || s == HPState.Stable || s == HPState.Unconscious))
                 return true;
-            if (!IsDown(c))
-                return false;
-            return !CanRecover(c);
-        }
-
-        private static bool CanRecover(CharacterController c)
-        {
-            if (c.HasRegeneration)
-                return true;
-            List<string> abilities = c.Stats.SpecialAbilities;
-            if (abilities == null)
-                return false;
-            foreach (string a in abilities)
-            {
-                if (string.IsNullOrWhiteSpace(a))
-                    continue;
-                string n = a.ToLowerInvariant();
-                if (n.Contains("regeneration") || n.Contains("fast healing"))
-                    return true;
-            }
+            if (snap.Get("conds") is List<string> conds)
+                return conds.Contains(nameof(CombatConditionType.Unconscious))
+                    || conds.Contains(nameof(CombatConditionType.Petrified))
+                    || conds.Contains(nameof(CombatConditionType.Asleep));
             return false;
         }
 
-        private static bool IsActive(CharacterController c)
-            => c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null;
+        /// <summary>
+        /// Combat-end policy (owner decision 2026-10-07): the game's own predicate,
+        /// <see cref="CombatEndRules.IsOutOfFight"/> (dead, dying or unconscious, petrified and asleep included,
+        /// regeneration and fast healing too; a disabled creature is still in), so the harness and
+        /// GameManager.EvaluateCombatEnd agree. The predicate cases are pinned independently by CombatEndRulesTests.
+        /// </summary>
+        public static bool IsOutOfFight(CharacterController c) => CombatEndRules.IsOutOfFight(c);
 
-        /// <summary>For each side, whether it has any active member and whether every active member is out.</summary>
-        public void SideState(out bool playersOut, out bool enemiesOut, out string detail)
-            => SideState(out playersOut, out enemiesOut, out detail, out _, out _);
+        private static bool IsActive(CharacterController c) => CombatEndRules.IsActiveCombatant(c);
 
         /// <summary>
-        /// As above, plus for each side whether every member that is out has HP at or below 0 (the game's own
-        /// end predicates, AreAllNPCsDead and AreAllPCsDead, count only HP &lt;= 0; a side put out at positive HP,
-        /// by sleep or nonlethal damage, is a predicate mismatch, CORE-037, not a missed check, CORE-011).
+        /// For each side, whether it has any active member and whether every active member is out
+        /// (<see cref="GameManager.GetCombatEndSides"/>, the counts GameManager.EvaluateCombatEnd uses, including a side
+        /// that had members earlier in the combat and has none left), plus a per-actor detail.
         /// </summary>
-        public void SideState(out bool playersOut, out bool enemiesOut, out string detail, out bool playersOutByHp, out bool enemiesOutByHp)
+        public void SideState(out bool playersOut, out bool enemiesOut, out string detail)
         {
-            int pIn = 0, pAll = 0, eIn = 0, eAll = 0, pOutPositive = 0, eOutPositive = 0;
+            List<CharacterController> all = _gm.GetAllCharactersForAI();
+            CombatEndRules.SideCounts sides = _gm.GetCombatEndSides();
             var parts = new List<string>();
-            foreach (CharacterController c in _gm.GetAllCharactersForAI())
+            foreach (CharacterController c in all)
             {
                 if (!IsActive(c) || c.Team == CharacterTeam.Neutral)
                     continue;
-                bool outOf = IsOutOfFight(c);
-                bool positive = outOf && c.Stats.CurrentHP > 0 && !c.IsDead && !c.Stats.IsDead;
-                if (c.Team == CharacterTeam.Player) { pAll++; if (!outOf) pIn++; if (positive) pOutPositive++; }
-                else { eAll++; if (!outOf) eIn++; if (positive) eOutPositive++; }
                 parts.Add(_job.Trace.KeyOf(c) + "=" + c.Stats.CurrentHP + "/" + c.CurrentHPState);
             }
-            playersOut = pAll > 0 && pIn == 0;
-            enemiesOut = eAll > 0 && eIn == 0;
-            playersOutByHp = playersOut && pOutPositive == 0;
-            enemiesOutByHp = enemiesOut && eOutPositive == 0;
-            detail = "players " + pIn + "/" + pAll + " in, enemies " + eIn + "/" + eAll + " in: " + string.Join(", ", parts);
+            playersOut = sides.PlayersOut;
+            enemiesOut = sides.EnemiesOut;
+            detail = "players " + sides.PlayersIn + "/" + sides.PlayersAll + " in, enemies " + sides.EnemiesIn + "/" + sides.EnemiesAll + " in: " + string.Join(", ", parts);
         }
 
         private void Violation(string inv, string detail, CharacterController actor = null)
@@ -247,14 +223,13 @@ namespace Tests.Scenarios
             // Combat end: a side out with no CombatOver by the end of the turn in which it went out.
             if (!_job.Decided && _gm.CurrentPhase != GameManager.TurnPhase.CombatOver)
             {
-                SideState(out bool playersOut, out bool enemiesOut, out string detail, out bool playersByHp, out bool enemiesByHp);
+                SideState(out bool playersOut, out bool enemiesOut, out string detail);
                 if (playersOut || enemiesOut)
                 {
                     bool victory = enemiesOut && !playersOut;
-                    // cause=hp<=0: the game's own predicate says the side is out too, so a check was missed (CORE-011);
-                    // cause=unconscious>0: someone is out at positive HP, which the game's predicate ignores (CORE-037).
-                    string cause = (victory ? enemiesByHp : playersByHp) ? "hp<=0" : "unconscious>0";
-                    Violation(CombatEndDetected, (victory ? "victory" : "defeat") + " side out (cause=" + cause + ") but the game did not end combat: " + detail);
+                    // The game checks the same predicate at every turn boundary (GameManager.EvaluateCombatEnd from
+                    // NextInitiativeTurn), so a side out at the end of a turn without CombatOver is a missed check.
+                    Violation(CombatEndDetected, (victory ? "victory" : "defeat") + " side out but the game did not end combat: " + detail);
                     _job.Decide(victory ? Outcome.VictoryUndetected : Outcome.DefeatUndetected, detail, haltNow: false);
                 }
             }

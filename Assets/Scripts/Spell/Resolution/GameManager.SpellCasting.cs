@@ -2420,25 +2420,8 @@ public partial class GameManager
             // Check for victory (all NPCs dead) or defeat (all PCs dead)
             if (result.TargetKilled)
             {
-                if (AreAllNPCsDead())
+                if (EvaluateCombatEnd("ResolveSingleTargetSpell"))
                 {
-                    Debug.Log("[CombatEnd] Victory condition met after spell target kill.");
-                    HandleCombatVictoryDetected("ResolveSingleTargetSpell");
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
-                    _pendingAnimateRopeItem = null;
-                    _pendingResistEnergyType = null;
-                    _pendingFireShieldIsWarm = null;
-                    _pendingProtectionFromEnergyType = null;
-                    ResetPendingGreaseCastMode();
-                    return;
-                }
-                else if (AreAllPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
-                    CombatUI.SetActionButtonsVisible(false);
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
@@ -3855,18 +3838,8 @@ public partial class GameManager
                 Grid.ClearAllHighlights();
 
                 // Check for victory/defeat
-                if (AreAllNPCsDead())
+                if (EvaluateCombatEnd("ResolveScaledAoEDamageSpell"))
                 {
-                    HandleCombatVictoryDetected("ResolveScaledAoEDamageSpell");
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    return;
-                }
-                else if (AreAllPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
-                    CombatUI.SetActionButtonsVisible(false);
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     return;
@@ -3951,9 +3924,8 @@ public partial class GameManager
                 Grid.ClearAllHighlights();
 
                 // Check for victory/defeat (paralyzed enemies don't typically end combat, but check anyway)
-                if (AreAllNPCsDead())
+                if (EvaluateCombatEnd("ResolveHaltUndeadSpell"))
                 {
-                    HandleCombatVictoryDetected("ResolveHaltUndeadSpell");
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     return;
@@ -4427,7 +4399,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("ConeOfCold"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("ConeOfCold")) { _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4446,7 +4418,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("ChainLightning"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("ChainLightning")) { _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4465,7 +4437,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("CircleOfDeath"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("CircleOfDeath")) { _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4538,7 +4510,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("InsectPlague"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("InsectPlague")) { _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4557,7 +4529,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("WallOfThorns"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("WallOfThorns")) { _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4596,7 +4568,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("Sunburst"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("Sunburst")) { _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4615,7 +4587,7 @@ public partial class GameManager
                 CombatUI.ShowCombatLog(_lastCombatLog);
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
-                if (AreAllNPCsDead()) { HandleCombatVictoryDetected("Earthquake"); _pendingSpell = null; _pendingMetamagic = null; return; }
+                if (EvaluateCombatEnd("Earthquake")) { _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null; _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
                 return;
@@ -4804,19 +4776,8 @@ public partial class GameManager
             Grid.ClearAllHighlights();
 
             // Check for victory/defeat
-            if (AreAllNPCsDead())
+            if (EvaluateCombatEnd("ResolveAOESpell"))
             {
-                Debug.Log("[CombatEnd] Victory condition met after AoE spell resolution.");
-                HandleCombatVictoryDetected("ResolveAOESpell");
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                return;
-            }
-            else if (AreAllPCsDead())
-            {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
-                CombatUI.SetActionButtonsVisible(false);
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 return;
@@ -4976,20 +4937,8 @@ public partial class GameManager
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
 
-        if (AreAllNPCsDead())
+        if (EvaluateCombatEnd("ResolveHypnotismSpell"))
         {
-            Debug.Log("[CombatEnd] Victory condition met after Hypnotism spell resolution.");
-            HandleCombatVictoryDetected("ResolveHypnotismSpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        if (AreAllPCsDead())
-        {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
-            CombatUI.SetActionButtonsVisible(false);
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -5104,20 +5053,8 @@ public partial class GameManager
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
 
-        if (AreAllNPCsDead())
+        if (EvaluateCombatEnd("ResolveSleepSpell"))
         {
-            Debug.Log("[CombatEnd] Victory condition met after Sleep spell resolution.");
-            HandleCombatVictoryDetected("ResolveSleepSpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        if (AreAllPCsDead())
-        {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
-            CombatUI.SetActionButtonsVisible(false);
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -5228,20 +5165,8 @@ public partial class GameManager
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
 
-        if (AreAllNPCsDead())
+        if (EvaluateCombatEnd("ResolveDeepSlumberSpell"))
         {
-            Debug.Log("[CombatEnd] Victory condition met after Deep Slumber spell resolution.");
-            HandleCombatVictoryDetected("ResolveDeepSlumberSpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        if (AreAllPCsDead())
-        {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
-            CombatUI.SetActionButtonsVisible(false);
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -5326,20 +5251,8 @@ public partial class GameManager
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
 
-        if (AreAllNPCsDead())
+        if (EvaluateCombatEnd("ResolveColorSpraySpell"))
         {
-            Debug.Log("[CombatEnd] Victory condition met after Color Spray resolution.");
-            HandleCombatVictoryDetected("ResolveColorSpraySpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        if (AreAllPCsDead())
-        {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
-            CombatUI.SetActionButtonsVisible(false);
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -6137,21 +6050,8 @@ public partial class GameManager
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
 
-        if (AreAllNPCsDead())
+        if (EvaluateCombatEnd("ResolveFearSpell"))
         {
-            Debug.Log("[CombatEnd] Victory condition met after Fear resolution.");
-            HandleCombatVictoryDetected("ResolveFearSpell");
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
-
-        if (AreAllPCsDead())
-        {
-            Debug.Log("[CombatEnd] Defeat condition met after Fear resolution.");
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-            CombatUI?.SetActionButtonsVisible(false);
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;

@@ -1788,17 +1788,8 @@ public partial class GameManager
 
         Debug.Log($"[Charge] Coroutine ending | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | targetDead={(target != null && target.Stats != null && target.Stats.IsDead)} | phase={CurrentPhase}");
 
-        if (target != null && target.Team == CharacterTeam.Enemy && CurrentPhase != TurnPhase.CombatOver)
-        {
-            bool allEnemiesDead = AreAllNPCsDead();
-            Debug.Log($"[Charge] Final victory probe | allEnemiesDead={allEnemiesDead} | targetDead={(target.Stats != null && target.Stats.IsDead)}");
-
-            if (allEnemiesDead)
-            {
-                Debug.Log("[Charge] All enemies defeated! Triggering centralized victory check.");
-                CheckCombatVictory("ExecuteCharge.Final", target);
-            }
-        }
+        // Victory or defeat when the charge (or an AoO on the way) dropped the last creature of a side (CORE-011).
+        CheckCombatVictory("ExecuteCharge.Final", target);
 
         if (CurrentPhase == TurnPhase.CombatOver)
             yield break;
@@ -2155,13 +2146,8 @@ public partial class GameManager
         UpdateAllStatsUI();
 
         Debug.Log($"[Charge][NPC] Coroutine ending | attacker={npc?.Stats?.CharacterName ?? npc?.name ?? "<null>"} | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | targetDead={(target != null && target.Stats != null && target.Stats.IsDead)} | phase={CurrentPhase}");
-        if (target != null && target.Team == CharacterTeam.Enemy && CurrentPhase != TurnPhase.CombatOver)
-        {
-            bool allEnemiesDead = AreAllNPCsDead();
-            Debug.Log($"[Charge][NPC] Final victory probe | allEnemiesDead={allEnemiesDead}");
-            if (allEnemiesDead)
-                CheckCombatVictory("NPCExecuteCharge.Final", target);
-        }
+        // Victory or defeat for either side when the charge dropped the last creature of a side (CORE-011).
+        CheckCombatVictory("NPCExecuteCharge.Final", target);
 
         if (CurrentPhase == TurnPhase.CombatOver)
             yield break;

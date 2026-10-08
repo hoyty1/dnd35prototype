@@ -876,15 +876,9 @@ public partial class GameManager
 
         UpdateAllStatsUI();
 
-        bool allEnemiesDead = AreAllNPCsDead();
-        Debug.Log($"[TurnUndead] Resolution complete. Victory probe | allEnemiesDead={allEnemiesDead} | destroyed={destroyedCount} | turned={turnedCount}");
-        if (allEnemiesDead)
-        {
-            Debug.Log("[TurnUndead] All enemies defeated. Triggering centralized victory check.");
-            CheckCombatVictory("TurnUndead.Resolve", null);
-            if (CurrentPhase == TurnPhase.CombatOver)
-                return;
-        }
+        // Destroyed undead may be the last enemies (CORE-011).
+        if (EvaluateCombatEnd("TurnUndead.Resolve"))
+            return;
 
         StartCoroutine(AfterAttackDelay(context.Turner, 0.9f));
     }

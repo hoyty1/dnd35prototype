@@ -41,8 +41,8 @@ namespace Tests.Scenarios
                 .Pc("cleric", ActorSource.QuickStart("Cleric"), 4, 9)
                 .Pc("wizard", ActorSource.QuickStart("Wizard"), 4, 11)
                 .GenerateActors(GenerateDmgEncounter)
-                .Expect("The fight runs to an end or to the round cap (any outcome is fine in a soak)",
-                    Expect.Outcome(Outcome.Victory, Outcome.VictoryUndetected, Outcome.Defeat, Outcome.DefeatUndetected, Outcome.Stalemate))
+                .Expect("The fight runs to an end the game declares itself, or to the round cap (CORE-011, CORE-037)",
+                    Expect.Outcome(Outcome.Victory, Outcome.Defeat, Outcome.Stalemate))
                 .Expect("The generated encounter is on the field and somebody acts", v =>
                 {
                     int enemies = v.Of("actor").Count(e => e.Str("source") != null && e.Str("source").StartsWith("npc:dmg:", StringComparison.Ordinal));

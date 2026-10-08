@@ -5033,18 +5033,21 @@ public class CharacterController : MonoBehaviour
 
         if (newHP <= -1)
         {
+            // Diehard (PHB p.93): stable automatically and conscious, acting as disabled, at -1 to -9 HP. Checked before
+            // the healing-stabilizes rule, so a Diehard character healed or regenerating at negative HP stays disabled
+            // (and stays in the fight, CombatEndRules) instead of becoming Stable, which counts as unconscious.
+            if (Stats != null && FeatManager.HasDiehard(Stats))
+            {
+                if (_currentHPState != HPState.Disabled)
+                    Debug.Log($"[Diehard] {Stats.CharacterName} remains conscious at {newHP} HP (Diehard feat)");
+                return HPState.Disabled;
+            }
+
             if (newHP > oldHP)
                 return HPState.Stable; // Healing while still negative stabilizes.
 
             if (_currentHPState == HPState.Stable && newHP == oldHP)
                 return HPState.Stable;
-
-            // Diehard: remain conscious (Disabled) at negative HP, auto-stabilize
-            if (Stats != null && FeatManager.HasDiehard(Stats))
-            {
-                Debug.Log($"[Diehard] {Stats.CharacterName} remains conscious at {newHP} HP (Diehard feat)");
-                return HPState.Disabled;
-            }
 
             return HPState.Dying;
         }

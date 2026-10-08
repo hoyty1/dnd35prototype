@@ -827,18 +827,9 @@ public partial class GameManager
 
         UpdateAllStatsUI();
 
-        if (target.Stats.IsDead && target.Team == CharacterTeam.Enemy)
-        {
-            bool allEnemiesDead = AreAllNPCsDead();
-            Debug.Log($"[Overrun] Target killed. Victory probe | allEnemiesDead={allEnemiesDead} | target={target.Stats?.CharacterName ?? target.name}");
-            if (allEnemiesDead)
-            {
-                Debug.Log("[Overrun] All enemies defeated. Triggering centralized victory check.");
-                CheckCombatVictory("Overrun.Resolve", target);
-                if (CurrentPhase == TurnPhase.CombatOver)
-                    return;
-            }
-        }
+        // Victory or defeat when the overrun or its AoOs dropped the last creature of a side (CORE-011).
+        if (CheckCombatVictory("Overrun.Resolve", target))
+            return;
 
         if (result.DefenderAvoided
             && !result.AttackerActionConsumed

@@ -3416,6 +3416,45 @@ public class CharacterCreationUI : MonoBehaviour
     // ========== SHOW / HIDE ==========
 
     /// <summary>
+    /// Opens character creation again from Hero 1 with empty creation data, as at game start (the defeat screen's
+    /// New Party button, CORE-001). The completion callbacks are left as the caller set them.
+    /// </summary>
+    public void ReopenForNewParty()
+    {
+        CreatedCharacters = new CharacterCreationData[TotalPCs];
+        for (int i = 0; i < TotalPCs; i++)
+        {
+            CreatedCharacters[i] = new CharacterCreationData
+            {
+                CharacterLevel = 1,
+                TargetLevel = 3
+            };
+        }
+
+        CurrentCharacterIndex = 0;
+        IsComplete = false;
+        HideQSOverlay();
+        if (_premadeOverlayPanel != null)
+            _premadeOverlayPanel.SetActive(false);
+        ResetForNewCharacter();
+        if (_nameInput != null)
+            _nameInput.text = "";
+
+        if (_overlayPanel != null)
+            _overlayPanel.SetActive(true);
+
+        if (_canvasGroup != null)
+        {
+            _canvasGroup.alpha = 1f;
+            _canvasGroup.interactable = true;
+            _canvasGroup.blocksRaycasts = true;
+        }
+
+        ShowStep(Step.RollStats);
+        Debug.Log("[UI] Character creation reopened for a new party");
+    }
+
+    /// <summary>
     /// Hide the character creation UI and disable raycast blocking.
     /// </summary>
     private void HideCreationUI()

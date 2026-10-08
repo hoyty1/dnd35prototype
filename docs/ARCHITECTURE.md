@@ -30,10 +30,11 @@ Play -> SceneBootstrap.Awake builds everything
      -> PromptEncounterSelection --------------------------------------------+
      -> OpenPreCombatHubPhase (store / stash / spell prep / crafting)        |
      -> StartCombat -> TurnService rounds -> PC turns / NPC turns            |
-          |-- all enemies dead -> HandleCombatVictoryDetected                |
+          |-- EvaluateCombatEnd: enemy side out -> HandleCombatVictoryDetected
           |      -> loot window -> XP -> level-ups -> full rest -> ----------+
           |      -> (loot window "exit") -> ExitCombatLoopToMenu = quit
-          '-- all PCs dead -> "DEFEAT!" text, nothing else (soft-lock)
+          '-- EvaluateCombatEnd: party side out -> defeat screen
+                 -> New Party -> CharacterCreationUI again (or Quit)
 ```
 
 | Step | What happens | Where to look |
@@ -44,13 +45,13 @@ Play -> SceneBootstrap.Awake builds everything
 | Encounter selection | `PromptEncounterSelection` opens `EncounterSelectionUI`, which offers presets, a random generator, DMG tables and a custom builder. A preset leads to `ApplyEncounterPreset`; a generated or custom encounter leads to `ApplyRandomEncounter`; Cancel falls back to `goblin_raiders`. All of them then call `SetupEnemyEncounter` and `OpenPreCombatHubPhase`. | `GameManager.cs:785, 1690, 1769`; `_Core/GameManager.NPCSetup.cs:29` |
 | Pre-combat hub | `PreCombatHubUI` offers Store, Inventory/Stash, Spell Prep, Crafting, Start Encounter and Back. `StartEncounterFromPreCombat` warns if a prepared caster has not prepared spells, then `ForceStartEncounterFromPreCombat` locks the stash and calls `StartCombat`. | `GameManager.cs:1403-1647` |
 | Combat | `StartCombat` calls `TurnService.StartCombat` (`GameManager.cs:3728`), which rolls initiative and raises `OnNewRound(1)` and `OnTurnStarted`. `GameManager.OnTurnStarted` routes a controllable character to `StartPCTurn` and anything else to the coroutine `SingleNPCTurnFromInitiative` (AI). `NextInitiativeTurn` advances. | `GameManager.cs:3634, 3766, 3806, 3950, 3976`; `_Core/GameManager.NPCTurns.cs:35` |
-| Victory | Call sites detect "all enemies dead": 9 call sites of `CheckCombatVictory` (maneuvers, Turn Undead, Template Smite, `CombatFlowService`, accessors, `EndAttackSequence`) plus 19 inline `AreAllNPCsDead()` checks (16 in `GameManager.SpellCasting.cs`, 3 in `GameManager.CombatActions.cs`). They call `HandleCombatVictoryDetected`, which calls `BeginPostCombatLootCollection`. | `GameManager.cs:3541, 3581`; `_Core/GameManager.LootCollection.cs:25` |
+| Combat end | One check for both sides, `GameManager.EvaluateCombatEnd` (`_Core/GameManager.CombatEnd.cs`), with the predicate `CombatEndRules.IsOutOfFight` (`Combat/Core/CombatEndRules.cs`): dead, dying or unconscious is out (unconscious includes stable, nonlethal knockout, asleep and petrified), a disabled creature is in, regeneration makes no exception; a side (team) is out when every active member is out and it has or had a member in this combat (owner definition 2026-10-07; a tie is a defeat and control does not change side, both pending the owner, CORE-038). It runs after each attack, spell, maneuver and AoO resolution that checked before (PC and NPC attack sites whenever the target is out, of either team), after every NPC cast (`TryNPCPerformSpellCastForAI`) (`CheckCombatVictory` wraps it with the XP registration), in the PC menu after every PC action (`ShowActionChoices`), at turn start after the turn-start effects, after every NPC turn and at every turn boundary (`NextInitiativeTurn`, which then starts no further turn). Victory calls `HandleCombatVictoryDetected` -> `BeginPostCombatLootCollection`. | `_Core/GameManager.CombatEnd.cs`; `_Core/GameManager.LootCollection.cs:25` |
 | Loot / XP / level-up | Loot window (`LootCollectionUI`), then `ShowPostCombatXPFlow` (`ExperienceCalculator`, `CombatEndXPUI`), then `CheckAndShowLevelUps` (`LevelUpUI`), then `ContinueToRestAndNextCombat`. | `GameManager.LootCollection.cs:175, 290` |
 | Auto full rest | `RestorePartyAfterCombat` restores HP (no `IsDead` skip, so dead but active PCs appear to be revived; not verified in Play mode), spell slots and daily uses, clears effects and summons, and moves PCs to (3,6)/(3,9)/(3,12)/(3,15). `ReturnToEncounterSelection` -> `ResetCombatStateForNextEncounter` -> `PromptEncounterSelection`. | `GameManager.cs:868, 1253, 1076` |
 | Exit | The loot window's exit button calls `ExitCombatLoopToMenu`. Despite its name it stops Play mode (editor) or calls `Application.Quit()`. | `GameManager.cs:1271` |
-| Defeat | 14 copy-pasted checks set `CurrentPhase = CombatOver` and show "DEFEAT!". No code returns to encounter selection, so the session is soft-locked. Tracked in [KNOWN_ISSUES.md](KNOWN_ISSUES.md). | e.g. `GameManager.NPCTurns.cs:67-72` |
+| Defeat | `HandleCombatDefeatDetected` sets `CombatOver` and opens the code-built defeat screen (`CombatUI.ShowDefeatPanel`; `WaitingForDefeatChoice` blocks world input). New Party (`StartNewPartyAfterDefeat`) clears the fight, summons and grapples, resets gold and stash (`EconomyService.ResetForNewParty`), reactivates the four party slots and reopens character creation (`CharacterCreationUI.ReopenForNewParty`); Quit calls `ExitCombatLoopToMenu`. | `_Core/GameManager.CombatEnd.cs` |
 
-Two behaviours look like bugs and are tracked in [KNOWN_ISSUES.md](KNOWN_ISSUES.md). First, `TurnService` raises `OnCombatEnded` only when no living combatant is left, so an ordinary victory never runs `GameManager.OnCombatEnded` (`GameManager.cs:3838`), and its cleanup is skipped: `EffectService.ClearAll`, `AIService.ClearAuraSaveImmunities`, `ConditionService.CleanupOnCombatEnd`, the bardic-music stop and the `CombatEndedEvent` publish. (`RestorePartyAfterCombat` separately clears grease, area/wind effects, Mirror Image, `MeleeReactionService` and `CurseTracker`.) Second, damage-over-time and area ticks (Flaming Sphere, Wall of Fire, turn-start ticks) have no immediate victory check. A tick kill of the last enemy is caught at the start of the next PC turn, because `StartPCTurn` calls `EndAttackSequence`, whose safety net calls `CheckCombatVictory` (`GameManager.cs:8641-8663`). `StartPCTurn` then sets `CurrentPhase = PCTurn` unconditionally, overwriting the `CombatOver` set by the victory handler while the loot window opens.
+Two behaviours look like bugs and are tracked in [KNOWN_ISSUES.md](KNOWN_ISSUES.md). First, `TurnService` raises `OnCombatEnded` only when no living combatant is left, so an ordinary victory never runs `GameManager.OnCombatEnded` (`GameManager.cs:3838`), and its cleanup is skipped: `EffectService.ClearAll`, `AIService.ClearAuraSaveImmunities`, `ConditionService.CleanupOnCombatEnd`, the bardic-music stop and the `CombatEndedEvent` publish. (`RestorePartyAfterCombat` separately clears grease, area/wind effects, Mirror Image, `MeleeReactionService` and `CurseTracker`.) Second, damage-over-time and area ticks (Flaming Sphere, Wall of Fire, turn-start ticks) run no combat-end check of their own; a tick kill is caught by the shared check at the next turn start, PC action or turn boundary, and both turn starters return when the phase is already `CombatOver` (CORE-003, not verified in Play mode).
 
 Developer shortcuts (22 hard-wired test encounter presets, the F12 Spell Testing panel, Left Ctrl+H) are described in [UI: debug and test tools](architecture/ai-encounters-ui.md#ui-debug-and-test-tools). The I/K/C/Esc keys are handled by `InputService`; see [UI: hotkeys](architecture/ai-encounters-ui.md#ui-hotkeys).
 
@@ -92,7 +93,7 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 53 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 54 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
 - `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
@@ -111,7 +112,7 @@ Awake-before-wiring caveat: `AddComponent<GameManager>()` runs `GameManager.Awak
 `Update` (:2189) does three things:
 
 - It ticks poison timers every frame, in real time.
-- It returns early while any of `WaitingForCharacterCreation`, `WaitingForEncounterSelection`, `WaitingForPreCombatInventory` or `WaitingForLootCollection` is set. These flags are how modal phases block world input.
+- It returns early while any of `WaitingForCharacterCreation`, `WaitingForEncounterSelection`, `WaitingForPreCombatInventory`, `WaitingForLootCollection` or `WaitingForDefeatChoice` is set. These flags are how modal phases block world input.
 - Otherwise it feeds `InputService` and updates the hover previews.
 
 `OnDestroy` unsubscribes events and calls `Cleanup` on the AI, CombatFlow and maneuver components.
@@ -139,13 +140,14 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 53 files, found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Six files with system-sounding names are also partials.
+There are 54 files, found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Six files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
-| **_Core/** (10) | | |
+| **_Core/** (11) | | |
 | GameManager.cs | 11,516 | Main partial: singleton, state and enums, Awake/Start wiring, creation callbacks, encounter selection, hub, preset/random setup, rest and reset, `Update`/input routing, `StartCombat`, turn callbacks, `StartPCTurn`/`ShowActionChoices`, item/scroll/wand/staff use, 31 of the 51 GameManager `On*ButtonPressed` handlers, `*ForAI` wrappers (~10879-11026), path and hover previews. |
 | GameManager.CombatActions.cs | 2,697 | `OnCellClicked` routing by sub-phase; movement with AoO; attack target clicks; off-hand, full attack and special-attack execution; hand-off to `CombatFlowService`; `EndActivePCTurn`. |
+| GameManager.CombatEnd.cs | 268 | The shared combat-end check `EvaluateCombatEnd` (both sides, by team, through `CombatEndRules`; `GetCombatEndSides` remembers which sides had members this combat), `CheckCombatVictory`, XP registration of defeated enemies, victory and defeat handling, the defeat screen and `StartNewPartyAfterDefeat` (CORE-011, CORE-037, CORE-034, CORE-001). |
 | GameManager.CombatFlowAccessors.cs | 130 | `Combat_*` getters, setters and forwarders over private state. |
 | GameManager.LootCollection.cs | 800 | Post-combat loot, XP flow, level-up sequence, `ContinueToRestAndNextCombat`. |
 | GameManager.NPCSetup.cs | 924 | `SetupEnemyEncounter`, `ResetCharacterSlotForSpawn` and `ResetPCSlotForNewCharacter` (CRE-046), `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile`, spawn overrides. |
@@ -240,7 +242,7 @@ There are 675 `.cs` files (about 305K lines, recounted 2026-10-07). The layout c
 
 ```
 Assets/Scripts/
-  _Core/ (16)            GameManager.cs + 9 GameManager.*.cs partials (ScenarioHarness is editor-only),
+  _Core/ (17)            GameManager.cs + 10 GameManager.*.cs partials (ScenarioHarness is editor-only),
                          SceneBootstrap, GameEventSystem, ScenarioHooks, GameSettings, GameConstants, PlaneType
     Commands/ (3)        dormant command pattern
   AI/ (10)               AISpellcastingStrategist, LastKnownPositionTracker, SpellCategoryClassifier,
@@ -259,7 +261,7 @@ Assets/Scripts/
     CreatureClass/ (5), Familiar/ (1), Feats/ (3), Progression/ (3), Races/ (2),
     Religion/ (4), Skills/ (2), Specialization/ (1)
   Combat/
-    Core/ (14)           AttackCalculator, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility,
+    Core/ (15)           AttackCalculator, ThreatSystem, RangeCalculator, SizeCategory, TeamUtility, CombatEndRules,
                          DamageModel, BullRushRules, dormant CombatStateMachine/InitiativeSystem
     Conditions/ (11), Behaviors/ (4), Maneuvers/ (6), Special/ (3), Reactions/ (3),
     Mounts/ (4), StatusEffects/ (1), Logging/ (2), Utilities/ (2)
@@ -286,7 +288,7 @@ Assets/Scripts/
   World/ (2)             PlanarTravelSystem, CreatureTrapSystem (mostly inert)
   Utilities/ (12)        DiceRoller, CameraController, DebugCommands, IdentifierExtensions, ...
   Identifiers/ (2)       two editor-only ContextMenu smoke tests (the real ID types live elsewhere)
-  Tests/ (119)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
+  Tests/ (122)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
                          and Scenarios/ (the editor-only scenario harness: model, runner, trace, checks, steps,
                          expectations, fast mode, session guard, fresh-session batch driver, soak statistics,
                          Catalog/ of smoke, rules and soak definitions); ScenarioHooks (in _Core/) is null in

@@ -1144,14 +1144,7 @@ public partial class GameManager
             {
                 RegisterDefeatedEnemyForXP(target, "BullRush.MovementAoO");
                 RegisterDefeatedEnemyForXP(attacker, "BullRush.MovementAoO");
-                CheckCombatVictory("BullRush.MovementAoO", target);
-
-                if (CurrentPhase != TurnPhase.CombatOver && AreAllPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                    CombatUI?.SetActionButtonsVisible(false);
-                }
+                EvaluateCombatEnd("BullRush.MovementAoO");
             }
 
             onComplete?.Invoke(attackerDown);
@@ -1628,43 +1621,28 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Death cleanup and the end-of-combat checks after an Improved Trip attack or a counter-trip, which run
-    /// outside the attack loops that normally make them: each dead creature gets its summon cleanup; a dead
-    /// enemy-team creature runs the victory check (with its XP registration); when a hero went down and every
-    /// hero is down, the defeat state is set as the NPC attack loop sets it. The callers' own checks still run afterwards.
+    /// Death cleanup and the end-of-combat check after an Improved Trip attack or a counter-trip, which run
+    /// outside the attack loops that normally make them: each dead creature gets its summon cleanup, each enemy
+    /// out of the fight is registered for XP, and the shared combat-end check runs for both sides (CORE-011).
+    /// The callers' own checks still run afterwards.
     /// </summary>
     private void SettleTripAftermathCasualties(string sourceContext, params CharacterController[] creatures)
     {
-        CharacterController deadEnemy = null;
-        bool heroDown = false;
         foreach (CharacterController creature in creatures)
         {
-            if (creature == null || creature.Stats == null)
-                continue;
-
-            if (creature.Team == CharacterTeam.Player && creature.Stats.CurrentHP <= 0)
-                heroDown = true;
-
-            if (!creature.Stats.IsDead)
+            if (creature == null || creature.Stats == null || !creature.Stats.IsDead)
                 continue;
 
             HandleSummonDeathCleanup(creature);
-            if (creature.Team == CharacterTeam.Enemy && deadEnemy == null)
-                deadEnemy = creature;
         }
 
         if (CurrentPhase == TurnPhase.CombatOver)
             return;
 
-        if (deadEnemy != null && CheckCombatVictory(sourceContext, deadEnemy))
-            return;
+        foreach (CharacterController creature in creatures)
+            RegisterDefeatedEnemyForXP(creature, sourceContext);
 
-        if (heroDown && AreAllPCsDead())
-        {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-            CombatUI?.SetActionButtonsVisible(false);
-        }
+        EvaluateCombatEnd(sourceContext);
     }
 
     private void OpenCounterTripPrompt(CharacterController defender, CharacterController tripper, Action onDone)

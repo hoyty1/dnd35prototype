@@ -3892,6 +3892,111 @@ public class CombatUI : MonoBehaviour
         _confirmationPanel = null;
     }
 
+    private GameObject _defeatPanel;
+
+    /// <summary>True while the defeat screen is open.</summary>
+    public bool IsDefeatPanelOpen => _defeatPanel != null;
+
+    /// <summary>
+    /// The defeat screen (CORE-001), built like <see cref="ShowConfirmationDialog"/>: a full-screen overlay with a
+    /// title, a message and two buttons, New Party (<paramref name="onNewParty"/>) and Quit (<paramref name="onQuit"/>).
+    /// Each button closes the panel before running its callback.
+    /// </summary>
+    public void ShowDefeatPanel(string title, string message, System.Action onNewParty, System.Action onQuit)
+    {
+        HideDefeatPanel();
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindAnyObjectByType<Canvas>();
+        if (canvas == null)
+        {
+            Debug.LogWarning("[CombatUI] No canvas for the defeat panel.");
+            return;
+        }
+
+        _defeatPanel = new GameObject("DefeatPanel");
+        _defeatPanel.transform.SetParent(canvas.transform, false);
+        _defeatPanel.transform.SetAsLastSibling();
+        RectTransform panelRT = _defeatPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image overlay = _defeatPanel.AddComponent<Image>();
+        overlay.color = new Color(0f, 0f, 0f, 0.8f);
+
+        GameObject dialog = new GameObject("Dialog");
+        dialog.transform.SetParent(_defeatPanel.transform, false);
+        RectTransform dialogRT = dialog.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.32f, 0.35f);
+        dialogRT.anchorMax = new Vector2(0.68f, 0.65f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialog.AddComponent<Image>();
+        dialogBg.color = new Color(0.18f, 0.1f, 0.12f, 0.97f);
+        Outline dialogOutline = dialog.AddComponent<Outline>();
+        dialogOutline.effectColor = new Color(0.85f, 0.35f, 0.35f, 1f);
+        dialogOutline.effectDistance = new Vector2(2f, 2f);
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(dialog.transform, false);
+        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.06f, 0.7f);
+        titleRT.anchorMax = new Vector2(0.94f, 0.95f);
+        titleRT.offsetMin = Vector2.zero;
+        titleRT.offsetMax = Vector2.zero;
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = font;
+        titleText.fontSize = 26;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.color = new Color(1f, 0.55f, 0.5f, 1f);
+        titleText.text = title;
+
+        GameObject bodyObj = new GameObject("Body");
+        bodyObj.transform.SetParent(dialog.transform, false);
+        RectTransform bodyRT = bodyObj.AddComponent<RectTransform>();
+        bodyRT.anchorMin = new Vector2(0.08f, 0.38f);
+        bodyRT.anchorMax = new Vector2(0.92f, 0.7f);
+        bodyRT.offsetMin = Vector2.zero;
+        bodyRT.offsetMax = Vector2.zero;
+        Text bodyText = bodyObj.AddComponent<Text>();
+        bodyText.font = font;
+        bodyText.fontSize = 14;
+        bodyText.alignment = TextAnchor.MiddleCenter;
+        bodyText.color = new Color(0.95f, 0.9f, 0.9f, 1f);
+        bodyText.text = message;
+
+        Button newPartyBtn = CreateTouchPromptButton(dialog, "NewParty", "New Party",
+            new Vector2(0.1f, 0.1f), new Vector2(0.45f, 0.3f), new Color(0.2f, 0.45f, 0.25f, 1f));
+        newPartyBtn.onClick.AddListener(() =>
+        {
+            HideDefeatPanel();
+            onNewParty?.Invoke();
+        });
+
+        Button quitBtn = CreateTouchPromptButton(dialog, "Quit", "Quit",
+            new Vector2(0.55f, 0.1f), new Vector2(0.9f, 0.3f), new Color(0.45f, 0.2f, 0.2f, 1f));
+        quitBtn.onClick.AddListener(() =>
+        {
+            HideDefeatPanel();
+            onQuit?.Invoke();
+        });
+    }
+
+    /// <summary>Closes the defeat screen without running either callback.</summary>
+    public void HideDefeatPanel()
+    {
+        if (_defeatPanel != null)
+            Destroy(_defeatPanel);
+        _defeatPanel = null;
+    }
+
     public void HideSummonCreatureSelection()
     {
         if (_summonSelectionPanel != null)

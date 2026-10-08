@@ -45,9 +45,16 @@ public class AIService : MonoBehaviour
         _gameManager = null;
     }
 
+    /// <summary>
+    /// True once victory or defeat has been declared (GameManager.EvaluateCombatEnd, CORE-011). A turn in progress
+    /// stops at its next step: the AI neither moves nor acts after the combat is over.
+    /// </summary>
+    private bool CombatEnded()
+        => _gameManager == null || _gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver;
+
     public IEnumerator ExecuteNPCTurn(CharacterController npc, NPCAIBehavior behavior)
     {
-        if (_gameManager == null || npc == null || npc.Stats == null)
+        if (_gameManager == null || npc == null || npc.Stats == null || CombatEnded())
             yield break;
 
         _gameManager.BeginNPCTurnForAI(npc);
@@ -59,6 +66,8 @@ public class AIService : MonoBehaviour
         _gameManager.CombatUI.SetTurnIndicator($"{_gameManager.GetSummonDisplayName(npc)}'s turn...");
         _gameManager.CombatUI.ShowCombatLog(CombatLogHelper.Summon("", $"<color={turnColor}>{turnIcon} {_gameManager.GetSummonDisplayName(npc)}'s turn begins</color>"));
         yield return new WaitForSeconds(0.6f);
+        if (CombatEnded())
+            yield break;
 
         // ── Death/disable check after turn-start effects ──
         // The NPC may have been killed/disabled by start-of-turn area damage
@@ -88,7 +97,7 @@ public class AIService : MonoBehaviour
             if (npc.HasCondition(CombatConditionType.Prone) && !npc.IsGrappling() && !npc.HasCondition(CombatConditionType.Fascinated))
             {
                 yield return _gameManager.StartCoroutine(_gameManager.TryStandUpFromProneForAI(npc));
-                if (ThreatSystem.IsMoverIncapacitated(npc))
+                if (CombatEnded() || ThreatSystem.IsMoverIncapacitated(npc))
                     yield break;
             }
 
@@ -132,6 +141,8 @@ public class AIService : MonoBehaviour
         if (npc.HasCondition(CombatConditionType.Prone) && !npc.IsGrappling())
         {
             yield return _gameManager.StartCoroutine(_gameManager.TryStandUpFromProneForAI(npc));
+            if (CombatEnded())
+                yield break;
             if (ThreatSystem.IsMoverIncapacitated(npc))
             {
                 Debug.Log($"[AI] {npc.Stats.CharacterName} was dropped by an AoO while standing up — turn ended");
@@ -148,12 +159,16 @@ public class AIService : MonoBehaviour
         if (_gameManager.TryExecuteAnimateRopeEscapeForNpc(npc))
         {
             yield return new WaitForSeconds(0.35f);
+            if (CombatEnded())
+                yield break;
         }
 
         CharacterController targetPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
         if (targetPC == null)
         {
             yield return _gameManager.StartCoroutine(ExecuteSearchTurnWhenNoTargets(npc));
+            if (CombatEnded())
+                yield break;
             targetPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
             if (targetPC == null)
             {
@@ -174,7 +189,7 @@ public class AIService : MonoBehaviour
         if (npc.IsGrappling())
         {
             yield return _gameManager.StartCoroutine(RunGrappleTurnForAI(npc));
-            if (!CanContinueTurnAfterGrappleEnded(npc)) yield break; // free pin release (CMB-089)
+            if (CombatEnded() || !CanContinueTurnAfterGrappleEnded(npc)) yield break; // free pin release (CMB-089)
         }
 
         // ── Supernatural Aura (free action): Gibbering, Frightful Presence, etc. ──
@@ -183,6 +198,8 @@ public class AIService : MonoBehaviour
         if (npc.HasAuraAbility)
         {
             ProcessAuraAbility(npc);
+            if (_gameManager.EvaluateCombatEnd("AI.Aura"))
+                yield break;
         }
 
         // ── Free-Action Ranged Special Attack (Spittle, etc.) ──
@@ -199,6 +216,8 @@ public class AIService : MonoBehaviour
                 {
                     Debug.Log($"[AI] {npc.Stats.CharacterName} fires free-action {freeAttack.Name} at {spittleTarget.Stats.CharacterName}");
                     TryExecuteRangedSpecialAttack(npc, spittleTarget);
+                    if (_gameManager.EvaluateCombatEnd("AI.FreeRangedSpecial"))
+                        yield break;
                     // No yield break — creature continues its turn with standard/move actions
                 }
             }
@@ -357,6 +376,7 @@ public class AIService : MonoBehaviour
 
         yield return _gameManager.StartCoroutine(
             _gameManager.MoveCharacterAlongComputedPathForAI(npc, searchDestination, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (npc.Stats.CurrentHP <= 0)
             yield break; // dropped by an AoO or area damage while moving (CMB-073)
 
@@ -500,6 +520,7 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                 if (npc.Stats.CurrentHP <= 0)
                     yield break; // dropped by an AoO or area damage while moving (CMB-073)
                 npc.Actions.UseMoveAction();
@@ -519,6 +540,7 @@ public class AIService : MonoBehaviour
             yield break;
 
         // Death/disable check: NPC may have been killed by damage before this method runs
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (npc.Stats.CurrentHP <= 0)
         {
             Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} is dead/disabled (HP={npc.Stats.CurrentHP}) at start of aggressive melee turn — turn ended");
@@ -576,6 +598,7 @@ public class AIService : MonoBehaviour
 
                 // ── Death/disable check after movement ──
                 // Creature may have been killed by area damage (Wall of Fire, etc.) during movement.
+                if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                 if (npc.Stats.CurrentHP <= 0)
                 {
                     Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} killed/disabled during movement (HP={npc.Stats.CurrentHP}) — turn ended");
@@ -594,6 +617,7 @@ public class AIService : MonoBehaviour
         }
 
         // ── Death/disable re-check before attack phase ──
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (npc.Stats.CurrentHP <= 0)
         {
             Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} dead/disabled before attack phase (HP={npc.Stats.CurrentHP}) — turn ended");
@@ -670,6 +694,7 @@ public class AIService : MonoBehaviour
         if (npc == null || target == null || target.Stats == null || target.Stats.IsDead)
             yield break;
 
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (npc.Stats.CurrentHP <= 0)
         {
             Debug.Log($"🔥 [AI][Dragon] {npc.Stats.CharacterName} is dead/disabled (HP={npc.Stats.CurrentHP}) — turn ended");
@@ -715,6 +740,7 @@ public class AIService : MonoBehaviour
                     yield return _gameManager.StartCoroutine(
                         _gameManager.MoveCharacterAlongComputedPathForAI(npc, bp.Position, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
 
+                    if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                     if (npc.Stats.CurrentHP <= 0)
                     {
                         Debug.Log($"🔥 [AI][Dragon] {npc.Stats.CharacterName} killed during breath positioning move — turn ended");
@@ -758,6 +784,7 @@ public class AIService : MonoBehaviour
                                 {
                                     yield return _gameManager.StartCoroutine(
                                         _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                                    if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                                     if (npc.Stats.CurrentHP <= 0)
                                         yield break; // dropped by an AoO or area damage while moving (CMB-073)
                                     npc.Actions.UseMoveAction();
@@ -802,6 +829,7 @@ public class AIService : MonoBehaviour
                                 {
                                     yield return _gameManager.StartCoroutine(
                                         _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                                    if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                                     if (npc.Stats.CurrentHP <= 0)
                                         yield break; // dropped by an AoO or area damage while moving (CMB-073)
                                     npc.Actions.UseMoveAction();
@@ -839,6 +867,7 @@ public class AIService : MonoBehaviour
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
 
+                if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                 if (npc.Stats.CurrentHP <= 0)
                 {
                     Debug.Log($"🔥 [AI][Dragon] {npc.Stats.CharacterName} killed during movement — turn ended");
@@ -851,6 +880,7 @@ public class AIService : MonoBehaviour
             }
         }
 
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (npc.Stats.CurrentHP <= 0)
             yield break;
 
@@ -923,6 +953,7 @@ public class AIService : MonoBehaviour
                 {
                     yield return _gameManager.StartCoroutine(
                         _gameManager.MoveCharacterAlongComputedPathForAI(npc, blindSearchCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                    if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                     if (npc.Stats.CurrentHP <= 0)
                         yield break; // dropped by an AoO or area damage while moving (CMB-073)
                     npc.Actions.UseMoveAction();
@@ -980,6 +1011,7 @@ public class AIService : MonoBehaviour
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
 
                 // ── Death/disable check after retreat movement ──
+                if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                 if (npc.Stats.CurrentHP <= 0)
                 {
                     Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} killed/disabled during retreat movement (HP={npc.Stats.CurrentHP}) — turn ended");
@@ -998,6 +1030,7 @@ public class AIService : MonoBehaviour
         }
 
         // ── Death/disable re-check before attack phase ──
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (npc.Stats.CurrentHP <= 0)
         {
             Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} dead/disabled before ranged attack phase (HP={npc.Stats.CurrentHP}) — turn ended");
@@ -1041,6 +1074,7 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, approachCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                 if (npc.Stats.CurrentHP <= 0)
                     yield break; // dropped by an AoO or area damage while moving (CMB-073)
                 npc.Actions.UseMoveAction();
@@ -1194,6 +1228,7 @@ public class AIService : MonoBehaviour
             yield break;
 
         // Death/disable check: NPC may have been killed by damage before this method runs
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (npc.Stats.CurrentHP <= 0)
         {
             Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} is dead/disabled (HP={npc.Stats.CurrentHP}) at start of defensive melee turn — turn ended");
@@ -1219,6 +1254,7 @@ public class AIService : MonoBehaviour
                     _gameManager.ExecuteWithdrawMovementForAI(npc, withdrawCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
 
                 // ── Death/disable check after withdraw movement ──
+                if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                 if (npc.Stats.CurrentHP <= 0)
                 {
                     Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} killed/disabled during withdraw (HP={npc.Stats.CurrentHP}) — turn ended");
@@ -1241,6 +1277,7 @@ public class AIService : MonoBehaviour
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, bestCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
 
                 // ── Death/disable check after movement ──
+                if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
                 if (npc.Stats.CurrentHP <= 0)
                 {
                     Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} killed/disabled during movement (HP={npc.Stats.CurrentHP}) — turn ended");
@@ -1254,6 +1291,7 @@ public class AIService : MonoBehaviour
         }
 
         // ── Death/disable re-check before attack phase ──
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (npc.Stats.CurrentHP <= 0)
         {
             Debug.Log($"🔥 [AI] {npc.Stats.CharacterName} dead/disabled before attack phase (HP={npc.Stats.CurrentHP}) — turn ended");
@@ -1309,6 +1347,7 @@ public class AIService : MonoBehaviour
                 _gameManager.MoveCharacterAlongComputedPathForAI(swarm, target.GridPosition, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
 
             // ── Death/disable check after swarm movement ──
+            if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
             if (swarm.Stats.CurrentHP <= 0)
             {
                 Debug.Log($"🔥 [AI] {swarm.Stats.CharacterName} killed/disabled during swarm movement (HP={swarm.Stats.CurrentHP}) — turn ended");
@@ -1320,6 +1359,7 @@ public class AIService : MonoBehaviour
         }
 
         // ── Death/disable re-check before swarm attack phase ──
+        if (CombatEnded()) yield break; // victory or defeat already declared (CORE-011)
         if (swarm.Stats.CurrentHP <= 0)
         {
             Debug.Log($"🔥 [AI] {swarm.Stats.CharacterName} dead/disabled before swarm attack phase (HP={swarm.Stats.CurrentHP}) — turn ended");

@@ -358,7 +358,7 @@ namespace Tests.Scenarios
                 .Set("weapon", weapon != null ? weapon.Name : null);
         }
 
-        /// <summary>Per-actor state for snapshots: hp, nonlethal, position, sorted conditions, HP state, grappling, team.</summary>
+        /// <summary>Per-actor state for snapshots: hp, nonlethal, position, sorted conditions, HP state, out of the fight (CombatEndRules), grappling, team.</summary>
         public JsonObj Snapshot(CharacterController c)
         {
             var o = new JsonObj();
@@ -370,6 +370,7 @@ namespace Tests.Scenarios
              .Set("pos", c.GridPosition)
              .Set("conds", ConditionNames(c))
              .Set("st", c.CurrentHPState)
+             .Set("out", CombatEndRules.IsOutOfFight(c))
              .Set("gr", SafeIsGrappling(c))
              .Set("team", c.Team);
             if (c.gameObject == null || !c.gameObject.activeInHierarchy)

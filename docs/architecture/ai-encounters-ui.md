@@ -49,7 +49,7 @@ TurnService.StartTurnAtCurrentIndex -> OnTurnStarted
         aura (free action), free-action ranged special such as Spittle
         inside a Resilient Sphere -> stop
         routing (table below)
-      AreAllPCsDead -> TurnPhase.CombatOver, else NextInitiativeTurn (GameManager.cs:3950)
+      EvaluateCombatEnd (either side out -> victory or defeat), else NextInitiativeTurn
 ```
 
 Routing, checked in this order (AIService.cs:182-297):
@@ -212,6 +212,7 @@ To add an action button you need: a public `Button` field on `CombatUI`, a `Crea
 | Character sheet with embedded inventory | UI/CharacterSheet/CharacterSheetUI.cs + UI/Inventory/InventoryUI.cs | Eager | C key |
 | Status badges and tooltips | UI/Combat/StatusEffectIndicator.cs (world-space sprites), StatusEffectTooltipUI.cs, UI/CharacterSheet/CharacterHoverTooltipUI.cs | Per character / singleton | CharacterController.cs:1372; GameManager.cs:632 |
 | Loot, XP, level-up | UI/Inventory/LootCollectionUI.cs, UI/Combat/CombatEndXPUI.cs, UI/CharacterSheet/LevelUpUI.cs | Eager / lazy / lazy | _Core/GameManager.LootCollection.cs: `BeginPostCombatLootCollection` (25), `ShowPostCombatXPFlow` (175), `ShowLevelUpUISequence` (344) |
+| Defeat screen | UI/Combat/CombatUI.cs (`ShowDefeatPanel`, `HideDefeatPanel`; built like `ShowConfirmationDialog`) | On defeat | _Core/GameManager.CombatEnd.cs: `ShowDefeatScreen`, `StartNewPartyAfterDefeat` (New Party -> `CharacterCreationUI.ReopenForNewParty`), `QuitAfterDefeat` |
 
 Dead UI: `EncounterPreviewPanel` and `SpellStorageUI` are never opened. `TreasureGenerator/TreasureUI.cs` is dead (see [Treasure generation and post-combat loot](items-and-economy.md#treasure-generation-and-post-combat-loot)), and `UI/Panels` is an empty leftover folder (see [Folder map](../ARCHITECTURE.md#folder-map-of-assetsscripts)).
 

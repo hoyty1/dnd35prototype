@@ -228,17 +228,10 @@ public partial class GameManager
         if (result != null && result.TargetKilled)
         {
             Combat_HandleSummonDeathCleanup(target);
-            if (target.Team == CharacterTeam.Enemy)
-            {
-                bool allEnemiesDead = Combat_AreAllNPCsDead();
-                Debug.Log($"[Smite] Target killed. Victory probe | allEnemiesDead={allEnemiesDead} | target={target.Stats?.CharacterName ?? target.name}");
-                if (allEnemiesDead)
-                {
-                    Debug.Log("[Smite] All enemies defeated. Triggering centralized victory check.");
-                    Combat_CheckCombatVictory("TemplateSmite.Resolve", target);
-                }
-            }
         }
+
+        // Victory or defeat when the smite dropped the last creature of a side (CORE-011).
+        Combat_CheckCombatVictory("TemplateSmite.Resolve", target);
 
         Combat_SetLastCombatLog(result != null ? result.GetDetailedSummary() : string.Empty);
         UpdateAllStatsUI();

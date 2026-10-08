@@ -1226,6 +1226,8 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
 
         CombatUI?.ResetAllUI(clearCombatLog: true);
+        CloseDefeatScreen();
+        ClearCombatSidesSeen();
 
         int turnOrderAfter = _turnService != null && _turnService.InitiativeOrder != null ? _turnService.InitiativeOrder.Count : 0;
         Debug.Log($"[CombatReset] EXIT | context={safeContext} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | turnOrder={turnOrderAfter}");
@@ -2215,7 +2217,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         // Skip all game input during character creation / encounter selection / pre-combat inventory.
-        if (WaitingForCharacterCreation || WaitingForEncounterSelection || WaitingForPreCombatInventory || WaitingForLootCollection)
+        if (WaitingForCharacterCreation || WaitingForEncounterSelection || WaitingForPreCombatInventory || WaitingForLootCollection || WaitingForDefeatChoice)
         {
             HideCharacterHoverTooltip();
             return;
@@ -3357,236 +3359,6 @@ public partial class GameManager : MonoBehaviour
         return c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null;
     }
 
-    private bool HasRegenerationOrFastHealing(CharacterController npc, bool logMatches = true)
-    {
-        if (npc == null || npc.Stats == null)
-            return false;
-
-        CharacterStats stats = npc.Stats;
-        string npcName = string.IsNullOrWhiteSpace(stats.CharacterName) ? npc.name : stats.CharacterName;
-
-        if (npc.HasRegeneration)
-        {
-            if (logMatches)
-                Debug.Log($"[VictoryCheck] {npcName} can recover (innate regeneration configured).");
-            return true;
-        }
-
-        if (stats.SpecialAbilities != null)
-        {
-            for (int i = 0; i < stats.SpecialAbilities.Count; i++)
-            {
-                string ability = stats.SpecialAbilities[i];
-                if (string.IsNullOrWhiteSpace(ability))
-                    continue;
-
-                string normalized = ability.Trim().ToLowerInvariant();
-                if (normalized.Contains("regeneration") || normalized.Contains("fast healing"))
-                {
-                    if (logMatches)
-                        Debug.Log($"[VictoryCheck] {npcName} can recover via trait '{ability}'.");
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Check if all hostile (enemy-team) combatants are defeated for combat-resolution purposes.
-    /// D&D 3.5e handling: HP <= 0 counts as down/defeated unless the target has regeneration/fast healing and can recover.
-    /// </summary>
-    private bool AreAllNPCsDead()
-    {
-        Debug.Log("[VictoryCheck] Checking if all enemies are defeated (HP <= 0 unless recoverable).");
-
-        if (NPCs == null)
-        {
-            Debug.Log("[VictoryCheck] AreAllNPCsDead called with null NPC list. Treating as victory-safe true.");
-            return true;
-        }
-
-        int aliveEnemies = 0;
-        for (int i = 0; i < NPCs.Count; i++)
-        {
-            CharacterController npc = NPCs[i];
-            bool active = IsActiveCombatant(npc);
-            bool isEnemy = active && npc.Team == CharacterTeam.Enemy;
-            string npcName = npc != null && npc.Stats != null ? npc.Stats.CharacterName : $"<npc:{i}>";
-
-            if (!active || !isEnemy)
-            {
-                Debug.Log($"[VictoryCheck] Skipping NPC in victory scan | idx={i} | name={npcName} | active={active} | isEnemy={isEnemy}");
-                continue;
-            }
-
-            int hp = npc.Stats.CurrentHP;
-            bool atZeroOrBelow = hp <= 0;
-            bool canRecover = HasRegenerationOrFastHealing(npc);
-            bool isDefeated = atZeroOrBelow && !canRecover;
-
-            Debug.Log($"[VictoryCheck] Enemy #{i}: {npcName} | hp={hp} | atOrBelowZero={atZeroOrBelow} | canRecover={canRecover} | countsAsAlive={!isDefeated}");
-
-            if (!isDefeated)
-            {
-                aliveEnemies++;
-
-                if (atZeroOrBelow && canRecover)
-                    Debug.Log($"[VictoryCheck] {npcName} is down but can recover; still counted as alive.");
-                else
-                    Debug.Log($"[VictoryCheck] {npcName} is still fighting.");
-            }
-            else
-            {
-                Debug.Log($"[VictoryCheck] {npcName} is defeated for victory checks.");
-            }
-        }
-
-        bool allDead = aliveEnemies == 0;
-        Debug.Log($"[VictoryCheck] AreAllNPCsDead result={allDead} | aliveEnemies={aliveEnemies} | snapshot={BuildEnemyStatusSnapshot()}");
-        return allDead;
-    }
-
-    /// <summary>
-    /// Check if all active PCs in the party are defeated (HP <= 0).
-    /// For combat resolution, unconscious/disabled/dying PCs count as unable to continue.
-    /// </summary>
-    private bool AreAllPCsDead()
-    {
-        foreach (var pc in PCs)
-        {
-            if (!IsActiveCombatant(pc))
-                continue;
-
-            if (pc.Stats.CurrentHP > 0)
-                return false;
-        }
-
-        // If no active PCs remain, treat the party as defeated.
-        return true;
-    }
-
-    /// <summary>Count remaining alive hostile (enemy-team) NPCs.</summary>
-    private int GetAliveNPCCount()
-    {
-        if (NPCs == null)
-            return 0;
-
-        int count = 0;
-        foreach (var npc in NPCs)
-        {
-            if (!IsActiveCombatant(npc))
-                continue;
-
-            if (npc.Team != CharacterTeam.Enemy)
-                continue;
-
-            bool atZeroOrBelow = npc.Stats.CurrentHP <= 0;
-            bool canRecover = HasRegenerationOrFastHealing(npc, logMatches: false);
-            bool isDefeated = atZeroOrBelow && !canRecover;
-
-            if (!isDefeated)
-                count++;
-        }
-
-        Debug.Log($"[VictoryCheck] GetAliveNPCCount -> {count} | snapshot={BuildEnemyStatusSnapshot()}");
-        return count;
-    }
-
-    private string BuildEnemyStatusSnapshot()
-    {
-        if (NPCs == null)
-            return "NPCs=<null>";
-
-        List<string> entries = new List<string>();
-        for (int i = 0; i < NPCs.Count; i++)
-        {
-            CharacterController npc = NPCs[i];
-            if (npc == null)
-            {
-                entries.Add($"#{i}:<null>");
-                continue;
-            }
-
-            string name = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
-            bool active = IsActiveCombatant(npc);
-            bool enemy = npc.Team == CharacterTeam.Enemy;
-            int hp = npc.Stats != null ? npc.Stats.CurrentHP : 0;
-            bool dead = npc.Stats != null && npc.Stats.IsDead;
-            bool canRecover = HasRegenerationOrFastHealing(npc, logMatches: false);
-            bool defeatedForVictory = hp <= 0 && !canRecover;
-            entries.Add($"#{i}:{name}[active={active},enemy={enemy},dead={dead},hp={hp},canRecover={canRecover},defeatedForVictory={defeatedForVictory}]");
-        }
-
-        return string.Join("; ", entries);
-    }
-
-    private void RegisterDefeatedEnemyForXP(CharacterController character, string sourceContext)
-    {
-        if (character == null || character.Stats == null)
-            return;
-
-        if (character.Team != CharacterTeam.Enemy)
-            return;
-
-        bool countsAsDefeated = character.Stats.CurrentHP <= 0 && !HasRegenerationOrFastHealing(character, logMatches: false);
-        if (!countsAsDefeated)
-            return;
-
-        if (_defeatedEnemiesThisCombat.Contains(character))
-            return;
-
-        _defeatedEnemiesThisCombat.Add(character);
-        string enemyName = string.IsNullOrWhiteSpace(character.Stats.CharacterName) ? "Unknown Enemy" : character.Stats.CharacterName;
-        string cr = string.IsNullOrWhiteSpace(character.Stats.ChallengeRating) ? "—" : character.Stats.ChallengeRatingDisplay;
-        Debug.Log($"[Combat] Enemy defeated tracked: {enemyName} (CR {cr}) | source={sourceContext}");
-    }
-
-    private void CaptureDefeatedEnemiesSnapshotForXP(string sourceContext)
-    {
-        if (NPCs == null)
-            return;
-
-        for (int i = 0; i < NPCs.Count; i++)
-            RegisterDefeatedEnemyForXP(NPCs[i], sourceContext);
-
-        Debug.Log($"[XP] Defeated enemy snapshot captured | source={sourceContext} | tracked={_defeatedEnemiesThisCombat.Count}");
-    }
-
-    public List<CharacterController> GetDefeatedEnemiesForXP()
-    {
-        return new List<CharacterController>(_defeatedEnemiesThisCombat);
-    }
-
-    private bool CheckCombatVictory(string sourceContext, CharacterController defeatedTarget = null)
-    {
-        RegisterDefeatedEnemyForXP(defeatedTarget, sourceContext);
-
-        string targetName = defeatedTarget != null && defeatedTarget.Stats != null ? defeatedTarget.Stats.CharacterName : "<none>";
-        Debug.Log($"[VictoryCheck] ENTER | source={sourceContext} | frame={Time.frameCount} | phase={CurrentPhase} | target={targetName} | targetDead={(defeatedTarget != null && defeatedTarget.Stats != null && defeatedTarget.Stats.IsDead)}");
-
-        int aliveBefore = GetAliveNPCCount();
-
-        if (CurrentPhase == TurnPhase.CombatOver)
-        {
-            Debug.Log($"[VictoryCheck] EARLY RETURN | source={sourceContext} | reason=CurrentPhase already CombatOver | aliveBefore={aliveBefore}");
-            return false;
-        }
-
-        bool allEnemiesDead = AreAllNPCsDead();
-        int aliveAfter = GetAliveNPCCount();
-        Debug.Log($"[VictoryCheck] EVALUATED | source={sourceContext} | aliveBefore={aliveBefore} | aliveAfter={aliveAfter} | allEnemiesDead={allEnemiesDead}");
-
-        if (!allEnemiesDead)
-            return false;
-
-        Debug.Log($"[VictoryCheck] All enemies dead. Calling HandleCombatVictoryDetected | source={sourceContext}");
-        HandleCombatVictoryDetected(sourceContext);
-        Debug.Log($"[VictoryCheck] EXIT after HandleCombatVictoryDetected | source={sourceContext} | waitingLoot={WaitingForLootCollection} | phaseNow={CurrentPhase}");
-        return true;
-    }
-
     /// <summary>Get first alive hostile NPC (for backward compat in single-target scenarios).</summary>
     private CharacterController GetFirstAliveNPC()
     {
@@ -3597,27 +3369,6 @@ public partial class GameManager : MonoBehaviour
             return npc;
         }
         return null;
-    }
-
-    private void HandleCombatVictoryDetected(string sourceContext)
-    {
-        Debug.Log($"[CombatEnd] Victory detected | source={sourceContext} | frame={Time.frameCount} | phaseBefore={CurrentPhase} | waitingLootBefore={WaitingForLootCollection}");
-
-        CurrentPhase = TurnPhase.CombatOver;
-        CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
-        CombatUI?.SetActionButtonsVisible(false);
-
-        Debug.Log($"[CombatEnd] Loot safeguards | source={sourceContext} | lootUiAssigned={LootCollectionUI != null} | partyStashAssigned={PartyStash != null}");
-        if (LootCollectionUI == null)
-            Debug.LogWarning("[LootUI] LootCollectionUI reference is null before BeginPostCombatLootCollection. Initialization will be attempted.");
-        if (PartyStash == null)
-            Debug.LogWarning("[LootFlow] PartyStash is null before BeginPostCombatLootCollection. Initialization will be attempted.");
-
-        CaptureDefeatedEnemiesSnapshotForXP($"{sourceContext}.Victory");
-
-        Debug.Log($"[CombatEnd] Triggering post-combat loot collection | source={sourceContext} | waitingBefore={WaitingForLootCollection}");
-        BeginPostCombatLootCollection();
-        Debug.Log($"[CombatEnd] Post-combat loot collection invoked | source={sourceContext} | waitingAfter={WaitingForLootCollection} | phaseAfter={CurrentPhase}");
     }
 
     private Sprite LoadSprite(string path)
@@ -3726,6 +3477,7 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[CombatPhase] Transitioning: {previousPhase} → {CurrentPhase} (combat bootstrap)");
 
         CombatUI.InitializeForCombat();
+        RecordCombatSidesAtStart();
 
         ClearAllActiveGreaseEffects();
 
@@ -3861,9 +3613,10 @@ public partial class GameManager : MonoBehaviour
 
     private void OnCombatEnded()
     {
-        int aliveEnemiesBefore = GetAliveNPCCount();
-        bool allNpcsDead = AreAllNPCsDead();
-        bool allPcsDead = AreAllPCsDead();
+        CombatEndRules.SideCounts sides = GetCombatEndSides();
+        int aliveEnemiesBefore = sides.EnemiesIn;
+        bool allNpcsDead = sides.EnemiesOut;
+        bool allPcsDead = sides.PlayersOut;
         bool isVictory = allNpcsDead && !allPcsDead;
 
         Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)} | aliveEnemiesBefore={aliveEnemiesBefore} | allNpcsDead={allNpcsDead} | allPcsDead={allPcsDead} | victory={isVictory}");
@@ -3985,11 +3738,22 @@ public partial class GameManager : MonoBehaviour
         _conditionService?.OnTurnEnd(endingCharacter);
         ProcessEndOfTurnHPState(endingCharacter);
 
+        // Every turn boundary checks the combat end (CORE-011): whatever dropped a creature during this turn, on
+        // any path, the combat ends here at the latest. Checked before TurnEndedEvent so its subscribers see the end.
+        bool combatOver = EvaluateCombatEnd("NextInitiativeTurn");
+
         if (endingCharacter != null)
             GameEventSystem.Instance.Publish(new TurnEndedEvent { Character = endingCharacter });
 
         // Threat map may have changed (NPC moved, character died, etc.)
         InvalidatePreviewThreats();
+
+        // No next turn once the combat is over: an NPC turn would set the phase again (CORE-003).
+        if (combatOver)
+        {
+            UpdateInitiativeUI();
+            return;
+        }
 
         _turnService?.EndTurn();
         UpdateInitiativeUI();
@@ -4010,6 +3774,10 @@ public partial class GameManager : MonoBehaviour
         pc.TickBombardierAcidSprayCooldown();
         pc.ApplyRegenerationAtTurnStart();
         CloseInventoryIfOpen();
+
+        // Ongoing damage at the start of the turn can drop the last creature of a side.
+        if (EvaluateCombatEnd("StartPCTurn.TurnStartEffects"))
+            return;
 
         // Tick Aid Another expiry counters before actions; this keeps bonuses available for one full beneficiary turn.
         ExpireAidBonusesAtTurnStart(pc);
@@ -4172,6 +3940,11 @@ public partial class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        // Every PC action comes back here once it has resolved, so this is where a PC-path kill, spell, maneuver,
+        // AoO or tick that dropped the last creature of either side ends the combat (CORE-011).
+        if (EvaluateCombatEnd("ShowActionChoices"))
+            return;
 
         bool hasThrowableWeapon = pc.HasThrowableWeaponEquipped();
         bool hasOffHandWeapon = pc.HasOffHandWeaponEquipped();
@@ -8793,39 +8566,9 @@ public partial class GameManager : MonoBehaviour
         Debug.Log("[Attack][Sequence] Ending attack sequence");
         Debug.Log($"[Attack][Sequence] Final state before teardown: attacksUsed={(_attackingCharacter != null ? _attackingCharacter.ProgressiveAttackPool.MainHandStepsUsed : 0)}/{(_attackingCharacter != null ? _attackingCharacter.ProgressiveAttackPool.MainHandBudget : 0)}, offHandUsed={_offHandAttackUsedThisTurn}, offHandAvailable={_offHandAttackAvailableThisTurn}, phase={CurrentPhase}");
 
-        // Nuclear safety net: if attack flow ended and every enemy is dead, force victory handling.
+        // Safety net: an attack flow that ended may have dropped the last creature of either side (CORE-011).
         if (CurrentPhase == TurnPhase.PCTurn || CurrentPhase == TurnPhase.NPCTurn)
-        {
-            int aliveEnemies = GetAliveNPCCount();
-            int totalEnemyCombatants = 0;
-            if (NPCs != null)
-            {
-                for (int i = 0; i < NPCs.Count; i++)
-                {
-                    CharacterController npc = NPCs[i];
-                    if (!IsActiveCombatant(npc))
-                        continue;
-                    if (npc.Team != CharacterTeam.Enemy)
-                        continue;
-                    totalEnemyCombatants++;
-                }
-            }
-
-            Debug.Log($"[Attack][ForceCheck] EndAttackSequence enemy status | aliveEnemies={aliveEnemies} | totalEnemyCombatants={totalEnemyCombatants} | snapshot={BuildEnemyStatusSnapshot()}");
-            if (aliveEnemies == 0 && totalEnemyCombatants > 0)
-            {
-                Debug.Log("[Attack][ForceCheck] FORCING victory detection from EndAttackSequence");
-                CheckCombatVictory("EndAttackSequence.ForceCheck");
-            }
-            else
-            {
-                Debug.Log("[Attack][ForceCheck] No force trigger needed.");
-            }
-        }
-        else
-        {
-            Debug.Log($"[Attack][ForceCheck] Skipped force check due to phase={CurrentPhase}");
-        }
+            EvaluateCombatEnd("EndAttackSequence.ForceCheck");
 
         // Only the UI flow ends here. The creature's attack sequence (ProgressiveAttackPool) lives
         // until StartNewTurn, so a sequence restarted later this turn continues at the next lower
@@ -11190,7 +10933,13 @@ public partial class GameManager : MonoBehaviour
         => NPCPerformAttack(npc, target, tryStepManeuver);
 
     public bool TryNPCPerformSpellCastForAI(CharacterController npc, CharacterController target, SpellData spell)
-        => TryNPCPerformSpellCast(npc, target, spell);
+    {
+        bool cast = TryNPCPerformSpellCast(npc, target, spell);
+        // A spell that drops the last creature of a side ends the combat now, as the PC cast sites do (CORE-011).
+        if (cast)
+            EvaluateCombatEnd("TryNPCPerformSpellCast");
+        return cast;
+    }
 
     public bool HasActiveShieldSpellForAI(CharacterController target)
         => HasActiveShieldSpell(target);

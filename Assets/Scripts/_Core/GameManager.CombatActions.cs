@@ -1174,13 +1174,8 @@ public partial class GameManager
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{pc.Stats.CharacterName}'s movement stops immediately due to incapacitation."));
 
-            if (AreAllPCsDead())
-            {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                CombatUI.SetActionButtonsVisible(false);
+            if (EvaluateCombatEnd("PCMovement.Incapacitated"))
                 yield break;
-            }
 
             EndActivePCTurn();
             yield break;
@@ -1556,21 +1551,18 @@ public partial class GameManager
             CheckConcentrationOnDamage(target, result.TotalDamage);
 
         if (result != null && result.TargetKilled)
-        {
             HandleSummonDeathCleanup(target);
 
-            if (target.Team == CharacterTeam.Enemy)
+        // Victory or defeat when the off-hand attack dropped the last creature of a side (CORE-011).
+        if (CombatEndRules.IsOutOfFight(target))
+        {
+            UpdateAllStatsUI();
+            if (EvaluateCombatEnd("ResolveOffHandAttack"))
             {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    _offHandAttackUsedThisTurn = true;
-                    _isSelectingOffHandTarget = false;
-                    _isSelectingOffHandThrownTarget = false;
-                    Debug.Log("[CombatEnd] Victory condition met after off-hand attack kill.");
-                    HandleCombatVictoryDetected("ResolveOffHandAttack");
-                    return;
-                }
+                _offHandAttackUsedThisTurn = true;
+                _isSelectingOffHandTarget = false;
+                _isSelectingOffHandThrownTarget = false;
+                return;
             }
         }
 
@@ -2197,12 +2189,9 @@ public partial class GameManager
         if (CurrentPhase == TurnPhase.CombatOver)
             return;
 
-        if (target != null && target.Stats != null && target.Stats.IsDead && target.Team == CharacterTeam.Enemy && AreAllNPCsDead())
-        {
-            Debug.Log("[CombatEnd] Victory condition met after special attack resolution.");
-            HandleCombatVictoryDetected("FinalizeSpecialAttackResolution");
+        // Victory or defeat when the maneuver (or an AoO it provoked) dropped the last creature of a side (CORE-011).
+        if (EvaluateCombatEnd("FinalizeSpecialAttackResolution"))
             return;
-        }
 
         if (attacker != null)
             StartCoroutine(AfterAttackDelay(attacker, 1.0f));
@@ -2703,16 +2692,17 @@ public partial class GameManager
 
             TryResolveFreeTripFromAttackResults(attacker, currentTarget, stepResult.Attacks, rangeInfo);
 
+            // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
+            if (!attack.TargetKilled && CombatEndRules.IsOutOfFight(currentTarget)
+                && EvaluateCombatEnd("ExecuteFullAttackSequence"))
+                yield break;
+
             if (attack.TargetKilled)
             {
                 HandleSummonDeathCleanup(currentTarget);
 
-                if (currentTarget.Team == CharacterTeam.Enemy && AreAllNPCsDead())
-                {
-                    Debug.Log("[CombatEnd] Victory condition met during full attack sequence.");
-                    HandleCombatVictoryDetected("ExecuteFullAttackSequence");
+                if (EvaluateCombatEnd("ExecuteFullAttackSequence"))
                     yield break;
-                }
 
                 int attacksRemainingAfterKill = plannedAttackCount - (attackIndex + 1);
                 if (attacksRemainingAfterKill > 0)

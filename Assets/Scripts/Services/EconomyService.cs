@@ -73,6 +73,18 @@ public class EconomyService : MonoBehaviour
         Debug.Log($"[Economy] EconomyService initialized | startingGold={startingGold}");
     }
 
+    /// <summary>
+    /// A new party after a defeat (CORE-001): the starting gold and a new stash, seeded again on the next
+    /// <see cref="EnsurePartyStashInitialized"/>.
+    /// </summary>
+    public void ResetForNewParty(int startingGold)
+    {
+        PartyGold = startingGold;
+        _partyStash = new PartyStash();
+        _partyStashSeeded = false;
+        Debug.Log($"[Economy] Reset for a new party | startingGold={startingGold}");
+    }
+
     /// <summary>Clean up on destruction or combat end.</summary>
     public void Cleanup()
     {

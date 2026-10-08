@@ -386,26 +386,8 @@ public class CombatFlowService : MonoBehaviour
 
         LogDeathPoint($"{context}:ENTRY", attacker, target);
 
-        if (target == null || target.Stats == null)
-        {
-            Debug.Log($"[VictoryCheck] {context} skip: target is null.");
-            return false;
-        }
-
-        if (target.Team != CharacterTeam.Enemy)
-        {
-            Debug.Log($"[VictoryCheck] {context} skip: target is not enemy (team={target.Team}).");
-            return false;
-        }
-
-        int aliveBefore = _gameManager.Combat_GetAliveNPCCount();
-        Debug.Log($"[VictoryCheck] {context} before check | aliveEnemies={aliveBefore}");
-
-        bool handled = _gameManager.Combat_CheckCombatVictory(context, target);
-
-        int aliveAfter = _gameManager.Combat_GetAliveNPCCount();
-        Debug.Log($"[VictoryCheck] {context} after check | handled={handled} | aliveEnemies={aliveAfter} | phase={_gameManager.CurrentPhase} | waitingLoot={_gameManager.WaitingForLootCollection}");
-        return handled;
+        // The shared combat-end check for both sides (CORE-011); a null target (Whirlwind Attack) still checks.
+        return _gameManager.Combat_CheckCombatVictory(context, target);
     }
 
     public CombatResult ExecuteOffHandAttack(CharacterController attacker, CharacterController target, int attackBab, ItemData offHandWeapon, bool useThrownRange)
@@ -685,19 +667,21 @@ public class CombatFlowService : MonoBehaviour
         {
             LogDeathPoint("PerformIterativeSequenceAttack:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (target.Team == CharacterTeam.Enemy)
-            {
-                _gameManager.Combat_UpdateAllStatsUI();
-                Debug.Log("[AttackFlow] Attack sequence ended");
-                Debug.Log("[AttackFlow] Target died, checking victory");
-                if (TryHandleVictoryAfterEnemyDeath("PerformIterativeSequenceAttack", attacker, target))
-                {
-                    _gameManager.Combat_EndAttackSequence();
-                    return;
-                }
+        }
 
-                _gameManager.CombatUI?.ShowCombatLog(attackLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
+        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
+        if (CombatEndRules.IsOutOfFight(target))
+        {
+            _gameManager.Combat_UpdateAllStatsUI();
+            Debug.Log("[AttackFlow] Target is out of the fight, checking combat end");
+            if (TryHandleVictoryAfterEnemyDeath("PerformIterativeSequenceAttack", attacker, target))
+            {
+                _gameManager.Combat_EndAttackSequence();
+                return;
             }
+
+            if (result.TargetKilled && target.Team == CharacterTeam.Enemy)
+                _gameManager.CombatUI?.ShowCombatLog(attackLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
         }
 
         attacker.RegisterAttackMade(useNaturalFullAttackStep ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand);
@@ -917,18 +901,24 @@ public class CombatFlowService : MonoBehaviour
         if (result.Hit && !result.IsRangedAttack)
             MeleeReactionService.TriggerReactions(attacker, target, result);
 
+        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
+        if (!result.TargetKilled && CombatEndRules.IsOutOfFight(target))
+        {
+            _gameManager.Combat_UpdateAllStatsUI();
+            if (TryHandleVictoryAfterEnemyDeath("PerformSingleAttack", attacker, target))
+                return;
+        }
+
         if (result.TargetKilled)
         {
             LogDeathPoint("PerformSingleAttack:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (target.Team == CharacterTeam.Enemy)
-            {
-                _gameManager.Combat_UpdateAllStatsUI();
-                if (TryHandleVictoryAfterEnemyDeath("PerformSingleAttack", attacker, target))
-                    return;
+            _gameManager.Combat_UpdateAllStatsUI();
+            if (TryHandleVictoryAfterEnemyDeath("PerformSingleAttack", attacker, target))
+                return;
 
+            if (target.Team == CharacterTeam.Enemy)
                 _gameManager.CombatUI?.ShowCombatLog(log + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
-            }
 
             // === CLEAVE / GREAT CLEAVE ===
             // After dropping a foe with a melee attack, grant bonus attack(s) against adjacent enemies.
@@ -968,6 +958,10 @@ public class CombatFlowService : MonoBehaviour
 
                     if (cleaveResult.Hit && !cleaveResult.IsRangedAttack)
                         MeleeReactionService.TriggerReactions(attacker, cleaveTarget, cleaveResult);
+
+                    if (!cleaveResult.TargetKilled && CombatEndRules.IsOutOfFight(cleaveTarget)
+                        && TryHandleVictoryAfterEnemyDeath("Cleave", attacker, cleaveTarget))
+                        return;
 
                     if (cleaveResult.TargetKilled)
                     {
@@ -1067,12 +1061,14 @@ public class CombatFlowService : MonoBehaviour
         {
             LogDeathPoint("PerformFullAttack:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (target.Team == CharacterTeam.Enemy)
-            {
-                _gameManager.Combat_UpdateAllStatsUI();
-                if (TryHandleVictoryAfterEnemyDeath("PerformFullAttack", attacker, target))
-                    return;
-            }
+        }
+
+        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
+        if (CombatEndRules.IsOutOfFight(target))
+        {
+            _gameManager.Combat_UpdateAllStatsUI();
+            if (TryHandleVictoryAfterEnemyDeath("PerformFullAttack", attacker, target))
+                return;
         }
 
         _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
@@ -1121,12 +1117,14 @@ public class CombatFlowService : MonoBehaviour
         {
             LogDeathPoint("PerformDualWieldAttack:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (target.Team == CharacterTeam.Enemy)
-            {
-                _gameManager.Combat_UpdateAllStatsUI();
-                if (TryHandleVictoryAfterEnemyDeath("PerformDualWieldAttack", attacker, target))
-                    return;
-            }
+        }
+
+        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
+        if (CombatEndRules.IsOutOfFight(target))
+        {
+            _gameManager.Combat_UpdateAllStatsUI();
+            if (TryHandleVictoryAfterEnemyDeath("PerformDualWieldAttack", attacker, target))
+                return;
         }
 
         _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
@@ -1175,12 +1173,14 @@ public class CombatFlowService : MonoBehaviour
         {
             LogDeathPoint("PerformFlurryOfBlows:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (target.Team == CharacterTeam.Enemy)
-            {
-                _gameManager.Combat_UpdateAllStatsUI();
-                if (TryHandleVictoryAfterEnemyDeath("PerformFlurryOfBlows", attacker, target))
-                    return;
-            }
+        }
+
+        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
+        if (CombatEndRules.IsOutOfFight(target))
+        {
+            _gameManager.Combat_UpdateAllStatsUI();
+            if (TryHandleVictoryAfterEnemyDeath("PerformFlurryOfBlows", attacker, target))
+                return;
         }
 
         _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
@@ -1408,6 +1408,10 @@ public class CombatFlowService : MonoBehaviour
                     LogDeathPoint("WhirlwindAttack:TargetKilled", attacker, enemy);
                     _gameManager.Combat_HandleSummonDeathCleanup(enemy);
                 }
+                else if (CombatEndRules.IsOutOfFight(enemy))
+                {
+                    anyKilled = true; // dropped (dying, unconscious): the combat-end check below runs too
+                }
             }
             else
             {
@@ -1510,12 +1514,11 @@ public class CombatFlowService : MonoBehaviour
         {
             LogDeathPoint("Manyshot:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (target.Team == CharacterTeam.Enemy)
-            {
-                if (TryHandleVictoryAfterEnemyDeath("Manyshot", attacker, target))
-                    return;
-            }
         }
+
+        // Either side, dead or only out of the fight (dying, unconscious): the shared check (CORE-011, CORE-037).
+        if (CombatEndRules.IsOutOfFight(target) && TryHandleVictoryAfterEnemyDeath("Manyshot", attacker, target))
+            return;
 
         _gameManager.Combat_StartDelayedEndActivePCTurn(2.0f);
     }

@@ -100,12 +100,10 @@ public partial class GameManager
     public void Combat_HandleSummonDeathCleanup(CharacterController target)
         => HandleSummonDeathCleanup(target);
 
-    public bool Combat_AreAllNPCsDead() => AreAllNPCsDead();
     public int Combat_GetAliveNPCCount() => GetAliveNPCCount();
     public bool Combat_CheckCombatVictory(string sourceContext, CharacterController defeatedTarget = null)
         => CheckCombatVictory(sourceContext, defeatedTarget);
 
-    public bool Combat_AreAllPCsDead() => AreAllPCsDead();
 
     public void Combat_ShowActionChoices() => ShowActionChoices();
 

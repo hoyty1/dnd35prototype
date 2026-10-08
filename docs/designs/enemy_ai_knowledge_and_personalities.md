@@ -428,7 +428,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | | **AI-011** | Becomes the outcome-fact writers. |
 | Before Phase 4 | NPC skills (no issue exists yet; file one) | `NPCDefinition` has no skills field and `InitializeSkills` never runs for NPCs, so trained-only checks always fail for monsters. |
 | | **ENC-015** | The DMG `SpawnResult` is dropped at `EncounterSelectionUI.cs:676`, so DMG encounters carry no intel context. |
-| | **CORE-002** | `OnCombatEnded` is skipped on victory. Use `HandleCombatVictoryDetected` (`GameManager.cs:3581`). |
+| | **CORE-002** | `OnCombatEnded` is skipped on victory. Combat end goes through `GameManager.EvaluateCombatEnd` (`_Core/GameManager.CombatEnd.cs`), which calls `HandleCombatVictoryDetected`. |
 | | **CRE-002** | Spawned monsters have no alignment (alignment hints, Zealot, *detect evil*). |
 | | **CMB-028** | Surprise and encounter distance, needed for the Alert/Watched levels and Ambusher. |
 

@@ -68,8 +68,8 @@ namespace Tests.Scenarios
             Party(b, Control.Ai)
                 .Npc("goblin1", "goblin", 12, 9)
                 .Npc("goblin2", "goblin", 12, 11)
-                .Expect("The fight ends with one side out (an end the harness had to detect is waived by CORE-011)",
-                    Expect.Outcome(Outcome.Victory, Outcome.VictoryUndetected, Outcome.Defeat, Outcome.DefeatUndetected))
+                .Expect("The game ends the fight itself when one side is out (CORE-011: AI-run killers trigger victory too)",
+                    Expect.GameDetectedEnd())
                 .Expect("Every turn of a party member is an AI turn (PC-slot actors run on the NPC path)",
                     v =>
                     {

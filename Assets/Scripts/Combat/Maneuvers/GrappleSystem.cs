@@ -1874,19 +1874,14 @@ public partial class GameManager
             TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result);
 
             if (result != null && result.TargetKilled)
-            {
                 HandleSummonDeathCleanup(opponent);
 
-                if (AreAllPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                    CombatUI?.SetActionButtonsVisible(false);
-                    yield break;
-                }
+            // Victory or defeat when the grapple dropped the last creature of a side (CORE-011).
+            if (EvaluateCombatEnd("NPCGrapple.Action"))
+                yield break;
 
+            if (result != null && result.TargetKilled)
                 break;
-            }
 
             float pause = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
             yield return new WaitForSeconds(pause);

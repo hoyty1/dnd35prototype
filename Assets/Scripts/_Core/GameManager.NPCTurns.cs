@@ -34,6 +34,10 @@ public partial class GameManager
     /// </summary>
     private IEnumerator SingleNPCTurnFromInitiative(CharacterController npc)
     {
+        // A combat that ended before this turn began (for example by a tick at the round boundary) stays ended (CORE-003).
+        if (CurrentPhase == TurnPhase.CombatOver)
+            yield break;
+
         CurrentPhase = TurnPhase.NPCTurn;
         CombatUI.SetActivePC(0); // No PC active
         CombatUI.SetActiveNPC(NPCs.IndexOf(npc)); // Highlight active NPC
@@ -45,6 +49,10 @@ public partial class GameManager
 
         ExpireAidBonusesAtTurnStart(npc);
         HandleFlamingSphereTurnStart(npc);
+
+        // Ongoing damage at the start of the turn can drop the last creature of a side.
+        if (EvaluateCombatEnd("SingleNPCTurn.TurnStartEffects"))
+            yield break;
 
         if (ShouldSkipTurnDueToHPState(npc))
         {
@@ -63,14 +71,9 @@ public partial class GameManager
         if (_aiService != null)
             yield return StartCoroutine(_aiService.ExecuteNPCTurn(npc, behavior));
 
-        // Check if all PCs are dead after NPC turn
-        if (AreAllPCsDead())
-        {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-            CombatUI.SetActionButtonsVisible(false);
+        // Victory or defeat after the NPC turn, whoever this NPC is and whichever side it dropped (CORE-011).
+        if (EvaluateCombatEnd("SingleNPCTurnFromInitiative"))
             yield break;
-        }
 
         // Advance to next in initiative
         NextInitiativeTurn();
@@ -992,17 +995,14 @@ public partial class GameManager
             TryResolveImprovedGrabFromAttackResults(npc, currentTarget, stepAttacks);
 
             if (currentTarget.Stats.IsDead)
-            {
                 HandleSummonDeathCleanup(currentTarget);
 
-                if (AreAllPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    break;
-                }
+            // A target dead, dying or unconscious may be the last of its side: victory or defeat at once (CORE-011).
+            if (CombatEndRules.IsOutOfFight(currentTarget) && EvaluateCombatEnd("NPCPerformAttack.Sequence"))
+                break;
 
+            if (currentTarget.Stats.IsDead)
+            {
                 int attacksRemainingAfterKill = adaptive ? npc.GetRemainingMainHandAttackSteps(stepKind) : 0;
                 CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", attacksRemainingAfterKill > 0
                     ? $"{currentTarget.Stats.CharacterName} is defeated! {attacksRemainingAfterKill} attack(s) remaining."
@@ -1688,17 +1688,14 @@ public partial class GameManager
             TryResolveImprovedGrabFromAttackResults(npc, target, fullResult.Attacks);
 
             if (fullResult.TargetKilled)
-            {
                 HandleSummonDeathCleanup(target);
 
-                if (AreAllPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    yield break;
-                }
+            // Victory or defeat when the target was the last of its side (CORE-011).
+            if (CombatEndRules.IsOutOfFight(target) && EvaluateCombatEnd("NPCPerformAttack.FullAttack"))
+                yield break;
 
+            if (fullResult.TargetKilled)
+            {
                 CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
             }
 
@@ -1751,17 +1748,14 @@ public partial class GameManager
         TryResolveImprovedGrabFromAttackResults(npc, target, new List<CombatResult> { result });
 
         if (result.TargetKilled)
-        {
             HandleSummonDeathCleanup(target);
 
-            if (AreAllPCsDead())
-            {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                CombatUI.SetActionButtonsVisible(false);
-                yield break;
-            }
+        // Victory or defeat when the target was the last of its side (CORE-011).
+        if (CombatEndRules.IsOutOfFight(target) && EvaluateCombatEnd("NPCPerformAttack.Single"))
+            yield break;
 
+        if (result.TargetKilled)
+        {
             CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
         }
 

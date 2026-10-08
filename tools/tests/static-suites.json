@@ -457,6 +457,17 @@
       "notes": "Edit mode: the suite sets controller.Stats without Init, so in Play mode Awake has bound ConditionManager to null stats and conditions are dropped (TST-029); edit mode uses the CharacterStats fallback path. Move to play once TST-029 is fixed."
     },
     {
+      "type": "Tests.Combat.CombatEndRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 31,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CORE-011, CORE-034, CORE-037: the combat-end predicate (CombatEndRules) case by case. Play only: CharacterController.Init needs Awake (TST-009)."
+    },
+    {
       "type": "Tests.Combat.CommandUndeadRulesTests",
       "needs": "play",
       "skip": "",
