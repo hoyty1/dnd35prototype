@@ -93,7 +93,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 81;
+        public const int Count = 85;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -144,6 +144,10 @@ namespace Tests.Scenarios
             yield return S("pin-release-npc-withdraw", () => PinReleaseLeave(false, "withdraw"));
             yield return S("pin-release-npc-charge", () => PinReleaseLeave(false, "charge"));
             yield return S("pin-release-ai-stayer", PinReleaseAiStayer);
+            yield return S("shared-square-move-aoo", () => SharedSquareLeave(false));
+            yield return S("shared-square-5ft-no-aoo", () => SharedSquareLeave(true));
+            yield return S("shared-square-melee", SharedSquareMelee);
+            yield return S("shared-square-coup-de-grace", SharedSquareCoupDeGrace);
             yield return S("grappler-feared-stays", GrapplerFearedStays);
             yield return S("pin-duration-ui", PinDurationUi);
             yield return S("pin-duration-ai", PinDurationAi);
@@ -1710,12 +1714,14 @@ namespace Tests.Scenarios
         /// <summary>
         /// The Ui hero pins and releases the orc, then ends its turn in the shared square. The orc's own AI turn starts in
         /// that square with an enemy at distance 0 (CMB-122's NPC symptom: an AI that advanced spent its move action and
-        /// stayed). The AI must leave the square by a move or a 5-foot step and then act against the hero.
+        /// stayed). The hero is in the orc's reach there (PHB p.149, owner ruling CMB-131), so the AI may attack it from
+        /// the shared square or leave first (a move provokes from the hero, a 5-foot step does not); either way it acts
+        /// against the hero.
         /// </summary>
         private static ScenarioDef PinReleaseAiStayer()
         {
-            return Rules("rules/pin-release-ai-stayer", "The AI orc left in the square shared after a pin release leaves it on its own turn and acts (CMB-122; PHB p.148, p.157)")
-                .Covers("CMB-122", "CMB-089", "PHB p.148", "PHB p.157", "PC_NPC_PARITY")
+            return Rules("rules/pin-release-ai-stayer", "The AI orc left in the square shared after a pin release acts against the hero on its own turn (CMB-122, CMB-131; PHB p.148, p.149, p.157)")
+                .Covers("CMB-122", "CMB-131", "CMB-089", "PHB p.148", "PHB p.149", "PHB p.157", "PC_NPC_PARITY")
                 .MaxRounds(2)
                 .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Ui)
                 .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
@@ -1740,25 +1746,194 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass("ai, free, both at " + SharedSquare, t.Seq)
                         : ExpectResult.Fail("controller " + t.Str("controller") + ", free " + free + ", orc at " + Pos(o) + ", hero at " + Pos(h), t.Seq);
                 })
-                .Expect("The orc leaves the shared square on its round-2 turn (a move or a 5-foot step)", v =>
+                .Expect("The orc attacks the hero or uses a maneuver on it in round 2, from the shared square or after leaving it (CMB-131)", v =>
                 {
-                    TraceEvent mv = v.Moves("orc", 2).FirstOrDefault();
-                    JsonObj o = v.Final("orc");
-                    if (mv == null)
-                        return ScenarioChecks.IsDownSnapshot(o) ? ExpectResult.Inconclusive("the orc went down before moving") : ExpectResult.Fail("the orc did not move in round 2; it ends at " + Pos(o));
-                    return mv.Get("from") is Vector2Int start && start == SharedSquare && mv.Get("to") is Vector2Int to && to != SharedSquare
-                        ? ExpectResult.Pass(mv.Str("type") + " " + start + " -> " + to, mv.Seq)
-                        : ExpectResult.Fail("first move " + mv.Get("from") + " -> " + mv.Get("to"), mv.Seq);
+                    TraceEvent t = v.TurnsOf("orc").FirstOrDefault(e => e.Round == 2);
+                    if (t == null) return ExpectResult.Fail("no orc turn in round 2");
+                    TraceEvent act = v.Attacks("orc", "hero", aoo: false, round: 2).FirstOrDefault(e => e.Seq > t.Seq)
+                        ?? v.Maneuvers("orc").FirstOrDefault(e => e.Round == 2 && e.Seq > t.Seq && e.Str("target") == "hero");
+                    if (act != null)
+                    {
+                        TraceEvent mv = v.Moves("orc", 2).FirstOrDefault(e => e.Seq < act.Seq);
+                        return ExpectResult.Pass(act.Ev + " #" + act.Seq + (mv == null ? " from the shared square" : " after " + mv.Str("type") + " " + mv.Get("from") + " -> " + mv.Get("to")), act.Seq);
+                    }
+                    return ScenarioChecks.IsDownSnapshot(v.Final("orc")) ? ExpectResult.Inconclusive("the orc went down") : ExpectResult.Fail("no attack or maneuver on the hero in round 2", t.Seq);
                 })
-                .Expect("After leaving, the orc attacks the hero or uses a maneuver on it in round 2", v =>
+                .Expect("If the orc leaves the shared square with a move, the hero takes its AoO (CMB-131; PHB p.137); a 5-foot step provokes nothing", v =>
                 {
-                    TraceEvent mv = v.Moves("orc", 2).FirstOrDefault();
-                    if (mv == null) return ExpectResult.Inconclusive("no orc move in round 2 (see the previous expectation)");
-                    if (ScenarioChecks.IsDownSnapshot(v.Final("orc"))) return ExpectResult.Inconclusive("the orc went down");
-                    TraceEvent act = v.Attacks("orc", "hero", aoo: false, round: 2).FirstOrDefault(e => e.Seq > mv.Seq)
-                        ?? v.Maneuvers("orc").FirstOrDefault(e => e.Round == 2 && e.Seq > mv.Seq && e.Str("target") == "hero");
-                    return act != null ? ExpectResult.Pass(act.Ev + " #" + act.Seq, act.Seq) : ExpectResult.Fail("no attack or maneuver on the hero after the move", mv.Seq);
+                    TraceEvent mv = v.Moves("orc", 2).FirstOrDefault(e => e.Get("from") is Vector2Int f && f == SharedSquare);
+                    if (mv == null) return ExpectResult.Pass("the orc did not leave the shared square");
+                    // The move event's type never names a 5-foot step: read it from the orc's round-2 turn-end economy
+                    // (ActionEconomy.HasMoved5Ft). A full-round move with no attack or maneuver is a withdraw, whose first
+                    // square does not provoke (PHB p.143); a charge is full-round too but attacks, and provokes on leaving.
+                    TraceEvent end = v.Of("turn_end").FirstOrDefault(e => e.Round == 2 && e.Str("actor") == "orc" && e.Seq > mv.Seq);
+                    JsonObj econ = end != null ? end.Get("econ") as JsonObj : null;
+                    if (econ == null) return ExpectResult.Inconclusive("no orc turn end after the move (the orc went down?)");
+                    bool fiveFoot = econ.Get("five") is bool five && five;
+                    bool fullRound = econ.Get("full") is bool full && full;
+                    bool acted = v.Attacks("orc", null, aoo: false, round: 2).Any(e => e.Seq > mv.Seq)
+                        || v.Maneuvers("orc").Any(e => e.Round == 2 && e.Seq > mv.Seq);
+                    TraceEvent aoo = v.AoOs("hero", "orc", "movement").FirstOrDefault(e => e.Round == 2);
+                    if (fiveFoot)
+                        return aoo == null ? ExpectResult.Pass("5-foot step, no AoO", mv.Seq) : ExpectResult.Fail("the 5-foot step provoked AoO #" + aoo.Seq, mv.Seq);
+                    if (fullRound && !acted)
+                        return ExpectResult.Inconclusive("a full-round move without an attack (a withdraw: its first square does not provoke)");
+                    return aoo != null && aoo.Seq < mv.Seq ? ExpectResult.Pass(mv.Str("type") + ", AoO #" + aoo.Seq, aoo.Seq) : ExpectResult.Fail("no movement AoO by the hero before " + mv.Str("type") + " #" + mv.Seq, mv.Seq);
                 })
+                .Build();
+        }
+
+        /// <summary>
+        /// Owner ruling 2026-10-08 (CMB-131): a creature threatens its own square (PHB p.149, p.137), so after a pin
+        /// release the scripted NPC orc that leaves the shared square with a one-square move provokes an AoO from the Ui
+        /// hero left in it. Before the ruling that move provoked nothing: the square it ends in is never left, and the
+        /// shared square was not threatened. A 5-foot step out of it provokes nothing (PHB p.144).
+        /// </summary>
+        private static ScenarioDef SharedSquareLeave(bool fiveFoot)
+        {
+            Step leave = fiveFoot ? Step.FiveFootStep(12, 10) : Step.Move(12, 10);
+            string stepLabel = fiveFoot ? "FiveFootStep" : "Move";
+            ScenarioBuilder b = Rules(fiveFoot ? "rules/shared-square-5ft-no-aoo" : "rules/shared-square-move-aoo",
+                    fiveFoot
+                        ? "A 5-foot step out of a square shared after a pin release provokes nothing from the creature left in it (PHB p.144; CMB-131)"
+                        : "A one-square move out of a square shared after a pin release provokes from the creature left in it (PHB p.137, p.149; CMB-131)")
+                .Covers("CMB-131", "CMB-089", "PHB p.137", "PHB p.149", fiveFoot ? "PHB p.144" : "PHB p.138", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Ui)
+                .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
+                .Tweak("hero", StripOffHand)
+                .Initiative("hero", "orc")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", -1)
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Turn("orc", 1, Step.Pass())
+                .Turn("hero", 2, Step.GrappleAction("Pin"), Step.GrappleAction("ReleasePin"), Step.EndTurn())
+                .Turn("orc", 2, leave)
+                .Expect("The pin and the release are done", Expect.All(
+                    Expect.StepStatus("hero", 2, "GrappleAction(Pin)", 0, "done"),
+                    Expect.StepStatus("hero", 2, "GrappleAction(ReleasePin)", 0, "done")))
+                .Expect("Both creatures share the square, free, when the orc's round-2 turn begins", v =>
+                {
+                    JsonObj h = v.Snapshot("hero", 2, "orc"), o = v.Snapshot("orc", 2, "orc");
+                    if (h == null || o == null) return ExpectResult.Fail("no snapshot at the orc's round-2 turn start");
+                    bool free = !HasCond(h, "Grappled") && !HasCond(o, "Grappled") && !HasCond(o, "Pinned");
+                    return Pos(h) == SharedSquare && Pos(o) == SharedSquare && free
+                        ? ExpectResult.Pass("both at " + SharedSquare + ", free") : ExpectResult.Fail("hero at " + Pos(h) + ", orc at " + Pos(o) + ", free " + free);
+                })
+                .Expect("The orc's " + stepLabel + " is done and takes it from the shared square to (12,10)", v =>
+                {
+                    ExpectResult r = Expect.StepStatus("orc", 2, stepLabel, 0, "done")(v);
+                    if (!r.IsPass) return r;
+                    TraceEvent mv = v.Moves("orc", 2).FirstOrDefault();
+                    if (mv == null) return ExpectResult.Fail("no orc move in round 2");
+                    return mv.Get("from") is Vector2Int f && f == SharedSquare && mv.Get("to") is Vector2Int t && t == new Vector2Int(12, 10)
+                        ? ExpectResult.Pass(mv.Str("type") + " " + f + " -> " + t, mv.Seq) : ExpectResult.Fail("move " + mv.Get("from") + " -> " + mv.Get("to"), mv.Seq);
+                });
+            if (fiveFoot)
+                b.Expect("The 5-foot step provokes no AoO (PHB p.144)", Expect.None("aoo", null));
+            else
+                b.Expect("Exactly one AoO by the hero, for movement, before the orc leaves the shared square (PHB p.137, p.149; CMB-131)", Expect.All(
+                        Expect.Count("aoo", e => e.Str("by") == "hero" && e.Str("target") == "orc" && e.Str("trigger") == "movement", 1, 1),
+                        Expect.AoOBefore("hero", "orc", e => e.Ev == "move" && e.Str("actor") == "orc")))
+                 .Expect("No other AoO", Expect.Count("aoo", null, 1, 1));
+            return b.Build();
+        }
+
+        /// <summary>
+        /// Coup de grace on a helpless square-mate (PHB p.153; own square in reach, PHB p.149, owner ruling CMB-131). The
+        /// orc is paralyzed throughout; the Ui hero grapples it, pins it, releases the pin at the start of round 3 (a free
+        /// action) and presses Coup de Grace, clicking its own square. The button (CanUseCoupDeGraceAttackOption, which
+        /// the AI also asks), the target highlight and the resolver share CharacterController.IsInCoupDeGraceReach, so the
+        /// coup de grace resolves; before, the button stayed hidden (no adjacent helpless foe) and the resolver refused
+        /// the target as "not adjacent".
+        /// </summary>
+        private static ScenarioDef SharedSquareCoupDeGrace()
+        {
+            return Rules("rules/shared-square-coup-de-grace", "A coup de grace on a helpless creature in the attacker's own square after a pin release resolves (PHB p.149, p.153; CMB-131)")
+                .Covers("CMB-131", "CMB-089", "PHB p.149", "PHB p.153", "PC_NPC_PARITY")
+                .MaxRounds(3)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Ui)
+                .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
+                .StartCondition("orc", CombatConditionType.Paralyzed, -1)
+                // A far, idle second orc keeps the fight going when the coup de grace kills the first, so the step is traced.
+                .Npc("watcher", "orc_grapple_drill", 18, 18, Control.Idle)
+                .Tweak("hero", StripOffHand)
+                .Initiative("hero", "orc")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", -1)
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Turn("orc", 0, Step.Pass())
+                .Turn("hero", 2, Step.GrappleAction("Pin"))
+                .Turn("hero", 3, Step.GrappleAction("ReleasePin"), Step.Maneuver(SpecialAttackType.CoupDeGrace, "orc"))
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("The pin, the release and the coup de grace are done", Expect.All(
+                    Expect.StepStatus("hero", 2, "GrappleAction(Pin)", 0, "done"),
+                    Expect.StepStatus("hero", 3, "GrappleAction(ReleasePin)", 0, "done"),
+                    Expect.StepStatus("hero", 3, "Maneuver(CoupDeGrace", 0, "done")))
+                .Expect("The hero coup de graces the paralyzed orc in the shared square after the release, without moving (PHB p.153)", v =>
+                {
+                    TraceEvent release = v.Steps("hero", "GrappleAction(ReleasePin)", 3).FirstOrDefault();
+                    if (release == null) return ExpectResult.Fail("no release step");
+                    JsonObj h = v.Snapshot("hero", 3, "hero"), o = v.Snapshot("orc", 3, "hero");
+                    if (Pos(h) != SharedSquare || Pos(o) != SharedSquare) return ExpectResult.Fail("hero at " + Pos(h) + ", orc at " + Pos(o) + " at the hero's round-3 turn start");
+                    TraceEvent cdg = v.Maneuvers("hero", SpecialAttackType.CoupDeGrace).FirstOrDefault(e => e.Round == 3 && e.Seq > release.Seq && e.Str("target") == "orc");
+                    if (cdg == null) return ExpectResult.Fail("no coup de grace by the hero on the orc after the release", release.Seq);
+                    TraceEvent mv = v.Moves("hero", 3).FirstOrDefault(e => e.Seq < cdg.Seq);
+                    if (mv != null) return ExpectResult.Fail("the hero moved first (#" + mv.Seq + ")", mv.Seq);
+                    return cdg.Bool("success") ? ExpectResult.Pass("coup de grace #" + cdg.Seq + " from " + SharedSquare, cdg.Seq) : ExpectResult.Fail("the coup de grace was refused", cdg.Seq);
+                })
+                .Expect("No coup de grace is refused as not adjacent", Expect.None("log", e => (e.Str("text") ?? "").Contains("is not adjacent")))
+                .Build();
+        }
+
+        /// <summary>
+        /// Owner ruling 2026-10-08 (CMB-131): creatures sharing a square may melee each other (PHB p.149). The Ui hero
+        /// pins the orc in round 2 and releases it at the start of its round-3 renewal turn (a free action, so the full
+        /// round is left), then attacks it in the shared square through the Attack button (a click on its own square
+        /// picks the square-mate); the scripted orc then attacks the hero on the NPC path. Neither moves first.
+        /// </summary>
+        private static ScenarioDef SharedSquareMelee()
+        {
+            return Rules("rules/shared-square-melee", "Creatures sharing a square after a pin release melee each other without moving: the Ui hero and the NPC orc (PHB p.149; CMB-131)")
+                .Covers("CMB-131", "CMB-089", "PHB p.137", "PHB p.149", "PC_NPC_PARITY")
+                .MaxRounds(3)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Grapple")), 10, 10, Control.Ui)
+                .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
+                .Tweak("hero", StripOffHand)
+                .Initiative("hero", "orc")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 20, "Grapple check", -1)
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Turn("orc", 0, Step.Pass())
+                .Turn("hero", 2, Step.GrappleAction("Pin"))
+                .Turn("hero", 3, Step.GrappleAction("ReleasePin"), Step.Attack("orc"))
+                .Turn("orc", 3, Step.Attack("hero"))
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("The release and the hero's attack are done", Expect.All(
+                    Expect.StepStatus("hero", 3, "GrappleAction(ReleasePin)", 0, "done"),
+                    Expect.StepStatus("hero", 3, "Attack", 0, "done")))
+                .Expect("The hero attacks the orc in the shared square after the release, without moving (PHB p.149)", v =>
+                {
+                    TraceEvent release = v.Steps("hero", "GrappleAction(ReleasePin)", 3).FirstOrDefault();
+                    if (release == null) return ExpectResult.Fail("no release step");
+                    TraceEvent atk = v.Attacks("hero", "orc", aoo: false, round: 3).FirstOrDefault(e => e.Seq > release.Seq);
+                    if (atk == null) return ExpectResult.Fail("no hero attack on the orc after the release", release.Seq);
+                    TraceEvent mv = v.Moves("hero", 3).FirstOrDefault(e => e.Seq < atk.Seq);
+                    return mv == null ? ExpectResult.Pass("attack #" + atk.Seq + " from " + SharedSquare, atk.Seq) : ExpectResult.Fail("the hero moved first (#" + mv.Seq + ")", mv.Seq);
+                })
+                .Expect("The NPC orc attacks the hero in the shared square on its round-3 turn, without moving (PHB p.149)", v =>
+                {
+                    TraceEvent t = v.TurnsOf("orc").FirstOrDefault(e => e.Round == 3);
+                    if (t == null)
+                        return ScenarioChecks.IsDownSnapshot(v.Final("orc")) ? ExpectResult.Inconclusive("the orc went down") : ExpectResult.Fail("no orc turn in round 3");
+                    JsonObj o = v.Snapshot("orc", 3, "orc"), h = v.Snapshot("hero", 3, "orc");
+                    if (Pos(o) != SharedSquare || Pos(h) != SharedSquare) return ExpectResult.Fail("orc at " + Pos(o) + ", hero at " + Pos(h) + " at the orc's turn start", t.Seq);
+                    TraceEvent atk = v.Attacks("orc", "hero", aoo: false, round: 3).FirstOrDefault(e => e.Seq > t.Seq);
+                    if (atk == null) return ExpectResult.Fail("no orc attack on the hero in round 3", t.Seq);
+                    TraceEvent mv = v.Moves("orc", 3).FirstOrDefault(e => e.Seq < atk.Seq);
+                    return mv == null ? ExpectResult.Pass("attack #" + atk.Seq + " from " + SharedSquare, atk.Seq) : ExpectResult.Fail("the orc moved first (#" + mv.Seq + ")", mv.Seq);
+                })
+                .Expect("The orc's Attack step is done", Expect.StepStatus("orc", 3, "Attack", 0, "done"))
                 .Build();
         }
 

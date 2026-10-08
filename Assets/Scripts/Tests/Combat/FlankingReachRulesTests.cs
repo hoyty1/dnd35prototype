@@ -12,7 +12,8 @@ namespace Tests.Combat
 /// attack-of-opportunity rules for movement and maneuvers (one movement AoO per opponent per round, CMB-128,
 /// what stops a mover, who a grapple, sunder, trip, disarm, bull rush or coup de grace
 /// provokes, CMB-014) for PC and NPC sides,
-/// and the prone rules (standing up provokes; no ordinary movement while prone, CMB-074).
+/// and the prone rules (standing up provokes; no ordinary movement while prone, CMB-074),
+/// and reach into one's own square (a square-mate is threatened and may be attacked, CMB-131).
 /// Attach to any GameObject or call FlankingReachRulesTests.RunAllTests().
 /// </summary>
 public class FlankingReachRulesTests : MonoBehaviour
@@ -55,6 +56,8 @@ public class FlankingReachRulesTests : MonoBehaviour
         TestPathAoOsOncePerRound(CharacterTeam.Enemy, ref passed, ref failed);
         TestPathAoOsOncePerRound(CharacterTeam.Player, ref passed, ref failed);
         TestMovementStopsOnlyOnAoOChanges(ref passed, ref failed);
+        TestSharedSquareThreat(CharacterTeam.Enemy, ref passed, ref failed);
+        TestSharedSquareThreat(CharacterTeam.Player, ref passed, ref failed);
         TestManeuverAoOProvokers(CharacterTeam.Enemy, ref passed, ref failed);
         TestManeuverAoOProvokers(CharacterTeam.Player, ref passed, ref failed);
         TestManeuverAoODisruption(ref passed, ref failed);
@@ -290,6 +293,100 @@ public class FlankingReachRulesTests : MonoBehaviour
         {
             TestHelpers.Cleanup(mover != null ? mover.gameObject : null, threatener != null ? threatener.gameObject : null,
                 second != null ? second.gameObject : null);
+        }
+    }
+
+    private static void TestSharedSquareThreat(CharacterTeam moverTeam, ref int passed, ref int failed)
+    {
+        // Owner ruling 2026-10-08 (CMB-131): a creature reaches into its own square (PHB p.149), so it threatens a
+        // creature sharing it (PHB p.137) and may melee it; leaving the shared square provokes, but not as a
+        // withdraw's first square; a reach weapon still cannot attack there (PHB p.113); a swarm does not threaten
+        // creatures in its square (MM p.316); a creature inside the target's space does not flank it (PHB p.153).
+        CharacterTeam threatTeam = moverTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = moverTeam == CharacterTeam.Player ? "PC" : "NPC";
+        CharacterController mover = null;
+        CharacterController stayer = null;
+        CharacterController partner = null;
+        GameObject cellObject = null;
+        try
+        {
+            mover = CreateTeamCharacter("SharedMover", moverTeam, 0, 0);
+            stayer = CreateTeamCharacter("SharedStayer", threatTeam, 0, 0);
+            var all = new List<CharacterController> { mover, stayer };
+            stayer.Stats.MaxAttacksOfOpportunity = 1;
+            stayer.Stats.AttacksOfOpportunityUsed = 0;
+
+            Assert(stayer.CanMeleeAttackDistance(0) && mover.CanMeleeAttackDistance(0),
+                $"{side} shared square: distance 0 is in melee reach for both creatures", ref passed, ref failed);
+            Assert(stayer.IsTargetInCurrentWeaponRange(mover) && mover.IsTargetInCurrentWeaponRange(stayer),
+                $"{side} shared square: each creature's square-mate is in weapon range", ref passed, ref failed);
+            // A longspear's reach profile (the database entry is asserted by AssertThreatBand above).
+            var longspear = new ItemData { Name = "Longspear", WeaponCat = WeaponCategory.Melee, ReachSquares = 2, AttackRange = 2, CanAttackAdjacent = false, IsReachWeapon = true };
+            Assert(!stayer.CanMeleeAttackDistance(0, longspear) && stayer.CanMeleeAttackDistance(2, longspear),
+                $"{side} shared square: a longspear cannot attack into its wielder's own square (PHB p.113)", ref passed, ref failed);
+
+            Assert(ThreatSystem.GetThreatenedSquares(stayer).Contains(Vector2Int.zero),
+                $"{side} shared square: the stayer threatens its own square", ref passed, ref failed);
+            Assert(CombatUtils.IsThreatening(stayer, mover) && ThreatSystem.GetThreateningEnemies(mover.GridPosition, mover, all).Contains(stayer),
+                $"{side} shared square: the stayer threatens its square-mate (spellcasting, ranged attacks and standing up provoke)", ref passed, ref failed);
+
+            // One step out of the shared square into a square the stayer also threatens, and no further.
+            var oneStep = new List<Vector2Int> { new Vector2Int(1, 0) };
+            List<AoOThreatInfo> aoos = ThreatSystem.AnalyzePathForAoOs(mover, oneStep, all);
+            Assert(aoos.Count == 1 && aoos[0].Threatener == stayer && aoos[0].PathIndex == 0,
+                $"{side} shared square: leaving it with a one-square move provokes from the stayer (got {aoos.Count})", ref passed, ref failed);
+            Assert(ThreatSystem.AnalyzePathForAoOs(mover, oneStep, all, suppressFirstSquareAoO: true).Count == 0,
+                $"{side} shared square: a withdraw's first square out of it does not provoke", ref passed, ref failed);
+
+            // A creature inside the target's space threatens it but is not on an opposite side of it.
+            partner = CreateTeamCharacter("SharedPartner", moverTeam, 1, 0);
+            var trio = new List<CharacterController> { mover, stayer, partner };
+            Assert(!CombatUtils.IsAttackerFlanking(mover, stayer, trio, out _) && !CombatUtils.IsAttackerFlanking(partner, stayer, trio, out _),
+                $"{side} shared square: a creature in the target's square neither flanks nor gives a flank", ref passed, ref failed);
+
+            stayer.Stats.IsSwarm = true;
+            Assert(!ThreatSystem.GetThreatenedSquares(stayer).Contains(Vector2Int.zero),
+                $"{side} shared square: a swarm does not threaten creatures in its square (MM p.316)", ref passed, ref failed);
+            stayer.Stats.IsSwarm = false;
+
+            // Coup de grace: one distance test for the PC button and highlight, the AI and the resolver (adjacent or
+            // own square; not two squares away).
+            Assert(mover.IsInCoupDeGraceReach(stayer) && partner.IsInCoupDeGraceReach(stayer),
+                $"{side} shared square: coup de grace reaches a square-mate and an adjacent foe", ref passed, ref failed);
+            TestHelpers.SetGridPosition(partner, 2, 0);
+            Assert(!partner.IsInCoupDeGraceReach(stayer),
+                $"{side} shared square: coup de grace does not reach two squares away", ref passed, ref failed);
+            TestHelpers.SetGridPosition(partner, 1, 0);
+
+            // A click on a square shared by an ally and an enemy picks the enemy, whichever entered first; a click on
+            // one's own square picks the square-mate.
+            cellObject = new GameObject("SharedSquareCell");
+            SquareCell cell = cellObject.AddComponent<SquareCell>();
+            cell.AddOccupant(mover);
+            cell.AddOccupant(stayer);
+            Assert(cell.GetOccupantOtherThan(partner) == stayer && cell.GetOccupantOtherThan(mover) == stayer
+                && cell.GetOccupantOtherThan(stayer) == mover,
+                $"{side} shared square: a click picks the enemy in a square shared with an ally, and the square-mate in one's own square", ref passed, ref failed);
+            Assert(cell.GetOccupantOtherThan(partner, o => o != stayer) == mover,
+                $"{side} shared square: a filtered click falls back to the first valid occupant", ref passed, ref failed);
+
+            // A Large target (2x2, base at the origin) with a Medium creature in its (1,1) square: the creature
+            // inside neither flanks nor gives a flank to an ally on the far corner, but two creatures outside on
+            // opposite borders still flank (PHB p.153). Without the inside-the-space exclusion the first pair flanks.
+            stayer.Stats.CurrentSizeCategory = SizeCategory.Large;
+            TestHelpers.SetGridPosition(mover, 1, 1);
+            TestHelpers.SetGridPosition(partner, -1, -1);
+            Assert(!CombatUtils.IsAttackerFlanking(mover, stayer, trio, out _) && !CombatUtils.IsAttackerFlanking(partner, stayer, trio, out _),
+                $"{side} shared square: a creature inside a Large target's space neither flanks nor gives a flank", ref passed, ref failed);
+            TestHelpers.SetGridPosition(mover, 2, 0);
+            TestHelpers.SetGridPosition(partner, -1, 0);
+            Assert(CombatUtils.IsAttackerFlanking(mover, stayer, trio, out _) && CombatUtils.IsAttackerFlanking(partner, stayer, trio, out _),
+                $"{side} shared square: two creatures on opposite borders of a Large target flank it", ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(mover != null ? mover.gameObject : null, stayer != null ? stayer.gameObject : null,
+                partner != null ? partner.gameObject : null, cellObject);
         }
     }
 

@@ -400,10 +400,9 @@ public partial class GameManager
         // the grapple (PHB p.157, CMB-089) but grants the releaser no movement: both creatures stay where
         // they are, and either one leaves with its own move, withdraw, charge or 5-foot step
         // (SquareGrid.FindPathAoOAware accepts a shared start square, CMB-122). Nothing forces the other
-        // out: it may stay in that square until it moves, and no move may end in an occupied square. The
-        // leaver provokes as the threat rules stand: the creature it shares the square with does not threaten
-        // that square, so the first step out never provokes from it, and neither can melee the other while
-        // they share it (CMB-131).
+        // out: it may stay in that square until it moves, and no move may end in an occupied square. While
+        // they share it each threatens the other and may melee it (PHB p.149, p.137; owner ruling CMB-131), so
+        // leaving the square provokes from the creature left in it (not on a 5-foot step or a withdraw's first square).
         bool wasEscapeAction = actionType == GrappleActionType.EscapeArtist
             || actionType == GrappleActionType.OpposedGrappleEscape;
         if (!wasEscapeAction)

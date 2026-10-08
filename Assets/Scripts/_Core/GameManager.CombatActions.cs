@@ -76,31 +76,26 @@ public partial class GameManager
         }
 
         int sizePadding = Mathf.Max(0, pc.GetVisualSquaresOccupied() - 1);
-        List<SquareCell> allCells = isRangedWeapon
-            ? Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares + sizePadding)
-            : GetCellsInChebyshevRange(pc.GridPosition, maxRangeSquares + sizePadding);
+        // The scan includes the attacker's own square, melee and ranged alike: a creature sharing it is in melee reach
+        // (PHB p.149, CMB-131) and in range of a ranged or thrown weapon, as IsTargetInCurrentWeaponRange already
+        // accepts for the AI. The Chebyshev square is a superset of the D&D-distance range; the range test filters.
+        List<SquareCell> allCells = GetCellsInChebyshevRange(pc.GridPosition, maxRangeSquares + sizePadding, includeCenter: true);
         bool hasTarget = false;
         bool anyFlanking = false;
 
         foreach (var cell in allCells)
         {
-            if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead)
+            // Allow targeting ANY character (enemies, friendlies, neutrals) so players can attack walls, allies
+            // (mind control, coup de grace), etc.; an enemy is preferred when the square holds several (CMB-131).
+            CharacterController occupant = GetAttackTargetInCell(pc, cell);
+            if (occupant != null)
             {
-                // Allow targeting ANY character (enemies, friendlies, neutrals)
-                // so players can attack walls, allies (mind control, coup de grace), etc.
-
-                if (!pc.IsTargetInCurrentWeaponRange(cell.Occupant))
-                    continue;
-
-                if (isRangedWeapon && !pc.CanSee(cell.Occupant, incomingIsRangedAttack: true))
-                    continue;
-
-                bool isEnemy = TeamUtility.IsEnemy(pc, cell.Occupant);
+                bool isEnemy = TeamUtility.IsEnemy(pc, occupant);
 
                 // Check whether attacker can flank this target with any ally who actually threatens.
                 // Flanking only applies against enemies.
                 CharacterController flankPartner;
-                bool flanking = isEnemy && CombatUtils.IsAttackerFlanking(pc, cell.Occupant, allCombatants, out flankPartner);
+                bool flanking = isEnemy && CombatUtils.IsAttackerFlanking(pc, occupant, allCombatants, out flankPartner);
 
                 if (flanking)
                 {
@@ -220,29 +215,34 @@ public partial class GameManager
         }
     }
 
+    /// <summary>
+    /// The creature a normal attack by <paramref name="pc"/> on <paramref name="cell"/> targets: a living occupant other
+    /// than the attacker that is in range of the current weapon and, for a ranged attack, visible; an enemy first
+    /// (SquareCell.GetOccupantOtherThan). The attack highlight and the click use this one choice, so a square shared
+    /// by an ally and an enemy (a pin release, CMB-089/CMB-131) highlights and attacks the enemy. Null when none.
+    /// </summary>
+    private CharacterController GetAttackTargetInCell(CharacterController pc, SquareCell cell)
+    {
+        if (pc == null || cell == null)
+            return null;
+
+        bool isRanged = IsAttackModeRanged(pc, pc.GetEquippedMainWeapon());
+        return cell.GetOccupantOtherThan(pc, o => o.Stats != null && !o.Stats.IsDead
+            && pc.IsTargetInCurrentWeaponRange(o)
+            && (!isRanged || pc.CanSee(o, incomingIsRangedAttack: true)));
+    }
+
     private List<CharacterController> GetValidRangedTargets(CharacterController attacker)
     {
         var valid = new List<CharacterController>();
         if (attacker == null || !IsAttackModeRanged(attacker))
             return valid;
 
-        ItemData weapon = attacker.GetEquippedMainWeapon();
-        int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
-        bool isThrownWeapon = IsUsingThrownAttackMode(attacker, weapon) || (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
-
-        int maxRangeSquares = (rangeIncrement > 0)
-            ? RangeCalculator.GetMaxRangeSquares(rangeIncrement, isThrownWeapon)
-            : attacker.Stats.AttackRange;
-
-        int sizePadding = Mathf.Max(0, attacker.GetVisualSquaresOccupied() - 1);
-        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, maxRangeSquares + sizePadding);
-        foreach (SquareCell cell in allCells)
+        // Every enemy, not one occupant per square, so a creature sharing a square with another (or with the
+        // attacker, CMB-131) is a candidate; the weapon range test below bounds the distance.
+        foreach (CharacterController candidate in GetAllCharacters())
         {
-            if (cell == null || !cell.IsOccupied || cell.Occupant == null || cell.Occupant == attacker)
-                continue;
-
-            CharacterController candidate = cell.Occupant;
-            if (candidate.Stats == null || candidate.Stats.IsDead)
+            if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
             if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
@@ -1395,23 +1395,26 @@ public partial class GameManager
 
         if (_pendingAttackMode == PendingAttackMode.TemplateSmite)
         {
-            if (!cell.IsOccupied || cell.Occupant == null || cell.Occupant == pc || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead || !_highlightedCells.Contains(cell))
+            // The target ShowAttackTargets highlighted in this square (own square: the square-mate; an enemy first, CMB-131).
+            CharacterController smiteTarget = GetAttackTargetInCell(pc, cell);
+            if (smiteTarget == null || smiteTarget.Stats == null || smiteTarget.Stats.IsDead || !_highlightedCells.Contains(cell))
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Select a highlighted valid smite target."));
                 return;
             }
 
-            ExecuteTemplateSmiteAttack(pc, cell.Occupant);
+            ExecuteTemplateSmiteAttack(pc, smiteTarget);
             return;
         }
 
         // ===== NORMAL ATTACK MODE =====
         if (_isAwaitingRangedRetargetSelection)
         {
-            if (cell.IsOccupied && cell.Occupant != null && cell.Occupant != pc && !cell.Occupant.Stats.IsDead
+            CharacterController retarget = GetAttackTargetInCell(pc, cell); // as highlighted (CMB-131)
+            if (retarget != null && retarget.Stats != null && !retarget.Stats.IsDead
                 && _highlightedCells.Contains(cell))
             {
-                _selectedRangedRetarget = cell.Occupant;
+                _selectedRangedRetarget = retarget;
                 _isAwaitingRangedRetargetSelection = false;
                 return;
             }
@@ -1447,7 +1450,10 @@ public partial class GameManager
             return;
         }
 
-        if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)
+        // The target ShowAttackTargets highlighted in this square: a click on the attacker's own square picks a creature
+        // sharing it, and a square shared by an ally and an enemy gives the enemy (PHB p.149, CMB-131).
+        CharacterController clicked = GetAttackTargetInCell(pc, cell) ?? cell.GetOccupantOtherThan(pc);
+        if (clicked == null || clicked.Stats == null || clicked.Stats.IsDead)
         {
             // ── WALL OF ICE ATTACK ──
             // Check if the clicked cell contains a destructible Wall of Ice
@@ -1469,11 +1475,11 @@ public partial class GameManager
         }
 
 
-        if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead && _highlightedCells.Contains(cell))
+        if (clicked != null && clicked.Stats != null && !clicked.Stats.IsDead && _highlightedCells.Contains(cell))
         {
             // Allow attacking any highlighted target (enemies, friendlies, neutrals).
             // This supports attacking mind-controlled allies, neutral creatures, etc.
-            PerformPlayerAttack(pc, cell.Occupant);
+            PerformPlayerAttack(pc, clicked);
         }
     }
 
@@ -1487,9 +1493,11 @@ public partial class GameManager
             return;
         }
 
-        if (!cell.IsOccupied || cell.Occupant == null || cell.Occupant == attacker || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead || !_highlightedCells.Contains(cell))
+        // As ShowOffHandAttackTargets highlights: an enemy (own square: the square-mate, CMB-131).
+        CharacterController clicked = cell.GetOccupantOtherThan(attacker, o => TeamUtility.IsEnemy(attacker, o)) ?? cell.GetOccupantOtherThan(attacker);
+        if (clicked == null || clicked.Stats == null || clicked.Stats.IsDead || !_highlightedCells.Contains(cell))
         {
-            Debug.Log($"[OffHand] Invalid target click. occupied={cell.IsOccupied} occupant={(cell.Occupant != null ? cell.Occupant.Stats.CharacterName : "none")} highlighted={_highlightedCells.Contains(cell)}");
+            Debug.Log($"[OffHand] Invalid target click. occupied={cell.IsOccupied} occupant={(clicked != null && clicked.Stats != null ? clicked.Stats.CharacterName : "none")} highlighted={_highlightedCells.Contains(cell)}");
             _isSelectingOffHandTarget = false;
             _isSelectingOffHandThrownTarget = false;
             _currentOffHandBAB = 0;
@@ -1498,7 +1506,7 @@ public partial class GameManager
             return;
         }
 
-        CharacterController target = cell.Occupant;
+        CharacterController target = clicked;
         ItemData offHandWeapon = _currentOffHandWeapon;
         if (offHandWeapon == null)
         {
@@ -1645,25 +1653,37 @@ public partial class GameManager
         if (maxRange < 1) maxRange = 1;
 
         int sizePadding = Mathf.Max(0, attacker.GetVisualSquaresOccupied() - 1);
-        List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, maxRange + sizePadding);
+        // The attacker's own square is included: a creature sharing it is in reach (PHB p.149, CMB-131).
+        List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, maxRange + sizePadding, includeCenter: true);
         bool hasTarget = false;
         bool hasRefusedBullRushTarget = false;
         bool hasRefusedTripTarget = false;
 
+        // Drawn first so that a target sharing the attacker's square keeps its target highlight.
+        HighlightCharacterFootprint(attacker, HighlightType.Selected);
+
         foreach (var c in allCells)
         {
-            if (!c.IsOccupied || c.Occupant == attacker || c.Occupant.Stats.IsDead) continue;
-            if (!TeamUtility.IsEnemy(attacker, c.Occupant)) continue;
+            // An enemy first, so a square shared by an ally and an enemy offers the enemy (CMB-131).
+            CharacterController occupant = c.GetOccupantOtherThan(attacker);
+            if (occupant == null || occupant.Stats == null || occupant.Stats.IsDead) continue;
+            if (!TeamUtility.IsEnemy(attacker, occupant)) continue;
 
-            int distance = attacker.GetMinimumDistanceToTarget(c.Occupant, chebyshev: true);
-            // Bull rush enters the defender's space, so it needs an adjacent target (PHB p.154).
-            bool inRange = (type == SpecialAttackType.Feint || type == SpecialAttackType.CoupDeGrace || type == SpecialAttackType.BullRushAttack)
-                ? distance == 1
-                : attacker.CanMeleeAttackDistance(distance);
+            int distance = attacker.GetMinimumDistanceToTarget(occupant, chebyshev: true);
+            // Feint and coup de grace need a foe adjacent or in the attacker's own square (PHB p.149, CMB-131); coup de
+            // grace through the one test the button, the AI and the resolver share. Bull rush enters the defender's
+            // space, so it needs an adjacent target (PHB p.154; a square-mate is refused, an owner question in CMB-154).
+            bool inRange = type == SpecialAttackType.CoupDeGrace
+                ? attacker.IsInCoupDeGraceReach(occupant)
+                : type == SpecialAttackType.Feint
+                ? distance <= 1
+                : type == SpecialAttackType.BullRushAttack
+                    ? distance == 1
+                    : attacker.CanMeleeAttackDistance(distance);
 
             if (type == SpecialAttackType.Overrun)
             {
-                if (!IsValidOverrunTarget(attacker, c.Occupant, out _, requireAdjacency: true))
+                if (!IsValidOverrunTarget(attacker, occupant, out _, requireAdjacency: true))
                     continue;
 
                 inRange = distance == 1;
@@ -1674,7 +1694,7 @@ public partial class GameManager
 
             if (type == SpecialAttackType.Disarm)
             {
-                bool hasDisarmableWeapon = c.Occupant.HasDisarmableWeaponEquipped();
+                bool hasDisarmableWeapon = occupant.HasDisarmableWeaponEquipped();
                 c.SetHighlight(hasDisarmableWeapon ? HighlightType.Attack : HighlightType.AttackDeadZone);
                 _highlightedCells.Add(c);
                 hasTarget = true;
@@ -1684,7 +1704,7 @@ public partial class GameManager
             if (type == SpecialAttackType.BullRushAttack)
             {
                 // Shared legality (size, swarm, incorporeal, grappling): gray targets are refused.
-                bool canBullRush = attacker.CanBullRush(c.Occupant, false, out _);
+                bool canBullRush = attacker.CanBullRush(occupant, false, out _);
                 if (!canBullRush)
                     hasRefusedBullRushTarget = true;
                 c.SetHighlight(canBullRush ? HighlightType.Attack : HighlightType.AttackDeadZone);
@@ -1696,7 +1716,7 @@ public partial class GameManager
             if (type == SpecialAttackType.Trip)
             {
                 // Shared trip legality (size, swarm, incorporeal; PHB p.158): gray targets are refused.
-                bool canTrip = attacker.CanTrip(c.Occupant, out _);
+                bool canTrip = attacker.CanTrip(occupant, out _);
                 if (!canTrip)
                     hasRefusedTripTarget = true;
                 c.SetHighlight(canTrip ? HighlightType.Attack : HighlightType.AttackDeadZone);
@@ -1707,7 +1727,7 @@ public partial class GameManager
 
             if (type == SpecialAttackType.Sunder)
             {
-                bool hasSunderableItem = c.Occupant.HasSunderableItemEquipped();
+                bool hasSunderableItem = occupant.HasSunderableItemEquipped();
                 c.SetHighlight(hasSunderableItem ? HighlightType.Attack : HighlightType.AttackDeadZone);
                 _highlightedCells.Add(c);
                 hasTarget = true;
@@ -1716,8 +1736,8 @@ public partial class GameManager
 
             if (type == SpecialAttackType.CoupDeGrace)
             {
-                bool helplessTarget = c.Occupant.IsHelplessForCoupDeGrace() && !c.Occupant.IsImmuneToCriticalHits();
-                Debug.Log($"[Targeting][CoupDeGrace] candidate={c.Occupant.Stats.CharacterName} hp={c.Occupant.Stats.CurrentHP} dead={c.Occupant.Stats.IsDead} unconscious={c.Occupant.Stats.IsUnconscious} helpless={helplessTarget}");
+                bool helplessTarget = occupant.IsHelplessForCoupDeGrace() && !occupant.IsImmuneToCriticalHits();
+                Debug.Log($"[Targeting][CoupDeGrace] candidate={occupant.Stats.CharacterName} hp={occupant.Stats.CurrentHP} dead={occupant.Stats.IsDead} unconscious={occupant.Stats.IsUnconscious} helpless={helplessTarget}");
                 c.SetHighlight(helplessTarget ? HighlightType.Attack : HighlightType.AttackDeadZone);
                 _highlightedCells.Add(c);
                 hasTarget = true;
@@ -1728,8 +1748,6 @@ public partial class GameManager
             _highlightedCells.Add(c);
             hasTarget = true;
         }
-
-        HighlightCharacterFootprint(attacker, HighlightType.Selected);
 
         if (hasTarget)
         {
@@ -1757,13 +1775,14 @@ public partial class GameManager
 
     private void HandleSpecialAttackTargetClick(CharacterController attacker, SquareCell cell)
     {
-        if (!_highlightedCells.Contains(cell) || !cell.IsOccupied || cell.Occupant == attacker)
+        // A click on the attacker's own square picks a creature sharing it, an enemy first, as highlighted (PHB p.149, CMB-131).
+        CharacterController target = cell.GetOccupantOtherThan(attacker);
+        if (!_highlightedCells.Contains(cell) || target == null)
         {
             ShowActionChoices();
             return;
         }
 
-        CharacterController target = cell.Occupant;
         if (_pendingSpecialAttackType == SpecialAttackType.Disarm)
         {
             HandleDisarmTargetClick(attacker, target);

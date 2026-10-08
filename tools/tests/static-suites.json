@@ -477,20 +477,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 29,
-      "failed": 2,
+      "passed": 31,
+      "failed": 0,
       "flakyFailures": 0,
-      "knownFailures": [
-        {
-          "match": "Attack misses due to concealment",
-          "issue": "TST-029"
-        },
-        {
-          "match": "Concealment miss chance recorded in result",
-          "issue": "TST-029"
-        }
-      ],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
+      "knownFailures": [],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). The attack checks put attacker and defender in the same square, which is in melee reach since CMB-131 (2026-10-08), so they resolve (before, Attack returned early, TST-029)."
     },
     {
       "type": "Tests.Combat.ConditionSourceAgnosticTests",
@@ -673,7 +664,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 94,
+      "passed": 124,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
@@ -742,40 +733,22 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 55,
-      "failed": 2,
+      "passed": 57,
+      "failed": 0,
       "flakyFailures": 0,
-      "knownFailures": [
-        {
-          "match": "Invisibility effect data clears on attack action",
-          "issue": "TST-029"
-        },
-        {
-          "match": "Invisibility spell effect removed on attack action",
-          "issue": "TST-029"
-        }
-      ],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
+      "knownFailures": [],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). The attack checks put attacker and defender in the same square, which is in melee reach since CMB-131 (2026-10-08), so they resolve (before, Attack returned early, TST-029)."
     },
     {
       "type": "Tests.Combat.JumpAndMagicWeaponRulesTests",
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 43,
-      "failed": 2,
+      "passed": 45,
+      "failed": 0,
       "flakyFailures": 0,
-      "knownFailures": [
-        {
-          "match": "Attack flow reads +1 enhancement attack bonus from weapon effect",
-          "issue": "TST-029"
-        },
-        {
-          "match": "Attack flow reads +1 enhancement damage bonus from weapon effect",
-          "issue": "TST-029"
-        }
-      ],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
+      "knownFailures": [],
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). The attack checks put attacker and defender in the same square, which is in melee reach since CMB-131 (2026-10-08), so they resolve (before, Attack returned early, TST-029)."
     },
     {
       "type": "Tests.Combat.MagicCircleRulesTests",
@@ -842,28 +815,24 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 31,
-      "failed": 4,
+      "passed": 32,
+      "failed": 3,
       "flakyFailures": 0,
       "knownFailures": [
         {
-          "match": "Matching aligned attacker sees +2 deflection AC from protection",
-          "issue": "TST-029"
-        },
-        {
-          "match": "Matching aligned attack target AC is 2 higher than non-matching aligned attack",
-          "issue": "TST-029"
-        },
-        {
           "match": "Protection barrier blocks bodily contact from summoned matching-aligned melee attacker",
-          "issue": "TST-029"
+          "issue": "TST-007"
+        },
+        {
+          "match": "Summoned contact-blocked melee attack is treated as miss/no contact",
+          "issue": "TST-007"
         },
         {
           "match": "Summoned contact block provides barrier note",
-          "issue": "TST-029"
+          "issue": "TST-007"
         }
       ],
-      "notes": "Play: the attack checks run with attacker and defender in the same square, so Attack returns early (TST-029)."
+      "notes": "The attack checks run with attacker and defender in the same square; since CMB-131 (2026-10-08) that is in melee reach, so the attacks resolve (before, Attack returned early, TST-029). The summon-barrier checks register the summon on the suite's own GameManager while the attack asks GameManager.Instance, so the barrier never blocks (TST-007), as in MagicCircleRulesTests."
     },
     {
       "type": "Tests.Combat.ProtectionFromArrowsRulesTests",

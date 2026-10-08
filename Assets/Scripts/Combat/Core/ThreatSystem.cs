@@ -134,8 +134,20 @@ public static class ThreatSystem
             }
         }
 
+        // The creature's own squares: you can attack into your own square (PHB p.149), and you threaten every
+        // square you can attack into (PHB p.137), so a creature sharing one of them (after a pin release,
+        // CMB-089) is threatened, and leaving it provokes. Owner ruling 2026-10-08 (CMB-131). The same test as
+        // CharacterController.CanMeleeAttackDistance(0): only with a weapon that can attack an adjacent foe, not
+        // a reach weapon (PHB p.113). A swarm does not threaten creatures in its square (MM p.316; its other
+        // threat is CMB-123).
+        bool threatensOwnSquares = minThreatDistance <= 1 && !character.Stats.IsSwarm;
         for (int i = 0; i < occupiedSquares.Count; i++)
-            threatened.Remove(occupiedSquares[i]);
+        {
+            if (threatensOwnSquares)
+                threatened.Add(occupiedSquares[i]);
+            else
+                threatened.Remove(occupiedSquares[i]);
+        }
 
         Vector2Int basePos = character.GridPosition;
         Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from footprint base ({basePos.x},{basePos.y}) at Chebyshev distances {minThreatDistance}-{maxThreatDistance} (melee weapon equipped)");

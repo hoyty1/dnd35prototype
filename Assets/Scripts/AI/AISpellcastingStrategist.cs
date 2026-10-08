@@ -1395,7 +1395,8 @@ public static class AISpellcastingStrategist
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
             if (c.Team == caster.Team) continue;
-            if (SquareGridUtils.IsAdjacent(caster.GridPosition, c.GridPosition))
+            // Adjacent or in the caster's own square (a square-mate threatens it, PHB p.149, CMB-131).
+            if (SquareGridUtils.GetChebyshevDistance(caster.GridPosition, c.GridPosition) <= 1)
                 return true;
         }
         return false;
@@ -1410,7 +1411,8 @@ public static class AISpellcastingStrategist
             var c = allCombatants[i];
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
             if (c.Team == caster.Team) continue;
-            if (SquareGridUtils.IsAdjacent(caster.GridPosition, c.GridPosition))
+            // Adjacent or in the caster's own square (a square-mate threatens it, PHB p.149, CMB-131).
+            if (SquareGridUtils.GetChebyshevDistance(caster.GridPosition, c.GridPosition) <= 1)
                 count++;
         }
         return count;

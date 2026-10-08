@@ -31,6 +31,37 @@ public class SquareCell : MonoBehaviour
     /// </summary>
     public IReadOnlyList<CharacterController> Occupants => _occupants;
 
+    /// <summary>
+    /// The occupant a click by <paramref name="self"/> on this cell picks as a target. Among the occupants other than
+    /// <paramref name="self"/> that pass <paramref name="isValid"/> (every one when null): the first living one hostile
+    /// to <paramref name="self"/>, else the first living one, else the first one, else null. Several creatures may
+    /// share a square (a pin release leaves the pinner and the released creature together, CMB-089; a swarm or a Tiny
+    /// creature), and a creature may attack into its own square (PHB p.149, CMB-131), so a click on one's own square
+    /// picks the square-mate, and a click on a square shared by an ally and an enemy picks the enemy whatever the
+    /// order in which they entered it. Two hostile creatures in one square: the first that passes the filter (no chooser).
+    /// </summary>
+    public CharacterController GetOccupantOtherThan(CharacterController self, System.Func<CharacterController, bool> isValid = null)
+    {
+        CharacterController firstLiving = null;
+        CharacterController fallback = null;
+        for (int i = 0; i < _occupants.Count; i++)
+        {
+            CharacterController occupant = _occupants[i];
+            if (occupant == null || occupant == self)
+                continue;
+            if (isValid != null && !isValid(occupant))
+                continue;
+            bool living = occupant.Stats != null && !occupant.Stats.IsDead;
+            if (living && self != null && TeamUtility.IsEnemy(self, occupant))
+                return occupant;
+            if (living && firstLiving == null)
+                firstLiving = occupant;
+            if (fallback == null)
+                fallback = occupant;
+        }
+        return firstLiving ?? fallback;
+    }
+
     public bool ContainsOccupant(CharacterController occupant)
     {
         return occupant != null && _occupants.Contains(occupant);

@@ -499,8 +499,8 @@ Candidates: `GetCastablePreparedSpells` (distinct prepared unused IDs; known spe
 | Term | Summary |
 |---|---|
 | Effect base | Damage 8 (+15 if it kills), Healing 6 (+20/+10 when hurt), Buff 5, Debuff 7, Control 9 (+5 outnumbered), Summon 6, Wall 7, Illusion 6, Dispel 4, Escape 2, Utility/Divination 1; + 1.5×level |
-| Pre-buff | rounds ≤2, no adjacent enemy: +20 (+10 if an enemy is within 6), duration and protection bonuses |
-| Threatened penalty | adjacent enemy: -2 to -40 by Concentration odds |
+| Pre-buff | rounds ≤2, no adjacent enemy (an enemy in the caster's square counts as adjacent): +20 (+10 if an enemy is within 6), duration and protection bonuses |
+| Threatened penalty | adjacent enemy (or one in the caster's square, CMB-131): -2 to -40 by Concentration odds |
 | Save exploit | +15 weakest save, -10 strongest, +10 no save |
 | Resistance | immune -50, resistance -5 to -30, force +5 |
 | Resources | penalties for the last spell at a level and low remaining counts (counts distinct IDs, not slots) |

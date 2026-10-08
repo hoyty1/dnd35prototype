@@ -2353,6 +2353,9 @@ public class CharacterController : MonoBehaviour
             return false;
 
         string sourceSpellId = ActiveInvisibilityEffect.SourceSpellId;
+        // Read before the spell effect is removed: removing the Invisibility effect clears ActiveInvisibilityEffect
+        // (StatusEffectManager -> ClearInvisibilityEffect), and reading it afterwards threw a NullReferenceException.
+        string sourceName = ActiveInvisibilityEffect.SourceName ?? "invisibility";
 
         StatusEffectManager statusMgr = StatusEffectManager;
         if (statusMgr != null)
@@ -2365,7 +2368,6 @@ public class CharacterController : MonoBehaviour
         }
 
         string actorName = Stats != null ? Stats.CharacterName : name;
-        string sourceName = ActiveInvisibilityEffect.SourceName ?? "invisibility";
         string reasonLabel = string.IsNullOrWhiteSpace(reason) ? "hostile action" : reason;
         string targetLabel = hostileTarget != null && hostileTarget.Stats != null
             ? $" against {hostileTarget.Stats.CharacterName}"
@@ -6658,6 +6660,19 @@ public class CharacterController : MonoBehaviour
             || creatureType == "ooze";
     }
 
+    /// <summary>
+    /// The one coup de grace distance test for the PC button and highlight, the AI and the resolver: the helpless
+    /// target is adjacent or in one of this creature's own squares (Chebyshev distance 0 or 1). PHB p.153 asks for a
+    /// melee weapon against a helpless opponent; a square-mate is in melee reach (PHB p.149, owner ruling CMB-131).
+    /// Reach beyond adjacent squares is not accepted (unchanged).
+    /// </summary>
+    public bool IsInCoupDeGraceReach(CharacterController target)
+    {
+        if (target == null || target == this)
+            return false;
+        return GetMinimumDistanceToTarget(target, chebyshev: true) <= 1;
+    }
+
     public bool IsHelplessForCoupDeGrace()
     {
         if (Stats == null || Stats.IsDead)
@@ -8413,11 +8428,16 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Returns true if the specified square distance is legal for this character's current melee weapon.
+    /// Distance 0 means the target is in one of this creature's own squares (a square shared after a pin
+    /// release, CMB-089; a swarm or a Tiny creature). You can attack into your own square (PHB p.149), and you
+    /// threaten every square you can attack into (PHB p.137), so distance 0 is legal for every creature and
+    /// weapon that can attack an adjacent foe; a reach weapon cannot (PHB p.113). Owner ruling 2026-10-08 (CMB-131).
     /// </summary>
     public bool CanMeleeAttackDistance(int squareDistance, ItemData weapon = null)
     {
-        if (squareDistance <= 0) return false;
+        if (squareDistance < 0) return false;
         int minDist = GetMeleeMinAttackDistance(weapon);
+        if (squareDistance == 0) return minDist <= 1;
         int maxDist = GetMeleeMaxAttackDistance(weapon);
         return squareDistance >= minDist && squareDistance <= maxDist;
     }
@@ -12839,8 +12859,7 @@ public class CharacterController : MonoBehaviour
         if (IsBlockedBySummonedContactBarrier(target, out _))
             return BuildSummonedContactBarrierResult(target, "Coup de Grace");
 
-        int distance = GetMinimumDistanceToTarget(target, chebyshev: true);
-        if (distance != 1)
+        if (!IsInCoupDeGraceReach(target))
         {
             return new SpecialAttackResult
             {

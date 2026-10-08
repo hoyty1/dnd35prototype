@@ -711,8 +711,8 @@ public partial class GameManager
             if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
-            int distance = attacker.GetMinimumDistanceToTarget(candidate, chebyshev: true);
-            if (distance != 1)
+            // Adjacent or in the attacker's own square (CMB-131); the resolver applies the same test.
+            if (!attacker.IsInCoupDeGraceReach(candidate))
                 continue;
 
             if (!candidate.IsHelplessForCoupDeGrace())

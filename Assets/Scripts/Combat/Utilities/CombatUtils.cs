@@ -118,12 +118,19 @@ public static class CombatUtils
         if (potentialAllies == null || potentialAllies.Count == 0)
             return false;
 
+        // A creature inside the target's space threatens it (PHB p.149, CMB-131) but cannot flank it: the line
+        // between the flankers' centers must pass through opposite borders of the target's space (PHB p.153).
+        List<Vector2Int> targetSquares = target.GetOccupiedSquares();
+        if (SharesAnySquare(attacker.GetOccupiedSquaresAt(attackerPosition), targetSquares))
+            return false;
+
         foreach (var ally in potentialAllies)
         {
             if (ally == null) continue;
             if (ally == attacker || ally == target) continue;
             if (!AreAllies(attacker, ally)) continue;
             if (!IsThreateningTarget(ally, target)) continue;
+            if (SharesAnySquare(ally.GetOccupiedSquares(), targetSquares)) continue;
 
             if (IsFlanking(attackerPosition, ally.GridPosition, target.GridPosition))
             {
@@ -132,6 +139,15 @@ public static class CombatUtils
             }
         }
 
+        return false;
+    }
+
+    private static bool SharesAnySquare(List<Vector2Int> a, List<Vector2Int> b)
+    {
+        if (a == null || b == null) return false;
+        for (int i = 0; i < a.Count; i++)
+            if (b.Contains(a[i]))
+                return true;
         return false;
     }
 
