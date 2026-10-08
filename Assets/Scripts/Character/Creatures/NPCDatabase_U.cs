@@ -43,7 +43,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
             },
             CreatureTags = new List<string> { "Aberration", "Tremorsense60", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Great Fortitude", "Toughness" },
+            Feats = new List<string> { "Great Fortitude", "Multiattack", "Toughness" }, // MM p.249: bite 2 below the claws
             SpecialAbilities = new List<string> { "Confusing Gaze (Su): 30 ft., Will DC 15 or confused 1 round", "Tremorsense 60 ft.", "Burrow 20 ft.", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Brute,
             SpriteColor = new Color(0.45f, 0.35f, 0.25f, 1f),

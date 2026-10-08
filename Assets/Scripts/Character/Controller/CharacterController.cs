@@ -698,9 +698,10 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Highest step count usable by this kind of step. A main-hand step (weapon swing or a maneuver
-    /// that replaces an attack) uses an iterative BAB, so it can never go past the iterative ladder,
-    /// even for a natural-weapon creature with more natural attacks than iteratives.
+    /// Highest step count usable by this kind of step. A MainHand step (a weapon or unarmed swing, a
+    /// weapon user's maneuver, or a grapple action once grappling) uses an iterative BAB, so it can
+    /// never go past the iterative ladder. A natural-attack creature's maneuver is a NaturalSequence
+    /// step (CMB-102) and is capped by the natural-attack count instead.
     /// </summary>
     private int GetAttackStepLimit(AttackStepKind kind)
     {
@@ -887,6 +888,93 @@ public class CharacterController : MonoBehaviour
     }
 
     public int GetMainHandAttackStepBAB(int stepIndex) => GetIterativeAttackBAB(stepIndex);
+
+    // ----- Maneuvers that replace an attack (trip, disarm, sunder, grapple; CMB-102) -----
+    // One rule for PCs and NPCs: the maneuver takes the place of one step of this creature's own
+    // sequence and rolls at that step's bonus. A weapon or unarmed fighter gives up an iterative
+    // attack (its iterative BAB, PHB p.141 Table 8-2 note 7, p.143). A creature fighting with its
+    // innate natural attacks gives up one natural attack, any one of them, and rolls at that natural
+    // attack's BAB: full BAB for a primary attack, -5 for a secondary one, -2 with Multiattack
+    // (MM p.312, p.304; owner decision 2026-10-07). Its other natural attacks stay available.
+    // Which natural attack is given up follows the sequence order (see TryCommitManeuverSubstituteStep).
+
+    /// <summary>
+    /// True when this creature fights with its innate natural attacks (no main weapon). The one
+    /// predicate for "natural-attack creature": the PC and NPC melee flows, the maneuver substitute
+    /// and the disarm rules (a natural-weapon attacker is armed, MM p.312) all read it.
+    /// </summary>
+    public bool UsesInnateNaturalAttackSequence() => ShouldUseInnateNaturalAttackProfile(GetEquippedMainWeapon());
+
+    /// <summary>The step kind of this creature's melee attacks: a natural attack of its innate sequence, or an iterative step.</summary>
+    public AttackStepKind GetMeleeAttackStepKind()
+        => UsesInnateNaturalAttackSequence() ? AttackStepKind.NaturalSequence : AttackStepKind.MainHand;
+
+    /// <summary>The step kind a maneuver that replaces an attack commits (see the rule above).</summary>
+    public AttackStepKind GetManeuverSubstituteStepKind() => GetMeleeAttackStepKind();
+
+    /// <summary>
+    /// Sunder needs a manufactured weapon in hand: <see cref="ResolveSunder"/> uses its damage and
+    /// handedness. A creature fighting with natural attacks or unarmed cannot sunder here. Whether a
+    /// natural weapon may sunder (PHB p.158 asks for a slashing or bludgeoning weapon; MM p.312 counts
+    /// a natural-weapon attacker as armed) is an open owner question (CMB-102). Checked by the PC
+    /// buttons, the AI and the NPC executor before any attack step is spent.
+    /// </summary>
+    public bool CanSunderWithMainWeapon(out string reason)
+    {
+        if (GetEquippedMainWeapon() != null)
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        reason = $"{(Stats != null ? Stats.CharacterName : name)} cannot sunder without a weapon.";
+        return false;
+    }
+
+    /// <summary>
+    /// BAB of the natural attack at this place of the innate sequence, with its secondary-attack
+    /// penalty (MM p.312; -2 with Multiattack): what a maneuver replacing that natural attack rolls at.
+    /// </summary>
+    public int GetNaturalAttackStepBAB(int naturalAttackIndex)
+    {
+        if (Stats == null)
+            return 0;
+
+        NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex);
+        return Stats.BaseAttackBonus + Stats.GetNaturalAttackSequencePenalty(natural);
+    }
+
+    /// <summary>
+    /// BAB a maneuver rolls at when it replaces sequence step <paramref name="stepIndex"/>. For a
+    /// natural-attack creature, <paramref name="naturalAttackIndex"/> names the natural attack given up;
+    /// a negative value means the natural attack at the step itself (the NPC sequence order).
+    /// </summary>
+    public int GetManeuverSubstituteBAB(int stepIndex, int naturalAttackIndex = -1)
+    {
+        if (GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence)
+            return GetNaturalAttackStepBAB(naturalAttackIndex >= 0 ? naturalAttackIndex : stepIndex);
+
+        return GetMainHandAttackStepBAB(stepIndex);
+    }
+
+    /// <summary>
+    /// Check, pay for and record the step a maneuver replaces, and return the BAB the maneuver rolls
+    /// at. Used by the PC maneuver wrapper and the NPC maneuver executor alike.
+    /// <paramref name="naturalAttackIndex"/> as in <see cref="GetManeuverSubstituteBAB"/>. The attack
+    /// pool counts steps, not which natural attack was given up: pass a non-negative index only from
+    /// a caller that records the used natural attacks itself (the PC wrapper, through
+    /// GameManager._usedNaturalAttackSequenceIndices). The NPC loop resolves natural attacks by the
+    /// step cursor, so it passes -1 and gives up the natural attack at the current step.
+    /// </summary>
+    public bool TryCommitManeuverSubstituteStep(int naturalAttackIndex, out int maneuverBab, out int stepIndex, out string reason)
+    {
+        maneuverBab = 0;
+        if (!TryCommitAttack(GetManeuverSubstituteStepKind(), out stepIndex, out reason))
+            return false;
+
+        maneuverBab = GetManeuverSubstituteBAB(stepIndex, naturalAttackIndex);
+        return true;
+    }
 
     /// <summary>
     /// Resolve one already-committed attack step of this creature's sequence (PHB p.143). Shared by
@@ -5107,7 +5195,7 @@ public class CharacterController : MonoBehaviour
                     if (target.Stats.IsDead)
                         break;
 
-                    // Every natural attack is at full BAB; secondary attacks take -5 (MM p.312).
+                    // Every natural attack is at full BAB; secondary attacks take -5, or -2 with Multiattack (MM p.312, p.304).
                     AttackBonusBreakdown atkBonus = sequenceBonus;
                     atkBonus.BaseAttackBonus = Stats.BaseAttackBonus;
                     atkBonus.SequenceModifier = Stats.GetNaturalAttackSequencePenalty(naturalAttack);
@@ -10597,7 +10685,7 @@ public class CharacterController : MonoBehaviour
             {
                 logLines.Add($"⚠ {target.Stats.CharacterName}'s held item could not be removed.");
             }
-            else if (attackerHeldWeapon == null)
+            else if (DisarmerCatchesWeapon(this, attackerHeldWeapon))
             {
                 if (TryEquipDisarmedItem(this, disarmedItem, out EquipSlot equippedSlot))
                 {
@@ -10650,7 +10738,7 @@ public class CharacterController : MonoBehaviour
                     {
                         logLines.Add($"⚠ {Stats.CharacterName}'s held item could not be removed by the counter-disarm.");
                     }
-                    else if (counterAttackerHeldWeapon == null)
+                    else if (DisarmerCatchesWeapon(target, counterAttackerHeldWeapon))
                     {
                         if (TryEquipDisarmedItem(target, counterDisarmedItem, out EquipSlot counterEquipSlot))
                         {
@@ -10812,6 +10900,10 @@ public class CharacterController : MonoBehaviour
             };
         }
 
+        // The step's BAB enters the opposed grapple check too: for an iterative step that is RAW (PHB
+        // p.156, multiple grapples at successively lower BAB). For a grapple that replaces a secondary
+        // natural attack, the -5 (or -2 with Multiattack) also lands on the grapple check, although
+        // MM p.312 names only the attack roll. Interpretation pending the owner (CMB-102).
         GrappleCheckResult attackerCheck = RollGrappleCheck(attackBab);
         GrappleCheckResult defenderCheck = target.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
 
@@ -10963,14 +11055,17 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        ItemData attackerWeapon = attackerWeaponOverride ?? GetEquippedMainWeapon();
+        ItemData attackerWeapon = attackerWeaponOverride;
+        string noSunderWeaponReason = string.Empty;
+        if (attackerWeapon == null && CanSunderWithMainWeapon(out noSunderWeaponReason))
+            attackerWeapon = GetEquippedMainWeapon();
         if (attackerWeapon == null)
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Sunder",
                 Success = false,
-                Log = $"{Stats.CharacterName} cannot sunder without a weapon."
+                Log = noSunderWeaponReason
             };
         }
 
@@ -11627,6 +11722,14 @@ public class CharacterController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// PHB p.155: a disarmer that attempted the disarm unarmed now has the weapon; an armed one knocks
+    /// it to the ground in the defender's square. A creature attacking with its natural weapons is
+    /// armed (MM p.312), so it does not catch the weapon, and its natural sequence goes on (CMB-102).
+    /// </summary>
+    private static bool DisarmerCatchesWeapon(CharacterController disarmer, ItemData disarmerHeldWeapon)
+        => disarmerHeldWeapon == null && (disarmer == null || !disarmer.UsesInnateNaturalAttackSequence());
+
     private static DisarmCheckResult RollDisarmCheck(
         CharacterController attacker,
         CharacterController defender,
@@ -11638,7 +11741,11 @@ public class CharacterController : MonoBehaviour
         int? attackerBaseAttackBonusOverride = null,
         int attackerDualWieldPenaltyForLog = 0)
     {
-        int atkHeldItemMod = GetDisarmHeldItemModifier(attackerHeldItem, treatUnarmedAsLight: true);
+        // An unarmed strike counts as a light weapon (-4, PHB p.155). A natural weapon is not an unarmed
+        // strike (MM p.312: armed) and RAW gives it no light or two-handed modifier, so it adds 0
+        // (interpretation pending the owner, CMB-102).
+        bool attackerUsesNaturalWeapon = attackerHeldItem == null && attacker.UsesInnateNaturalAttackSequence();
+        int atkHeldItemMod = GetDisarmHeldItemModifier(attackerHeldItem, treatUnarmedAsLight: !attackerUsesNaturalWeapon);
         int atkSizeDiffMod = GetDisarmSizeDifferenceModifier(attacker, defender);
         int atkImprovedDisarmMod = attacker.Stats.HasFeat("Improved Disarm") ? 4 : 0;
 
@@ -11661,7 +11768,7 @@ public class CharacterController : MonoBehaviour
         int defTotal = defRoll + defender.Stats.BaseAttackBonus + defender.Stats.STRMod + defender.Stats.SizeModifier + defender.Stats.ConditionAttackPenalty
                        + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod + defenderSpecialResistBonus;
 
-        string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : "Unarmed Strike";
+        string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : attackerUsesNaturalWeapon ? "Natural weapon" : "Unarmed Strike";
         string defenderHeldLabel = defenderHeldItem != null ? defenderHeldItem.Name : $"Held Item ({defenderHeldSlot})";
 
         string atkBreakdown = BuildDisarmDetailedRollSection(

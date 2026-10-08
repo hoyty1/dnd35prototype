@@ -78,6 +78,13 @@ public static class GrappleDamageRulesTests
         TestBullRushTargetLimits();
         TestNpcManeuverCostsOneAttackStep();
         TestNpcMeleeSequenceTripThenAttacks();
+        TestNaturalAttackStepBabPrimarySecondaryMultiattack();
+        TestManeuverReplacesAnyNaturalAttackStep();
+        TestPcManeuverReplacesNaturalAttackAtItsBonus();
+        TestNpcManeuverReplacesLaterNaturalAttack();
+        TestNaturalWeaponDisarmIsArmed();
+        TestNaturalWeaponCreatureCannotSunder();
+        TestNpcNaturalSequenceMakesOneSubstitute();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
         TestBullRushImprovedFeatAddsPlus4();
         TestBullRushDefenderUsesStrengthAndDwarfStability();
@@ -1038,10 +1045,13 @@ public static class GrappleDamageRulesTests
 
         bool paid = wolf.TryPayForNextAttack(out _);
         int biteStep = wolf.RegisterAttackMade(AttackStepKind.NaturalSequence);
-        bool canTrip = wolf.CanCommitAttack(AttackStepKind.MainHand, out string reason);
+        AttackStepKind tripKind = wolf.GetManeuverSubstituteStepKind();
+        bool canTrip = wolf.CanCommitAttack(tripKind, out string reason);
+        bool tripCommitted = wolf.TryCommitManeuverSubstituteStep(-1, out _, out _, out _);
 
-        Assert(paid && biteStep == 0 && !canTrip && !string.IsNullOrEmpty(reason) && wolf.GetRemainingMainHandAttackSteps() == 0,
-            "A creature with one natural attack cannot trip after using it");
+        Assert(paid && biteStep == 0 && tripKind == AttackStepKind.NaturalSequence && !canTrip && !tripCommitted
+            && !string.IsNullOrEmpty(reason) && wolf.GetRemainingMainHandAttackSteps(tripKind) == 0,
+            "A creature with one natural attack cannot trip after using it (the trip would replace that bite)");
 
         Cleanup(wolf);
     }
@@ -1050,13 +1060,17 @@ public static class GrappleDamageRulesTests
     {
         var bear = CreateNaturalAttacker("SequenceNaturalClawClawBite", ("Claw", 2), ("Bite", 1));
 
-        bool trip = bear.TryCommitAttack(AttackStepKind.MainHand, out int tripStep, out _);
+        // The live path of the PC wrapper and the NPC executor (CMB-102): a NaturalSequence step at the
+        // BAB of the natural attack it replaces (the first claw, primary here: full BAB).
+        bool trip = bear.TryCommitManeuverSubstituteStep(-1, out int tripBab, out int tripStep, out _);
         bool natural1 = bear.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
         bool natural2 = bear.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
         bool natural3 = bear.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out string reason);
 
-        Assert(trip && tripStep == 0 && bear.ProgressiveAttackPool.MainHandBudget == 3,
-            "A trip by a natural-weapon creature uses one step of its natural-attack budget");
+        Assert(trip && tripStep == 0 && bear.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence
+            && tripBab == bear.GetNaturalAttackStepBAB(0) && tripBab == bear.Stats.BaseAttackBonus
+            && bear.ProgressiveAttackPool.MainHandBudget == 3,
+            "A trip by a natural-weapon creature uses one step of its natural-attack budget, at the replaced claw's BAB");
         Assert(natural1 && natural2 && !natural3 && !string.IsNullOrEmpty(reason),
             "After a trip replaces one of three natural attacks, only two natural attacks remain");
 
@@ -1384,6 +1398,526 @@ public static class GrappleDamageRulesTests
                 Cleanup(bear);
             if (bearTarget != null)
                 Cleanup(bearTarget);
+        }
+    }
+
+    // ── Maneuvers replace any natural attack at that attack's bonus (CMB-102, owner decision 2026-10-07) ──
+    // MM p.312: a primary natural attack uses the full attack bonus, a secondary one takes -5, or -2
+    // with Multiattack (MM p.304). A trip, disarm, sunder or grapple that replaces a natural attack
+    // rolls at that natural attack's BAB, for PCs and NPCs alike, and the other natural attacks stay.
+
+    /// <summary>Bite (primary) and two claws (secondary), BAB through BaseAttackBonusOverride, no weapon.</summary>
+    private static CharacterController CreateBiteClawsCreature(string name, int bab, bool multiattack)
+    {
+        var creature = CreateIterativeAttacker(name);
+        creature.Stats.BaseAttackBonusOverride = bab;
+        creature.Stats.NaturalAttacks.Clear();
+        creature.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, IsPrimary = true });
+        creature.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, IsPrimary = false, BonusDamageSource = DamageBonusSource.StrengthHalf });
+        if (multiattack)
+            creature.Stats.Feats.Add("Multiattack");
+        return creature;
+    }
+
+    private static void TestNaturalAttackStepBabPrimarySecondaryMultiattack()
+    {
+        var plain = CreateBiteClawsCreature("NaturalStepBabPlain", 4, false);
+        var multi = CreateBiteClawsCreature("NaturalStepBabMultiattack", 4, true);
+        try
+        {
+            Assert(plain.GetNaturalAttackStepBAB(0) == 4 && plain.GetNaturalAttackStepBAB(1) == -1 && plain.GetNaturalAttackStepBAB(2) == -1,
+                "Natural step BAB: primary bite +4, secondary claws +4-5 = -1 (MM p.312)");
+            Assert(multi.GetNaturalAttackStepBAB(0) == 4 && multi.GetNaturalAttackStepBAB(1) == 2 && multi.GetNaturalAttackStepBAB(2) == 2,
+                "Natural step BAB with Multiattack: primary +4, secondary claws +4-2 = +2 (MM p.304)");
+
+            NaturalAttackDefinition claw = multi.Stats.GetNaturalAttackAtSequenceIndex(2);
+            Assert(claw != null && claw.Name == "Claw" && multi.Stats.GetNaturalAttackAtSequenceIndex(3) == null
+                && multi.Stats.GetNaturalAttackAtSequenceIndex(-1) == null,
+                "Natural sequence index: bite, claw, claw; out of range is null");
+
+            int multiBite = multi.Stats.GetNaturalAttackBonus(multi.Stats.GetNaturalAttackAtSequenceIndex(0));
+            int plainBite = plain.Stats.GetNaturalAttackBonus(plain.Stats.GetNaturalAttackAtSequenceIndex(0));
+            int plainClaw = plain.Stats.GetNaturalAttackBonus(plain.Stats.GetNaturalAttackAtSequenceIndex(1));
+            Assert(multi.Stats.GetNaturalAttackBonus(claw) - multiBite == -2 && plainClaw - plainBite == -5,
+                "The natural attack rolls use the same secondary penalty: -5, or -2 with Multiattack");
+        }
+        finally
+        {
+            Cleanup(plain, multi);
+        }
+    }
+
+    private static void TestManeuverReplacesAnyNaturalAttackStep()
+    {
+        // BAB +4 is one iterative, but each of the three natural attacks can be replaced (shared core,
+        // CharacterController.TryCommitManeuverSubstituteStep, used by the PC wrapper and the NPC executor).
+        var plain = CreateBiteClawsCreature("NaturalSubstitutePlain", 4, false);
+        var multi = CreateBiteClawsCreature("NaturalSubstituteMultiattack", 4, true);
+        var mixed = CreateBiteClawsCreature("NaturalSubstituteMixed", 4, false);
+        var fighter = CreateIterativeAttacker("NaturalSubstituteWeaponControl");
+        try
+        {
+            Assert(plain.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence
+                && fighter.GetManeuverSubstituteStepKind() == AttackStepKind.MainHand,
+                "A natural-weapon creature's maneuver replaces a natural attack; a weapon user's an iterative");
+
+            bool p0 = plain.TryCommitManeuverSubstituteStep(-1, out int pBab0, out int pStep0, out _);
+            bool p1 = plain.TryCommitManeuverSubstituteStep(-1, out int pBab1, out int pStep1, out _);
+            bool p2 = plain.TryCommitManeuverSubstituteStep(-1, out int pBab2, out int pStep2, out _);
+            bool p3 = plain.TryCommitManeuverSubstituteStep(-1, out _, out _, out string pReason3);
+            Assert(p0 && p1 && p2 && pStep0 == 0 && pStep1 == 1 && pStep2 == 2 && pBab0 == 4 && pBab1 == -1 && pBab2 == -1,
+                $"Three maneuvers replace bite (+4), claw (-1) and claw (-1) past the single iterative (got {pBab0}, {pBab1}, {pBab2})");
+            Assert(!p3 && !string.IsNullOrEmpty(pReason3) && plain.ProgressiveAttackPool.IsFullAttack,
+                "A fourth maneuver is refused: the three natural attacks are spent (PHB p.141 Table 8-2 note 7)");
+
+            multi.TryCommitManeuverSubstituteStep(-1, out int mBab0, out _, out _);
+            bool m1 = multi.TryCommitManeuverSubstituteStep(-1, out int mBab1, out _, out _);
+            Assert(mBab0 == 4 && m1 && mBab1 == 2,
+                $"With Multiattack a maneuver replacing a secondary claw rolls at +2, not -1 (MM p.304; got {mBab1})");
+
+            // The bite is made as an attack, then a maneuver replaces the next claw; one claw remains.
+            bool bite = mixed.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+            bool clawTrip = mixed.TryCommitManeuverSubstituteStep(-1, out int mixedBab, out _, out _);
+            bool lastClaw = mixed.CanCommitAttack(AttackStepKind.NaturalSequence, out _);
+            bool lastClawBab = mixed.GetManeuverSubstituteBAB(2) == -1;
+            bool namedPrimary = mixed.GetManeuverSubstituteBAB(2, naturalAttackIndex: 0) == 4;
+            Assert(bite && clawTrip && mixedBab == -1 && lastClaw && lastClawBab && namedPrimary,
+                "After the bite, a maneuver replaces a claw at -1 and the last claw is still available; a named natural attack sets the bonus");
+
+            bool f1 = fighter.TryCommitManeuverSubstituteStep(-1, out int fBab0, out _, out _);
+            bool f2 = fighter.TryCommitManeuverSubstituteStep(-1, out int fBab1, out _, out _);
+            Assert(f1 && f2 && fBab0 == 11 && fBab1 == 6,
+                "A weapon user's maneuvers still roll at the iterative BABs (+11, +6)");
+        }
+        finally
+        {
+            Cleanup(plain, multi, mixed, fighter);
+        }
+    }
+
+    /// <summary>
+    /// Makes <paramref name="pc"/> the GameManager's ActivePC (PC turn, current character, controllable)
+    /// with an empty used-natural-attack set, by reflection on private fields (TST-006); Dispose restores
+    /// everything. Enter returns null when a field is missing.
+    /// </summary>
+    private sealed class ActivePcScope : System.IDisposable
+    {
+        private readonly GameManager _gm;
+        private readonly CharacterController _pc;
+        private readonly object _turnService;
+        private readonly FieldInfo _phaseField;
+        private readonly FieldInfo _currentField;
+        private readonly object _savedPhase;
+        private readonly object _savedCurrent;
+        private readonly bool _savedControllable;
+        private readonly System.Collections.Generic.HashSet<int> _used;
+        private readonly int[] _savedUsed;
+
+        private ActivePcScope(GameManager gm, CharacterController pc, object turnService, FieldInfo phaseField, FieldInfo currentField,
+            System.Collections.Generic.HashSet<int> used)
+        {
+            _gm = gm;
+            _pc = pc;
+            _turnService = turnService;
+            _phaseField = phaseField;
+            _currentField = currentField;
+            _used = used;
+            _savedPhase = phaseField.GetValue(gm);
+            _savedCurrent = currentField.GetValue(turnService);
+            _savedControllable = pc.IsControllable;
+            _savedUsed = new int[used.Count];
+            used.CopyTo(_savedUsed);
+
+            pc.IsControllable = true;
+            phaseField.SetValue(gm, GameManager.TurnPhase.PCTurn);
+            currentField.SetValue(turnService, pc);
+            used.Clear();
+        }
+
+        public static ActivePcScope Enter(GameManager gm, CharacterController pc)
+        {
+            if (gm == null || pc == null)
+                return null;
+
+            FieldInfo phaseField = typeof(GameManager).GetField("_currentPhase", BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo turnServiceField = typeof(GameManager).GetField("_turnService", BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo usedField = typeof(GameManager).GetField("_usedNaturalAttackSequenceIndices", BindingFlags.Instance | BindingFlags.NonPublic);
+            object turnService = turnServiceField != null ? turnServiceField.GetValue(gm) : null;
+            FieldInfo currentField = turnService != null
+                ? turnService.GetType().GetField("_currentCharacter", BindingFlags.Instance | BindingFlags.NonPublic)
+                : null;
+            var used = usedField != null ? usedField.GetValue(gm) as System.Collections.Generic.HashSet<int> : null;
+            if (phaseField == null || currentField == null || used == null)
+                return null;
+
+            return new ActivePcScope(gm, pc, turnService, phaseField, currentField, used);
+        }
+
+        public void Dispose()
+        {
+            _used.Clear();
+            foreach (int index in _savedUsed)
+                _used.Add(index);
+            _currentField.SetValue(_turnService, _savedCurrent);
+            _phaseField.SetValue(_gm, _savedPhase);
+            if (_pc != null)
+                _pc.IsControllable = _savedControllable;
+        }
+    }
+
+    private static void TestPcManeuverReplacesNaturalAttackAtItsBonus()
+    {
+        // The PC maneuver wrapper (GameManager.TryConsumeTripAttackAction and the Trip button's bonus
+        // and count) goes through the same core. As the active PC the creature gives up the first
+        // natural attack not used this turn, and that attack is marked used for the natural buttons.
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; PC natural maneuver check needs Play mode");
+            return;
+        }
+
+        MethodInfo consumeTrip = typeof(GameManager).GetMethod("TryConsumeTripAttackAction", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(consumeTrip != null, "GameManager.TryConsumeTripAttackAction is available for the PC natural maneuver test");
+        if (consumeTrip == null)
+            return;
+
+        foreach (bool multiattack in new[] { false, true })
+        {
+            int secondary = multiattack ? 2 : -1;
+            string tag = multiattack ? " (Multiattack)" : string.Empty;
+            var pc = CreateBiteClawsCreature(multiattack ? "PcNaturalTripMultiattack" : "PcNaturalTrip", 4, multiattack);
+            ActivePcScope scope = null;
+            try
+            {
+                scope = ActivePcScope.Enter(gm, pc);
+                Assert(scope != null && gm.ActivePC == pc, "The test creature is the active PC (reflection on GameManager/TurnService fields)" + tag);
+                if (scope == null)
+                    continue;
+
+                Assert(gm.CanUseTripAttackOption(pc) && gm.GetRemainingTripAttackActions(pc) == 3 && gm.GetCurrentTripAttackBonus(pc) == 4,
+                    "PC Trip button: 3 trips available at BAB +4 (the primary bite) for a BAB +4 bite/claw/claw creature" + tag);
+
+                var babs = new System.Collections.Generic.List<int>();
+                for (int i = 0; i < 3; i++)
+                {
+                    object[] args = { pc, 0, 0, null };
+                    if ((bool)consumeTrip.Invoke(gm, args))
+                        babs.Add((int)args[1]);
+                    if (i == 0)
+                        Assert(gm.IsNaturalAttackSequenceIndexUsed(pc, 0) && !gm.IsNaturalAttackSequenceIndexUsed(pc, 1)
+                            && gm.GetCurrentTripAttackBonus(pc) == secondary && gm.GetRemainingTripAttackActions(pc) == 2,
+                            $"PC Trip after one trip: the bite is marked used, next trip at the claw's BAB {CharacterStats.FormatMod(secondary)}, 2 left" + tag);
+                }
+
+                object[] fourth = { pc, 0, 0, null };
+                bool fourthOk = (bool)consumeTrip.Invoke(gm, fourth);
+                Assert(babs.Count == 3 && babs[0] == 4 && babs[1] == secondary && babs[2] == secondary && !fourthOk && !gm.CanUseTripAttackOption(pc)
+                    && gm.IsNaturalAttackSequenceIndexUsed(pc, 1) && gm.IsNaturalAttackSequenceIndexUsed(pc, 2) && !gm.CanUseNaturalAttackOption(pc),
+                    $"PC trips replace bite, claw, claw at +4, {CharacterStats.FormatMod(secondary)}, {CharacterStats.FormatMod(secondary)}, all marked used; a fourth is refused" + tag);
+            }
+            catch (System.Exception ex)
+            {
+                System.Exception inner = ex.InnerException ?? ex;
+                Assert(false, $"PC natural maneuver check threw {inner.GetType().Name}: {inner.Message}" + tag);
+            }
+            finally
+            {
+                scope?.Dispose();
+                Cleanup(pc);
+            }
+        }
+
+        // Out of order: the first claw (index 1) was used through its natural-attack button first.
+        // The Trip button then offers the first unused natural attack, the bite at +4, marks it, and
+        // one natural attack is left.
+        var outOfOrder = CreateBiteClawsCreature("PcNaturalTripOutOfOrder", 4, false);
+        ActivePcScope orderScope = null;
+        try
+        {
+            orderScope = ActivePcScope.Enter(gm, outOfOrder);
+            if (orderScope != null)
+            {
+                bool clawCommitted = outOfOrder.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+                gm.Combat_MarkNaturalAttackSequenceIndexUsed(1);
+                bool offeredAtBite = gm.GetCurrentTripAttackBonus(outOfOrder) == 4 && gm.GetRemainingTripAttackActions(outOfOrder) == 2;
+
+                object[] args = { outOfOrder, 0, 0, null };
+                bool tripped = (bool)consumeTrip.Invoke(gm, args);
+                Assert(clawCommitted && offeredAtBite && tripped && (int)args[1] == 4
+                    && gm.IsNaturalAttackSequenceIndexUsed(outOfOrder, 0) && !gm.IsNaturalAttackSequenceIndexUsed(outOfOrder, 2)
+                    && gm.GetRemainingTripAttackActions(outOfOrder) == 1 && gm.CanUseNaturalAttackOption(outOfOrder),
+                    "PC Trip after the first claw was used: the trip replaces the bite at +4, marks it, and one claw is left");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"PC out-of-order natural maneuver check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            orderScope?.Dispose();
+            Cleanup(outOfOrder);
+        }
+    }
+
+    private static void TestNaturalWeaponDisarmIsArmed()
+    {
+        // MM p.312: a creature attacking with natural weapons is armed. PHB p.155: an armed disarmer
+        // knocks the weapon to the defender's square and only an unarmed one takes it in hand; the
+        // unarmed-strike light-weapon -4 does not apply to a natural weapon. The creature keeps its
+        // other natural attacks after disarming with one (CMB-102).
+        var bear = CreateBiteClawsCreature("NaturalDisarmBear", 20, false);
+        var unarmed = CreateTestCharacter("NaturalDisarmUnarmedControl", "Fighter");
+        var defender = CreateWeakDefender("NaturalDisarmDefender");
+        unarmed.Stats.BaseAttackBonusOverride = 20;
+        defender.Stats.STR = 1;
+        bear.GridPosition = new Vector2Int(12, 12);
+        defender.GridPosition = new Vector2Int(13, 12);
+        ItemData sword = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+        defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(sword, EquipSlot.RightHand);
+        ActivePcScope scope = null;
+        try
+        {
+            MethodInfo rollDisarm = typeof(CharacterController).GetMethod("RollDisarmCheck", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert(rollDisarm != null, "RollDisarmCheck is available for the natural disarm test");
+            if (rollDisarm != null)
+            {
+                int bearMod = GetDisarmModifier(rollDisarm.Invoke(null, new object[] { bear, defender, null, sword, EquipSlot.RightHand, 0, string.Empty, null, 0 }), "Attacker");
+                int unarmedMod = GetDisarmModifier(rollDisarm.Invoke(null, new object[] { unarmed, defender, null, sword, EquipSlot.RightHand, 0, string.Empty, null, 0 }), "Attacker");
+                Assert(bearMod - unarmedMod == 4,
+                    $"A natural-weapon disarmer takes no unarmed-strike -4 (natural {bearMod}, unarmed {unarmedMod}; PHB p.155, MM p.312)");
+            }
+
+            bool committed = bear.TryCommitManeuverSubstituteStep(-1, out int disarmBab, out _, out _);
+            SpecialAttackResult result = bear.ExecuteSpecialAttack(SpecialAttackType.Disarm, defender, disarmAttackBonusOverride: disarmBab);
+            SquareGrid grid = GameManager.Instance != null ? GameManager.Instance.Grid : SquareGrid.Instance;
+            SquareCell cell = grid != null ? grid.GetCell(defender.GridPosition) : null;
+            bool onGround = false;
+            if (cell != null)
+            {
+                foreach (ItemData item in cell.GroundItems)
+                    onGround |= item == sword;
+                cell.RemoveGroundItem(sword);
+            }
+
+            Assert(committed && result != null && result.Success && defender.GetEquippedMainWeapon() == null
+                && bear.GetEquippedMainWeapon() == null && result.Log.Contains("drops to the ground"),
+                "A natural-weapon disarm knocks the weapon down; the creature does not take it in hand (PHB p.155)");
+            Assert(cell == null || onGround, "The disarmed weapon lies in the defender's square");
+            Assert(bear.UsesInnateNaturalAttackSequence() && bear.GetMeleeAttackStepKind() == AttackStepKind.NaturalSequence
+                && bear.CanCommitAttack(AttackStepKind.NaturalSequence, out _) && bear.GetRemainingMainHandAttackSteps(AttackStepKind.NaturalSequence) == 2,
+                "After disarming with one natural attack, the two other natural attacks remain (NPC side)");
+
+            GameManager gm = GameManager.Instance;
+            if (gm != null)
+            {
+                scope = ActivePcScope.Enter(gm, bear);
+                if (scope != null)
+                {
+                    gm.Combat_MarkNaturalAttackSequenceIndexUsed(0);
+                    Assert(gm.CanUseNaturalAttackOption(bear) && gm.GetRemainingTripAttackActions(bear) == 2,
+                        "After disarming with one natural attack, the PC natural-attack and maneuver buttons still offer the other two");
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Natural disarm check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            scope?.Dispose();
+            Cleanup(bear, unarmed, defender);
+        }
+    }
+
+    private static void TestNaturalWeaponCreatureCannotSunder()
+    {
+        // ResolveSunder needs a manufactured weapon, so the PC button, the AI and the NPC executor
+        // refuse sunder for a natural-weapon creature before any attack step is spent (CMB-102;
+        // whether natural weapons may sunder is an open owner question).
+        var bear = CreateBiteClawsCreature("NaturalSunderBear", 6, false);
+        var defender = CreateWeakDefender("NaturalSunderDefender");
+        var fighter = CreateIterativeAttacker("NaturalSunderFighter");
+        bear.GridPosition = new Vector2Int(16, 12);
+        defender.GridPosition = new Vector2Int(17, 12);
+        bear.IsControllable = false;
+        defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        fighter.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        try
+        {
+            Assert(!bear.CanSunderWithMainWeapon(out string reason) && !string.IsNullOrEmpty(reason) && fighter.CanSunderWithMainWeapon(out _),
+                "Sunder needs a weapon: refused for a natural-weapon creature, allowed for a sword fighter");
+
+            GameManager gm = GameManager.Instance;
+            if (gm == null)
+            {
+                Debug.Log("  [SKIP] GameManager.Instance is null; PC/NPC sunder gates need Play mode");
+                return;
+            }
+
+            Assert(!gm.CanUseSunderAttackOption(bear) && gm.GetRemainingSunderAttackActions(bear) == 0 && gm.CanUseSunderAttackOption(fighter),
+                "PC Sunder button is not offered to a natural-weapon creature");
+
+            bool npcSunder = gm.TryNPCSpecialAttackByTypeForAI(bear, defender, SpecialAttackType.Sunder);
+            Assert(!npcSunder && bear.ProgressiveAttackPool.MainHandStepsUsed == 0 && bear.Actions.HasStandardAction
+                && defender.GetEquippedMainWeapon() != null,
+                "NPC sunder by a natural-weapon creature is refused and spends no attack step");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Natural sunder check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            Cleanup(bear, defender, fighter);
+        }
+    }
+
+    private static void TestNpcNaturalSequenceMakesOneSubstitute()
+    {
+        // AI limit pending AI-035: a Grappler-profile claw/claw/bite creature (the owlbear's profile)
+        // against a standing armed target prefers a trip before every step. With the trip's touch
+        // attack forced to a natural 1 the trip fails and the target stays standing; the NPC still
+        // makes only one substitute and rolls its other two natural attacks. Runs the real AIService
+        // evaluation through the NPC melee loop.
+        GameManager gm = GameManager.Instance;
+        AIService ai = gm != null ? gm.GetComponent<AIService>() : null;
+        if (gm == null || ai == null)
+        {
+            Debug.Log("  [SKIP] GameManager/AIService is null; NPC natural substitute limit needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        CharacterController npc = null;
+        CharacterController target = null;
+        DND35.AI.Profiles.GrapplerAIProfile profile = null;
+        try
+        {
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Trip touch attack" ? 1 : natural;
+            npc = CreateNaturalAttacker("NpcNaturalGrapplerOwlbear", ("Claw", 2), ("Bite", 1));
+            npc.Stats.BaseAttackBonusOverride = 4;
+            npc.Stats.Feats.Add("Improved Trip"); // no AoO from the target (PHB p.96)
+            npc.IsControllable = false;
+            profile = ScriptableObject.CreateInstance<DND35.AI.Profiles.GrapplerAIProfile>();
+            npc.aiProfile = profile;
+            target = CreateWeakDefender("NpcNaturalGrapplerTarget");
+            target.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            npc.GridPosition = new Vector2Int(20, 12);
+            target.GridPosition = new Vector2Int(21, 12);
+            target.Stats.AdjustMaxHP(500);
+            target.Stats.CurrentHP += 500;
+
+            Assert(profile.GetPreferredManeuver(npc, target) == SpecialAttackType.Trip,
+                "Grappler profile prefers a trip against a standing target");
+
+            FullAttackResult sequence = RunNpcMeleeSequence(gm, npc, target, ai.CreateMeleeStepManeuverEvaluator(profile), out int maneuvers);
+            Assert(maneuvers == 1 && sequence.Attacks.Count == 2 && npc.ProgressiveAttackPool.MainHandStepsUsed == 3,
+                $"NPC natural sequence: one failed trip, then the other two natural attacks are rolled, not more trips (maneuvers {maneuvers}, attacks {sequence.Attacks.Count}; AI-035)");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"NPC natural substitute limit check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(npc, target);
+            if (profile != null)
+                Object.DestroyImmediate(profile);
+        }
+    }
+
+    private static void TestNpcManeuverReplacesLaterNaturalAttack()
+    {
+        // The NPC melee loop offers the maneuver before every natural step until one substitute is
+        // made (AI limit, AI-035). A trip-only evaluation trips only on the second step (the first
+        // claw), so the third step is not offered; the trip's touch attack is forced to a natural 1
+        // (always a miss, so nothing else changes) and its modifier is read from the result.
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; NPC natural maneuver check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CharacterController, SpecialAttackType, SpecialAttackResult> savedManeuver = ScenarioHooks.ManeuverResolved;
+        var tripResults = new System.Collections.Generic.List<SpecialAttackResult>();
+        try
+        {
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Trip touch attack" ? 1 : natural;
+            ScenarioHooks.ManeuverResolved = (attacker, target, type, result) =>
+            {
+                if (type == SpecialAttackType.Trip)
+                    tripResults.Add(result);
+            };
+
+            int row = 0;
+            foreach (bool multiattack in new[] { false, true })
+            {
+                CharacterController npc = null;
+                CharacterController target = null;
+                string tag = multiattack ? " (Multiattack)" : string.Empty;
+                try
+                {
+                    npc = CreateBiteClawsCreature(multiattack ? "NpcNaturalTripMultiattack" : "NpcNaturalTrip", 4, multiattack);
+                    npc.Stats.Feats.Add("Improved Trip"); // no AoO from the target (PHB p.96)
+                    npc.IsControllable = false;
+                    target = CreateWeakDefender(multiattack ? "NpcNaturalTripTargetMultiattack" : "NpcNaturalTripTarget");
+                    npc.GridPosition = new Vector2Int(8, 8 + row);
+                    target.GridPosition = new Vector2Int(9, 8 + row);
+                    row += 3;
+                    target.Stats.AdjustMaxHP(500);
+                    target.Stats.CurrentHP += 500;
+                    tripResults.Clear();
+
+                    int stepsOffered = 0;
+                    int stepOfTrip = -1;
+                    FullAttackResult sequence = RunNpcMeleeSequence(gm, npc, target,
+                        (actor, stepTarget) =>
+                        {
+                            if (stepsOffered++ != 1)
+                                return false;
+                            stepOfTrip = actor.ProgressiveAttackPool.MainHandStepsUsed;
+                            return gm.TryNPCSpecialAttackByTypeForAI(actor, stepTarget, SpecialAttackType.Trip);
+                        },
+                        out int maneuvers);
+
+                    Assert(stepsOffered == 2 && maneuvers == 1 && stepOfTrip == 1,
+                        $"NPC melee loop: the maneuver is offered before a later natural step, the trip takes step 2, and no second substitute is offered (offered {stepsOffered}, trip at {stepOfTrip}; CMB-102, AI-035)" + tag);
+                    Assert(sequence.Attacks.Count == 2 && sequence.Attacks[0].WeaponName == "Bite" && sequence.Attacks[1].WeaponName == "Claw"
+                        && npc.ProgressiveAttackPool.MainHandStepsUsed == 3,
+                        "NPC melee loop: bite, a trip in place of the first claw, then the second claw" + tag);
+
+                    int expectedTouch = npc.GetManeuverMeleeTouchAttackModifier(multiattack ? 2 : -1);
+                    SpecialAttackResult trip = tripResults.Count == 1 ? tripResults[0] : null;
+                    int touchMod = trip != null ? trip.CheckTotal - trip.CheckRoll : int.MinValue;
+                    Assert(trip != null && trip.CheckRoll == 1 && touchMod == expectedTouch
+                        && touchMod == npc.GetManeuverMeleeTouchAttackModifier(4) - (multiattack ? 2 : 5),
+                        $"NPC trip in place of a secondary claw rolls its touch attack at BAB {(multiattack ? "+2" : "-1")} (modifier {touchMod}, expected {expectedTouch}; MM p.312)" + tag);
+                }
+                catch (System.Exception ex)
+                {
+                    System.Exception inner = ex.InnerException ?? ex;
+                    Assert(false, $"NPC natural maneuver check threw {inner.GetType().Name}: {inner.Message}" + tag);
+                }
+                finally
+                {
+                    Cleanup(npc, target);
+                }
+            }
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.ManeuverResolved = savedManeuver;
         }
     }
 

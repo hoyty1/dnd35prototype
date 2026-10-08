@@ -2266,9 +2266,9 @@ public class AIService : MonoBehaviour
 
         if (npc.IsGrappling())
             return false;
-        // Trip, disarm, sunder and grapple need only the next attack step (CMB-102);
-        // TryNPCSpecialAttackIfBeneficial enforces the exact cost of the chosen type.
-        if (!npc.Actions.HasStandardAction && !npc.CanCommitAttack(AttackStepKind.MainHand, out _))
+        // Trip, disarm, sunder and grapple need only the next attack step, iterative or natural
+        // (CMB-102); TryNPCSpecialAttackIfBeneficial enforces the exact cost of the chosen type.
+        if (!npc.Actions.HasStandardAction && !npc.CanCommitAttack(npc.GetManeuverSubstituteStepKind(), out _))
             return false;
 
         if (profile != null)
@@ -2292,7 +2292,7 @@ public class AIService : MonoBehaviour
                     return profile.ShouldInitiateGrapple(npc, target);
 
                 if (preferred.Value == SpecialAttackType.Sunder)
-                    return target.HasSunderableItemEquipped();
+                    return target.HasSunderableItemEquipped() && npc.CanSunderWithMainWeapon(out _);
 
                 return true;
             }
@@ -2326,8 +2326,16 @@ public class AIService : MonoBehaviour
         yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(
             npc,
             target,
-            (actor, stepTarget) => ShouldUseManeuver(actor, stepTarget) && TryExecutePreferredManeuver(actor, stepTarget, profile)));
+            CreateMeleeStepManeuverEvaluator(profile)));
     }
+
+    /// <summary>
+    /// The per-step maneuver evaluation PerformMeleeAttackActionWithManeuvers hands to the NPC melee
+    /// sequence (GameManager.PerformNPCMeleeAttackSequence). Internal so the static suites can run the
+    /// real profile evaluation through the loop.
+    /// </summary>
+    internal System.Func<CharacterController, CharacterController, bool> CreateMeleeStepManeuverEvaluator(AIProfile profile)
+        => (actor, stepTarget) => ShouldUseManeuver(actor, stepTarget) && TryExecutePreferredManeuver(actor, stepTarget, profile);
 
     private bool TryExecutePreferredManeuver(CharacterController npc, CharacterController target, AIProfile profile)
     {

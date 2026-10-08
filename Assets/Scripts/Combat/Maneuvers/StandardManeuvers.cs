@@ -188,7 +188,9 @@ public partial class GameManager
         if (attacker == null || attacker.Actions == null)
             return false;
 
-        if (!attacker.HasMeleeWeaponEquipped())
+        // Sunder needs a manufactured weapon (the check the AI and the NPC executor use too), so a
+        // creature fighting with natural attacks or unarmed is not offered it (CMB-102).
+        if (!attacker.HasMeleeWeaponEquipped() || !attacker.CanSunderWithMainWeapon(out _))
             return false;
 
         return CanUseMainHandManeuverAttackOption(attacker, "Sunder");
@@ -267,48 +269,76 @@ public partial class GameManager
     }
 
     // Trip, disarm, sunder and grapple replace one melee attack of an attack or full attack, at that
-    // attack's BAB (PHB p.141 Table 8-2 note 7, p.143). They are steps of the creature's own attack
-    // sequence (CharacterController.TryCommitAttack), so the first one spends only the standard action
-    // and a second attack or maneuver turns the turn into a full attack (CMB-102).
+    // attack's bonus (PHB p.141 Table 8-2 note 7, p.143). They are steps of the creature's own attack
+    // sequence (CharacterController.TryCommitManeuverSubstituteStep, shared with the NPC executor), so
+    // the first one spends only the standard action and a second attack or maneuver turns the turn
+    // into a full attack (CMB-102). A weapon or unarmed fighter gives up an iterative attack (its
+    // iterative BAB); a creature fighting with its natural attacks gives up one natural attack, at that
+    // attack's BAB (primary full, secondary -5 or -2 with Multiattack, MM p.312). The PC gives up the
+    // natural attack the Attack button would use next (the first one not used this turn), and that
+    // natural attack is marked used. Grapple actions while already grappling stay iterative steps
+    // (PHB p.156), so callers pass iterativeOnly for them.
     // The list lives in ManeuverActionCost.ReplacesMeleeAttack. Bull rush and overrun are not on it:
     // they are standard actions or part of a charge (PHB p.154, p.157).
 
-    private bool CanUseMainHandManeuverAttackOption(CharacterController attacker, string maneuverLabel)
+    private AttackStepKind GetManeuverStepKind(CharacterController attacker, bool iterativeOnly)
+        => iterativeOnly ? AttackStepKind.MainHand : attacker.GetManeuverSubstituteStepKind();
+
+    /// <summary>The natural attack a PC maneuver gives up: the first one not used this turn, from the sequence cursor.</summary>
+    private int GetPcManeuverNaturalAttackIndex(CharacterController attacker)
+    {
+        if (attacker == null || attacker != ActivePC || attacker.GetManeuverSubstituteStepKind() != AttackStepKind.NaturalSequence)
+            return -1;
+
+        return ResolveNextAvailableNaturalAttackSequenceIndex(attacker, attacker.ProgressiveAttackPool.MainHandStepsUsed, null);
+    }
+
+    private bool CanUseMainHandManeuverAttackOption(CharacterController attacker, string maneuverLabel, bool iterativeOnly = false)
     {
         if (attacker == null || attacker.Actions == null)
             return false;
 
-        return attacker.GetRemainingMainHandAttackSteps() > 0;
+        return GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly) > 0;
     }
 
-    private int GetRemainingMainHandManeuverAttackActions(CharacterController attacker)
+    private int GetRemainingMainHandManeuverAttackActions(CharacterController attacker, bool iterativeOnly = false)
     {
         if (attacker == null || attacker.Actions == null)
             return 0;
 
-        return attacker.GetRemainingMainHandAttackSteps();
+        int remaining = attacker.GetRemainingMainHandAttackSteps(GetManeuverStepKind(attacker, iterativeOnly));
+
+        // A PC's natural-attack buttons can use natural attacks out of order; never offer more
+        // substitutes than unused natural attacks.
+        if (!iterativeOnly && attacker == ActivePC && attacker.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence)
+            remaining = Mathf.Min(remaining, Mathf.Max(0, GetTotalNaturalAttackCount(attacker) - _usedNaturalAttackSequenceIndices.Count));
+
+        return remaining;
     }
 
-    private int GetCurrentMainHandManeuverAttackBonusForUI(CharacterController attacker)
+    private int GetCurrentMainHandManeuverAttackBonusForUI(CharacterController attacker, bool iterativeOnly = false)
     {
         if (attacker == null || attacker.Stats == null)
             return 0;
 
-        if (attacker.GetRemainingMainHandAttackSteps() <= 0)
+        if (GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly) <= 0)
             return 0;
 
-        int bab = attacker.GetMainHandAttackStepBAB(attacker.ProgressiveAttackPool.MainHandStepsUsed);
-        if (_isDualWielding && attacker == ActivePC)
+        int step = attacker.ProgressiveAttackPool.MainHandStepsUsed;
+        int bab = iterativeOnly
+            ? attacker.GetMainHandAttackStepBAB(step)
+            : attacker.GetManeuverSubstituteBAB(step, GetPcManeuverNaturalAttackIndex(attacker));
+        if (_isDualWielding && attacker == ActivePC && GetManeuverStepKind(attacker, iterativeOnly) == AttackStepKind.MainHand)
             bab += _mainHandPenalty;
         return bab;
     }
 
     /// <summary>
-    /// Commit one main-hand attack step for a maneuver that replaces an attack. Returns the BAB of
-    /// that step (with the PC dual-wield main-hand penalty) and ends the PC Attack-button flow when
-    /// no main-hand step remains.
+    /// Commit the attack step a maneuver replaces. Returns the BAB the maneuver rolls at (with the PC
+    /// dual-wield main-hand penalty on a weapon step) and ends the PC Attack-button flow when no
+    /// main-hand step remains.
     /// </summary>
-    private bool TryCommitMainHandManeuverStep(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out string reason)
+    private bool TryCommitMainHandManeuverStep(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out string reason, bool iterativeOnly = false)
     {
         attackBonusUsed = 0;
         reason = string.Empty;
@@ -319,16 +349,46 @@ public partial class GameManager
             return false;
         }
 
-        if (!attacker.TryCommitAttack(AttackStepKind.MainHand, out int step, out reason))
+        AttackStepKind kind = GetManeuverStepKind(attacker, iterativeOnly);
+        if (kind == AttackStepKind.NaturalSequence && GetRemainingMainHandManeuverAttackActions(attacker) <= 0)
+        {
+            reason = $"No {maneuverLabel.ToLowerInvariant()} attacks remaining this turn.";
+            return false;
+        }
+
+        int naturalAttackIndex = kind == AttackStepKind.NaturalSequence ? GetPcManeuverNaturalAttackIndex(attacker) : -1;
+        bool committed;
+        if (iterativeOnly)
+        {
+            committed = attacker.TryCommitAttack(AttackStepKind.MainHand, out int step, out reason);
+            if (committed)
+                attackBonusUsed = attacker.GetMainHandAttackStepBAB(step);
+        }
+        else
+        {
+            committed = attacker.TryCommitManeuverSubstituteStep(naturalAttackIndex, out attackBonusUsed, out _, out reason);
+        }
+
+        if (!committed)
         {
             if (string.IsNullOrWhiteSpace(reason))
                 reason = $"No {maneuverLabel.ToLowerInvariant()} attacks remaining this turn.";
             return false;
         }
 
-        attackBonusUsed = attacker.GetMainHandAttackStepBAB(step);
-        if (_isDualWielding && attacker == ActivePC)
+        if (kind == AttackStepKind.NaturalSequence)
+        {
+            // The natural attack given up is spent, so the Attack and natural-attack buttons skip it.
+            if (naturalAttackIndex >= 0)
+            {
+                _usedNaturalAttackSequenceIndices.Add(naturalAttackIndex);
+                Debug.Log($"[{maneuverLabel}][Flow] Replaces natural attack #{naturalAttackIndex + 1} ({attacker.Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex)?.Name ?? "?"}).");
+            }
+        }
+        else if (_isDualWielding && attacker == ActivePC)
+        {
             attackBonusUsed += _mainHandPenalty;
+        }
 
         if (_isInAttackSequence && _attackingCharacter == attacker && !HasMoreAttacksAvailable())
             EndAttackSequence();
@@ -336,14 +396,14 @@ public partial class GameManager
         return true;
     }
 
-    private bool TryConsumeMainHandManeuverAttackAction(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out int attacksRemaining, out string reason)
+    private bool TryConsumeMainHandManeuverAttackAction(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out int attacksRemaining, out string reason, bool iterativeOnly = false)
     {
         attacksRemaining = 0;
 
-        if (!TryCommitMainHandManeuverStep(attacker, maneuverLabel, out attackBonusUsed, out reason))
+        if (!TryCommitMainHandManeuverStep(attacker, maneuverLabel, out attackBonusUsed, out reason, iterativeOnly))
             return false;
 
-        attacksRemaining = GetRemainingMainHandManeuverAttackActions(attacker);
+        attacksRemaining = GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly);
         Debug.Log($"[{maneuverLabel}][Flow] Consumed main-hand maneuver attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}; remaining={attacksRemaining}");
         return true;
     }
@@ -353,11 +413,12 @@ public partial class GameManager
         if (attacker == null)
             return false;
 
+        // Once grappling, each attack can be a grapple action at its iterative BAB (PHB p.156).
         bool isAlreadyGrappling = attacker.IsGrappling();
         if (!isAlreadyGrappling && !attacker.CanUseStandardGrapple())
             return false;
 
-        return CanUseMainHandManeuverAttackOption(attacker, "Grapple");
+        return CanUseMainHandManeuverAttackOption(attacker, "Grapple", iterativeOnly: isAlreadyGrappling);
     }
 
     public int GetRemainingGrappleAttackActions(CharacterController attacker)
@@ -365,7 +426,7 @@ public partial class GameManager
         if (!CanUseGrappleAttackOption(attacker))
             return 0;
 
-        return GetRemainingMainHandManeuverAttackActions(attacker);
+        return GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: attacker.IsGrappling());
     }
 
     public int GetCurrentGrappleAttackBonus(CharacterController attacker)
@@ -373,7 +434,7 @@ public partial class GameManager
         if (!CanUseGrappleAttackOption(attacker))
             return 0;
 
-        return GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+        return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: attacker.IsGrappling());
     }
 
     private bool TryConsumeGrappleAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
@@ -395,7 +456,7 @@ public partial class GameManager
             return false;
         }
 
-        return TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason);
+        return TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason, iterativeOnly: isAlreadyGrappling);
     }
 
     // Bull rush is a standard action (or the end of a charge) for every creature, never one attack

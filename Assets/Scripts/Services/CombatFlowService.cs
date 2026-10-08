@@ -482,39 +482,20 @@ public class CombatFlowService : MonoBehaviour
         return result;
     }
 
+    /// <summary>No attack weapon and a creature that fights with its natural attacks (CharacterController.UsesInnateNaturalAttackSequence).</summary>
     private static bool ShouldUseNaturalAttackStep(CharacterController attacker, ItemData attackWeapon)
     {
         return attacker != null
             && attackWeapon == null
-            && attacker.Stats != null
-            && attacker.Stats.HasNaturalAttacks;
+            && attacker.UsesInnateNaturalAttackSequence();
     }
 
     private static bool TryGetNaturalAttackAtSequenceIndex(CharacterController attacker, int attackIndex, out NaturalAttackDefinition attack)
     {
-        attack = null;
-        if (attacker == null || attacker.Stats == null || attackIndex < 0)
-            return false;
-
-        List<NaturalAttackDefinition> naturalAttacks = attacker.Stats.GetValidNaturalAttacks();
-        int currentIndex = 0;
-        for (int naturalIndex = 0; naturalIndex < naturalAttacks.Count; naturalIndex++)
-        {
-            NaturalAttackDefinition naturalAttack = naturalAttacks[naturalIndex];
-            int count = Mathf.Max(1, naturalAttack.Count);
-            for (int i = 0; i < count; i++)
-            {
-                if (currentIndex == attackIndex)
-                {
-                    attack = naturalAttack;
-                    return true;
-                }
-
-                currentIndex++;
-            }
-        }
-
-        return false;
+        attack = attacker != null && attacker.Stats != null
+            ? attacker.Stats.GetNaturalAttackAtSequenceIndex(attackIndex)
+            : null;
+        return attack != null;
     }
 
     private static int GetSequenceAttackBaseBonus(CharacterController attacker, GameManager.AttackType attackType, int attackIndex)

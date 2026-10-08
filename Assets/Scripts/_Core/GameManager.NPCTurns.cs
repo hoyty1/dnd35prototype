@@ -299,9 +299,9 @@ public partial class GameManager
         if (npc.IsGrappling() && (!forcedChoice.HasValue || forcedChoice.Value != SpecialAttackType.CoupDeGrace))
             return false;
 
-        // A maneuver that replaces an attack only needs the next attack step (CMB-102); the exact
-        // cost per type is checked once the choice is known.
-        if (!npc.Actions.HasStandardAction && !hasCoupOption && !npc.CanCommitAttack(AttackStepKind.MainHand, out _))
+        // A maneuver that replaces an attack only needs the next attack step, iterative or natural
+        // (CMB-102); the exact cost per type is checked once the choice is known.
+        if (!npc.Actions.HasStandardAction && !hasCoupOption && !npc.CanCommitAttack(npc.GetManeuverSubstituteStepKind(), out _))
             return false;
 
         SpecialAttackType? choice = forcedChoice;
@@ -366,21 +366,31 @@ public partial class GameManager
             return false;
         }
 
+        // Sunder needs a manufactured weapon (CharacterController.CanSunderWithMainWeapon, the check the
+        // PC buttons and the AI use), refused before any attack step or AoO is spent.
+        if (choice.Value == SpecialAttackType.Sunder && !npc.CanSunderWithMainWeapon(out string sunderReason))
+        {
+            Debug.Log($"[AI][SpecialAttack] {sunderReason}");
+            return false;
+        }
+
         // Trip, disarm, sunder and grapple replace one melee attack (PHB p.141 Table 8-2 note 7):
-        // one step of the NPC's own attack sequence at that step's BAB, paid before the AoOs as the
-        // PC wrapper does (CMB-102). Other maneuvers still cost a standard action (or the full round
-        // for a coup de grace).
+        // one step of the NPC's own attack sequence at that step's bonus (an iterative BAB, or the
+        // BAB of the natural attack it replaces, MM p.312), paid before the AoOs as the PC wrapper
+        // does (CMB-102). In a natural sequence the NPC gives up the natural attack at the current
+        // step, the order PerformNPCMeleeAttackSequence resolves them in. Other maneuvers still cost
+        // a standard action (or the full round for a coup de grace).
         bool replacesAttack = ManeuverActionCost.ReplacesMeleeAttack(choice.Value);
         int? stepBab = null;
         if (replacesAttack)
         {
-            if (!npc.TryCommitAttack(AttackStepKind.MainHand, out int step, out string why))
+            if (!npc.TryCommitManeuverSubstituteStep(-1, out int maneuverBab, out _, out string why))
             {
                 Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice.Value} as an attack: {why}");
                 return false;
             }
 
-            stepBab = npc.GetMainHandAttackStepBAB(step);
+            stepBab = maneuverBab;
         }
         else if (choice.Value != SpecialAttackType.CoupDeGrace && !npc.Actions.HasStandardAction)
         {
@@ -582,9 +592,11 @@ public partial class GameManager
     /// the turn into a full attack (move action), so an NPC that moved, is slowed or can take only
     /// one action gets one step, and Haste adds its step through the iterative count (weapon and
     /// unarmed sequences only, CMB-106). Before each
-    /// weapon step (and before the first natural step) <paramref name="tryStepManeuver"/> may
-    /// replace that attack with trip, disarm, sunder or grapple at that step's BAB
-    /// (PHB p.141 Table 8-2 note 7; which types is ManeuverActionCost.ReplacesMeleeAttack).
+    /// step, weapon or natural, <paramref name="tryStepManeuver"/> may replace that attack with trip,
+    /// disarm, sunder or grapple at that step's bonus: the iterative BAB, or the BAB of the natural
+    /// attack it replaces (PHB p.141 Table 8-2 note 7, MM p.312; which types is
+    /// ManeuverActionCost.ReplacesMeleeAttack; the BAB is CharacterController.TryCommitManeuverSubstituteStep).
+    /// In a natural sequence the NPC is offered at most one substitute (an AI limit pending AI-035).
     /// Each attack is resolved by CharacterController.ResolveAttackSequenceStep, the resolver the
     /// PC iterative flow uses (PC_NPC_PARITY plan step 6).
     /// </summary>
@@ -616,7 +628,14 @@ public partial class GameManager
 
         bool adaptive = profile != null && profile.ShouldSwitchTargetsMidFullAttack(npc);
         CharacterController currentTarget = initialTarget;
-        int stepsTaken = 0;
+
+        // AI limit, not a rule (AI-035, CMB-102 open item 7): in a natural sequence the evaluation
+        // re-runs before every natural attack and the shipped profiles would retry a failed trip (or
+        // chain trip, disarm, grapple) with each one, never rolling the bites and claws an Improved
+        // Grab creature needs. Until AI-035 adds an odds check, a natural-attack NPC makes at most
+        // one maneuver substitute per sequence; its other natural attacks are rolled. PCs may replace
+        // as many natural attacks as they like. Weapon sequences keep the per-step evaluation.
+        bool naturalSubstituteUsed = false;
 
         // Safety cap; the attack sequence itself ends the loop (CanCommitAttack). Sized from the
         // budget so that maneuvers and kill-retargets (iterations that commit no attack) cannot
@@ -629,10 +648,8 @@ public partial class GameManager
             if (npc.Stats == null || npc.Stats.IsDead || npc.Stats.CurrentHP <= 0 || CurrentPhase == TurnPhase.CombatOver)
                 break;
 
-            // Same predicate as CombatFlowService.ShouldUseNaturalAttackStep (PC iterative flow).
-            AttackStepKind stepKind = npc.GetEquippedMainWeapon() == null && npc.Stats.HasNaturalAttacks
-                ? AttackStepKind.NaturalSequence
-                : AttackStepKind.MainHand;
+            // Same predicate as the PC iterative flow (CharacterController.UsesInnateNaturalAttackSequence).
+            AttackStepKind stepKind = npc.GetMeleeAttackStepKind();
 
             if (!npc.CanCommitAttack(stepKind, out string cannotCommitReason))
             {
@@ -688,16 +705,17 @@ public partial class GameManager
             if (currentTarget == null || currentTarget.Stats == null)
                 break;
 
-            // A maneuver may replace this attack (CMB-102). Inside a natural sequence only the first
-            // step is offered (the maneuver takes an iterative BAB, and a natural creature below
-            // BAB +6 has one iterative); the remaining natural attacks then follow it, as in the PC
-            // iterative flow (the shared budget is the natural-attack count).
-            if (tryStepManeuver != null && (stepKind == AttackStepKind.MainHand || stepsTaken == 0))
+            // A maneuver may replace this attack (CMB-102), weapon or natural. In a natural sequence it
+            // replaces the natural attack of this step and rolls at that attack's BAB (primary full,
+            // secondary -5 or -2 with Multiattack, MM p.312; owner decision 2026-10-07); the other
+            // natural attacks still follow, as in the PC flow (the shared budget is the natural-attack count).
+            if (tryStepManeuver != null && !(naturalSubstituteUsed && stepKind == AttackStepKind.NaturalSequence))
             {
                 if (tryStepManeuver(npc, currentTarget))
                 {
                     maneuversUsed++;
-                    stepsTaken++;
+                    if (stepKind == AttackStepKind.NaturalSequence)
+                        naturalSubstituteUsed = true;
 
                     // A grapple started by a substitute: the remaining steps become grapple actions,
                     // handed to AI_GrappleRestrictedTurn by the caller.
@@ -721,8 +739,6 @@ public partial class GameManager
                 stopReason = commitReason;
                 break;
             }
-
-            stepsTaken++;
 
             CharacterController flankPartner;
             bool isFlanking = CombatUtils.IsAttackerFlanking(npc, currentTarget, GetAllCharacters(), out flankPartner);

@@ -25,11 +25,13 @@ namespace Tests.Scenarios
     /// crawl), p.140 (casting provokes; casting defensively), p.153 (flanking +2), p.154 (bull rush), p.155 (disarm:
     /// an AoO that deals damage foils it), p.156 (grapple: likewise), p.158 (trip; the defender may trip back),
     /// p.141 Table 8-2 note (trip, disarm and grapple replace a melee attack).
+    /// MM p.312 (primary natural attacks at full bonus, secondary at -5) and p.304 (Multiattack: -2) for the
+    /// maneuvers that replace a natural attack (owner decision 2026-10-07).
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 24;
+        public const int Count = 27;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -60,6 +62,9 @@ namespace Tests.Scenarios
             yield return S("pin-release-ends-grapple", PinRelease);
             yield return S("pin-release-5ft", PinReleaseFiveFootStep);
             yield return S("npc-maneuver-replaces-iterative", NpcManeuverReplacesIterative);
+            yield return S("maneuver-replaces-natural", () => ManeuverReplacesNatural(false));
+            yield return S("maneuver-replaces-natural-multiattack", () => ManeuverReplacesNatural(true));
+            yield return S("maneuver-replaces-natural-ui", ManeuverReplacesNaturalUi);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -751,6 +756,128 @@ namespace Tests.Scenarios
                     return mods[0].Value - mods[1].Value == 5
                         ? ExpectResult.Pass("touch mods " + mods[0].Value + ", " + mods[1].Value, mods[0].Key.Seq, mods[1].Key.Seq)
                         : ExpectResult.Fail("touch mods " + mods[0].Value + ", " + mods[1].Value, mods[0].Key.Seq, mods[1].Key.Seq);
+                })
+                .Build();
+        }
+
+        // ── A maneuver replaces any natural attack at that attack's bonus (CMB-102) ──
+
+        /// <summary>
+        /// A Human fighter 4 (BAB +4, STR 16) fighting with a primary bite and two secondary claws and no
+        /// weapon (strip the kit with <see cref="StripAllWeapons"/>), with Improved Trip so no trip provokes.
+        /// </summary>
+        private static CharacterStats NaturalBeast(string name, bool multiattack)
+        {
+            CharacterStats s = multiattack ? Fighter(name, 4, "Improved Trip", "Multiattack") : Fighter(name, 4, "Improved Trip");
+            s.NaturalAttacks.Clear();
+            s.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, IsPrimary = true });
+            s.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, IsPrimary = false, BonusDamageSource = DamageBonusSource.StrengthHalf });
+            return s;
+        }
+
+        /// <summary>Empties both hands and the gauntlet slot, so the creature fights with its natural attacks.</summary>
+        internal static void StripAllWeapons(CharacterController c)
+        {
+            InventoryComponent inv = c.GetComponent<InventoryComponent>();
+            if (inv == null || inv.CharacterInventory == null)
+                return;
+            inv.CharacterInventory.RightHandSlot = null;
+            inv.CharacterInventory.LeftHandSlot = null;
+            inv.CharacterInventory.HandsSlot = null;
+            inv.CharacterInventory.RecalculateStats();
+        }
+
+        /// <summary>The trip touch-attack modifier from a 'maneuver' event whose touch attack missed (check minus the d20).</summary>
+        private static int TouchMod(TraceEvent trip) => trip.Int("check") - trip.Int("checkRoll");
+
+        private static ScenarioDef ManeuverReplacesNatural(bool multiattack)
+        {
+            int secondaryPenalty = multiattack ? 2 : 5;
+            string id = multiattack ? "rules/maneuver-replaces-natural-multiattack" : "rules/maneuver-replaces-natural";
+            string title = multiattack
+                ? "With Multiattack, a trip replacing a secondary natural attack rolls at -2 (MM p.304, p.312)"
+                : "A trip replaces any natural attack at that attack's bonus: primary full, secondary -5 (MM p.312, PHB p.141)";
+            return Rules(id, title)
+                .Covers("CMB-102", "PHB p.141", "MM p.312", "MM p.304")
+                .MaxRounds(1)
+                .Pc("beast", ActorSource.Stats(() => NaturalBeast("Beast", multiattack)), 10, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Tweak("beast", StripAllWeapons)
+                .Initiative("beast", "dummy")
+                // A natural 1 always misses the touch attack, so no trip lands and nothing else changes.
+                .Force(20, 1, "Trip touch attack", -1)
+                .Turn("dummy", 0, Step.Pass())
+                // BAB +4 is one iterative, yet the trips take the bite and the first claw, the attack the
+                // second claw, and a fourth action finds no natural attack left.
+                .Turn("beast", 1, Step.Maneuver(SpecialAttackType.Trip, "dummy"), Step.Maneuver(SpecialAttackType.Trip, "dummy"),
+                    Step.Attack("dummy"), Step.Maneuver(SpecialAttackType.Trip, "dummy"))
+                .Expect("Two trips and one attack are done; the fourth action is refused", Expect.All(
+                    Expect.StepStatus("beast", 1, "Maneuver", 0, "done"),
+                    Expect.StepStatus("beast", 1, "Maneuver", 1, "done"),
+                    Expect.StepStatus("beast", 1, "Attack", 0, "done"),
+                    Expect.StepStatus("beast", 1, "Maneuver", 2, "refused")))
+                .Expect("The second trip (in place of a secondary claw) rolls " + secondaryPenalty + " lower than the first (in place of the primary bite)", v =>
+                {
+                    List<TraceEvent> trips = v.Maneuvers("beast", SpecialAttackType.Trip).Where(e => e.Round == 1).ToList();
+                    if (trips.Count != 2) return ExpectResult.Fail(trips.Count + " trips");
+                    if (trips.Any(t => t.Int("checkRoll") != 1)) return ExpectResult.Fail("a touch attack was not the forced natural 1");
+                    int m0 = TouchMod(trips[0]), m1 = TouchMod(trips[1]);
+                    return m0 - m1 == secondaryPenalty
+                        ? ExpectResult.Pass("touch mods " + m0 + ", " + m1, trips[0].Seq, trips[1].Seq)
+                        : ExpectResult.Fail("touch mods " + m0 + ", " + m1, trips[0].Seq, trips[1].Seq);
+                })
+                // The trace's 'weapon' is recorded inside PerformSingleAttackWithCrit, before FullAttack names the
+                // natural attack, so it reads "Unarmed strike"; the claw is told from the bite by its modifier.
+                .Expect("The attack is the remaining claw, at the same bonus as the trip that replaced the other claw", v =>
+                {
+                    List<TraceEvent> attacks = v.Attacks("beast", null, false, 1);
+                    TraceEvent clawTrip = v.Maneuvers("beast", SpecialAttackType.Trip).Where(e => e.Round == 1).Skip(1).FirstOrDefault();
+                    if (attacks.Count != 1 || clawTrip == null) return ExpectResult.Fail(attacks.Count + " attacks");
+                    return attacks[0].Int("mod") == TouchMod(clawTrip)
+                        ? ExpectResult.Pass("claw +" + attacks[0].Int("mod"), attacks[0].Seq, clawTrip.Seq)
+                        : ExpectResult.Fail("claw mod " + attacks[0].Int("mod") + " vs trip touch mod " + TouchMod(clawTrip), attacks[0].Seq, clawTrip.Seq);
+                })
+                .Build();
+        }
+
+        private static ScenarioDef ManeuverReplacesNaturalUi()
+        {
+            return Rules("rules/maneuver-replaces-natural-ui", "A PC's Trip button replaces each natural attack in turn at that attack's bonus (MM p.312, PHB p.141)")
+                .Covers("CMB-102", "PHB p.141", "MM p.312", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => NaturalBeast("Hero", false)), 10, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Tweak("hero", StripAllWeapons)
+                .Initiative("hero", "dummy")
+                .Force(20, 1, "Trip touch attack", -1)
+                .Turn("dummy", 0, Step.Pass())
+                .Turn("hero", 1,
+                    Step.Maneuver(SpecialAttackType.Trip, "dummy"),
+                    Step.Maneuver(SpecialAttackType.Trip, "dummy"),
+                    Step.Assert("the bite and the first claw are marked used; the second claw is not", ctx =>
+                    {
+                        CharacterController hero = ctx.Get("hero");
+                        return ctx.Gm.IsNaturalAttackSequenceIndexUsed(hero, 0)
+                            && ctx.Gm.IsNaturalAttackSequenceIndexUsed(hero, 1)
+                            && !ctx.Gm.IsNaturalAttackSequenceIndexUsed(hero, 2);
+                    }),
+                    Step.Maneuver(SpecialAttackType.Trip, "dummy"),
+                    Step.Maneuver(SpecialAttackType.Trip, "dummy"))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("Three trips are done and the used natural attacks are marked", Expect.All(
+                    Expect.StepStatus("hero", 1, "Maneuver", 0, "done"),
+                    Expect.StepStatus("hero", 1, "Maneuver", 1, "done"),
+                    Expect.StepStatus("hero", 1, "Maneuver", 2, "done"),
+                    Expect.AssertsPass()))
+                .Expect("A fourth trip finds no natural attack left", Expect.StepStatus("hero", 1, "Maneuver", 3, "refused", "dropped"))
+                .Expect("Trips at the bite, claw, claw bonuses: the second 5 lower than the first, the third equal to the second", v =>
+                {
+                    List<TraceEvent> trips = v.Maneuvers("hero", SpecialAttackType.Trip).Where(e => e.Round == 1).ToList();
+                    if (trips.Count != 3) return ExpectResult.Fail(trips.Count + " trips");
+                    int m0 = TouchMod(trips[0]), m1 = TouchMod(trips[1]), m2 = TouchMod(trips[2]);
+                    return m0 - m1 == 5 && m1 == m2
+                        ? ExpectResult.Pass("touch mods " + m0 + ", " + m1 + ", " + m2, trips[0].Seq, trips[2].Seq)
+                        : ExpectResult.Fail("touch mods " + m0 + ", " + m1 + ", " + m2, trips[0].Seq, trips[2].Seq);
                 })
                 .Build();
         }

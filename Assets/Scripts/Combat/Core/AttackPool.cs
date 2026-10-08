@@ -14,9 +14,9 @@ public enum ProgressiveAttackMode
 /// </summary>
 public enum AttackStepKind
 {
-    /// <summary>An iterative weapon or unarmed swing, or a maneuver that replaces one (trip, disarm, sunder, grapple).</summary>
+    /// <summary>An iterative weapon or unarmed swing, a maneuver that replaces one (trip, disarm, sunder, grapple), or a grapple action once grappling.</summary>
     MainHand,
-    /// <summary>The next natural attack of an innate natural-attack sequence.</summary>
+    /// <summary>The next natural attack of an innate natural-attack sequence, or a maneuver that replaces one (at that natural attack's BAB).</summary>
     NaturalSequence,
     /// <summary>An off-hand attack: counts toward commitment but does not move the main-hand cursor.</summary>
     OffHand
@@ -30,7 +30,8 @@ public enum AttackStepKind
 /// creature that has already used its move action cannot take a second attack.
 /// This applies PHB p.143 "Deciding between an Attack or a Full Attack". Trip, disarm, sunder and
 /// grapple replace a melee attack (PHB p.141 Table 8-2 note 7) and use the same steps, at that
-/// step's iterative BAB. Cleared by <see cref="CharacterController.StartNewTurn"/>.
+/// step's bonus (an iterative BAB, or for a natural-attack creature the BAB of the natural attack
+/// replaced, MM p.312). Cleared by <see cref="CharacterController.StartNewTurn"/>.
 /// </summary>
 [Serializable]
 public sealed class AttackPool
@@ -105,8 +106,9 @@ public static class ManeuverActionCost
 {
     /// <summary>
     /// Maneuvers that may replace one melee attack of an attack or full attack, at that attack's
-    /// BAB (PHB p.141 Table 8-2 note 7). They cost one main-hand step of
-    /// <see cref="CharacterController.TryCommitAttack"/>. Bull rush and overrun are not in this set:
+    /// BAB (PHB p.141 Table 8-2 note 7). They cost one step of the creature's sequence through
+    /// <see cref="CharacterController.TryCommitManeuverSubstituteStep"/>: an iterative step, or for a
+    /// creature fighting with natural attacks one natural attack at that attack's BAB (MM p.312). Bull rush and overrun are not in this set:
     /// for every creature, PC or NPC, they are a standard action or part of a charge (PHB p.154,
     /// p.157), never one attack of a full attack and never an attack of opportunity.
     /// </summary>

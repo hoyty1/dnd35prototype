@@ -3813,13 +3813,38 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Attack penalty for a natural attack's place in the routine: -5 for a secondary attack (MM p.312), else 0.
+    /// Attack penalty for a natural attack's place in the routine: 0 for a primary attack; -5 for a
+    /// secondary attack, or -2 with the Multiattack feat (MM p.312 Natural Weapons, MM p.304 Multiattack).
+    /// The same penalty applies to a maneuver that replaces that natural attack (CMB-102).
     /// </summary>
     public int GetNaturalAttackSequencePenalty(NaturalAttackDefinition attack)
     {
         if (!IsValidNaturalAttack(attack) || attack.IsPrimary)
             return 0;
-        return -5;
+        return HasFeat("Multiattack") ? -2 : -5;
+    }
+
+    /// <summary>
+    /// The natural attack at this place of the innate natural-attack sequence: the valid natural
+    /// attacks in list order, each repeated by its Count (claw, claw, bite is indices 0, 1, 2).
+    /// Null when the index is out of range. The order FullAttack and the attack-sequence steps use.
+    /// </summary>
+    public NaturalAttackDefinition GetNaturalAttackAtSequenceIndex(int sequenceIndex)
+    {
+        if (sequenceIndex < 0)
+            return null;
+
+        List<NaturalAttackDefinition> validAttacks = GetValidNaturalAttacks();
+        int currentIndex = 0;
+        for (int i = 0; i < validAttacks.Count; i++)
+        {
+            int count = Mathf.Max(1, validAttacks[i].Count);
+            if (sequenceIndex < currentIndex + count)
+                return validAttacks[i];
+            currentIndex += count;
+        }
+
+        return null;
     }
 
     public DamageBonusSource GetDefaultNaturalAttackDamageSource(NaturalAttackDefinition attack)
