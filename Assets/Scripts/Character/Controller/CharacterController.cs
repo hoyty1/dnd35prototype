@@ -808,9 +808,10 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Highest step count usable by this kind of step. A MainHand step (a weapon or unarmed swing, a
-    /// weapon user's maneuver, or a grapple action once grappling) uses an iterative BAB, so it can
-    /// never go past the iterative ladder. A natural-attack creature's maneuver is a NaturalSequence
-    /// step (CMB-102) and is capped by the natural-attack count instead.
+    /// weapon user's maneuver, or any creature's grapple action once grappling other than a natural-weapon
+    /// creature's grapple natural attack) uses an iterative BAB, so it can never go past the iterative ladder.
+    /// A natural-attack creature's maneuver or grapple natural attack is a NaturalSequence step (CMB-102,
+    /// CMB-127) and is capped by the natural-attack count instead (that count for grapple attacks is CMB-146).
     /// </summary>
     private int GetAttackStepLimit(AttackStepKind kind)
     {
@@ -1154,39 +1155,136 @@ public class CharacterController : MonoBehaviour
     public int GetManeuverSubstituteBAB(int stepIndex, int naturalAttackIndex = -1)
     {
         if (GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence)
-            return GetNaturalAttackStepBAB(naturalAttackIndex >= 0 ? naturalAttackIndex : stepIndex);
+            return GetNaturalAttackStepBAB(naturalAttackIndex >= 0 ? naturalAttackIndex : ResolveSubstituteNaturalAttackIndex(stepIndex, out _));
 
         return GetMainHandAttackStepBAB(stepIndex);
     }
 
     /// <summary>
-    /// Check, pay for and record the step a maneuver replaces, and return the BAB the maneuver rolls
-    /// at. Used by the PC maneuver wrapper and the NPC maneuver executor alike.
-    /// <paramref name="naturalAttackIndex"/> as in <see cref="GetManeuverSubstituteBAB"/>. The attack
-    /// pool counts steps, not which natural attack was given up: pass a non-negative index only from
-    /// a caller that records the used natural attacks itself (the PC wrapper, through
-    /// GameManager._usedNaturalAttackSequenceIndices). The NPC loop resolves natural attacks by the
-    /// step cursor, so it passes -1 and gives up the natural attack at the current step; at the Haste
-    /// step (CMB-106) that is Haste's extra natural attack, which is then marked used. The PC wrapper
-    /// passes <paramref name="givesUpHasteExtraAttack"/> when the maneuver takes the place of Haste's
-    /// extra natural attack.
+    /// The natural attack a maneuver or grapple action gives up when the caller names none (the NPC paths), at
+    /// natural-sequence step <paramref name="stepIndex"/>. Normally the natural attack at the step itself, the order
+    /// the NPC sequence resolves them in; at the Haste step Haste's extra natural attack while it is unused
+    /// (<paramref name="isHasteExtraAttack"/>, at the default Haste natural attack's bonus, CMB-106). When that natural
+    /// attack is already used this turn, because a grapple attack action picked natural attacks out of sequence order
+    /// (PHB p.156, CMB-127), the first unused natural attack in sequence order, else Haste's extra attack while unused.
+    /// Returns a natural-sequence index (the step's own when nothing is left).
+    /// </summary>
+    public int ResolveSubstituteNaturalAttackIndex(int stepIndex, out bool isHasteExtraAttack)
+    {
+        isHasteExtraAttack = false;
+        int count = Stats != null ? Stats.GetTotalNaturalAttackCount() : 0;
+        AttackPool pool = ProgressiveAttackPool;
+
+        if (IsHasteExtraNaturalStep(stepIndex))
+        {
+            if (CanUseHasteExtraNaturalAttack())
+            {
+                isHasteExtraAttack = true;
+                return GetDefaultHasteNaturalAttackIndex();
+            }
+        }
+        else if (stepIndex >= 0 && stepIndex < count && !pool.IsNaturalAttackUsed(stepIndex))
+        {
+            return stepIndex;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            if (!pool.IsNaturalAttackUsed(i))
+                return i;
+        }
+
+        if (CanUseHasteExtraNaturalAttack())
+        {
+            isHasteExtraAttack = true;
+            return GetDefaultHasteNaturalAttackIndex();
+        }
+
+        return ResolveNaturalAttackIndexForStep(stepIndex);
+    }
+
+    /// <summary>
+    /// Check, pay for and record the step a maneuver (or a grapple natural attack, CMB-127) replaces, and return
+    /// the BAB it rolls at. Used by the PC maneuver wrapper, the grapple actions and the NPC maneuver executor alike.
+    /// For a weapon or unarmed fighter the step is an iterative one at its iterative BAB. For a creature fighting
+    /// with its natural attacks the step gives up one natural attack and returns that attack's BAB:
+    /// <paramref name="naturalAttackIndex"/> when the caller names one (the PC wrapper's next unused natural attack,
+    /// or the natural attack a grapple attack makes, the attacker's pick), with <paramref name="givesUpHasteExtraAttack"/>
+    /// when it is Haste's extra attack with that natural weapon (CMB-106); a named natural attack that is out of range
+    /// or already made or given up this turn (<see cref="AttackPool.IsNaturalAttackUsed"/>), or a Haste attack that
+    /// is not available, is refused before the step is spent. With -1 the step gives up
+    /// <see cref="ResolveSubstituteNaturalAttackIndex"/>: the natural attack at the step (the NPC sequence order), or
+    /// the first unused one, else Haste's extra attack. The natural attack given up is marked used in the attack
+    /// pool (or Haste's extra attack is), and recorded with the Haste flag as the last substitute
+    /// (<see cref="AttackPool.LastSubstituteNaturalAttackIndex"/>, <see cref="AttackPool.LastSubstituteWasHasteExtraAttack"/>).
     /// </summary>
     public bool TryCommitManeuverSubstituteStep(int naturalAttackIndex, out int maneuverBab, out int stepIndex, out string reason,
         bool givesUpHasteExtraAttack = false)
     {
         maneuverBab = 0;
+        stepIndex = -1;
         AttackStepKind kind = GetManeuverSubstituteStepKind();
+        if (kind == AttackStepKind.NaturalSequence && naturalAttackIndex >= 0
+            && !CanGiveUpNaturalAttack(naturalAttackIndex, givesUpHasteExtraAttack, out reason))
+            return false;
+
         if (!TryCommitAttack(kind, out stepIndex, out reason))
             return false;
 
-        maneuverBab = GetManeuverSubstituteBAB(stepIndex, naturalAttackIndex);
-        if (kind == AttackStepKind.NaturalSequence
-            && (givesUpHasteExtraAttack || (naturalAttackIndex < 0 && IsHasteExtraNaturalStep(stepIndex))))
+        if (kind != AttackStepKind.NaturalSequence)
+        {
+            maneuverBab = GetMainHandAttackStepBAB(stepIndex);
+            ProgressiveAttackPool.RecordSubstituteNaturalAttack(-1);
+            return true;
+        }
+
+        // The natural attack given up: the caller's, else the step's own (or the first unused one, CMB-127).
+        bool givesUpHaste = givesUpHasteExtraAttack;
+        int givenUpIndex = naturalAttackIndex;
+        if (givenUpIndex < 0)
+            givenUpIndex = ResolveSubstituteNaturalAttackIndex(stepIndex, out givesUpHaste);
+
+        maneuverBab = GetNaturalAttackStepBAB(givenUpIndex);
+        if (givesUpHaste)
             MarkHasteExtraNaturalAttackUsed();
-        // Which natural attack was given up, for the Improved Trip follow-up attack (PHB p.96, CMB-079).
-        ProgressiveAttackPool.RecordSubstituteNaturalAttack(kind == AttackStepKind.NaturalSequence
-            ? (naturalAttackIndex >= 0 ? naturalAttackIndex : ResolveNaturalAttackIndexForStep(stepIndex))
-            : -1);
+        else
+            ProgressiveAttackPool.MarkNaturalAttackUsed(givenUpIndex);
+        // Which natural attack was given up, for the Improved Trip follow-up attack (PHB p.96, CMB-079) and a
+        // grapple natural attack committed without a named attack (CMB-127).
+        ProgressiveAttackPool.RecordSubstituteNaturalAttack(givenUpIndex, givesUpHaste);
+        return true;
+    }
+
+    /// <summary>
+    /// Whether a caller-named natural attack can still be given up (or made) this turn: in range, and not made or
+    /// given up already (<see cref="AttackPool.IsNaturalAttackUsed"/>); for Haste's extra attack with it, while that
+    /// attack is unused (<see cref="CanUseHasteExtraNaturalAttack"/>). Checked before any step is spent (CMB-127).
+    /// </summary>
+    public bool CanGiveUpNaturalAttack(int naturalAttackIndex, bool asHasteExtraAttack, out string reason)
+    {
+        reason = string.Empty;
+        int count = Stats != null ? Stats.GetTotalNaturalAttackCount() : 0;
+        if (naturalAttackIndex < 0 || naturalAttackIndex >= count)
+        {
+            reason = $"no natural attack #{naturalAttackIndex + 1}";
+            return false;
+        }
+
+        if (asHasteExtraAttack)
+        {
+            if (CanUseHasteExtraNaturalAttack())
+                return true;
+            reason = "Haste's extra natural attack is not available this turn";
+            return false;
+        }
+
+        if (ProgressiveAttackPool.IsNaturalAttackUsed(naturalAttackIndex))
+        {
+            NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex);
+            reason = $"the {(natural != null && !string.IsNullOrWhiteSpace(natural.Name) ? natural.Name : "natural attack")} (#{naturalAttackIndex + 1}) was already used this turn";
+            return false;
+        }
+
         return true;
     }
 
@@ -1413,8 +1511,9 @@ public class CharacterController : MonoBehaviour
             {
                 Stats.GetScaledNaturalAttackDamage(naturalAttack, out damageCount, out damageDice);
                 bonusDamage = Stats.GetNaturalAttackDamageBonus(naturalAttack) - Stats.STRMod;
+                // Same fallback as FullAttack: only a data name can be a Trip (Ex) trigger (CMB-125).
                 attackLabel = string.IsNullOrWhiteSpace(naturalAttack.Name)
-                    ? (Stats.HasTripAttack ? "Bite" : "Natural attack")
+                    ? "Natural attack"
                     : naturalAttack.Name;
                 return;
             }
@@ -5643,8 +5742,9 @@ public class CharacterController : MonoBehaviour
                     naturalSteps.Add((naturalAttacks[naturalIndex], repeat, false));
             }
 
-            // Only while it is unused this turn: it is one attack per full attack, and the grapple
-            // routine (ResolveNaturalAttackRoutineWhileGrappling) leaves it out with maxAttacks.
+            // Only while it is unused this turn: it is one attack per full attack. A grapple attack action
+            // that takes the Haste step (ResolveGrappleNaturalAttack, CMB-127) has marked it used already
+            // and resolves its natural attack by index instead.
             if (CanUseHasteExtraNaturalAttack() && naturalSteps.Count > 0)
             {
                 int hasteIndex = ResolveNaturalAttackIndexForStep(naturalSteps.Count, hasteNaturalAttackIndex);
@@ -5697,6 +5797,8 @@ public class CharacterController : MonoBehaviour
                 TryApplyNaturalAttackOnHitEffects(target, atk, naturalAttack);
                 if (isHasteExtraAttack)
                     MarkHasteExtraNaturalAttackUsed();
+                else
+                    ProgressiveAttackPool.MarkNaturalAttackUsed(stepIndex); // its natural-sequence index (CMB-127)
 
                 result.Attacks.Add(atk);
                 string naturalLabel = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural" : naturalAttack.Name;
@@ -6046,6 +6148,10 @@ public class CharacterController : MonoBehaviour
             result.Attacks.Add(atk);
             result.AttackLabels.Add($"Rake {i + 1} ({CharacterStats.FormatMod(baseBonus)})");
         }
+
+        // The rake's extra claw attacks come once a turn (MM p.314), whichever path made them (CMB-127).
+        if (result.Attacks.Count > 0)
+            ProgressiveAttackPool.MarkRakeUsed();
 
         result.DefenderHPAfter = target.Stats.CurrentHP;
         result.TargetKilled = target.Stats.IsDead;
@@ -9489,12 +9595,19 @@ public class CharacterController : MonoBehaviour
     /// every action except Pin Opponent (the renewal) and Release Pinned Opponent first lets the pin lapse, because
     /// its 1 round is up (PHB p.156; CMB-120); the lapse is the first line of the result's log. An action that would
     /// resolve to nothing for this pinner (<see cref="IsGrappleActionNoOpForPinner"/>) leaves the pin in place.
+    /// For Attack Unarmed by a creature fighting with its natural attacks, <paramref name="naturalAttackIndex"/> and
+    /// <paramref name="naturalAttackIsHasteExtra"/> name the one natural attack it makes (<see cref="ResolveGrappleNaturalAttack"/>,
+    /// CMB-127); the caller commits that step first. With -1, the natural attack the committed step gave up
+    /// (<see cref="AttackPool.LastSubstituteNaturalAttackIndex"/>, when <paramref name="iterativeAttackBonusOverride"/> says a
+    /// step was committed), else <see cref="GetDefaultGrappleNaturalAttackOption"/>; with none left the attack is refused.
     /// </summary>
     public SpecialAttackResult ResolveGrappleAction(
         GrappleActionType actionType,
         AttackDamageMode? grappleDamageModeOverride = null,
         EquipSlot? opponentWeaponHandSlotOverride = null,
-        int? iterativeAttackBonusOverride = null)
+        int? iterativeAttackBonusOverride = null,
+        int naturalAttackIndex = -1,
+        bool naturalAttackIsHasteExtra = false)
     {
         string lapseLog = string.Empty;
         if (actionType != GrappleActionType.PinOpponent
@@ -9505,7 +9618,8 @@ public class CharacterController : MonoBehaviour
             lapseLog = LetDuePinLapse();
         }
 
-        SpecialAttackResult result = ResolveGrappleActionCore(actionType, grappleDamageModeOverride, opponentWeaponHandSlotOverride, iterativeAttackBonusOverride);
+        SpecialAttackResult result = ResolveGrappleActionCore(actionType, grappleDamageModeOverride, opponentWeaponHandSlotOverride, iterativeAttackBonusOverride,
+            naturalAttackIndex, naturalAttackIsHasteExtra);
         if (result != null && !string.IsNullOrEmpty(lapseLog))
             result.Log = string.IsNullOrEmpty(result.Log) ? lapseLog : lapseLog + "\n\n" + result.Log;
         return result;
@@ -9568,7 +9682,9 @@ public class CharacterController : MonoBehaviour
         GrappleActionType actionType,
         AttackDamageMode? grappleDamageModeOverride,
         EquipSlot? opponentWeaponHandSlotOverride,
-        int? iterativeAttackBonusOverride)
+        int? iterativeAttackBonusOverride,
+        int naturalAttackIndex,
+        bool naturalAttackIsHasteExtra)
     {
         if (!TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out bool opponentPinned))
         {
@@ -9825,7 +9941,7 @@ public class CharacterController : MonoBehaviour
             }
             case GrappleActionType.AttackUnarmed:
             {
-                return ResolveUnarmedAttackWhileGrappling(opponent, isPinned, iterativeAttackBonusOverride);
+                return ResolveUnarmedAttackWhileGrappling(opponent, isPinned, iterativeAttackBonusOverride, naturalAttackIndex, naturalAttackIsHasteExtra);
             }
             case GrappleActionType.PinOpponent:
             {
@@ -10352,7 +10468,8 @@ public class CharacterController : MonoBehaviour
             iterativeAttackBonusOverride: iterativeAttackBonusOverride);
     }
 
-    private SpecialAttackResult ResolveUnarmedAttackWhileGrappling(CharacterController opponent, bool isPinned, int? iterativeAttackBonusOverride)
+    private SpecialAttackResult ResolveUnarmedAttackWhileGrappling(CharacterController opponent, bool isPinned, int? iterativeAttackBonusOverride,
+        int naturalAttackIndex, bool naturalAttackIsHasteExtra)
     {
         if (!CanAttackUnarmedWhileGrappling(out string reason))
         {
@@ -10370,7 +10487,9 @@ public class CharacterController : MonoBehaviour
             maneuverName: "Grapple Unarmed Attack",
             isPinned: isPinned,
             enforceMainHandLightWeaponOnly: false,
-            iterativeAttackBonusOverride: iterativeAttackBonusOverride);
+            iterativeAttackBonusOverride: iterativeAttackBonusOverride,
+            naturalAttackIndex: naturalAttackIndex,
+            naturalAttackIsHasteExtra: naturalAttackIsHasteExtra);
     }
 
     private SpecialAttackResult ResolveAttackWhileGrappling(
@@ -10379,7 +10498,9 @@ public class CharacterController : MonoBehaviour
         string maneuverName,
         bool isPinned,
         bool enforceMainHandLightWeaponOnly,
-        int? iterativeAttackBonusOverride)
+        int? iterativeAttackBonusOverride,
+        int naturalAttackIndex = -1,
+        bool naturalAttackIsHasteExtra = false)
     {
         const int grappleAttackPenalty = -4;
 
@@ -10428,8 +10549,39 @@ public class CharacterController : MonoBehaviour
         }
 
         bool isUnarmed = weapon == null;
-        if (isUnarmed && ShouldUseInnateNaturalAttackProfile(null))
-            return ResolveNaturalAttackRoutineWhileGrappling(opponent, maneuverName);
+        // A creature fighting with its natural attacks attacks with one of them (PHB p.156; MM p.314: one natural
+        // weapon per attack while grappling; CMB-127): the attacker's pick. When the caller named none, the natural
+        // attack the committed step gave up (an override BAB means the caller committed one), else the default
+        // option. It never falls back to an unarmed strike.
+        if (isUnarmed && UsesNaturalAttacksForGrappleAttack())
+        {
+            if (naturalAttackIndex < 0)
+            {
+                if (iterativeAttackBonusOverride.HasValue && ProgressiveAttackPool.LastSubstituteNaturalAttackIndex >= 0)
+                {
+                    naturalAttackIndex = ProgressiveAttackPool.LastSubstituteNaturalAttackIndex;
+                    naturalAttackIsHasteExtra = ProgressiveAttackPool.LastSubstituteWasHasteExtraAttack;
+                }
+                else
+                {
+                    GrappleNaturalAttackOption fallback = GetDefaultGrappleNaturalAttackOption(GetGrappleNaturalAttackOptions());
+                    naturalAttackIndex = fallback.NaturalAttackIndex;
+                    naturalAttackIsHasteExtra = fallback.IsHasteExtraAttack;
+                }
+            }
+
+            if (naturalAttackIndex < 0)
+            {
+                return new SpecialAttackResult
+                {
+                    ManeuverName = maneuverName,
+                    Success = false,
+                    Log = $"{Stats.CharacterName} has no natural attack left to make while grappling this turn."
+                };
+            }
+
+            return ResolveGrappleNaturalAttack(opponent, naturalAttackIndex, naturalAttackIsHasteExtra, maneuverName);
+        }
 
         DamageModeAttackProfile damageMode = ResolveDamageModeAttackProfile(weapon);
 
@@ -10456,23 +10608,12 @@ public class CharacterController : MonoBehaviour
 
         if (isUnarmed)
         {
-            if (ShouldUseInnateNaturalAttackProfile(null))
-            {
-                ResolveBaseAttackDamageProfile(null, out damageDice, out damageCount, out bonusDamage, out grappleAttackLabel);
-                damageDice = Mathf.Max(2, damageDice);
-                damageCount = Mathf.Max(1, damageCount);
-                critThreatMin = 20;
-                critMultiplier = 2;
-            }
-            else
-            {
-                var unarmed = GetUnarmedDamage();
-                damageDice = Mathf.Max(2, unarmed.damageDice);
-                damageCount = Mathf.Max(1, unarmed.damageCount);
-                bonusDamage = Stats.STRMod + unarmed.bonusDamage;
-                critThreatMin = 20;
-                critMultiplier = 2;
-            }
+            var unarmed = GetUnarmedDamage();
+            damageDice = Mathf.Max(2, unarmed.damageDice);
+            damageCount = Mathf.Max(1, unarmed.damageCount);
+            bonusDamage = Stats.STRMod + unarmed.bonusDamage;
+            critThreatMin = 20;
+            critMultiplier = 2;
         }
         else
         {
@@ -10557,12 +10698,111 @@ public class CharacterController : MonoBehaviour
         };
     }
 
+    // ----- Grapple attack with a natural weapon (PHB p.156; MM p.314; CMB-127) -----
+    // PHB p.156 (Attack Your Opponent): while grappling, an attack with an unarmed strike, a natural weapon or a light
+    // weapon takes the place of one of your attacks. MM p.314 (Rake): normally a monster attacks with only one of its
+    // natural weapons while grappling. So each grapple attack action of a creature fighting with its natural attacks
+    // is ONE natural attack of its choice, at that attack's normal bonus (primary full BAB, secondary -5 or -2 with
+    // Multiattack, MM p.312, p.304), with the -4 for attacking in a grapple: the attacker's Grappled condition row
+    // (AttackModifier -4, read by BuildAttackBonus), so it is not added a second time here. The action is one step of
+    // the creature's natural sequence (a NaturalSequence step, like a maneuver that replaces a natural attack,
+    // CMB-102), so a full attack of grapple attacks makes each natural attack once, and Haste adds one more with a
+    // natural weapon already used (CMB-106). That count (one grapple attack per natural attack) is an unconfirmed
+    // reading: PHB p.156 ties grapple actions to the BAB ladder, and the owner has not ruled (CMB-146). Every other
+    // grapple action (damage, pin, escape, light weapon, opponent's weapon) stays an iterative step at its iterative
+    // BAB for every creature (GameManager.IsGrappleNaturalAttackStep). The step is committed by the caller with the chosen natural attack
+    // (GameManager.TryConsumeIterativeGrappleAttack -> TryCommitManeuverSubstituteStep), PC and AI alike; the PC picks
+    // in the grapple natural-attack menu, the AI with DND35.AI.NaturalAttackChoice. Rake keeps its own rule: its two
+    // extra claw attacks come once a turn, with the first grapple natural attack (PerformRakeAttacks marks the turn).
+
+    /// <summary>One natural attack a grapple attack action can make: a natural-sequence index, and whether it is Haste's extra attack with that weapon.</summary>
+    public struct GrappleNaturalAttackOption
+    {
+        public int NaturalAttackIndex;
+        public bool IsHasteExtraAttack;
+
+        public static GrappleNaturalAttackOption None => new GrappleNaturalAttackOption { NaturalAttackIndex = -1 };
+    }
+
     /// <summary>
-    /// Grapple natural attack routine for creatures with innate natural attacks.
-    /// D&D 3.5e: Use full natural attack routine while grappling, plus rake when available.
-    /// Tiger example: 2 claws + bite + 2 rakes.
+    /// True when this creature's grapple attack (the "Attack Unarmed" grapple action) is a natural attack: it fights
+    /// with its innate natural attacks (<see cref="UsesInnateNaturalAttackSequence"/>, no main weapon). A creature
+    /// holding a weapon makes an unarmed strike (or uses its light weapon) instead.
     /// </summary>
-    private SpecialAttackResult ResolveNaturalAttackRoutineWhileGrappling(CharacterController opponent, string maneuverName)
+    public bool UsesNaturalAttacksForGrappleAttack() => UsesInnateNaturalAttackSequence() && Stats != null && Stats.GetTotalNaturalAttackCount() > 0;
+
+    /// <summary>
+    /// The natural attacks a grapple attack action can make now, in sequence order: every natural attack not made or
+    /// given up this turn (<see cref="AttackPool.IsNaturalAttackUsed"/>, or <paramref name="alsoUsed"/> for a caller
+    /// that keeps its own record, the PC natural-attack buttons), then, while Haste's extra natural attack is unused,
+    /// each used one again as the Haste attack (CMB-106). Empty for a creature that does not use natural attacks.
+    /// </summary>
+    public List<GrappleNaturalAttackOption> GetGrappleNaturalAttackOptions(Func<int, bool> alsoUsed = null)
+    {
+        var options = new List<GrappleNaturalAttackOption>();
+        if (!UsesNaturalAttacksForGrappleAttack())
+            return options;
+
+        int count = Stats.GetTotalNaturalAttackCount();
+        var used = new List<int>();
+        for (int i = 0; i < count; i++)
+        {
+            if (ProgressiveAttackPool.IsNaturalAttackUsed(i) || (alsoUsed != null && alsoUsed(i)))
+                used.Add(i);
+            else
+                options.Add(new GrappleNaturalAttackOption { NaturalAttackIndex = i, IsHasteExtraAttack = false });
+        }
+
+        if (CanUseHasteExtraNaturalAttack())
+        {
+            for (int i = 0; i < used.Count; i++)
+                options.Add(new GrappleNaturalAttackOption { NaturalAttackIndex = used[i], IsHasteExtraAttack = true });
+        }
+
+        return options;
+    }
+
+    /// <summary>
+    /// The option a grapple attack uses when nobody chose: the highest attack bonus, then the higher average damage,
+    /// then the first (an unused attack before a Haste one). <see cref="GrappleNaturalAttackOption.None"/> when empty.
+    /// </summary>
+    public GrappleNaturalAttackOption GetDefaultGrappleNaturalAttackOption(List<GrappleNaturalAttackOption> options)
+    {
+        GrappleNaturalAttackOption best = GrappleNaturalAttackOption.None;
+        if (options == null || Stats == null)
+            return best;
+
+        int bestBonus = int.MinValue;
+        float bestDamage = float.MinValue;
+        for (int i = 0; i < options.Count; i++)
+        {
+            NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(options[i].NaturalAttackIndex);
+            if (natural == null)
+                continue;
+
+            int bonus = Stats.GetNaturalAttackBonus(natural);
+            float damage = GetNaturalAttackAverageDamage(natural);
+            if (bonus > bestBonus || (bonus == bestBonus && damage > bestDamage))
+            {
+                best = options[i];
+                bestBonus = bonus;
+                bestDamage = damage;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// One natural attack against <paramref name="opponent"/> by a grapple attack action (see the rule above): the
+    /// natural attack at <paramref name="naturalAttackIndex"/>, rolled through <see cref="FullAttack"/> at its normal
+    /// bonus, so every BuildAttackBonus term and its on-hit riders apply. <paramref name="isHasteExtraAttack"/> marks it
+    /// as Haste's extra attack in the log; the step commit has already marked the Haste attack (or this natural
+    /// attack) used. With the rake ability (MM p.314) the first grapple natural attack of the turn adds the rake's
+    /// extra claw attacks against the grappled foe (<see cref="PerformRakeAttacks"/>; their timing is CMB-144).
+    /// </summary>
+    public SpecialAttackResult ResolveGrappleNaturalAttack(CharacterController opponent, int naturalAttackIndex, bool isHasteExtraAttack,
+        string maneuverName = "Grapple Natural Attack")
     {
         if (opponent == null || opponent.Stats == null || Stats == null)
         {
@@ -10574,114 +10814,79 @@ public class CharacterController : MonoBehaviour
             };
         }
 
+        NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex);
+        if (natural == null || !UsesNaturalAttacksForGrappleAttack())
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = maneuverName,
+                Success = false,
+                Log = $"{Stats.CharacterName} has no natural attack #{naturalAttackIndex + 1} to make while grappling."
+            };
+        }
+
         int targetHpBefore = opponent.Stats.CurrentHP;
-        // The natural attacks only: Haste's extra natural attack (CMB-106) is one attack of a full
-        // attack, not part of every grapple attack action.
-        FullAttackResult naturalRoutine = FullAttack(
-            opponent,
-            isFlanking: false,
-            flankingBonus: 0,
-            flankingPartnerName: null,
-            rangeInfo: null,
-            startAttackIndex: 0,
-            maxAttacks: Stats.GetTotalNaturalAttackCount());
-
-        int naturalAttackCount = naturalRoutine != null && naturalRoutine.Attacks != null ? naturalRoutine.Attacks.Count : 0;
-        int naturalHitCount = 0;
-        int naturalDamage = 0;
-
-        if (naturalRoutine != null && naturalRoutine.Attacks != null)
+        FullAttackResult single = FullAttack(opponent, isFlanking: false, flankingBonus: 0, flankingPartnerName: null,
+            rangeInfo: null, startAttackIndex: naturalAttackIndex, maxAttacks: 1);
+        CombatResult attack = single != null && single.Attacks != null && single.Attacks.Count > 0 ? single.Attacks[0] : null;
+        string naturalName = string.IsNullOrWhiteSpace(natural.Name) ? "natural weapon" : natural.Name;
+        if (attack == null)
         {
-            for (int i = 0; i < naturalRoutine.Attacks.Count; i++)
+            return new SpecialAttackResult
             {
-                CombatResult attack = naturalRoutine.Attacks[i];
-                if (attack != null && attack.Hit)
-                {
-                    naturalHitCount++;
-                    naturalDamage += attack.FinalDamageDealt;
-                }
-            }
+                ManeuverName = maneuverName,
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot attack {opponent.Stats.CharacterName} with its {naturalName} while grappling."
+            };
         }
 
-        int rakeAttackCount = 0;
-        int rakeHitCount = 0;
-        int rakeDamage = 0;
-        bool rakeExecuted = false;
-        FullAttackResult rakeRoutine = null;
+        string label = single.AttackLabels != null && single.AttackLabels.Count > 0 ? single.AttackLabels[0] : naturalName;
+        if (isHasteExtraAttack)
+            label += " [Haste's extra attack]";
 
+        int totalDamage = attack.Hit ? attack.FinalDamageDealt : 0;
+        FullAttackResult rake = null;
         if (Stats.HasRake
+            && !ProgressiveAttackPool.RakeUsedThisTurn
+            && !opponent.Stats.IsDead
             && TryGetGrappleState(out CharacterController grappledOpponent, out _, out _, out _)
-            && grappledOpponent == opponent
-            && !opponent.Stats.IsDead)
+            && grappledOpponent == opponent)
         {
-            rakeRoutine = PerformRakeAttacks(opponent, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
-            if (rakeRoutine != null && rakeRoutine.Attacks != null && rakeRoutine.Attacks.Count > 0)
-            {
-                rakeExecuted = true;
-                rakeAttackCount = rakeRoutine.Attacks.Count;
-                for (int i = 0; i < rakeRoutine.Attacks.Count; i++)
-                {
-                    CombatResult attack = rakeRoutine.Attacks[i];
-                    if (attack != null && attack.Hit)
-                    {
-                        rakeHitCount++;
-                        rakeDamage += attack.FinalDamageDealt;
-                    }
-                }
-            }
+            rake = PerformRakeAttacks(opponent, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
         }
 
-        int totalAttackCount = naturalAttackCount + rakeAttackCount;
-        int totalHitCount = naturalHitCount + rakeHitCount;
-        int totalDamage = naturalDamage + rakeDamage;
-
+        int rakeCount = rake != null && rake.Attacks != null ? rake.Attacks.Count : 0;
         var logLines = new List<string>
         {
-            $"{Stats.CharacterName} mauls {opponent.Stats.CharacterName} while grappling.",
-            $"Natural attacks: {naturalAttackCount} (full routine while grappling).",
-            rakeExecuted
-                ? $"Rake attacks: {rakeAttackCount} (grapple bonus attacks)."
-                : "Rake attacks: 0.",
-            $"Total attacks: {totalAttackCount} | Hits: {totalHitCount} | Damage: {totalDamage}",
-            $"Target HP: {targetHpBefore} -> {opponent.Stats.CurrentHP}"
+            $"{Stats.CharacterName} attacks {opponent.Stats.CharacterName} with its {naturalName} while grappling: one natural attack in place of an attack (PHB p.156; MM p.314).",
+            attack.GetAttackBreakdown(label)
         };
 
-        if (naturalRoutine != null && naturalRoutine.Attacks != null && naturalRoutine.Attacks.Count > 0)
+        if (rakeCount > 0)
         {
-            logLines.Add("── Natural attack roll breakdowns ──");
-            for (int i = 0; i < naturalRoutine.Attacks.Count; i++)
+            logLines.Add($"Rake: {rakeCount} extra claw attack(s) against the grappled foe, once this turn (MM p.314).");
+            for (int i = 0; i < rake.Attacks.Count; i++)
             {
-                CombatResult attack = naturalRoutine.Attacks[i];
-                if (attack == null)
+                CombatResult rakeAttack = rake.Attacks[i];
+                if (rakeAttack == null)
                     continue;
 
-                string label = (naturalRoutine.AttackLabels != null && i < naturalRoutine.AttackLabels.Count)
-                    ? naturalRoutine.AttackLabels[i]
-                    : $"Natural Attack {i + 1}";
-                logLines.Add(attack.GetAttackBreakdown(label));
+                if (rakeAttack.Hit)
+                    totalDamage += rakeAttack.FinalDamageDealt;
+                string rakeLabel = rake.AttackLabels != null && i < rake.AttackLabels.Count ? rake.AttackLabels[i] : $"Rake {i + 1}";
+                logLines.Add(rakeAttack.GetAttackBreakdown(rakeLabel));
             }
         }
 
-        if (rakeRoutine != null && rakeRoutine.Attacks != null && rakeRoutine.Attacks.Count > 0)
-        {
-            logLines.Add("── Rake attack roll breakdowns ──");
-            for (int i = 0; i < rakeRoutine.Attacks.Count; i++)
-            {
-                CombatResult attack = rakeRoutine.Attacks[i];
-                if (attack == null)
-                    continue;
-
-                string label = (rakeRoutine.AttackLabels != null && i < rakeRoutine.AttackLabels.Count)
-                    ? rakeRoutine.AttackLabels[i]
-                    : $"Rake {i + 1}";
-                logLines.Add(attack.GetAttackBreakdown(label));
-            }
-        }
+        logLines.Add($"Target HP: {targetHpBefore} -> {opponent.Stats.CurrentHP}");
 
         return new SpecialAttackResult
         {
             ManeuverName = maneuverName,
-            Success = totalHitCount > 0,
+            Success = attack.Hit,
+            CheckRoll = attack.DieRoll,
+            CheckTotal = attack.TotalRoll,
+            OpposedTotal = attack.TargetAC,
             DamageDealt = totalDamage,
             TargetKilled = opponent.Stats.IsDead,
             Log = string.Join("\n", logLines)
@@ -11931,6 +12136,46 @@ public class CharacterController : MonoBehaviour
         };
     }
 
+    /// <summary>
+    /// The largest size this creature's Improved Grab can seize: the MM entry's own maximum when it names one
+    /// (<see cref="CharacterStats.ImprovedGrabMaxTargetSize"/>), else one size category smaller than the creature's
+    /// current size (MM p.310). Below Fine (a Fine grabber without an override) nothing qualifies.
+    /// </summary>
+    public int GetImprovedGrabMaxTargetSizeIndex()
+    {
+        if (Stats != null && Stats.ImprovedGrabMaxTargetSize.HasValue)
+            return (int)Stats.ImprovedGrabMaxTargetSize.Value;
+        return (int)GetCurrentSizeCategory() - 1;
+    }
+
+    /// <summary>
+    /// The size limit of Improved Grab (MM p.310): unless the creature's entry says otherwise, the free grapple works
+    /// only against an opponent at least one size category smaller. The one size test for every Improved Grab path,
+    /// PC and NPC alike: <c>GameManager.CanAttemptImprovedGrabFromAttack</c> (single attacks, full attacks, attack
+    /// sequences), the charge and pounce grabs, <see cref="ResolveImprovedGrabFreeAttempt"/> and the AI's Haste pick
+    /// (DND35.AI.NaturalAttackChoice). Only the size is tested here; trigger attack, hit and grapple state are the
+    /// callers' checks.
+    /// </summary>
+    public bool CanImprovedGrabTargetBySize(CharacterController target, out string reason)
+    {
+        reason = null;
+        if (target == null || target.Stats == null || Stats == null)
+        {
+            reason = "no valid target";
+            return false;
+        }
+
+        int maxSize = GetImprovedGrabMaxTargetSizeIndex();
+        if ((int)target.GetCurrentSizeCategory() <= maxSize)
+            return true;
+
+        string limit = maxSize < (int)SizeCategory.Fine
+            ? "no size"
+            : ((SizeCategory)maxSize).ToString() + " or smaller";
+        reason = $"{target.Stats.CharacterName} ({target.GetCurrentSizeCategory()}) is too large for {Stats.CharacterName}'s Improved Grab ({limit}, MM p.310)";
+        return false;
+    }
+
     public SpecialAttackResult ResolveImprovedGrabFreeAttempt(CharacterController target)
     {
         if (target == null || target.Stats == null || Stats == null)
@@ -11953,6 +12198,16 @@ public class CharacterController : MonoBehaviour
                 ManeuverName = "Improved Grab",
                 Success = false,
                 Log = $"{Stats.CharacterName} does not have Improved Grab."
+            };
+        }
+
+        if (!CanImprovedGrabTargetBySize(target, out string sizeReason))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Improved Grab",
+                Success = false,
+                Log = sizeReason + "."
             };
         }
 

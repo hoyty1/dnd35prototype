@@ -355,7 +355,7 @@ public static class WildShapeFormDatabase
             Name = "Cheetah", Size = WildShapeSize.Medium, FormType = WildShapeFormType.Animal,
             STR = 16, DEX = 19, CON = 15, NaturalArmor = 1, Speed = 10,
             Attacks = { new NaturalAttackData("Bite", 1, 6), new NaturalAttackData("Claw", 2, 2, 1, false) },
-            SpecialAbilities = { "Sprint" }
+            SpecialAbilities = { "Trip", "Sprint" } // MM p.271: trips on a claw or bite hit (display only, CHR-048)
         });
         _allForms.Add(new WildShapeForm
         {

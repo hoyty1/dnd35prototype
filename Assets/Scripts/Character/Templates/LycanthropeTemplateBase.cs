@@ -91,12 +91,14 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
         // Special abilities
         target.HasImprovedGrab = source.HasImprovedGrab;
         target.ImprovedGrabTriggerAttackName = source.ImprovedGrabTriggerAttackName;
+        target.ImprovedGrabMaxTargetSize = source.ImprovedGrabMaxTargetSize;
         target.HasPounce = source.HasPounce;
         target.HasRake = source.HasRake;
         target.RakeAttack = source.RakeAttack;
         target.HasScent = source.HasScent;
         target.HasTripAttack = source.HasTripAttack;
         target.TripAttackCheckBonus = source.TripAttackCheckBonus;
+        target.TripTriggerAttackName = source.TripTriggerAttackName;
         target.IsExceptionallyStable = source.IsExceptionallyStable;
 
         // Display

@@ -149,7 +149,8 @@ public static partial class NPCDatabase
             BAB = 4,
             HasScent = true,
             HasTripAttack = true,
-            TripAttackCheckBonus = 1,
+            TripAttackCheckBonus = 3, // MM p.257 trip modifier (reference only)
+            TripTriggerAttackName = "Bite", // MM p.257: a bite hit trips (CMB-125)
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }

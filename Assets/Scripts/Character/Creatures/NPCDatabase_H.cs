@@ -543,7 +543,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 13,
             BAB = 1,
             HasTripAttack = true,
-            TripAttackCheckBonus = 1,
+            TripAttackCheckBonus = 2, // MM p.274 trip modifier (reference only)
+            TripTriggerAttackName = "Bite", // MM p.274: a bite hit trips (CMB-125)
             HasScent = true,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

@@ -565,18 +565,9 @@ public static class ThreatSystem
         ScenarioHooks.AoOResolved?.Invoke(threatener, target, trigger ?? (isFromMovement ? "movement" : "other"), result);
 
         // Innate trip follow-up (e.g., wolf bite) is a free action and should not consume AoO economy.
-        SpecialAttackResult freeTripResult = null;
-        if (result.Hit
-            && threatener.Stats != null
-            && threatener.Stats.HasTripAttack
-            && target.Stats != null
-            && !target.Stats.IsDead
-            && !target.HasCondition(CombatConditionType.Prone)
-            && threatener.CanTrip(target, out _)) // the trip size limit applies to a free trip too (PHB p.158)
-        {
-            freeTripResult = threatener.ResolveFreeTripAttempt(target, result);
-            Debug.Log($"[ThreatSystem] Free trip follow-up from AoO by {threatener.Stats.CharacterName}: Success={freeTripResult.Success} | {freeTripResult.Log}");
-        }
+        // The one shared rule decides it (only an AoO made with the trigger attack, MM Trip (Ex), CMB-125) and
+        // writes its log line and reactions, as on a turn; the aftermath waits for the AoO's own log below.
+        SpecialAttackResult freeTripResult = gm != null ? gm.ResolveFreeTripAfterHit(threatener, target, result, null) : null;
 
         // Log the result
         if (result.Hit)

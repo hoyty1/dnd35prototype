@@ -47,6 +47,7 @@ public static partial class NPCDatabase
             DamageReductionBypass = DamageBypassTag.Silver,
             HasTripAttack = true,
             TripAttackCheckBonus = 3, // Str +3 trip modifier
+            TripTriggerAttackName = "Bite", // MM p.262: a bite hit trips (CMB-125)
             HasScent = true,
             CreatureTags = new List<string> { "Outsider", "Evil", "Extraplanar", "MM35", "Fly" },
             Feats = new List<string> { "Improved Initiative", "Track" },
@@ -90,6 +91,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 58,
             BAB = 9,
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Large, // MM p.265: an abomination grabs Large or smaller
             ImprovedGrabTriggerAttackName = "Bite",
             Immunities = new CreatureImmunities { immuneToPoison = true },
             NaturalAttacks = new List<NaturalAttackDefinition>

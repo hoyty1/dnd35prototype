@@ -486,6 +486,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 16,
             BAB = 2,
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Large, // MM p.35: a choker grabs Large or smaller
             ImprovedGrabTriggerAttackName = "Tentacle",
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
@@ -542,7 +543,7 @@ public static partial class NPCDatabase
 
     /// <summary>
     /// Cheetah (CR 2) — Medium animal.
-    /// MM 3.5e p.271. Sprint ability, trip on bite.
+    /// MM 3.5e p.271. Sprint ability, trip on claw or bite.
     /// 3d8+6 HP (19), bite 1d6+3, 2 claws 1d2+1.
     /// </summary>
     private static void RegisterCheetah()
@@ -566,7 +567,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 19,
             BAB = 2,
             HasTripAttack = true,
-            TripAttackCheckBonus = 2,
+            TripAttackCheckBonus = 3, // MM p.271 trip modifier (reference only)
+            TripTriggerAttackName = "Claw, Bite", // MM p.271: a claw or bite hit trips (CMB-125)
             HasScent = true,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
@@ -575,7 +577,7 @@ public static partial class NPCDatabase
             },
             CreatureTags = new List<string> { "Animal", "MM35" },
             Feats = new List<string> { "Weapon Finesse" },
-            SpecialAbilities = new List<string> { "Sprint (Ex): 10x speed 1/hour", "Trip (Ex): free trip on bite", "Scent", "Low-light vision" },
+            SpecialAbilities = new List<string> { "Sprint (Ex): 10x speed 1/hour", "Trip (Ex): free trip on claw or bite", "Scent", "Low-light vision" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.85f, 0.75f, 0.45f, 1f),
             PanelColor = new Color(0.3f, 0.25f, 0.1f, 0.85f),
@@ -691,6 +693,7 @@ public static partial class NPCDatabase
                 }
             },
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Gargantuan, // MM p.37: up to two size categories larger than the Large couatl (fixed at its stat-block size, CMB-143)
             CreatureTags = new List<string> { "Outsider", "Native", "Darkvision60", "Constrict", "MM35" },
             Feats = new List<string> { "Dodge", "Empower Spell", "Eschew Materials", "Hover" },
             SpecialAbilities = new List<string>

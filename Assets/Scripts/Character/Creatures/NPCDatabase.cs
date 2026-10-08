@@ -514,9 +514,22 @@ public class NPCDefinition
     public bool IsTallCreature = true;
     public int NaturalArmorBonus;
     public bool HasTripAttack;
+    /// <summary>The MM Trip (Ex) entry's printed check modifier, reference only (CharacterStats.TripAttackCheckBonus).</summary>
     public int TripAttackCheckBonus;
+    /// <summary>
+    /// The natural attack whose hit allows the Trip (Ex) free trip, as the MM entry names it ("Bite"; the cheetah's
+    /// "Claw, Bite"). Set for every creature with <see cref="HasTripAttack"/>; empty falls back to the bite
+    /// (CharacterStats.TripTriggerAttackName, CMB-125).
+    /// </summary>
+    public string TripTriggerAttackName;
     public bool HasImprovedGrab;
     public string ImprovedGrabTriggerAttackName;
+    /// <summary>
+    /// The largest target size the MM entry's Improved Grab names, when it differs from the MM p.310 default (at least
+    /// one size category smaller than the creature); null keeps the default. An entry worded relative to the creature
+    /// ("its size or smaller", "up to two size categories larger") is stored at its stat-block size (CMB-143).
+    /// </summary>
+    public SizeCategory? ImprovedGrabMaxTargetSize;
     public bool HasPounce;
     public bool HasRake;
     public bool HasScent;
@@ -681,6 +694,7 @@ public class NPCDefinition
         clone.IsSingleActionsOnly = IsSingleActionsOnly;
         clone.IsSwarm = IsSwarm;
         clone.IsExceptionallyStable = IsExceptionallyStable;
+        clone.ImprovedGrabMaxTargetSize = ImprovedGrabMaxTargetSize;
         clone.SwarmTraits = SwarmTraits != null
             ? new SwarmTraits
             {

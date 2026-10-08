@@ -610,6 +610,7 @@ public static partial class NPCDatabase
             HasScent = true,
             HasTripAttack = true,
             TripAttackCheckBonus = 11, // Str +7, size +4 = +11 trip check bonus
+            TripTriggerAttackName = "Bite", // MM p.66: a bite hit trips (CMB-125)
             SpecialAbilities = new List<string>
             {
                 "Trip (free trip attempt on bite hit, opposed Str +11)",
@@ -814,6 +815,7 @@ public static partial class NPCDatabase
             HasScent = true,
             HasTripAttack = true,
             TripAttackCheckBonus = 1,
+            TripTriggerAttackName = "Bite", // MM p.283: a bite hit trips (CMB-125)
             Feats = new List<string> { "Weapon Focus", "Track" },
             WeaponFocusChoice = "Bite",
             AIProfileArchetype = NPCAIProfileArchetype.Animal,

@@ -226,34 +226,61 @@ public partial class GameManager
         string targetAxis = smiteEvil ? "Evil" : "Good";
         CombatUI.ShowCombatLog(CombatLogHelper.Color($"✦ {GetSummonDisplayName(summon)} uses Smite {targetAxis}! {result.GetDetailedSummary()}", "FFD280"));
 
+        // A smite is an ordinary melee attack with the bite, so a fiendish wolf's smite hit trips (MM p.283, CMB-125).
+        TryResolveFreeTripOnHit(summon, target, result, CalculateRangeInfo(summon, target));
+
         if (result.TargetKilled)
             HandleSummonDeathCleanup(target);
 
         return true;
     }
 
+    /// <summary>
+    /// The Trip (Ex) free trip after a hit, with its aftermath (the Improved Trip attack; no counter-trip). Used by
+    /// the PC attack buttons, the NPC attack sequence, charges, pounces and smites; an AoO calls
+    /// <see cref="ResolveFreeTripAfterHit"/> and runs the aftermath after its own log (ThreatSystem.ExecuteAoO).
+    /// </summary>
     private void TryResolveFreeTripOnHit(CharacterController attacker, CharacterController target, CombatResult attackResult, RangeInfo attackRange)
     {
-        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null || attackResult == null)
-            return;
+        SpecialAttackResult tripResult = ResolveFreeTripAfterHit(attacker, target, attackResult, attackRange);
 
-        if (!attacker.Stats.HasTripAttack)
-            return;
+        // The Improved Trip attack after a free trip that landed (PHB p.96, CMB-079); no counter-trip.
+        if (tripResult != null)
+            HandleTripAftermath(attacker, target, tripResult, null);
+    }
+
+    /// <summary>
+    /// The one rule for the Trip (Ex) free trip after a hit, for PCs and NPCs on any attack path (turns, charges,
+    /// pounces, smites, AoOs): only a melee hit with the trigger attack the creature's MM entry names (CMB-125), on a
+    /// living, standing target the trip rules allow (CanTrip); no touch attack, no AoO and no counter-trip (MM Trip
+    /// (Ex), CMB-014). Writes the combat log line and runs the trip's melee reactions. Returns the trip's result, or
+    /// null when no trip was attempted; the caller runs <see cref="HandleTripAftermath"/>.
+    /// </summary>
+    internal SpecialAttackResult ResolveFreeTripAfterHit(CharacterController attacker, CharacterController target, CombatResult attackResult, RangeInfo attackRange)
+    {
+        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null || attackResult == null)
+            return null;
+
+        // MM Trip (Ex): only a hit with the attack the creature's entry names (its bite; the cheetah's claw or bite)
+        // allows the free trip, not a weapon, unarmed or other natural attack hit (CMB-125).
+        if (!attacker.Stats.IsTripTriggerAttack(attackResult.WeaponName))
+            return null;
 
         bool isMeleeHit = attackRange != null
             ? attackRange.IsMelee
             : !attackResult.IsRangedAttack;
         if (!isMeleeHit)
-            return;
+            return null;
 
-        if (!attackResult.Hit || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
-            return;
+        if (!attackResult.Hit || attacker.IsDead || attacker.Stats.IsDead
+            || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
+            return null;
 
         // The trip size limit and the other trip rules apply to a free trip too (PHB p.158, CMB-079).
         if (!attacker.CanTrip(target, out string cannotTripReason))
         {
             Debug.Log($"[NPC Trip Follow-up] {attacker.Stats.CharacterName} makes no free trip: {cannotTripReason}.");
-            return;
+            return null;
         }
 
         // MM trip (Ex): no touch attack and no AoO (CMB-014); the opponent cannot trip back.
@@ -263,13 +290,12 @@ public partial class GameManager
             : "free trip attempt failed";
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Death("☠", $"{attacker.Stats.CharacterName} follows up with Trip ({tripContext}): {tripResult.Log}"));
-        Debug.Log($"[NPC Trip Follow-up] {attacker.Stats.CharacterName} triggered free trip after hit. Success={tripResult.Success}");
+        Debug.Log($"[NPC Trip Follow-up] {attacker.Stats.CharacterName} triggered free trip after hit{(attackResult.IsAttackOfOpportunity ? " (AoO)" : "")}. Success={tripResult.Success}");
 
         // Melee reaction effects (Fire Shield, Thorns, etc.) — free trip follow-up is a melee maneuver
         MeleeReactionService.TriggerReactions(attacker, target, null);
 
-        // The Improved Trip attack after a free trip that landed (PHB p.96, CMB-079); no counter-trip.
-        HandleTripAftermath(attacker, target, tripResult, null);
+        return tripResult;
     }
 
     private void TryResolveFreeTripFromAttackResults(CharacterController attacker, CharacterController target, List<CombatResult> attacks, RangeInfo attackRange)
@@ -605,6 +631,13 @@ public partial class GameManager
         return true;
     }
 
+    /// <summary>
+    /// Whether a hit lets <paramref name="attacker"/> try Improved Grab on <paramref name="target"/>: the attacker has
+    /// it, the attack hit with its trigger attack, the target is alive, and the target is small enough
+    /// (CharacterController.CanImprovedGrabTargetBySize, MM p.310). Every Improved Grab path checks this before it
+    /// prompts a controllable attacker or rolls, PC and NPC alike (CMB-126). A trigger hit refused only for size logs
+    /// one combat log line, so the rule is visible in play; each caller asks once per attack.
+    /// </summary>
     private bool CanAttemptImprovedGrabFromAttack(CharacterController attacker, CharacterController target, CombatResult attackResult)
     {
         if (attacker?.Stats == null || target?.Stats == null || attackResult == null)
@@ -613,7 +646,17 @@ public partial class GameManager
         if (!attacker.Stats.HasImprovedGrab || target.Stats.IsDead || !attackResult.Hit)
             return false;
 
-        return IsImprovedGrabTriggerAttack(attacker, attackResult);
+        if (!IsImprovedGrabTriggerAttack(attacker, attackResult))
+            return false;
+
+        if (!attacker.CanImprovedGrabTargetBySize(target, out string sizeReason))
+        {
+            string attackName = !string.IsNullOrWhiteSpace(attackResult.WeaponName) ? attackResult.WeaponName : "trigger attack";
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", $"No Improved Grab after the {attackName} hit: {sizeReason}."));
+            return false;
+        }
+
+        return true;
     }
 
     private IEnumerator ResolveImprovedGrabWithPromptCoroutine(CharacterController attacker, CharacterController target, CombatResult attackResult, Action onResolved)
@@ -693,6 +736,26 @@ public partial class GameManager
         return chooser != null
             ? chooser.ChooseHasteNaturalAttackIndex(npc, target)
             : DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(npc, target);
+    }
+
+    /// <summary>
+    /// The natural attack an AI-run creature makes with a grapple attack action (PHB p.156, CMB-127): among the
+    /// options left this turn (CharacterController.GetGrappleNaturalAttackOptions), the best by its profile's natural
+    /// attack scoring (AIProfile.ScoreHasteNaturalAttack, by default DND35.AI.NaturalAttackChoice.Score: the highest
+    /// bonus unless another natural attack carries a rider that matters against the target).
+    /// </summary>
+    internal CharacterController.GrappleNaturalAttackOption ChooseGrappleNaturalAttackForAI(CharacterController npc, CharacterController target)
+    {
+        if (npc == null)
+            return CharacterController.GrappleNaturalAttackOption.None;
+
+        List<CharacterController.GrappleNaturalAttackOption> options = npc.GetGrappleNaturalAttackOptions();
+        DND35.AI.AIProfile profile = npc.aiProfile;
+        System.Func<int, float> score = profile != null
+            ? (System.Func<int, float>)(index => profile.ScoreHasteNaturalAttack(npc, target, index))
+            : null;
+        int pick = DND35.AI.NaturalAttackChoice.ChooseGrappleAttackOption(npc, target, options, score);
+        return pick >= 0 ? options[pick] : CharacterController.GrappleNaturalAttackOption.None;
     }
 
     /// <summary>
@@ -1064,9 +1127,10 @@ public partial class GameManager
             yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
 
         // The remaining steps of a turn whose grapple was started by a substitute become grapple
-        // actions at those steps' BAB (PHB p.156); AI_GrappleRestrictedTurn draws them through the
-        // same attack sequence.
-        if (startedGrappleBySubstitute && npc.IsGrappling() && npc.CanCommitAttack(AttackStepKind.MainHand, out _))
+        // actions (PHB p.156); AI_GrappleRestrictedTurn draws them through the same attack sequence:
+        // grapple checks on iterative steps, and for a creature fighting with its natural attacks
+        // grapple natural attacks on its remaining natural steps (CMB-127).
+        if (startedGrappleBySubstitute && npc.IsGrappling() && CanUseGrappleAttackOption(npc))
             yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
 
         yield return new WaitForSeconds(1.0f);

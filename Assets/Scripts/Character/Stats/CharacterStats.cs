@@ -2280,11 +2280,53 @@ public class CharacterStats
     /// <summary>Innate natural armor bonus separate from worn armor.</summary>
     public int NaturalArmorBonus;
 
-    /// <summary>Whether this creature has a built-in trip-capable natural attack profile.</summary>
+    /// <summary>
+    /// MM Trip (Ex): a hit with the trigger natural attack (<see cref="TripTriggerAttackName"/>) allows a free trip
+    /// attempt (GameManager.TryResolveFreeTripOnHit, ThreatSystem.ExecuteAoO; CMB-125).
+    /// </summary>
     public bool HasTripAttack;
 
-    /// <summary>Creature-specific modifier applied to trip checks (e.g., wolves get +1).</summary>
+    /// <summary>
+    /// The trip check modifier the creature's MM Trip (Ex) entry prints (wolf +1, MM p.283), kept as reference data
+    /// only: nothing reads it. The trip check is computed from Strength and special size
+    /// (CharacterController.GetTripAttackerCheckModifier), which gives the same number for a stat block that matches the MM.
+    /// </summary>
     public int TripAttackCheckBonus;
+
+    /// <summary>The trigger attack when <see cref="TripTriggerAttackName"/> is empty: every MM Trip (Ex) entry names the bite.</summary>
+    public const string DefaultTripTriggerAttackName = "Bite";
+
+    /// <summary>
+    /// The natural attack whose hit allows the Trip (Ex) free trip, as the creature's MM entry names it (the bite for
+    /// wolves, dire wolves, worgs, hyenas, shadow mastiffs, yeth hounds and werewolves; "Claw, Bite" for the cheetah,
+    /// MM p.271). A comma-separated list names several attacks; empty means <see cref="DefaultTripTriggerAttackName"/>.
+    /// Copied from <see cref="NPCDefinition.TripTriggerAttackName"/>; read through <see cref="IsTripTriggerAttack"/> (CMB-125).
+    /// </summary>
+    public string TripTriggerAttackName;
+
+    /// <summary>
+    /// Whether a hit with <paramref name="attackName"/> (a CombatResult.WeaponName or a natural attack's Name) allows
+    /// this creature's Trip (Ex) free trip: it has the ability and the name contains one of its trigger attack names
+    /// (case-insensitive, the same name match as the Improved Grab trigger). A weapon, an unarmed strike or another
+    /// natural attack never triggers it (CMB-125). The one test for the free trip after a hit (PC and NPC turns,
+    /// charges, AoOs) and for the AI's rider count (NaturalAttackChoice).
+    /// </summary>
+    public bool IsTripTriggerAttack(string attackName)
+    {
+        if (!HasTripAttack || string.IsNullOrWhiteSpace(attackName))
+            return false;
+
+        string triggers = string.IsNullOrWhiteSpace(TripTriggerAttackName) ? DefaultTripTriggerAttackName : TripTriggerAttackName;
+        string[] names = triggers.Split(',');
+        for (int i = 0; i < names.Length; i++)
+        {
+            string trigger = names[i].Trim();
+            if (trigger.Length > 0 && attackName.IndexOf(trigger, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Exceptionally stable creature (more than two legs, or a stability trait): +4 on checks to
@@ -2348,6 +2390,15 @@ public class CharacterStats
     /// If empty, Improved Grab defaults to claw-based triggers.
     /// </summary>
     public string ImprovedGrabTriggerAttackName;
+
+    /// <summary>
+    /// The largest size Improved Grab can seize when the creature's MM entry names one (for example the choker's
+    /// "Large or smaller opponent", the behir's "any size"). Null applies the MM p.310 default: at least one size
+    /// category smaller than the creature's current size. Read through CharacterController.GetImprovedGrabMaxTargetSizeIndex;
+    /// callers test a target with CharacterController.CanImprovedGrabTargetBySize. A relative MM clause is stored at the
+    /// stat-block size (CMB-143).
+    /// </summary>
+    public global::SizeCategory? ImprovedGrabMaxTargetSize;
 
     /// <summary>Monster special: can make a full natural attack sequence at the end of a charge.</summary>
     public bool HasPounce;

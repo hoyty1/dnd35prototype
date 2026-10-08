@@ -105,6 +105,7 @@ public static partial class NPCDatabase
             BaseSpeed = 2, // 10 ft, fly 40 ft (average)
             BaseHitDieHP = 5,
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Colossal, // MM p.237: Attach, modelled as Improved Grab, has no size limit
             ImprovedGrabTriggerAttackName = "Touch",
             CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
             Feats = new List<string> { "Weapon Finesse" },
@@ -362,6 +363,7 @@ public static partial class NPCDatabase
             BAB = 4,
             HasTripAttack = true,
             TripAttackCheckBonus = 3,
+            TripTriggerAttackName = "Bite", // MM p.222: a bite hit trips (CMB-125)
             HasScent = true,
             AuraAbility = new AuraAbilityDefinition
             {

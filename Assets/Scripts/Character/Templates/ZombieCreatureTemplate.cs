@@ -76,6 +76,8 @@ public sealed class ZombieCreatureTemplate : ICreatureTemplate
         // Cleared capabilities
         target.HasImprovedGrab = source.HasImprovedGrab;
         target.ImprovedGrabTriggerAttackName = source.ImprovedGrabTriggerAttackName;
+        target.ImprovedGrabMaxTargetSize = source.ImprovedGrabMaxTargetSize;
+        target.TripTriggerAttackName = source.TripTriggerAttackName;
         target.KnownSpellIds = source.KnownSpellIds;
         target.PreparedSpellSlotIds = source.PreparedSpellSlotIds;
         target.SpellResistance = source.SpellResistance;

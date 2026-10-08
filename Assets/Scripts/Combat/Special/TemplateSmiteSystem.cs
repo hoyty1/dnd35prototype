@@ -196,13 +196,13 @@ public partial class GameManager
         attacker.Stats.MoraleDamageBonus += damageBonus;
 
         CombatResult result;
+        RangeInfo rangeInfo = _combatFlowService != null ? _combatFlowService.CalculateRangeInfo(attacker, target) : null;
         try
         {
             List<CharacterController> allCombatants = GetAllCharacters();
             bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
             int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
             string partnerName = flankPartner != null && flankPartner.Stats != null ? flankPartner.Stats.CharacterName : string.Empty;
-            RangeInfo rangeInfo = _combatFlowService != null ? _combatFlowService.CalculateRangeInfo(attacker, target) : null;
             result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         }
         finally
@@ -220,6 +220,10 @@ public partial class GameManager
 
         if (result != null && result.Hit && result.TotalDamage > 0)
             Combat_CheckConcentrationOnDamage(target, result.TotalDamage);
+
+        // A smite is an ordinary melee attack with the bite, so a fiendish wolf's smite hit trips (MM p.283, CMB-125).
+        if (result != null)
+            TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
 
         if (result != null && result.TargetKilled)
         {

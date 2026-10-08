@@ -1245,7 +1245,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 467,
+      "passed": 501,
       "failed": 7,
       "flakyFailures": 0,
       "knownFailures": [
@@ -1278,7 +1278,7 @@
           "issue": "TST-027"
         }
       ],
-      "notes": "Deterministic since the helpers set BaseAttackBonusOverride (CHR-068): the same assertions fail with all 67 seeds swept on 2026-10-07, and with seeds 1-30 after CMB-120. TST-027: 7 checks of rewritten log text. The 3 pin-duration checks pass since CMB-120 (1-round pin, renewal on the pinner's next turn). The pass count also takes in assertions added by CMB-085, CMB-102 and CMB-106, whose commits did not refresh it, and the 22 trip checks of CMB-079 (432 on 2026-10-08); 467 after the CMB-102 natural-weapon rulings of 2026-10-08 (six tests replaced the natural sunder refusal; they also cover the PHB p.155/p.158 size and handedness terms of disarm and sunder)."
+      "notes": "Deterministic since the helpers set BaseAttackBonusOverride (CHR-068): the same assertions fail with all 67 seeds swept on 2026-10-07, and with seeds 1-30 after CMB-120. TST-027: 7 checks of rewritten log text. The 3 pin-duration checks pass since CMB-120 (1-round pin, renewal on the pinner's next turn). The pass count also takes in assertions added by CMB-085, CMB-102 and CMB-106, whose commits did not refresh it, and the 22 trip checks of CMB-079 (432 on 2026-10-08); 467 after the CMB-102 natural-weapon rulings of 2026-10-08 (six tests replaced the natural sunder refusal; they also cover the PHB p.155/p.158 size and handedness terms of disarm and sunder); 476 after CMB-126; 493 after CMB-127 (six grapple natural-attack tests replaced the old Haste grapple-routine test, two of them for grapple checks staying on the BAB ladder and refused natural attacks); 500 after CMB-125 (the Trip (Ex) trigger attack: helper, NPC data, AI rider count and the shared free-trip path)."
     },
     {
       "type": "Tests.Maneuvers.OverrunRulesTests",

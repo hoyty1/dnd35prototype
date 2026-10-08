@@ -75,7 +75,7 @@ public static class LycanthropeTemplate
                     AnimalHD = 2, AnimalSize = SizeCategory.Medium,
                     AnimalNaturalArmor = 2, AnimalSpeed = 10, // 50 ft
                     AnimalBAB = 1,
-                    HasTrip = true, TripBonus = 1
+                    HasTrip = true, TripBonus = 2 // the MM p.174 werewolf's trip modifier (reference only)
                 };
 
             case LycanthropeAnimalType.DireWolf:
@@ -87,7 +87,7 @@ public static class LycanthropeTemplate
                     AnimalHD = 6, AnimalSize = SizeCategory.Large,
                     AnimalNaturalArmor = 3, AnimalSpeed = 10, // 50 ft
                     AnimalBAB = 4,
-                    HasTrip = true, TripBonus = 11
+                    HasTrip = true, TripBonus = 15 // the MM p.174 werewolf lord's trip modifier (reference only)
                 };
 
             case LycanthropeAnimalType.Boar:
@@ -294,11 +294,15 @@ public static class LycanthropeTemplate
         lycan.NaturalAttacks.Add(biteAttack);
 
         // ── Special attacks from animal form (carried to hybrid only for some) ──
-        // MM p.173: "A lycanthrope's hybrid form does not gain any special
-        // attacks of the base animal." But trip on bite IS kept for wolves.
+        // MM p.176 (template, Special Attacks): the hybrid form gains none of the
+        // base animal's special attacks. The trip is kept here anyway, although the
+        // MM p.174 werewolf and werewolf lord trip only in wolf or dire wolf form
+        // (CRE-049, owner question).
         // Trip is triggered by the bite attack, which the hybrid has.
         lycan.HasTripAttack = animal.HasTrip;
         lycan.TripAttackCheckBonus = animal.TripBonus;
+        // MM p.174-175: the werewolf and the werewolf lord trip when they hit with the bite (CMB-125).
+        lycan.TripTriggerAttackName = animal.HasTrip ? CharacterStats.DefaultTripTriggerAttackName : null;
 
         // Improved grab / pounce / rake are animal-form-only for most,
         // but weretiger hybrid CAN pounce (MM p.174 notes).

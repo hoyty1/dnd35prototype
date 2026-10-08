@@ -1635,6 +1635,9 @@ public partial class GameManager
                         }
                     }
 
+                    // Trip (Ex) after the trigger attack's hit, as on any full attack, before Improved Grab (CMB-125).
+                    TryResolveFreeTripFromAttackResults(charger, target, pounceResult.Attacks, CalculateRangeInfo(charger, target));
+
                     for (int i = 0; i < pounceResult.Attacks.Count; i++)
                     {
                         CombatResult attackResult = pounceResult.Attacks[i];
@@ -1650,7 +1653,7 @@ public partial class GameManager
                         if (improvedGrabAttempted || improvedGrabSucceeded || target.Stats.IsDead)
                             continue;
 
-                        if (charger.Stats == null || !charger.Stats.HasImprovedGrab || !IsImprovedGrabTriggerAttack(charger, attackResult) || !attackResult.Hit)
+                        if (!CanAttemptImprovedGrabFromAttack(charger, target, attackResult))
                             continue;
 
                         bool shouldAttemptGrab = true;
@@ -1736,7 +1739,7 @@ public partial class GameManager
 
                     Debug.Log($"[Charge] Post-hit target state | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | hp={target?.Stats?.CurrentHP ?? 0} | dead={(target != null && target.Stats != null && target.Stats.IsDead)}");
 
-                    if (charger.Stats != null && charger.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(charger, result) && !target.Stats.IsDead)
+                    if (CanAttemptImprovedGrabFromAttack(charger, target, result))
                     {
                         bool shouldAttemptGrab = true;
                         if (charger.IsControllable)
@@ -2084,6 +2087,9 @@ public partial class GameManager
                     }
                 }
 
+                // Trip (Ex) after the trigger attack's hit, as on any full attack, before Improved Grab (CMB-125).
+                TryResolveFreeTripFromAttackResults(npc, target, pounceResult.Attacks, CalculateRangeInfo(npc, target));
+
                 bool improvedGrabAttempted = false;
                 bool improvedGrabSucceeded = false;
                 for (int i = 0; i < pounceResult.Attacks.Count; i++)
@@ -2098,7 +2104,7 @@ public partial class GameManager
                     if (improvedGrabAttempted || improvedGrabSucceeded || target.Stats.IsDead)
                         continue;
 
-                    if (npc.Stats == null || !npc.Stats.HasImprovedGrab || !attackResult.Hit || !IsImprovedGrabTriggerAttack(npc, attackResult))
+                    if (!CanAttemptImprovedGrabFromAttack(npc, target, attackResult))
                         continue;
 
                     improvedGrabAttempted = true;
@@ -2149,7 +2155,7 @@ public partial class GameManager
                 if (result.Hit && !result.IsRangedAttack)
                     MeleeReactionService.TriggerReactions(npc, target, result);
 
-                if (npc.Stats != null && npc.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(npc, result) && !target.Stats.IsDead)
+                if (CanAttemptImprovedGrabFromAttack(npc, target, result))
                 {
                     SpecialAttackResult grabResult = npc.ResolveImprovedGrabFreeAttempt(target);
                     CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🪢", $"Improved Grab: {grabResult.Log}"));

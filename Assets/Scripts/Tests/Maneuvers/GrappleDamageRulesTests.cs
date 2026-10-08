@@ -109,11 +109,18 @@ public static class GrappleDamageRulesTests
         TestHasteAddsOneNaturalAttackStep();
         TestHasteNaturalStepUsesChosenNaturalAttack();
         TestHasteNaturalFullAttackAddsOneAttack();
-        TestHasteNaturalNotInGrappleRoutine();
+        TestGrappleNaturalAttackIsOneAttack();
+        TestGrappleNaturalAttackHasteAndOutOfOrderSteps();
+        TestGrappleNaturalAttackRakeOncePerTurn();
+        TestGrappleNaturalAttackStepsAndAiChoice();
+        TestGrappleChecksStayIterativeForNaturalAttackers();
+        TestGrappleNaturalAttackRefusesUsedOrMissingAttack();
         TestHasteWeaponAndMixedAttackersGetOneHasteAttack();
         TestHasteNaturalManeuverReplacesHasteStep();
         TestAiHasteNaturalAttackChoice();
         TestNpcHasteNaturalSequence();
+        TestImprovedGrabSizeLimit();
+        TestImprovedGrabSizeOverrideData();
         TestPcHasteNaturalAttackOptions();
         TestPcHasteNaturalButtonSelection();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
@@ -133,6 +140,9 @@ public static class GrappleDamageRulesTests
         TestManeuverTouchAttackNaturalTwentyAndOne();
         TestOpposedCheckTieBreaks();
         TestFreeTripSkipsTouchAttack();
+        TestTripTriggerAttackData();
+        TestFreeTripOnlyAfterTriggerAttack();
+        TestSummonSmiteBiteStartsFreeTrip();
         TestTripAttemptRollsTouchAttack();
         TestTripSizeLimit();
         TestCounterTripAfterFailedTrip();
@@ -1315,6 +1325,90 @@ public static class GrappleDamageRulesTests
         Assert(!second && !string.IsNullOrEmpty(reason2), "Additional iterative grapple attacks are unavailable after standard-only use");
 
         Cleanup(attacker);
+    }
+
+    /// <summary>
+    /// MM p.310 (CMB-126): unless the entry says otherwise, Improved Grab works only against an opponent at least one
+    /// size category smaller than the creature (its current size); an entry's own maximum replaces that limit. A refused
+    /// free attempt rolls nothing and starts no grapple.
+    /// </summary>
+    private static void TestImprovedGrabSizeLimit()
+    {
+        var grabber = CreateTestCharacter("ImprovedGrabSizeGrabber", "Fighter");
+        var medium = CreateWeakDefender("ImprovedGrabSizeMedium");
+        var small = CreateWeakDefender("ImprovedGrabSizeSmall");
+        var huge = CreateWeakDefender("ImprovedGrabSizeHuge");
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        try
+        {
+            grabber.Stats.HasImprovedGrab = true;
+            grabber.Stats.ImprovedGrabTriggerAttackName = "Claw";
+            small.Stats.SetBaseSizeCategory(SizeCategory.Small);
+            huge.Stats.SetBaseSizeCategory(SizeCategory.Huge);
+
+            Assert(!grabber.CanImprovedGrabTargetBySize(medium, out string mediumReason) && !string.IsNullOrEmpty(mediumReason)
+                && grabber.CanImprovedGrabTargetBySize(small, out _),
+                "Improved Grab size: a Medium grabber cannot grab a Medium target but can grab a Small one (MM p.310)");
+
+            int d20Rolls = 0;
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => { if (sides == 20) d20Rolls++; return natural; };
+            SpecialAttackResult refused = grabber.ResolveImprovedGrabFreeAttempt(medium);
+            ScenarioHooks.RollFilter = savedFilter;
+            Assert(refused != null && !refused.Success && d20Rolls == 0 && !grabber.IsGrappling() && !medium.IsGrappling()
+                && refused.Log.Contains("too large"),
+                "Improved Grab size: the free attempt on a target too large rolls no grapple check and starts no grapple");
+
+            grabber.Stats.TryShiftCurrentSize(1);
+            Assert(grabber.GetCurrentSizeCategory() == SizeCategory.Large && grabber.CanImprovedGrabTargetBySize(medium, out _)
+                && !grabber.CanImprovedGrabTargetBySize(huge, out _),
+                "Improved Grab size: the limit follows the grabber's current size (Large after a size increase grabs Medium, not Huge)");
+            grabber.Stats.TryShiftCurrentSize(-1);
+
+            grabber.Stats.ImprovedGrabMaxTargetSize = SizeCategory.Large;
+            Assert(grabber.CanImprovedGrabTargetBySize(medium, out _) && !grabber.CanImprovedGrabTargetBySize(huge, out _),
+                "Improved Grab size: an entry's own maximum (Large or smaller) replaces the default limit");
+
+            grabber.Stats.ImprovedGrabMaxTargetSize = null;
+            grabber.Stats.SetBaseSizeCategory(SizeCategory.Fine);
+            var fine = CreateWeakDefender("ImprovedGrabSizeFine");
+            fine.Stats.SetBaseSizeCategory(SizeCategory.Fine);
+            Assert(!grabber.CanImprovedGrabTargetBySize(fine, out _),
+                "Improved Grab size: a Fine grabber without an entry maximum can grab nothing (no smaller size exists)");
+            Cleanup(fine);
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Improved Grab size check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(grabber, medium, small, huge);
+        }
+    }
+
+    /// <summary>
+    /// The per-creature Improved Grab maxima from the MM (CMB-126) are on the database entries, survive NPCDefinition.Clone,
+    /// and entries without a size clause keep the default (null).
+    /// </summary>
+    private static void TestImprovedGrabSizeOverrideData()
+    {
+        NPCDatabase.Init();
+        NPCDefinition choker = NPCDatabase.Get("choker");
+        NPCDefinition behir = NPCDatabase.Get("behir");
+        NPCDefinition mohrg = NPCDatabase.Get("mohrg");
+        NPCDefinition crocodile = NPCDatabase.Get("crocodile");
+        NPCDefinition lion = NPCDatabase.Get("lion");
+        Assert(choker != null && choker.ImprovedGrabMaxTargetSize == SizeCategory.Large
+            && behir != null && behir.ImprovedGrabMaxTargetSize == SizeCategory.Colossal
+            && mohrg != null && mohrg.ImprovedGrabMaxTargetSize == SizeCategory.Medium,
+            "Improved Grab data: choker Large or smaller (MM p.35), behir any size (MM p.25), mohrg its own size (MM p.190)");
+        Assert(crocodile != null && crocodile.HasImprovedGrab && crocodile.ImprovedGrabMaxTargetSize == null
+            && lion != null && lion.HasImprovedGrab && lion.ImprovedGrabMaxTargetSize == null,
+            "Improved Grab data: the crocodile and lion entries name no size, so the MM p.310 default applies");
+        NPCDefinition chokerClone = choker != null ? choker.Clone() : null;
+        Assert(chokerClone != null && chokerClone.ImprovedGrabMaxTargetSize == SizeCategory.Large,
+            "Improved Grab data: NPCDefinition.Clone keeps the size maximum (CRE-023)");
     }
 
     private static void TestImprovedGrabCreatureCanUseStandardGrappleAction()
@@ -3174,42 +3268,302 @@ public static class GrappleDamageRulesTests
         }
     }
 
-    private static void TestHasteNaturalNotInGrappleRoutine()
-    {
-        // Each grapple attack action of a natural-weapon creature runs its natural routine
-        // (ResolveNaturalAttackRoutineWhileGrappling). Haste's extra natural attack is one attack of a full
-        // attack (PHB p.239), never part of each routine, and a used Haste attack is not made again.
-        MethodInfo routine = typeof(CharacterController).GetMethod("ResolveNaturalAttackRoutineWhileGrappling", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert(routine != null, "CharacterController.ResolveNaturalAttackRoutineWhileGrappling is available for the Haste grapple test");
-        if (routine == null)
-            return;
+    // ── Grapple attacks with natural weapons (PHB p.156; MM p.314; CMB-127) ──
+    // Each grapple attack action of a creature fighting with its natural attacks is ONE natural attack of its choice,
+    // at that attack's normal bonus with the -4 for attacking in a grapple (the attacker's Grappled condition), in
+    // place of one natural attack of its sequence. Rake adds its claws once a turn.
 
-        var bear = CreateHastedBiteClaws("HasteNaturalGrappleRoutine", 4);
-        var target = CreateHasteTarget("HasteNaturalGrappleRoutineTarget");
+    /// <summary>Commits the grapple step that gives up natural attack <paramref name="index"/>, then makes that attack (the PC and AI order).</summary>
+    private static SpecialAttackResult GrappleNaturalAttack(CharacterController attacker, int index, bool haste, out bool committed)
+    {
+        committed = attacker.TryCommitManeuverSubstituteStep(index, out int bab, out _, out _, haste);
+        return committed
+            ? attacker.ResolveGrappleAction(GrappleActionType.AttackUnarmed, null, null, bab, index, haste)
+            : null;
+    }
+
+    private static int CheckMod(SpecialAttackResult r) => r != null ? r.CheckTotal - r.CheckRoll : int.MinValue;
+
+    private static void TestGrappleNaturalAttackIsOneAttack()
+    {
+        var bear = CreateBiteClawsCreature("GrappleNaturalOne", 4, false);
+        var control = CreateBiteClawsCreature("GrappleNaturalOneControl", 4, false);
+        var target = CreateHasteTarget("GrappleNaturalOneTarget");
         try
         {
-            var first = (SpecialAttackResult)routine.Invoke(bear, new object[] { target, "Attack" });
-            var second = (SpecialAttackResult)routine.Invoke(bear, new object[] { target, "Attack" });
-            Assert(first != null && second != null && first.Log.Contains("Natural attacks: 3 (") && second.Log.Contains("Natural attacks: 3 (")
-                && !first.Log.Contains("(Haste,") && !second.Log.Contains("(Haste,") && !bear.ProgressiveAttackPool.HasteExtraNaturalAttackUsed,
-                "A hasted bite/claw/claw creature makes 3 natural attacks per grapple routine, never the Haste attack (CMB-106)");
+            bear.StartNewTurn();
+            ForceGrappleState(bear, target);
+            var options = bear.GetGrappleNaturalAttackOptions();
+            Assert(bear.UsesNaturalAttacksForGrappleAttack() && options.Count == 3
+                && options[0].NaturalAttackIndex == 0 && options[2].NaturalAttackIndex == 2 && !options.Exists(o => o.IsHasteExtraAttack),
+                "CMB-127: a grappling bite/claw/claw creature may make any of its 3 natural attacks with a grapple attack");
 
-            CombatResult hasteStep = bear.ResolveAttackSequenceStep(target, AttackStepKind.NaturalSequence, 3,
-                false, 0, null, null, null, 0, out _);
-            CombatResult hasteAgain = bear.ResolveAttackSequenceStep(target, AttackStepKind.NaturalSequence, 3,
-                false, 0, null, null, null, 0, out _);
-            FullAttackResult afterUsed = bear.FullAttack(target, false, 0, null);
-            Assert(hasteStep != null && hasteAgain == null && afterUsed.Attacks.Count == 3,
-                "Once the Haste natural attack is made, the Haste step resolves nothing and a natural routine has 3 attacks");
+            int hpBefore = target.Stats.CurrentHP;
+            SpecialAttackResult claw = GrappleNaturalAttack(bear, 1, false, out bool clawCommitted);
+            FullAttackResult controlClaw = control.FullAttack(target, false, 0, null, null, startAttackIndex: 1, maxAttacks: 1);
+            FullAttackResult controlBite = control.FullAttack(target, false, 0, null, null, startAttackIndex: 0, maxAttacks: 1);
+            Assert(clawCommitted && claw != null && claw.Log.Contains("with its Claw while grappling") && !claw.Log.Contains("Bite")
+                && bear.ProgressiveAttackPool.IsNaturalAttackUsed(1) && !bear.ProgressiveAttackPool.IsNaturalAttackUsed(0)
+                && bear.ProgressiveAttackPool.MainHandStepsUsed == 1,
+                "CMB-127: one grapple attack is one natural attack (the claw picked), and only that natural attack is used");
+            Assert(controlClaw.Attacks.Count == 1 && CheckMod(claw) == AttackModifier(controlClaw.Attacks[0]) - 4,
+                $"CMB-127: the grapple claw rolls at the claw's normal bonus -4 for grappling (PHB p.156; got {CheckMod(claw)}, ungrappled {AttackModifier(controlClaw.Attacks[0])})");
+
+            SpecialAttackResult bite = GrappleNaturalAttack(bear, 0, false, out bool biteCommitted);
+            Assert(biteCommitted && bite != null && bite.Log.Contains("with its Bite") && CheckMod(bite) - CheckMod(claw) == 5
+                && CheckMod(bite) == AttackModifier(controlBite.Attacks[0]) - 4 && bear.ProgressiveAttackPool.IsFullAttack,
+                "CMB-127: the second grapple attack (the primary bite) is 5 above the secondary claw (MM p.312) and makes it a full attack");
+
+            var left = bear.GetGrappleNaturalAttackOptions();
+            SpecialAttackResult claw2 = GrappleNaturalAttack(bear, 2, false, out bool claw2Committed);
+            bool fourth = bear.TryCommitManeuverSubstituteStep(-1, out _, out _, out string fourthReason);
+            Assert(left.Count == 1 && left[0].NaturalAttackIndex == 2 && claw2Committed && claw2 != null
+                && !fourth && !string.IsNullOrEmpty(fourthReason) && bear.GetGrappleNaturalAttackOptions().Count == 0,
+                "CMB-127: a full attack of grapple attacks makes each natural attack once (3 with BAB +4), then nothing is left");
         }
         catch (System.Exception ex)
         {
-            System.Exception inner = ex.InnerException ?? ex;
-            Assert(false, $"Haste natural grapple routine check threw {inner.GetType().Name}: {inner.Message}");
+            Assert(false, $"Grapple natural attack check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(bear, control, target);
+        }
+    }
+
+    private static void TestGrappleNaturalAttackHasteAndOutOfOrderSteps()
+    {
+        var bear = CreateHastedBiteClaws("GrappleNaturalHaste", 4);
+        var target = CreateHasteTarget("GrappleNaturalHasteTarget");
+        try
+        {
+            bear.StartNewTurn();
+            ForceGrappleState(bear, target);
+            SpecialAttackResult bite = GrappleNaturalAttack(bear, 0, false, out bool biteOk);
+            var options = bear.GetGrappleNaturalAttackOptions();
+            Assert(biteOk && bite != null && options.Count == 3 && options[2].NaturalAttackIndex == 0 && options[2].IsHasteExtraAttack
+                && !options[0].IsHasteExtraAttack && !options[1].IsHasteExtraAttack,
+                "CMB-127/CMB-106: after the bite, a hasted grappler may attack with either claw, or with the bite again as Haste's extra attack");
+
+            SpecialAttackResult hasteBite = GrappleNaturalAttack(bear, 0, true, out bool hasteOk);
+            Assert(hasteOk && hasteBite != null && hasteBite.Log.Contains("Haste") && CheckMod(hasteBite) == CheckMod(bite)
+                && bear.ProgressiveAttackPool.HasteExtraNaturalAttackUsed && !bear.CanUseHasteExtraNaturalAttack(),
+                "CMB-127/CMB-106: the Haste grapple attack is the bite at the bite's bonus, and uses Haste's extra attack");
+
+            SpecialAttackResult c1 = GrappleNaturalAttack(bear, 1, false, out bool c1Ok);
+            SpecialAttackResult c2 = GrappleNaturalAttack(bear, 2, false, out bool c2Ok);
+            bool fifth = bear.TryCommitManeuverSubstituteStep(-1, out _, out _, out _);
+            Assert(c1Ok && c2Ok && c1 != null && c2 != null && !fifth,
+                "CMB-127: a hasted bite/claw/claw grappler makes 4 grapple attacks (bite, Haste bite, claw, claw), and no fifth");
+
+            // Out of sequence order: a grapple claw at step 0, then a maneuver substitute with no natural attack named
+            // (the NPC executor's call) gives up the bite, the first natural attack not used, at the bite's BAB
+            // (CMB-127; MM p.312). Grapple checks do not come here: they take iterative steps.
+            bear.StartNewTurn();
+            GrappleNaturalAttack(bear, 1, false, out bool firstClawOk);
+            bool pinStep = bear.TryCommitManeuverSubstituteStep(-1, out int pinBab, out int pinStepIndex, out _);
+            int resolvedThird = bear.ResolveSubstituteNaturalAttackIndex(2, out bool thirdIsHaste);
+            Assert(firstClawOk && pinStep && pinStepIndex == 1 && pinBab == 4 && bear.ProgressiveAttackPool.IsNaturalAttackUsed(0)
+                && resolvedThird == 2 && !thirdIsHaste,
+                "CMB-127: after a grapple claw at step 0, a maneuver at step 1 gives up the unused bite (BAB +4), and step 2 the other claw");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Grapple natural Haste check threw {ex.GetType().Name}: {ex.Message}");
         }
         finally
         {
             Cleanup(bear, target);
+        }
+    }
+
+    private static void TestGrappleNaturalAttackRakeOncePerTurn()
+    {
+        var cat = CreateBiteClawsCreature("GrappleNaturalRake", 4, false);
+        var target = CreateHasteTarget("GrappleNaturalRakeTarget");
+        try
+        {
+            cat.Stats.HasRake = true;
+            cat.Stats.SetRakeAttack(new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 2, IsPrimary = true, BonusDamageSource = DamageBonusSource.StrengthHalf });
+            cat.StartNewTurn();
+            ForceGrappleState(cat, target);
+            SpecialAttackResult first = GrappleNaturalAttack(cat, 0, false, out _);
+            SpecialAttackResult second = GrappleNaturalAttack(cat, 1, false, out _);
+            Assert(first != null && first.Log.Contains("Rake: 2 extra claw attack(s)") && second != null && !second.Log.Contains("Rake:")
+                && cat.ProgressiveAttackPool.RakeUsedThisTurn,
+                "CMB-127: the rake's 2 claws come with the first grapple natural attack of the turn, not with every one (MM p.314)");
+
+            cat.StartNewTurn();
+            SpecialAttackResult nextTurn = GrappleNaturalAttack(cat, 2, false, out _);
+            Assert(nextTurn != null && nextTurn.Log.Contains("Rake: 2 extra claw attack(s)"),
+                "CMB-127: the next turn's first grapple natural attack rakes again");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Grapple natural rake check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(cat, target);
+        }
+    }
+
+    private static void TestGrappleNaturalAttackStepsAndAiChoice()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; the grapple step and AI choice checks need Play mode");
+            return;
+        }
+
+        var bear = CreateBiteClawsCreature("GrappleNaturalSteps", 4, false);
+        var fighter = CreateTestCharacter("GrappleNaturalStepsFighter", "Fighter"); // BAB +12: +12/+7/+2
+        var stinger = CreateBiteClawsCreature("GrappleNaturalStepsSting", 4, false);
+        var target = CreateHasteTarget("GrappleNaturalStepsTarget");
+        var target2 = CreateHasteTarget("GrappleNaturalStepsTarget2");
+        var target3 = CreateHasteTarget("GrappleNaturalStepsTarget3");
+        try
+        {
+            bear.StartNewTurn();
+            fighter.StartNewTurn();
+            ForceGrappleState(bear, target);
+            ForceGrappleState(fighter, target2);
+            Assert(gm.GetRemainingGrappleAttackActions(bear) == 3 && gm.GetCurrentGrappleAttackBonus(bear) == 4
+                && gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.AttackUnarmed) == 3
+                && gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.PinOpponent) == 1
+                && gm.GetRemainingGrappleAttackActions(fighter) == 3 && gm.GetRemainingGrappleAttackActions(fighter, GrappleActionType.AttackUnarmed) == 3,
+                $"CMB-127/CMB-146: a grappling BAB +4 bite/claw/claw creature has 3 grapple natural attacks (one per natural attack) but 1 grapple check (its iterative ladder, PHB p.156); a BAB +12 fighter keeps its 3 iteratives for both (got {gm.GetRemainingGrappleAttackActions(bear)}, {gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.PinOpponent)}, {gm.GetRemainingGrappleAttackActions(fighter)})");
+
+            CharacterController.GrappleNaturalAttackOption pick = gm.ChooseGrappleNaturalAttackForAI(bear, target);
+            Assert(pick.NaturalAttackIndex == 0 && !pick.IsHasteExtraAttack,
+                "CMB-127: with no riders the AI's grapple attack is the highest-bonus natural attack (the bite)");
+            GrappleNaturalAttack(bear, 0, false, out _);
+            CharacterController.GrappleNaturalAttackOption next = gm.ChooseGrappleNaturalAttackForAI(bear, target);
+            Assert(next.NaturalAttackIndex == 1 && gm.GetRemainingGrappleAttackActions(bear) == 2,
+                "CMB-127: once the bite is used the AI attacks with a claw, and 2 grapple actions are left");
+
+            stinger.Stats.NaturalAttacks.Clear();
+            stinger.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, IsPrimary = true });
+            stinger.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Sting", DamageDice = 4, DamageCount = 1, Count = 1, IsPrimary = false, PoisonOnHitId = "test_poison" });
+            stinger.StartNewTurn();
+            ForceGrappleState(stinger, target3);
+            CharacterController.GrappleNaturalAttackOption sting = gm.ChooseGrappleNaturalAttackForAI(stinger, target3);
+            Assert(sting.NaturalAttackIndex == 1,
+                "CMB-127: the AI's grapple attack takes the poison sting over the higher-bonus bite against a living foe (NaturalAttackChoice)");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Grapple natural step check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(bear, fighter, stinger, target, target2, target3);
+        }
+    }
+
+    /// <summary>Commits one grapple action's step through GameManager.TryConsumeGrappleAttackAction (the PC and AI path).</summary>
+    private static bool ConsumeGrappleStep(GameManager gm, CharacterController attacker, GrappleActionType action, int naturalIndex, out int bab, out string reason)
+    {
+        MethodInfo consume = typeof(GameManager).GetMethod("TryConsumeGrappleAttackAction", BindingFlags.Instance | BindingFlags.NonPublic);
+        object[] args = { attacker, 0, 0, null, (GrappleActionType?)action, naturalIndex, false };
+        bool ok = (bool)consume.Invoke(gm, args);
+        bab = (int)args[1];
+        reason = args[3] as string;
+        return ok;
+    }
+
+    private static void TestGrappleChecksStayIterativeForNaturalAttackers()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; the grapple check step checks need Play mode");
+            return;
+        }
+
+        var bear = CreateBiteClawsCreature("GrappleCheckIterative", 4, false);
+        var bear2 = CreateBiteClawsCreature("GrappleCheckIterative2", 4, false);
+        var target = CreateHasteTarget("GrappleCheckIterativeTarget");
+        var target2 = CreateHasteTarget("GrappleCheckIterativeTarget2");
+        try
+        {
+            // PHB p.156: grapple checks in place of attacks follow the BAB ladder. Only the grapple natural attack takes
+            // a natural step (CMB-127), so a pin is an iterative step at full BAB and gives up no natural attack.
+            bear.StartNewTurn();
+            ForceGrappleState(bear, target);
+            bool pinOk = ConsumeGrappleStep(gm, bear, GrappleActionType.PinOpponent, -1, out int pinBab, out string pinReason);
+            Assert(pinOk && pinBab == 4 && bear.ProgressiveAttackPool.LastSubstituteNaturalAttackIndex == -1
+                && bear.GetGrappleNaturalAttackOptions().Count == 3
+                && !gm.CanUseGrappleAttackOption(bear, GrappleActionType.PinOpponent)
+                && !gm.CanUseGrappleAttackOption(bear, GrappleActionType.OpposedGrappleEscape)
+                && gm.GetRemainingGrappleAttackActions(bear, GrappleActionType.AttackUnarmed) == 2,
+                $"CMB-127: a BAB +4 bite/claw/claw grappler's pin is an iterative step at its full BAB +4 that gives up no natural attack; no second grapple check follows, 2 grapple natural attacks do (got ok={pinOk} bab={pinBab} reason={pinReason})");
+
+            // The lion case: after one grapple claw attack the one iterative step is used, so a pin or escape check is refused.
+            bear2.StartNewTurn();
+            ForceGrappleState(bear2, target2);
+            bool clawOk = ConsumeGrappleStep(gm, bear2, GrappleActionType.AttackUnarmed, 1, out int clawBab, out _);
+            bool pinAfter = ConsumeGrappleStep(gm, bear2, GrappleActionType.PinOpponent, -1, out _, out string refusal);
+            Assert(clawOk && clawBab == -1 && bear2.ProgressiveAttackPool.IsNaturalAttackUsed(1)
+                && !pinAfter && !string.IsNullOrEmpty(refusal) && bear2.ProgressiveAttackPool.MainHandStepsUsed == 1
+                && !gm.CanUseGrappleAttackOption(bear2, GrappleActionType.PinOpponent)
+                && !gm.CanUseGrappleAttackOption(bear2, GrappleActionType.OpposedGrappleEscape)
+                && gm.CanUseGrappleAttackOption(bear2, GrappleActionType.AttackUnarmed),
+                $"CMB-127: after one grapple claw attack (at the claw's -1) a BAB +4 natural attacker is refused a pin or escape check and keeps its other natural attacks (got claw={clawOk}/{clawBab}, pin={pinAfter})");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Grapple check step check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(bear, bear2, target, target2);
+        }
+    }
+
+    private static void TestGrappleNaturalAttackRefusesUsedOrMissingAttack()
+    {
+        var beast = CreateBiteClawsCreature("GrappleNaturalRefuse", 4, false);
+        var clawBite = CreateBiteClawsCreature("GrappleNaturalFallback", 4, false);
+        var target = CreateHasteTarget("GrappleNaturalRefuseTarget");
+        var target2 = CreateHasteTarget("GrappleNaturalFallbackTarget");
+        try
+        {
+            beast.StartNewTurn();
+            ForceGrappleState(beast, target);
+            GrappleNaturalAttack(beast, 1, false, out bool firstOk);
+            int stepsBefore = beast.ProgressiveAttackPool.MainHandStepsUsed;
+            bool again = beast.TryCommitManeuverSubstituteStep(1, out _, out _, out string againReason);
+            bool fakeHaste = beast.TryCommitManeuverSubstituteStep(0, out _, out _, out _, true);
+            bool outOfRange = beast.TryCommitManeuverSubstituteStep(7, out _, out _, out _);
+            Assert(firstOk && !again && !fakeHaste && !outOfRange && againReason != null && againReason.Contains("already used")
+                && beast.ProgressiveAttackPool.MainHandStepsUsed == stepsBefore,
+                "CMB-127: a named natural attack already used this turn, a Haste attack without Haste, or a missing one is refused before any step is spent");
+
+            // Claw (secondary) first, bite (primary) second: a step committed with no natural attack named gives up the claw.
+            clawBite.Stats.NaturalAttacks.Clear();
+            clawBite.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 1, IsPrimary = false });
+            clawBite.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, IsPrimary = true });
+            clawBite.StartNewTurn();
+            ForceGrappleState(clawBite, target2);
+            bool stepOk = clawBite.TryCommitManeuverSubstituteStep(-1, out int stepBab, out _, out _);
+            SpecialAttackResult fallback = stepOk ? clawBite.ResolveGrappleAction(GrappleActionType.AttackUnarmed, null, null, stepBab) : null;
+            Assert(stepOk && fallback != null && fallback.Log.Contains("with its Claw") && !clawBite.ProgressiveAttackPool.IsNaturalAttackUsed(1),
+                "CMB-127: a grapple attack whose step was committed without naming a natural attack makes the one that step gave up (the claw), not the higher-bonus bite, so one step spends one natural attack");
+
+            GrappleNaturalAttack(clawBite, 1, false, out bool biteOk);
+            SpecialAttackResult none = clawBite.ResolveGrappleAction(GrappleActionType.AttackUnarmed);
+            Assert(biteOk && none != null && !none.Success && none.Log.Contains("no natural attack left"),
+                "CMB-127: with every natural attack used, a natural-weapon grappler's grapple attack is refused, never turned into an unarmed strike");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Grapple natural refusal check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(beast, clawBite, target, target2);
         }
     }
 
@@ -3279,10 +3633,13 @@ public static class GrappleDamageRulesTests
         var clawBite = CreateIterativeAttacker("AiHasteChoiceEqualBonus");
         var living = CreateHasteTarget("AiHasteChoiceLiving");
         var undead = CreateHasteTarget("AiHasteChoiceUndead");
+        var smallLiving = CreateHasteTarget("AiHasteChoiceSmallLiving");
         DND35.AI.AIProfile profile = null;
         try
         {
             undead.Stats.CreatureType = "Undead";
+            // MM p.310 (CMB-126): the Medium grabber's claw can seize only a Small or smaller target.
+            smallLiving.Stats.SetBaseSizeCategory(SizeCategory.Small);
             grabber.Stats.HasImprovedGrab = true;
             grabber.Stats.ImprovedGrabTriggerAttackName = "Claw";
 
@@ -3303,16 +3660,19 @@ public static class GrappleDamageRulesTests
             Assert(DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(clawBite, living) == 2
                 && clawBite.GetDefaultHasteNaturalAttackIndex() == 2,
                 "AI Haste pick: at an equal bonus the higher expected damage wins (bite 1d8 over claw 1d4)");
-            Assert(DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(grabber, living) == 1
+            Assert(DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(grabber, smallLiving) == 1
                 && grabber.GetDefaultHasteNaturalAttackIndex() == 0,
                 "AI Haste pick: the Improved Grab claw beats the higher-bonus bite; the rules default stays the bite");
+            Assert(DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(grabber, living) == 0
+                && DND35.AI.NaturalAttackChoice.CountRidersThatMatter(grabber, living, grabber.Stats.GetNaturalAttackAtSequenceIndex(1)) == 0,
+                "AI Haste pick: against a Medium target, too large for a Medium grabber (MM p.310), the grab claw adds nothing and the bite wins (CMB-126)");
             Assert(DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(stinger, living) == 1
                 && DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(stinger, undead) == 0,
                 "AI Haste pick: a poison sting against a living target, the bite against an undead one (immune to poison)");
 
             profile = ScriptableObject.CreateInstance<DND35.AI.AIProfile>();
-            Assert(profile.ChooseHasteNaturalAttackIndex(grabber, living) == 1
-                && profile.ScoreHasteNaturalAttack(grabber, living, 1) > profile.ScoreHasteNaturalAttack(grabber, living, 0),
+            Assert(profile.ChooseHasteNaturalAttackIndex(grabber, smallLiving) == 1
+                && profile.ScoreHasteNaturalAttack(grabber, smallLiving, 1) > profile.ScoreHasteNaturalAttack(grabber, smallLiving, 0),
                 "AIProfile.ChooseHasteNaturalAttackIndex and ScoreHasteNaturalAttack default to the shared scoring (the override points)");
         }
         catch (System.Exception ex)
@@ -3321,7 +3681,7 @@ public static class GrappleDamageRulesTests
         }
         finally
         {
-            Cleanup(plain, grabber, stinger, clawBite, living, undead);
+            Cleanup(plain, grabber, stinger, clawBite, living, undead, smallLiving);
             if (profile != null)
                 Object.DestroyImmediate(profile);
         }
@@ -3358,6 +3718,8 @@ public static class GrappleDamageRulesTests
             grabber = CreateHastedBiteClaws("NpcHasteNaturalGrabChoice", 4);
             grabber.Stats.HasImprovedGrab = true;
             grabber.Stats.ImprovedGrabTriggerAttackName = "Claw";
+            // Large, so the Medium target is small enough to grab (MM p.310, CMB-126).
+            grabber.Stats.SetBaseSizeCategory(SizeCategory.Large);
             Assert(gm.ChooseHasteNaturalAttackIndexForAI(grabber, target) == 1 && gm.ChooseHasteNaturalAttackIndexForAI(target, bear) == -1,
                 "The NPC executor asks the AI scoring for the Haste natural attack (the grab claw); -1 for a creature without one");
 
@@ -4004,6 +4366,167 @@ public static class GrappleDamageRulesTests
         Assert(result != null && !result.Log.Contains("Touch attack"), "Free trip after a hit does not roll a touch attack");
 
         Cleanup(attacker, defender);
+    }
+
+    /// <summary>
+    /// CMB-125 data and the shared trigger test: every MM Trip (Ex) entry names the attack that trips (the bite; the
+    /// cheetah's claw or bite, MM p.271), and only that attack counts as a trip rider for the AI's Haste pick.
+    /// </summary>
+    private static void TestTripTriggerAttackData()
+    {
+        var plain = new CharacterStats();
+        plain.HasTripAttack = true;
+        Assert(plain.IsTripTriggerAttack("Bite") && plain.IsTripTriggerAttack("bite") && !plain.IsTripTriggerAttack("Claw")
+            && !plain.IsTripTriggerAttack("Longsword") && !plain.IsTripTriggerAttack("Unarmed strike") && !plain.IsTripTriggerAttack(null),
+            "Trip (Ex) trigger: with no name set only a bite hit trips, not a claw, a weapon or an unarmed strike (CMB-125)");
+        plain.TripTriggerAttackName = "Claw, Bite";
+        Assert(plain.IsTripTriggerAttack("Claw") && plain.IsTripTriggerAttack("Bite") && !plain.IsTripTriggerAttack("Gore"),
+            "Trip (Ex) trigger: a comma-separated list names several attacks (the cheetah's claw or bite)");
+        plain.HasTripAttack = false;
+        Assert(!plain.IsTripTriggerAttack("Bite"), "Trip (Ex) trigger: no Trip (Ex), no trigger");
+
+        NPCDatabase.Init();
+        var problems = new System.Collections.Generic.List<string>();
+        int tripCreatures = 0;
+        foreach (NPCDefinition def in NPCDatabase.AllNPCs)
+        {
+            if (def == null || !def.HasTripAttack)
+                continue;
+            tripCreatures++;
+            if (string.IsNullOrWhiteSpace(def.TripTriggerAttackName))
+            {
+                problems.Add(def.Id + ": no trigger");
+                continue;
+            }
+
+            foreach (string raw in def.TripTriggerAttackName.Split(','))
+            {
+                string trigger = raw.Trim();
+                bool found = def.NaturalAttacks != null && def.NaturalAttacks.Exists(n => n != null && n.Name != null
+                    && n.Name.IndexOf(trigger, System.StringComparison.OrdinalIgnoreCase) >= 0);
+                if (!found)
+                    problems.Add(def.Id + ": no natural attack named " + trigger);
+            }
+        }
+        Assert(tripCreatures >= 7 && problems.Count == 0,
+            $"Trip (Ex) data: every trip creature names a trigger attack it has ({tripCreatures} creatures; {string.Join("; ", problems)})");
+
+        NPCDefinition cheetah = NPCDatabase.Get("cheetah");
+        NPCDefinition wolf = NPCDatabase.Get("wolf");
+        NPCDefinition werewolf = NPCDatabase.Get("werewolf");
+        Assert(cheetah != null && cheetah.TripTriggerAttackName == "Claw, Bite"
+            && wolf != null && wolf.TripTriggerAttackName == "Bite" && wolf.Clone().TripTriggerAttackName == "Bite"
+            && werewolf != null && werewolf.HasTripAttack && werewolf.TripTriggerAttackName == "Bite",
+            "Trip (Ex) data: cheetah claw or bite (MM p.271), wolf bite (MM p.283) kept by Clone and the summon alias, werewolf bite (MM p.174)");
+
+        var tripper = CreateBiteClawsCreature("TripTriggerRiders", 4, false);
+        var target = CreateHasteTarget("TripTriggerRidersTarget");
+        try
+        {
+            tripper.Stats.HasTripAttack = true;
+            Assert(DND35.AI.NaturalAttackChoice.CountRidersThatMatter(tripper, target, tripper.Stats.GetNaturalAttackAtSequenceIndex(0)) == 1
+                && DND35.AI.NaturalAttackChoice.CountRidersThatMatter(tripper, target, tripper.Stats.GetNaturalAttackAtSequenceIndex(1)) == 0,
+                "AI riders: Trip (Ex) counts on the bite only, not on the claws (CMB-125)");
+        }
+        finally
+        {
+            Cleanup(tripper, target);
+        }
+    }
+
+    /// <summary>
+    /// CMB-125 through the one shared free-trip path (GameManager.TryResolveFreeTripOnHit, used by the PC buttons, the NPC
+    /// executor and charges): with the trip checks forced to land, a bite hit trips, a claw or weapon hit does not.
+    /// </summary>
+    private static void TestFreeTripOnlyAfterTriggerAttack()
+    {
+        GameManager gm = GameManager.Instance;
+        MethodInfo freeTrip = typeof(GameManager).GetMethod("TryResolveFreeTripOnHit", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (gm == null || freeTrip == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance or TryResolveFreeTripOnHit is missing; the free-trip trigger check needs Play mode");
+            return;
+        }
+
+        CharacterController wolf = null, clawTarget = null, weaponTarget = null, biteTarget = null;
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        try
+        {
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Trip Strength check" ? 20 : ctx == "Trip defense check" ? 1 : natural;
+            wolf = CreateBiteClawsCreature("FreeTripTrigger", 4, false);
+            wolf.Stats.HasTripAttack = true;
+            clawTarget = CreateWeakDefender("FreeTripTriggerClaw");
+            weaponTarget = CreateWeakDefender("FreeTripTriggerWeapon");
+            biteTarget = CreateWeakDefender("FreeTripTriggerBite");
+
+            freeTrip.Invoke(gm, new object[] { wolf, clawTarget, new CombatResult { WeaponName = "Claw", Hit = true, BreakdownBAB = 4 }, null });
+            freeTrip.Invoke(gm, new object[] { wolf, weaponTarget, new CombatResult { WeaponName = "Longsword", Hit = true, BreakdownBAB = 4 }, null });
+            freeTrip.Invoke(gm, new object[] { wolf, biteTarget, new CombatResult { WeaponName = "Bite", Hit = true, BreakdownBAB = 4 }, null });
+            Assert(!clawTarget.HasCondition(CombatConditionType.Prone) && !weaponTarget.HasCondition(CombatConditionType.Prone)
+                && biteTarget.HasCondition(CombatConditionType.Prone),
+                "Free trip: a bite hit trips; a claw or a longsword hit of the same creature does not (MM p.283, CMB-125)");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Free-trip trigger check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(wolf, clawTarget, weaponTarget, biteTarget);
+        }
+    }
+
+    /// <summary>
+    /// A summon's Smite is an ordinary melee attack with its bite (a fiendish wolf, Summon Monster II), so a smite hit
+    /// starts the Trip (Ex) free trip through the shared path (GameManager.TryExecuteSummonSmiteAttack, MM p.283, CMB-125).
+    /// Attack d20s forced to 19 (a hit, no natural-weapon threat), the trip check forced to land.
+    /// </summary>
+    private static void TestSummonSmiteBiteStartsFreeTrip()
+    {
+        GameManager gm = GameManager.Instance;
+        MethodInfo smite = typeof(GameManager).GetMethod("TryExecuteSummonSmiteAttack", BindingFlags.Instance | BindingFlags.NonPublic);
+        System.Type summonType = typeof(GameManager).GetNestedType("ActiveSummonInstance", BindingFlags.NonPublic);
+        if (gm == null || gm.CombatUI == null || smite == null || summonType == null)
+        {
+            Debug.Log("  [SKIP] GameManager, CombatUI, TryExecuteSummonSmiteAttack or ActiveSummonInstance is missing; the smite free-trip check needs Play mode");
+            return;
+        }
+
+        CharacterController wolf = null, target = null;
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        try
+        {
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Trip Strength check" ? 20 : ctx == "Trip defense check" ? 1 : sides == 20 ? 19 : natural;
+            wolf = CreateBiteClawsCreature("SmiteTripWolf", 4, false);
+            wolf.Stats.HasTripAttack = true;
+            wolf.Stats.TripTriggerAttackName = "Bite";
+            wolf.Stats.HasTemplateSmiteGood = true;
+            target = CreateWeakDefender("SmiteTripTarget");
+            wolf.GridPosition = new Vector2Int(0, 0);
+            target.GridPosition = new Vector2Int(1, 0); // adjacent: in the bite's reach
+            target.Stats.CharacterAlignment = Alignment.LawfulGood;
+            target.Stats.AdjustMaxHP(200);
+            target.Stats.CurrentHP += 200;
+
+            object summonData = System.Activator.CreateInstance(summonType, true);
+            bool used = (bool)smite.Invoke(gm, new object[] { wolf, target, summonData });
+            Assert(used && target.HasCondition(CombatConditionType.Prone),
+                $"Summon smite: the fiendish wolf's Smite Good bite hit trips (MM p.283, CMB-125) (used {used}, prone {target.HasCondition(CombatConditionType.Prone)})");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Summon smite free-trip check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(wolf, target);
+        }
     }
 
     private static void TestTripAttemptRollsTouchAttack()

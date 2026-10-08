@@ -9,7 +9,8 @@ namespace DND35.AI
     /// attack carries a rider that matters against this target (Improved Grab, trip, poison, disease,
     /// paralysis, petrification, energy or ability drain), or does clearly more damage at the same bonus.
     /// <see cref="AIProfile.ChooseHasteNaturalAttackIndex"/> and <see cref="AIProfile.ScoreHasteNaturalAttack"/>
-    /// call this and are the override points for profiles.
+    /// call this and are the override points for profiles. The same scoring picks the one natural attack each
+    /// grapple attack action makes (PHB p.156, CMB-127; <see cref="ChooseGrappleAttackOption"/>).
     /// </summary>
     public static class NaturalAttackChoice
     {
@@ -45,6 +46,35 @@ namespace DND35.AI
         /// </summary>
         public static int ChooseHasteExtraAttackIndex(CharacterController self, CharacterController target)
             => ChooseBest(self, index => Score(self, target, index));
+
+        /// <summary>
+        /// The option a grapple attack action uses (PHB p.156: one natural weapon per attack while grappling; MM p.314;
+        /// CMB-127): the best of <paramref name="options"/> by <paramref name="score"/> (default <see cref="Score"/>: the
+        /// highest attack bonus unless another natural attack has a rider that matters against the target). Ties go to
+        /// the first option, so an unused natural attack comes before the Haste attack with the same weapon. Returns an
+        /// index into <paramref name="options"/>, or -1 when it is empty.
+        /// </summary>
+        public static int ChooseGrappleAttackOption(CharacterController self, CharacterController target,
+            System.Collections.Generic.IList<CharacterController.GrappleNaturalAttackOption> options, System.Func<int, float> score = null)
+        {
+            if (self == null || options == null || options.Count == 0)
+                return -1;
+
+            System.Func<int, float> scorer = score ?? (index => Score(self, target, index));
+            int best = -1;
+            float bestScore = float.MinValue;
+            for (int i = 0; i < options.Count; i++)
+            {
+                float s = scorer(options[i].NaturalAttackIndex);
+                if (best < 0 || s > bestScore)
+                {
+                    best = i;
+                    bestScore = s;
+                }
+            }
+
+            return best;
+        }
 
         /// <summary>The index with the highest score from <paramref name="score"/> (ties: the first).</summary>
         public static int ChooseBest(CharacterController self, System.Func<int, float> score)
@@ -85,14 +115,16 @@ namespace DND35.AI
             int riders = 0;
 
             // Improved Grab: only the trigger attack starts the free grapple (same name match as
-            // GameManager.IsImprovedGrabTriggerAttack); useless while either side is already grappling.
+            // GameManager.IsImprovedGrabTriggerAttack); useless while either side is already grappling, or
+            // against a target too large to grab (MM p.310, CMB-126: the shared size test of every grab path).
             if (self.Stats.HasImprovedGrab && IsImprovedGrabTrigger(self.Stats, natural)
-                && !self.IsGrappling() && (target == null || !target.IsGrappling()))
+                && !self.IsGrappling() && (target == null || !target.IsGrappling())
+                && (target == null || self.CanImprovedGrabTargetBySize(target, out _)))
                 riders++;
 
-            // Trip (Ex): the code follows any natural melee hit with the free trip
-            // (GameManager.TryResolveFreeTripOnHit), so it adds the same value to every natural attack.
-            if (self.Stats.HasTripAttack && (target == null || !target.HasCondition(CombatConditionType.Prone)))
+            // Trip (Ex): only the trigger attack (the bite; the cheetah's claw or bite) is followed by the free trip
+            // (CharacterStats.IsTripTriggerAttack, the test GameManager.TryResolveFreeTripOnHit uses; CMB-125).
+            if (self.Stats.IsTripTriggerAttack(natural.Name) && (target == null || !target.HasCondition(CombatConditionType.Prone)))
                 riders++;
 
             if (!string.IsNullOrWhiteSpace(natural.PoisonOnHitId) && (targetStats == null || !targetStats.IsImmuneToPoison()))
