@@ -306,6 +306,13 @@ public class CharacterController : MonoBehaviour
         _controllableExplicitlySet = true;
     }
 
+    /// <summary>
+    /// True for a controller of the encounter enemy pool (<c>GameManager.CreateNPCPoolSlot</c>: the slots SceneBootstrap
+    /// builds and those SetupEnemyEncounter adds for a larger encounter, ENC-001); false for party slots, summons and
+    /// other controllers added to <c>GameManager.NPCs</c>. Set once at creation; a slot reset (CRE-046) keeps it.
+    /// </summary>
+    public bool IsEncounterPoolSlot { get; internal set; }
+
     [Header("AI Configuration")]
     [Tooltip("Optional AI profile used by AIService for NPC decision making")]
     public AIProfile aiProfile;

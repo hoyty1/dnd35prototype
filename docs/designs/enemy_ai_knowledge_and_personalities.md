@@ -66,7 +66,7 @@ What does exist is 19 profile classes:
 
 ### 2.2 Profile machinery we build on
 
-- **One profile per NPC.** It lives in `CharacterController.aiProfile` (`Character/Controller/CharacterController.cs:310`). `GameManager.BuildRuntimeAIProfile` (`_Core/GameManager.NPCSetup.cs:864-922`) builds it from one `NPCDefinition.AIProfileArchetype` (`Character/Creatures/NPCDatabase.cs:627`) and assigns it at `NPCSetup.cs:854`.
+- **One profile per NPC.** It lives in `CharacterController.aiProfile` (`Character/Controller/CharacterController.cs:310`). `GameManager.BuildRuntimeAIProfile` (`_Core/GameManager.NPCSetup.cs:991-1049`) builds it from one `NPCDefinition.AIProfileArchetype` (`Character/Creatures/NPCDatabase.cs:627`) and assigns it at `NPCSetup.cs:981`.
   - `Brute` and `Caster` fall through to `null` (AI-004).
 - **Virtual hooks.** `AIProfile` (`AI/AIProfile.cs`) exposes these, called from about 20 sites in `Services/AIService.cs` and `_Core/GameManager.NPCTurns.cs`:
   - `ScoreTarget`
@@ -146,7 +146,7 @@ public readonly struct KnownFact { FactKey Key; int SubjectId; FactValue Value;
 | Side store (`SideKnowledgeStore`, one per team) | Inferred, Recalled and Confirmed facts in this encounter, plus last-seen snapshots of Apparent facts (`Stale = true`) | Keyed by `(EncounterEntityId, FactKey)` |
 | Lore (`LoreBook`) | Species facts ("orc: humanoid (orc), light sensitivity") | Party Bestiary for the session; enemy faction books later |
 
-**Keys.** The 15 NPC slot GameObjects are reused, and the hub's Back button re-spawns into the same slots. So facts are keyed by a new `CharacterController.EncounterEntityId`, assigned in `InitializeNPCFromDefinition` (`NPCSetup.cs:554`). Species facts are keyed by `LoreKey`, which is `SourceNpcDefinitionId` (`NPCSetup.cs:612`) with the `spawn_` prefix stripped. The side store is reset in `SetupEnemyEncounter` and `ResetCombatStateForNextEncounter`, **not** in `OnCombatEnded`, because an ordinary victory never reaches it (CORE-002).
+**Keys.** The enemy pool's slot GameObjects (15 at start, more added for a larger encounter, ENC-001) are reused, and the hub's Back button re-spawns into the same slots. So facts are keyed by a new `CharacterController.EncounterEntityId`, assigned in `InitializeNPCFromDefinition` (`NPCSetup.cs:681`). Species facts are keyed by `LoreKey`, which is `SourceNpcDefinitionId` (`NPCSetup.cs:739`) with the `spawn_` prefix stripped. The side store is reset in `SetupEnemyEncounter` and `ResetCombatStateForNextEncounter`, **not** in `OnCombatEnded`, because an ordinary victory never reaches it (CORE-002).
 
 **Sharing.** A creature with Int 3 or more that can speak and is not silenced shares its learned facts with its side at the end of its turn (talking is a free action). Animals share positions only, and mindless creatures share nothing. PCs always share. The rule is the same for both teams.
 
@@ -386,7 +386,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | Where | Change |
 |---|---|
 | `NPCDefinition` (`NPCDatabase.cs`, near 627) | Add `public string AIPersonality;` (validated against `TraitDatabase` at load) and `public string AIWardName;`. Phase 4 adds `List<SkillRank> Skills` and `List<LoreEntry> Lore`. Keep `AIProfileArchetype` and `AIBehavior`. |
-| `GameManager.InitializeNPCFromDefinition` (`NPCSetup.cs:554`, 748) | Resolve the Role (archetype, else the implied role from the spec), then `npc.aiProfile = BuildRuntimeAIProfile(...)` and `npc.Personality = PersonalityFactory.Build(def, npc.aiProfile, npc.Stats)`. Assign `EncounterEntityId`. Call `Tags.ClearAllTags()` and reset the trackers on the reused slot. |
+| `GameManager.InitializeNPCFromDefinition` (`NPCSetup.cs:681`, 748) | Resolve the Role (archetype, else the implied role from the spec), then `npc.aiProfile = BuildRuntimeAIProfile(...)` and `npc.Personality = PersonalityFactory.Build(def, npc.aiProfile, npc.Stats)`. Assign `EncounterEntityId`. Call `Tags.ClearAllTags()` and reset the trackers on the reused slot. |
 | `BuildRuntimeAIProfile` (864-922) | Add a Brute case (Berserk or Humanoid) and a Caster case (Spellcaster) for AI-004. (`ResetCharacterSlotForSpawn` already destroys the slot's previous profile instance, CRE-046.) |
 | `CharacterController` | Add `PersonalityProfile Personality` and `int EncounterEntityId`. Later, `NPCAIBehavior AIBehavior` moves here from the parallel list (AI-015). |
 | Target scoring: `AIService.SelectBestTargetFromProfile` (~1790), `SelectAdaptiveFullAttackTarget` (3074), `NPCTurns.cs:733` | `profile.ScoreTarget(t, self)` becomes `AIDecisions.ScoreTarget(self, t)`, which returns the legacy value unchanged when `Personality == null`. |

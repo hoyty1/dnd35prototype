@@ -27,7 +27,7 @@ namespace Tests.Scenarios
             {
                 var o = new JsonObj();
                 o.Set("id", d.Id).Set("title", d.Title).Set("tags", d.Tags).Set("covers", d.Covers).Set("maxRounds", d.MaxRounds)
-                 .Set("actors", d.Actors.Select(a => a.Key + ":" + a.Source + "@" + a.Pos.x + "," + a.Pos.y + "/" + a.Control.ToString().ToLowerInvariant()).ToList())
+                 .Set("actors", d.Actors.Select(a => a.Key + ":" + a.Source + "@" + (a.GamePlaced ? "game" : a.Pos.x + "," + a.Pos.y) + "/" + a.Control.ToString().ToLowerInvariant()).ToList())
                  .Set("expectations", d.Expectations.Count);
                 list.Add(o);
             }

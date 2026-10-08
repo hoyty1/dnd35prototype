@@ -42,7 +42,7 @@ Play -> SceneBootstrap.Awake builds everything
 | Scene load | Unity loads `Assets/Scenes/MainScene.unity`. `SceneBootstrap.Awake` builds the camera, grid, characters, UI and `GameManager`. | `_Core/SceneBootstrap.cs:24` |
 | Start | `GameManager.Start` generates the grid and hooks the creation callbacks, because `CharacterCreationUI` is always present. The `else` branch (`SetupCharacters` + `PromptEncounterSelection`) is unreachable in this scene. | `_Core/GameManager.cs:610` |
 | Character creation | Step-by-step creation, Quick Start (premade selection or party builder), or "Play Now!" (Fighter/Rogue/Cleric/Wizard). All paths (four call sites, flow sources `StandardFlow`, `PremadeSelection`, `VeryQuickStart`, `QuickStartPartyBuilder`) end in `CharacterCreationUI.NotifyCreationComplete`, which calls `OnCreationComplete4`. That runs `GameManager.OnCharacterCreationComplete4` -> `SetupCreatedCharacters` -> `ProcessCreationLevelUpsThenPromptEncounterSelection`. New characters default to `TargetLevel = 3`, so the level-up UI runs before the first fight. | `UI/CharacterCreation/CharacterCreationUI.cs:3364`; `GameManager.cs:735, 753, 1863` |
-| Encounter selection | `PromptEncounterSelection` opens `EncounterSelectionUI`, which offers presets, a random generator, DMG tables and a custom builder. A preset leads to `ApplyEncounterPreset`; a generated or custom encounter leads to `ApplyRandomEncounter`; Cancel falls back to `goblin_raiders`. All of them then call `SetupEnemyEncounter` and `OpenPreCombatHubPhase`. | `GameManager.cs:785, 1690, 1769`; `_Core/GameManager.NPCSetup.cs:29` |
+| Encounter selection | `PromptEncounterSelection` opens `EncounterSelectionUI`, which offers presets, a random generator, DMG tables and a custom builder. A preset leads to `ApplyEncounterPreset`; a generated or custom encounter leads to `ApplyRandomEncounter`; Cancel falls back to `goblin_raiders`. All of them then call `SetupEnemyEncounter` and `OpenPreCombatHubPhase`. | `GameManager.cs:785, 1690, 1769`; `_Core/GameManager.NPCSetup.cs:128` |
 | Pre-combat hub | `PreCombatHubUI` offers Store, Inventory/Stash, Spell Prep, Crafting, Start Encounter and Back. `StartEncounterFromPreCombat` warns if a prepared caster has not prepared spells, then `ForceStartEncounterFromPreCombat` locks the stash and calls `StartCombat`. | `GameManager.cs:1403-1647` |
 | Combat | `StartCombat` calls `TurnService.StartCombat` (`GameManager.cs:3728`), which rolls initiative and raises `OnNewRound(1)` and `OnTurnStarted`. `GameManager.OnTurnStarted` routes a controllable character to `StartPCTurn` and anything else to the coroutine `SingleNPCTurnFromInitiative` (AI). `NextInitiativeTurn` advances. | `GameManager.cs:3634, 3766, 3806, 3950, 3976`; `_Core/GameManager.NPCTurns.cs:35` |
 | Combat end | One check for both sides, `GameManager.EvaluateCombatEnd` (`_Core/GameManager.CombatEnd.cs`), with the predicate `CombatEndRules.IsOutOfFight` (`Combat/Core/CombatEndRules.cs`): dead, dying or unconscious is out (unconscious includes stable, nonlethal knockout, asleep and petrified), a disabled creature is in, regeneration makes no exception; a side (team) is out when every active member is out and it has or had a member in this combat (owner definition 2026-10-07; a tie is a defeat and control does not change side, both pending the owner, CORE-038). It runs after each attack, spell, maneuver and AoO resolution that checked before (PC and NPC attack sites whenever the target is out, of either team), after every NPC cast (`TryNPCPerformSpellCastForAI`) (`CheckCombatVictory` wraps it with the XP registration), in the PC menu after every PC action (`ShowActionChoices`), at turn start after the turn-start effects, after every NPC turn and at every turn boundary (`NextInitiativeTurn`, which then starts no further turn). Victory calls `HandleCombatVictoryDetected` -> `BeginPostCombatLootCollection`. | `_Core/GameManager.CombatEnd.cs`; `_Core/GameManager.LootCollection.cs:25` |
@@ -74,7 +74,7 @@ The scene references `SceneBootstrap` by the GUID in `Assets/Scripts/_Core/Scene
 
 1. `SetupCamera`: reuses `Camera.main` and adds `CameraController` with zoom 0.5-2.0.
 2. `CreateSquareGrid`: a `SquareGrid` GameObject with a procedurally drawn cell sprite.
-3. `CreateCharacters`: `PC_Hero1..4` (Player team, controllable) and `NPC_Enemy_0..14` (Enemy team, not controllable). Each is a `SpriteRenderer` plus a `CharacterController` with no stats yet. `totalEnemySlots = 15` at :119.
+3. `CreateCharacters`: `PC_Hero1..4` (Player team, controllable) and `NPC_Enemy_0..14` (Enemy team, not controllable). Each is a `SpriteRenderer` plus a `CharacterController` with no stats yet; the enemy slots come from `GameManager.CreateNPCPoolSlot` (`initialEnemySlots = 15`), and `SetupEnemyEncounter` adds more for a larger encounter (ENC-001).
 4. `CreateUI`: Canvas (ScreenSpaceOverlay, `CanvasScaler` 1920x1080), an `EventSystem` if missing, `CombatUI` and its panels (initiative, party, 3 NPC panels, combat log, action buttons, feat toggles) and `SpellTestingPanel`.
 5. `SetupGameManager` (:997):
    - `gameObject.AddComponent<GameManager>()` (:1001).
@@ -145,12 +145,12 @@ There are 54 files, found with `grep -rlE '^\s*public partial class GameManager\
 | Folder / file | Lines | Responsibility |
 |---|---|---|
 | **_Core/** (11) | | |
-| GameManager.cs | 11,516 | Main partial: singleton, state and enums, Awake/Start wiring, creation callbacks, encounter selection, hub, preset/random setup, rest and reset, `Update`/input routing, `StartCombat`, turn callbacks, `StartPCTurn`/`ShowActionChoices`, item/scroll/wand/staff use, 31 of the 51 GameManager `On*ButtonPressed` handlers, `*ForAI` wrappers (~10879-11026), path and hover previews. |
+| GameManager.cs | 11,467 | Main partial: singleton, state and enums, Awake/Start wiring, creation callbacks, encounter selection, hub, preset/random setup, rest and reset, `Update`/input routing, `StartCombat`, turn callbacks, `StartPCTurn`/`ShowActionChoices`, item/scroll/wand/staff use, 31 of the 51 GameManager `On*ButtonPressed` handlers, `*ForAI` wrappers (~10879-11026), path and hover previews. |
 | GameManager.CombatActions.cs | 2,697 | `OnCellClicked` routing by sub-phase; movement with AoO; attack target clicks; off-hand, full attack and special-attack execution; hand-off to `CombatFlowService`; `EndActivePCTurn`. |
 | GameManager.CombatEnd.cs | 268 | The shared combat-end check `EvaluateCombatEnd` (both sides, by team, through `CombatEndRules`; `GetCombatEndSides` remembers which sides had members this combat), `CheckCombatVictory`, XP registration of defeated enemies, victory and defeat handling, the defeat screen and `StartNewPartyAfterDefeat` (CORE-011, CORE-037, CORE-034, CORE-001). |
 | GameManager.CombatFlowAccessors.cs | 130 | `Combat_*` getters, setters and forwarders over private state. |
 | GameManager.LootCollection.cs | 800 | Post-combat loot, XP flow, level-up sequence, `ContinueToRestAndNextCombat`. |
-| GameManager.NPCSetup.cs | 924 | `SetupEnemyEncounter`, `ResetCharacterSlotForSpawn` and `ResetPCSlotForNewCharacter` (CRE-046), `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile`, spawn overrides. |
+| GameManager.NPCSetup.cs | 1,027 | `SetupEnemyEncounter` (pool growth `EnsureNPCPoolSize` and `CreateNPCPoolSlot`, spawn squares through `EncounterSpawnPlacement`, ENC-001), `ResetCharacterSlotForSpawn` and `ResetPCSlotForNewCharacter` (CRE-046), `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile`, spawn overrides. |
 | GameManager.NPCTurns.cs | 1,853 | `SingleNPCTurnFromInitiative`; summon AI; NPC attacks, full attacks and spellcasting (`TryNPCPerformSpellCast`); breath weapon; grab/trip helpers. |
 | GameManager.TestConfigs.cs | 1,875 | 22 `Configure*TestParty` methods, `RestoreStandardPartyLayout`. |
 | GameManager.TestPanel.cs | 110 | F12 panel bridge: `TestCastSpellFromPanel`, `CleanupTestPanelCast`. |
@@ -279,8 +279,8 @@ Assets/Scripts/
   UI/                    Common/ (8), Combat/ (12), CharacterCreation/ (6), CharacterSheet/ (5),
                          Inventory/ (3), Spells/ (6), Encounter/ (6), Crafting/ (1), Wish/ (1)
   Services/ (16)         see Service layer
-  Encounters/ (13)       DMG dungeon tables, CSV parser, spawner, random encounter system,
-                         GameManager.DungeonEncounters partial
+  Encounters/ (14)       DMG dungeon tables, CSV parser, spawner, random encounter system,
+                         EncounterSpawnPlacement (spawn squares, ENC-001), GameManager.DungeonEncounters partial
   Crafting/ (10)         item creation feats and workshop logic
   TreasureGenerator/ (7) DMG treasure (5 files in namespace DND35e.Treasure) + global TreasureItemConverter, TreasureUI
   Effects/ (5)           diseases and poisons (not spell effects)
@@ -288,7 +288,7 @@ Assets/Scripts/
   World/ (2)             PlanarTravelSystem, CreatureTrapSystem (mostly inert)
   Utilities/ (12)        DiceRoller, CameraController, DebugCommands, IdentifierExtensions, ...
   Identifiers/ (2)       two editor-only ContextMenu smoke tests (the real ID types live elsewhere)
-  Tests/ (122)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
+  Tests/ (123)           static RunAll() suites in 14 domain subfolders, plus Runner/ (StaticSuiteRunner)
                          and Scenarios/ (the editor-only scenario harness: model, runner, trace, checks, steps,
                          expectations, fast mode, session guard, fresh-session batch driver, soak statistics,
                          Catalog/ of smoke, rules and soak definitions); ScenarioHooks (in _Core/) is null in

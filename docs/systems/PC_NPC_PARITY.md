@@ -75,8 +75,8 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | CHR-072 (new) | Weapon/armor proficiency | NPC classes (Warrior and others) and creature types grant none: -4 plus armor ACP on attacks for about 250 Warrior-class monsters | PC | High | CharacterStats.cs:5269-5441; CharacterController.cs:5041-5042 |
 | SPL-054 | Spell handlers | NPC path runs 17 of 51 handlers (Ghoul Touch, Sound Burst, Searing Light, Prayer...) | depends | High | GameManager.SpellCasting.cs:2129-2346 vs NPCTurns.cs:938-1006 |
 | AI-001 | Area spells, metamagic | NPCs cannot cast any Area spell or apply metamagic | PC | High | NPCTurns.cs:820, 835, 911 |
-| CRE-004 | BAB, base saves | NPCs use creature-type progression over all HD | depends | High | NPCSetup.cs:562-598 |
-| CRE-002 | Alignment | NPCs spawn with no alignment | NPC | High | NPCSetup.cs:554-861 |
+| CRE-004 | BAB, base saves | NPCs use creature-type progression over all HD | depends | High | NPCSetup.cs:689-725 |
+| CRE-002 | Alignment | NPCs spawn with no alignment | NPC | High | NPCSetup.cs:681-988 |
 | ITM-004 | NPC equipment | MainHand/OffHand/Ranged entries are silently dropped (58 hits) | PC | High | Inventory.cs:295-306 |
 | CHR-067 | Skills | NPC skill totals are 0 (not the ability modifier); `RollSkillCheck` returns an automatic fail | PC | High | CharacterStats.cs:5970-6029 |
 | SPL-004 | Damage mitigation | PC area spells and NPC breath/specials bypass `ApplyIncomingDamage` by different routes | depends | High | GameManager_Spells_Shared.cs:263; NPCTurns.cs:1548-1584 |
@@ -94,8 +94,8 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | GRID-018 (new) | Grease movement | Entry save and extra cost only on PC voluntary moves | NPC | Med | CombatActions.cs:1019, 1058 |
 | SPL-112 (new) | Caster choices | NPC energy type forced to Fire, Fire Shield warm, Disguise Self own race, or a stale PC choice is inherited | PC | Med | GameManager.SpellCasting.cs:7008, 7061; Spells_F.cs:174 |
 | SPL-114 (new) | Components, concentration | NPC cast path skips pouch check, concentration tracking and casting-while-concentrating | NPC | Med | SpellCasting.cs:1691-1712, 1956, 2350-2356 |
-| CHR-070 (new) | Class choices | NPC clerics have no domains or spontaneous casting; NPC wizards cannot specialize or have familiars | PC | Med | NPCSetup.cs:554-861; SpellcastingComponent.cs:1048-1058 |
-| CRE-038 (new) | Racial traits | NPC members of PC races have no RaceData (sleep immunity, racial attack, familiarity; NPC dwarves get stability from `IsExceptionallyStable` since 2026-10-07) | PC | Med | NPCSetup.cs:573-588; SpellUtilities.cs:164 |
+| CHR-070 (new) | Class choices | NPC clerics have no domains or spontaneous casting; NPC wizards cannot specialize or have familiars | PC | Med | NPCSetup.cs:681-988; SpellcastingComponent.cs:1048-1058 |
+| CRE-038 (new) | Racial traits | NPC members of PC races have no RaceData (sleep immunity, racial attack, familiarity; NPC dwarves get stability from `IsExceptionallyStable` since 2026-10-07) | PC | Med | NPCSetup.cs:700-715; SpellUtilities.cs:164 |
 | CRE-039 (new) | Monster specials | Breath, auras, spittle, engulf, acid spray, frightful presence only on the AI turn | NPC | Med | AIService.cs:170-192, 735, 780 |
 | CRE-041 (new) | NPC max HP | CON (and Toughness) re-added to MM hp totals | NPC | Med | CharacterStats.cs:3444-3445, 2145 |
 | CRE-042 (new) | NPC monks | Fast movement double counted, unarmed strike as natural attacks, monk AC as natural armor | NPC | Med | NPCDatabase_M.cs:790-916 |

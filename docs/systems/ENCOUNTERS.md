@@ -19,7 +19,7 @@ GameManager.PromptEncounterSelection                       _Core/GameManager.cs:
                           -> DungeonEncounterSpawner.PrepareEncounter (spawn_* ids)
     "Custom Encounter" -> CustomEncounterBuilderUI
                        (the last three) -> onStartRandomEncounter(ids, generated) -> ApplyRandomEncounter   GameManager.cs:1690
-  SetupEnemyEncounter(ids)                                  _Core/GameManager.NPCSetup.cs:29
+  SetupEnemyEncounter(ids)                                  _Core/GameManager.NPCSetup.cs:128
   OpenPreCombatHubPhase (stash, store, spell prep, crafting, Start Encounter)   GameManager.cs:1403
   ... combat ...
   BeginPostCombatLootCollection                             _Core/GameManager.LootCollection.cs:25
@@ -64,7 +64,7 @@ All four end in a `List<string>` of NPC IDs handed to `GameManager.ApplyEncounte
 | Swarm | 5-8, max 15 | One NPC ID repeated n times, CR at most `max(0.5, targetEL - bonus + 0.5)` (fallback `max(1, targetEL - bonus + 1.5)`) |
 | MixedGroup | 3-7, max 12 | One leader with CR in [L - 2, L + 1], L = max(1, target EL - 1), then minions with CR at most leader CR - 2 (fallback - 1); minions are independent random picks, so IDs can repeat |
 
-The UI's Min/Max Creatures fields override the defaults within the caps (the minimum is still floored at 2, 5 and 3 respectively; SingleBoss is rejected when Min > 1). The generator ignores creature organization, environment data, alignment and treasure, so mixes are not ecologically plausible. Swarm and MixedGroup routinely exceed the 5 standard spawn positions (ENC-001).
+The UI's Min/Max Creatures fields override the defaults within the caps (the minimum is still floored at 2, 5 and 3 respectively; SingleBoss is rejected when Min > 1). The generator ignores creature organization, environment data, alignment and treasure, so mixes are not ecologically plausible. Swarm and MixedGroup routinely have more than 5 creatures; since ENC-001 was fixed (2026-10-08) every one spawns on the grid (section 5).
 
 ### 2.3 DMG dungeon tables
 
@@ -208,13 +208,13 @@ APL: `ChallengeRatingUtils.CalculateAPL` rounds the average, subtracts 1 for few
 
 ## 5. Spawning
 
-`GameManager.SetupEnemyEncounter` (GameManager.NPCSetup.cs:29) handles every source:
+`GameManager.SetupEnemyEncounter` (GameManager.NPCSetup.cs:128) handles every source:
 
-- **15 NPC slots.** `SceneBootstrap.CreateCharacters` makes 15 enemy GameObjects once (`totalEnemySlots`, SceneBootstrap.cs:119). `spawnCount = min(ids.Count, NPCs.Count)`; extra IDs are dropped silently and unused slots are deactivated. Only 3 NPC stat panels exist (SceneBootstrap.cs:181). The slots are created as `CharacterTeam.Enemy`, so every spawned creature is hostile unless a test-scenario override (`ApplyScenarioSpawnOverrides`, e.g. the celestial/fiendish template tests) moves it to the player's team.
+- **Enemy pool.** `SceneBootstrap.CreateCharacters` makes 15 enemy controllers once through `GameManager.CreateNPCPoolSlot`; `SetupEnemyEncounter` first calls `EnsureNPCPoolSize`, which removes any entry that is not a pool slot (such as a leftover Lion's Shield lion, CRE-005) and adds slots until every ID has one, so no creature is dropped (ENC-001, fixed 2026-10-08). Unused slots are deactivated, and every slot's grid occupancy is cleared before placement. Only 3 NPC stat panels exist (SceneBootstrap.cs:174), so the 4th and later enemy shows only in the hover tooltip (ENC-023). The slots are created as `CharacterTeam.Enemy`, so every spawned creature is hostile unless a test-scenario override (`ApplyScenarioSpawnOverrides`, e.g. the celestial/fiendish template tests) moves it to the player's team.
 - **Definition.** `NPCDatabase.Get(id)` -> `BuildEncounterDefinitionForSpawn` (template application, CRE-001) -> `InitializeNPCFromDefinition` (no alignment, CRE-002; creature-type BAB and saves, CRE-004). An unknown ID deactivates the slot and skips the AI-behavior entry, which shifts `_npcAIBehaviors` against `NPCs` (AI-015).
-- **Position**, first match wins: a test-scenario rule or array; custom positions; `EncounterSpawnPositions[i]` (5 cells: (16,6), (14,10), (16,14), (13,8), (13,12); GameManager.cs:2864); otherwise `(15 + i, 10)`, which is off the 20x20 grid from the 6th enemy on (ENC-001). 16 of the 238 CSV encounter rows can roll more than 5 creatures (largest: 13, "1d3+1 ghasts (ghoul) and 2d4+1 ghouls"; static).
-- **Size.** A creature's footprint extends +x/+y from its base cell (`SquareGrid.GetOccupiedSquares`). Nothing checks bounds or overlap at spawn, so Huge and larger creatures in neighbouring default cells can overlap, and very large creatures near the right edge extend off the grid. `CustomEncounterBuilderUI.CalculateSpawnPositions` picks random cells with x 11-18 and y 2-18, at least 2 squares apart (relaxed if it runs out), and is also size-blind.
-- **Distance.** PCs start at (3,6), (3,9), (3,12), (3,15). Each default enemy cell is 10-13 squares (50-65 ft) from the nearest PC, so every encounter that uses the default cells starts at the same range. No encounter-distance roll and no surprise round (CMB-028); everyone is aware at the start.
+- **Position.** The preferred square, first match wins: a test-scenario rule or array; custom positions (a negative one means none, which the scenario harness uses for game-placed actors). Every path then goes through `GameManager.TryResolveSpawnSquare` and `EncounterSpawnPlacement` (Encounters/EncounterSpawnPlacement.cs, ENC-001): a preferred square is kept when the creature's whole footprint fits there on the grid on squares free by the grid's own rule (`SquareGrid.CanPlaceCreature`, as for movement and summons; dead creatures hold no square, and a hidden party slot holds none since `SetPCActiveState` clears it), otherwise the nearest square that fits is taken. Creatures without a preferred square take `EncounterSpawnPlacement.DefaultFormation` in order (the old five cells (16,6), (14,10), (16,14), (13,8), (13,12)), then spread out from (15,10) with one free square around each while there is room, then pack. Deterministic, no dice. A creature that fits nowhere is not spawned (logged as an error). 16 of the 238 CSV encounter rows can roll more than 5 creatures (largest: 13, "1d3+1 ghasts (ghoul) and 2d4+1 ghouls"; static); twenty goblins all land on the enemy half (x 11-19).
+- **Size.** A creature's footprint extends +x/+y from its base cell (`SquareGrid.GetOccupiedSquares`; `SizeCategory.GetSpaceWidthSquares`, PHB p.149 Table 8-4). The placement checks bounds and overlap for the whole footprint. `CustomEncounterBuilderUI.CalculateSpawnPositions` still picks random size-blind cells with x 11-18 and y 2-18, at least 2 squares apart (relaxed if it runs out); the placement moves any that do not fit.
+- **Distance.** PCs start at (3,6), (3,9), (3,12), (3,15). Each of the five default enemy cells is 10-13 squares (50-65 ft) from the nearest PC, and the spread-out cells for larger groups are 8-16 squares away, so every encounter starts at about the same range. No encounter-distance roll and no surprise round (CMB-028); everyone is aware at the start.
 - **AI.** Each NPC gets the `AIBehavior` and `AIProfileArchetype` from its definition (adjusted by `UpdateAIForClass` for DMG class-leveled spawns). There is no encounter-level AI: no group roles, leader/minion coordination, morale or retreat (AI-010), surrender or parley. How behaviours and archetypes become turn routines is in [AI.md](AI.md#6-profiles-and-archetypes); morale is in [AI.md](AI.md#89-morale-and-fleeing).
 - **Tokens.** `IconLoader.DetermineMonsterType(def.Name)` keyword match, otherwise a tinted generic sprite.
 
@@ -318,7 +318,7 @@ What a feature that interrupts a rest or a journey with an encounter would call 
 Things that are wrong for an interrupted rest and need changing, not just calling:
 
 - The rest itself is `RestorePartyAfterCombat` (GameManager.cs:868): an all-at-once full rest (CORE-015) that also moves the PCs back to the start squares (3,6), (3,9), (3,12), (3,15). It runs before the next encounter is chosen, so there is no partly rested state to interrupt. A wandering-monster check needs the rest split into time steps, with the check between steps and the PCs left where they are.
-- Enemies use the fixed `EncounterSpawnPositions` (section 5), so there is no encounter distance; there is no surprise round (CMB-028).
+- Enemies use the fixed default layout of `EncounterSpawnPlacement` (section 5), so there is no encounter distance; there is no surprise round (CMB-028).
 - `ApplyRandomEncounter` re-activates all four PCs, which overrides any party layout set before it.
 
 ## 9. Gaps and backlog toward DMG fidelity
@@ -326,7 +326,7 @@ Things that are wrong for an interrupted rest and need changing, not just callin
 Ordered by value for the "random DMG encounters" game mode. Each item names the code it touches.
 
 1. **Make every CSV row spawn.** In `DungeonEncounterTableData.ResolveCreatureName`, try singular candidates and keep the first that `NPCDatabase.Get` knows (section 7; not `Depluralize` as written); return null when nothing matches so the load log reports real failures (ENC-002, ENC-009). Fix the stand-in entries (ENC-003). Add a check (extend `DungeonEncounterTableManager.RunIntegrationTest`, ENC-011) that runs `PrepareEncounter` for every row and fails on any unresolved group.
-2. **Spawn any group size on the grid.** One size-aware, bounds-checked placement routine for all non-test encounters, used instead of `EncounterSpawnPositions` and the `(15 + i, 10)` fallback (ENC-001). Decide whether 15 slots is enough (the CSV peaks at 13; Swarm can ask for 15).
+2. **Encounter distance and stat panels.** Done 2026-10-08 (ENC-001): every spawn path places every creature, whatever its size, on free grid squares, and the enemy pool grows with the encounter. Left: a DMG encounter distance in place of the fixed layout (section 8), and enemy stat panels for more than three enemies (ENC-023).
 3. **One CR/EL/APL module.** Consolidate into `ChallengeRatingUtils` with the DMG doubling rule and a DMG mixed-group method, and use it for the generator, the custom builder, DMG table rows (replace `EstimateEL`) and treasure (ENC-013, ENC-006).
 4. **DMG XP.** Index awards by each character's level and CR (DMG ch.2), award XP for enemies defeated by any means (fled, surrendered, captured) once morale exists (CHR-004).
 5. **Treasure by the book.** Add a treasure rating to `NPCDefinition` (none / standard / double / triple), scale or skip Table 3-5 by it, pass the defeated NPCs' gear value as `monsterGearGP`, and turn generated items into real items (ITM-016).

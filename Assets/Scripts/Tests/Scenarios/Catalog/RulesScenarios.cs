@@ -102,7 +102,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 97;
+        public const int Count = 99;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -206,6 +206,8 @@ namespace Tests.Scenarios
             yield return S("combat-end-defeat-ally", CombatEndDefeatAlly);
             yield return S("combat-end-petrified-victory", () => CombatEndPetrified(false));
             yield return S("combat-end-petrified-defeat", () => CombatEndPetrified(true));
+            yield return S("large-encounter-goblins", LargeEncounterGoblins);
+            yield return S("large-encounter-sizes", LargeEncounterSizes);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -4153,6 +4155,172 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass("defeat line logged")
                         : ExpectResult.Fail("no defeat log line"));
             return b.Build();
+        }
+
+        // ── Encounter spawning (ENC-001) ────────────────────────────────
+
+        /// <summary>The five squares the default layout gives the first five creatures without a preset square.</summary>
+        private static readonly Vector2Int[] DefaultFormationSquares =
+        {
+            new Vector2Int(16, 6), new Vector2Int(14, 10), new Vector2Int(16, 14), new Vector2Int(13, 8), new Vector2Int(13, 12)
+        };
+
+        /// <summary>Four idle level-8 fighters on the left edge: they hold squares the spawn must avoid and outlast two rounds.</summary>
+        private static ScenarioBuilder IdleGuards(ScenarioBuilder b)
+            => b.Pc("guard1", ActorSource.Stats(() => Fighter("Guard A", 8)), 3, 7, Control.Idle)
+                .Pc("guard2", ActorSource.Stats(() => Fighter("Guard B", 8)), 3, 9, Control.Idle)
+                .Pc("guard3", ActorSource.Stats(() => Fighter("Guard C", 8)), 3, 11, Control.Idle)
+                .Pc("guard4", ActorSource.Stats(() => Fighter("Guard D", 8)), 3, 13, Control.Idle);
+
+        /// <summary>
+        /// Twenty goblins placed by the game's own layout (GameManager.SetupEnemyEncounter through
+        /// EncounterSpawnPlacement), as a random or DMG encounter spawns them. Before ENC-001 was fixed the sixth and later
+        /// goblins spawned at (15 + i, 10), off the 20x20 grid, and could not move, and the 16th to 20th were dropped
+        /// (15 pool slots). Now the pool grows to 20, the first five keep the old five squares, the rest spread out from
+        /// the enemy side's middle, and every goblin takes its turns.
+        /// </summary>
+        private static ScenarioDef LargeEncounterGoblins()
+        {
+            ScenarioBuilder b = IdleGuards(Rules("rules/large-encounter-goblins",
+                    "Twenty goblins all spawn on free squares of the grid and all act (ENC-001)")
+                .Covers("ENC-001", "PHB p.149")
+                .MaxRounds(2));
+            var keys = new List<string>();
+            for (int i = 1; i <= 20; i++)
+            {
+                string key = "g" + i;
+                keys.Add(key);
+                b.NpcPlacedByGame(key, "goblin");
+            }
+            AddSpawnExpectations(b, keys);
+            b.Expect("The first five goblins take the default layout's five squares", v =>
+                {
+                    for (int i = 0; i < DefaultFormationSquares.Length; i++)
+                    {
+                        Vector2Int? p = ActorPos(v, keys[i]);
+                        if (p != DefaultFormationSquares[i])
+                            return ExpectResult.Fail(keys[i] + " at " + p + ", expected " + DefaultFormationSquares[i]);
+                    }
+                    return ExpectResult.Pass("g1-g5 on the five default squares");
+                });
+            return b.Build();
+        }
+
+        /// <summary>
+        /// Seventeen creatures of three sizes placed by the game's layout: a goblin, a Huge giant constrictor snake (3x3,
+        /// PHB p.149 Table 8-4), three Large ogres (2x2), ten goblins, an ogre and a second snake. The snake takes the
+        /// second default square (14,10) and covers (14-16, 10-12), so the third ogre's default square (13,12), whose
+        /// 2x2 footprint would overlap it, gives way to the nearest square that fits. Every footprint must lie on the
+        /// grid on squares no other creature holds, and every creature must act.
+        /// </summary>
+        private static ScenarioDef LargeEncounterSizes()
+        {
+            ScenarioBuilder b = IdleGuards(Rules("rules/large-encounter-sizes",
+                    "Seventeen Medium, Large and Huge creatures spawn with whole footprints on free squares and all act (ENC-001)")
+                .Covers("ENC-001", "PHB p.149")
+                .MaxRounds(2));
+            var spawn = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("g1", "goblin"),
+                new KeyValuePair<string, string>("snake1", "giant_constrictor_snake"),
+                new KeyValuePair<string, string>("ogre1", "ogre"),
+                new KeyValuePair<string, string>("ogre2", "ogre"),
+                new KeyValuePair<string, string>("ogre3", "ogre"),
+            };
+            for (int i = 2; i <= 11; i++)
+                spawn.Add(new KeyValuePair<string, string>("g" + i, "goblin"));
+            spawn.Add(new KeyValuePair<string, string>("ogre4", "ogre"));
+            spawn.Add(new KeyValuePair<string, string>("snake2", "giant_constrictor_snake"));
+
+            var keys = new List<string>();
+            foreach (KeyValuePair<string, string> kv in spawn)
+            {
+                keys.Add(kv.Key);
+                b.NpcPlacedByGame(kv.Key, kv.Value);
+            }
+            AddSpawnExpectations(b, keys);
+            b.Expect("The snake keeps the default square (14,10); the third ogre gives way from (13,12), which its footprint would share with the snake", v =>
+                {
+                    Vector2Int? snake = ActorPos(v, "snake1");
+                    Vector2Int? ogre3 = ActorPos(v, "ogre3");
+                    if (snake != new Vector2Int(14, 10))
+                        return ExpectResult.Fail("snake1 at " + snake);
+                    return ogre3.HasValue && ogre3 != new Vector2Int(13, 12)
+                        ? ExpectResult.Pass("snake1 at (14,10), ogre3 at " + ogre3)
+                        : ExpectResult.Fail("ogre3 at " + ogre3);
+                });
+            return b.Build();
+        }
+
+        /// <summary>
+        /// The checks both large-encounter scenarios share: every creature spawned (its actor event exists), its whole
+        /// footprint is on the 20x20 grid, no two actors' footprints share a square, every creature takes an AI turn in
+        /// round 1, and every creature acts (moves, attacks, makes a maneuver or casts) within the two rounds.
+        /// </summary>
+        private static void AddSpawnExpectations(ScenarioBuilder b, List<string> keys)
+        {
+            b.Expect("All " + keys.Count + " creatures spawn (none dropped)", v =>
+                {
+                    List<string> missing = keys.Where(k => !v.Of("actor").Any(e => e.Str("key") == k)).ToList();
+                    return missing.Count == 0
+                        ? ExpectResult.Pass(keys.Count + " actor events")
+                        : ExpectResult.Fail("missing " + string.Join(",", missing));
+                })
+             .Expect("Every footprint lies on the grid, and no two actors share a square", v =>
+                {
+                    var owner = new Dictionary<Vector2Int, string>();
+                    foreach (TraceEvent a in v.Of("actor"))
+                    {
+                        string key = a.Str("key");
+                        if (!(a.Get("pos") is Vector2Int p))
+                            return ExpectResult.Fail(key + " has no position", a.Seq);
+                        int w = FootprintWidth(a.Get("size"));
+                        for (int dx = 0; dx < w; dx++)
+                        {
+                            for (int dy = 0; dy < w; dy++)
+                            {
+                                var sq = new Vector2Int(p.x + dx, p.y + dy);
+                                if (sq.x < 0 || sq.y < 0 || sq.x >= ScenarioLimits.GridWidth || sq.y >= ScenarioLimits.GridHeight)
+                                    return ExpectResult.Fail(key + " at " + p + " (" + w + "x" + w + ") leaves the grid at " + sq, a.Seq);
+                                if (owner.TryGetValue(sq, out string other))
+                                    return ExpectResult.Fail(key + " at " + p + " shares " + sq + " with " + other, a.Seq);
+                                owner[sq] = key;
+                            }
+                        }
+                    }
+                    return ExpectResult.Pass(owner.Count + " squares held, no overlap");
+                })
+             .Expect("Every creature takes an AI turn in round 1", v =>
+                {
+                    List<string> none = keys.Where(k => !v.Of("turn_start").Any(e => e.Round == 1 && e.Str("actor") == k && e.Str("controller") == "ai")).ToList();
+                    return none.Count == 0
+                        ? ExpectResult.Pass(keys.Count + " AI turns in round 1")
+                        : ExpectResult.Fail("no round-1 AI turn: " + string.Join(",", none));
+                })
+             .Expect("Every creature acts: it moves, attacks, makes a maneuver or casts within two rounds", v =>
+                {
+                    List<string> idle = keys.Where(k => !(v.Of("move").Any(e => e.Str("actor") == k)
+                            || v.Of("attack").Any(e => e.Str("attacker") == k)
+                            || v.Of("maneuver").Any(e => e.Str("by") == k)
+                            || v.Of("cast").Any(e => e.Str("by") == k))).ToList();
+                    return idle.Count == 0
+                        ? ExpectResult.Pass("all " + keys.Count + " acted")
+                        : ExpectResult.Fail("never acted: " + string.Join(",", idle));
+                });
+        }
+
+        private static Vector2Int? ActorPos(TraceView v, string key)
+        {
+            TraceEvent a = v.Of("actor").FirstOrDefault(e => e.Str("key") == key);
+            return a != null && a.Get("pos") is Vector2Int p ? p : (Vector2Int?)null;
+        }
+
+        /// <summary>The footprint width in squares of a traced size (PHB p.149 Table 8-4, SizeCategory.GetSpaceWidthSquares).</summary>
+        private static int FootprintWidth(object size)
+        {
+            if (size is SizeCategory sc)
+                return Mathf.Max(1, sc.GetSpaceWidthSquares());
+            return Enum.TryParse(Convert.ToString(size), out SizeCategory parsed) ? Mathf.Max(1, parsed.GetSpaceWidthSquares()) : 1;
         }
     }
 }

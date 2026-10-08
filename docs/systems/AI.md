@@ -132,7 +132,7 @@ Contents:
 
 Per-NPC AI state lives in three places:
 
-- `NPCDefinition` fields (above). `InitializeNPCFromDefinition` copies them: `npc.aiProfile = BuildRuntimeAIProfile(def)` (NPCSetup.cs:854), `EnemyUseCoupDeGraceOverride` (855), `PriorityTargetName` (856).
+- `NPCDefinition` fields (above). `InitializeNPCFromDefinition` copies them: `npc.aiProfile = BuildRuntimeAIProfile(def)` (NPCSetup.cs:981), `EnemyUseCoupDeGraceOverride` (855), `PriorityTargetName` (856).
 - `GameManager._npcAIBehaviors`, a list index-parallel to `NPCs` and read by `GetNPCBehaviorForAI` (AI-015, CRE-006).
 - One `AIProfile` instance per NPC from `ScriptableObject.CreateInstance`, with all tuning hard-set in `OnEnable`. There are no profile `.asset` files (AI-017).
 
@@ -146,7 +146,7 @@ Writers of the AI fields besides the database files:
 | Lycanthrope template | AggressiveMelee + Berserk; wererat Humanoid |
 | `DungeonEncounterSpawner.UpdateAIForClass` (Encounters/DungeonEncounterSpawner.cs:224) | class map for DMG spawns with class levels (table in 6.5) |
 | Summon Swarm / Summon Monster swarm options (Spell/Resolution/GameManager.SpellCasting.cs:641, 778) | `IndiscriminateSwarmAI` / `SwarmAI` |
-| Test overrides (NPCSetup.cs:184-197) | armor-targeting test: `RangedAIProfile` + tag; shield-bash test: `UndeadMindlessAIProfile` |
+| Test overrides (NPCSetup.cs:311-324) | armor-targeting test: `RangedAIProfile` + tag; shield-bash test: `UndeadMindlessAIProfile` |
 | `NPCTemplateAIConfigurator`, `QuickSpawnSystem.GetDefaultAI` | test-only paths with a different class map |
 
 The `SkeletonCreatureTemplate` and `ZombieCreatureTemplate` registry adapters do not copy AI fields, so a creature skeletonised through `CreatureTemplateRegistry.ApplyTemplatesClone` keeps its original archetype (a skeleton ogre stays Brute). Related: CRE-023.
@@ -380,7 +380,7 @@ Effective routine reached (389 registered IDs; behaviour and archetype counts co
 
 The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, but because `IsTargetInCurrentWeaponRange` uses its bow's maximum range it usually stands and shoots without AoO assessment, and charges when a legal charge exists.
 
-### 6.2 Archetype to profile (`GameManager.BuildRuntimeAIProfile`, NPCSetup.cs:864)
+### 6.2 Archetype to profile (`GameManager.BuildRuntimeAIProfile`, NPCSetup.cs:991)
 
 | Archetype | Class | CombatStyle | Effective | Representatives | Key behaviour |
 |---|---|---|---|---|---|
@@ -465,7 +465,7 @@ The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, b
 
 Casting is attempted only by the Healer branch (heal/buff), `ExecuteDragonTurn` (before breath), `ExecuteRangedKiterTurn` (twice per turn) and a charmed NPC healing its charmer (direct call, no strategist). AggressiveMelee, DefensiveMelee, Swarm and summons never cast (AI-002).
 
-An NPC gets a `SpellcastingComponent` only if `stats.IsSpellcaster` (a caster class) **and** its `KnownSpellIds` or `PreparedSpellSlotIds` is non-empty (NPCSetup.cs:821-823). Prepared IDs are assigned **by slot index** (`SpellcastingComponent.ApplyPreparedSpellSlotIds`), slots are ordered from cantrips up, mismatched levels are rejected, and wizard NPCs only get spell levels 0-2: 4/3/2 base slots from class level 4 up, plus one bonus 1st-level slot at Int modifier +1 and one bonus 2nd-level slot at +2 (`GetWizardSlotsForLevel`), so 4/4/3 for the lich and the Int 16+ test wizards. Result by static reading:
+An NPC gets a `SpellcastingComponent` only if `stats.IsSpellcaster` (a caster class) **and** its `KnownSpellIds` or `PreparedSpellSlotIds` is non-empty (NPCSetup.cs:948-950). Prepared IDs are assigned **by slot index** (`SpellcastingComponent.ApplyPreparedSpellSlotIds`), slots are ordered from cantrips up, mismatched levels are rejected, and wizard NPCs only get spell levels 0-2: 4/3/2 base slots from class level 4 up, plus one bonus 1st-level slot at Int modifier +1 and one bonus 2nd-level slot at +2 (`GetWizardSlotsForLevel`), so 4/4/3 for the lich and the Int 16+ test wizards. Result by static reading:
 
 | NPC | Expected castable |
 |---|---|
@@ -625,7 +625,7 @@ From [issues/AI.md](../issues/AI.md), AI-001 to AI-031 (AI-032 to AI-054 were fi
 - **Missing behaviour:** AI-009 (consumables), AI-010 (flee thresholds, lich aura), AI-012 (difficulty unused).
 - **Structure and performance:** AI-018 (`CombatUI` null derefs), AI-019 (A* per cell), AI-020 (3,504-line god class), AI-023 (hard-coded delays), AI-024 (two-way coupling via `*ForAI`), AI-025 (duplicate maneuver choosers), AI-026 (unread settings), AI-027 (`SelectBestAction` results other than `Charge` are ignored; if morale is built, wire in its `Retreat` result instead of reducing it to a charge test, 13.3), AI-029 (uncalled members), AI-030 (dead `ShouldNPCUseCharge`).
 
-From other files: CMB-003, CMB-004, CMB-006, CMB-008, CMB-015 to CMB-019, CMB-021 to CMB-029, CMB-031 to CMB-033, CMB-037, CMB-039, CMB-044, CMB-055 ([issues/CMB.md](../issues/CMB.md)); SPL-005, SPL-024, SPL-025, SPL-027, SPL-037, SPL-038, SPL-041, SPL-047, SPL-054, SPL-068 ([issues/SPL.md](../issues/SPL.md)); CRE-002, CRE-004, CRE-006, CRE-007, CRE-012 to CRE-018, CRE-020, CRE-022 to CRE-024 ([issues/CRE.md](../issues/CRE.md)); CORE-002, CORE-004, CORE-012 to CORE-015, CORE-017, CORE-022, CORE-030 ([issues/CORE.md](../issues/CORE.md)); GRID-005, GRID-007, GRID-009 to GRID-011 ([issues/GRID.md](../issues/GRID.md)); ITM-004, ITM-005, ITM-018, ITM-019, ITM-024 ([issues/ITM.md](../issues/ITM.md)); CHR-003 to CHR-005, CHR-008, CHR-020, CHR-021, CHR-023, CHR-024, CHR-026, CHR-053, CHR-062 ([issues/CHR.md](../issues/CHR.md)); ENC-001, ENC-005, ENC-012 ([issues/ENC.md](../issues/ENC.md)); TST-001 to TST-003, TST-008 ([issues/TST.md](../issues/TST.md)).
+From other files: CMB-003, CMB-004, CMB-006, CMB-008, CMB-015 to CMB-019, CMB-021 to CMB-029, CMB-031 to CMB-033, CMB-037, CMB-039, CMB-044, CMB-055 ([issues/CMB.md](../issues/CMB.md)); SPL-005, SPL-024, SPL-025, SPL-027, SPL-037, SPL-038, SPL-041, SPL-047, SPL-054, SPL-068 ([issues/SPL.md](../issues/SPL.md)); CRE-002, CRE-004, CRE-006, CRE-007, CRE-012 to CRE-018, CRE-020, CRE-022 to CRE-024 ([issues/CRE.md](../issues/CRE.md)); CORE-002, CORE-004, CORE-012 to CORE-015, CORE-017, CORE-022, CORE-030 ([issues/CORE.md](../issues/CORE.md)); GRID-005, GRID-007, GRID-009 to GRID-011 ([issues/GRID.md](../issues/GRID.md)); ITM-004, ITM-005, ITM-018, ITM-019, ITM-024 ([issues/ITM.md](../issues/ITM.md)); CHR-003 to CHR-005, CHR-008, CHR-020, CHR-021, CHR-023, CHR-024, CHR-026, CHR-053, CHR-062 ([issues/CHR.md](../issues/CHR.md)); ENC-005, ENC-012 ([issues/ENC.md](../issues/ENC.md)); TST-001 to TST-003, TST-008 ([issues/TST.md](../issues/TST.md)).
 
 ### 10.2 Issues found while writing this doc
 
@@ -764,7 +764,7 @@ Run them with the committed runner in [TESTING.md section 3](../TESTING.md#3-run
 | `undead_showcase`, `tier5_lich_sanctum`, `tier4_vampire_hunt` | undead profiles, lich, vampire |
 | `wolf_pack`, `beast_arena` | animal specialties |
 
-No preset contains a Brute or Caster NPC, a swarm, the gibbering mouther, a Spellcaster-archetype monster, a non-dragon breather, or a Healer, Abjurer or Necromancer profile. Use the Custom Encounter Builder (UI/Encounter/CustomEncounterBuilderUI.cs; at most 8 creatures; hides `_test`/`_drill` IDs) or DMG spawns (Cleric levels give the Healer profile). Preset caveats: TESTING.md 4.2, ENC-001, ENC-012, CORE-004.
+No preset contains a Brute or Caster NPC, a swarm, the gibbering mouther, a Spellcaster-archetype monster, a non-dragon breather, or a Healer, Abjurer or Necromancer profile. Use the Custom Encounter Builder (UI/Encounter/CustomEncounterBuilderUI.cs; at most 8 creatures; hides `_test`/`_drill` IDs) or DMG spawns (Cleric levels give the Healer profile). Preset caveats: TESTING.md 4.2, ENC-012, CORE-004.
 
 ### 12.3 Observing decisions
 

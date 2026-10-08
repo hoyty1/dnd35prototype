@@ -122,6 +122,11 @@ namespace Tests.Scenarios
         public CharacterTeam Team = CharacterTeam.Player;
         public ActorSource Source;
         public Vector2Int Pos;
+        /// <summary>
+        /// Npc actors only: the game picks the square (GameManager.SetupEnemyEncounter's default layout through
+        /// EncounterSpawnPlacement, ENC-001) and the runner leaves the actor there; <see cref="Pos"/> is ignored.
+        /// </summary>
+        public bool GamePlaced;
         public Control Control = Control.Ai;
         /// <summary>
         /// Optional AI profile override for an AI-run PC-slot actor (default: AiProfileForClass). Return a fresh
@@ -330,9 +335,18 @@ namespace Tests.Scenarios
 
                 if (a.Source.IsPcSlot && a.Team != CharacterTeam.Player)
                     problems.Add(a.Key + ": PC-slot actors are on the Player team");
-                if (a.Pos.x < 0 || a.Pos.y < 0 || a.Pos.x >= ScenarioLimits.GridWidth || a.Pos.y >= ScenarioLimits.GridHeight)
+                if (a.GamePlaced)
+                {
+                    if (a.Source.IsPcSlot)
+                        problems.Add(a.Key + ": only Npc actors can be placed by the game");
+                }
+                else if (a.Pos.x < 0 || a.Pos.y < 0 || a.Pos.x >= ScenarioLimits.GridWidth || a.Pos.y >= ScenarioLimits.GridHeight)
                     problems.Add(a.Key + ": position " + a.Pos + " is off the " + ScenarioLimits.GridWidth + "x" + ScenarioLimits.GridHeight + " grid");
-                if (squares.TryGetValue(a.Pos, out string other))
+                if (a.GamePlaced)
+                {
+                    // the game picks the square
+                }
+                else if (squares.TryGetValue(a.Pos, out string other))
                     problems.Add(a.Key + ": position " + a.Pos + " is taken by " + other);
                 else
                     squares[a.Pos] = a.Key;
@@ -342,8 +356,8 @@ namespace Tests.Scenarios
 
             if (pcSlots > ScenarioLimits.PcSlots)
                 problems.Add("at most " + ScenarioLimits.PcSlots + " QuickStart or Stats actors (PC slots), got " + pcSlots);
-            if (pool > ScenarioLimits.PoolSlots)
-                problems.Add("at most " + ScenarioLimits.PoolSlots + " Npc actors (pool slots), got " + pool);
+            if (pool > ScenarioLimits.MaxNpcActors)
+                problems.Add("at most " + ScenarioLimits.MaxNpcActors + " Npc actors, got " + pool);
 
             if (InitiativeOrder != null)
             {
@@ -404,13 +418,17 @@ namespace Tests.Scenarios
         }
     }
 
-    /// <summary>Fixed sizes the scenario model validates against (the MainScene grid and party/pool sizes).</summary>
+    /// <summary>Fixed sizes the scenario model validates against (the MainScene grid and party size, and a cap on Npc actors).</summary>
     public static class ScenarioLimits
     {
         public const int GridWidth = 20;
         public const int GridHeight = 20;
         public const int PcSlots = 4;
-        public const int PoolSlots = 15;
+        /// <summary>
+        /// A sanity cap on Npc actors. The game's enemy pool starts at 15 slots and grows to the encounter's size
+        /// (GameManager.EnsureNPCPoolSize, ENC-001), so this is not a pool size.
+        /// </summary>
+        public const int MaxNpcActors = 40;
     }
 
     /// <summary>The live side of a job, passed to scripts and OnSetup.</summary>
@@ -465,6 +483,16 @@ namespace Tests.Scenarios
         public ScenarioBuilder Npc(string key, string npcId, int x, int y, Control control = Control.Ai, CharacterTeam team = CharacterTeam.Enemy)
         {
             _def.Actors.Add(new ActorSpec { Key = key, Team = team, Source = ActorSource.Npc(npcId), Pos = new Vector2Int(x, y), Control = control });
+            return this;
+        }
+
+        /// <summary>
+        /// A pool actor the game places itself (<see cref="ActorSpec.GamePlaced"/>): the encounter's default layout,
+        /// as a random or DMG encounter spawns (ENC-001). The actor event's <c>pos</c> records where it landed.
+        /// </summary>
+        public ScenarioBuilder NpcPlacedByGame(string key, string npcId, Control control = Control.Ai, CharacterTeam team = CharacterTeam.Enemy)
+        {
+            _def.Actors.Add(new ActorSpec { Key = key, Team = team, Source = ActorSource.Npc(npcId), GamePlaced = true, Control = control });
             return this;
         }
 

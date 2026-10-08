@@ -1894,10 +1894,23 @@ public partial class GameManager
         SetPCActiveState(PC4, true, CombatUI != null ? CombatUI.PC4Panel : null);
     }
 
-    private static void SetPCActiveState(CharacterController pc, bool active, GameObject panel)
+    /// <summary>
+    /// Shows or hides a party slot. A hidden party member holds no square of the grid, so encounter spawn placement,
+    /// movement and summon placement (all SquareGrid.CanPlaceCreature) treat its square alike (ENC-001); shown again,
+    /// it holds its own square, as the encounter-loop reset does for active PCs.
+    /// </summary>
+    private void SetPCActiveState(CharacterController pc, bool active, GameObject panel)
     {
         if (pc != null && pc.gameObject != null)
+        {
+            if (Grid != null)
+            {
+                Grid.ClearCreatureOccupancy(pc);
+                if (active && pc.Stats != null)
+                    Grid.SetCreatureOccupancy(pc, pc.GridPosition, pc.GetVisualSquaresOccupied());
+            }
             pc.gameObject.SetActive(active);
+        }
 
         if (panel != null)
             panel.SetActive(active);

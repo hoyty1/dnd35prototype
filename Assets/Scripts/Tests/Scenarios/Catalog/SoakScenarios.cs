@@ -111,7 +111,7 @@ namespace Tests.Scenarios
         private static GeneratedActors Place(GeneratedActors gen, EncounterDefinition encounter,
             DungeonEncounterSpawner.SpawnResult spawn, int level, List<string> rejected)
         {
-            int count = Math.Min(spawn.Count, ScenarioLimits.PoolSlots);
+            int count = Math.Min(spawn.Count, ScenarioLimits.MaxNpcActors);
             var labels = new List<string>();
             var sizes = new List<int>();
             for (int i = 0; i < count; i++)

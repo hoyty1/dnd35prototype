@@ -35,12 +35,12 @@ Entries per section:
 | [Spells and metamagic](issues/SPL.md) | SPL | 8 | 58 | 54 | 120 | SPL-122 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 9 | 27 | 38 | 74 | CHR-075 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 26 | 20 | 50 | CRE-052 |
-| [Encounters](issues/ENC.md) | ENC | 1 | 7 | 14 | 22 | ENC-023 |
+| [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 32 | 36 | 72 | ITM-073 |
 | [AI](issues/AI.md) | AI | 1 | 19 | 40 | 60 | AI-062 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 25 | 32 | TST-036 |
-| **All** | | 31 | 277 | 365 | 673 | |
+| **All** | | 30 | 277 | 366 | 673 | |
 
 ## Top issues
 
@@ -48,7 +48,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
-| [ENC-001](issues/ENC.md) | High | Encounters | Enemies 6+ spawn off the grid and cannot move; more than 15 enemies are dropped | Yes |
 | [CMB-003](issues/CMB.md) | High | Combat | Morale and situational damage bonuses never reach weapon damage | Yes |
 | [CMB-004](issues/CMB.md) | High | Combat | Critical hits multiply only weapon dice; coup de grace multiplies sneak attack | Yes |
 | [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at the round boundary (GameManager.OnNewRound -> ConditionService.OnRoundEnd), so 1-round conditions can cost the target nothing | Yes |

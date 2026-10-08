@@ -14,8 +14,8 @@ Each NPC's AI is set by two independent fields on `NPCDefinition` (Assets/Script
 
 | Field | Enum | Selects | Where it is consumed |
 |---|---|---|---|
-| `AIBehavior` (default `AggressiveMelee`) | `NPCAIBehavior`: AggressiveMelee, RangedKiter, DefensiveMelee, Ranged (NPCDatabase.cs:808) | The tactical routine in AIService | `GameManager.SetupEnemyEncounter` appends it to the parallel list `GameManager._npcAIBehaviors` (GameManager.NPCSetup.cs:179). `GameManager.GetNPCBehaviorForAI` reads it back by `NPCs.IndexOf(npc)` |
-| `AIProfileArchetype` (default `None`) | `NPCAIProfileArchetype`, 23 values (NPCDatabase.cs:777) | The `AIProfile` subclass that scores targets, maneuvers, charges and spells | `GameManager.BuildRuntimeAIProfile` (GameManager.NPCSetup.cs:864), called from `InitializeNPCFromDefinition`, sets `CharacterController.aiProfile` |
+| `AIBehavior` (default `AggressiveMelee`) | `NPCAIBehavior`: AggressiveMelee, RangedKiter, DefensiveMelee, Ranged (NPCDatabase.cs:808) | The tactical routine in AIService | `GameManager.SetupEnemyEncounter` appends it to the parallel list `GameManager._npcAIBehaviors` (GameManager.NPCSetup.cs:306). `GameManager.GetNPCBehaviorForAI` reads it back by `NPCs.IndexOf(npc)` |
+| `AIProfileArchetype` (default `None`) | `NPCAIProfileArchetype`, 23 values (NPCDatabase.cs:777) | The `AIProfile` subclass that scores targets, maneuvers, charges and spells | `GameManager.BuildRuntimeAIProfile` (GameManager.NPCSetup.cs:991), called from `InitializeNPCFromDefinition`, sets `CharacterController.aiProfile` |
 
 In short, the profile decides whom to attack and with what, and the behavior decides whether the NPC closes to melee, kites or holds back. Some profiles bypass the behavior entirely (see the routing table below).
 
@@ -25,7 +25,7 @@ Check these before changing either axis:
 - A new profile class needs a new `NPCAIProfileArchetype` value, a `case` in `BuildRuntimeAIProfile`, and the archetype set on the NPC definitions. Assigning `aiProfile` by hand is overwritten at spawn. `AI/Custom/CustomAIExample.cs` is not wired to any archetype.
 - `None` becomes `Animal` only when `CreatureType` is "Animal". `Brute` (29 definitions) and `Caster` (2) have no `case`, so those NPCs get a null profile and run the profile-less path.
 - `NPCAIBehavior.Ranged` is handled nowhere. It runs AggressiveMelee unless the profile's `CombatStyle` is `Ranged`. It is used at NPCDatabase_B.cs:844, NPCDatabase_G.cs:1130, NPCDatabase_R.cs:235 and SkeletonTemplate.cs:738.
-- Other code also writes these fields: `DungeonEncounterSpawner.UpdateAIForClass` (DMG spawns with class levels), and the Skeleton, Zombie and Lycanthrope templates. The armor-targeting and shield-bash test encounters bypass both fields and replace `npc.aiProfile` directly after spawn (GameManager.NPCSetup.cs:184-196); Summon Swarm also assigns `SwarmAI`/`IndiscriminateSwarmAI` directly (Spell/Resolution/GameManager.SpellCasting.cs:641, 778). `NPCTemplateAIConfigurator.ConfigureDefinition` is reached only through `QuickSpawnSystem`, and only tests call that.
+- Other code also writes these fields: `DungeonEncounterSpawner.UpdateAIForClass` (DMG spawns with class levels), and the Skeleton, Zombie and Lycanthrope templates. The armor-targeting and shield-bash test encounters bypass both fields and replace `npc.aiProfile` directly after spawn (GameManager.NPCSetup.cs:311-323); Summon Swarm also assigns `SwarmAI`/`IndiscriminateSwarmAI` directly (Spell/Resolution/GameManager.SpellCasting.cs:641, 778). `NPCTemplateAIConfigurator.ConfigureDefinition` is reached only through `QuickSpawnSystem`, and only tests call that.
 - `_npcAIBehaviors` must stay index-aligned with `GameManager.NPCs`. `SetupEnemyEncounter` skips the `Add` when an ID is unknown, and `LionsShieldBehavior.cs:286` appends to `NPCs` without adding a behavior. Summons keep the lists aligned: they add to both (GameManager.SpellCasting.cs:335-336) and remove from both (367-369). A missing index falls back to AggressiveMelee.
 
 ## NPC AI: the turn, end to end
@@ -162,17 +162,21 @@ All four sources end in a `List<string>` of NPC IDs. `GameManager.PromptEncounte
 ApplyEncounterPreset / ApplyRandomEncounter           _Core/GameManager.cs:1769 / 1690
   (custom only) CustomEncounterBuilderUI.CalculateSpawnPositions  x 11-18, y 2-18, >= 2 squares apart
   RestoreStandardPartyLayout or Configure*TestParty
-  SetupEnemyEncounter(ids)                             _Core/GameManager.NPCSetup.cs:29
-    spawnCount = min(ids.Count, NPCs.Count); unused slots SetActive(false)
+  SetupEnemyEncounter(ids)                             _Core/GameManager.NPCSetup.cs:128
+    EnsureNPCPoolSize(ids.Count): non-pool entries removed, pool grows past 15 (ENC-001); every slot's grid occupancy cleared
+    spawnCount = ids.Count; unused slots SetActive(false)
     def = BuildEncounterDefinitionForSpawn(id, NPCDatabase.Get(id), i)
-    position: test-scenario rule/array -> custom positions -> EncounterSpawnPositions[i] -> (15+i, 10)
+    preferred square: test-scenario rule/array -> custom positions (negative = none) -> none
+    TryResolveSpawnSquare -> EncounterSpawnPlacement.TryFindSpawnSquare (Encounters/EncounterSpawnPlacement.cs):
+      preferred square if the footprint fits, else the nearest that does; no preferred square:
+      DefaultFormation[k] (the old 5 squares), then spread out from (15,10) with a free square around each
     token: IconLoader.DetermineMonsterType + GetToken, else tinted Sprites/npc_enemy_alive
     InitializeNPCFromDefinition (stats, aiProfile), _npcAIBehaviors.Add
   SetupNPCIcons, UpdateAllStatsUI
 ```
 
-- **15 NPC slots.** `SceneBootstrap.CreateCharacters` creates exactly 15 enemy GameObjects (`totalEnemySlots`, _Core/SceneBootstrap.cs:119), and `SetupEnemyEncounter` silently drops any extra IDs. Only 3 NPC stat panels exist on the HUD (`CreateNPCPanelsRight(..., 3)`, SceneBootstrap.cs:181).
-- **5 spawn positions.** `GameManager.EncounterSpawnPositions` (GameManager.cs:2864) has 5 entries. Preset, random and DMG encounters with more than 5 enemies place the 6th enemy at (20, 10) and later ones further right, outside the default 20x20 grid. Nothing validates bounds or size overlap. Only custom encounters get computed positions. This is tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
+- **Enemy pool.** `SceneBootstrap.CreateCharacters` creates 15 enemy controllers through `GameManager.CreateNPCPoolSlot` (marked `CharacterController.IsEncounterPoolSlot`); `SetupEnemyEncounter` calls `EnsureNPCPoolSize`, which removes every entry that is not a pool slot (a destroyed controller, or a leftover creature such as the Lion's Shield lion, CRE-005, which is taken off the grid and the summon trackers and destroyed) and adds slots until every enemy ID has one (ENC-001, fixed 2026-10-08). Added slots stay for the session and are reset per spawn like the rest (CRE-046). `CreateNPCPoolSlot` restores `UnityEngine.Random.state`, since a controller's Awake draws from it. Only 3 NPC stat panels exist on the HUD (`CreateNPCPanelsRight(..., 3)`, SceneBootstrap.cs:174), so the 4th and later enemy shows only in the hover tooltip (ENC-023).
+- **Spawn squares.** Every spawn path ends in `GameManager.TryResolveSpawnSquare`, which asks `EncounterSpawnPlacement` for the base square: the creature's whole footprint (`SizeCategory.GetSpaceWidthSquares`, PHB p.149) must lie on the grid on squares free by the grid's own rule, `SquareGrid.CanPlaceCreature` (dead creatures hold no square), the rule movement and summon placement use; a hidden party slot holds no square (`SetPCActiveState` clears its occupancy and restores it when shown); a preset or custom square that does not fit gives way to the nearest one that does, and creatures without one take the old five squares, then spread out from (15,10). Before placing, `SetupEnemyEncounter` clears every pool slot's grid occupancy, so last fight's creatures and unused slots hold no square. If a footprint fits nowhere the creature is not spawned and an error is logged. Custom encounters still precompute size-blind squares with `CustomEncounterBuilderUI.CalculateSpawnPositions`; the placement corrects any that do not fit. Placement is a layout, not the DMG's encounter distance.
 - **`spawn_*` temporary IDs.** `DungeonEncounterSpawner.PrepareEncounter` clones the base definition, applies class levels (`CreatureClassEngine.ApplyClassToDefinition`), `UpdateAIForClass` and templates, then registers the result with `NPCDatabase.RegisterExternal` as `spawn_{baseId}_{counter}` or `spawn_{baseId}_{class}_{level}_{counter}` (DungeonEncounterSpawner.cs:294-307). The live DMG path never calls `CleanupSpawnEntries`. These entries stay in `NPCDatabase.AllNPCs` for the whole session, appear in the Custom Encounter Builder list, and can become RandomEncounterSystem candidates.
 
 ## UI: built entirely in code

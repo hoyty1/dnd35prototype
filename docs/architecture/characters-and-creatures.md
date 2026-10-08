@@ -221,7 +221,7 @@ Grep for `"<new_id>"` (not only `Id = "<new_id>"`: the monstrous centipede/scorp
 `GameManager.InitializeNPCFromDefinition` (_Core/GameManager.NPCSetup.cs, `internal`) is the only path that turns an NPCDefinition into a combatant. It has two call sites (SetupEnemyEncounter and SpawnSummonedCreature) and three entry paths; the test presets and the scenario harness (`Harness_SpawnEnemies`) go through SetupEnemyEncounter. Encounter spawns reuse the pre-placed `GameManager.NPCs` objects that SceneBootstrap builds once (slots beyond the enemy count are deactivated); summons create a new GameObject with a CharacterController. `LionsShieldBehavior` builds its lion through its own copy of the setup on a new GameObject (CRE-005).
 
 ```
-encounter:  SetupEnemyEncounter (NPCSetup.cs:29) -> NPCDatabase.Get -> BuildEncounterDefinitionForSpawn
+encounter:  SetupEnemyEncounter (NPCSetup.cs:128) -> NPCDatabase.Get -> BuildEncounterDefinitionForSpawn
             (GameManager.cs:2830, CreatureTemplateRegistry.ApplyTemplatesClone) -> InitializeNPCFromDefinition
             -> ApplyScenarioSpawnOverrides
 dungeon:    DungeonEncounterSpawner.BuildSpawnDefinition (clone, class levels, templates)
@@ -239,7 +239,7 @@ What `InitializeNPCFromDefinition` does:
 - Sets team/control from `IsAlly`/`IsControllable`, equips `EquipmentIds` (random material upgrades at CR >= 1) and backpack items.
 - Dragons get an injected `ClassLevelEntry("Sorcerer", CL)`; any caster with spell lists gets a SpellcastingComponent (a non-caster has none, since the reset removed the previous creature's). Adds StatusEffectManager, ConcentrationManager and `aiProfile = TrackRuntimeAIProfile(BuildRuntimeAIProfile(def))` (the Brute and Caster archetypes have no case and get null).
 
-What it does not copy: **`CharacterAlignment`** **[KI]**. Database NPCs spawn as `Alignment.None` unless ApplyScenarioSpawnOverrides (NPCSetup.cs:320) or the summon code sets it, which affects smite, Protection from Evil and aligned weapons. It also drops `HasTrample` and `SwarmDamageCount`. Any new NPCDefinition field must be added here, in `Clone()`, and in the three template adapters' `CopyDefinitionFields`.
+What it does not copy: **`CharacterAlignment`** **[KI]**. Database NPCs spawn as `Alignment.None` unless ApplyScenarioSpawnOverrides (NPCSetup.cs:447) or the summon code sets it, which affects smite, Protection from Evil and aligned weapons. It also drops `HasTrample` and `SwarmDamageCount`. Any new NPCDefinition field must be added here, in `Clone()`, and in the three template adapters' `CopyDefinitionFields`.
 
 ## Templates, dragons and class levels on monsters
 

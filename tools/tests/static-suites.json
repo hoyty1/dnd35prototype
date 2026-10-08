@@ -1063,6 +1063,28 @@
       "notes": ""
     },
     {
+      "type": "Tests.Encounters.EncounterSpawnPlacementTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 21,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "ENC-001: EncounterSpawnPlacement puts every encounter creature's whole footprint on free grid squares (large and mixed-size groups, preferred squares, edges, no room); pure, no scene"
+    },
+    {
+      "type": "Tests.Encounters.EncounterPoolTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 13,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "ENC-001: EnsureNPCPoolSize removes a non-pool controller left in NPCs (the Lion's Shield lion, CRE-005) and grows the pool to exactly the requested size; a hidden party slot holds no grid square and spawn placement may use it; needs a scene GameManager"
+    },
+    {
       "type": "Tests.Feats.Phase1CombatFeatTests",
       "needs": "either",
       "skip": "",

@@ -108,23 +108,16 @@ public class SceneBootstrap : MonoBehaviour
         }
 
         // Legacy NPC (first enemy)
-        GameObject npcGO = new GameObject("NPC_Enemy_0");
-        npcGO.AddComponent<SpriteRenderer>();
-        CharacterController npc = npcGO.AddComponent<CharacterController>();
-        npc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
+        CharacterController npc = GameManager.CreateNPCPoolSlot(0);
 
         var npcList = new List<CharacterController>();
         npcList.Add(npc);
 
-        const int totalEnemySlots = 15; // Supports expanded Turn Undead stress test (12 skeletons + 3 wights).
-        for (int i = 1; i < totalEnemySlots; i++)
-        {
-            GameObject go = new GameObject($"NPC_Enemy_{i}");
-            go.AddComponent<SpriteRenderer>();
-            CharacterController cc = go.AddComponent<CharacterController>();
-            cc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
-            npcList.Add(cc);
-        }
+        // The starting enemy pool (the Turn Undead preset has 15 undead). SetupEnemyEncounter adds slots through the
+        // same factory when an encounter has more creatures (ENC-001).
+        const int initialEnemySlots = 15;
+        for (int i = 1; i < initialEnemySlots; i++)
+            npcList.Add(GameManager.CreateNPCPoolSlot(i));
 
         Debug.Log($"[SceneBootstrap] Created 4 PC and {npcList.Count} NPC GameObjects for encounter.");
         return (pcs, npc, npcList);

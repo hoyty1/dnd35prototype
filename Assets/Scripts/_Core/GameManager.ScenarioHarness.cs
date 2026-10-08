@@ -140,9 +140,11 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Spawns <paramref name="ids"/> into the NPC pool at exactly <paramref name="positions"/>
-    /// (index-parallel; a missing position falls back to the default spawn square), as a custom
-    /// encounter with every <c>_is*TestEncounter</c> preset flag cleared.
+    /// Spawns <paramref name="ids"/> into the NPC pool at <paramref name="positions"/> (index-parallel), as a custom
+    /// encounter with every <c>_is*TestEncounter</c> preset flag cleared. The pool grows to the number of ids
+    /// (ENC-001). Each creature goes through the game's spawn placement (EncounterSpawnPlacement): a position whose
+    /// footprint fits is kept, one that does not gives way to the nearest square that does, and a missing or negative
+    /// position gets the game's default layout (the harness's game-placed actors).
     /// </summary>
     internal void Harness_SpawnEnemies(List<string> ids, Vector2Int[] positions)
     {

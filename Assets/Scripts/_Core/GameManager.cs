@@ -2884,14 +2884,6 @@ public partial class GameManager : MonoBehaviour
         return CreatureTemplateRegistry.ApplyTemplatesClone(scenarioDef);
     }
 
-    private static readonly Vector2Int[] EncounterSpawnPositions = {
-        new Vector2Int(16, 6),
-        new Vector2Int(14, 10),
-        new Vector2Int(16, 14),
-        new Vector2Int(13, 8),
-        new Vector2Int(13, 12),
-    };
-
     private static readonly Vector2Int[] GreaseTestSpawnPositions = {
         new Vector2Int(12, 5),
         new Vector2Int(13, 6),

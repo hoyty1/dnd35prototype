@@ -327,7 +327,6 @@ namespace Tests.Scenarios
         internal static string DirtyReason;
         private static bool _booted;
         private static Dictionary<string, int> _baselineSubs;
-        private static int _baselineNpcCount = -1;
 
         public const int PhaseFrameTimeout = 600;
         /// <summary>Frames between combat-log leak sweeps while a job runs (a safety net since UI-001 was fixed).</summary>
@@ -994,10 +993,16 @@ namespace Tests.Scenarios
                 if (npc != null && npc.gameObject != null && npc.gameObject.activeSelf)
                     problems.Add("pool slot " + i + " (" + (npc.Stats != null ? npc.Stats.CharacterName : npc.name) + ") is active");
             }
-            if (_baselineNpcCount < 0)
-                _baselineNpcCount = gm.NPCs.Count;
-            else if (gm.NPCs.Count != _baselineNpcCount)
-                problems.Add("NPC list has " + gm.NPCs.Count + " entries (baseline " + _baselineNpcCount + "): a summon was left");
+            // The pool grows with a larger encounter (ENC-001), so the list's length is no baseline: every entry
+            // must be a pool slot, and anything else (a summon, a destroyed controller) was left behind.
+            for (int i = 0; i < gm.NPCs.Count; i++)
+            {
+                CharacterController npc = gm.NPCs[i];
+                if (npc == null)
+                    problems.Add("NPC list entry " + i + " is a destroyed controller");
+                else if (!npc.IsEncounterPoolSlot)
+                    problems.Add("NPC list entry " + i + " (" + npc.name + ") is not a pool slot: a summon was left");
+            }
 
             foreach (CharacterController cc in Object.FindObjectsByType<CharacterController>(FindObjectsInactive.Exclude))
                 if (!gm.PCs.Contains(cc))
@@ -1094,7 +1099,8 @@ namespace Tests.Scenarios
             for (int slot = quick.Count + built.Count; slot < slots.Length; slot++)
                 gm.Harness_DeactivatePartySlot(slot);
 
-            gm.Harness_SpawnEnemies(npcs.Select(a => a.Source.NpcId).ToList(), npcs.Select(a => a.Pos).ToArray());
+            // A game-placed actor passes (-1,-1): the game's own layout places it (ENC-001), and it stays there.
+            gm.Harness_SpawnEnemies(npcs.Select(a => a.Source.NpcId).ToList(), npcs.Select(a => a.GamePlaced ? new Vector2Int(-1, -1) : a.Pos).ToArray());
             for (int i = 0; i < npcs.Count; i++)
             {
                 CharacterController npc = i < gm.NPCs.Count ? gm.NPCs[i] : null;
@@ -1108,12 +1114,20 @@ namespace Tests.Scenarios
                 if (!_savedControl.Any(s => s.Key == kv.Value))
                     _savedControl.Add(new KeyValuePair<CharacterController, (CharacterTeam, bool, DND35.AI.AIProfile)>(kv.Value, (kv.Value.Team, kv.Value.IsControllable, kv.Value.aiProfile)));
 
-            // Exact placement: clear everyone's occupancy, then place in def order.
+            // Exact placement: clear everyone's occupancy, then place in def order. Game-placed actors keep the square
+            // the game gave them (an exact actor whose square they hold fails setup).
             foreach (KeyValuePair<ActorSpec, CharacterController> kv in placed)
-                gm.Grid.ClearCreatureOccupancy(kv.Value);
+                if (!kv.Key.GamePlaced)
+                    gm.Grid.ClearCreatureOccupancy(kv.Value);
             foreach (ActorSpec spec in def.Actors)
             {
                 CharacterController c = placed.First(p => p.Key == spec).Value;
+                if (spec.GamePlaced)
+                {
+                    job.Ctx.Actors[spec.Key] = c;
+                    job.SpecOf[c] = spec;
+                    continue;
+                }
                 SquareCell cell = gm.Grid.GetCell(spec.Pos);
                 if (cell == null)
                     throw new InvalidOperationException(spec.Key + ": no grid cell at " + spec.Pos);

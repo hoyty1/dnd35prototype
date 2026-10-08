@@ -26,6 +26,105 @@ public partial class GameManager
     //  NPC/ENEMY SETUP &amp; INITIALIZATION
     // ═══════════════════════════════════════════════════════════════════
 
+    /// <summary>
+    /// Creates one controller of the encounter enemy pool, named NPC_Enemy_<paramref name="index"/>, on the Enemy team
+    /// and not controllable, marked <see cref="CharacterController.IsEncounterPoolSlot"/>. SceneBootstrap builds the
+    /// first 15 with it; <see cref="EnsureNPCPoolSize"/> adds more for a larger encounter (ENC-001). The new
+    /// controller's Awake draws from UnityEngine.Random (a visual offset), so the RNG state is put back afterwards: a
+    /// pool that grows mid-session does not shift the dice of a seeded fight.
+    /// </summary>
+    internal static CharacterController CreateNPCPoolSlot(int index)
+    {
+        UnityEngine.Random.State saved = UnityEngine.Random.state;
+        GameObject go = new GameObject($"NPC_Enemy_{index}");
+        go.AddComponent<SpriteRenderer>();
+        CharacterController cc = go.AddComponent<CharacterController>();
+        cc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
+        cc.IsEncounterPoolSlot = true;
+        UnityEngine.Random.state = saved;
+        return cc;
+    }
+
+    /// <summary>
+    /// Makes room in <see cref="NPCs"/> for <paramref name="count"/> enemies (ENC-001). First every entry that is not a
+    /// pool slot leaves the list: a destroyed controller, or a creature still alive from the last fight that was never
+    /// a pool slot, such as the Greater Lion's Shield lion, which only the dormant SummoningService tracks (CRE-005).
+    /// Such a creature leaves the grid and the summon records and is destroyed (no summon outlasts the fight it was
+    /// called in), so it is never taken over as an enemy. Then pool slots are added through
+    /// <see cref="CreateNPCPoolSlot"/> until the list holds <paramref name="count"/>, so the list is exactly the pool
+    /// and every enemy ID gets a slot. Before the fix a 16th and later enemy was dropped without a word. Added slots
+    /// stay for the session and go through the same per-spawn reset (CRE-046) as the first 15.
+    /// <c>_npcAIBehaviors</c> loses the same index as <see cref="NPCs"/> (AI-015).
+    /// </summary>
+    internal void EnsureNPCPoolSize(int count)
+    {
+        if (NPCs == null)
+            NPCs = new List<CharacterController>();
+
+        int evicted = 0;
+        for (int i = NPCs.Count - 1; i >= 0; i--)
+        {
+            CharacterController n = NPCs[i];
+            if (n != null && n.IsEncounterPoolSlot)
+                continue;
+
+            if (n != null)
+            {
+                EvictNonPoolNPC(n);
+                evicted++;
+            }
+            NPCs.RemoveAt(i);
+            if (i < _npcAIBehaviors.Count)
+                _npcAIBehaviors.RemoveAt(i);
+        }
+        if (evicted > 0)
+            Debug.Log($"[GameManager] Removed {evicted} creature(s) left in the NPC list that are not enemy pool slots (ENC-001, CRE-005).");
+
+        int added = 0;
+        while (NPCs.Count < count)
+        {
+            NPCs.Add(CreateNPCPoolSlot(NPCs.Count));
+            added++;
+        }
+        if (added > 0)
+            Debug.Log($"[GameManager] Enemy pool grown by {added} to {NPCs.Count} slots for a {count}-creature encounter (ENC-001).");
+    }
+
+    /// <summary>
+    /// Takes a creature that is in <see cref="NPCs"/> but is not a pool slot out of play before an encounter is set up
+    /// (<see cref="EnsureNPCPoolSize"/>): off the grid, out of both summon trackers, destroyed. The caller removes it
+    /// from <see cref="NPCs"/>.
+    /// </summary>
+    private void EvictNonPoolNPC(CharacterController npc)
+    {
+        Debug.Log($"[GameManager] Removing {(npc.Stats != null ? npc.Stats.CharacterName : npc.name)} before the encounter: it is not an enemy pool slot (ENC-001).");
+        Grid?.ClearCreatureOccupancy(npc);
+        Summoning?.RemoveSummonByController(npc);
+        _activeSummons.RemoveAll(s => s != null && s.Controller == npc);
+        _summonedAllies.Remove(npc);
+        _summonedEnemies.Remove(npc);
+        if (npc.gameObject != null)
+            Destroy(npc.gameObject);
+    }
+
+    /// <summary>
+    /// The square <paramref name="npc"/> spawns on (ENC-001), through <see cref="EncounterSpawnPlacement"/>: the
+    /// preferred square when the creature's whole footprint fits there on the grid on squares no other creature holds,
+    /// else the nearest such square. Whether a square is free is the grid's own rule, SquareGrid.CanPlaceCreature (dead
+    /// creatures do not hold a square), the one movement and summon placement use. Every pool slot has left the grid
+    /// before placement starts and a hidden party member holds no square (SetPCActiveState), so only creatures in
+    /// play count. False when the footprint fits nowhere.
+    /// </summary>
+    private bool TryResolveSpawnSquare(CharacterController npc, Vector2Int? preferred, int formationIndex, int sizeSquares, out Vector2Int square)
+    {
+        int width = Grid != null ? Grid.Width : 20;
+        int height = Grid != null ? Grid.Height : 20;
+
+        bool IsFree(Vector2Int p) => Grid == null || Grid.CanPlaceCreature(p, 1, npc);
+
+        return EncounterSpawnPlacement.TryFindSpawnSquare(preferred, formationIndex, sizeSquares, width, height, IsFree, out square);
+    }
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         NPCDatabase.Init();
@@ -37,7 +136,18 @@ public partial class GameManager
         Sprite npcAliveFallback = LoadSprite("Sprites/npc_enemy_alive");
         Sprite npcDead = LoadSprite("Sprites/npc_enemy_dead");
 
+        // Every enemy gets a slot (ENC-001), and every slot leaves the grid first: each is placed again below or
+        // deactivated, so last fight's creatures (and an unused slot) never hold a square of this one.
+        EnsureNPCPoolSize(enemyIds != null ? enemyIds.Count : 0);
+        if (Grid != null)
+        {
+            for (int i = 0; i < NPCs.Count; i++)
+                if (NPCs[i] != null)
+                    Grid.ClearCreatureOccupancy(NPCs[i]);
+        }
+
         int spawnCount = enemyIds != null ? Mathf.Min(enemyIds.Count, NPCs.Count) : 0;
+        int formationIndex = 0;
 
         for (int i = 0; i < NPCs.Count; i++)
         {
@@ -58,7 +168,10 @@ public partial class GameManager
             if (def == null)
             {
                 Debug.LogError($"[GameManager] Unknown enemy ID: {enemyId}");
+                _npcAIBehaviors.Add(NPCAIBehavior.AggressiveMelee); // placeholder: keeps the list index-parallel to NPCs (AI-015)
                 npc.gameObject.SetActive(false);
+                if (CombatUI != null && i < CombatUI.NPCPanels.Count && CombatUI.NPCPanels[i].Panel != null)
+                    CombatUI.NPCPanels[i].Panel.SetActive(false);
                 continue;
             }
 
@@ -66,98 +179,112 @@ public partial class GameManager
             if (CombatUI != null && i < CombatUI.NPCPanels.Count && CombatUI.NPCPanels[i].Panel != null)
                 CombatUI.NPCPanels[i].Panel.SetActive(true);
 
-            Vector2Int pos;
+            // The square the preset, the custom layout or the harness asks for; null = the default layout.
+            Vector2Int? preferred = null;
             if ((_isGrappleTestEncounter || _isFeintSneakTestEncounter) && i == 0 && PC1 != null)
             {
                 // Spawn adjacent in dedicated mechanics test encounters.
-                pos = PC1.GridPosition + Vector2Int.right;
+                preferred = PC1.GridPosition + Vector2Int.right;
             }
             else if (_isGreaseTestEncounter && i < GreaseTestSpawnPositions.Length)
             {
                 // Cluster all enemies into a tight 2x2 for 10-ft grease area and repeated grapple attempts.
-                pos = GreaseTestSpawnPositions[i];
+                preferred = GreaseTestSpawnPositions[i];
             }
             else if (_isTurnUndeadTestEncounter && i < TurnUndeadTestSpawnPositions.Length)
             {
                 // Explicit 15-undead test formation (front skeletons, mid wights, back skeletons).
-                pos = TurnUndeadTestSpawnPositions[i];
+                preferred = TurnUndeadTestSpawnPositions[i];
             }
             else if (_isArmorTargetingTestEncounter && i < ArmorTargetingTestSpawnPositions.Length)
             {
                 // Position skeleton archers at range so armor-priority targeting is easy to observe.
-                pos = ArmorTargetingTestSpawnPositions[i];
+                preferred = ArmorTargetingTestSpawnPositions[i];
             }
             else if (_isTigerHuntTestEncounter && i < TigerHuntTestSpawnPositions.Length)
             {
                 // Place tiger with enough lane length to charge wounded prey and trigger pounce behavior.
-                pos = TigerHuntTestSpawnPositions[i];
+                preferred = TigerHuntTestSpawnPositions[i];
             }
             else if (_isOgreBattleTestEncounter && i < OgreBattleTestSpawnPositions.Length)
             {
                 // Spawn controllable dire tiger near the wizard with both ogres advancing from the far side.
-                pos = OgreBattleTestSpawnPositions[i];
+                preferred = OgreBattleTestSpawnPositions[i];
             }
             else if (_isShieldBashTestEncounter && i < ShieldBashTestSpawnPositions.Length)
             {
                 // Keep one melee enemy adjacent to each test fighter so shield-bash AC differences are obvious.
-                pos = ShieldBashTestSpawnPositions[i];
+                preferred = ShieldBashTestSpawnPositions[i];
             }
             else if (_isCelestialTemplateTestEncounter && i < CelestialTemplateTestSpawnPositions.Length)
             {
                 // Keep celestial allies close to the cleric and undead on the opposite side.
-                pos = CelestialTemplateTestSpawnPositions[i];
+                preferred = CelestialTemplateTestSpawnPositions[i];
             }
             else if (_isFiendishTemplateTestEncounter && i < FiendishTemplateTestSpawnPositions.Length)
             {
                 // Keep fiendish allies near the necromancer with good enemies opposite for Smite Good demonstrations.
-                pos = FiendishTemplateTestSpawnPositions[i];
+                preferred = FiendishTemplateTestSpawnPositions[i];
             }
             else if (_isSummonMonsterTestEncounter && i < SummonMonsterTestSpawnPositions.Length)
             {
                 // Keep targets spread so summon placement and command behavior can be observed.
-                pos = SummonMonsterTestSpawnPositions[i];
+                preferred = SummonMonsterTestSpawnPositions[i];
             }
             else if (_isProtectionFromEvilTestEncounter && i < ProtectionFromEvilTestSpawnPositions.Length)
             {
                 // Place enemies so all three protection clauses are exercised quickly (charm spell, summoned contact, regular melee).
-                pos = ProtectionFromEvilTestSpawnPositions[i];
+                preferred = ProtectionFromEvilTestSpawnPositions[i];
             }
             else if (_isWindDispersionTestEncounter && i < WindDispersionTestSpawnPositions.Length)
             {
                 // Build a straight wind lane + one off-axis archer to validate line-of-effect and concealment interactions.
-                pos = WindDispersionTestSpawnPositions[i];
+                preferred = WindDispersionTestSpawnPositions[i];
             }
             else if (_isObscuringMistRangedOnlyTestEncounter && i < ObscuringMistRangedOnlySpawnPositions.Length)
             {
                 // Place six ranged attackers around the central mist zone to test concealed-target ranged AI behavior.
-                pos = ObscuringMistRangedOnlySpawnPositions[i];
+                preferred = ObscuringMistRangedOnlySpawnPositions[i];
             }
             else if (_isWizardSpellTestEncounter && i < WizardSpellTestSpawnPositions.Length)
             {
                 // Keep the dummy in a clean line with the wizard for single-target + AoE validation.
-                pos = WizardSpellTestSpawnPositions[i];
+                preferred = WizardSpellTestSpawnPositions[i];
             }
             else if (_isClericSpellTestEncounter && i < ClericSpellTestSpawnPositions.Length)
             {
                 // Mirror wizard test spacing so cleric spell coverage can be compared directly.
-                pos = ClericSpellTestSpawnPositions[i];
+                preferred = ClericSpellTestSpawnPositions[i];
             }
             else if (_isMirrorImageTestEncounter && i < MirrorImageTestSpawnPositions.Length)
             {
                 // Cardinal ring around the central wizard (≈25 ft) keeps all archers in LOS for clone-target validation.
-                pos = MirrorImageTestSpawnPositions[i];
+                preferred = MirrorImageTestSpawnPositions[i];
             }
             else if (_isCustomEncounter && _customEncounterSpawnPositions != null && i < _customEncounterSpawnPositions.Length)
             {
-                // Custom encounter: use pre-computed non-overlapping spawn positions.
-                pos = _customEncounterSpawnPositions[i];
+                // Custom encounter: use pre-computed spawn positions; a negative one (the scenario harness's
+                // game-placed actors) asks for the default layout.
+                Vector2Int custom = _customEncounterSpawnPositions[i];
+                if (custom.x >= 0 && custom.y >= 0)
+                    preferred = custom;
             }
-            else
+
+            // Every spawn path ends here (ENC-001): the creature's whole footprint goes on the grid, on squares no
+            // other creature holds; a preferred square that does not fit gives way to the nearest one that does.
+            int sizeSquares = Mathf.Max(1, def.SizeCategory.GetSpaceWidthSquares());
+            int creatureFormationIndex = preferred.HasValue ? -1 : formationIndex++;
+            if (!TryResolveSpawnSquare(npc, preferred, creatureFormationIndex, sizeSquares, out Vector2Int pos))
             {
-                pos = (i < EncounterSpawnPositions.Length)
-                    ? EncounterSpawnPositions[i]
-                    : new Vector2Int(15 + i, 10);
+                Debug.LogError($"[GameManager] No room on the grid for {def.Name} ({sizeSquares}x{sizeSquares} squares); it does not spawn (ENC-001).");
+                _npcAIBehaviors.Add(def.AIBehavior); // keeps the list index-parallel to NPCs (AI-015)
+                npc.gameObject.SetActive(false);
+                if (CombatUI != null && i < CombatUI.NPCPanels.Count && CombatUI.NPCPanels[i].Panel != null)
+                    CombatUI.NPCPanels[i].Panel.SetActive(false);
+                continue;
             }
+            if (preferred.HasValue && preferred.Value != pos)
+                Debug.Log($"[GameManager] Spawn square ({preferred.Value.x},{preferred.Value.y}) does not fit {def.Name} ({sizeSquares}x{sizeSquares}); placed at ({pos.x},{pos.y}) instead (ENC-001).");
 
             // Try class-specific monster token; fallback to generic NPC sprite
             string monsterType = IconLoader.DetermineMonsterType(def.Name);
