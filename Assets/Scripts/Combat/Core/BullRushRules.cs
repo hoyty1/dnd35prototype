@@ -51,8 +51,10 @@ public static class BullRushRules
     /// <see cref="GetSpeedSquares"/>), and a move action taken earlier in the same turn does not count
     /// against it; a charge bull rush allows twice the speed minus the squares the charge already
     /// cost, so the charge distance plus the follow distance is at most twice the speed (PHB
-    /// p.154-155). The squares followed are not deducted from a move action taken after a standard
-    /// bull rush either (the decision does not address that direction; open owner question CMB-129). It is 0, so the
+    /// p.154-155). Owner ruling 2026-10-08 (CMB-129): after a standard bull rush the squares followed are
+    /// independent of the move action in both directions, so they are not deducted from a move action taken
+    /// later in the turn either (GameManager.ExecuteBullRushMovement records no squares; a later move reads
+    /// the whole budget from GameManager.GetCurrentMoveRangeSquares). It is 0, so the
     /// attacker cannot follow, when the attacker is incapacitated or a condition blocks its
     /// movement, or after a 5-foot step this turn (PHB p.144: no 5-foot step in a round in which you
     /// move any distance, and following is movement).

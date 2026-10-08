@@ -370,24 +370,34 @@ public static class ThreatSystem
     /// <summary>
     /// Analyze a movement path and determine which AoOs would be provoked.
     /// PHB p.137-138: moving out of a threatened square provokes an AoO from the threatening
-    /// enemy, and moving out of more than one square threatened by the same enemy counts
-    /// as only one opportunity for that enemy, so Combat Reflexes never grants a second
-    /// AoO for the same movement (PHB p.92). Each enemy is therefore listed at most once,
-    /// at the first square it threatens, and only if it has an AoO left this round.
-    /// The opportunity is tracked per path, not per round (CMB-084).
+    /// enemy, and moving out of more than one square threatened by the same enemy in the same
+    /// round counts as only one opportunity for that enemy, so Combat Reflexes (PHB p.92) never
+    /// gives a second movement AoO against the same mover in one round (owner ruling 2026-10-08,
+    /// CMB-128: per round, not per movement). Each enemy is therefore listed at most once, at
+    /// the first square it threatens, only if it has an AoO left this round, and not at all when
+    /// its movement opportunity against this mover already came earlier in the mover's round
+    /// (<see cref="HasHadMovementOpportunity"/>: the first move of a double move, a move before a
+    /// bull rush follow, a charge before its bull rush follow). The executors record the
+    /// opportunity when they resolve the step (<see cref="RecordMovementOpportunity"/>); this
+    /// analysis only reads it, so calling it changes nothing. Its result (the PC AoO confirmation
+    /// prompt, the AI's provoke counts) therefore reflects the record; the hover path preview
+    /// (GameManager.GetPreviewThreatenedSquares) and the A* threat cost (SquareGrid.FindSafePath)
+    /// use raw threatened squares and do not (GRID-020).
+    /// With <paramref name="forcedMovement"/> (a bull rush push) the round record is not read:
+    /// whether a pushed defender shares it, and over which round, is an open owner question (CMB-150).
     /// </summary>
     /// <param name="mover">The character moving.</param>
     /// <param name="path">The movement path (list of squares, NOT including the starting square).</param>
     /// <param name="allCharacters">All characters in combat.</param>
     /// <returns>List of AoOs that would be provoked.</returns>
-    public static List<AoOThreatInfo> AnalyzePathForAoOs(CharacterController mover, List<Vector2Int> path, List<CharacterController> allCharacters, bool suppressFirstSquareAoO = false)
+    public static List<AoOThreatInfo> AnalyzePathForAoOs(CharacterController mover, List<Vector2Int> path, List<CharacterController> allCharacters, bool suppressFirstSquareAoO = false, bool forcedMovement = false)
     {
         var provokedAoOs = new List<AoOThreatInfo>();
         if (mover == null || mover.Stats == null) return provokedAoOs;
         if (path == null || path.Count == 0) return provokedAoOs;
         if (mover.Stats.IsSwarm) return provokedAoOs;
 
-        // Track which enemies have already been triggered (each gets at most their max AoOs)
+        // Enemies already listed on this path (one opportunity each, PHB p.138).
         var enemyAoOUsedThisMovement = new Dictionary<CharacterController, int>();
 
         // Build threatened squares for each enemy
@@ -397,6 +407,8 @@ public static class ThreatSystem
             if (character == mover) continue;
             if (character.Stats.IsDead) continue;
             if (character.Team == mover.Team) continue;
+            // Its one movement opportunity against this mover this round already came (CMB-128).
+            if (!forcedMovement && HasHadMovementOpportunity(character, mover)) continue;
 
             enemyThreats[character] = GetThreatenedSquares(character);
             enemyAoOUsedThisMovement[character] = 0;
@@ -439,8 +451,9 @@ public static class ThreatSystem
                 if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(enemy, mover))
                     continue;
 
-                // One opportunity per enemy per movement (PHB p.138), and only if the
-                // enemy still has an AoO left this round (Combat Reflexes raises that cap).
+                // One opportunity per enemy per round (PHB p.138; earlier moves this round were
+                // filtered out above), and only if the enemy still has an AoO left this round
+                // (Combat Reflexes raises that cap).
                 int usedThisMovement = enemyAoOUsedThisMovement[enemy];
                 int remainingGlobal = enemy.Stats.MaxAttacksOfOpportunity - enemy.Stats.AttacksOfOpportunityUsed;
 
@@ -469,6 +482,57 @@ public static class ThreatSystem
         }
 
         return provokedAoOs;
+    }
+
+    // ========================================================================
+    // MOVEMENT OPPORTUNITIES PER ROUND (PHB p.138, CMB-128)
+    // ========================================================================
+
+    /// <summary>
+    /// True when <paramref name="threatener"/>'s movement opportunity against <paramref name="mover"/>
+    /// already came this round: earlier in the mover's round (since the start of its turn) the mover
+    /// left a square the threatener threatens and an executor recorded it
+    /// (<see cref="RecordMovementOpportunity"/>). PHB p.138: moving out of more than one square
+    /// threatened by the same opponent in the same round is one opportunity for that opponent
+    /// (owner ruling 2026-10-08). Read by <see cref="AnalyzePathForAoOs"/>.
+    /// </summary>
+    public static bool HasHadMovementOpportunity(CharacterController threatener, CharacterController mover)
+    {
+        if (threatener == null || mover == null)
+            return false;
+        return mover.MovementOpportunityThreateners.Contains(threatener);
+    }
+
+    /// <summary>
+    /// Records that <paramref name="mover"/> left a square <paramref name="threatener"/> threatens, so
+    /// that opponent gets no further movement opportunity against it this round (PHB p.138). The
+    /// movement executors call it for each opponent listed at the step they resolve, whether or not
+    /// the AoO is then made (the opportunity came either way): GameManager.ResolveMovementAoOsBeforeStep
+    /// (PC moves and withdraw, NPC, summon and compulsion moves, both charge paths, crawl, the overrun
+    /// continuation) and the bull rush follow (GameManager.ResolveBullRushStepAoOs). Movement executors
+    /// that resolve no movement AoOs at all also record nothing: the PC move-through overrun and its
+    /// Normal Move branch (CMB-151), the attacker's follow after a targeted overrun push
+    /// (TryPushTargetAway, CMB-116, CMB-151) and the grapple moves (GrappleSystem.ExecuteGrappleMovement,
+    /// ExecuteFreeAdjacentGrappleMovement, CMB-152). Not called for provocations that are not movement
+    /// (casting, ranged attacks, standing up, maneuver starts, the bull rush entry into the defender's
+    /// space, CMB-113) nor for a bull rush push (CMB-150).
+    /// </summary>
+    public static void RecordMovementOpportunity(CharacterController threatener, CharacterController mover)
+    {
+        if (threatener == null || mover == null || threatener == mover)
+            return;
+        mover.MovementOpportunityThreateners.Add(threatener);
+    }
+
+    /// <summary>
+    /// Starts a new round for <see cref="HasHadMovementOpportunity"/>: called by
+    /// CharacterController.StartNewTurn (the mover's round boundary) and when a slot is reset.
+    /// </summary>
+    public static void ClearMovementOpportunities(CharacterController mover)
+    {
+        if (mover == null)
+            return;
+        mover.MovementOpportunityThreateners.Clear();
     }
 
     // ========================================================================

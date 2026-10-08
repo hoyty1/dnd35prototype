@@ -9,7 +9,7 @@ namespace Tests.Combat
 /// Lightweight runtime checks for reach-aware flanking geometry and threat-distance semantics,
 /// plus the PHB p.153 flanking bonus rule (flankers get +2 on melee attacks; the defender
 /// takes no AC penalty, CMB-001) and flanking sneak attack eligibility, and the shared
-/// attack-of-opportunity rules for movement and maneuvers (one AoO per opponent per movement,
+/// attack-of-opportunity rules for movement and maneuvers (one movement AoO per opponent per round, CMB-128,
 /// what stops a mover, who a grapple, sunder, trip, disarm, bull rush or coup de grace
 /// provokes, CMB-014) for PC and NPC sides,
 /// and the prone rules (standing up provokes; no ordinary movement while prone, CMB-074).
@@ -52,6 +52,8 @@ public class FlankingReachRulesTests : MonoBehaviour
         // Shared AoO rules: movement and maneuvers provoke the same way for PCs and NPCs.
         TestPathAoOsOncePerOpponent(CharacterTeam.Enemy, ref passed, ref failed);
         TestPathAoOsOncePerOpponent(CharacterTeam.Player, ref passed, ref failed);
+        TestPathAoOsOncePerRound(CharacterTeam.Enemy, ref passed, ref failed);
+        TestPathAoOsOncePerRound(CharacterTeam.Player, ref passed, ref failed);
         TestMovementStopsOnlyOnAoOChanges(ref passed, ref failed);
         TestManeuverAoOProvokers(CharacterTeam.Enemy, ref passed, ref failed);
         TestManeuverAoOProvokers(CharacterTeam.Player, ref passed, ref failed);
@@ -230,6 +232,64 @@ public class FlankingReachRulesTests : MonoBehaviour
         finally
         {
             TestHelpers.Cleanup(mover != null ? mover.gameObject : null, threatener != null ? threatener.gameObject : null);
+        }
+    }
+
+    private static void TestPathAoOsOncePerRound(CharacterTeam moverTeam, ref int passed, ref int failed)
+    {
+        // PHB p.138 (owner ruling 2026-10-08, CMB-128): the single opportunity covers the whole round, so a
+        // second move this round (a double move, a bull rush follow after a move) lists no opponent whose
+        // movement opportunity against this mover already came; other opponents are unaffected; the mover's
+        // turn start (the round boundary) clears it; a bull rush push (forcedMovement) ignores it (CMB-150).
+        CharacterTeam threatTeam = moverTeam == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        string side = moverTeam == CharacterTeam.Player ? "PC" : "NPC";
+        CharacterController mover = null;
+        CharacterController threatener = null;
+        CharacterController second = null;
+        try
+        {
+            mover = CreateTeamCharacter("RoundMover", moverTeam, 0, 0);
+            threatener = CreateTeamCharacter("RoundThreatener", threatTeam, 1, 0);
+            second = CreateTeamCharacter("RoundSecond", threatTeam, 1, 1);
+            var all = new List<CharacterController> { mover, threatener, second };
+            var path = new List<Vector2Int> { new Vector2Int(0, 1), new Vector2Int(0, 2), new Vector2Int(0, 3) };
+            threatener.Stats.MaxAttacksOfOpportunity = 3;
+            threatener.Stats.AttacksOfOpportunityUsed = 0;
+            second.Stats.MaxAttacksOfOpportunity = 3;
+            second.Stats.AttacksOfOpportunityUsed = 0;
+
+            List<AoOThreatInfo> fresh = ThreatSystem.AnalyzePathForAoOs(mover, path, all);
+            Assert(fresh.Count == 2, $"{side} round record: both opponents provoke on a fresh round (got {fresh.Count})", ref passed, ref failed);
+            Assert(!ThreatSystem.HasHadMovementOpportunity(threatener, mover),
+                $"{side} round record: the analysis alone records nothing (previews and AI scoring are read-only)", ref passed, ref failed);
+
+            ThreatSystem.RecordMovementOpportunity(threatener, mover);
+            List<AoOThreatInfo> later = ThreatSystem.AnalyzePathForAoOs(mover, path, all);
+            Assert(later.Count == 1 && later[0].Threatener == second,
+                $"{side} round record: a later move this round provokes only the opponent that has not had its opportunity (got {later.Count})",
+                ref passed, ref failed);
+
+            List<AoOThreatInfo> pushed = ThreatSystem.AnalyzePathForAoOs(mover, path, all, forcedMovement: true);
+            Assert(pushed.Count == 2, $"{side} round record: forced movement (a bull rush push) ignores the record (got {pushed.Count})",
+                ref passed, ref failed);
+
+            ThreatSystem.ClearMovementOpportunities(mover);
+            Assert(ThreatSystem.AnalyzePathForAoOs(mover, path, all).Count == 2,
+                $"{side} round record: after the record is cleared both opponents provoke again", ref passed, ref failed);
+
+            ThreatSystem.RecordMovementOpportunity(threatener, mover);
+            ThreatSystem.RecordMovementOpportunity(second, mover);
+            string startError = null;
+            try { mover.StartNewTurn(); }
+            catch (System.Exception ex) { startError = ex.GetType().Name + ": " + ex.Message; }
+            Assert(startError == null && !ThreatSystem.HasHadMovementOpportunity(threatener, mover) && !ThreatSystem.HasHadMovementOpportunity(second, mover),
+                $"{side} round record: the mover's turn start clears it" + (startError != null ? " (StartNewTurn threw " + startError + ")" : string.Empty),
+                ref passed, ref failed);
+        }
+        finally
+        {
+            TestHelpers.Cleanup(mover != null ? mover.gameObject : null, threatener != null ? threatener.gameObject : null,
+                second != null ? second.gameObject : null);
         }
     }
 

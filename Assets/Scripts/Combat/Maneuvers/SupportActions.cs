@@ -1567,7 +1567,7 @@ public partial class GameManager
         if (_pendingChargeBullRush)
         {
             var chargeBullRushOutcome = new ChargeBullRushOutcome();
-            yield return StartCoroutine(ResolveChargeBullRush(charger, target, BuildChargeProvokerSet(provokedAoOs),
+            yield return StartCoroutine(ResolveChargeBullRush(charger, target,
                 SquareGridUtils.CalculatePathCost(chargeStart, path), CountDiagonalSteps(chargeStart, path), chargeBullRushOutcome));
             if (chargeBullRushOutcome.AttackerIncapacitated)
                 yield break;
@@ -1831,29 +1831,6 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Enemies that already had a movement AoO during this charge move. PHB p.138 makes moving out of
-    /// several squares one opponent threatens in the same round a single opportunity, so they get no
-    /// further AoO when the charger follows a defender it bull rushes (the follow is movement in the
-    /// same round). Entering the defender's space is the bull rush's own provocation (PHB p.154) and
-    /// is not covered: any of them with an AoO left this round, normally through Combat Reflexes, takes
-    /// one then (owner decision 2026-10-07).
-    /// </summary>
-    private static HashSet<CharacterController> BuildChargeProvokerSet(List<AoOThreatInfo> provokedAoOs)
-    {
-        var chargeProvokers = new HashSet<CharacterController>();
-        if (provokedAoOs != null)
-        {
-            for (int i = 0; i < provokedAoOs.Count; i++)
-            {
-                if (provokedAoOs[i] != null && provokedAoOs[i].Threatener != null)
-                    chargeProvokers.Add(provokedAoOs[i].Threatener);
-            }
-        }
-
-        return chargeProvokers;
-    }
-
-    /// <summary>
     /// The end of a bull rush charge, shared by the PC (ExecuteCharge) and NPC (NPCExecuteCharge)
     /// charges (PHB p.154-155, CMB-102). First the shared legality check now that the charger stands
     /// at the endpoint (adjacency included); a refusal logs and stops here, with the full-round
@@ -1864,15 +1841,15 @@ public partial class GameManager
     /// at +2 and the push and follow, whose movement limit is twice the speed minus
     /// <paramref name="squaresMovedThisCharge"/> (charge distance plus follow distance at most twice
     /// the speed, PHB p.154-155, owner decision 2026-10-07; the follow continues the path's
-    /// <paramref name="diagonalsMovedThisCharge"/> diagonal count). Enemies in
-    /// <paramref name="provokedDuringCharge"/> get no AoO as the charger follows (one movement
-    /// opportunity per round, PHB p.138). When an AoO drops the charger, at the start or
+    /// <paramref name="diagonalsMovedThisCharge"/> diagonal count). Enemies that had a movement AoO
+    /// during the charge get no AoO as the charger follows: the charge path recorded their movement
+    /// opportunity for the round (ThreatSystem.RecordMovementOpportunity, PHB p.138, CMB-128). When an AoO drops the charger, at the start or
     /// during the push and follow, it clears the charge state, ends a PC turn and sets
     /// <paramref name="outcome"/>.AttackerIncapacitated so the caller stops. When an initiation AoO
     /// that strays into the defender ends the attempt (Disrupted), the charge ends here with its
     /// full-round action and AC penalty spent.
     /// </summary>
-    private IEnumerator ResolveChargeBullRush(CharacterController charger, CharacterController target, HashSet<CharacterController> provokedDuringCharge, int squaresMovedThisCharge, int diagonalsMovedThisCharge, ChargeBullRushOutcome outcome = null)
+    private IEnumerator ResolveChargeBullRush(CharacterController charger, CharacterController target, int squaresMovedThisCharge, int diagonalsMovedThisCharge, ChargeBullRushOutcome outcome = null)
     {
         if (!charger.CanBullRush(target, false, out string bullRushReason))
         {
@@ -1908,7 +1885,7 @@ public partial class GameManager
             var pushOutcome = new BullRushPushCoroutineOutcome();
             yield return StartCoroutine(ResolveBullRushPushAndFollowCoroutine(charger, target, bullRushResult, isCharge: true,
                 squaresMovedThisCharge: squaresMovedThisCharge, diagonalsMovedThisCharge: diagonalsMovedThisCharge,
-                attackerAlreadyProvoked: provokedDuringCharge, outcome: pushOutcome));
+                outcome: pushOutcome));
             if (pushOutcome.AttackerIncapacitated)
                 EndChargeBullRushForDroppedCharger(outcome);
         }
@@ -2035,7 +2012,7 @@ public partial class GameManager
         {
             // Same end of charge as the PC bull rush charge (ResolveChargeBullRush, CMB-102).
             var chargeBullRushOutcome = new ChargeBullRushOutcome();
-            yield return StartCoroutine(ResolveChargeBullRush(npc, target, BuildChargeProvokerSet(provokedAoOs),
+            yield return StartCoroutine(ResolveChargeBullRush(npc, target,
                 SquareGridUtils.CalculatePathCost(chargeStart, path), CountDiagonalSteps(chargeStart, path), chargeBullRushOutcome));
             if (chargeBullRushOutcome.AttackerIncapacitated)
                 yield break;

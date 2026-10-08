@@ -43,7 +43,11 @@ namespace Tests.Scenarios
     /// natural attack at that attack's normal bonus (owner decision 2026-10-07, CMB-106).
     /// Bull rush AoOs (owner decision 2026-10-07): entering the defender's space is the bull rush's own provocation
     /// (PHB p.154), separate from movement; moving out of squares one opponent threatens counts as one opportunity for
-    /// the whole round (PHB p.138), and a creature makes one AoO a round, 1 + DEX modifier with Combat Reflexes (PHB p.92).
+    /// the whole round (PHB p.138, rechecked 2026-10-08: the rule is stated per round; owner ruling 2026-10-08, CMB-128:
+    /// per round, across a double move or a move and a bull rush follow), and a creature makes one AoO a round, 1 + DEX
+    /// modifier with Combat Reflexes (PHB p.92). The squares followed after a standard bull rush and the move action are
+    /// independent in both directions (owner ruling 2026-10-08, CMB-129; PHB p.154 limits the follow only by the
+    /// attacker's normal movement).
     /// Pin duration (owner decision 2026-10-07, CMB-120; PHB p.156): a pin holds the opponent for 1 round; on the
     /// pinner's next turn it may pin again (an opposed check in place of an attack) to hold it another round, and
     /// a pin not renewed that turn ends while the grapple goes on. The AI renews only when that pays (a grapple attack
@@ -89,7 +93,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 74;
+        public const int Count = 81;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -99,6 +103,8 @@ namespace Tests.Scenarios
             yield return S("movement-aoo-move", () => MovementAoO("rules/movement-aoo-move", "Moving out of a threatened square provokes once (PHB p.137)", Step.Move(14, 10)));
             yield return S("movement-aoo-5ft", () => MovementAoO("rules/movement-aoo-5ft", "A 5-foot step provokes nothing (PHB p.144)", Step.FiveFootStep(12, 10)));
             yield return S("movement-aoo-withdraw", () => MovementAoO("rules/movement-aoo-withdraw", "Withdraw: the first square provokes nothing (PHB p.143)", Step.Withdraw(16, 10)));
+            yield return S("movement-aoo-double-move", () => DoubleMoveAoOs(false));
+            yield return S("movement-aoo-double-move-ui", () => DoubleMoveAoOs(true));
             yield return S("flanking", () => Flanking(true));
             yield return S("flanking-control", () => Flanking(false));
             yield return S("prone-ai-stands", ProneAiStandsUp);
@@ -121,6 +127,8 @@ namespace Tests.Scenarios
             yield return S("maneuver-bullrush-charge-reflexes", () => BullRushWatcherAoOs(true, true));
             yield return S("maneuver-bullrush-charge-control", () => BullRushWatcherAoOs(true, false));
             yield return S("maneuver-bullrush-reflexes", () => BullRushWatcherAoOs(false, true));
+            yield return S("maneuver-bullrush-after-move", BullRushAfterMove);
+            yield return S("maneuver-bullrush-then-move", BullRushThenMove);
             yield return S("maneuver-grapple", Grapple);
             yield return S("maneuver-freetrip", FreeTrip);
             yield return S("freetrip-trigger", () => FreeTripTrigger(false));
@@ -269,6 +277,81 @@ namespace Tests.Scenarios
                     })
                  .Expect("Withdrawing from the only threatened square provokes nothing (PHB p.143)", Expect.None("aoo", null));
             }
+            return b.Build();
+        }
+
+        /// <summary>
+        /// CMB-128 (owner ruling 2026-10-08; PHB p.138, p.92): moving out of more than one square threatened by the same
+        /// opponent in the same round is one opportunity for that opponent, even across two move actions. The mover at
+        /// (11,10) moves to (11,11), then on to (14,11) with its second move action. "reflexes" at (10,10) has Combat
+        /// Reflexes (DEX 16: 4 AoOs a round) and threatens both (11,10) and (11,11): one movement AoO, in the first move,
+        /// and none in the second. "guard" at (12,12) (no Combat Reflexes) threatens (11,11) but not (11,10): its first
+        /// opportunity comes in the second move, so it takes one AoO there (the round record is per opponent). Scripted:
+        /// an NPC orc through the NPC move executor; Ui: a PC hero through the PC Move button and the AoO prompt.
+        /// </summary>
+        private static ScenarioDef DoubleMoveAoOs(bool ui)
+        {
+            string mover = ui ? "hero" : "orc";
+            ScenarioBuilder b = Rules(ui ? "rules/movement-aoo-double-move-ui" : "rules/movement-aoo-double-move",
+                    "A double move out of one Combat Reflexes opponent's squares provokes it once a round (PHB p.138, CMB-128)"
+                    + (ui ? ", through the PC buttons" : ""))
+                .Covers("CMB-128", "PHB p.92", "PHB p.137", "PHB p.138", "PC_NPC_PARITY")
+                .MaxRounds(1);
+            if (ui)
+                b.Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 11, 10, Control.Ui)
+                 .Npc("reflexes", "orc_berserker", 10, 10, Control.Scripted)
+                 .Npc("guard", "orc_berserker", 12, 12, Control.Scripted)
+                 .Tweak("hero", c => { StripOffHand(c); SturdyDummy(c); });
+            else
+                b.Pc("reflexes", ActorSource.Stats(() => Fighter("Reflexes", 4, "Combat Reflexes")), 10, 10, Control.Scripted)
+                 .Pc("guard", ActorSource.Stats(() => Fighter("Guard", 4)), 12, 12, Control.Scripted)
+                 .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                 .Tweak("orc", SturdyDummy);
+            b.Tweak("reflexes", c =>
+                {
+                    c.Stats.DEX = 16;
+                    if (!c.Stats.Feats.Contains("Combat Reflexes"))
+                        c.Stats.Feats.Add("Combat Reflexes");
+                })
+             .Initiative("reflexes", "guard", mover)
+             .Turn("reflexes", 1, Step.Pass())
+             .Turn("guard", 1, Step.Pass());
+
+            Step fixture = Step.Assert("fixture: the Combat Reflexes opponent has AoOs to spare this round", ctx =>
+                ctx.Get("reflexes").Stats.MaxAttacksOfOpportunity >= 2 && ctx.Get("reflexes").Stats.AttacksOfOpportunityUsed == 0);
+            if (ui)
+                b.Turn("hero", 1, fixture, Step.Move(11, 11), Step.AnswerAoO(AoOAnswer.Proceed), Step.Move(14, 11), Step.AnswerAoO(AoOAnswer.Proceed))
+                 .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"));
+            else
+                b.Turn("orc", 1, fixture, Step.Move(11, 11), Step.Move(14, 11));
+
+            b.Expect("Both moves are done and the mover ends at (14,11)", v =>
+                {
+                    ExpectResult r = Expect.All(Expect.StepStatus(mover, 1, "Move", 0, "done"), Expect.StepStatus(mover, 1, "Move", 1, "done"), Expect.AssertsPass())(v);
+                    if (!r.IsPass) return r;
+                    if (ScenarioChecks.IsDownSnapshot(v.Final(mover))) return ExpectResult.Inconclusive("the mover was dropped");
+                    Vector2Int? p = Pos(v.Final(mover));
+                    return p == new Vector2Int(14, 11) ? ExpectResult.Pass("at (14,11)") : ExpectResult.Fail("at " + p);
+                })
+             .Expect("One movement AoO from the Combat Reflexes opponent, in the first move only (PHB p.138, CMB-128)", v =>
+                {
+                    List<TraceEvent> aoos = v.AoOs("reflexes", mover, "movement");
+                    TraceEvent firstMove = v.Moves(mover).FirstOrDefault();
+                    if (firstMove == null) return ExpectResult.Fail("no move by " + mover);
+                    return aoos.Count == 1 && aoos[0].Seq < firstMove.Seq
+                        ? ExpectResult.Pass("AoO #" + aoos[0].Seq + " before the first move #" + firstMove.Seq, aoos[0].Seq, firstMove.Seq)
+                        : ExpectResult.Fail(aoos.Count + " movement AoOs", aoos.Select(e => e.Seq).Concat(new[] { firstMove.Seq }).ToArray());
+                })
+             .Expect("One movement AoO from the guard, in the second move: its own first opportunity this round", v =>
+                {
+                    List<TraceEvent> aoos = v.AoOs("guard", mover, "movement");
+                    TraceEvent firstMove = v.Moves(mover).FirstOrDefault();
+                    if (firstMove == null) return ExpectResult.Fail("no move by " + mover);
+                    return aoos.Count == 1 && aoos[0].Seq > firstMove.Seq
+                        ? ExpectResult.Pass("AoO #" + aoos[0].Seq + " after the first move #" + firstMove.Seq, aoos[0].Seq, firstMove.Seq)
+                        : ExpectResult.Fail(aoos.Count + " movement AoOs", aoos.Select(e => e.Seq).Concat(new[] { firstMove.Seq }).ToArray());
+                })
+             .Expect("No other AoO", Expect.Count("aoo", null, 2, 2));
             return b.Build();
         }
 
@@ -1074,6 +1157,137 @@ namespace Tests.Scenarios
             }
 
             return b.Build();
+        }
+
+        /// <summary>
+        /// CMB-128 (owner ruling 2026-10-08; PHB p.138, p.154, p.92): a creature that moved earlier in the round and then
+        /// follows a defender it bull rushed gets no second movement AoO from the same opponent. The goblin watcher at
+        /// (10,9) (DEX 16, Combat Reflexes) threatens (9,9), (10,10) and (11,10). The fighter moves from (9,9) to (10,10)
+        /// (one movement AoO), bull rushes the orc at (11,10) (entering its space provokes the goblin again: the bull
+        /// rush's own provocation, CMB-113) and follows it out of (10,10) and (11,10): no AoO, because the goblin's
+        /// movement opportunity this round came during the move. The orc makes no AoO; forced dice give a margin of at
+        /// least 15. Before CMB-128 the follow drew a third AoO.
+        /// </summary>
+        private static ScenarioDef BullRushAfterMove()
+        {
+            return Rules("rules/maneuver-bullrush-after-move", "Move, then bull rush: one movement AoO from a Combat Reflexes watcher for the move and the follow together (PHB p.138, p.154, CMB-128)")
+                .Covers("CMB-128", "CMB-113", "PHB p.92", "PHB p.138", "PHB p.154")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), 9, 9, Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Npc("goblin", "goblin", 10, 9, Control.Scripted)
+                .Tweak("fighter", SturdyDummy)
+                .Tweak("orc", SturdyDummyWithoutAoO)
+                .Tweak("goblin", c =>
+                {
+                    c.Stats.DEX = 16;
+                    c.Stats.Feats.Add("Combat Reflexes");
+                })
+                .Initiative("goblin", "orc", "fighter")
+                .Force(20, 20, "Bull rush check")
+                .Force(20, 1, "Bull rush defense")
+                .Turn("goblin", 1, Step.Pass())
+                .Turn("orc", 1, Step.Pass())
+                .Turn("fighter", 1,
+                    Step.Assert("fixture: the goblin has AoOs to spare this round", ctx => ctx.Get("goblin").Stats.MaxAttacksOfOpportunity >= 3),
+                    Step.Move(10, 10),
+                    Step.Maneuver(SpecialAttackType.BullRushAttack, "orc"))
+                .Expect("The move and the bull rush are done", Expect.All(
+                    Expect.StepStatus("fighter", 1, "Move", 0, "done"),
+                    Expect.StepStatus("fighter", 1, "Maneuver", 0, "done"),
+                    Expect.AssertsPass()))
+                .Expect("The orc makes no AoO (fixture check)", Expect.None("aoo", e => e.Str("by") == "orc"))
+                .Expect("The bull rush succeeds and the fighter moves with the orc (fixture check)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.BullRushAttack).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    if (!m.Bool("success")) return ExpectResult.Fail("bull rush failed with forced dice", m.Seq);
+                    if (ScenarioChecks.IsDownSnapshot(v.Final("fighter"))) return ExpectResult.Inconclusive("the fighter was dropped");
+                    Vector2Int? o = Pos(v.Final("orc")), f = Pos(v.Final("fighter"));
+                    if (o == null || f == null) return ExpectResult.Fail("no final positions");
+                    return o.Value.y == 10 && o.Value.x >= 14 && f.Value == new Vector2Int(o.Value.x - 1, 10)
+                        ? ExpectResult.Pass("orc at " + o + ", fighter at " + f, m.Seq)
+                        : ExpectResult.Fail("orc at " + o + ", fighter at " + f, m.Seq);
+                })
+                .Expect("The goblin makes one movement AoO during the move, before the bull rush (PHB p.137)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.BullRushAttack).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    List<TraceEvent> moveAoOs = v.AoOs("goblin", null, "movement");
+                    return moveAoOs.Count == 1 && moveAoOs[0].Seq < m.Seq
+                        ? ExpectResult.Pass("movement AoO #" + moveAoOs[0].Seq + " before #" + m.Seq, moveAoOs[0].Seq, m.Seq)
+                        : ExpectResult.Fail(moveAoOs.Count + " movement AoOs", moveAoOs.Select(e => e.Seq).ToArray());
+                })
+                .Expect("Entering the orc's space provokes the goblin again: the bull rush's own provocation (PHB p.154, CMB-113)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.BullRushAttack).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    List<TraceEvent> entry = v.AoOs("goblin", null, "maneuver");
+                    return entry.Count == 1 && entry[0].Seq < m.Seq
+                        ? ExpectResult.Pass("entry AoO #" + entry[0].Seq + " before #" + m.Seq, entry[0].Seq, m.Seq)
+                        : ExpectResult.Fail(entry.Count + " entry AoOs", entry.Select(e => e.Seq).ToArray());
+                })
+                .Expect("No AoO from the goblin as the fighter follows: its movement opportunity this round came during the move (PHB p.138, CMB-128)",
+                    Expect.None("aoo", e => e.Str("by") == "goblin" && e.Str("trigger") == "bullrush-move"))
+                .Build();
+        }
+
+        /// <summary>
+        /// CMB-129 (owner ruling 2026-10-08; PHB p.154): the squares followed after a standard-action bull rush are
+        /// independent of the move action, so the follow does not shrink a later move action. The fighter at (10,10) bull
+        /// rushes the orc at (11,10) (forced dice: a margin of at least 15, so the fighter follows it 3 or more squares, to
+        /// (13,10) or beyond), then still has its move action and its whole movement budget, and moves to (14,6): 4 squares,
+        /// more than the budget would leave if the squares followed counted against the move (a budget of 4 to 6 squares,
+        /// less 3 or more followed).
+        /// The orc makes no AoO.
+        /// </summary>
+        private static ScenarioDef BullRushThenMove()
+        {
+            int budgetBefore = -1;
+            return Rules("rules/maneuver-bullrush-then-move", "Standard bull rush, then a move action: the follow does not shrink the move (PHB p.154, CMB-129)")
+                .Covers("CMB-129", "PHB p.154")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("orc", SturdyDummyWithoutAoO)
+                .Initiative("orc", "fighter")
+                .Force(20, 20, "Bull rush check")
+                .Force(20, 1, "Bull rush defense")
+                .Turn("orc", 1, Step.Pass())
+                .Turn("fighter", 1,
+                    Step.Assert("fixture: the fighter's movement budget is recorded before the bull rush (4 squares or more)", ctx =>
+                    {
+                        budgetBefore = GameManager.Instance.GetCurrentMoveRangeSquares(ctx.Get("fighter"));
+                        return budgetBefore >= 4;
+                    }),
+                    Step.Maneuver(SpecialAttackType.BullRushAttack, "orc"),
+                    Step.Assert("after following, the fighter still has its move action and the same movement budget", ctx =>
+                    {
+                        CharacterController f = ctx.Get("fighter");
+                        return f.Actions.HasMoveAction && GameManager.Instance.GetCurrentMoveRangeSquares(f) == budgetBefore;
+                    }),
+                    Step.Move(14, 6))
+                .Expect("The bull rush, the move and both checks are done", Expect.All(
+                    Expect.StepStatus("fighter", 1, "Maneuver", 0, "done"),
+                    Expect.StepStatus("fighter", 1, "Move", 0, "done"),
+                    Expect.AssertsPass()))
+                .Expect("The bull rush succeeds and the fighter follows the orc 3 squares or more (fixture check)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.BullRushAttack).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    if (!m.Bool("success")) return ExpectResult.Fail("bull rush failed with forced dice", m.Seq);
+                    Vector2Int? o = Pos(v.Final("orc"));
+                    return o != null && o.Value.y == 10 && o.Value.x >= 14
+                        ? ExpectResult.Pass("orc pushed to " + o, m.Seq)
+                        : ExpectResult.Fail("orc at " + o + ", expected (14,10) or beyond", m.Seq);
+                })
+                .Expect("The later move action takes the fighter 4 squares north to (14,6)", v =>
+                {
+                    if (ScenarioChecks.IsDownSnapshot(v.Final("fighter"))) return ExpectResult.Inconclusive("the fighter was dropped");
+                    Vector2Int? f = Pos(v.Final("fighter"));
+                    return f == new Vector2Int(14, 6) ? ExpectResult.Pass("fighter at (14,6)") : ExpectResult.Fail("fighter at " + f);
+                })
+                .Build();
         }
 
         private static ScenarioDef Grapple()

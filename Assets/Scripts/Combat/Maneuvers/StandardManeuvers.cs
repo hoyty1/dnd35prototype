@@ -1089,11 +1089,12 @@ public partial class GameManager
     /// path (onComplete null) finishes before this returns. <paramref name="onComplete"/> receives
     /// true when the attacker ends the bull rush dead, dying or unconscious.
     /// <paramref name="diagonalsMovedThisCharge"/> continues the 5-10-5 diagonal count of a charge
-    /// path; <paramref name="attackerAlreadyProvoked"/> lists opponents that already had a movement
-    /// AoO against the attacker this round (the charge path), which get no further AoO as it follows
-    /// (PHB p.138: one opportunity per opponent for movement in the same round). An AoO at the bull
-    /// rush's start is not a movement opportunity, so its maker is not listed (follows from the owner
-    /// decision 2026-10-07 that the entry is the bull rush's own provocation, not movement).
+    /// path. Opponents that already had their movement opportunity against the attacker this round (a
+    /// charge path, a move action before a standard bull rush) get no further AoO as it follows: the
+    /// follow reads and writes the attacker's round record (ThreatSystem.HasHadMovementOpportunity,
+    /// PHB p.138, owner ruling 2026-10-08, CMB-128). An AoO at the bull rush's start is not a
+    /// movement opportunity and is not recorded (follows from the owner decision 2026-10-07 that the
+    /// entry is the bull rush's own provocation, not movement).
     /// </summary>
     private void ResolveBullRushPushAndFollow(
         CharacterController attacker,
@@ -1102,8 +1103,7 @@ public partial class GameManager
         bool isCharge,
         int squaresMovedThisCharge,
         System.Action<bool> onComplete,
-        int diagonalsMovedThisCharge = 0,
-        ICollection<CharacterController> attackerAlreadyProvoked = null)
+        int diagonalsMovedThisCharge = 0)
     {
         if (attacker == null || attacker.Stats == null || target == null || target.Stats == null
             || bullRushResult == null || !bullRushResult.Success)
@@ -1136,7 +1136,7 @@ public partial class GameManager
         {
             follow &= maxIfFollowing > 0;
             int pushSquares = follow ? Mathf.Clamp(squares, 1, maxIfFollowing) : 1;
-            BullRushMovementOutcome movement = ExecuteBullRushMovement(attacker, target, direction, pushSquares, follow, attackerAlreadyProvoked);
+            BullRushMovementOutcome movement = ExecuteBullRushMovement(attacker, target, direction, pushSquares, follow);
             bool attackerDown = ThreatSystem.IsMoverIncapacitated(attacker);
 
             // CORE-011: an AoO during the push or follow may end the combat, on every path.
@@ -1201,7 +1201,6 @@ public partial class GameManager
         bool isCharge,
         int squaresMovedThisCharge,
         int diagonalsMovedThisCharge = 0,
-        ICollection<CharacterController> attackerAlreadyProvoked = null,
         BullRushPushCoroutineOutcome outcome = null)
     {
         bool finished = false;
@@ -1212,7 +1211,7 @@ public partial class GameManager
                     outcome.AttackerIncapacitated = attackerDown;
                 finished = true;
             },
-            diagonalsMovedThisCharge, attackerAlreadyProvoked);
+            diagonalsMovedThisCharge);
 
         while (!finished)
             yield return null;
@@ -1235,22 +1234,26 @@ public partial class GameManager
     /// ends as soon as the attacker cannot follow: its footprint is blocked, an AoO stops it
     /// (ThreatSystem.ShouldStopMovementAfterAoO) or it is incapacitated. Each step must fit the
     /// mover's whole footprint (SquareGrid.CanPlaceCreature). Before each step each mover provokes
-    /// from every opponent threatening a square it leaves, except the other participant, at most
-    /// once per opponent per push and per follow (PHB p.154, p.138); the follow set starts from
-    /// <paramref name="attackerAlreadyProvoked"/>. Each such AoO may strike the other participant
-    /// instead (<see cref="ResolveBullRushAoO"/>). Owner decision 2026-10-07: a push interrupted by an
+    /// from every opponent threatening a square it leaves, except the other participant (PHB p.154):
+    /// the follower at most once per opponent per round, shared with its other movement this round
+    /// (PHB p.138, owner ruling 2026-10-08, CMB-128), the pushed defender at most once per opponent
+    /// per push (forced movement; CMB-150 asks the owner whether it shares the round record). Each
+    /// such AoO may strike the other participant instead (<see cref="ResolveBullRushAoO"/>). Owner decision 2026-10-07: a push interrupted by an
     /// AoO goes on unless the defender dies (or leaves the combat), so a defender knocked prone,
     /// dying or unconscious keeps being pushed; a push into an occupied square or a wall stops
     /// there. The squares beyond the first still need the attacker to move with the defender (PHB
-    /// p.154), so an AoO that stops or drops the follower ends them. Logs only what happened.
+    /// p.154), so an AoO that stops or drops the follower ends them. The follower moves with
+    /// MoveToCell (markAsMoved true: no 5-foot step afterwards, PHB p.144) and nothing records the
+    /// squares followed: owner ruling 2026-10-08 (CMB-129), after a standard bull rush the follow and
+    /// the move action are independent in both directions (BullRushRules.GetMovementLimitSquares).
+    /// Logs only what happened.
     /// </summary>
     private BullRushMovementOutcome ExecuteBullRushMovement(
         CharacterController attacker,
         CharacterController target,
         Vector2Int direction,
         int pushSquares,
-        bool follow,
-        ICollection<CharacterController> attackerAlreadyProvoked = null)
+        bool follow)
     {
         string attackerName = attacker.Stats.CharacterName;
         string targetName = target.Stats.CharacterName;
@@ -1261,9 +1264,6 @@ public partial class GameManager
             : $"{attackerName} pushes {targetName} 5 feet and stays."));
 
         var pushProvoked = new HashSet<CharacterController>();
-        var followProvoked = attackerAlreadyProvoked != null
-            ? new HashSet<CharacterController>(attackerAlreadyProvoked)
-            : new HashSet<CharacterController>();
         bool obstructed = false;
         string pushStopReason = null;
         string followStopReason = null;
@@ -1302,7 +1302,7 @@ public partial class GameManager
                 else
                 {
                     ThreatSystem.MoverAoOSnapshot before = ThreatSystem.CaptureMoverState(attacker);
-                    outcome.SomeoneDropped |= ResolveBullRushStepAoOs(attacker, target, attackerNext, followProvoked, "following");
+                    outcome.SomeoneDropped |= ResolveBullRushStepAoOs(attacker, target, attackerNext, null, "following");
                     if (ThreatSystem.ShouldStopMovementAfterAoO(attacker, before, out string stopReason))
                         why = stopReason;
                 }
@@ -1392,20 +1392,31 @@ public partial class GameManager
     /// <summary>
     /// Resolves the AoOs one bull rush step provokes from <paramref name="mover"/> leaving its current
     /// squares (ThreatSystem.AnalyzePathForAoOs for a one-square path). <paramref name="partner"/> (the
-    /// other bull rush participant) gets none, nor does an opponent already in
-    /// <paramref name="alreadyProvoked"/>. Returns true when an AoO left either participant at 0 HP or below.
+    /// other bull rush participant) gets none. <paramref name="pushProvoked"/> is null for the follower:
+    /// its step is ordinary movement, so an opponent whose movement opportunity against it already came
+    /// this round gets none, and each opponent listed now is recorded for the round, whether or not it
+    /// can make the AoO (ThreatSystem.RecordMovementOpportunity, PHB p.138, CMB-128). For the pushed
+    /// defender it is the push's own set, as before: an opponent in it gets none, and the round record
+    /// is neither read nor written (forced movement, CMB-150). Returns true when an AoO left either
+    /// participant at 0 HP or below.
     /// </summary>
-    private bool ResolveBullRushStepAoOs(CharacterController mover, CharacterController partner, Vector2Int next, HashSet<CharacterController> alreadyProvoked, string context)
+    private bool ResolveBullRushStepAoOs(CharacterController mover, CharacterController partner, Vector2Int next, HashSet<CharacterController> pushProvoked, string context)
     {
-        List<AoOThreatInfo> threats = ThreatSystem.AnalyzePathForAoOs(mover, new List<Vector2Int> { next }, GetAllCharacters());
+        bool forced = pushProvoked != null;
+        List<AoOThreatInfo> threats = ThreatSystem.AnalyzePathForAoOs(mover, new List<Vector2Int> { next }, GetAllCharacters(), forcedMovement: forced);
         bool dropped = false;
         for (int i = 0; i < threats.Count; i++)
         {
             CharacterController provoker = threats[i] != null ? threats[i].Threatener : null;
-            if (provoker == null || provoker == partner || alreadyProvoked.Contains(provoker) || !ThreatSystem.CanMakeAoO(provoker))
+            if (provoker == null || provoker == partner)
+                continue;
+            if (!forced)
+                ThreatSystem.RecordMovementOpportunity(provoker, mover);
+            if ((forced && pushProvoked.Contains(provoker)) || !ThreatSystem.CanMakeAoO(provoker))
                 continue;
 
-            alreadyProvoked.Add(provoker);
+            if (forced)
+                pushProvoked.Add(provoker);
             int moverHpBefore = mover.Stats.CurrentHP;
             int partnerHpBefore = partner != null && partner.Stats != null ? partner.Stats.CurrentHP : 0;
             ResolveBullRushAoO(provoker, mover, partner, isFromMovement: true, context: $"Bull Rush ({mover.Stats.CharacterName} {context})");

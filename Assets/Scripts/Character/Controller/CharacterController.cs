@@ -418,6 +418,13 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public DND35.AI.AIManeuverTurnMemory AIManeuverMemory { get; } = new DND35.AI.AIManeuverTurnMemory();
 
+    /// <summary>
+    /// The opponents whose movement opportunity against this creature already came this round (PHB p.138,
+    /// owner ruling 2026-10-08, CMB-128). Read and written only through ThreatSystem.HasHadMovementOpportunity,
+    /// RecordMovementOpportunity and ClearMovementOpportunities; cleared by <see cref="StartNewTurn"/>.
+    /// </summary>
+    public HashSet<CharacterController> MovementOpportunityThreateners { get; } = new HashSet<CharacterController>();
+
     // ========== FEAT PROPERTIES ==========
 
     /// <summary>
@@ -4295,6 +4302,7 @@ public class CharacterController : MonoBehaviour
         Actions.Reset();
         ProgressiveAttackPool.Clear();
         AIManeuverMemory.Clear();
+        ThreatSystem.ClearMovementOpportunities(this);
 
         // Feat toggles and the attack damage mode.
         PowerAttackValue = 0;
@@ -11081,6 +11089,7 @@ public class CharacterController : MonoBehaviour
             || (Stats != null && Stats.IsSingleActionsOnly);
         ProgressiveAttackPool.Clear();
         AIManeuverMemory.Clear(); // AI stopgap (AI-060): per-turn maneuver memory
+        ThreatSystem.ClearMovementOpportunities(this); // a new round of movement opportunities (PHB p.138, CMB-128)
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them
 

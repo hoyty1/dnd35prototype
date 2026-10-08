@@ -37,6 +37,8 @@ public static class BullRushRulesTests
         TestScenarioProneAttackerCannotFollow();
         TestPartnerNeverTakesAnAoO();
         TestScenarioAlreadyProvokedOpponentsSkipFollowAoO();
+        TestScenarioPushIsNotInTheRoundRecord();
+        TestScenarioFollowLeavesLaterMoveWhole();
 
         Debug.Log($"========== BULL RUSH RESULTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -218,11 +220,11 @@ public static class BullRushRulesTests
     }
 
     private static void ResolvePush(GameManager gm, CharacterController attacker, CharacterController target, int margin,
-        bool isCharge = false, int squaresMoved = 0, ICollection<CharacterController> alreadyProvoked = null)
+        bool isCharge = false, int squaresMoved = 0)
     {
         var result = new SpecialAttackResult { Success = true, CheckTotal = 20 + margin, OpposedTotal = 20 };
         MethodInfo method = typeof(GameManager).GetMethod("ResolveBullRushPushAndFollow", BindingFlags.Instance | BindingFlags.NonPublic);
-        method.Invoke(gm, new object[] { attacker, target, result, isCharge, squaresMoved, null, 0, alreadyProvoked });
+        method.Invoke(gm, new object[] { attacker, target, result, isCharge, squaresMoved, null, 0 });
     }
 
     private static void TestScenarioMediumFollowsLargeEast()
@@ -473,11 +475,12 @@ public static class BullRushRulesTests
 
             MethodInfo step = typeof(GameManager).GetMethod("ResolveBullRushStepAoOs", BindingFlags.Instance | BindingFlags.NonPublic);
             var next = new Vector2Int(14, 4);
-            step.Invoke(s.Gm, new object[] { attacker, target, next, new HashSet<CharacterController>(), "following" });
+            // A null set is the follower's step (the round record, CMB-128); a set is a push's own record.
+            step.Invoke(s.Gm, new object[] { attacker, target, next, null, "following" });
             Assert(target.Stats.AttacksOfOpportunityUsed == 0,
                 $"The defender takes no AoO against the attacker moving with it, though it threatens the square left (used {target.Stats.AttacksOfOpportunityUsed})");
 
-            step.Invoke(s.Gm, new object[] { attacker, null, next, new HashSet<CharacterController>(), "control" });
+            step.Invoke(s.Gm, new object[] { attacker, null, next, null, "control" });
             Assert(target.Stats.AttacksOfOpportunityUsed == 1,
                 $"Control: without the partner exclusion the same creature takes the AoO (used {target.Stats.AttacksOfOpportunityUsed})");
         }
@@ -494,36 +497,122 @@ public static class BullRushRulesTests
 
     private static void TestScenarioAlreadyProvokedOpponentsSkipFollowAoO()
     {
-        // An opponent that already had its movement opportunity against the attacker this round (on
-        // the charge path) gets no second AoO as the attacker follows (PHB p.138). An AoO at the bull
-        // rush's start is not a movement opportunity and does not seed this set (follows from the
-        // owner decision 2026-10-07 that the entry is the bull rush's own provocation; checked by
-        // rules/maneuver-bullrush-reflexes). Control: without the seed, the same opponent takes one.
+        // PHB p.138 (owner ruling 2026-10-08, CMB-128): moving out of several squares one opponent threatens
+        // in the same round is one opportunity for it. The watcher (3 AoOs a round, as with Combat Reflexes)
+        // threatens every square the attacker leaves. (1) Its movement opportunity against the attacker
+        // already came this round (a charge path or a move action before the bull rush, recorded through
+        // ThreatSystem.RecordMovementOpportunity): no AoO on the follow. (2) After the attacker's turn starts
+        // (StartNewTurn, the round boundary) the follow provokes it once and records it. (3) Another follow in
+        // the same round provokes nothing, though the watcher still has AoOs left. An AoO at the bull rush's
+        // start is not a movement opportunity and is not recorded (owner decision 2026-10-07; checked by
+        // rules/maneuver-bullrush-reflexes and rules/maneuver-bullrush-after-move).
         if (!TryBeginScenario("Already provoked", out Scenario s))
             return;
         try
         {
             var attacker = AddActor(s, "BRSeedAttacker", CharacterTeam.Player, new Vector2Int(12, 12), SizeCategory.Medium);
             var target = AddActor(s, "BRSeedDefender", CharacterTeam.Enemy, new Vector2Int(13, 12), SizeCategory.Medium);
-            var watcher = AddActor(s, "BRSeedWatcher", CharacterTeam.Enemy, new Vector2Int(12, 13), SizeCategory.Medium);
+            var watcher = AddActor(s, "BRSeedWatcher", CharacterTeam.Enemy, new Vector2Int(13, 13), SizeCategory.Medium);
+            watcher.Stats.MaxAttacksOfOpportunity = 3;
             GameManager.BullRushMisdirectionRollOverride = () => 100;
 
-            ResolvePush(s.Gm, attacker, target, margin: 0, alreadyProvoked: new List<CharacterController> { watcher });
+            ThreatSystem.RecordMovementOpportunity(watcher, attacker);
+            ResolvePush(s.Gm, attacker, target, margin: 0);
             Assert(attacker.GridPosition == new Vector2Int(13, 12) && target.GridPosition == new Vector2Int(14, 12),
                 $"Already provoked: push 1 and follow 1 (at {target.GridPosition}, {attacker.GridPosition})");
             Assert(watcher.Stats.AttacksOfOpportunityUsed == 0,
-                $"An opponent that already had a movement AoO this round takes no AoO on the follow (used {watcher.Stats.AttacksOfOpportunityUsed})");
+                $"An opponent whose movement opportunity already came this round takes no AoO on the follow (used {watcher.Stats.AttacksOfOpportunityUsed})");
 
+            attacker.StartNewTurn();
+            Assert(!ThreatSystem.HasHadMovementOpportunity(watcher, attacker),
+                "The attacker's turn start ends the round's record (StartNewTurn)");
             ResolvePush(s.Gm, attacker, target, margin: 0);
             Assert(attacker.GridPosition == new Vector2Int(14, 12),
-                $"Control push: attacker follows again (at {attacker.GridPosition})");
+                $"New round: attacker follows again (at {attacker.GridPosition})");
             Assert(watcher.Stats.AttacksOfOpportunityUsed == 1,
-                $"Control: the same opponent takes the follow AoO when not already provoked (used {watcher.Stats.AttacksOfOpportunityUsed})");
+                $"New round: the same opponent takes the follow AoO (used {watcher.Stats.AttacksOfOpportunityUsed})");
+            Assert(ThreatSystem.HasHadMovementOpportunity(watcher, attacker),
+                "The follow records the opponent's movement opportunity for the round");
+
+            ResolvePush(s.Gm, attacker, target, margin: 0);
+            Assert(attacker.GridPosition == new Vector2Int(15, 12),
+                $"Same round: attacker follows once more (at {attacker.GridPosition})");
+            Assert(watcher.Stats.AttacksOfOpportunityUsed == 1,
+                $"Same round: no second movement AoO on the next follow although AoOs are left (used {watcher.Stats.AttacksOfOpportunityUsed} of {watcher.Stats.MaxAttacksOfOpportunity})");
         }
         catch (System.Exception ex)
         {
             System.Exception inner = ex.InnerException ?? ex;
             Assert(false, $"Already provoked threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            s.Dispose();
+        }
+    }
+
+    private static void TestScenarioPushIsNotInTheRoundRecord()
+    {
+        // The pushed defender keeps the push's own one-AoO-per-opponent set and neither reads nor writes the
+        // round record (forced movement; open owner question CMB-150, behaviour unchanged). The attacker's ally
+        // is already in the defender's round record; the push still provokes it, and the push records nothing
+        // for the other ally it provokes.
+        if (!TryBeginScenario("Push outside the round record", out Scenario s))
+            return;
+        try
+        {
+            var attacker = AddActor(s, "BRPushAttacker", CharacterTeam.Player, new Vector2Int(4, 3), SizeCategory.Medium);
+            var target = AddActor(s, "BRPushDefender", CharacterTeam.Enemy, new Vector2Int(5, 3), SizeCategory.Medium);
+            var ally = AddActor(s, "BRPushAlly", CharacterTeam.Player, new Vector2Int(5, 4), SizeCategory.Medium);
+            var other = AddActor(s, "BRPushOtherAlly", CharacterTeam.Player, new Vector2Int(6, 2), SizeCategory.Medium);
+            GameManager.BullRushMisdirectionRollOverride = () => 100;
+
+            ThreatSystem.RecordMovementOpportunity(ally, target);
+            ResolvePush(s.Gm, attacker, target, margin: 0);
+            Assert(target.GridPosition == new Vector2Int(6, 3),
+                $"Push record: defender pushed to (6,3) (at {target.GridPosition})");
+            Assert(ally.Stats.AttacksOfOpportunityUsed == 1,
+                $"Push record: the push provokes an opponent already in the defender's round record (used {ally.Stats.AttacksOfOpportunityUsed})");
+            Assert(other.Stats.AttacksOfOpportunityUsed == 1 && !ThreatSystem.HasHadMovementOpportunity(other, target),
+                $"Push record: the push provokes the other ally and writes nothing to the defender's round record (used {other.Stats.AttacksOfOpportunityUsed})");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Push record threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            s.Dispose();
+        }
+    }
+
+    private static void TestScenarioFollowLeavesLaterMoveWhole()
+    {
+        // Owner ruling 2026-10-08 (CMB-129, PHB p.154): the squares followed after a standard bull rush are
+        // independent of the move action, so a move action after the bull rush keeps the whole movement budget.
+        // The resolver is called directly here, so the action economy (the standard action spent, the move action
+        // kept) is checked by the rules/maneuver-bullrush-then-move scenario, not by this suite.
+        if (!TryBeginScenario("Follow then move", out Scenario s))
+            return;
+        try
+        {
+            var attacker = AddActor(s, "BRMoveAttacker", CharacterTeam.Player, new Vector2Int(4, 10), SizeCategory.Medium);
+            var target = AddActor(s, "BRMoveDefender", CharacterTeam.Enemy, new Vector2Int(5, 10), SizeCategory.Medium);
+            attacker.Actions?.Reset();
+            int budget = s.Gm.GetCurrentMoveRangeSquares(attacker);
+            Assert(budget >= 3, $"Follow then move setup: the attacker has a movement budget of 3 or more squares ({budget})");
+
+            ResolvePush(s.Gm, attacker, target, margin: 10);
+            Assert(attacker.GridPosition == new Vector2Int(7, 10) && target.GridPosition == new Vector2Int(8, 10),
+                $"Follow then move: push 3 and follow 3 (at {target.GridPosition}, {attacker.GridPosition})");
+            Assert(s.Gm.GetCurrentMoveRangeSquares(attacker) == budget,
+                $"Follow then move: a later move action keeps the whole budget ({s.Gm.GetCurrentMoveRangeSquares(attacker)} of {budget})");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Follow then move threw {inner.GetType().Name}: {inner.Message}");
         }
         finally
         {

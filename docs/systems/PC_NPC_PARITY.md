@@ -174,7 +174,7 @@ After step 12, `IsControllable` should only choose between UI input and AI choic
 ## 6. Verified shared (brief) and gaps
 
 **Verified shared:**
-- Attacks: attack modifier assembly; hit, crit, concealment, mirror image, sneak attack, DR and energy resistance on weapon hits; flanking term; range increments; natural attack sequences; AoOs as attacker; movement AoOs; maneuver initiation AoOs; the bull rush push and follow (movement, AoOs, misdirection); opposed checks for trip, disarm, sunder, bull rush, feint and grapple; grapple sub-actions; free trip; melee reactions; rake.
+- Attacks: attack modifier assembly; hit, crit, concealment, mirror image, sneak attack, DR and energy resistance on weapon hits; flanking term; range increments; natural attack sequences; AoOs as attacker; movement AoOs (one per opponent per mover per round, recorded by the shared executors, CMB-128); maneuver initiation AoOs; the bull rush push and follow (movement, AoOs, misdirection); opposed checks for trip, disarm, sunder, bull rush, feint and grapple; grapple sub-actions; free trip; melee reactions; rake.
 - Turns and movement: initiative (TurnService); turn-skip gate; end of turn and dying; round ticks; 5-ft step; stand up; charge legality and penalties; speed formula.
 - Spells: casting while threatened; entangled and grappled casting Concentration; ASF roll; slot tables; Blink; counterspell; `SpellCaster.Cast` (SR, saves, DC); save negation; Lesser Globe; mirror image spell redirect.
 - Conditions, HP and items: HP state machine; healing; regeneration amount; condition application and expiry; Confusion; poison; ability damage; negative levels; all `Inventory.RecalculateStats` outputs; reload; disarm and sunder item effects.

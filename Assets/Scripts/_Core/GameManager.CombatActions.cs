@@ -758,7 +758,14 @@ public partial class GameManager
     /// path[pathIndex]. Call it BEFORE the step, while the mover is still in the square
     /// it is leaving (PHB p.137), so the threatener's reach is checked from there.
     /// Sets <paramref name="outcome"/>.StopMovement when an AoO kills, drops, trips or
-    /// otherwise stops the mover; the caller must then not take the step.
+    /// otherwise stops the mover; the caller must then not take the step. Records each
+    /// opponent listed at this step as having had its movement opportunity this round
+    /// (ThreatSystem.RecordMovementOpportunity, PHB p.138, CMB-128). Callers: PC moves and
+    /// withdraw, NPC, summon and compulsion moves, both charge paths, crawl and the overrun
+    /// continuation. The bull rush follow resolves and records its own steps
+    /// (ResolveBullRushStepAoOs). Not yet through here, so they resolve no movement AoOs and
+    /// record nothing: the PC move-through overrun, its Normal Move branch and the attacker's
+    /// follow after a targeted overrun push (CMB-151, CMB-116), and the grapple moves (CMB-152).
     /// </summary>
     private IEnumerator ResolveMovementAoOsBeforeStep(
         CharacterController mover,
@@ -773,6 +780,16 @@ public partial class GameManager
             yield break;
 
         ThreatSystem.MoverAoOSnapshot before = ThreatSystem.CaptureMoverState(mover);
+
+        // The mover leaves these opponents' squares now: each one's movement opportunity against it this
+        // round has come, whether or not the AoO is made (PHB p.138, CMB-128). Recorded for the whole step
+        // first, so a later step or move this round lists none of them again even if this step stops early.
+        for (int i = 0; i < provokedAoOs.Count; i++)
+        {
+            AoOThreatInfo aooInfo = provokedAoOs[i];
+            if (aooInfo != null && aooInfo.PathIndex == pathIndex)
+                ThreatSystem.RecordMovementOpportunity(aooInfo.Threatener, mover);
+        }
 
         for (int i = 0; i < provokedAoOs.Count; i++)
         {

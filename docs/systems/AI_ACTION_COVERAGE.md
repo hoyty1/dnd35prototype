@@ -36,7 +36,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Cleave | Never | PC path only | Yes | CMB-017 |
 | Sneak attack | Auto | damage path; AI seeks flanks, not sneak attack | Auto | CMB-028 |
 | Nonlethal | Never | | Yes | |
-| Take AoOs | Auto | `ThreatSystem.ExecuteAoO` when something provokes, before the mover leaves the square | Auto | CMB-084 |
+| Take AoOs | Auto | `ThreatSystem.ExecuteAoO` when something provokes, before the mover leaves the square; one movement AoO per mover per round (CMB-128 fixed 2026-10-08) | Auto | CMB-150, CMB-151, CMB-152 |
 | Avoid provoking: movement | Partial | path scoring | | |
 | Avoid provoking: ranged | Used | kiter risk model | Prompt | |
 | Avoid provoking: casting | Used | adjacency estimate picks or drops the spell; at cast time `ShouldCastDefensively` picks defensive (rolled) or normal (AoOs rolled) | Prompt + roll | |
