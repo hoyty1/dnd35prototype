@@ -34,13 +34,13 @@ Entries per section:
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 10 | 19 | GRID-020 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 8 | 58 | 54 | 120 | SPL-122 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 9 | 26 | 37 | 72 | CHR-073 |
-| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 23 | 18 | 45 | CRE-046 |
+| [Creatures, templates and summoning](issues/CRE.md) | CRE | 5 | 23 | 18 | 46 | CRE-047 |
 | [Encounters](issues/ENC.md) | ENC | 1 | 7 | 14 | 22 | ENC-023 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 32 | 35 | 71 | ITM-072 |
 | [AI](issues/AI.md) | AI | 1 | 19 | 39 | 59 | AI-061 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 25 | 32 | TST-036 |
-| **All** | | 33 | 269 | 354 | 656 | |
+| **All** | | 34 | 269 | 354 | 657 | |
 
 ## Top issues
 
@@ -66,6 +66,7 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [SPL-037](issues/SPL.md) | High | Spells and metamagic | Spell-specific branches at the end of ApplySpellBuff never run | Yes |
 | [CRE-002](issues/CRE.md) | High | Creatures, templates and summoning | Spawned NPCs have no alignment, so smite, aligned weapons and alignment spells ignore them | Yes |
 | [CRE-004](issues/CRE.md) | High | Creatures, templates and summoning | Spawned NPCs ignore class BAB and saves | Yes |
+| [CRE-046](issues/CRE.md) | High | Creatures, templates and summoning | A reused enemy slot keeps the previous creature's incorporeality, aura and other special traits for the rest of the session | Yes |
 | [ITM-004](issues/ITM.md) | High | Items, store, crafting and treasure | NPCs spawn without weapons and shields listed under MainHand, OffHand or Ranged | Yes |
 | [ITM-001](issues/ITM.md) | High | Items, store, crafting and treasure | Ring of Protection deflection accumulates on every stat recalculation | Yes |
 | [AI-001](issues/AI.md) | High | AI | NPCs never cast area spells, although AI scoring favours them | Yes |
