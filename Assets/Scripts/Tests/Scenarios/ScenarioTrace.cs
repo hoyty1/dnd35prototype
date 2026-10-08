@@ -205,7 +205,8 @@ namespace Tests.Scenarios
     /// </summary>
     internal sealed class ScenarioTrace
     {
-        public const string HarnessVersion = "2";
+        /// <summary>2: the cast event; 3: the attack event's weapon damage dice (dice, baseRoll).</summary>
+        public const string HarnessVersion = "3";
 
         private readonly ScenarioJob _job;
         private readonly GameManager _gm;
@@ -586,6 +587,8 @@ namespace Tests.Scenarios
                 .Set("sneak", r.SneakAttackApplied)
                 .Set("ranged", r.IsRangedAttack)
                 .Set("weapon", r.WeaponName)
+                .Set("dice", r.BaseDamageDiceStr)
+                .Set("baseRoll", r.Hit ? r.BaseDamageRoll : 0)
                 .Set("conceal", r.MissedDueToConcealment)
                 .Set("barrier", r.ProtectionSummonedBarrierBlocked)
                 .Set("deflected", IsDeflected(r))

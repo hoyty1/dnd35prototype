@@ -30,17 +30,17 @@ Entries per section:
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 2 | 20 | 15 | 37 | CORE-038 |
-| [Combat](issues/CMB.md) | CMB | 4 | 52 | 57 | 113 | CMB-133 |
+| [Combat](issues/CMB.md) | CMB | 3 | 52 | 58 | 113 | CMB-134 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 10 | 19 | GRID-020 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 8 | 58 | 54 | 120 | SPL-122 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 9 | 26 | 37 | 72 | CHR-073 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 23 | 18 | 45 | CRE-046 |
 | [Encounters](issues/ENC.md) | ENC | 1 | 7 | 14 | 22 | ENC-023 |
-| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 32 | 34 | 70 | ITM-071 |
+| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 32 | 35 | 71 | ITM-072 |
 | [AI](issues/AI.md) | AI | 1 | 19 | 39 | 59 | AI-061 |
-| [UI](issues/UI.md) | UI | 1 | 11 | 38 | 50 | UI-051 |
+| [UI](issues/UI.md) | UI | 1 | 12 | 38 | 51 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 24 | 31 | TST-035 |
-| **All** | | 35 | 268 | 348 | 651 | |
+| **All** | | 34 | 269 | 350 | 653 | |
 
 ## Top issues
 
@@ -54,7 +54,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [UI-001](issues/UI.md) | High | UI | Combat log adds about 50 pooled GameObjects on every log call (588 in one FlankingReach suite run; 175,466 after 28 soak fights, under 1 frame per second) | Yes |
 | [CMB-003](issues/CMB.md) | High | Combat | Morale and situational damage bonuses never reach weapon damage | Yes |
 | [CMB-004](issues/CMB.md) | High | Combat | Critical hits multiply only weapon dice; coup de grace multiplies sneak attack | Yes |
-| [CMB-119](issues/CMB.md) | High | Combat | Single-die weapon damage by size is one size step too large (a Small wielder's longsword deals 1d8; Enlarge Person makes it 3d6); 2d6 and 2d8 weapons scale correctly | Yes |
 | [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at the round boundary (GameManager.OnNewRound -> ConditionService.OnRoundEnd), so 1-round conditions can cost the target nothing | Yes |
 | [CHR-001](issues/CHR.md) | High | Characters, feats and classes | Created PCs get CON hit points twice; CON HP clamped to +1 per level | Yes |
 | [CHR-002](issues/CHR.md) | High | Characters, feats and classes | Class BAB and hit-die tables contradict class data and RAW (e.g. Bard 1/2 BAB) | Yes |

@@ -276,8 +276,10 @@ public static class ThreatSystem
         ItemData weapon = attacker.GetEquippedMainWeapon();
         if (weapon != null && weapon.IsWeapon)
         {
-            float diceAverage = weapon.DamageCount > 0 && weapon.DamageDice > 0
-                ? weapon.DamageCount * (weapon.DamageDice + 1) * 0.5f
+            // The dice the attack code rolls for the wielder's size (DMG Tables 2-2 and 2-3).
+            attacker.GetScaledWeaponDamageDice(weapon, out int count, out int dice);
+            float diceAverage = count > 0 && dice > 0
+                ? count * (dice + 1) * 0.5f
                 : 2.5f;
 
             float damageBonus = weapon.BonusDamage;
@@ -287,8 +289,16 @@ public static class ThreatSystem
             return Mathf.Max(1f, diceAverage + damageBonus);
         }
 
-        // Basic fallback for natural/unarmed AoOs.
-        return Mathf.Max(1f, 2f + attacker.Stats.STRMod);
+        // Natural attack (size-scaled, with its own Strength multiple) or unarmed strike (size- and monk-scaled).
+        NaturalAttackDefinition natural = attacker.Stats.GetPrimaryNaturalAttack();
+        if (natural != null)
+        {
+            attacker.Stats.GetScaledNaturalAttackDamage(natural, out int naturalCount, out int naturalDice);
+            return Mathf.Max(1f, naturalCount * (naturalDice + 1) * 0.5f + attacker.Stats.GetNaturalAttackDamageBonus(natural));
+        }
+
+        var unarmed = attacker.GetUnarmedDamage();
+        return Mathf.Max(1f, unarmed.damageCount * (unarmed.damageDice + 1) * 0.5f + unarmed.bonusDamage + attacker.Stats.STRMod);
     }
 
     // ========================================================================

@@ -584,9 +584,17 @@ public class Inventory
                 }
                 else
                 {
-                    // Unarmed: 1d3, 20/×2, bludgeoning
-                    OwnerStats.BaseDamageDice = 3;
-                    OwnerStats.BaseDamageCount = 1;
+                    // Unarmed: 1d3 at Medium (a monk's die), resized like CharacterController.GetUnarmedDamage
+                    // (PHB Table 7-5, DMG Tables 2-2 and 2-3); 20/×2, bludgeoning
+                    int unarmedMediumDie = OwnerStats.MonkUnarmedDamageDie > 0 ? OwnerStats.MonkUnarmedDamageDie : 3;
+                    if (!WeaponDamageScaler.TryScaleDamageDice(1, unarmedMediumDie, SizeCategory.Medium, OwnerStats.CurrentSizeCategory,
+                            out int unarmedCount, out int unarmedDie))
+                    {
+                        unarmedCount = 1;
+                        unarmedDie = unarmedMediumDie;
+                    }
+                    OwnerStats.BaseDamageDice = unarmedDie;
+                    OwnerStats.BaseDamageCount = unarmedCount;
                     OwnerStats.BonusDamage = 0;
                     OwnerStats.AttackRange = 1;
                 }

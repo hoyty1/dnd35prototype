@@ -1271,7 +1271,14 @@ public class CharacterController : MonoBehaviour
         return (scaledCount, scaledDice, 0);
     }
 
-    private void GetScaledWeaponDamageDice(ItemData weapon, out int damageCount, out int damageDice)
+    /// <summary>
+    /// The weapon's damage dice in this creature's hands (DMG Tables 2-2 and 2-3, p.28). Weapons are sized for their
+    /// current wielder, so a size change (Enlarge or Reduce Person) resizes them, except a thrown weapon: an item that
+    /// leaves an enlarged or reduced creature returns to its normal size, so a thrown weapon deals its normal damage
+    /// (PHB p.227 and p.269); it is scaled to the creature's normal size (<see cref="CharacterStats.BaseSizeCategory"/>).
+    /// A projectile deals damage by the size of its launcher, which stays resized, so pass false for it.
+    /// </summary>
+    public void GetScaledWeaponDamageDice(ItemData weapon, out int damageCount, out int damageDice, bool thrownAttack = false)
     {
         if (weapon == null)
         {
@@ -1280,18 +1287,26 @@ public class CharacterController : MonoBehaviour
             return;
         }
 
-        SizeCategory currentSize = Stats != null ? Stats.CurrentSizeCategory : SizeCategory.Medium;
-        weapon.GetScaledDamageDice(currentSize, out damageCount, out damageDice);
+        SizeCategory size = Stats == null ? SizeCategory.Medium
+            : thrownAttack ? Stats.BaseSizeCategory
+            : Stats.CurrentSizeCategory;
+        weapon.GetScaledDamageDice(size, out damageCount, out damageDice);
+    }
+
+    /// <summary>True when the attack throws the weapon (it leaves the wielder's hand), not a melee or launcher attack.</summary>
+    public static bool IsThrownWeaponAttack(ItemData weapon, RangeInfo rangeInfo)
+    {
+        return weapon != null && weapon.IsThrown && IsRangedWeaponAttack(weapon, rangeInfo);
     }
 
     /// <summary>
     /// Resolve base damage inputs and display label for the current attack source.
     /// </summary>
-    private void ResolveBaseAttackDamageProfile(ItemData weapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel)
+    private void ResolveBaseAttackDamageProfile(ItemData weapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel, bool thrownAttack = false)
     {
         if (weapon != null)
         {
-            GetScaledWeaponDamageDice(weapon, out damageCount, out damageDice);
+            GetScaledWeaponDamageDice(weapon, out damageCount, out damageDice, thrownAttack);
             bonusDamage = weapon.BonusDamage;
             attackLabel = weapon.Name;
             return;
@@ -5130,7 +5145,8 @@ public class CharacterController : MonoBehaviour
 
         int totalAtkMod = atkBonus.Total;
         int totalFeatDmgBonus = atkBonus.FeatDamageBonus;
-        ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
+        ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel,
+            IsThrownWeaponAttack(equippedWeapon, rangeInfo));
 
         // D&D 3.5e Magic Stone: when firing a sling with active Magic Stone charges,
         // override damage to 1d6+1; the +1 enhancement to attack is atkBonus.MagicStoneBonus (PHB p.251)
@@ -5301,7 +5317,8 @@ public class CharacterController : MonoBehaviour
         bool rapidShotActive = sequenceBonus.Feats.RapidShotActive;
         int totalFeatDmgBonus = sequenceBonus.FeatDamageBonus;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
-        ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
+        ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel,
+            IsThrownWeaponAttack(equippedWeapon, rangeInfo));
 
         bool useNaturalAttackSequence = isMelee && ShouldUseInnateNaturalAttackProfile(equippedWeapon);
         if (useNaturalAttackSequence)
@@ -5777,7 +5794,7 @@ public class CharacterController : MonoBehaviour
 
             int totalMainFeatDmg = mainBonus.FeatDamageBonus;
 
-            GetScaledWeaponDamageDice(mainWeapon, out int mainDamageCount, out int mainDamageDice);
+            GetScaledWeaponDamageDice(mainWeapon, out int mainDamageCount, out int mainDamageDice, IsThrownWeaponAttack(mainWeapon, rangeInfo));
 
             int hpBeforeMain = target.Stats.CurrentHP;
             CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
@@ -5829,7 +5846,7 @@ public class CharacterController : MonoBehaviour
 
             int totalOffFeatDmg = offBonus.FeatDamageBonus;
 
-            GetScaledWeaponDamageDice(offWeapon, out int offDamageCount, out int offDamageDice);
+            GetScaledWeaponDamageDice(offWeapon, out int offDamageCount, out int offDamageDice, IsThrownWeaponAttack(offWeapon, rangeInfo));
 
             int hpBeforeOff = target.Stats.CurrentHP;
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
@@ -9926,7 +9943,7 @@ public class CharacterController : MonoBehaviour
                             + useOpponentWeaponAttackPenalty;
 
             GetScaledWeaponDamageDice(opponentWeapon, out int scaledOpponentDamageCount, out int scaledOpponentDamageDice);
-            int damageDice = Mathf.Max(2, scaledOpponentDamageDice);
+            int damageDice = Mathf.Max(1, scaledOpponentDamageDice); // a 1-point step (DMG p.28) rolls 1d1, CMB-133
             int damageCount = Mathf.Max(1, scaledOpponentDamageCount);
             int bonusDamage = opponentWeapon.BonusDamage;
             int critThreatMin = opponentWeapon.CritThreatMin > 0 ? opponentWeapon.CritThreatMin : 20;
@@ -10154,7 +10171,7 @@ public class CharacterController : MonoBehaviour
         else
         {
             GetScaledWeaponDamageDice(weapon, out int scaledWeaponDamageCount, out int scaledWeaponDamageDice);
-            damageDice = Mathf.Max(2, scaledWeaponDamageDice);
+            damageDice = Mathf.Max(1, scaledWeaponDamageDice); // a 1-point step (DMG p.28) rolls 1d1, CMB-133
             damageCount = Mathf.Max(1, scaledWeaponDamageCount);
             bonusDamage = weapon.BonusDamage;
             critThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;

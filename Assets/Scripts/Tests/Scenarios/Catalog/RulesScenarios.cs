@@ -43,6 +43,9 @@ namespace Tests.Scenarios
     /// Pin release (PHB p.157, CMB-089, CMB-122): the release ends the grapple and moves neither creature; either one
     /// then leaves the shared square with ordinary movement (PHB p.148 forbids only ending a move in an occupied
     /// square), and the one that stays is not moved until it moves itself.
+    /// Weapon damage by size (CMB-119): DMG Tables 2-2 and 2-3 (p.28) scale a Medium weapon's damage one row per
+    /// size category; PHB Table 7-5 (p.116) gives a Small longsword 1d6; Enlarge Person (PHB p.226) and Reduce Person
+    /// (p.269) resize the wielder's weapon with it; MM goblin (p.133, morningstar 1d6) and ogre (p.199, greatclub 2d8).
     /// The AI maneuver stopgap (owner decision 2026-10-07, AI-060) is an AI decision limit, not a rule: after a
     /// maneuver lands the AI attacks with its remaining steps, and it does not retry a failed maneuver type against
     /// the same target that turn.
@@ -50,7 +53,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 49;
+        public const int Count = 50;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -106,6 +109,7 @@ namespace Tests.Scenarios
             yield return S("stability-trip", () => StabilityCheck("rules/stability-trip", "A four-legged formian taskmaster resists a trip with +4 stability (PHB p.158, CMB-085)", "formian_taskmaster", SpecialAttackType.Trip, true));
             yield return S("stability-bullrush", () => StabilityCheck("rules/stability-bullrush", "A four-legged formian taskmaster resists a bull rush with +4 stability (PHB p.154, CMB-085)", "formian_taskmaster", SpecialAttackType.BullRushAttack, true));
             yield return S("stability-trip-control", () => StabilityCheck("rules/stability-trip-control", "A barghest in its natural form (the only modelled form) gets no stability against a trip (PHB p.158, CMB-085)", "barghest", SpecialAttackType.Trip, false));
+            yield return S("weapon-size-damage", WeaponSizeDamage);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -1635,6 +1639,131 @@ namespace Tests.Scenarios
                      : ExpectResult.Fail("mods " + attacks[0].Int("mod") + ", " + attacks[1].Int("mod"), attacks[0].Seq, attacks[1].Seq);
              });
             return b.Build();
+        }
+
+        // ── Weapon damage by size (CMB-119; DMG p.28 Tables 2-2 and 2-3) ──────────
+
+        /// <summary>A fighter 4 like <see cref="Fighter"/> but of the given race (a halfling is Small, PHB p.19).</summary>
+        private static CharacterStats FighterOfRace(string name, string race)
+        {
+            var s = new CharacterStats(
+                name: name, level: 4, characterClass: "Fighter",
+                str: 16, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 10,
+                bab: 4, armorBonus: 0, shieldBonus: 0,
+                damageDice: 8, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 32, raceName: race);
+            s.BaseAttackBonusOverride = 4;
+            return s;
+        }
+
+        /// <summary>
+        /// Strips the off-hand kit and applies the real Enlarge Person or Reduce Person effect through the target's
+        /// StatusEffectManager (the size shift and inventory recalculation of the spell's buff path); a harness
+        /// stand-in for the cast itself, which no NPC caster in the catalog prepares.
+        /// </summary>
+        private static Action<CharacterController> WithSizeSpell(string spellId) => c =>
+        {
+            StripOffHand(c);
+            SpellDatabase.Init();
+            SpellData spell = SpellDatabase.GetSpell(spellId);
+            if (spell != null && c.StatusEffectManager != null)
+                c.StatusEffectManager.AddEffect(spell.Clone(), "ScenarioHarness", 1);
+        };
+
+        /// <summary>Every attack by <paramref name="key"/> rolls <paramref name="dice"/>; a hit that is not a crit rolls within those dice.</summary>
+        private static Func<TraceView, ExpectResult> RollsDice(string key, string dice)
+        {
+            return v =>
+            {
+                List<TraceEvent> attacks = v.Attacks(key, null, false);
+                if (attacks.Count == 0) return ExpectResult.Fail("no attack by " + key);
+                TraceEvent wrong = attacks.FirstOrDefault(e => e.Str("dice") != dice);
+                if (wrong != null) return ExpectResult.Fail(key + " rolled " + wrong.Str("dice") + " with " + wrong.Str("weapon"), wrong.Seq);
+                string[] parts = dice.Split('d');
+                int count = int.Parse(parts[0]), sides = int.Parse(parts[1]);
+                TraceEvent outOfRange = attacks.FirstOrDefault(e => e.Bool("hit") && !e.Bool("confirmed")
+                    && (e.Int("baseRoll") < count || e.Int("baseRoll") > count * sides));
+                if (outOfRange != null) return ExpectResult.Fail("base roll " + outOfRange.Int("baseRoll") + " outside " + dice, outOfRange.Seq);
+                return ExpectResult.Pass(attacks.Count + " attacks with " + attacks[0].Str("weapon") + ", " + dice, attacks.Select(e => e.Seq).ToArray());
+            };
+        }
+
+        /// <summary>
+        /// Puts a greatclub in the MM ogre's right hand. Its NPC data lists the greatclub under EquipSlot.MainHand, which
+        /// DirectEquip drops (ITM-004), so the ogre otherwise fights with an unarmed strike. Large NPCs whose weapon is
+        /// listed under RightHand (ogre_brute, test_ogre_gust) spawn armed; the scenario's "brute" covers that path.
+        /// </summary>
+        private static void EquipGreatclub(CharacterController c)
+        {
+            InventoryComponent inv = c.GetComponent<InventoryComponent>();
+            if (inv == null || inv.CharacterInventory == null || inv.CharacterInventory.RightHandSlot != null)
+                return;
+#pragma warning disable CS0618
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(DND35e.Identifiers.ItemIDs.GREATCLUB), EquipSlot.RightHand);
+#pragma warning restore CS0618
+            inv.CharacterInventory.RecalculateStats();
+        }
+
+        private static Func<TraceView, ExpectResult> ActorSize(string key, SizeCategory size)
+        {
+            return v =>
+            {
+                TraceEvent a = v.Of("actor").FirstOrDefault(e => e.Str("key") == key);
+                object got = a != null ? a.Get("size") : null;
+                return got is SizeCategory s && s == size
+                    ? ExpectResult.Pass(key + " is " + size, a.Seq)
+                    : ExpectResult.Fail(key + " is " + (got ?? "missing"));
+            };
+        }
+
+        /// <summary>
+        /// Each attacker makes one scripted attack with its weapon; the trace's attack dice must match the DMG tables
+        /// for its size: a Medium longsword 1d8, a halfling's 1d6, an enlarged human's 2d6, a reduced human's 1d6, the
+        /// Small goblin's morningstar 1d6 and the Large ogre's greatclub 2d8, both for the MM ogre given its greatclub by
+        /// a tweak and for ogre_brute, which spawns with its greatclub (CMB-119).
+        /// </summary>
+        private static ScenarioDef WeaponSizeDamage()
+        {
+            return Rules("rules/weapon-size-damage", "Weapon damage dice follow the wielder's size: DMG Tables 2-2 and 2-3 (p.28), PHB Table 7-5, MM goblin and ogre (CMB-119)")
+                .Covers("CMB-119", "DMG p.28", "PHB p.116", "PHB p.226", "PHB p.269", "MM p.133", "MM p.199")
+                .MaxRounds(1)
+                .Pc("medium", ActorSource.Stats(() => FighterOfRace("Medium", "Human")), 3, 3, Control.Scripted)
+                .Pc("halfling", ActorSource.Stats(() => FighterOfRace("Halfling", "Halfling")), 3, 7, Control.Scripted)
+                .Pc("enlarged", ActorSource.Stats(() => FighterOfRace("Enlarged", "Human")), 3, 11, Control.Scripted)
+                .Pc("reduced", ActorSource.Stats(() => FighterOfRace("Reduced", "Human")), 3, 15, Control.Scripted)
+                .Npc("d1", "target_dummy", 4, 3, Control.Idle)
+                .Npc("d2", "target_dummy", 4, 7, Control.Idle)
+                .Npc("d3", "target_dummy", 5, 11, Control.Idle)
+                .Npc("d4", "target_dummy", 4, 15, Control.Idle)
+                .Npc("goblin", "goblin", 2, 3, Control.Scripted)
+                .Npc("ogre", "ogre", 1, 7, Control.Scripted)
+                .Npc("brute", "ogre_brute", 1, 14, Control.Scripted)
+                .Tweak("medium", StripOffHand)
+                .Tweak("halfling", StripOffHand)
+                .Tweak("enlarged", WithSizeSpell(DND35e.Identifiers.SpellNames.ENLARGE_PERSON))
+                .Tweak("reduced", WithSizeSpell(DND35e.Identifiers.SpellNames.REDUCE_PERSON))
+                .Tweak("ogre", EquipGreatclub)
+                .Initiative("medium", "halfling", "enlarged", "reduced", "goblin", "ogre", "brute")
+                .Turn("medium", 1, Step.Attack("d1"))
+                .Turn("halfling", 1, Step.Attack("d2"))
+                .Turn("enlarged", 1, Step.Attack("d3"))
+                .Turn("reduced", 1, Step.Attack("d4"))
+                .Turn("goblin", 1, Step.Attack("medium"))
+                .Turn("ogre", 1, Step.Attack("halfling"))
+                .Turn("brute", 1, Step.Attack("reduced"))
+                .Expect("Sizes: halfling and reduced human Small, enlarged human Large, goblin Small, ogre Large (PHB p.226, p.269)", Expect.All(
+                    ActorSize("medium", SizeCategory.Medium), ActorSize("halfling", SizeCategory.Small),
+                    ActorSize("enlarged", SizeCategory.Large), ActorSize("reduced", SizeCategory.Small),
+                    ActorSize("goblin", SizeCategory.Small), ActorSize("ogre", SizeCategory.Large),
+                    ActorSize("brute", SizeCategory.Large)))
+                .Expect("A Medium longsword rolls 1d8 (PHB Table 7-5)", RollsDice("medium", "1d8"))
+                .Expect("A halfling's longsword rolls 1d6 (PHB Table 7-5; DMG Table 2-3)", RollsDice("halfling", "1d6"))
+                .Expect("An enlarged human's longsword rolls 2d6 (Enlarge Person, PHB p.226; DMG Table 2-2)", RollsDice("enlarged", "2d6"))
+                .Expect("A reduced human's longsword rolls 1d6 (Reduce Person, PHB p.269; DMG Table 2-3)", RollsDice("reduced", "1d6"))
+                .Expect("The Small goblin's morningstar rolls 1d6 (MM p.133; DMG Table 2-3)", RollsDice("goblin", "1d6"))
+                .Expect("The Large ogre's greatclub rolls 2d8 (MM p.199; DMG Table 2-2)", RollsDice("ogre", "2d8"))
+                .Expect("The Large ogre_brute's spawned greatclub rolls 2d8 (DMG Table 2-2)", RollsDice("brute", "2d8"))
+                .Build();
         }
     }
 }

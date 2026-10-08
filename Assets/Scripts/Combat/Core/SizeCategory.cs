@@ -196,27 +196,83 @@ public static class SizeCategoryExtensions
 }
 
 /// <summary>
-/// D&D 3.5e weapon/natural attack damage scaling by size category
-/// (DMG tables for changing weapon damage by size).
+/// D&D 3.5e weapon and natural attack damage scaling by size category.
+///
+/// Source: DMG Tables 2-2 (increasing) and 2-3 (decreasing weapon damage by size), p.28. Both tables list a
+/// weapon's Medium damage and its damage one to four size categories larger or smaller, so a Medium weapon covers
+/// Fine (four smaller) to Colossal (four larger). The rows below are those tables, one per Medium damage value,
+/// indexed by <see cref="SizeCategory"/> (Fine 0 ... Medium 4 ... Colossal 8), so index 4 is always the key.
+/// "-" marks a step the DMG leaves blank: the weapon would deal less than 1 point, which the DMG says has no
+/// effect (it is no longer a weapon). The game has no zero-damage weapon state, so such a step keeps 1 point
+/// (CMB-133).
+///
+/// A source that is not Medium (a natural attack of a Large creature, for example) has no DMG row of its own.
+/// It is scaled one size category at a time: each step reads the "One" column of the row whose Medium damage
+/// equals the current damage, the way MM Table 4-3 (p.291) repeats its one-category increase for each category.
+/// Applied from Medium, these single steps give exactly the multi-step columns of both DMG tables. Values the
+/// tables reach but do not list as a row (3d6, 4d6, 6d6, 8d6, 3d8, 4d8, 6d8, 8d8) step along the ladders the tables
+/// themselves use (3d6, 4d6, 6d6, 8d6, 12d6 and 3d8, 4d8, 6d8, 8d8, 12d8); those extension steps are not printed
+/// in the DMG. A value outside both (1d20, 3d4, ...) is not scaled.
 /// </summary>
 public static class WeaponDamageScaler
 {
+    /// <summary>A step the DMG leaves blank: less than 1 point, no longer a weapon (DMG p.28).</summary>
+    public const string NoDamage = "-";
+
+    // Keys are the damage at Medium; values are indexed by SizeCategory, Fine (0) to Colossal (8).
+    // Fine..Small come from DMG Table 2-3 (four to one categories smaller), Large..Colossal from Table 2-2.
     private static readonly Dictionary<string, string[]> MediumReferenceProgressions = new Dictionary<string, string[]>
     {
-        // Keys are the damage expression at Medium size.
-        { "1",   new[] { "1",   "1",   "1",   "1",   "1",   "1d2", "1d3", "1d4", "1d6" } },
-        { "1d2", new[] { "1",   "1",   "1",   "1d2", "1d3", "1d4", "1d6", "1d8", "2d6" } },
-        { "1d3", new[] { "1",   "1d2", "1d2", "1d3", "1d4", "1d6", "1d8", "2d6", "3d6" } },
-        { "1d4", new[] { "1",   "1d2", "1d3", "1d4", "1d6", "1d8", "2d6", "3d6", "4d6" } },
-        { "1d6", new[] { "1d2", "1d3", "1d4", "1d6", "1d8", "2d6", "3d6", "4d6", "6d6" } },
-        { "1d8", new[] { "1d3", "1d4", "1d6", "1d8", "2d6", "3d6", "4d6", "6d6", "8d6" } },
-        { "1d10",new[] { "1d4", "1d6", "1d8", "1d10","2d8", "3d8", "4d8", "6d8", "8d8" } },
-        { "1d12",new[] { "1d6", "1d8", "1d10","1d12","3d6", "4d6", "6d6", "8d6", "12d6" } },
-        { "2d4", new[] { "1d3", "1d4", "1d6", "1d8", "2d4", "2d6", "3d6", "4d6", "6d6" } },
-        { "2d6", new[] { "1d4", "1d6", "1d8", "1d10","2d6", "3d6", "4d6", "6d6", "8d6" } },
-        { "2d8", new[] { "1d6", "1d8", "1d10","2d6", "2d8", "3d8", "4d8", "6d8", "8d8" } },
+        //                Fine      Dimin.    Tiny      Small     Medium  Large   Huge    Garg.   Colossal
+        { "1d2",  new[] { NoDamage, NoDamage, NoDamage, "1",      "1d2",  "1d3",  "1d4",  "1d6",  "1d8"  } },
+        { "1d3",  new[] { NoDamage, NoDamage, "1",      "1d2",    "1d3",  "1d4",  "1d6",  "1d8",  "2d6"  } },
+        { "1d4",  new[] { NoDamage, "1",      "1d2",    "1d3",    "1d4",  "1d6",  "1d8",  "2d6",  "3d6"  } },
+        { "1d6",  new[] { "1",      "1d2",    "1d3",    "1d4",    "1d6",  "1d8",  "2d6",  "3d6",  "4d6"  } },
+        { "1d8",  new[] { "1d2",    "1d3",    "1d4",    "1d6",    "1d8",  "2d6",  "3d6",  "4d6",  "6d6"  } },
+        { "1d10", new[] { "1d3",    "1d4",    "1d6",    "1d8",    "1d10", "2d8",  "3d8",  "4d8",  "6d8"  } },
+        { "1d12", new[] { "1d4",    "1d6",    "1d8",    "1d10",   "1d12", "3d6",  "4d6",  "6d6",  "8d6"  } },
+        { "2d4",  new[] { "1d2",    "1d3",    "1d4",    "1d6",    "2d4",  "2d6",  "3d6",  "4d6",  "6d6"  } },
+        { "2d6",  new[] { "1d4",    "1d6",    "1d8",    "1d10",   "2d6",  "3d6",  "4d6",  "6d6",  "8d6"  } },
+        { "2d8",  new[] { "1d6",    "1d8",    "1d10",   "2d6",    "2d8",  "3d8",  "4d8",  "6d8",  "8d8"  } },
+        { "2d10", new[] { "1d8",    "1d10",   "2d6",    "2d8",    "2d10", "4d8",  "6d8",  "8d8",  "12d8" } },
     };
 
+    // One size category up or down for values that are not a DMG row (the tables' own ladders, extended).
+    // "1" (1 point) has no DMG row either: up it follows the 1d2 row's ladder, down it is gone (DMG p.28).
+    private static readonly Dictionary<string, string> ExtensionStepUp = new Dictionary<string, string>
+    {
+        { "1", "1d2" },
+        { "3d6", "4d6" }, { "4d6", "6d6" }, { "6d6", "8d6" }, { "8d6", "12d6" },
+        { "3d8", "4d8" }, { "4d8", "6d8" }, { "6d8", "8d8" }, { "8d8", "12d8" },
+    };
+
+    private static readonly Dictionary<string, string> ExtensionStepDown = new Dictionary<string, string>
+    {
+        { "1", NoDamage },
+        { "3d6", "2d6" }, { "4d6", "3d6" }, { "6d6", "4d6" }, { "8d6", "6d6" }, { "12d6", "8d6" },
+        { "3d8", "2d8" }, { "4d8", "3d8" }, { "6d8", "4d8" }, { "8d8", "6d8" }, { "12d8", "8d8" },
+    };
+
+    /// <summary>
+    /// The DMG Table 2-2/2-3 entry for a weapon whose Medium damage is <paramref name="mediumExpression"/>, at
+    /// <paramref name="size"/>: "-" (<see cref="NoDamage"/>) where the table leaves the step blank, null when the
+    /// value is not a table row.
+    /// </summary>
+    public static string GetMediumTableEntry(string mediumExpression, SizeCategory size)
+    {
+        if (mediumExpression == null || !MediumReferenceProgressions.TryGetValue(mediumExpression, out string[] row))
+            return null;
+        return row[(int)size];
+    }
+
+    /// <summary>The Medium damage values that DMG Tables 2-2 and 2-3 list as rows.</summary>
+    public static IEnumerable<string> MediumTableKeys => MediumReferenceProgressions.Keys;
+
+    /// <summary>
+    /// Scales <paramref name="baseCount"/>d<paramref name="baseDice"/> from <paramref name="fromSize"/> to
+    /// <paramref name="toSize"/>. Returns false, with the outputs left at the base dice, when the value is outside
+    /// the tables. A step the DMG leaves blank (less than 1 point) gives 1 point (CMB-133).
+    /// </summary>
     public static bool TryScaleDamageDice(int baseCount, int baseDice, SizeCategory fromSize, SizeCategory toSize, out int scaledCount, out int scaledDice)
     {
         scaledCount = Mathf.Max(1, baseCount);
@@ -225,10 +281,17 @@ public static class WeaponDamageScaler
         if (fromSize == toSize)
             return true;
 
-        if (!TryResolveProgression(baseCount, baseDice, fromSize, out string[] progression))
+        string expression = ToExpression(baseCount, baseDice);
+        string scaled;
+        if (fromSize == SizeCategory.Medium && MediumReferenceProgressions.TryGetValue(expression, out string[] row))
+            scaled = row[(int)toSize];
+        else if (!TryStep(expression, (int)toSize - (int)fromSize, out scaled))
             return false;
 
-        return TryParseDamageExpression(progression[(int)toSize], out scaledCount, out scaledDice);
+        if (scaled == NoDamage)
+            scaled = "1";
+
+        return TryParseDamageExpression(scaled, out scaledCount, out scaledDice);
     }
 
     public static string ScaleDamageExpression(string baseExpression, SizeCategory fromSize, SizeCategory toSize)
@@ -242,38 +305,35 @@ public static class WeaponDamageScaler
         return ToExpression(scaledCount, scaledDice);
     }
 
-    private static bool TryResolveProgression(int damageCount, int damageDice, SizeCategory fromSize, out string[] progression)
+    /// <summary>
+    /// Applies <paramref name="steps"/> single size-category changes (positive = larger), each read from the row
+    /// keyed by the current value (the DMG p.28 "One" columns) or from the extension ladders. Once the damage drops
+    /// below 1 point it stays gone (<see cref="NoDamage"/>).
+    /// </summary>
+    private static bool TryStep(string expression, int steps, out string result)
     {
-        progression = null;
-        string expression = ToExpression(damageCount, damageDice);
-
-        // Fast path when source expression is already the Medium baseline key.
-        if (fromSize == SizeCategory.Medium && MediumReferenceProgressions.TryGetValue(expression, out progression))
-            return true;
-
-        string[] candidate = null;
-        foreach (KeyValuePair<string, string[]> kvp in MediumReferenceProgressions)
+        result = expression;
+        int direction = steps > 0 ? 1 : -1;
+        for (int i = 0; i != steps; i += direction)
         {
-            string atSourceSize = kvp.Value[(int)fromSize];
-            if (!TryParseDamageExpression(atSourceSize, out int candidateCount, out int candidateDice))
-                continue;
-
-            if (candidateCount != damageCount || candidateDice != damageDice)
-                continue;
-
-            // Prefer exact medium-key match when ambiguous.
-            if (kvp.Key == expression)
-            {
-                progression = kvp.Value;
+            if (result == NoDamage)
                 return true;
+
+            if (MediumReferenceProgressions.TryGetValue(result, out string[] row))
+            {
+                result = row[(int)SizeCategory.Medium + direction];
+                continue;
             }
 
-            if (candidate == null)
-                candidate = kvp.Value;
+            Dictionary<string, string> ladder = direction > 0 ? ExtensionStepUp : ExtensionStepDown;
+            if (!ladder.TryGetValue(result, out string next))
+            {
+                result = expression;
+                return false;
+            }
+            result = next;
         }
-
-        progression = candidate;
-        return progression != null;
+        return true;
     }
 
     private static bool TryParseDamageExpression(string expression, out int count, out int dice)

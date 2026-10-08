@@ -990,27 +990,10 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 9,
-      "failed": 4,
+      "passed": 73,
+      "failed": 0,
       "flakyFailures": 0,
-      "knownFailures": [
-        {
-          "match": "Longsword Medium->Small = 1d6",
-          "issue": "CMB-119"
-        },
-        {
-          "match": "Longsword Medium->Large = 2d6",
-          "issue": "CMB-119"
-        },
-        {
-          "match": "After enlarge, equipped longsword damage is 2d6",
-          "issue": "CMB-119"
-        },
-        {
-          "match": "After enlarge then reduce to Small, equipped longsword damage is 1d6",
-          "issue": "CMB-119"
-        }
-      ],
+      "knownFailures": [],
       "notes": ""
     },
     {
