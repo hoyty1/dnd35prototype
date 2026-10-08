@@ -1631,6 +1631,7 @@ public partial class GameManager
         List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, maxRange + sizePadding);
         bool hasTarget = false;
         bool hasRefusedBullRushTarget = false;
+        bool hasRefusedTripTarget = false;
 
         foreach (var c in allCells)
         {
@@ -1675,6 +1676,18 @@ public partial class GameManager
                 continue;
             }
 
+            if (type == SpecialAttackType.Trip)
+            {
+                // Shared trip legality (size, swarm, incorporeal; PHB p.158): gray targets are refused.
+                bool canTrip = attacker.CanTrip(c.Occupant, out _);
+                if (!canTrip)
+                    hasRefusedTripTarget = true;
+                c.SetHighlight(canTrip ? HighlightType.Attack : HighlightType.AttackDeadZone);
+                _highlightedCells.Add(c);
+                hasTarget = true;
+                continue;
+            }
+
             if (type == SpecialAttackType.Sunder)
             {
                 bool hasSunderableItem = c.Occupant.HasSunderableItemEquipped();
@@ -1711,6 +1724,8 @@ public partial class GameManager
                 CombatUI.SetTurnIndicator(hasRefusedBullRushTarget
                     ? "SPECIAL: Bull Rush (standard action) - red targets are valid; gray targets are too large, incorporeal or swarms (Right-click/Esc to cancel)"
                     : "SPECIAL: Bull Rush (standard action) - select an adjacent target (Right-click/Esc to cancel)");
+            else if (type == SpecialAttackType.Trip && hasRefusedTripTarget)
+                CombatUI.SetTurnIndicator("SPECIAL: Trip - red targets are valid; gray targets are too large, incorporeal or swarms (Right-click/Esc to cancel)");
             else if (type == SpecialAttackType.CoupDeGrace)
                 CombatUI.SetTurnIndicator("SPECIAL: Coup de Grace - red targets are helpless and vulnerable to critical hits (Right-click/Esc to cancel)");
             else
@@ -1765,6 +1780,17 @@ public partial class GameManager
         if (type == SpecialAttackType.BullRushAttack && !attacker.CanBullRush(target, false, out string bullRushReason))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot bull rush {target.Stats.CharacterName}: {bullRushReason}."));
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            _isSelectingSpecialAttack = false;
+            ShowActionChoices();
+            return;
+        }
+
+        // Shared trip legality (size, swarm, incorporeal; PHB p.158, CMB-079), also before any cost.
+        if (type == SpecialAttackType.Trip && !attacker.CanTrip(target, out string tripReason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot trip {target.Stats.CharacterName}: {tripReason}."));
             Grid.ClearAllHighlights();
             _highlightedCells.Clear();
             _isSelectingSpecialAttack = false;
@@ -2084,6 +2110,14 @@ public partial class GameManager
         // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
         if (type == SpecialAttackType.Trip || type == SpecialAttackType.Disarm)
             MeleeReactionService.TriggerReactions(attacker, target, null);
+
+        // The Improved Trip attack and the defender's counter-trip (PHB p.96, p.158; CMB-079), shared
+        // with the NPC executor. A controllable defender's prompt holds the finish until it is answered.
+        if (type == SpecialAttackType.Trip)
+        {
+            HandleTripAftermath(attacker, target, result, () => FinalizeSpecialAttackResolution(attacker, target));
+            return;
+        }
 
         if (result.Success)
         {

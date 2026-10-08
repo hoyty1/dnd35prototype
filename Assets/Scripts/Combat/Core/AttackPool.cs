@@ -58,6 +58,14 @@ public sealed class AttackPool
     /// </summary>
     public bool HasteExtraNaturalAttackUsed { get; private set; }
 
+    /// <summary>
+    /// Natural-sequence index of the natural attack the last maneuver substitute gave up this turn, or -1 (none
+    /// yet, or the last substitute replaced an iterative step). Set by
+    /// <see cref="CharacterController.TryCommitManeuverSubstituteStep"/>; read by the Improved Trip follow-up
+    /// attack (PHB p.96, CMB-079), which is that natural attack made as if the trip had not used it.
+    /// </summary>
+    public int LastSubstituteNaturalAttackIndex { get; private set; } = -1;
+
     public bool IsFullAttack => Mode == ProgressiveAttackMode.FullAttackCommitted;
     public bool HasStartedAttacking => Mode != ProgressiveAttackMode.None;
     public bool NextAttackNeedsMoveAction => Mode == ProgressiveAttackMode.StandardAttackCommitted && !PendingStepPaid;
@@ -70,6 +78,12 @@ public sealed class AttackPool
         MainHandBudget = 0;
         PendingStepPaid = false;
         HasteExtraNaturalAttackUsed = false;
+        LastSubstituteNaturalAttackIndex = -1;
+    }
+
+    internal void RecordSubstituteNaturalAttack(int naturalAttackIndex)
+    {
+        LastSubstituteNaturalAttackIndex = naturalAttackIndex;
     }
 
     internal void MarkHasteExtraNaturalAttackUsed()

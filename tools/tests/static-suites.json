@@ -1234,7 +1234,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 410,
+      "passed": 437,
       "failed": 7,
       "flakyFailures": 0,
       "knownFailures": [
@@ -1267,7 +1267,7 @@
           "issue": "TST-027"
         }
       ],
-      "notes": "Deterministic since the helpers set BaseAttackBonusOverride (CHR-068): the same assertions fail with all 67 seeds swept on 2026-10-07, and with seeds 1-30 after CMB-120. TST-027: 7 checks of rewritten log text. The 3 pin-duration checks pass since CMB-120 (1-round pin, renewal on the pinner's next turn). The pass count also takes in assertions added by CMB-085, CMB-102 and CMB-106, whose commits did not refresh it."
+      "notes": "Deterministic since the helpers set BaseAttackBonusOverride (CHR-068): the same assertions fail with all 67 seeds swept on 2026-10-07, and with seeds 1-30 after CMB-120. TST-027: 7 checks of rewritten log text. The 3 pin-duration checks pass since CMB-120 (1-round pin, renewal on the pinner's next turn). The pass count also takes in assertions added by CMB-085, CMB-102 and CMB-106, whose commits did not refresh it, and the 22 trip checks of CMB-079 (432 on 2026-10-08)."
     },
     {
       "type": "Tests.Maneuvers.OverrunRulesTests",

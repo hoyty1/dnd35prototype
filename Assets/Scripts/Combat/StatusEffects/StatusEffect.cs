@@ -905,4 +905,32 @@ public class SpecialAttackResult
     // Overrun-specific metadata.
     public bool DefenderAvoided;
     public bool AttackerActionConsumed = true;
+
+    // Trip metadata (PHB p.158, p.96; CMB-079).
+    /// <summary>A trip lost at the opposed check: the defender may try to trip the tripper back (PHB p.158). Never set after a free trip.</summary>
+    public bool CounterTripAllowed;
+    /// <summary>This result is a counter-trip (the defender's reaction after a failed trip), reported as a trip by the defender.</summary>
+    public bool IsCounterTrip;
+    /// <summary>
+    /// A trip by an attacker with Improved Trip landed and its attack (PHB p.96) is still to be made:
+    /// CharacterController.PrepareImprovedTripFollowUp sets it with the fields below, and
+    /// GameManager.HandleTripAftermath makes the attack (CharacterController.ResolveImprovedTripFollowUp, which
+    /// clears it) after the trip's log and melee reactions.
+    /// </summary>
+    public bool ImprovedTripFollowUpPending;
+    /// <summary>
+    /// Bonus of the attack step the trip replaced, a PC's two-weapon main-hand penalty included (null: the free
+    /// trip's triggering hit, or full BAB).
+    /// </summary>
+    public int? FollowUpAttackBonus;
+    /// <summary>The hit that triggered a free trip (MM trip), made again as the follow-up, or null.</summary>
+    public CombatResult FollowUpTrigger;
+    /// <summary>Natural-sequence index of the natural attack to make as the follow-up, or -1.</summary>
+    public int FollowUpNaturalAttackIndex = -1;
+    /// <summary>The Improved Trip attack made after a trip that landed (PHB p.96), or null.</summary>
+    public CombatResult FollowUpAttack;
+    /// <summary>Log label of <see cref="FollowUpAttack"/>.</summary>
+    public string FollowUpLabel;
+    /// <summary>Why an Improved Trip attack was not made after a trip that landed (out of reach, a ranged weapon), or null.</summary>
+    public string FollowUpNote;
 }

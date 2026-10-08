@@ -1093,6 +1093,10 @@ public class CharacterController : MonoBehaviour
         if (kind == AttackStepKind.NaturalSequence
             && (givesUpHasteExtraAttack || (naturalAttackIndex < 0 && IsHasteExtraNaturalStep(stepIndex))))
             MarkHasteExtraNaturalAttackUsed();
+        // Which natural attack was given up, for the Improved Trip follow-up attack (PHB p.96, CMB-079).
+        ProgressiveAttackPool.RecordSubstituteNaturalAttack(kind == AttackStepKind.NaturalSequence
+            ? (naturalAttackIndex >= 0 ? naturalAttackIndex : ResolveNaturalAttackIndexForStep(stepIndex))
+            : -1);
         return true;
     }
 
@@ -10588,7 +10592,11 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Resolves a special attack (see <see cref="ExecuteSpecialAttackCore"/>), then reports it to the
-    /// inert <see cref="ScenarioHooks.ManeuverResolved"/> test hook.
+    /// inert <see cref="ScenarioHooks.ManeuverResolved"/> test hook. A trip that lands records the Improved
+    /// Trip attack (<see cref="PrepareImprovedTripFollowUp"/>, PHB p.96) at the trip's bonus,
+    /// <paramref name="tripAttackBonusOverride"/> (the bonus of the step the trip replaced; for a PC in a
+    /// two-weapon round it already carries the main-hand penalty, GameManager.TryCommitMainHandManeuverStep);
+    /// GameManager.HandleTripAftermath makes it after the trip's log and reactions.
     /// </summary>
     public SpecialAttackResult ExecuteSpecialAttack(
         SpecialAttackType type,
@@ -10614,6 +10622,8 @@ public class CharacterController : MonoBehaviour
             sunderTargetSlot, sunderAttackBonusOverride, sunderAttackerWeaponOverride,
             sunderUsedOffHand, sunderDualWieldPenaltyForLog);
         ScenarioHooks.ManeuverResolved?.Invoke(this, target, type, result);
+        if (type == SpecialAttackType.Trip)
+            PrepareImprovedTripFollowUp(result, tripAttackBonusOverride, freeTripTrigger: null);
         return result;
     }
 
@@ -10862,32 +10872,358 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Free trip after a hit (MM trip, e.g. a wolf's bite): no touch attack and no attack of
-    /// opportunity. The opposed Strength check is the normal one.
+    /// opportunity. The opposed Strength check is the normal one, the trip size limit applies (PHB p.158),
+    /// and the opponent cannot react to trip back (the MM trip entries, for example the wolf, MM p.283).
+    /// With Improved Trip a trip that lands records the feat's attack (PHB p.96): the attack that hit,
+    /// <paramref name="triggeringHit"/>, made again (<see cref="PrepareImprovedTripFollowUp"/>). The caller runs
+    /// GameManager.HandleTripAftermath after the trip's log and reactions to make it.
     /// </summary>
-    public SpecialAttackResult ResolveFreeTripAttempt(CharacterController target)
+    public SpecialAttackResult ResolveFreeTripAttempt(CharacterController target, CombatResult triggeringHit = null)
     {
-        return ResolveTrip(target, attackBonusOverride: null, freeTripAfterHit: true);
+        SpecialAttackResult result = ResolveTrip(target, attackBonusOverride: null, freeTripAfterHit: true);
+        PrepareImprovedTripFollowUp(result, null,
+            triggeringHit ?? new CombatResult { BreakdownBAB = Stats != null ? Stats.BaseAttackBonus : 0 });
+        return result;
+    }
+
+    // ========== TRIP LEGALITY, COUNTER-TRIP AND IMPROVED TRIP (PHB p.158, p.96; CMB-079) ==========
+
+    /// <summary>
+    /// Shared trip legality for PCs and NPCs (PHB p.158, CMB-079). Spends nothing. Refuses when the target
+    /// is missing, dead or this creature; this creature is a swarm (swarms make no trip attempts here) or
+    /// the target is a swarm (MM p.316); either side is incorporeal (MM p.311: an incorporeal creature
+    /// cannot trip or be tripped); or the target is more than one size category larger than this creature
+    /// (PHB p.158). Checked by the PC menu and wrapper and the NPC executor before any cost, by the AI's trip
+    /// choices, by <see cref="ResolveTrip"/> itself (free trips included), and from the defender's side for
+    /// a counter-trip (<see cref="CanCounterTrip"/>).
+    /// </summary>
+    public bool CanTrip(CharacterController target, out string reason)
+    {
+        reason = null;
+        if (target == null || target.Stats == null || target == this || Stats == null)
+        {
+            reason = "no valid target";
+            return false;
+        }
+
+        if (target.IsDead || target.Stats.IsDead)
+        {
+            reason = $"{target.Stats.CharacterName} is dead";
+            return false;
+        }
+
+        if (Stats.IsSwarm)
+        {
+            reason = $"{Stats.CharacterName} cannot make trip attempts while in swarm form";
+            return false;
+        }
+
+        if (target.Stats.IsSwarm)
+        {
+            reason = $"{target.Stats.CharacterName} is a swarm and cannot be tripped";
+            return false;
+        }
+
+        if (IsIncorporeal)
+        {
+            reason = $"{Stats.CharacterName} is incorporeal and cannot trip";
+            return false;
+        }
+
+        if (target.IsIncorporeal)
+        {
+            reason = $"{target.Stats.CharacterName} is incorporeal and cannot be tripped";
+            return false;
+        }
+
+        // SizeCategory runs Fine..Colossal: the target may be at most one category larger (PHB p.158).
+        if ((int)target.GetCurrentSizeCategory() - (int)GetCurrentSizeCategory() > 1)
+        {
+            reason = $"{target.Stats.CharacterName} is more than one size category larger";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Whether this creature, the defender of a trip that just failed at the opposed check, may try to trip
+    /// the tripper back (PHB p.158). The rule part only; whether it wants to is the defender's choice (the PC
+    /// prompt or the AI, GameManager.HandleTripAftermath). Refused when either side is down; this creature
+    /// cannot act (an HP state that cannot act, 0 HP or below, a helpless condition, or a condition that
+    /// prevents attacks such as stunned or nauseated); it is grappling (PHB p.156 limits a grappler to grapple
+    /// actions); the tripper is already prone; the trip would be illegal from this side (<see cref="CanTrip"/>:
+    /// size, swarm, incorporeal); or a protection barrier keeps this summoned creature from touching the
+    /// tripper. A disabled creature (0 HP, or below with Diehard) does not react: the reaction is treated as a
+    /// strenuous action (PHB p.145), an interpretation awaiting the owner (CMB-136).
+    /// </summary>
+    public bool CanCounterTrip(CharacterController tripper, out string reason)
+    {
+        reason = null;
+        if (Stats == null || IsDead || Stats.IsDead)
+        {
+            reason = "the defender is down";
+            return false;
+        }
+
+        if (tripper == null || tripper.Stats == null || tripper.IsDead || tripper.Stats.IsDead)
+        {
+            reason = "no tripper to trip back";
+            return false;
+        }
+
+        if (Stats.CurrentHP <= 0 || !CanTakeTurnActions() || !CanAttack() || IsHelplessLikeConditionState())
+        {
+            reason = $"{Stats.CharacterName} cannot act";
+            return false;
+        }
+
+        if (IsGrappling())
+        {
+            reason = $"{Stats.CharacterName} is grappling";
+            return false;
+        }
+
+        if (tripper.HasCondition(CombatConditionType.Prone))
+        {
+            reason = $"{tripper.Stats.CharacterName} is already prone";
+            return false;
+        }
+
+        if (!CanTrip(tripper, out reason))
+            return false;
+
+        if (IsBlockedBySummonedContactBarrier(tripper, out _))
+        {
+            reason = $"a protection barrier keeps {Stats.CharacterName} from touching {tripper.Stats.CharacterName}";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The counter-trip (PHB p.158): after <paramref name="tripper"/>'s trip against this creature failed at the
+    /// opposed check, this creature makes a Strength check opposed by the tripper's Dexterity or Strength check
+    /// (the better modifier): the same opposed check as a trip (<see cref="GetTripAttackerCheckModifier"/>, so
+    /// Improved Trip's +4 counts, against <see cref="GetTripOrOverrunDefenderCheckModifier"/>, with the special
+    /// size modifiers and the tripper's stability), with the roles swapped. No touch attack and no attack of
+    /// opportunity; it is an attack for invisibility and Sanctuary. On a win the tripper is prone. Raises
+    /// <see cref="ScenarioHooks.ManeuverResolved"/> as a trip by this creature with
+    /// <see cref="SpecialAttackResult.IsCounterTrip"/> set. The caller asks the defender first
+    /// (GameManager.HandleTripAftermath, which also runs the contact side effects); no Improved Trip
+    /// follow-up comes from it (CMB-134).
+    /// </summary>
+    public SpecialAttackResult ResolveCounterTrip(CharacterController tripper)
+    {
+        var result = new SpecialAttackResult
+        {
+            ManeuverName = "Counter-trip",
+            IsCounterTrip = true,
+            AttackerActionConsumed = false
+        };
+
+        if (!CanCounterTrip(tripper, out string reason))
+        {
+            result.Log = $"{(Stats != null ? Stats.CharacterName : name)} cannot trip back: {reason}.";
+            return result;
+        }
+
+        if (tripper.Team != Team)
+            BreakInvisibility("attack action", tripper);
+        CombatFlowService.BreakProtectiveWardsOnAttack(this);
+
+        int atkRoll = DiceService.D20("Counter-trip check");
+        int defRoll = DiceService.D20("Counter-trip resist check");
+        int atkModifier = GetTripAttackerCheckModifier();
+        int defModifier = tripper.GetTripOrOverrunDefenderCheckModifier();
+        int atkTotal = atkRoll + atkModifier;
+        int defTotal = defRoll + defModifier;
+
+        bool success = DoesAttackerWinOpposedCheck(atkTotal, atkModifier, defTotal, defModifier);
+        if (success)
+            tripper.ApplyCondition(CombatConditionType.Prone, -1, Stats.CharacterName);
+
+        string checkLine = $"Str check {atkTotal} (d20 {atkRoll} {CharacterStats.FormatMod(atkModifier)}) vs "
+            + $"{tripper.Stats.CharacterName}'s Str/Dex check {defTotal} (d20 {defRoll} {CharacterStats.FormatMod(defModifier)})"
+            + (atkTotal == defTotal ? ", tie broken by modifier or reroll" : string.Empty);
+
+        result.Success = success;
+        result.CheckRoll = atkRoll;
+        result.CheckTotal = atkTotal;
+        result.OpposedRoll = defRoll;
+        result.OpposedTotal = defTotal;
+        result.Log = success
+            ? $"{Stats.CharacterName} trips {tripper.Stats.CharacterName} back! {checkLine} → PRONE (until standing)."
+            : $"{Stats.CharacterName} tries to trip {tripper.Stats.CharacterName} back and fails. {checkLine}.";
+
+        ScenarioHooks.ManeuverResolved?.Invoke(this, tripper, SpecialAttackType.Trip, result);
+        return result;
+    }
+
+    /// <summary>
+    /// Chance that the side with <paramref name="attackerModifier"/> wins an opposed d20 check against
+    /// <paramref name="defenderModifier"/> (PHB p.64: the higher result wins, a tie goes to the higher
+    /// modifier, and with equal modifiers both roll again, counted as half). Exact over the 400 roll pairs.
+    /// Used by the counter-trip prompt and the AI's counter-trip choice.
+    /// </summary>
+    public static float EstimateOpposedCheckWinChance(int attackerModifier, int defenderModifier)
+    {
+        int halfWins = 0;
+        for (int a = 1; a <= 20; a++)
+        {
+            for (int d = 1; d <= 20; d++)
+            {
+                int attackerTotal = a + attackerModifier;
+                int defenderTotal = d + defenderModifier;
+                if (attackerTotal > defenderTotal)
+                    halfWins += 2;
+                else if (attackerTotal == defenderTotal)
+                    halfWins += attackerModifier > defenderModifier ? 2 : (attackerModifier == defenderModifier ? 1 : 0);
+            }
+        }
+
+        return halfWins / 800f;
+    }
+
+    /// <summary>
+    /// Improved Trip (PHB p.96), first half: after a trip by this creature lands, records on
+    /// <paramref name="result"/> the attack the feat grants, without making it. The attack is the one the trip
+    /// replaced, "as if you hadn't used your attack for the trip attempt": <paramref name="tripAttackBonus"/> is
+    /// that step's bonus (for a PC in a two-weapon round it already includes the main-hand penalty, added by
+    /// GameManager.TryCommitMainHandManeuverStep); a natural step is the natural attack the trip gave up
+    /// (<see cref="AttackPool.LastSubstituteNaturalAttackIndex"/>). After a free trip (MM trip on a hit,
+    /// <paramref name="freeTripTrigger"/> set) the attack that hit is made again. A counter-trip records none
+    /// (CMB-134). GameManager.HandleTripAftermath makes the attack (<see cref="ResolveImprovedTripFollowUp"/>)
+    /// after the trip's own log and melee reactions.
+    /// </summary>
+    private void PrepareImprovedTripFollowUp(SpecialAttackResult result, int? tripAttackBonus, CombatResult freeTripTrigger)
+    {
+        if (result == null || !result.Success || result.IsCounterTrip || Stats == null || !Stats.HasFeat("Improved Trip"))
+            return;
+
+        result.ImprovedTripFollowUpPending = true;
+        result.FollowUpAttackBonus = tripAttackBonus;
+        result.FollowUpTrigger = freeTripTrigger;
+        result.FollowUpNaturalAttackIndex = !UsesInnateNaturalAttackSequence()
+            ? -1
+            : freeTripTrigger != null
+                ? FindNaturalAttackSequenceIndex(freeTripTrigger.WeaponName)
+                : ProgressiveAttackPool.LastSubstituteNaturalAttackIndex;
+    }
+
+    /// <summary>
+    /// Improved Trip (PHB p.96), second half: makes the attack <see cref="PrepareImprovedTripFollowUp"/> recorded,
+    /// once (the pending flag is cleared). Called by GameManager.HandleTripAftermath after the trip's own log and
+    /// melee reactions, so a tripper those reactions dropped makes no attack. A weapon or unarmed step is one
+    /// Attack with the main weapon at the recorded bonus and modifier; a natural step is the natural attack the
+    /// trip gave up, at its own bonus. After a free trip the attack that hit is made again: the same natural
+    /// attack, or a weapon attack at that hit's BAB. The attack spends no step of the attack sequence, provokes
+    /// nothing, and is made only while both sides are up, this creature can attack and the target is in melee
+    /// reach of the main weapon (no fallback weapon, CMB-136). The attack goes in
+    /// <see cref="SpecialAttackResult.FollowUpAttack"/>, a reason it was not made in
+    /// <see cref="SpecialAttackResult.FollowUpNote"/>.
+    /// </summary>
+    public void ResolveImprovedTripFollowUp(CharacterController target, SpecialAttackResult result)
+    {
+        if (result == null || !result.ImprovedTripFollowUpPending)
+            return;
+
+        result.ImprovedTripFollowUpPending = false;
+        if (Stats == null || target == null || target.Stats == null || target.IsDead || target.Stats.IsDead)
+            return;
+
+        string selfName = Stats.CharacterName;
+        if (IsDead || Stats.IsDead || Stats.CurrentHP <= 0 || !CanAttack())
+        {
+            result.FollowUpNote = $"Improved Trip: {selfName} cannot make the follow-up attack.";
+            return;
+        }
+
+        bool natural = UsesInnateNaturalAttackSequence();
+        ItemData weapon = GetEquippedMainWeapon();
+        if (!natural && weapon != null && weapon.WeaponCat == WeaponCategory.Ranged)
+        {
+            result.FollowUpNote = $"Improved Trip: {selfName} holds a ranged weapon and makes no melee follow-up attack.";
+            return;
+        }
+
+        if (!IsTargetInCurrentWeaponRange(target))
+        {
+            result.FollowUpNote = $"Improved Trip: {target.Stats.CharacterName} is out of {selfName}'s melee reach, so no follow-up attack.";
+            return;
+        }
+
+        GameManager gm = GameManager.Instance;
+        List<CharacterController> combatants = gm != null ? gm.GetAllCharactersForAI() : null;
+        CharacterController flankPartner = null;
+        bool isFlanking = combatants != null && CombatUtils.IsAttackerFlanking(this, target, combatants, out flankPartner);
+        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+        string partnerName = flankPartner != null && flankPartner.Stats != null ? flankPartner.Stats.CharacterName : null;
+
+        CombatResult attack = null;
+        string label = null;
+        if (natural)
+        {
+            int naturalIndex = result.FollowUpNaturalAttackIndex;
+            if (naturalIndex < 0)
+                naturalIndex = GetDefaultHasteNaturalAttackIndex();
+            if (naturalIndex < 0)
+                return;
+
+            FullAttackResult naturalAttack = FullAttack(target, isFlanking, flankBonus, partnerName, null,
+                startAttackIndex: naturalIndex, maxAttacks: 1);
+            if (naturalAttack != null && naturalAttack.Attacks != null && naturalAttack.Attacks.Count > 0)
+            {
+                attack = naturalAttack.Attacks[0];
+                label = naturalAttack.AttackLabels != null && naturalAttack.AttackLabels.Count > 0
+                    ? naturalAttack.AttackLabels[0]
+                    : "Natural attack";
+            }
+        }
+        else
+        {
+            CombatResult trigger = result.FollowUpTrigger;
+            int bab = result.FollowUpAttackBonus ?? (trigger != null ? trigger.BreakdownBAB : Stats.BaseAttackBonus);
+            attack = Attack(target, isFlanking, flankBonus, partnerName, null, bab, weapon);
+            label = $"{(weapon != null ? weapon.Name : "Unarmed strike")} (BAB {CharacterStats.FormatMod(bab)})";
+        }
+
+        if (attack == null)
+            return;
+
+        result.FollowUpAttack = attack;
+        result.FollowUpLabel = $"Improved Trip attack: {label}";
+    }
+
+    /// <summary>Sequence index of the first natural attack named <paramref name="naturalAttackName"/>, or -1.</summary>
+    private int FindNaturalAttackSequenceIndex(string naturalAttackName)
+    {
+        if (Stats == null || string.IsNullOrEmpty(naturalAttackName))
+            return -1;
+
+        int count = Stats.GetTotalNaturalAttackCount();
+        for (int i = 0; i < count; i++)
+        {
+            NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(i);
+            if (natural != null && natural.Name == naturalAttackName)
+                return i;
+        }
+
+        return -1;
     }
 
     private SpecialAttackResult ResolveTrip(CharacterController target, int? attackBonusOverride = null, bool freeTripAfterHit = false)
     {
-        if (Stats != null && Stats.IsSwarm)
+        // Shared legality (size, swarm, incorporeal; PHB p.158). Callers check it before any cost;
+        // this keeps a free trip and any direct call inside the rule too.
+        if (!CanTrip(target, out string tripReason))
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Trip",
                 Success = false,
-                Log = $"{Stats.CharacterName} cannot make trip attempts while in swarm form."
-            };
-        }
-
-        if (target != null && target.Stats != null && target.Stats.IsSwarm)
-        {
-            return new SpecialAttackResult
-            {
-                ManeuverName = "Trip",
-                Success = false,
-                Log = $"{target.Stats.CharacterName} is a swarm and cannot be tripped."
+                Log = $"{(Stats != null ? Stats.CharacterName : name)} cannot trip: {tripReason}."
             };
         }
 
@@ -10946,6 +11282,10 @@ public class CharacterController : MonoBehaviour
             CheckTotal = atkTotal,
             OpposedRoll = defRoll,
             OpposedTotal = defTotal,
+            // PHB p.158: a trip lost at the opposed check lets the defender try to trip back; a free
+            // trip after a hit does not (MM trip: the opponent cannot react to trip). Whether the
+            // defender wants to is its own choice (GameManager.HandleTripAftermath).
+            CounterTripAllowed = !success && !freeTripAfterHit && target.CanCounterTrip(this, out _),
             Log = success
                 ? $"{Stats.CharacterName} trips {target.Stats.CharacterName}! {prefix}{checkLine} → PRONE (until standing)."
                 : $"{Stats.CharacterName} fails to trip {target.Stats.CharacterName}. {prefix}{checkLine}."

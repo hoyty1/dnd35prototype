@@ -765,6 +765,8 @@ namespace Tests.Scenarios
                 if (!job.Decided && job.WallCapSeconds > 0 && Time.realtimeSinceStartup - job.StartRealtime > job.WallCapSeconds)
                     job.Decide(Outcome.Timeout, "wall-clock cap " + job.WallCapSeconds + " s", false);
                 if (!job.Decided)
+                    TryRun(job, "counter-trip", () => HandleCounterTripPrompt(job, gm), Outcome.Exception);
+                if (!job.Decided)
                     TryRun(job, "ui-steps", () => HandleUiTurn(job, gm), Outcome.Exception);
                 WriteStatus(false);
             }
@@ -1160,6 +1162,23 @@ namespace Tests.Scenarios
                 if (cc != null && cc.aiProfile == profile)
                     return true;
             return false;
+        }
+
+        /// <summary>
+        /// Answers an open counter-trip prompt (a controllable defender after a failed trip, PHB p.158, CMB-079) through
+        /// the same answer the prompt's buttons give, as the scenario says (<see cref="ScenarioDef.CounterTripAnswers"/>;
+        /// trip back by default), and notes it in the trace. It can open on any turn, so it is answered here, not by a step.
+        /// </summary>
+        private static void HandleCounterTripPrompt(ScenarioJob job, GameManager gm)
+        {
+            CharacterController defender = gm.Harness_PendingCounterTripDefender;
+            if (defender == null)
+                return;
+
+            string key = job.Trace != null ? job.Trace.KeyOf(defender) : null;
+            bool tripBack = key == null || !job.Def.CounterTripAnswers.TryGetValue(key, out bool answer) || answer;
+            bool answered = gm.Harness_AnswerCounterTrip(tripBack);
+            job.Ctx?.Note("counter-trip prompt for " + (key ?? "?") + " answered " + (tripBack ? "TripBack" : "Decline") + (answered ? string.Empty : " (not open)"));
         }
 
         private static void HandleUiTurn(ScenarioJob job, GameManager gm)

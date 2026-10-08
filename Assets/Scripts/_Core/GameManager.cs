@@ -1119,6 +1119,7 @@ public partial class GameManager : MonoBehaviour
         _pendingAoOAction = null;
         _spellcastProvocationCancelled = false;
         ClearSpellcastResourceSnapshot();
+        ClearCounterTripPrompt(hideDialog: true);
 
         _isSelectingWithdraw = false;
         _isSelectingBreakWallTarget = false;

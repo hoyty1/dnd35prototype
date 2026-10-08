@@ -1027,7 +1027,12 @@ public class AIService : MonoBehaviour
             if (!usedSpecial)
                 yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, rangedTarget));
             else
+            {
+                // A failed trip may be waiting on a controllable defender's counter-trip choice (CMB-079).
+                while (_gameManager.IsAwaitingCounterTripChoice)
+                    yield return null;
                 yield return new WaitForSeconds(0.8f);
+            }
         }
         else if (distToRangedTarget > maxRange && npc.Actions.HasMoveAction)
         {
@@ -2251,6 +2256,22 @@ public class AIService : MonoBehaviour
         return score;
     }
 
+    /// <summary>
+    /// The defender's choice after a failed trip against an AI-run <paramref name="defender"/> (PHB p.158,
+    /// CMB-079): its profile's <see cref="AIProfile.ShouldCounterTrip"/>, or
+    /// <see cref="AIProfile.DefaultShouldCounterTrip"/> without a profile. Asked by
+    /// GameManager.HandleTripAftermath only when the rule allows the counter-trip.
+    /// </summary>
+    public bool ShouldCounterTrip(CharacterController defender, CharacterController tripper)
+    {
+        AIProfile profile = GetProfile(defender);
+        bool tripBack = profile != null
+            ? profile.ShouldCounterTrip(defender, tripper)
+            : AIProfile.DefaultShouldCounterTrip(defender, tripper);
+        Debug.Log($"[AI][CounterTrip] {defender?.Stats?.CharacterName ?? "<null>"} {(tripBack ? "trips back" : "declines to trip back")} against {tripper?.Stats?.CharacterName ?? "<null>"}.");
+        return tripBack;
+    }
+
     public bool ShouldUseManeuver(CharacterController npc, CharacterController target)
     {
         if (npc == null || target == null)
@@ -2283,7 +2304,8 @@ public class AIService : MonoBehaviour
                 }
 
                 if (preferred.Value == SpecialAttackType.Trip)
-                    return !target.HasCondition(CombatConditionType.Prone) && npc.HasMeleeWeaponEquipped();
+                    return !target.HasCondition(CombatConditionType.Prone) && npc.HasMeleeWeaponEquipped()
+                        && npc.CanTrip(target, out _); // size, swarm, incorporeal (PHB p.158, CMB-079)
 
                 if (preferred.Value == SpecialAttackType.Disarm)
                     return target.HasDisarmableWeaponEquipped();
@@ -2307,7 +2329,8 @@ public class AIService : MonoBehaviour
             return true; // disarm preference
         if (!target.Stats.IsProne
             && npc.HasMeleeWeaponEquipped()
-            && npc.CanPerformSpecialAttack(SpecialAttackType.Trip))
+            && npc.CanPerformSpecialAttack(SpecialAttackType.Trip)
+            && npc.CanTrip(target, out _))
             return true; // trip preference
 
         return npc.Stats.STRMod >= 4
@@ -3248,8 +3271,9 @@ public class AIService : MonoBehaviour
 
         bool hasImprovedGrab = npc.Stats.HasImprovedGrab;
 
-        // Trip: target must be standing, NPC must have melee weapon
-        if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped() && npc.CanPerformSpecialAttack(SpecialAttackType.Trip))
+        // Trip: target must be standing and trippable (size, swarm, incorporeal; PHB p.158), NPC must have melee weapon
+        if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped() && npc.CanPerformSpecialAttack(SpecialAttackType.Trip)
+            && npc.CanTrip(target, out _))
             return SpecialAttackType.Trip;
 
         // Disarm: target has weapon, NPC has high STR

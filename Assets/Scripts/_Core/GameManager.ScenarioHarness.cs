@@ -223,6 +223,7 @@ public partial class GameManager
         StopAllCoroutines();
         _turnService?.StopAllCoroutines();
         _turnService?.ForceResetWithoutCallbacks($"ScenarioHarness.Halt:{reason}");
+        ClearCounterTripPrompt(hideDialog: true);
         CurrentPhase = TurnPhase.CombatOver;
     }
 
@@ -365,6 +366,8 @@ public partial class GameManager
     /// </summary>
     internal string Harness_PendingPrompt()
     {
+        if (_counterTripPromptOpen)
+            return "counter-trip";
         if (_waitingForAoOConfirmation)
             return "aoo";
         if (_isAwaitingRangedRetargetSelection)
@@ -464,6 +467,24 @@ public partial class GameManager
     /// <summary>The AoO confirmation the player is being asked to answer, or null.</summary>
     internal AoOProvokingActionInfo Harness_PendingAoO
         => _waitingForAoOConfirmation ? _pendingAoOAction : null;
+
+    /// <summary>The defender whose counter-trip prompt is open (PHB p.158, CMB-079), else null.</summary>
+    internal CharacterController Harness_PendingCounterTripDefender
+        => _counterTripPromptOpen ? _counterTripPromptDefender : null;
+
+    /// <summary>
+    /// Answers the open counter-trip prompt exactly as its buttons do: true = Trip Back, false = Decline.
+    /// Returns false when no prompt is open.
+    /// </summary>
+    internal bool Harness_AnswerCounterTrip(bool tripBack)
+    {
+        if (!_counterTripPromptOpen)
+            return false;
+
+        CombatUI?.HideConfirmationDialog();
+        AnswerCounterTripPrompt(tripBack);
+        return true;
+    }
 
     /// <summary>
     /// Answers the pending AoO confirmation exactly as the panel buttons do: 0 = proceed (cast

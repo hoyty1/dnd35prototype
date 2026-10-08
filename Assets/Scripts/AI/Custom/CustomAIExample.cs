@@ -38,7 +38,7 @@ namespace DND35.AI.Custom
             if (self != null && target != null && self.Stats != null)
             {
                 // Example: high-STR bruiser prefers trip when target validation passes.
-                if (self.Stats.STRMod >= 3 && IsValidTripTarget(target))
+                if (self.Stats.STRMod >= 3 && IsValidTripTarget(target, self))
                     return SpecialAttackType.Trip;
 
                 // Example: use disarm when opponent has a valid held weapon.

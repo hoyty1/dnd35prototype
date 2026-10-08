@@ -212,9 +212,11 @@ namespace DND35.AI
         }
 
         /// <summary>
-        /// Validates whether trip is meaningful against the current target.
+        /// Validates whether trip is meaningful against the current target: it is standing, and, when
+        /// <paramref name="self"/> is given, the shared trip legality allows it (size, swarm, incorporeal;
+        /// CharacterController.CanTrip, PHB p.158, CMB-079).
         /// </summary>
-        protected virtual bool IsValidTripTarget(CharacterController target)
+        protected virtual bool IsValidTripTarget(CharacterController target, CharacterController self = null)
         {
             if (target == null)
             {
@@ -228,7 +230,52 @@ namespace DND35.AI
                 return false;
             }
 
+            if (self != null && !self.CanTrip(target, out string reason))
+            {
+                Debug.Log($"[AI Validation] Cannot trip {target.Stats?.CharacterName ?? "Unknown"} - {reason}.");
+                return false;
+            }
+
             return true;
+        }
+
+        /// <summary>
+        /// Lowest chance of winning the opposed check at which an AI-run creature trips back after a failed
+        /// trip against it (PHB p.158, CMB-079). A failed counter-trip costs nothing by RAW, so the AI declines
+        /// only a clearly bad one: about 1 in 10 or worse, a check some 10 or more points weaker.
+        /// </summary>
+        public const float CounterTripMinimumWinChance = 0.10f;
+
+        /// <summary>
+        /// The defender's choice after a failed trip against <paramref name="self"/> (PHB p.158): whether this
+        /// AI-run creature tries to trip <paramref name="tripper"/> back. Asked by AIService.ShouldCounterTrip
+        /// only when the rule allows it (CharacterController.CanCounterTrip). The default is
+        /// <see cref="DefaultShouldCounterTrip"/>; a profile may override it.
+        /// </summary>
+        public virtual bool ShouldCounterTrip(CharacterController self, CharacterController tripper)
+        {
+            return DefaultShouldCounterTrip(self, tripper);
+        }
+
+        /// <summary>
+        /// Default counter-trip choice (CMB-079; owner direction 2026-10-07: counter-trip unless it is clearly
+        /// bad). Declines when the reaction would end this creature's invisibility or Sanctuary (it counts as
+        /// an attack), or when its chance to win the opposed check is below
+        /// <see cref="CounterTripMinimumWinChance"/> (CharacterController.EstimateOpposedCheckWinChance with
+        /// the counter-trip modifiers); otherwise trips back.
+        /// </summary>
+        public static bool DefaultShouldCounterTrip(CharacterController self, CharacterController tripper)
+        {
+            if (self == null || tripper == null || self.Stats == null || tripper.Stats == null)
+                return false;
+
+            if (self.HasActiveInvisibilityEffect || self.Stats.SanctuaryActive)
+                return false;
+
+            float chance = CharacterController.EstimateOpposedCheckWinChance(
+                self.GetTripAttackerCheckModifier(),
+                tripper.GetTripOrOverrunDefenderCheckModifier());
+            return chance >= CounterTripMinimumWinChance;
         }
 
         /// <summary>
@@ -332,7 +379,7 @@ namespace DND35.AI
 
             if (Maneuvers != null)
             {
-                if (Maneuvers.AttemptTrip && self.HasMeleeWeaponEquipped() && IsValidTripTarget(target))
+                if (Maneuvers.AttemptTrip && self.HasMeleeWeaponEquipped() && IsValidTripTarget(target, self))
                     return SpecialAttackType.Trip;
 
                 if (Maneuvers.AttemptDisarm && IsValidDisarmTarget(target))

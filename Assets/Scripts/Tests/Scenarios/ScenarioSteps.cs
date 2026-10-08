@@ -376,6 +376,10 @@ namespace Tests.Scenarios
                         ok = gm.TryNPCSpecialAttackByTypeForAI(a, target, s.ManeuverType);
                         if (ok == false) note = "executor returned false (" + preM + ")";
                         yield return null;
+                        // A failed trip against a controllable defender opens its counter-trip prompt (CMB-079); the
+                        // runner answers it, and the step settles after the answer, as the NPC coroutines wait for it.
+                        for (int w = 0; w < UiSettleFrames && gm.IsAwaitingCounterTripChoice; w++)
+                            yield return null;
                         break;
 
                     case StepKind.Cast:

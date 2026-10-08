@@ -640,6 +640,7 @@ namespace Tests.Scenarios
                 .Set("opposedRoll", r != null ? r.OpposedRoll : 0)
                 .Set("provoked", r != null && r.ProvokedAoO)
                 .Set("consumed", r == null || r.AttackerActionConsumed)
+                .Set("counter", r != null && r.IsCounterTrip)
                 .Set("attackerDown", ScenarioChecks.IsDown(attacker));
             _job.Checks.OnActed(attacker, ev, "maneuver");
         }

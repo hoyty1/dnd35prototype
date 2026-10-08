@@ -249,8 +249,15 @@ public partial class GameManager
         if (!attackResult.Hit || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
             return;
 
-        // MM trip (Ex): no touch attack and no AoO (CMB-014).
-        SpecialAttackResult tripResult = attacker.ResolveFreeTripAttempt(target);
+        // The trip size limit and the other trip rules apply to a free trip too (PHB p.158, CMB-079).
+        if (!attacker.CanTrip(target, out string cannotTripReason))
+        {
+            Debug.Log($"[NPC Trip Follow-up] {attacker.Stats.CharacterName} makes no free trip: {cannotTripReason}.");
+            return;
+        }
+
+        // MM trip (Ex): no touch attack and no AoO (CMB-014); the opponent cannot trip back.
+        SpecialAttackResult tripResult = attacker.ResolveFreeTripAttempt(target, attackResult);
         string tripContext = tripResult.Success
             ? "free trip follow-up"
             : "free trip attempt failed";
@@ -260,6 +267,9 @@ public partial class GameManager
 
         // Melee reaction effects (Fire Shield, Thorns, etc.) — free trip follow-up is a melee maneuver
         MeleeReactionService.TriggerReactions(attacker, target, null);
+
+        // The Improved Trip attack after a free trip that landed (PHB p.96, CMB-079); no counter-trip.
+        HandleTripAftermath(attacker, target, tripResult, null);
     }
 
     private void TryResolveFreeTripFromAttackResults(CharacterController attacker, CharacterController target, List<CombatResult> attacks, RangeInfo attackRange)
@@ -318,7 +328,8 @@ public partial class GameManager
 
         if (!target.Stats.IsProne
             && npc.HasMeleeWeaponEquipped()
-            && npc.CanPerformSpecialAttack(SpecialAttackType.Trip))
+            && npc.CanPerformSpecialAttack(SpecialAttackType.Trip)
+            && npc.CanTrip(target, out _))
             return SpecialAttackType.Trip;
 
         if (target.GetEquippedMainWeapon() != null
@@ -416,6 +427,14 @@ public partial class GameManager
             return false;
         }
 
+        // Same trip legality as the PC wrapper (size, swarm, incorporeal; PHB p.158, CMB-079), checked
+        // before any cost or AoO.
+        if (choice.Value == SpecialAttackType.Trip && !npc.CanTrip(target, out string tripReason))
+        {
+            Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot trip {target?.Stats?.CharacterName ?? "<null>"}: {tripReason}");
+            return false;
+        }
+
         // Sunder needs a manufactured weapon (CharacterController.CanSunderWithMainWeapon, the check the
         // PC buttons and the AI use), refused before any attack step or AoO is spent.
         if (choice.Value == SpecialAttackType.Sunder && !npc.CanSunderWithMainWeapon(out string sunderReason))
@@ -486,6 +505,12 @@ public partial class GameManager
         // Melee reaction effects (Fire Shield, Thorns, etc.) — trip/disarm are melee maneuvers
         if (choice.Value == SpecialAttackType.Trip || choice.Value == SpecialAttackType.Disarm)
             MeleeReactionService.TriggerReactions(npc, target, null);
+
+        // The Improved Trip attack and the defender's counter-trip (PHB p.96, p.158; CMB-079), shared with
+        // the PC wrapper. A controllable defender's prompt may still be open when this returns
+        // (IsAwaitingCounterTripChoice); the NPC coroutines wait on it before the next step.
+        if (choice.Value == SpecialAttackType.Trip)
+            HandleTripAftermath(npc, target, result, null);
 
         if (result.Success)
         {
@@ -670,6 +695,10 @@ public partial class GameManager
     /// In a natural sequence the NPC is offered at most one substitute (an AI limit pending AI-035).
     /// Each attack is resolved by CharacterController.ResolveAttackSequenceStep, the resolver the
     /// PC iterative flow uses (PC_NPC_PARITY plan step 6).
+    /// A trip that failed against a controllable defender may leave the counter-trip prompt open
+    /// (PHB p.158, CMB-079): the loop then stops with <paramref name="resume"/>.Suspended set, and the
+    /// coroutine wrapper waits for the answer and calls again with the same <paramref name="resume"/>
+    /// to continue the sequence (null: a fresh sequence that cannot be resumed).
     /// </summary>
     private FullAttackResult PerformNPCMeleeAttackSequence(
         CharacterController npc,
@@ -679,12 +708,15 @@ public partial class GameManager
         out bool startedGrappleBySubstitute,
         out int maneuversUsed,
         out int targetSwitchCount,
-        out string stopReason)
+        out string stopReason,
+        NpcMeleeSequenceResume resume)
     {
         startedGrappleBySubstitute = false;
         maneuversUsed = 0;
         targetSwitchCount = 0;
         stopReason = null;
+        if (resume != null)
+            resume.Suspended = false;
 
         var aggregate = new FullAttackResult
         {
@@ -706,7 +738,7 @@ public partial class GameManager
         // Grab creature needs. Until AI-035 adds an odds check, a natural-attack NPC makes at most
         // one maneuver substitute per sequence; its other natural attacks are rolled. PCs may replace
         // as many natural attacks as they like. Weapon sequences keep the per-step evaluation.
-        bool naturalSubstituteUsed = false;
+        bool naturalSubstituteUsed = resume != null && resume.NaturalSubstituteUsed;
 
         // Safety cap; the attack sequence itself ends the loop (CanCommitAttack). Sized from the
         // budget so that maneuvers and kill-retargets (iterations that commit no attack) cannot
@@ -798,6 +830,17 @@ public partial class GameManager
 
                     if (npc.Stats.IsDead || npc.Stats.CurrentHP <= 0)
                         break;
+
+                    // A failed trip waits on a controllable defender's counter-trip choice (PHB p.158,
+                    // CMB-079): stop here; NPCMeleeAttackSequence resumes after the answer.
+                    if (IsAwaitingCounterTripChoice && resume != null)
+                    {
+                        resume.Suspended = true;
+                        resume.NaturalSubstituteUsed = naturalSubstituteUsed;
+                        resume.Target = currentTarget;
+                        stopReason = "waiting for the defender's counter-trip choice";
+                        break;
+                    }
 
                     // A non-substitute (coup de grace, bull rush) spent the standard or full-round
                     // action, so the next CanCommitAttack fails and the loop ends.
@@ -913,14 +956,28 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// Where a suspended <see cref="PerformNPCMeleeAttackSequence"/> stopped: set when a counter-trip prompt
+    /// opened after a step (CMB-079), read when the sequence continues after the answer.
+    /// </summary>
+    private sealed class NpcMeleeSequenceResume
+    {
+        public bool Suspended;
+        public bool NaturalSubstituteUsed;
+        public CharacterController Target;
+    }
+
+    /// <summary>
     /// Coroutine wrapper for <see cref="PerformNPCMeleeAttackSequence"/>: summary log, last-known
-    /// position search, and the grapple handoff after a grapple started by a substitute.
+    /// position search, and the grapple handoff after a grapple started by a substitute. When the
+    /// sequence stops for a controllable defender's counter-trip prompt (PHB p.158, CMB-079) it waits
+    /// for the answer and continues the same sequence.
     /// </summary>
     private IEnumerator NPCMeleeAttackSequence(
         CharacterController npc,
         CharacterController target,
         Func<CharacterController, CharacterController, bool> tryStepManeuver)
     {
+        var resume = new NpcMeleeSequenceResume();
         FullAttackResult aggregate = PerformNPCMeleeAttackSequence(
             npc,
             target,
@@ -929,7 +986,39 @@ public partial class GameManager
             out bool startedGrappleBySubstitute,
             out int maneuversUsed,
             out int targetSwitchCount,
-            out string stopReason);
+            out string stopReason,
+            resume);
+
+        while (resume.Suspended)
+        {
+            while (IsAwaitingCounterTripChoice)
+                yield return null;
+
+            if (CurrentPhase == TurnPhase.CombatOver || npc.Stats == null || npc.Stats.IsDead)
+                break;
+
+            FullAttackResult rest = PerformNPCMeleeAttackSequence(
+                npc,
+                resume.Target != null ? resume.Target : target,
+                npc.aiProfile,
+                tryStepManeuver,
+                out bool restStartedGrapple,
+                out int restManeuvers,
+                out int restSwitches,
+                out stopReason,
+                resume);
+            aggregate.Attacks.AddRange(rest.Attacks);
+            aggregate.AttackLabels.AddRange(rest.AttackLabels);
+            startedGrappleBySubstitute |= restStartedGrapple;
+            maneuversUsed += restManeuvers;
+            targetSwitchCount += restSwitches;
+        }
+
+        if (aggregate.Defender != null && aggregate.Defender.Stats != null)
+        {
+            aggregate.DefenderHPAfter = aggregate.Defender.Stats.CurrentHP;
+            aggregate.TargetKilled = aggregate.Defender.Stats.IsDead;
+        }
 
         UpdateAllStatsUI();
 
@@ -1459,6 +1548,9 @@ public partial class GameManager
         // first, as before; the ranged kiter's reach gate for it is CMB-104.
         if (tryStepManeuver != null && tryStepManeuver(npc, target))
         {
+            // A failed trip may be waiting on a controllable defender's counter-trip choice (CMB-079).
+            while (IsAwaitingCounterTripChoice)
+                yield return null;
             yield return new WaitForSeconds(0.8f);
             yield break;
         }

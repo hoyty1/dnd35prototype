@@ -565,15 +565,17 @@ public static class ThreatSystem
         ScenarioHooks.AoOResolved?.Invoke(threatener, target, trigger ?? (isFromMovement ? "movement" : "other"), result);
 
         // Innate trip follow-up (e.g., wolf bite) is a free action and should not consume AoO economy.
+        SpecialAttackResult freeTripResult = null;
         if (result.Hit
             && threatener.Stats != null
             && threatener.Stats.HasTripAttack
             && target.Stats != null
             && !target.Stats.IsDead
-            && !target.HasCondition(CombatConditionType.Prone))
+            && !target.HasCondition(CombatConditionType.Prone)
+            && threatener.CanTrip(target, out _)) // the trip size limit applies to a free trip too (PHB p.158)
         {
-            SpecialAttackResult tripResult = threatener.ResolveFreeTripAttempt(target);
-            Debug.Log($"[ThreatSystem] Free trip follow-up from AoO by {threatener.Stats.CharacterName}: Success={tripResult.Success} | {tripResult.Log}");
+            freeTripResult = threatener.ResolveFreeTripAttempt(target, result);
+            Debug.Log($"[ThreatSystem] Free trip follow-up from AoO by {threatener.Stats.CharacterName}: Success={freeTripResult.Success} | {freeTripResult.Log}");
         }
 
         // Log the result
@@ -595,6 +597,11 @@ public static class ThreatSystem
         {
             Debug.Log($"[ThreatSystem] AoO MISS! {threatener.Stats.CharacterName} rolled {result.DieRoll} + mods = {result.TotalRoll} vs AC {result.TargetAC}");
         }
+
+        // The Improved Trip attack after a free trip that landed (PHB p.96, CMB-079), after the AoO's own
+        // log and melee reactions; a free trip gets no counter-trip.
+        if (freeTripResult != null)
+            gm?.HandleTripAftermath(threatener, target, freeTripResult, null);
 
         Debug.Log($"[ThreatSystem] === END AoO ===");
         return result;

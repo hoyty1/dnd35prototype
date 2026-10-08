@@ -3816,6 +3816,14 @@ public class CombatUI : MonoBehaviour
         });
     }
 
+    /// <summary>Closes the open confirmation dialog without running either callback (the caller answers it itself).</summary>
+    public void HideConfirmationDialog()
+    {
+        if (_confirmationPanel != null)
+            Destroy(_confirmationPanel);
+        _confirmationPanel = null;
+    }
+
     public void HideSummonCreatureSelection()
     {
         if (_summonSelectionPanel != null)

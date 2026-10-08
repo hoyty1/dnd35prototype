@@ -1293,4 +1293,225 @@ public partial class GameManager
             ? $"{attacker.Stats.CharacterName} follows {followed} square{(followed == 1 ? string.Empty : "s")}."
             : $"{attacker.Stats.CharacterName} cannot follow due to blocked path."));
     }
+
+    // ── Trip aftermath: the Improved Trip attack and the counter-trip (PHB p.96, p.158; CMB-079) ──
+    // One path for every trip the shared resolver (CharacterController.ResolveTrip) settles: the PC
+    // wrapper (ExecuteSpecialAttack), the NPC executor (TryNPCSpecialAttackIfBeneficial, which also runs
+    // the trip that replaces a step of an NPC attack or full attack), the free trip after a hit
+    // (TryResolveFreeTripOnHit) and the free trip after an AoO hit (ThreatSystem.ExecuteAoO). The rules
+    // live in CharacterController (CanTrip, CanCounterTrip, ResolveCounterTrip, the Improved Trip
+    // attack); this part makes and logs the follow-up attack after the trip's own log and melee
+    // reactions, and asks the defender whether it trips back: a controllable defender through a
+    // prompt, an AI-run one through AIService.ShouldCounterTrip. Every caller runs it after the trip's
+    // MeleeReactionService.TriggerReactions (ExecuteAoO after the AoO's own reactions).
+
+    private bool _counterTripPromptOpen;
+    private CharacterController _counterTripPromptDefender;
+    private CharacterController _counterTripPromptTripper;
+    private Action _counterTripPromptDone;
+
+    /// <summary>
+    /// True while a controllable defender's counter-trip prompt waits for its answer (PHB p.158). An NPC
+    /// coroutine whose trip failed waits on it before its next step (NPCMeleeAttackSequence, the ranged
+    /// maneuver paths), so the counter-trip lands before the tripper acts again.
+    /// </summary>
+    public bool IsAwaitingCounterTripChoice => _counterTripPromptOpen;
+
+    /// <summary>
+    /// Settles what follows a trip resolved by the shared resolver; callers run it after the trip's own log
+    /// and melee reactions. A landed trip with Improved Trip gets its attack here (PHB p.96,
+    /// <see cref="CharacterController.ResolveImprovedTripFollowUp"/>, which re-checks that both sides are up,
+    /// the tripper can attack and the target is in reach), logged with its Concentration check, melee
+    /// reactions, death line and the victory or defeat check. A trip lost at the opposed check
+    /// (<see cref="SpecialAttackResult.CounterTripAllowed"/>) lets the defender try to trip back (PHB p.158)
+    /// when it is an enemy of the tripper and still able (<see cref="CharacterController.CanCounterTrip"/>):
+    /// a controllable defender is asked through a prompt, an AI-run defender decides through
+    /// <see cref="AIService.ShouldCounterTrip"/>. A trip by a creature that is not the defender's enemy (an
+    /// ally, a neutral) gets no counter-trip offer, a limit awaiting the owner (CMB-136). <paramref name="onDone"/>
+    /// runs once everything is settled: at once, or when the prompt is answered (until then
+    /// <see cref="IsAwaitingCounterTripChoice"/> is true).
+    /// </summary>
+    internal void HandleTripAftermath(CharacterController attacker, CharacterController target, SpecialAttackResult result, Action onDone)
+    {
+        // Made and reported once: ResolveImprovedTripFollowUp clears the pending flag.
+        bool followUpPending = result != null && result.ImprovedTripFollowUpPending && attacker != null
+            && CurrentPhase != TurnPhase.CombatOver;
+        if (followUpPending)
+        {
+            attacker.ResolveImprovedTripFollowUp(target, result);
+            if (result.FollowUpAttack != null)
+                ReportImprovedTripFollowUp(attacker, target, result);
+            else if (!string.IsNullOrEmpty(result.FollowUpNote))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("", result.FollowUpNote));
+        }
+
+        if (result == null || !result.CounterTripAllowed || attacker == null || target == null
+            || CurrentPhase == TurnPhase.CombatOver
+            || !TeamUtility.IsEnemy(target, attacker)
+            || !target.CanCounterTrip(attacker, out _))
+        {
+            onDone?.Invoke();
+            return;
+        }
+
+        if (target.IsControllable && CombatUI != null && !_counterTripPromptOpen)
+        {
+            OpenCounterTripPrompt(target, attacker, onDone);
+            return;
+        }
+
+        bool tripBack = _aiService != null
+            ? _aiService.ShouldCounterTrip(target, attacker)
+            : DND35.AI.AIProfile.DefaultShouldCounterTrip(target, attacker);
+        ResolveCounterTripChoice(target, attacker, tripBack);
+        onDone?.Invoke();
+    }
+
+    private void ReportImprovedTripFollowUp(CharacterController attacker, CharacterController target, SpecialAttackResult result)
+    {
+        CombatResult attack = result.FollowUpAttack;
+        CombatUI?.ShowCombatLog(attack.GetAttackBreakdown(result.FollowUpLabel));
+
+        // Concentration per damage instance (PHB p.70) and melee reactions, as for any melee attack.
+        if (attack.Hit && attack.TotalDamage > 0)
+            CheckConcentrationOnDamage(target, attack.TotalDamage);
+        if (attack.Hit && !attack.IsRangedAttack)
+            MeleeReactionService.TriggerReactions(attacker, target, attack);
+
+        if (target != null && target.Stats != null && target.Stats.IsDead)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{target.Stats.CharacterName} is slain by {attacker.Stats.CharacterName}'s Improved Trip attack!"));
+
+        SettleTripAftermathCasualties("ImprovedTrip.FollowUp", target, attacker);
+        UpdateAllStatsUI();
+    }
+
+    /// <summary>
+    /// Death cleanup and the end-of-combat checks after an Improved Trip attack or a counter-trip, which run
+    /// outside the attack loops that normally make them: each dead creature gets its summon cleanup; a dead
+    /// enemy-team creature runs the victory check (with its XP registration); when a hero went down and every
+    /// hero is down, the defeat state is set as the NPC attack loop sets it. The callers' own checks still run afterwards.
+    /// </summary>
+    private void SettleTripAftermathCasualties(string sourceContext, params CharacterController[] creatures)
+    {
+        CharacterController deadEnemy = null;
+        bool heroDown = false;
+        foreach (CharacterController creature in creatures)
+        {
+            if (creature == null || creature.Stats == null)
+                continue;
+
+            if (creature.Team == CharacterTeam.Player && creature.Stats.CurrentHP <= 0)
+                heroDown = true;
+
+            if (!creature.Stats.IsDead)
+                continue;
+
+            HandleSummonDeathCleanup(creature);
+            if (creature.Team == CharacterTeam.Enemy && deadEnemy == null)
+                deadEnemy = creature;
+        }
+
+        if (CurrentPhase == TurnPhase.CombatOver)
+            return;
+
+        if (deadEnemy != null && CheckCombatVictory(sourceContext, deadEnemy))
+            return;
+
+        if (heroDown && AreAllPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+            CombatUI?.SetActionButtonsVisible(false);
+        }
+    }
+
+    private void OpenCounterTripPrompt(CharacterController defender, CharacterController tripper, Action onDone)
+    {
+        _counterTripPromptOpen = true;
+        _counterTripPromptDefender = defender;
+        _counterTripPromptTripper = tripper;
+        _counterTripPromptDone = onDone;
+
+        string defenderName = defender.Stats.CharacterName;
+        string tripperName = tripper.Stats.CharacterName;
+        int checkModifier = defender.GetTripAttackerCheckModifier();
+        int resistModifier = tripper.GetTripOrOverrunDefenderCheckModifier();
+        int chance = Mathf.RoundToInt(CharacterController.EstimateOpposedCheckWinChance(checkModifier, resistModifier) * 100f);
+        string wardNote = defender.HasActiveInvisibilityEffect || defender.Stats.SanctuaryActive
+            ? "\n\nTripping back is an attack: it ends your invisibility or Sanctuary."
+            : string.Empty;
+
+        CombatUI.ShowCombatLog(CombatLogHelper.Warning("", $"Waiting for {defenderName}'s decision: trip {tripperName} back?"));
+        CombatUI.ShowConfirmationDialog(
+            title: "Trip Back?",
+            message: $"{tripperName} failed to trip {defenderName}.\n\n"
+                + $"{defenderName} may react at once and try to trip {tripperName}: a Strength check {CharacterStats.FormatMod(checkModifier)} "
+                + $"against {tripperName}'s Strength or Dexterity check {CharacterStats.FormatMod(resistModifier)}. "
+                + $"No touch attack and no attack of opportunity (PHB p.158).\n\nChance to trip: about {chance}%."
+                + wardNote,
+            confirmLabel: "Trip Back",
+            cancelLabel: "Decline",
+            onConfirm: () => AnswerCounterTripPrompt(true),
+            onCancel: () => AnswerCounterTripPrompt(false));
+    }
+
+    /// <summary>The prompt's answer: resolve or decline the counter-trip, then run the caller's continuation.</summary>
+    private void AnswerCounterTripPrompt(bool tripBack)
+    {
+        if (!_counterTripPromptOpen)
+            return;
+
+        CharacterController defender = _counterTripPromptDefender;
+        CharacterController tripper = _counterTripPromptTripper;
+        Action done = _counterTripPromptDone;
+        ClearCounterTripPrompt(hideDialog: false);
+
+        if (defender != null && tripper != null && CurrentPhase != TurnPhase.CombatOver)
+            ResolveCounterTripChoice(defender, tripper, tripBack);
+        done?.Invoke();
+    }
+
+    /// <summary>Drops an unanswered counter-trip prompt without resolving it (a combat reset or a halted fight).</summary>
+    private void ClearCounterTripPrompt(bool hideDialog)
+    {
+        bool wasOpen = _counterTripPromptOpen;
+        _counterTripPromptOpen = false;
+        _counterTripPromptDefender = null;
+        _counterTripPromptTripper = null;
+        _counterTripPromptDone = null;
+        if (hideDialog && wasOpen)
+            CombatUI?.HideConfirmationDialog();
+    }
+
+    private void ResolveCounterTripChoice(CharacterController defender, CharacterController tripper, bool tripBack)
+    {
+        if (!tripBack)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{defender.Stats.CharacterName} does not try to trip {tripper.Stats.CharacterName} back."));
+            return;
+        }
+
+        // The counter-trip is a melee attack on the tripper (PHB p.158): the same hostile-action breaks the
+        // trip paths run first (turned undead, fascination, charm).
+        bool canTripBack = defender.CanCounterTrip(tripper, out _);
+        if (canTripBack)
+        {
+            ProcessTurnUndeadMeleeFearBreak(defender, tripper, isMeleeAttack: true);
+            BreakFascinationOnHostileAction(defender, tripper, "hostile action");
+            BreakCharmOnHostileAction(defender, tripper);
+        }
+
+        SpecialAttackResult counter = defender.ResolveCounterTrip(tripper);
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("↩", $"COUNTER-TRIP: {counter.Log}"));
+
+        // Melee contact with the tripper, as after every other trip (Fire Shield, Thorns), then the
+        // cleanup and end-of-combat checks for a defender those reactions dropped.
+        if (canTripBack && counter.CheckRoll > 0)
+        {
+            MeleeReactionService.TriggerReactions(defender, tripper, null);
+            SettleTripAftermathCasualties("CounterTrip", defender, tripper);
+        }
+
+        UpdateAllStatsUI();
+    }
 }

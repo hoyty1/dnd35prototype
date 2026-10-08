@@ -670,11 +670,10 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | TST-025 | Stale `AIProfileFrameworkTests` expectations; the AoE safety test can pass vacuously |
 | CORE-011 | The NPC attack path has no victory check except on a charge |
 | SPL-094 | Sanctuary and Hide from Undead are broken only by `NPCPerformAttack` and the PC attack path, not by charges, maneuvers or spells |
-| CMB-079 | Trip has no counter-trip, no Improved Trip follow-up attack and no size limit (PCs and NPCs) |
 | AI-054 | PC action executors (Aid Another, item use, area casting, Turn Undead) are bound to the PC turn flow, so the AI cannot reuse them |
 | AI-058 | `ShouldUseManeuver` never checks whether the target is helpless, so the AI trips, disarms and grapples unconscious enemies (seen in Play mode by the scenario harness) |
 | CMB-121 | A creature cannot join a grapple in progress; the refused attempt still uses the attack, and the chooser offers it again every round (103 refused attempts in the 50-fight soak) |
-| AI-059 | The AI tries trips and targeted spells against swarms, which are immune; with no area spells (AI-001) an AI-run party cannot hurt a swarm (seen in the soak) |
+| AI-059 | The AI tries targeted spells against swarms, which are immune (trips are refused by `CanTrip` since CMB-079); with no area spells (AI-001) an AI-run party cannot hurt a swarm (seen in the soak) |
 | AI-060 | The per-turn maneuver stopgap (no maneuver after one succeeds, no retry of a failed type against the same target; owner decision 2026-10-07) is to be replaced by weighted personality scoring ([design](../designs/enemy_ai_knowledge_and_personalities.md) section 7, Increment 1) |
 
 ## 11. Extension points

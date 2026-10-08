@@ -129,6 +129,14 @@ public static class GrappleDamageRulesTests
         TestOpposedCheckTieBreaks();
         TestFreeTripSkipsTouchAttack();
         TestTripAttemptRollsTouchAttack();
+        TestTripSizeLimit();
+        TestCounterTripAfterFailedTrip();
+        TestCounterTripChoiceOdds();
+        TestNpcExecutorCounterTrip();
+        TestImprovedTripFollowUpAttack();
+        TestImprovedTripFollowUpNaturalAndFreeTrip();
+        TestImprovedTripFollowUpAfterTripReactions();
+        TestCounterTripTriggersMeleeReactions();
         TestDefenderImprovedDisarmGivesNoBonus();
         TestImprovedDisarmDeniesCounterDisarm();
         TestGrappleHoldFailsAgainstMuchLargerTarget();
@@ -1869,7 +1877,7 @@ public static class GrappleDamageRulesTests
         System.Func<CharacterController, CharacterController, bool> tryStepManeuver, out int maneuversUsed)
     {
         MethodInfo method = typeof(GameManager).GetMethod("PerformNPCMeleeAttackSequence", BindingFlags.Instance | BindingFlags.NonPublic);
-        object[] args = { npc, target, null, tryStepManeuver, false, 0, 0, null };
+        object[] args = { npc, target, null, tryStepManeuver, false, 0, 0, null, null }; // last: no resume state (CMB-079)
         var result = (FullAttackResult)method.Invoke(gm, args);
         maneuversUsed = (int)args[5];
         return result;
@@ -2388,8 +2396,8 @@ public static class GrappleDamageRulesTests
 
     /// <summary>
     /// A BAB +11 fighter (+11/+6/+1, STR 26) with a longsword, AI-run, at (x, y). No Improved Trip on
-    /// purpose: its free attack after a trip that lands (PHB p.96) is not built yet (CMB-079) and would add
-    /// an attack, so these tests count only the iterative steps the AI chooses. The trip's attack of
+    /// purpose: its attack after a trip that lands (PHB p.96, CMB-079) would add an attack outside the
+    /// sequence, and these tests count only the iterative steps the AI chooses. The trip's attack of
     /// opportunity (PHB p.158) is avoided on the target's side instead (<see cref="CreateArmedStopgapTarget"/>).
     /// </summary>
     private static CharacterController CreateAiTripper(string name, DND35.AI.AIProfile profile, int x, int y)
@@ -3547,6 +3555,477 @@ public static class GrappleDamageRulesTests
             "A trip attempt against an unreachable touch AC succeeds only after a natural 20 touch attack");
 
         Cleanup(attacker, defender);
+    }
+
+    // ── Trip size limit, counter-trip and Improved Trip (PHB p.158, p.96; CMB-079) ──
+
+    /// <summary>Forces the trip dice by context: touch attack, the trip's opposed check, the counter-trip's opposed check.</summary>
+    private static System.Func<int, string, int, int> TripDice(int touch, int tripCheck, int tripDefense, int counterCheck = 10, int counterResist = 10)
+        => (sides, ctx, natural) =>
+            ctx == "Trip touch attack" ? touch
+            : ctx == "Trip Strength check" ? tripCheck
+            : ctx == "Trip defense check" ? tripDefense
+            : ctx == "Counter-trip check" ? counterCheck
+            : ctx == "Counter-trip resist check" ? counterResist
+            : natural;
+
+    private static void TestTripSizeLimit()
+    {
+        var tripper = CreateTestCharacter("TripSizeTripper", "Fighter");
+        var large = CreateWeakDefender("TripSizeLarge");
+        var huge = CreateWeakDefender("TripSizeHuge");
+        var tiny = CreateWeakDefender("TripSizeTiny");
+        large.Stats.CurrentSizeCategory = SizeCategory.Large;
+        huge.Stats.CurrentSizeCategory = SizeCategory.Huge;
+        tiny.Stats.CurrentSizeCategory = SizeCategory.Tiny;
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        try
+        {
+            Assert(tripper.CanTrip(large, out _) && tripper.CanTrip(tiny, out _),
+                "A Medium creature may trip a creature one size larger or any smaller one (PHB p.158)");
+            Assert(!tripper.CanTrip(huge, out string hugeReason) && hugeReason != null && hugeReason.Contains("size category larger"),
+                "A Medium creature cannot trip a Huge one, two categories larger (PHB p.158)");
+
+            tripper.Stats.CurrentSizeCategory = SizeCategory.Small;
+            Assert(!tripper.CanTrip(large, out _), "A Small creature cannot trip a Large one (PHB p.158)");
+            tripper.Stats.CurrentSizeCategory = SizeCategory.Medium;
+
+            // The shared resolver refuses too, before any die: a forced success would otherwise trip the Huge target.
+            ScenarioHooks.RollFilter = TripDice(20, 20, 1);
+            SpecialAttackResult refused = tripper.ExecuteSpecialAttack(SpecialAttackType.Trip, huge);
+            SpecialAttackResult freeRefused = tripper.ResolveFreeTripAttempt(huge);
+            Assert(refused != null && !refused.Success && !refused.Log.Contains("Touch attack") && !refused.CounterTripAllowed
+                && freeRefused != null && !freeRefused.Success && !huge.HasCondition(CombatConditionType.Prone),
+                "The trip resolver refuses a target two sizes larger, free trips included, with no roll and no counter-trip");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Trip size limit check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(tripper, large, huge, tiny);
+        }
+    }
+
+    private static void TestCounterTripAfterFailedTrip()
+    {
+        // Tripper and defender both STR 26 (+8): the trip check forced to 1 (9) loses to the defense 20 (28);
+        // the counter-trip forced to 20 (28) beats the tripper's resist 1 (9).
+        var tripper = CreateTestCharacter("CounterTripTripper", "Fighter");
+        var defender = CreateTestCharacter("CounterTripDefender", "Fighter");
+        var tripper2 = CreateTestCharacter("CounterTripTripperTouchMiss", "Fighter");
+        var hugeTripper = CreateTestCharacter("CounterTripHugeTripper", "Fighter");
+        var smallDefender = CreateWeakDefender("CounterTripSmallDefender");
+        defender.GridPosition = new Vector2Int(1, 0);
+        hugeTripper.Stats.CurrentSizeCategory = SizeCategory.Huge;
+        smallDefender.Stats.CurrentSizeCategory = SizeCategory.Small;
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CharacterController, SpecialAttackType, SpecialAttackResult> savedManeuver = ScenarioHooks.ManeuverResolved;
+        var reported = new System.Collections.Generic.List<SpecialAttackResult>();
+        CharacterController reportedBy = null;
+        try
+        {
+            ScenarioHooks.RollFilter = TripDice(20, 1, 20, 20, 1);
+            SpecialAttackResult trip = tripper.ExecuteSpecialAttack(SpecialAttackType.Trip, defender);
+            Assert(trip != null && !trip.Success && trip.CounterTripAllowed && !defender.HasCondition(CombatConditionType.Prone),
+                "A trip lost at the opposed check lets the defender try to trip back (PHB p.158)");
+
+            ScenarioHooks.ManeuverResolved = (by, target, type, r) => { reported.Add(r); reportedBy = by; };
+            SpecialAttackResult counter = defender.ResolveCounterTrip(tripper);
+            Assert(counter != null && counter.IsCounterTrip && counter.Success && !counter.AttackerActionConsumed
+                && tripper.HasCondition(CombatConditionType.Prone) && !counter.Log.Contains("Touch attack"),
+                "Counter-trip: an opposed check with no touch attack and no action spent; the tripper is prone (PHB p.158)");
+            Assert(counter != null
+                && counter.CheckTotal - counter.CheckRoll == defender.GetTripAttackerCheckModifier()
+                && counter.OpposedTotal - counter.OpposedRoll == tripper.GetTripOrOverrunDefenderCheckModifier(),
+                "Counter-trip: the defender's Strength check against the tripper's better of Strength and Dexterity, roles swapped");
+            Assert(reported.Count == 1 && reportedBy == defender && reported[0].IsCounterTrip,
+                "Counter-trip is reported to the maneuver hook as a trip by the defender, marked as a counter-trip");
+            Assert(!defender.CanCounterTrip(tripper, out _), "A tripper already prone cannot be tripped back again");
+
+            ScenarioHooks.RollFilter = TripDice(1, 1, 20);
+            tripper2.GridPosition = new Vector2Int(0, 1);
+            SpecialAttackResult touchMiss = tripper2.ExecuteSpecialAttack(SpecialAttackType.Trip, defender);
+            Assert(touchMiss != null && !touchMiss.Success && !touchMiss.CounterTripAllowed,
+                "A trip that misses its touch attack gives no counter-trip (only a lost opposed check does)");
+
+            ScenarioHooks.RollFilter = TripDice(20, 1, 20);
+            SpecialAttackResult freeLost = tripper2.ResolveFreeTripAttempt(defender);
+            Assert(freeLost != null && !freeLost.Success && !freeLost.CounterTripAllowed,
+                "A free trip after a hit gives no counter-trip (MM trip: the opponent cannot react to trip)");
+
+            Assert(!smallDefender.CanCounterTrip(hugeTripper, out string sizeReason) && sizeReason != null && sizeReason.Contains("size category larger"),
+                "A Small defender cannot trip back a Huge tripper (the trip size limit, PHB p.158)");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Counter-trip check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.ManeuverResolved = savedManeuver;
+            Cleanup(tripper, defender, tripper2, hugeTripper, smallDefender);
+        }
+    }
+
+    private static void TestCounterTripChoiceOdds()
+    {
+        Assert(Mathf.Approximately(CharacterController.EstimateOpposedCheckWinChance(0, 0), 0.5f)
+            && CharacterController.EstimateOpposedCheckWinChance(0, 20) == 0f
+            && CharacterController.EstimateOpposedCheckWinChance(20, 0) == 1f
+            && CharacterController.EstimateOpposedCheckWinChance(5, 0) > 0.7f,
+            "Opposed-check odds: even at equal modifiers, 0 and 1 at a 20-point gap (PHB p.64 ties)");
+
+        var tripper = CreateTestCharacter("CounterTripChoiceTripper", "Fighter");     // STR 26: resists at +8
+        var even = CreateTestCharacter("CounterTripChoiceEven", "Fighter");          // STR 26: +8
+        var weak = CreateWeakDefender("CounterTripChoiceWeak");
+        weak.Stats.STR = 1;                                                            // -5: about 5% to win
+        try
+        {
+            Assert(DND35.AI.AIProfile.DefaultShouldCounterTrip(even, tripper),
+                "AI counter-trip choice: an even check trips back (owner direction: unless clearly bad)");
+            Assert(!DND35.AI.AIProfile.DefaultShouldCounterTrip(weak, tripper),
+                "AI counter-trip choice: a much weaker check (13 points, about 5%) declines");
+        }
+        finally
+        {
+            Cleanup(tripper, even, weak);
+        }
+    }
+
+    private static void TestNpcExecutorCounterTrip()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; NPC executor counter-trip check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CharacterController, SpecialAttackType, SpecialAttackResult> savedManeuver = ScenarioHooks.ManeuverResolved;
+        var counters = new System.Collections.Generic.List<CharacterController>();
+        CharacterController npc = null, enemy = null, npc2 = null, ally = null;
+        try
+        {
+            ScenarioHooks.RollFilter = TripDice(20, 1, 20, 20, 1);
+            ScenarioHooks.ManeuverResolved = (by, target, type, r) => { if (r != null && r.IsCounterTrip) counters.Add(by); };
+
+            npc = CreateIterativeAttacker("ExecutorCounterTripNpc");
+            npc.IsControllable = false;
+            npc.GridPosition = new Vector2Int(30, 30);
+            enemy = CreateTestCharacter("ExecutorCounterTripEnemy", "Fighter");
+            enemy.SetTeam(CharacterTeam.Player);
+            enemy.IsControllable = false; // AI-run: the AI layer decides
+            enemy.Stats.CanMakeAttacksOfOpportunity = false;
+            enemy.GridPosition = new Vector2Int(31, 30);
+
+            bool acted = gm.TryNPCSpecialAttackByTypeForAI(npc, enemy, SpecialAttackType.Trip);
+            Assert(acted && !gm.IsAwaitingCounterTripChoice && counters.Count == 1 && counters[0] == enemy
+                && npc.HasCondition(CombatConditionType.Prone) && npc.ProgressiveAttackPool.MainHandStepsUsed == 1,
+                "NPC executor: after a failed trip the AI-run enemy trips back at once; the trip cost one step (PHB p.158, CMB-079)");
+
+            counters.Clear();
+            npc2 = CreateIterativeAttacker("ExecutorCounterTripNpcAllyCase");
+            npc2.IsControllable = false;
+            npc2.GridPosition = new Vector2Int(30, 33);
+            ally = CreateTestCharacter("ExecutorCounterTripAlly", "Fighter");
+            ally.IsControllable = false;
+            ally.Stats.CanMakeAttacksOfOpportunity = false;
+            ally.GridPosition = new Vector2Int(31, 33);
+            bool actedOnAlly = gm.TryNPCSpecialAttackByTypeForAI(npc2, ally, SpecialAttackType.Trip);
+            Assert(actedOnAlly && counters.Count == 0 && !npc2.HasCondition(CombatConditionType.Prone),
+                "A failed trip by a creature of the defender's own side gets no counter-trip offer");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"NPC executor counter-trip check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.ManeuverResolved = savedManeuver;
+            Cleanup(npc, enemy, npc2, ally);
+        }
+    }
+
+    private static void TestImprovedTripFollowUpAttack()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; Improved Trip follow-up check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CombatResult> savedAttack = ScenarioHooks.AttackResolved;
+        var attacks = new System.Collections.Generic.List<CombatResult>();
+        CharacterController npc = null, target = null, plain = null, plainTarget = null;
+        try
+        {
+            ScenarioHooks.RollFilter = TripDice(20, 20, 1);
+
+            // BAB +11 (+11/+6/+1) with a longsword and Improved Trip.
+            npc = CreateIterativeAttacker("ImprovedTripFollowUp");
+            npc.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            npc.Stats.Feats.Add("Improved Trip");
+            npc.IsControllable = false;
+            npc.GridPosition = new Vector2Int(34, 30);
+            target = CreateWeakDefender("ImprovedTripFollowUpTarget");
+            target.GridPosition = new Vector2Int(35, 30);
+            target.Stats.AdjustMaxHP(500);
+            target.Stats.CurrentHP += 500;
+            ScenarioHooks.AttackResolved = (by, r) => { if (by == npc) attacks.Add(r); };
+
+            bool first = gm.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.Trip);
+            Assert(first && target.HasCondition(CombatConditionType.Prone) && attacks.Count == 1 && attacks[0].BreakdownBAB == 11
+                && attacks[0].WeaponName == "Longsword"
+                && npc.ProgressiveAttackPool.MainHandStepsUsed == 1 && !npc.ProgressiveAttackPool.IsFullAttack,
+                $"Improved Trip: one longsword attack at the trip's BAB (+11) right after the trip; the sequence spent only the trip's step (attacks {attacks.Count}, BAB {(attacks.Count > 0 ? attacks[0].BreakdownBAB : 0)}; PHB p.96)");
+
+            attacks.Clear();
+            bool second = gm.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.Trip);
+            Assert(second && attacks.Count == 1 && attacks[0].BreakdownBAB == 6 && npc.ProgressiveAttackPool.MainHandStepsUsed == 2,
+                "Improved Trip: a trip in place of the second iterative is followed by an attack at +6, that step's bonus (PHB p.96 example)");
+
+            // Without the feat no attack follows.
+            plain = CreateIterativeAttacker("ImprovedTripControl");
+            plain.IsControllable = false;
+            plain.GridPosition = new Vector2Int(34, 33);
+            plainTarget = CreateWeakDefender("ImprovedTripControlTarget");
+            plainTarget.GridPosition = new Vector2Int(35, 33);
+            plainTarget.Stats.CanMakeAttacksOfOpportunity = false;
+            attacks.Clear();
+            ScenarioHooks.AttackResolved = (by, r) => { if (by == plain) attacks.Add(r); };
+            bool control = gm.TryNPCSpecialAttackByTypeForAI(plain, plainTarget, SpecialAttackType.Trip);
+            Assert(control && plainTarget.HasCondition(CombatConditionType.Prone) && attacks.Count == 0,
+                "Without Improved Trip a trip that lands is followed by no attack");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Improved Trip follow-up check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.AttackResolved = savedAttack;
+            Cleanup(npc, target, plain, plainTarget);
+        }
+    }
+
+    private static void TestImprovedTripFollowUpNaturalAndFreeTrip()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; Improved Trip natural follow-up check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CombatResult> savedAttack = ScenarioHooks.AttackResolved;
+        var attacks = new System.Collections.Generic.List<CombatResult>();
+        CharacterController beast = null, target = null, wolf = null, wolfTarget = null;
+        try
+        {
+            ScenarioHooks.RollFilter = TripDice(20, 20, 1);
+
+            // Bite/claw/claw at BAB +4 with Improved Trip: the trip replaces the bite (step 1); the follow-up
+            // is the bite itself; then the two claws (MM p.312; PHB p.96).
+            beast = CreateBiteClawsCreature("ImprovedTripNatural", 4, false);
+            beast.Stats.Feats.Add("Improved Trip");
+            beast.IsControllable = false;
+            beast.GridPosition = new Vector2Int(38, 30);
+            target = CreateWeakDefender("ImprovedTripNaturalTarget");
+            target.GridPosition = new Vector2Int(39, 30);
+            target.Stats.AdjustMaxHP(500);
+            target.Stats.CurrentHP += 500;
+            ScenarioHooks.AttackResolved = (by, r) => { if (by == beast) attacks.Add(r); };
+
+            int offers = 0;
+            FullAttackResult sequence = RunNpcMeleeSequence(gm, beast, target,
+                (actor, stepTarget) => offers++ == 0 && gm.TryNPCSpecialAttackByTypeForAI(actor, stepTarget, SpecialAttackType.Trip),
+                out int maneuvers);
+            Assert(maneuvers == 1 && target.HasCondition(CombatConditionType.Prone)
+                && attacks.Count == 3 && attacks[0].WeaponName == "Bite" && attacks[1].WeaponName == "Claw" && attacks[2].WeaponName == "Claw"
+                && sequence.Attacks.Count == 2 && beast.ProgressiveAttackPool.MainHandStepsUsed == 3,
+                $"Improved Trip, natural sequence: the trip replaces the bite, the bite follows at once, then both claws; 3 steps (attacks {string.Join(",", attacks.ConvertAll(a => a.WeaponName))})");
+
+            // Free trip after a bite hit, with Improved Trip: the bite that hit is made again.
+            wolf = CreateBiteClawsCreature("ImprovedTripFreeTrip", 4, false);
+            wolf.Stats.Feats.Add("Improved Trip");
+            wolf.Stats.HasTripAttack = true;
+            wolf.GridPosition = new Vector2Int(38, 33);
+            wolfTarget = CreateWeakDefender("ImprovedTripFreeTripTarget");
+            wolfTarget.GridPosition = new Vector2Int(39, 33);
+            wolfTarget.Stats.AdjustMaxHP(500);
+            wolfTarget.Stats.CurrentHP += 500;
+            attacks.Clear();
+            ScenarioHooks.AttackResolved = (by, r) => { if (by == wolf) attacks.Add(r); };
+            SpecialAttackResult free = wolf.ResolveFreeTripAttempt(wolfTarget, new CombatResult { WeaponName = "Bite", BreakdownBAB = 4, Hit = true });
+            bool pendingOnly = free != null && free.ImprovedTripFollowUpPending && free.FollowUpAttack == null && attacks.Count == 0;
+            gm.HandleTripAftermath(wolf, wolfTarget, free, null); // the callers' step after the trip's log and reactions
+            Assert(pendingOnly && free.Success && !free.CounterTripAllowed && free.FollowUpAttack != null
+                && attacks.Count == 1 && attacks[0].WeaponName == "Bite",
+                "Improved Trip after a free trip on a bite hit: the bite is made again in the aftermath, and no counter-trip is offered");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Improved Trip natural follow-up check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.AttackResolved = savedAttack;
+            Cleanup(beast, target, wolf, wolfTarget);
+        }
+    }
+
+    /// <summary>Records every melee reaction call made against the creatures it is set on (a stand-in for Fire Shield).</summary>
+    private sealed class ReactionSpy : IMeleeReactionEffect
+    {
+        public readonly System.Collections.Generic.HashSet<CharacterController> On = new System.Collections.Generic.HashSet<CharacterController>();
+        public readonly System.Collections.Generic.List<(CharacterController by, CharacterController on, bool withAttack, int attacksSoFar)> Calls
+            = new System.Collections.Generic.List<(CharacterController, CharacterController, bool, int)>();
+        public System.Func<int> AttacksSoFar = () => 0;
+        public string EffectName => "Test reaction spy";
+        public bool IsActiveOn(CharacterController character) => character != null && On.Contains(character);
+        public void OnMeleeAttackHit(CharacterController attacker, CharacterController defender, CombatResult attackResult)
+            => Calls.Add((attacker, defender, attackResult != null, AttacksSoFar()));
+    }
+
+    /// <summary>
+    /// The Improved Trip attack comes after the trip's own melee reactions (CMB-079 review): the resolver only
+    /// records it and GameManager.HandleTripAftermath makes it, at the bonus the trip was given (for a PC in a
+    /// two-weapon round that bonus already includes the main-hand penalty, TryCommitMainHandManeuverStep).
+    /// </summary>
+    private static void TestImprovedTripFollowUpAfterTripReactions()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; Improved Trip order check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CombatResult> savedAttack = ScenarioHooks.AttackResolved;
+        var attacks = new System.Collections.Generic.List<CombatResult>();
+        var spy = new ReactionSpy { AttacksSoFar = () => attacks.Count };
+        CharacterController npc = null, target = null, pc = null, pcTarget = null;
+        try
+        {
+            ScenarioHooks.RollFilter = TripDice(20, 20, 1);
+            MeleeReactionService.Register(spy);
+
+            // NPC executor: the trip's reaction runs before the Improved Trip attack is rolled.
+            npc = CreateIterativeAttacker("ImprovedTripOrderNpc");
+            npc.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            npc.Stats.Feats.Add("Improved Trip");
+            npc.IsControllable = false;
+            npc.GridPosition = new Vector2Int(42, 30);
+            target = CreateWeakDefender("ImprovedTripOrderTarget");
+            target.GridPosition = new Vector2Int(43, 30);
+            target.Stats.AdjustMaxHP(500);
+            target.Stats.CurrentHP += 500;
+            spy.On.Add(target);
+            ScenarioHooks.AttackResolved = (by, r) => { if (by == npc) attacks.Add(r); };
+
+            bool acted = gm.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.Trip);
+            int tripReaction = spy.Calls.FindIndex(c => c.by == npc && c.on == target && !c.withAttack);
+            Assert(acted && attacks.Count == 1 && tripReaction >= 0 && spy.Calls[tripReaction].attacksSoFar == 0,
+                $"Improved Trip: the trip's melee reaction runs before the follow-up attack (reaction at attack count {(tripReaction >= 0 ? spy.Calls[tripReaction].attacksSoFar : -1)}, attacks {attacks.Count})");
+
+            // Shared resolver: a landed trip only records the attack; HandleTripAftermath makes it at the trip's
+            // bonus (+9: a +11 step with a -2 two-weapon main-hand penalty folded in, as the PC wrapper passes it).
+            pc = CreateIterativeAttacker("ImprovedTripRecordPc");
+            pc.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            pc.Stats.Feats.Add("Improved Trip");
+            pc.GridPosition = new Vector2Int(42, 33);
+            pcTarget = CreateWeakDefender("ImprovedTripRecordTarget");
+            pcTarget.GridPosition = new Vector2Int(43, 33);
+            pcTarget.Stats.AdjustMaxHP(500);
+            pcTarget.Stats.CurrentHP += 500;
+            attacks.Clear();
+            ScenarioHooks.AttackResolved = (by, r) => attacks.Add(r);
+            SpecialAttackResult trip = pc.ExecuteSpecialAttack(SpecialAttackType.Trip, pcTarget, tripAttackBonusOverride: 9);
+            bool recordedOnly = trip != null && trip.Success && trip.ImprovedTripFollowUpPending && trip.FollowUpAttack == null && attacks.Count == 0;
+            gm.HandleTripAftermath(pc, pcTarget, trip, null);
+            Assert(recordedOnly, "Improved Trip: the trip resolver records the attack and makes none itself");
+            CombatResult followUp = trip != null ? trip.FollowUpAttack : null;
+            Assert(followUp != null && !trip.ImprovedTripFollowUpPending && attacks.Count == 1 && followUp.BreakdownBAB == 9,
+                $"Improved Trip: the aftermath makes the one attack at the trip's bonus, +9 (BAB {(followUp != null ? followUp.BreakdownBAB : 0)}, attacks {attacks.Count})");
+            gm.HandleTripAftermath(pc, pcTarget, trip, null);
+            Assert(attacks.Count == 1, "Improved Trip: a second aftermath call makes no second attack");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Improved Trip order check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            MeleeReactionService.Unregister(spy);
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.AttackResolved = savedAttack;
+            Cleanup(npc, target, pc, pcTarget);
+        }
+    }
+
+    /// <summary>
+    /// A counter-trip is melee contact with the tripper (CMB-079 review): it triggers the tripper's melee reactions
+    /// (Fire Shield, Thorns), as every other trip does.
+    /// </summary>
+    private static void TestCounterTripTriggersMeleeReactions()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; counter-trip reaction check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        var spy = new ReactionSpy();
+        CharacterController npc = null, enemy = null;
+        try
+        {
+            ScenarioHooks.RollFilter = TripDice(20, 1, 20, 20, 1);
+            MeleeReactionService.Register(spy);
+
+            npc = CreateIterativeAttacker("CounterTripReactionNpc");
+            npc.IsControllable = false;
+            npc.GridPosition = new Vector2Int(46, 30);
+            enemy = CreateTestCharacter("CounterTripReactionEnemy", "Fighter");
+            enemy.SetTeam(CharacterTeam.Player);
+            enemy.IsControllable = false;
+            enemy.Stats.CanMakeAttacksOfOpportunity = false;
+            enemy.GridPosition = new Vector2Int(47, 30);
+            spy.On.Add(npc); // the tripper carries the reaction
+
+            bool acted = gm.TryNPCSpecialAttackByTypeForAI(npc, enemy, SpecialAttackType.Trip);
+            Assert(acted && npc.HasCondition(CombatConditionType.Prone)
+                && spy.Calls.Exists(c => c.by == enemy && c.on == npc && !c.withAttack),
+                "Counter-trip: the tripper's melee reaction is triggered by the defender's counter-trip (contact, as every trip)");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Counter-trip reaction check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            MeleeReactionService.Unregister(spy);
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(npc, enemy);
+        }
     }
 
     private static void TestDefenderImprovedDisarmGivesNoBonus()
