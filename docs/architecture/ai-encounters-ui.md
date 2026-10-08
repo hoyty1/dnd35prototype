@@ -15,7 +15,7 @@ Each NPC's AI is set by two independent fields on `NPCDefinition` (Assets/Script
 | Field | Enum | Selects | Where it is consumed |
 |---|---|---|---|
 | `AIBehavior` (default `AggressiveMelee`) | `NPCAIBehavior`: AggressiveMelee, RangedKiter, DefensiveMelee, Ranged (NPCDatabase.cs:808) | The tactical routine in AIService | `GameManager.SetupEnemyEncounter` appends it to the parallel list `GameManager._npcAIBehaviors` (GameManager.NPCSetup.cs:179). `GameManager.GetNPCBehaviorForAI` reads it back by `NPCs.IndexOf(npc)` |
-| `AIProfileArchetype` (default `None`) | `NPCAIProfileArchetype`, 23 values (NPCDatabase.cs:777) | The `AIProfile` subclass that scores targets, maneuvers, charges and spells | `GameManager.BuildRuntimeAIProfile` (GameManager.NPCSetup.cs:758), called from `InitializeNPCFromDefinition`, sets `CharacterController.aiProfile` |
+| `AIProfileArchetype` (default `None`) | `NPCAIProfileArchetype`, 23 values (NPCDatabase.cs:777) | The `AIProfile` subclass that scores targets, maneuvers, charges and spells | `GameManager.BuildRuntimeAIProfile` (GameManager.NPCSetup.cs:864), called from `InitializeNPCFromDefinition`, sets `CharacterController.aiProfile` |
 
 In short, the profile decides whom to attack and with what, and the behavior decides whether the NPC closes to melee, kites or holds back. Some profiles bypass the behavior entirely (see the routing table below).
 
@@ -32,10 +32,10 @@ Check these before changing either axis:
 
 ```
 TurnService.StartTurnAtCurrentIndex -> OnTurnStarted
-  GameManager.OnTurnStarted (_Core/GameManager.cs:3764), non-PC branch
+  GameManager.OnTurnStarted (_Core/GameManager.cs:3766), non-PC branch
     StartCoroutine(SingleNPCTurnFromInitiative)            _Core/GameManager.NPCTurns.cs:35
       ShouldSkipTurnDueToHPState -> NextInitiativeTurn, stop
-      behavior = GetNPCBehaviorForAI(npc)                  _Core/GameManager.cs:10922
+      behavior = GetNPCBehaviorForAI(npc)                  _Core/GameManager.cs:10924
       yield AIService.ExecuteNPCTurn(npc, behavior)        Services/AIService.cs:48
         BeginNPCTurnForAI: ConditionService.OnTurnStart, Melf's Acid Arrow damage, regeneration,
                            StartNewTurn, ProcessRoundStartPerception (Listen checks)
@@ -49,7 +49,7 @@ TurnService.StartTurnAtCurrentIndex -> OnTurnStarted
         aura (free action), free-action ranged special such as Spittle
         inside a Resilient Sphere -> stop
         routing (table below)
-      AreAllPCsDead -> TurnPhase.CombatOver, else NextInitiativeTurn (GameManager.cs:3948)
+      AreAllPCsDead -> TurnPhase.CombatOver, else NextInitiativeTurn (GameManager.cs:3950)
 ```
 
 Routing, checked in this order (AIService.cs:182-297):
@@ -118,7 +118,7 @@ AIService.TryExecuteSpellcastAction (2340)       requires a standard action and 
 
 `TryExecuteSpellcastAction` has callers only in the Healer branch (AIService.cs:231, 245), `ExecuteDragonTurn` (651) and `ExecuteRangedKiterTurn` (896, 970). The only other NPC cast path is a charmed NPC healing its charmer (Combat/Behaviors/CharmedBehaviorController.cs:91).
 
-- **`AISpellcastingStrategist`** (AI/AISpellcastingStrategist.cs) is a static class of about 1.5K lines. Its header lists tiers T1-T4. `ScoreSpellComprehensive` (1115) adds up roughly 20 modifiers: pre-buff, threatened penalty, save weakness, resistance and SR, slot conservation, dispel value, summons, combos, area denial, domain and class tweaks. Its static per-combat dictionaries are cleared by `ResetCombatState`, which runs at combat start (GameManager.cs:3732). `RegisterPlan`, `RecordIneffectiveDamage` and `RecordSpellSaveSuccess` have no callers, so the multi-round planning and "pattern learning" features do nothing. The school-priority term (0-100) in `SpellcasterAIProfile.ScoreSpell` usually outweighs the strategist's terms.
+- **`AISpellcastingStrategist`** (AI/AISpellcastingStrategist.cs) is a static class of about 1.5K lines. Its header lists tiers T1-T4. `ScoreSpellComprehensive` (1115) adds up roughly 20 modifiers: pre-buff, threatened penalty, save weakness, resistance and SR, slot conservation, dispel value, summons, combos, area denial, domain and class tweaks. Its static per-combat dictionaries are cleared by `ResetCombatState`, which runs at combat start (GameManager.cs:3734). `RegisterPlan`, `RecordIneffectiveDamage` and `RecordSpellSaveSuccess` have no callers, so the multi-round planning and "pattern learning" features do nothing. The school-priority term (0-100) in `SpellcasterAIProfile.ScoreSpell` usually outweighs the strategist's terms.
 - **`SpellCategoryClassifier.ReclassifyAll`** (AI/SpellCategoryClassifier.cs) lives with the AI but runs once from `SpellDatabase.Init` (Spell/Database/SpellDatabase.cs:75) and permanently rewrites `SpellData.EffectType` for all gameplay code; see [Spell data model](spells.md#spell-data-model).
 
 ## NPC AI: perception
@@ -134,7 +134,7 @@ The full option-by-option list (PHB ch.8 actions, maneuvers, spells, items, mons
 
 - **Cast area spells.** `TryNPCPerformSpellCast` returns false for any `SpellTargetType.Area` spell (GameManager.NPCTurns.cs:787-788). The profile and the strategist still score AoE spells, so a caster can pick Fireball, fail to cast it, and fall back to another action in silence.
 - **Cast from the melee routines.** `ExecuteAggressiveMeleeTurn` and `ExecuteDefensiveMeleeTurn` never call `TryExecuteSpellcastAction`. A Spellcaster-archetype monster that keeps the default AggressiveMelee behavior never casts. Examples are mind_flayer (NPCDatabase_M.cs:600) and vampire (NPCDatabase_V.cs:242, Vampire profile with CombatStyle Melee). The Lich reaches RangedKiter because its profile sets `CombatStyle.Ranged`, but it still never casts: its prepared list is assigned to slots by position and starts at 1st level, so no spell lands in a matching slot (SPL-015). See [Who can cast](../systems/AI.md#71-who-can-cast) in systems/AI.md.
-- **Counterspell.** `AIService.TryAIReadyCounterspell` (2660) has no callers, and no player UI calls `CharacterController.ReadyCounterspell` (CharacterController.cs:12137); only tests do. `DispelMagicService.TryResolveCounterspell` therefore never finds a readied caster in normal play.
+- **Counterspell.** `AIService.TryAIReadyCounterspell` (2660) has no callers, and no player UI calls `CharacterController.ReadyCounterspell` (CharacterController.cs:12349); only tests do. `DispelMagicService.TryResolveCounterspell` therefore never finds a readied caster in normal play.
 - **Rules deviations.** The NPC cast path skips components, metamagic and concentration tracking (see the `TryNPCPerformSpellCast` row in [Cast pipelines](spells.md#cast-pipelines)); it does provoke and roll Concentration like the PC path. Monster special attacks (Spittle, swarm damage) bypass the normal attack and damage math. These and the other AI rules gaps are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 - **Consumables.** `AIConsumableManager` is used only in Tests/Classes/NPCTemplateSystemTests.cs, so NPCs never use potions, scrolls or wands.
 
@@ -172,7 +172,7 @@ ApplyEncounterPreset / ApplyRandomEncounter           _Core/GameManager.cs:1769 
 ```
 
 - **15 NPC slots.** `SceneBootstrap.CreateCharacters` creates exactly 15 enemy GameObjects (`totalEnemySlots`, _Core/SceneBootstrap.cs:119), and `SetupEnemyEncounter` silently drops any extra IDs. Only 3 NPC stat panels exist on the HUD (`CreateNPCPanelsRight(..., 3)`, SceneBootstrap.cs:181).
-- **5 spawn positions.** `GameManager.EncounterSpawnPositions` (GameManager.cs:2862) has 5 entries. Preset, random and DMG encounters with more than 5 enemies place the 6th enemy at (20, 10) and later ones further right, outside the default 20x20 grid. Nothing validates bounds or size overlap. Only custom encounters get computed positions. This is tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
+- **5 spawn positions.** `GameManager.EncounterSpawnPositions` (GameManager.cs:2864) has 5 entries. Preset, random and DMG encounters with more than 5 enemies place the 6th enemy at (20, 10) and later ones further right, outside the default 20x20 grid. Nothing validates bounds or size overlap. Only custom encounters get computed positions. This is tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 - **`spawn_*` temporary IDs.** `DungeonEncounterSpawner.PrepareEncounter` clones the base definition, applies class levels (`CreatureClassEngine.ApplyClassToDefinition`), `UpdateAIForClass` and templates, then registers the result with `NPCDatabase.RegisterExternal` as `spawn_{baseId}_{counter}` or `spawn_{baseId}_{class}_{level}_{counter}` (DungeonEncounterSpawner.cs:294-307). The live DMG path never calls `CleanupSpawnEntries`. These entries stay in `NPCDatabase.AllNPCs` for the whole session, appear in the Custom Encounter Builder list, and can become RandomEncounterSystem candidates.
 
 ## UI: built entirely in code
@@ -206,7 +206,7 @@ To add an action button you need: a public `Button` field on `CombatUI`, a `Crea
 | Combat HUD (turn, initiative, party, 3 NPC panels, Combat Log and Action windows) | UI/Combat/CombatUI.cs with presenters CombatLogPanel, ActionButtonPanel, InitiativePanel, TargetSelectionPanel (UI/Combat) and CharacterInfoPanel (UI/CharacterSheet) | Eager | Always present |
 | In-combat modals (spell + metamagic, AoO confirm, cast defensively, touch spell, summon choice and menu, confirmation, pick-up/drop/disarm/sunder, special attack, bull rush push (`ShowBullRushExtraPushChoice`: "Push 5 ft, stay" or "N x 5 ft and follow"; not shown when the attacker cannot move), character choice, Disguise Self race) | `CombatUI.Show*` methods | Rebuilt per call under the canvas | GameManager and Combat/Maneuvers code |
 | Use Item | UI/Combat/QuickItemUsePanel.cs | Eager | `GameManager.OnUseItemButtonPressed` (4610) |
-| Staff spell choice | UI/Combat/StaffSpellSelectionPanel.cs | Eager | GameManager.cs:6378 |
+| Staff spell choice | UI/Combat/StaffSpellSelectionPanel.cs | Eager | GameManager.cs:6380 |
 | Wish | UI/Wish/WishUI.cs | Eager | Spell/Resolution/GameManager_Spells_W.cs:1085, 1144 |
 | Turn Undead targets | UI/Combat/TurnUndeadTargetSelectionPanel.cs | Static `Create(canvas)` | Combat/Special/TurnUndeadSystem.cs:629 |
 | Character sheet with embedded inventory | UI/CharacterSheet/CharacterSheetUI.cs + UI/Inventory/InventoryUI.cs | Eager | C key |
@@ -257,7 +257,7 @@ The history contains many fixes for the same few problems. Avoid them as follows
 | Blank band at the top of a list | Children anchored at (0.5, 0.5) inside content pivoted at (0.5, 1) (48106c2, 6e542ef; see the `yOffset = contentH / 2` workaround at CharacterCreationUI.cs:735) | Anchor rows to the top, or use VerticalLayoutGroup + ContentSizeFitter |
 | Overlapping cards, buttons or footers | Absolute pixel layout with fixed heights (a1f1242, ebf2bd9, f632d63, cbe85d0, fafa38e) | Prefer layout groups; budget widths for every footer button |
 | Rows or buttons not clickable | Decorative Text with `raycastTarget = true` on top (56edba2); a control created before the panels that cover it (25387d2) | Set `raycastTarget = false` on labels; create top controls last or call `SetAsLastSibling` |
-| Targeting mode cancelled by a UI callback | `GameManager.ShowActionChoices()` resets `CurrentSubPhase` (de5c5c7, guard at GameManager.cs:4646) | Do not call `ShowActionChoices` while a pending scroll, wand or spell targeting is active |
+| Targeting mode cancelled by a UI callback | `GameManager.ShowActionChoices()` resets `CurrentSubPhase` (de5c5c7, guard at GameManager.cs:4648) | Do not call `ShowActionChoices` while a pending scroll, wand or spell targeting is active |
 
 The combat log keeps one line pool for the session. `CombatUI.EnsureCombatLogPanel` calls `CombatLogPanel.Initialize` before every log call so references assigned late are picked up, but `Initialize` builds the `ObjectPool<Text>` (50 prewarmed `PooledLogMsg` lines) only on the first call. Free lines wait, inactive, under the panel's inactive `CombatLogPool` child object, never at the scene root; the visible log keeps at most 500 lines and hands the oldest back to the pool. The pool creates a line only when it has no free one, so the panel never holds more than `CombatLogPanel.MaxLineObjects` (501) line objects; `CountLineObjects` reports them and the holder count for leak checks. Until 2026-10-08 the pool was rebuilt on every call and each log line orphaned 50 inactive root objects, which slowed long sessions below 1 frame per second (UI-001, fixed). The scenario harness still sweeps stray inactive `PooledLogMsg` roots and checks the panel's counts, and reports any leak it finds (docs/TESTING.md 3.5). The fix was checked through object and child counts in the harness only: on-screen rendering, scrolling and `ClearLog` between encounters are not verified in Play mode.
 

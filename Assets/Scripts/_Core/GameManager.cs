@@ -1991,6 +1991,8 @@ public partial class GameManager : MonoBehaviour
             // Use class-specific token sprite for grid display; fallback to generic
             Sprite pcAlive = IconLoader.GetToken(data.ClassName) ?? pcAliveFallback;
             Vector2Int startPos = (i < pcPositions.Length) ? pcPositions[i] : new Vector2Int(3, 6 + i * 3);
+            // A slot that held another character (a new party, the scenario harness) starts clean (CRE-046).
+            ResetPCSlotForNewCharacter(pcSlots[i]);
             pcSlots[i].Init(stats, startPos, pcAlive, pcDead);
 
             // Only apply tint if using the generic fallback sprite (class tokens are already colored)
@@ -2000,8 +2002,8 @@ public partial class GameManager : MonoBehaviour
                 if (sr != null) sr.color = pcColors[i];
             }
 
-            // Inventory
-            var inv = pcSlots[i].gameObject.AddComponent<InventoryComponent>();
+            // Inventory (a reused slot keeps its InventoryComponent; Init gives it a new Inventory)
+            var inv = pcSlots[i].gameObject.GetComponent<InventoryComponent>() ?? pcSlots[i].gameObject.AddComponent<InventoryComponent>();
             inv.Init(stats);
             SetupStartingEquipment(inv, data.ClassName);
 

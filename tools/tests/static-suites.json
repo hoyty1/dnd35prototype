@@ -139,6 +139,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Character.NpcSlotReuseTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 43,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character; needs a scene GameManager"
+    },
+    {
       "type": "Tests.Character.MulticlassSaveCalculationTests",
       "needs": "either",
       "skip": "",

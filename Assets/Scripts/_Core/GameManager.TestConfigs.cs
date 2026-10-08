@@ -56,6 +56,7 @@ public partial class GameManager
 
         Vector2Int fighterStart = new Vector2Int(9, 9);
         Sprite fighterAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(fighterStats, fighterStart, fighterAlive, pcDead);
 
         var fighterInventory = PC1.gameObject.GetComponent<InventoryComponent>();
@@ -133,7 +134,9 @@ public partial class GameManager
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
         Sprite fighterAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
 
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
+        ResetPCSlotForNewCharacter(PC2); // a different character than the slot held (CRE-046)
         PC2.Init(fighterStats, fighterStart, fighterAlive, pcDead);
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -233,6 +236,7 @@ public partial class GameManager
 
         Vector2Int rogueStart = new Vector2Int(9, 9);
         Sprite rogueAlive = IconLoader.GetToken("Rogue") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(rogueStats, rogueStart, rogueAlive, pcDead);
 
         InventoryComponent rogueInventory = PC1.gameObject.GetComponent<InventoryComponent>();
@@ -285,6 +289,7 @@ public partial class GameManager
 
         Vector2Int clericStart = new Vector2Int(9, 9);
         Sprite clericAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(clericStats, clericStart, clericAlive, pcDead);
 
         InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>();
@@ -332,6 +337,7 @@ public partial class GameManager
 
         Vector2Int fighterStart = new Vector2Int(9, 7); // 10 feet south of Brother Marcus.
         Sprite fighterAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC2); // a different character than the slot held (CRE-046)
         PC2.Init(fighterStats, fighterStart, fighterAlive, pcDead);
 
         InventoryComponent fighterInventory = PC2.gameObject.GetComponent<InventoryComponent>();
@@ -425,8 +431,11 @@ public partial class GameManager
             raceName: "Human"
         );
 
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(wizardStats, new Vector2Int(6, 8), IconLoader.GetToken("Wizard") ?? pcAliveFallback, pcDead);
+        ResetPCSlotForNewCharacter(PC2); // a different character than the slot held (CRE-046)
         PC2.Init(rogueStats, new Vector2Int(8, 8), IconLoader.GetToken("Rogue") ?? pcAliveFallback, pcDead);
+        ResetPCSlotForNewCharacter(PC3); // a different character than the slot held (CRE-046)
         PC3.Init(fighterStats, new Vector2Int(10, 8), IconLoader.GetToken("Fighter") ?? pcAliveFallback, pcDead);
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -525,8 +534,11 @@ public partial class GameManager
         rogueStats.CharacterAlignment = Alignment.ChaoticNeutral;
         wizardStats.CharacterAlignment = Alignment.NeutralGood;
 
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(fighterStats, new Vector2Int(6, 12), IconLoader.GetToken("Fighter") ?? pcAliveFallback, pcDead);
+        ResetPCSlotForNewCharacter(PC2); // a different character than the slot held (CRE-046)
         PC2.Init(rogueStats, new Vector2Int(8, 10), IconLoader.GetToken("Rogue") ?? pcAliveFallback, pcDead);
+        ResetPCSlotForNewCharacter(PC3); // a different character than the slot held (CRE-046)
         PC3.Init(wizardStats, new Vector2Int(9, 7), IconLoader.GetToken("Wizard") ?? pcAliveFallback, pcDead);
 
         InventoryComponent fighterInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -589,6 +601,7 @@ public partial class GameManager
 
         wizardStats.CharacterAlignment = Alignment.NeutralGood;
 
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(wizardStats, new Vector2Int(6, 10), IconLoader.GetToken("Wizard") ?? pcAliveFallback, pcDead);
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -656,7 +669,9 @@ public partial class GameManager
         Vector2Int shielderStart = new Vector2Int(6, 9);
         Vector2Int basherStart = new Vector2Int(12, 9);
 
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(shielderStats, shielderStart, IconLoader.GetToken("Fighter") ?? pcAliveFallback, pcDead);
+        ResetPCSlotForNewCharacter(PC2); // a different character than the slot held (CRE-046)
         PC2.Init(basherStats, basherStart, IconLoader.GetToken("Fighter") ?? pcAliveFallback, pcDead);
 
         InventoryComponent shielderInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -713,6 +728,7 @@ public partial class GameManager
 
         Vector2Int clericStart = new Vector2Int(3, 7);
         Sprite clericAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(clericStats, clericStart, clericAlive, pcDead);
 
         InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -763,6 +779,7 @@ public partial class GameManager
 
         Vector2Int necromancerStart = new Vector2Int(3, 7);
         Sprite necromancerAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(necromancerStats, necromancerStart, necromancerAlive, pcDead);
 
         InventoryComponent necromancerInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -832,7 +849,9 @@ public partial class GameManager
         Sprite clericAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
 
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(clericStats, clericStart, clericAlive, pcDead);
+        ResetPCSlotForNewCharacter(PC2); // a different character than the slot held (CRE-046)
         PC2.Init(wizardStats, wizardStart, wizardAlive, pcDead);
 
         InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -916,6 +935,7 @@ public partial class GameManager
 
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
 
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -984,6 +1004,7 @@ public partial class GameManager
 
         Vector2Int wizardStart = new Vector2Int(3, 9);
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -1066,6 +1087,7 @@ public partial class GameManager
 
         Vector2Int druidStart = new Vector2Int(5, 5);
         Sprite druidAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(druidStats, druidStart, druidAlive, pcDead);
 
         InventoryComponent druidInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -1111,6 +1133,7 @@ public partial class GameManager
 
         Vector2Int wizardStart = new Vector2Int(7, 5);
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC2); // a different character than the slot held (CRE-046)
         PC2.Init(wizardStats, wizardStart, wizardAlive, pcDead);
 
         InventoryComponent wizardInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
@@ -1180,6 +1203,7 @@ public partial class GameManager
 
         Vector2Int fighter1Start = new Vector2Int(7, 8);
         Sprite fighter1Alive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(fighter1Stats, fighter1Start, fighter1Alive, pcDead);
 
         InventoryComponent fighter1Inventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -1208,6 +1232,7 @@ public partial class GameManager
 
         Vector2Int fighter2Start = new Vector2Int(9, 8);
         Sprite fighter2Alive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC2); // a different character than the slot held (CRE-046)
         PC2.Init(fighter2Stats, fighter2Start, fighter2Alive, pcDead);
 
         InventoryComponent fighter2Inventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
@@ -1236,6 +1261,7 @@ public partial class GameManager
 
         Vector2Int wizardStart = new Vector2Int(8, 7);
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC3); // a different character than the slot held (CRE-046)
         PC3.Init(wizardStats, wizardStart, wizardAlive, pcDead);
 
         InventoryComponent wizardInventory = PC3.gameObject.GetComponent<InventoryComponent>() ?? PC3.gameObject.AddComponent<InventoryComponent>();
@@ -1335,6 +1361,7 @@ public partial class GameManager
 
         Vector2Int wizardStart = new Vector2Int(3, 9);
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -1464,6 +1491,7 @@ public partial class GameManager
 
         Vector2Int wizardStart = new Vector2Int(3, 9);
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -1523,6 +1551,7 @@ public partial class GameManager
 
         Vector2Int enchanterStart = new Vector2Int(3, 9);
         Sprite enchanterAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(enchanterStats, enchanterStart, enchanterAlive, pcDead);
 
         InventoryComponent enchanterInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -1570,6 +1599,7 @@ public partial class GameManager
 
         Vector2Int guardStart = new Vector2Int(5, 9);
         Sprite guardAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC2); // a different character than the slot held (CRE-046)
         PC2.Init(guardStats, guardStart, guardAlive, pcDead);
 
         InventoryComponent guardInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
@@ -1651,6 +1681,7 @@ public partial class GameManager
 
         Vector2Int wizardStart = new Vector2Int(9, 8);
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
@@ -1724,6 +1755,7 @@ public partial class GameManager
 
         Vector2Int clericStart = new Vector2Int(3, 9);
         Sprite clericAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
+        ResetPCSlotForNewCharacter(PC1); // a different character than the slot held (CRE-046)
         PC1.Init(clericStats, clericStart, clericAlive, pcDead);
 
         InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();

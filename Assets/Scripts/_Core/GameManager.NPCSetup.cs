@@ -14,7 +14,7 @@ using DND35e.Identifiers;
 /// Contains all NPC spawning and configuration logic:
 /// - SetupEnemyEncounter: Spawns enemies from encounter definition
 /// - SetupNPCIcons: Creates visual representations for NPCs
-/// - InitializeNPCFromDefinition: Configures NPC from database definition
+/// - InitializeNPCFromDefinition: Configures NPC from database definition (after ResetCharacterSlotForSpawn, CRE-046)
 /// - ApplyScenarioSpawnOverrides: Test-specific NPC overrides
 /// - AI profile assignment
 /// 
@@ -183,7 +183,7 @@ public partial class GameManager
 
             if (_isArmorTargetingTestEncounter && string.Equals(enemyId, "skeleton_archer", StringComparison.Ordinal))
             {
-                npc.aiProfile = ScriptableObject.CreateInstance<RangedAIProfile>();
+                npc.aiProfile = TrackRuntimeAIProfile(ScriptableObject.CreateInstance<RangedAIProfile>());
                 npc.Tags.AddTag("Uses Armor-Based Targeting");
                 Debug.Log($"[ArmorTargetingTest] Overriding {npc.Stats.CharacterName} to Ranged profile for armor-priority targeting validation.");
             }
@@ -191,7 +191,7 @@ public partial class GameManager
             if (_isShieldBashTestEncounter)
             {
                 // Keep shield bash validation deterministic: basic melee pressure only, no trip/disarm/grapple maneuver selection.
-                npc.aiProfile = ScriptableObject.CreateInstance<UndeadMindlessAIProfile>();
+                npc.aiProfile = TrackRuntimeAIProfile(ScriptableObject.CreateInstance<UndeadMindlessAIProfile>());
                 npc.Tags.AddTag("ShieldBashTestSimpleMeleeAI");
                 Debug.Log($"[ShieldBashTest] Overriding {npc.Stats.CharacterName} to simple melee-only AI profile.");
             }
@@ -442,9 +442,120 @@ public partial class GameManager
         }
     }
 
-    private void InitializeNPCFromDefinition(CharacterController npc, NPCDefinition def,
+    /// <summary>
+    /// Runtime AI profile instances this GameManager created for spawned creatures (BuildRuntimeAIProfile and the
+    /// preset spawn overrides). <see cref="ResetCharacterSlotForSpawn"/> destroys a slot's old profile only when it is
+    /// in this set, so a profile someone else owns (a persistent asset, or one the scenario harness assigned and
+    /// tracks) is never destroyed here.
+    /// </summary>
+    private readonly HashSet<DND35.AI.AIProfile> _runtimeCreatedAIProfiles = new HashSet<DND35.AI.AIProfile>();
+
+    /// <summary>Records <paramref name="profile"/> as a runtime instance this GameManager owns, and returns it.</summary>
+    private DND35.AI.AIProfile TrackRuntimeAIProfile(DND35.AI.AIProfile profile)
+    {
+        if (profile != null)
+            _runtimeCreatedAIProfiles.Add(profile);
+        return profile;
+    }
+
+    /// <summary>
+    /// Clears everything a character controller kept from the character it held before, so that a reused slot starts
+    /// as a fresh controller (CRE-046). SceneBootstrap builds the enemy pool and the four party slots once; every
+    /// encounter re-initialises the enemy slots, and character creation, the test-party presets and the scenario
+    /// harness put new characters into the party slots. Before this a slot kept the previous creature's
+    /// incorporeality, aura, breath weapons, feat toggles and the rest. Callers: <see cref="InitializeNPCFromDefinition"/>
+    /// (encounters, test presets' enemies, the scenario harness's enemies, summons) for every spawn, and
+    /// <see cref="ResetPCSlotForNewCharacter"/> for a party slot that gets a different character (SetupCreatedCharacters,
+    /// the Configure*TestParty presets, Harness_SetupPartySlot). Never called between encounters for a continuing party
+    /// member. Here: links other characters and services keep to the controller (feint windows, readied counterspells
+    /// and last-known squares other creatures hold on it, concentration of others on spell effects it carries, a
+    /// summon registration, Mirror Image, a Turn Undead tracker, the synced condition record, aura save immunities, AI
+    /// spell plans and lessons, curses, emanations centred on it, melee reaction effects); then
+    /// <see cref="CharacterController.ResetForNewCreature"/> clears the controller and its components, and the old
+    /// AI profile is destroyed when it is a runtime instance this GameManager created and no other character shares
+    /// it (AI-017).
+    /// </summary>
+    internal void ResetCharacterSlotForSpawn(CharacterController npc)
+    {
+        if (npc == null)
+            return;
+
+        var others = new List<CharacterController>();
+        if (PCs != null) others.AddRange(PCs);
+        if (NPCs != null) others.AddRange(NPCs);
+        for (int i = 0; i < _activeSummons.Count; i++)
+            if (_activeSummons[i] != null) others.Add(_activeSummons[i].Controller);
+
+        StatusEffectManager slotEffects = npc.GetComponent<StatusEffectManager>();
+        for (int i = 0; i < others.Count; i++)
+        {
+            CharacterController other = others[i];
+            if (other == null || other == npc)
+                continue;
+
+            other.ForgetCreature(npc);
+
+            // A spell another creature concentrates on whose effect sits on this creature ends with it.
+            ConcentrationManager conc = other.GetComponent<ConcentrationManager>();
+            if (slotEffects != null && conc != null && conc.IsConcentrating && slotEffects.ActiveEffects.Contains(conc.ConcentratingOn))
+                conc.EndConcentration(silent: true);
+        }
+
+        for (int i = _activeSummons.Count - 1; i >= 0; i--)
+            if (_activeSummons[i] != null && _activeSummons[i].Controller == npc)
+                _activeSummons.RemoveAt(i);
+        _summonedAllies.Remove(npc);
+        _summonedEnemies.Remove(npc);
+
+        ClearMirrorImageForCaster(npc, "slot reused", removeStatusEffect: false, log: false);
+        _activeTurnUndeadTrackers.Remove(npc);
+        _conditionService?.ForgetCharacter(npc);
+        AIService.ForgetAuraSaveImmunities(npc);
+#pragma warning disable CS0618 // the strategist keys its memory by GetInstanceID
+        AISpellcastingStrategist.ForgetCharacter(npc.GetInstanceID());
+#pragma warning restore CS0618
+        CurseTracker.ClearForCharacter(npc);
+        EffectService.UnregisterEmanation(npc);
+        MeleeReactionService.UnregisterAllOn(npc);
+
+        // The runtime AI profile is a per-creature ScriptableObject instance (AI-017); destroy the old creature's one
+        // when this GameManager created it and no other character still uses the same instance.
+        DND35.AI.AIProfile oldProfile = npc.aiProfile;
+
+        npc.ResetForNewCreature("slot reused");
+
+        _runtimeCreatedAIProfiles.RemoveWhere(p => p == null);
+        if (oldProfile != null && _runtimeCreatedAIProfiles.Contains(oldProfile)
+            && !others.Exists(o => o != null && o != npc && o.aiProfile == oldProfile))
+        {
+            _runtimeCreatedAIProfiles.Remove(oldProfile);
+            Destroy(oldProfile);
+        }
+    }
+
+    /// <summary>
+    /// Prepares party slot <paramref name="pc"/> for a different character: runs
+    /// <see cref="ResetCharacterSlotForSpawn"/> when the slot already held one (Stats set), and does nothing for a slot
+    /// that was never initialised. Call it right before <c>Init</c> wherever a party slot gets a new character
+    /// (character creation, the test-party presets, the scenario harness); never for a continuing party member.
+    /// </summary>
+    internal void ResetPCSlotForNewCharacter(CharacterController pc)
+    {
+        if (pc != null && pc.Stats != null)
+            ResetCharacterSlotForSpawn(pc);
+    }
+
+    /// <summary>
+    /// Builds a creature from <paramref name="def"/> in <paramref name="npc"/>: first
+    /// <see cref="ResetCharacterSlotForSpawn"/> (CRE-046), then stats, Init, every innate ability (each Configure* call
+    /// takes the definition's value, so a missing trait is configured as none), team, inventory, spellcasting,
+    /// effect and concentration managers and the AI profile.
+    /// </summary>
+    internal void InitializeNPCFromDefinition(CharacterController npc, NPCDefinition def,
         Vector2Int pos, Sprite alive, Sprite dead)
     {
+        ResetCharacterSlotForSpawn(npc);
+
         int hitDice = Mathf.Max(1, def.HitDice > 0 ? def.HitDice : def.Level);
         CreatureTypeProgression creatureProgression = CreatureTypeProgressionDatabase.GetFromString(def.CreatureType);
 
@@ -602,27 +713,21 @@ public partial class GameManager
         npc.ConfigureBombardierAcidSprayCooldown(0);
         npc.ConfigureRegeneration(def.RegenerationAmount, def.RegenerationSuppressedBy);
 
-        // Monster special abilities (Tiers 1-3)
-        if (def.IsIncorporeal)
-            npc.ConfigureIncorporeal(true);
-        if (def.BreathWeapon != null)
-            npc.ConfigureBreathWeapon(def.BreathWeapon);
-        if (def.SecondaryBreathWeapon != null)
-            npc.ConfigureSecondaryBreathWeapon(def.SecondaryBreathWeapon);
-        if (def.FrightfulPresence != null)
-            npc.ConfigureFrightfulPresence(def.FrightfulPresence);
-        if (def.Engulf != null)
-            npc.ConfigureEngulf(def.Engulf);
-        if (def.RangedSpecialAttack != null)
-            npc.ConfigureRangedSpecialAttack(def.RangedSpecialAttack);
-        if (def.BloodDrain != null)
-            npc.ConfigureBloodDrain(def.BloodDrain);
-        if (def.TerrainManipulation != null)
-            npc.ConfigureTerrainManipulation(def.TerrainManipulation);
+        // Monster special abilities (Tiers 1-3). Each call takes the definition's value, so a trait the definition
+        // lacks is set to none (null, false or 0) on a reused pool slot as well (CRE-046).
+        npc.ConfigureIncorporeal(def.IsIncorporeal);
+        npc.ConfigureBreathWeapon(def.BreathWeapon);
+        npc.ConfigureSecondaryBreathWeapon(def.SecondaryBreathWeapon);
+        npc.ConfigureFrightfulPresence(def.FrightfulPresence);
+        npc.ConfigureEngulf(def.Engulf);
+        npc.ConfigureRangedSpecialAttack(def.RangedSpecialAttack);
+        npc.ConfigureBloodDrain(def.BloodDrain);
+        npc.ConfigureTerrainManipulation(def.TerrainManipulation);
         if (def.StenchAuraDC > 0)
             npc.ConfigureStenchAura(def.StenchAuraDC, def.StenchAuraRange);
-        if (def.AuraAbility != null)
-            npc.ConfigureAuraAbility(def.AuraAbility);
+        else
+            npc.ConfigureStenchAura(0, 0);
+        npc.ConfigureAuraAbility(def.AuraAbility);
 
         CharacterTeam npcTeam = def.IsAlly ? CharacterTeam.Player : CharacterTeam.Enemy;
         npc.ConfigureTeamControl(npcTeam, def.IsControllable);
@@ -746,7 +851,7 @@ public partial class GameManager
             concMgr = npc.gameObject.AddComponent<ConcentrationManager>();
         concMgr.Init(stats, npc);
 
-        npc.aiProfile = BuildRuntimeAIProfile(def);
+        npc.aiProfile = TrackRuntimeAIProfile(BuildRuntimeAIProfile(def));
         npc.EnemyUseCoupDeGraceOverride = def.UseCoupDeGrace;
         npc.PriorityTargetName = string.IsNullOrWhiteSpace(def.AITargetPriority) ? null : def.AITargetPriority;
 

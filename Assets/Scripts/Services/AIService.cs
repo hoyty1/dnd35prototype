@@ -3565,6 +3565,27 @@ public class AIService : MonoBehaviour
     }
 
     /// <summary>
+    /// Drops every aura save immunity in which <paramref name="character"/> is the aura's source or the target
+    /// (MM: a creature that saves is immune to that one creature's aura for 24 hours). Used when the controller is
+    /// reused for a different creature, which is not the creature that was saved against (CRE-046).
+    /// </summary>
+    public static void ForgetAuraSaveImmunities(CharacterController character)
+    {
+        if (character == null || _auraSaveImmunities.Count == 0)
+            return;
+
+#pragma warning disable CS0618 // the immunity keys are built from GetInstanceID (GetAuraImmunityKey)
+        string id = character.GetInstanceID().ToString();
+#pragma warning restore CS0618
+        _auraSaveImmunities.RemoveWhere(key =>
+        {
+            // Key: AuraImmunity_<targetId>_<sourceId>_<auraName>
+            string[] parts = key.Split('_');
+            return parts.Length >= 3 && (parts[1] == id || parts[2] == id);
+        });
+    }
+
+    /// <summary>
     /// Map an AuraEffectType to the corresponding CombatConditionType.
     /// </summary>
     private static CombatConditionType AuraEffectToCondition(AuraEffectType effect)

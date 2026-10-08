@@ -275,6 +275,17 @@ public class ConditionService : MonoBehaviour
         _activeConditionsByCharacter.Remove(target);
     }
 
+    /// <summary>
+    /// Drops the synced condition record of <paramref name="target"/> without touching its conditions (they live on
+    /// stats that are about to be replaced). Used when the controller is reused for a different creature, so the new
+    /// creature's first sync does not inherit the old record's source and turn-boundary data (CRE-046).
+    /// </summary>
+    public void ForgetCharacter(CharacterController target)
+    {
+        if (target != null)
+            _activeConditionsByCharacter.Remove(target);
+    }
+
     public void CleanupOnCombatEnd(List<CharacterController> allCharacters)
     {
         if (allCharacters == null)

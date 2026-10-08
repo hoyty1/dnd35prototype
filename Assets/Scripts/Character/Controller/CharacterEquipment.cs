@@ -509,6 +509,16 @@ public class CharacterEquipment : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Drops a pending shield-bash AC suppression without restoring anything (the stats it changed are about to be
+    /// replaced). Used when this controller is reused for a different creature (CRE-046).
+    /// </summary>
+    public void ResetShieldBashState()
+    {
+        _shieldBashAcSuppressed = false;
+        _suppressedShieldBonusAmount = 0;
+    }
+
     public void RestoreShieldBonusAfterShieldBash()
     {
         if (!_shieldBashAcSuppressed || Stats == null)

@@ -92,8 +92,9 @@ Where to look first:
 - Magic strings fail silently: case-sensitive `HasFeat` (CHR-030), duplicate NPC ids (CRE-022), unknown preset ids (ENC-012), sources matched by name (CORE-017).
 - Wand charges (ITM-034) and enhancement (ITM-035) are stored twice; update both.
 - `IsPC` means controllable (CORE-014); use `controller.IsDead` (CHR-031); never assign `Stats.Level` (CHR-034); the positional `CharacterStats` constructor takes WIS before INT (CHR-032).
-- 19 test files reflect on private members by name; grep `Assets/Scripts/Tests` before renaming (TST-006).
+- 20 test files reflect on private members by name; grep `Assets/Scripts/Tests` before renaming (TST-006).
 - `_npcAIBehaviors` is index-parallel to `NPCs` (AI-015).
+- Enemy pool and party slots are reused: new per-creature state on `CharacterController` (a field, a component, a link) must also be cleared in `ResetForNewCreature` or `GameManager.ResetCharacterSlotForSpawn` (CRE-046); a party slot that gets a new character calls `ResetPCSlotForNewCharacter` before `Init`.
 - Never run scenarios in a Play session that ran static suites; `ScenarioHooks` must stay null outside the harness.
 
 ## Current state

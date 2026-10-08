@@ -112,7 +112,7 @@ Contents:
 | Services/AIService.cs | 3,504 | Pipeline, all routines except summon and grapple, targeting, movement scoring, maneuver gate, spell selection glue, auras, specials, swarm damage (AI-020) |
 | _Core/GameManager.NPCTurns.cs | 1,863 | `SingleNPCTurnFromInitiative` 35, `AI_SummonedCreature` 79, `TryNPCSpecialAttackIfBeneficial` 306, melee attack sequence `PerformNPCMeleeAttackSequence` 593, `TryNPCPerformSpellCast` 951, bombardier spray 1188, `NPCPerformAttack` 1285, breath 1651, frightful presence 1791 |
 | _Core/GameManager.cs | 11,516 | `OnTurnStarted` 3764, `ShouldSkipTurnDueToHPState` 3909, `NextInitiativeTurn` 3948, the `*ForAI` block 10879-11036 |
-| _Core/GameManager.NPCSetup.cs | 818 | `SetupEnemyEncounter` (adds `_npcAIBehaviors` 179), `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile` 758 |
+| _Core/GameManager.NPCSetup.cs | 924 | `SetupEnemyEncounter` (adds `_npcAIBehaviors` 179), `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile` 864 |
 | _Core/GameManager.CombatActions.cs | | `MoveCharacterAlongComputedPath` 1148, withdraw 1102, shared AoO helpers `ResolveMovementAoOsBeforeStep`/`ExecutePathWithMovementAoOs`/`ResolveManeuverInitiationAoOs` 720-935, Wall of Ice AI helpers 2636-2670 |
 | Combat/Maneuvers/SupportActions.cs | | `CanChargeTarget` 1061, `NPCExecuteCharge` 1801 |
 | Combat/Maneuvers/GrappleSystem.cs | | `AI_GrappleRestrictedTurn` 1633, `ChooseNPCGrappleAction` 1747 |
@@ -132,7 +132,7 @@ Contents:
 
 Per-NPC AI state lives in three places:
 
-- `NPCDefinition` fields (above). `InitializeNPCFromDefinition` copies them: `npc.aiProfile = BuildRuntimeAIProfile(def)` (NPCSetup.cs:748), `EnemyUseCoupDeGraceOverride` (749), `PriorityTargetName` (750).
+- `NPCDefinition` fields (above). `InitializeNPCFromDefinition` copies them: `npc.aiProfile = BuildRuntimeAIProfile(def)` (NPCSetup.cs:854), `EnemyUseCoupDeGraceOverride` (855), `PriorityTargetName` (856).
 - `GameManager._npcAIBehaviors`, a list index-parallel to `NPCs` and read by `GetNPCBehaviorForAI` (AI-015, CRE-006).
 - One `AIProfile` instance per NPC from `ScriptableObject.CreateInstance`, with all tuning hard-set in `OnEnable`. There are no profile `.asset` files (AI-017).
 
@@ -155,16 +155,16 @@ The `SkeletonCreatureTemplate` and `ZombieCreatureTemplate` registry adapters do
 
 ### 3.1 From initiative to the AI
 
-1. `TurnService.StartCombat` rolls initiative (d20 + modifier; ties by modifier, then random) and fires `OnTurnStarted` for each actor. `AISpellcastingStrategist.ResetCombatState` runs right after (GameManager.cs:3732).
+1. `TurnService.StartCombat` rolls initiative (d20 + modifier; ties by modifier, then random) and fires `OnTurnStarted` for each actor. `AISpellcastingStrategist.ResetCombatState` runs right after (GameManager.cs:3734).
 2. `GameManager.OnTurnStarted` (3764) sends controllable characters to `StartPCTurn` and everything else to `SingleNPCTurnFromInitiative` (3800). `IsPC` means controllable (CORE-014).
 3. `SingleNPCTurnFromInitiative` (NPCTurns.cs:35) sets the phase and UI, expires Aid Another bonuses, handles Flaming Sphere, then calls **`ShouldSkipTurnDueToHPState`**. If that is true it logs "X is <reason> and cannot act" and calls `NextInitiativeTurn` (CORE-012: synchronous).
 4. Otherwise it reads the behaviour (`GetNPCBehaviorForAI`, default AggressiveMelee), runs `AIService.ExecuteNPCTurn`, and then checks only `AreAllPCsDead` (defeat). It does **not** check victory; see CORE-011.
 
 ### 3.2 The turn-skip gate
 
-`ShouldSkipTurnDueToHPState` (GameManager.cs:3909) skips the turn when `CanTakeTurnActions()` is false (HP state not Healthy, Disabled or Staggered) or when `CharacterConditions.CanTakeActions()` is false. The latter is false for any active condition whose `ConditionDefinition` sets both `PreventsStandardActions` and `PreventsFullRoundActions` (Combat/StatusEffects/StatusEffect.cs). Those conditions are: BlownAway, Cowering, Dazed, HideousLaughter, Dead, Dying, Fascinated, Asleep, Helpless, Nauseated, Panicked, Paralyzed, Petrified, Pinned, Stable, Stunned, Turned, Unconscious.
+`ShouldSkipTurnDueToHPState` (GameManager.cs:3911) skips the turn when `CanTakeTurnActions()` is false (HP state not Healthy, Disabled or Staggered) or when `CharacterConditions.CanTakeActions()` is false. The latter is false for any active condition whose `ConditionDefinition` sets both `PreventsStandardActions` and `PreventsFullRoundActions` (Combat/StatusEffects/StatusEffect.cs). Those conditions are: BlownAway, Cowering, Dazed, HideousLaughter, Dead, Dying, Fascinated, Asleep, Helpless, Nauseated, Panicked, Paralyzed, Petrified, Pinned, Stable, Stunned, Turned, Unconscious.
 
-Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3989):
+Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3991):
 
 - **Panicked** creatures never flee (PHB ch.8 / DMG ch.8 Condition Summary: a panicked creature drops what it holds and flees). The Panicked branch of `FrightenedBehaviorController` is unreachable, so frightful presence that panics a creature just freezes it.
 - **Turned** undead never flee; `AIService.ExecuteTurnedUndeadTurn` (443) is unreachable. `TurnUndeadSystem` logs "continues fleeing" without moving anything.
@@ -178,7 +178,7 @@ Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3989):
 | # | Line | Gate | Effect |
 |---|---|---|---|
 | 0 | 50 | GameManager, npc or Stats null | end |
-| 1 | 53 | `BeginNPCTurnForAI` (GameManager.cs:10930) | `ConditionService.OnTurnStart`, acid arrow damage, bombardier cooldown tick, `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
+| 1 | 53 | `BeginNPCTurnForAI` (GameManager.cs:10932) | `ConditionService.OnTurnStart`, acid arrow damage, bombardier cooldown tick, `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
 | 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
 | 3 | 66 | `CurrentHP <= 0` | end. A Disabled (0 HP) NPC never takes its single action (AI-053) |
 | 4 | 73 | Confused | d% roll; any result except ActNormally runs the controller and ends the turn |
@@ -212,7 +212,7 @@ Side effects of the order: auras and free-action Spittle are skipped on any turn
 
 ### 3.5 How a turn ends
 
-The routine returns; unused actions are discarded (no Delay, Ready, Total Defense). `SingleNPCTurnFromInitiative` checks `AreAllPCsDead`, then `NextInitiativeTurn` (GameManager.cs:3948) runs True Strike expiry, pinned-duration bookkeeping, `ConditionService.OnTurnEnd`, `ProcessEndOfTurnHPState` (dying and stabilisation), threat-preview invalidation, and advances `TurnService`. On wrap, `OnNewRound` ticks spell durations and `ConditionService.OnRoundEnd` (which runs at round start, CMB-006).
+The routine returns; unused actions are discarded (no Delay, Ready, Total Defense). `SingleNPCTurnFromInitiative` checks `AreAllPCsDead`, then `NextInitiativeTurn` (GameManager.cs:3950) runs True Strike expiry, pinned-duration bookkeeping, `ConditionService.OnTurnEnd`, `ProcessEndOfTurnHPState` (dying and stabilisation), threat-preview invalidation, and advances `TurnService`. On wrap, `OnNewRound` ticks spell durations and `ConditionService.OnRoundEnd` (which runs at round start, CMB-006).
 
 ## 4. Target selection and movement scoring
 
@@ -380,7 +380,7 @@ Effective routine reached (389 registered IDs; behaviour and archetype counts co
 
 The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, but because `IsTargetInCurrentWeaponRange` uses its bow's maximum range it usually stands and shoots without AoO assessment, and charges when a legal charge exists.
 
-### 6.2 Archetype to profile (`GameManager.BuildRuntimeAIProfile`, NPCSetup.cs:758)
+### 6.2 Archetype to profile (`GameManager.BuildRuntimeAIProfile`, NPCSetup.cs:864)
 
 | Archetype | Class | CombatStyle | Effective | Representatives | Key behaviour |
 |---|---|---|---|---|---|
@@ -465,7 +465,7 @@ The skeleton archer (behaviour `Ranged`, UndeadMindless) runs AggressiveMelee, b
 
 Casting is attempted only by the Healer branch (heal/buff), `ExecuteDragonTurn` (before breath), `ExecuteRangedKiterTurn` (twice per turn) and a charmed NPC healing its charmer (direct call, no strategist). AggressiveMelee, DefensiveMelee, Swarm and summons never cast (AI-002).
 
-An NPC gets a `SpellcastingComponent` only if `stats.IsSpellcaster` (a caster class) **and** its `KnownSpellIds` or `PreparedSpellSlotIds` is non-empty (NPCSetup.cs:716-718). Prepared IDs are assigned **by slot index** (`SpellcastingComponent.ApplyPreparedSpellSlotIds`), slots are ordered from cantrips up, mismatched levels are rejected, and wizard NPCs only get spell levels 0-2: 4/3/2 base slots from class level 4 up, plus one bonus 1st-level slot at Int modifier +1 and one bonus 2nd-level slot at +2 (`GetWizardSlotsForLevel`), so 4/4/3 for the lich and the Int 16+ test wizards. Result by static reading:
+An NPC gets a `SpellcastingComponent` only if `stats.IsSpellcaster` (a caster class) **and** its `KnownSpellIds` or `PreparedSpellSlotIds` is non-empty (NPCSetup.cs:821-823). Prepared IDs are assigned **by slot index** (`SpellcastingComponent.ApplyPreparedSpellSlotIds`), slots are ordered from cantrips up, mismatched levels are rejected, and wizard NPCs only get spell levels 0-2: 4/3/2 base slots from class level 4 up, plus one bonus 1st-level slot at Int modifier +1 and one bonus 2nd-level slot at +2 (`GetWizardSlotsForLevel`), so 4/4/3 for the lich and the Int 16+ test wizards. Result by static reading:
 
 | NPC | Expected castable |
 |---|---|
@@ -600,7 +600,7 @@ No NPC can summon (SPL-091): summon spells spend the slot and spawn nothing. No 
 ### 8.8 Perception and wards
 
 - `CanSee` = miss chance below 50% (`GetMissChance`: invisibility unless See Invisibility or Glitterdust, Darkness, Wall of Fire, Entropic Shield, incorporeal, Displacement). No line of sight (GRID-009); no blindsight, tremorsense or blindsense.
-- Two last-known stores: `LastKnownPositionTracker` and `CharacterController._lastKnownTargetPositions`; never cleared (AI-021). Going invisible writes both for all enemies.
+- Two last-known stores: `LastKnownPositionTracker` and `CharacterController._lastKnownTargetPositions`; cleared only when a controller is reused for a new creature (CRE-046 fix, AI-021). Going invisible writes both for all enemies.
 - `AttemptListenChecks`: See Invisibility users roll opposed Spot vs Hide; everyone else rolls one Listen vs a flat DC 20 that pinpoints all concealed targets (re-rolled per call, AI-007). PHB ch.4 (Listen) and DMG (Invisibility) use opposed Move Silently with distance penalties and a higher DC to pinpoint.
 - Sanctuary and Hide from Undead: see 4.1 and AI-005. `BreakProtectiveWardsOnAttack` runs on the PC attack path and `NPCPerformAttack` only, not on charges, maneuvers, grapples or spells (SPL-094, partly unverified).
 
@@ -675,7 +675,6 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | CMB-121 | A creature cannot join a grapple in progress; the refused attempt still uses the attack, and the chooser offers it again every round (103 refused attempts in the 50-fight soak) |
 | AI-059 | The AI tries targeted spells against swarms, which are immune (trips are refused by `CanTrip` since CMB-079); with no area spells (AI-001) an AI-run party cannot hurt a swarm (seen in the soak) |
 | AI-060 | The per-turn maneuver stopgap (no maneuver after one succeeds, no retry of a failed type against the same target; owner decision 2026-10-07) is to be replaced by weighted personality scoring ([design](../designs/enemy_ai_knowledge_and_personalities.md) section 7, Increment 1) |
-| CRE-046 | A reused enemy slot keeps the previous creature's special traits (an allip's incorporeality and Babble aura seen), so soak fights that follow an allip in the same Play session are contaminated (10 of 50 fights in the 2026-10-07 and 2026-10-08 soaks) |
 
 ## 11. Extension points
 
@@ -698,7 +697,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 
 ### 11.3 Add a `*ForAI` wrapper
 
-AIService may use only public GameManager members (docs/ARCHITECTURE.md conventions; AI-024). Add an expression-bodied delegate next to the block at GameManager.cs:10879-11036, e.g. `public bool TryNPCPerformSpellCastForAI(...) => TryNPCPerformSpellCast(...);`. Coroutine executors return the `IEnumerator`; AIService runs them with `_gameManager.StartCoroutine`. Existing wrappers: 40 (34 in GameManager.cs); 4 have no callers (AI-053).
+AIService may use only public GameManager members (docs/ARCHITECTURE.md conventions; AI-024). Add an expression-bodied delegate next to the block at GameManager.cs:10881-11038, e.g. `public bool TryNPCPerformSpellCastForAI(...) => TryNPCPerformSpellCast(...);`. Coroutine executors return the `IEnumerator`; AIService runs them with `_gameManager.StartCoroutine`. Existing wrappers: 40 (34 in GameManager.cs); 4 have no callers (AI-053).
 
 ### 11.4 Add an NPC action (attack form, monster ability, special action)
 
@@ -706,7 +705,7 @@ AIService may use only public GameManager members (docs/ARCHITECTURE.md conventi
 2. **Action economy:** spend the action yourself (`CommitStandardAction`, `UseFullRoundAction`, `UseMoveAction`); existing specials forget to (AI-053).
 3. **Rules plumbing:** resolve AoOs where PHB ch.8 says the action provokes (movement: `ResolveMovementAoOsBeforeStep`; maneuvers: `ResolveManeuverInitiationAoOs`; casting: `ResolveNPCSpellcastProvocation`); route damage through `Stats.ApplyIncomingDamage` with a typed `DamagePacket` (do not copy AI-006 or the breath code); saves through `SavingThrowResolver`; check `AreAllPCsDead` and victory (CORE-011).
 4. **Call site:** free actions at the top of `ExecuteNPCTurn` (after the condition gates); standard actions before or after movement in the routines that should use it. Prefer a capability check usable by every routine over adding it to AggressiveMelee only.
-5. **Data:** a new ability kind needs an `NPCDefinition` field, a deep copy in `NPCDefinition.Clone`, a `CharacterController.ConfigureX`, a call in `InitializeNPCFromDefinition`, and the template copy lists (DEVELOPMENT_RECIPES "Add a monster or NPC"). Tick its cooldown in `BeginNPCTurnForAI` (AI-032).
+5. **Data:** a new ability kind needs an `NPCDefinition` field, a deep copy in `NPCDefinition.Clone`, a `CharacterController.ConfigureX`, a call in `InitializeNPCFromDefinition`, a clear in `CharacterController.ResetForNewCreature` (CRE-046), and the template copy lists (DEVELOPMENT_RECIPES "Add a monster or NPC"). Tick its cooldown in `BeginNPCTurnForAI` (AI-032).
 6. **Feedback:** `CombatUI?.ShowCombatLog(CombatLogHelper...)`, a `[AI][Tag]` `Debug.Log`, and a `WaitForSeconds`.
 
 Maneuvers go through `ManeuverPreferences` → `GetPreferredManeuver` → `ShouldUseManeuver` → `TryNPCSpecialAttackByTypeForAI`; see DEVELOPMENT_RECIPES "Add a combat maneuver".
@@ -792,7 +791,7 @@ This section is analysis, not a plan. It describes structural constraints and op
 - **Capabilities are data the AI cannot see.** Spell-like abilities, stench, constrict, secondary breath and many MM specials exist only as text or unread fields; most monsters that should cast cannot. A deeper chooser has little to choose from until the capability data is executable.
 - **One-move horizon, no memory, no team.** Movement looks one move ahead, profiles are stateless except for dragons and swarms (each creature's only other memory is the per-turn maneuver stopgap, AI-060), and NPCs share nothing.
 - **Performance budget.** Per-cell A* already causes hitches; any search over action sequences needs a shared reachability flood and a cached threat map per turn first (AI-019).
-- **Testability and the AI-depth metric.** The Play-mode scenario harness ([TESTING.md](../TESTING.md) 3.4-3.5) runs `ExecuteNPCTurn` in the real scene: whole fights with seeded and forced dice, a typed trace of every turn, attack, AoO, maneuver, NPC cast, move and condition, and rules invariants; actors can be AI-run, scripted (typed steps through the same `*ForAI` executors, after the compulsion gates), idle or PC-driven. Its 24 `rules/*` scenarios pin shared mechanics. The AI-vs-AI soak `soak/dmg-random-encounters` (the AI-run Quick Start party against DMG dungeon random encounters, seeds 1-50, run with `ScenarioHarness.QueueFresh("soak/*", "1-50", "perSession=10")`) is the AI-depth baseline: its `soak` statistics give per-team actions per turn (baseline 2026-10-07: party 0.17 attacks, 0.15 maneuvers and 0.28 casts per turn; enemies 0.50 attacks, 0.21 maneuvers and no casts; 13 of 50 fights reached the 30-round cap; the full regression soak of 2026-10-08 after the session's maneuver and grapple changes: enemies 0.40 attacks per turn, 12 fights at the cap, table in TESTING.md 3.5). Compare a change to the AI against the latest table and read the traces of the seeds that moved. Until CRE-046 is fixed, seeds 25-30 and 37-40 fight a creature that kept an earlier allip's Babble aura and incorporeality, so their results depend on the session split: compare them only with the same `perSession=10` split, or leave them out. The soak surfaced AI-047 (the Healer cleric cures itself at full HP on 468 of 624 turns), AI-059, CMB-121, CMB-123, SPL-121, CRE-044 and CRE-046; earlier smoke runs surfaced AI-058 and confirmed CORE-011. AI-018 (the unguarded `CombatUI` uses in `ExecuteNPCTurn`) still blocks a headless run outside the scene.
+- **Testability and the AI-depth metric.** The Play-mode scenario harness ([TESTING.md](../TESTING.md) 3.4-3.5) runs `ExecuteNPCTurn` in the real scene: whole fights with seeded and forced dice, a typed trace of every turn, attack, AoO, maneuver, NPC cast, move and condition, and rules invariants; actors can be AI-run, scripted (typed steps through the same `*ForAI` executors, after the compulsion gates), idle or PC-driven. Its 58 `rules/*` scenarios pin shared mechanics. The AI-vs-AI soak `soak/dmg-random-encounters` (the AI-run Quick Start party against DMG dungeon random encounters, seeds 1-50, run with `ScenarioHarness.QueueFresh("soak/*", "1-50", "perSession=10")`) is the AI-depth baseline: its `soak` statistics give per-team actions per turn (baseline 2026-10-07: party 0.17 attacks, 0.15 maneuvers and 0.28 casts per turn; enemies 0.50 attacks, 0.21 maneuvers and no casts; 13 of 50 fights reached the 30-round cap; the full regression soak of 2026-10-08 after the session's maneuver and grapple changes: enemies 0.40 attacks per turn, 12 fights at the cap, table in TESTING.md 3.5). Compare a change to the AI against the latest table and read the traces of the seeds that moved. In both baseline tables seeds 25-30 and 37-40 fought a creature that kept an earlier allip's Babble aura and incorporeality (CRE-046, fixed 2026-10-08); since the fix a seed's trace no longer depends on the session split, and TESTING.md 3.5 has the rechecked results of seeds 21-40, so compare those seeds with the recheck, not with the tables. The soak surfaced AI-047 (the Healer cleric cures itself at full HP on 468 of 624 turns), AI-059, CMB-121, CMB-123, SPL-121, CRE-044 and CRE-046 (fixed); earlier smoke runs surfaced AI-058 and confirmed CORE-011. AI-018 (the unguarded `CombatUI` uses in `ExecuteNPCTurn`) still blocks a headless run outside the scene.
 
 ### 13.2 Prerequisites (fix before tuning behaviour)
 

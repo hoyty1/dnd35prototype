@@ -66,7 +66,7 @@ What does exist is 19 profile classes:
 
 ### 2.2 Profile machinery we build on
 
-- **One profile per NPC.** It lives in `CharacterController.aiProfile` (`Character/Controller/CharacterController.cs:310`). `GameManager.BuildRuntimeAIProfile` (`_Core/GameManager.NPCSetup.cs:758-816`) builds it from one `NPCDefinition.AIProfileArchetype` (`Character/Creatures/NPCDatabase.cs:627`) and assigns it at `NPCSetup.cs:748`.
+- **One profile per NPC.** It lives in `CharacterController.aiProfile` (`Character/Controller/CharacterController.cs:310`). `GameManager.BuildRuntimeAIProfile` (`_Core/GameManager.NPCSetup.cs:864-922`) builds it from one `NPCDefinition.AIProfileArchetype` (`Character/Creatures/NPCDatabase.cs:627`) and assigns it at `NPCSetup.cs:854`.
   - `Brute` and `Caster` fall through to `null` (AI-004).
 - **Virtual hooks.** `AIProfile` (`AI/AIProfile.cs`) exposes these, called from about 20 sites in `Services/AIService.cs` and `_Core/GameManager.NPCTurns.cs`:
   - `ScoreTarget`
@@ -89,7 +89,7 @@ What does exist is 19 profile classes:
 - **Tags are global ground truth.**
   - `CharacterTags` is filled by `StatusTagManager` with `Race:` (from `DisplayedRace`, so Disguise Self works), `Class:` (the true class), `HP State:`, `Status:` (every condition, including Charmed), `Wielding:` (item names, which can include "+1") and `Armor:`.
   - `AIProfile.TagPriorities` matches these with a two-way substring test (`AIProfile.cs:324-347`), so `Elf` matches `Race: Half-Elf`.
-  - `HP State: Staggered` is the 3.5 *nonlethal* state (`CharacterController.cs:4431`). Several profiles weight it as "low HP", so those weights almost never fire.
+  - `HP State: Staggered` is the 3.5 *nonlethal* state (`CharacterController.cs:4643`). Several profiles weight it as "low HP", so those weights almost never fire.
 - **The AI is omniscient.** It reads exact HP, AC, touch AC, all three saves, class, level, SR, immunities, and the true square of unseen targets. The places are:
   - `AIService.GetTargetPriority` (2010), `CalculateThreat` (2038) and `SelectLowestHPEnemy` (2612);
   - base `ScoreTarget`;
@@ -99,7 +99,7 @@ What does exist is 19 profile classes:
 - **Partial, mostly dead knowledge pieces.**
   - `LastKnownPositionTracker` stores positions only and rolls Listen against a flat DC 20 on every call (AI-007). A duplicate store sits at `CharacterController.cs:546` (AI-021).
   - The strategist's learning memory has writers with no callers (AI-011).
-  - `RollSpellcraftIdentification` (`CharacterController.cs:12204`) exists and is used only for counterspelling.
+  - `RollSpellcraftIdentification` (`CharacterController.cs:12416`) exists and is used only for counterspelling.
   - Events such as `AttackResolvedEvent`, `SpellCastEvent` and `DamageTakenEvent` are declared but never published.
   - **NPCs have no skills.** `InitializeSkills` runs only on PC paths, so every trained-only check fails for monsters.
 
@@ -146,7 +146,7 @@ public readonly struct KnownFact { FactKey Key; int SubjectId; FactValue Value;
 | Side store (`SideKnowledgeStore`, one per team) | Inferred, Recalled and Confirmed facts in this encounter, plus last-seen snapshots of Apparent facts (`Stale = true`) | Keyed by `(EncounterEntityId, FactKey)` |
 | Lore (`LoreBook`) | Species facts ("orc: humanoid (orc), light sensitivity") | Party Bestiary for the session; enemy faction books later |
 
-**Keys.** The 15 NPC slot GameObjects are reused, and the hub's Back button re-spawns into the same slots. So facts are keyed by a new `CharacterController.EncounterEntityId`, assigned in `InitializeNPCFromDefinition` (`NPCSetup.cs:445`). Species facts are keyed by `LoreKey`, which is `SourceNpcDefinitionId` (`NPCSetup.cs:501`) with the `spawn_` prefix stripped. The side store is reset in `SetupEnemyEncounter` and `ResetCombatStateForNextEncounter`, **not** in `OnCombatEnded`, because an ordinary victory never reaches it (CORE-002).
+**Keys.** The 15 NPC slot GameObjects are reused, and the hub's Back button re-spawns into the same slots. So facts are keyed by a new `CharacterController.EncounterEntityId`, assigned in `InitializeNPCFromDefinition` (`NPCSetup.cs:554`). Species facts are keyed by `LoreKey`, which is `SourceNpcDefinitionId` (`NPCSetup.cs:612`) with the `spawn_` prefix stripped. The side store is reset in `SetupEnemyEncounter` and `ResetCombatStateForNextEncounter`, **not** in `OnCombatEnded`, because an ordinary victory never reaches it (CORE-002).
 
 **Sharing.** A creature with Int 3 or more that can speak and is not silenced shares its learned facts with its side at the end of its turn (talking is a free action). Animals share positions only, and mindless creatures share nothing. PCs always share. The rule is the same for both teams.
 
@@ -158,7 +158,7 @@ public readonly struct KnownFact { FactKey Key; int SubjectId; FactValue Value;
 | **Observed in combat** (`KnowledgeService.RecordOutcome`, fed by published events) | A hit with total *t* gives `ACAtMost(t)`. A miss with total *t* (excluding natural 1 and 20) gives `ACMoreThan(t)`. Damage ignored or reduced gives `ImmuneTo` or `ResistsEnergy`. Save outcomes give `SaveTendency` (Inferred). Casting gives `CastsArcane`/`CastsDivine`. Rage, sneak attack and turning give `ClassRole`. | This is how 3.5 characters learn "that one is hard to hit". It replaces the dead `RecordSpellSaveSuccess` and `RecordIneffectiveDamage` (AI-011). | Inc 2 for AC and roles; phase 4 for saves and immunities |
 | **Checks** (`IdentificationService`) | Knowledge, by creature type: DC 10 + HD, trained only, 1 fact plus 1 per 5 points over the DC, drawn from the species lore list in order (type, worst special attack, defences, vulnerabilities, save tendencies, senses). Spellcraft: 15 + spell level for a spell being cast, 20 + level for an effect already in place, 25 + level after saving against it. Sense Motive: 25 to notice an enchantment (15 if dominated). Spot vs Disguise reveals the true Species. | Knowledge uses no action and allows no retry. The skill by type is arcana, dungeoneering, local, nature, religion or the planes, per the PHB table. No core rule lets Knowledge reveal a PC's *class*. Monsters need skill ranks first (§6). | Phase 4 |
 | **Party, between battles** (pre-combat hub) | "Study Foes": Knowledge on each species in the already-spawned roster, take 10 allowed. "Scout": best Hide + Move Silently vs the enemies' best Spot/Listen; success gives the Apparent facts for the whole roster; **failure raises the enemy intel level**. "Gather Information": optional and labelled a house rule, because RAW needs a settlement and 1d4+1 hours and the game has no clock. | Each action spends a **preparation budget** (abstract hours per encounter: 0-1 for a wandering monster, 4-8 for a known lair), so research is a choice rather than click-everything. Uses the party-best pattern from `TreasureItemConverter.FindBestAppraiser` (52-80). | Phase 4 |
-| **Enemies, between battles** (encounter-seeded) | `EncounterIntelLevel`: **Unaware** (default) gets nothing. **Alert** (failed party scout, or a lair) gets the Apparent facts for every PC. **Watched** (sentries) adds behaviour facts, such as the arcane caster who pre-buffed. **Informed** adds faction memory of named PCs; later, fleeing survivors report back to the faction. | Seeded at `StartCombat` (`GameManager.cs:3632`, beside `ResetCombatState` at 3732). That is the first point after the hub, so it reflects gear the party changed there. | Phase 4 |
+| **Enemies, between battles** (encounter-seeded) | `EncounterIntelLevel`: **Unaware** (default) gets nothing. **Alert** (failed party scout, or a lair) gets the Apparent facts for every PC. **Watched** (sentries) adds behaviour facts, such as the arcane caster who pre-buffed. **Informed** adds faction memory of named PCs; later, fleeing survivors report back to the faction. | Seeded at `StartCombat` (`GameManager.cs:3634`, beside `ResetCombatState` at 3732). That is the first point after the hub, so it reflects gear the party changed there. | Phase 4 |
 | **Divination** | *Deathwatch* gives `HPExact` as a band; *detect evil/magic* give aura facts | The spells are placeholders today (`SpellDatabase_D.cs:146, 316`) | Later |
 
 ### 3.3 Intelligence tiers
@@ -178,7 +178,7 @@ public readonly struct KnownFact { FactKey Key; int SubjectId; FactValue Value;
 
 ### 3.4 Fairness and symmetry
 
-- **One API for both sides.** `KnowledgeService.GetView(observer, subject)` is the only way the AI or the UI reads enemy data. `GameManager.UpdateAllStatsUI` (`GameManager.cs:2983`) already computes an `observer`; it just has to pass it on.
+- **One API for both sides.** `KnowledgeService.GetView(observer, subject)` is the only way the AI or the UI reads enemy data. `GameManager.UpdateAllStatsUI` (`GameManager.cs:2985`) already computes an `observer`; it just has to pass it on.
 - **Party UI in Rules mode.**
   - `CharacterInfoPanel` and `CharacterHoverTooltipUI.BuildTooltipText` (237-298) render Species, Size, wound band, armor category, "AC 15-17 (observed)", and known facts with source icons. Unknown values show as "?".
   - The combat log replaces "vs AC N" (`Combat/Core/CombatResult.cs:325, 495, 511-513, 619`) with hit/miss, and shows enemy HP as wound-band transitions.
@@ -386,8 +386,8 @@ That difference, shown in the trace, is the demonstration of fairness.
 | Where | Change |
 |---|---|
 | `NPCDefinition` (`NPCDatabase.cs`, near 627) | Add `public string AIPersonality;` (validated against `TraitDatabase` at load) and `public string AIWardName;`. Phase 4 adds `List<SkillRank> Skills` and `List<LoreEntry> Lore`. Keep `AIProfileArchetype` and `AIBehavior`. |
-| `GameManager.InitializeNPCFromDefinition` (`NPCSetup.cs:445`, 748) | Resolve the Role (archetype, else the implied role from the spec), then `npc.aiProfile = BuildRuntimeAIProfile(...)` and `npc.Personality = PersonalityFactory.Build(def, npc.aiProfile, npc.Stats)`. Assign `EncounterEntityId`. Call `Tags.ClearAllTags()` and reset the trackers on the reused slot. |
-| `BuildRuntimeAIProfile` (758-816) | Add a Brute case (Berserk or Humanoid) and a Caster case (Spellcaster) for AI-004. Destroy the slot's previous profile instance (AI-017). |
+| `GameManager.InitializeNPCFromDefinition` (`NPCSetup.cs:554`, 748) | Resolve the Role (archetype, else the implied role from the spec), then `npc.aiProfile = BuildRuntimeAIProfile(...)` and `npc.Personality = PersonalityFactory.Build(def, npc.aiProfile, npc.Stats)`. Assign `EncounterEntityId`. Call `Tags.ClearAllTags()` and reset the trackers on the reused slot. |
+| `BuildRuntimeAIProfile` (864-922) | Add a Brute case (Berserk or Humanoid) and a Caster case (Spellcaster) for AI-004. (`ResetCharacterSlotForSpawn` already destroys the slot's previous profile instance, CRE-046.) |
 | `CharacterController` | Add `PersonalityProfile Personality` and `int EncounterEntityId`. Later, `NPCAIBehavior AIBehavior` moves here from the parallel list (AI-015). |
 | Target scoring: `AIService.SelectBestTargetFromProfile` (~1790), `SelectAdaptiveFullAttackTarget` (3074), `NPCTurns.cs:733` | `profile.ScoreTarget(t, self)` becomes `AIDecisions.ScoreTarget(self, t)`, which returns the legacy value unchanged when `Personality == null`. |
 | Boolean and choice sites: `EvaluateMovementOptions` (2074-2082), `TryTakeTacticalFiveFootStep` (1089), `ShouldUseManeuver` / `TryExecutePreferredManeuver` (2233, 2288), `ShouldNPCUseCoupDeGrace` (2315), `SelectBestAction` (2589), ignore-unconscious (1782, 3044; `NPCTurns.cs:547, 652, 709`), `NPCTurns.cs:297, 563, 1136`, `CalculateRangedRiskTolerance` (1058) | Each goes through `AIDecisions.Judge(BoolDecision, ...)` or `ChooseManeuver`, with the same no-personality pass-through. |
@@ -414,10 +414,10 @@ That difference, shown in the trace, is the demonstration of fairness.
 |---|---|---|
 | Before Inc 1 | **AI-053** | Every profile logs as "Default AI", so the trace cannot name Roles. |
 | | **AI-004** | Brute (29 definitions) and Caster get a null Role. |
-| | **AI-017** | `OnEnable` overwrites tuning, and instances leak on reused slots. Apply params after `OnEnable`, and destroy old instances. |
+| | **AI-017** | `OnEnable` overwrites tuning, and summon and spawn-override instances leak (a reused slot's old instance is destroyed since 2026-10-08, CRE-046). Apply params after `OnEnable`, and destroy the remaining instances. |
 | | **AI-018** | `CombatUI` null dereference at `AIService.cs:59-60`. The static-suite runner and its curated baseline exist since 2026-10-07 (TST-002 closed), but without the AI-018 fix the turn tests below cannot run headless. The Play-mode scenario harness (docs/TESTING.md 3.4, 2026-10-07) can run them in the real scene instead. |
 | | **AI-005 / AI-007** | `SelectBestTarget` re-rolls Sanctuary and Listen on every call, so cached decisions would still flip within a turn. |
-| | Tag leak / **AI-021** | `ClearAllTags` has no callers, and the position stores are never cleared, so state leaks across encounters on reused slots. |
+| | **AI-021** | Two position stores. The tag and store leak across encounters on reused slots was fixed on 2026-10-08 (CRE-046: `CharacterController.ResetForNewCreature`). |
 | Before Cowardly counts as "complete" | CMB-073 (fixed 2026-10-07) | NPC movement now provokes AoOs, so "avoid AoOs" has a real cost; the "AoO risk simulated" trace label is no longer needed. |
 | | **AI-047** | The healer never moves to touch (the shaman example). |
 | | **AI-010**, **CMB-075** | `FleeHealthThreshold` is unread, and the turn-skip gate pre-empts Panicked creatures. Withdraw needs both. |
@@ -428,7 +428,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | | **AI-011** | Becomes the outcome-fact writers. |
 | Before Phase 4 | NPC skills (no issue exists yet; file one) | `NPCDefinition` has no skills field and `InitializeSkills` never runs for NPCs, so trained-only checks always fail for monsters. |
 | | **ENC-015** | The DMG `SpawnResult` is dropped at `EncounterSelectionUI.cs:676`, so DMG encounters carry no intel context. |
-| | **CORE-002** | `OnCombatEnded` is skipped on victory. Use `HandleCombatVictoryDetected` (`GameManager.cs:3579`). |
+| | **CORE-002** | `OnCombatEnded` is skipped on victory. Use `HandleCombatVictoryDetected` (`GameManager.cs:3581`). |
 | | **CRE-002** | Spawned monsters have no alignment (alignment hints, Zealot, *detect evil*). |
 | | **CMB-028** | Surprise and encounter distance, needed for the Alert/Watched levels and Ambusher. |
 

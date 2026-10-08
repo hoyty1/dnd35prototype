@@ -55,11 +55,17 @@ namespace Tests.Scenarios
     /// maneuver lands the AI attacks with its remaining steps, and it does not retry a failed maneuver type against
     /// the same target that turn.
     /// rules/combat-log-pool is not a rules check: it guards the combat log's line pool against the UI-001 leak.
+    /// rules/slot-reuse-traits and rules/slot-reuse-plain are not rules checks either: run in that order in one Play
+    /// session (filter rules/slot-reuse-*), they fight two encounters in the same enemy pool slots, the first with
+    /// trait creatures and the second with plain orc warriors, and check that no orc keeps a trait (CRE-046). Data
+    /// checked in the NPC database files on 2026-10-08: allip (incorporeal, Babble aura; spawns dead, CRE-044),
+    /// hell_hound (breath weapon), ghast (stench), gibbering_mouther (gibbering aura, spittle, ground manipulation,
+    /// blood drain, engulf), troll (regeneration, Large), orc_warrior (Warrior, greataxe, no special trait).
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 56;
+        public const int Count = 58;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -122,6 +128,8 @@ namespace Tests.Scenarios
             yield return S("stability-trip-control", () => StabilityCheck("rules/stability-trip-control", "A barghest in its natural form (the only modelled form) gets no stability against a trip (PHB p.158, CMB-085)", "barghest", SpecialAttackType.Trip, false));
             yield return S("weapon-size-damage", WeaponSizeDamage);
             yield return S("combat-log-pool", CombatLogPool);
+            yield return S("slot-reuse-traits", SlotReuseTraits);
+            yield return S("slot-reuse-plain", SlotReusePlain);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -2130,6 +2138,158 @@ namespace Tests.Scenarios
                     n++;
             }
             return n;
+        }
+
+        // ── Enemy pool slot reuse (CRE-046) ─────────────────────────────
+
+        /// <summary>The trait creatures of rules/slot-reuse-traits, in pool-slot order, and the squares both scenarios use.</summary>
+        private static readonly string[] SlotReuseTraitIds = { "allip", "hell_hound", "ghast", "gibbering_mouther", "troll" };
+        private static readonly Vector2Int[] SlotReuseSquares =
+        {
+            new Vector2Int(15, 2), new Vector2Int(15, 5), new Vector2Int(15, 8), new Vector2Int(15, 11), new Vector2Int(15, 14)
+        };
+
+        /// <summary>The innate traits a controller carries, as names (empty for a creature without any).</summary>
+        private static List<string> SlotTraits(CharacterController c)
+        {
+            var t = new List<string>();
+            if (c == null) return t;
+            if (c.IsIncorporeal) t.Add("incorporeal");
+            if (c.HasAuraAbility) t.Add("aura");
+            if (c.HasBreathWeapon) t.Add("breath");
+            if (c.HasSecondaryBreathWeapon) t.Add("secondary-breath");
+            if (c.HasFrightfulPresence) t.Add("frightful-presence");
+            if (c.HasEngulf) t.Add("engulf");
+            if (c.HasRangedSpecialAttack) t.Add("ranged-special");
+            if (c.HasBloodDrain) t.Add("blood-drain");
+            if (c.HasTerrainManipulation) t.Add("terrain");
+            if (c.HasStenchAura) t.Add("stench");
+            if (c.HasRegeneration) t.Add("regeneration");
+            return t;
+        }
+
+        /// <summary>The traits each creature of <see cref="SlotReuseTraitIds"/> must show (the positive control).</summary>
+        private static bool HoldsExpectedTraits(string id, CharacterController c)
+        {
+            List<string> t = SlotTraits(c);
+            switch (id)
+            {
+                case "allip": return t.Contains("incorporeal") && t.Contains("aura");
+                case "hell_hound": return t.Contains("breath");
+                case "ghast": return t.Contains("stench");
+                case "gibbering_mouther": return t.Contains("aura") && t.Contains("ranged-special") && t.Contains("terrain") && t.Contains("blood-drain") && t.Contains("engulf");
+                case "troll": return t.Contains("regeneration");
+                default: return false;
+            }
+        }
+
+        /// <summary>
+        /// First of the CRE-046 pair (not a rules check): a fighter against five trait creatures in pool slots 0-4
+        /// (allip, hell hound, ghast, gibbering mouther, troll), all AI-run for one round so their abilities run. The
+        /// fighter's assert confirms each slot carries its creature's traits, so rules/slot-reuse-plain, which follows
+        /// it in the same Play session, starts from slots that held them.
+        /// </summary>
+        private static ScenarioDef SlotReuseTraits()
+        {
+            ScenarioBuilder b = Rules("rules/slot-reuse-traits", "Trait creatures fill enemy pool slots 0-4 before rules/slot-reuse-plain (CRE-046)")
+                .Covers("CRE-046")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 4)), 3, 8, Control.Scripted);
+            for (int i = 0; i < SlotReuseTraitIds.Length; i++)
+                b.Npc("t" + i, SlotReuseTraitIds[i], SlotReuseSquares[i].x, SlotReuseSquares[i].y, Control.Ai);
+            return b
+                .Initiative("fighter")
+                .Turn("fighter", 1, Step.Assert("each pool slot carries its trait creature's traits (positive control)", ctx =>
+                {
+                    bool ok = true;
+                    for (int i = 0; i < SlotReuseTraitIds.Length; i++)
+                    {
+                        CharacterController c = ctx.Get("t" + i);
+                        if (!HoldsExpectedTraits(SlotReuseTraitIds[i], c))
+                        {
+                            ok = false;
+                            ctx.Note("slot " + i + " (" + SlotReuseTraitIds[i] + ") traits: " + string.Join(",", SlotTraits(c)));
+                        }
+                    }
+                    return ok;
+                }))
+                .Expect("Every trait creature spawns with its traits (the control for rules/slot-reuse-plain)", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>
+        /// Second of the CRE-046 pair: five plain orc warriors in pool slots 0-4, AI-run for one round. Run right after
+        /// rules/slot-reuse-traits in one Play session, each orc takes the slot a trait creature held in the previous
+        /// encounter. Run alone (or after other jobs), its setup first spawns the trait creatures into those slots
+        /// through the same spawn path, with the RNG state saved and restored, so the job starts from the same slots
+        /// either way and its trace does not depend on which happened. Before the fix the orc in slot 0 kept the allip's
+        /// incorporeality and Babble aura (soak seeds 25-30, docs/TESTING.md 3.5), and the others their breath weapon,
+        /// stench, mouther abilities and regeneration.
+        /// </summary>
+        private static ScenarioDef SlotReusePlain()
+        {
+            ScenarioBuilder b = Rules("rules/slot-reuse-plain", "Plain orcs in slots that held trait creatures keep none of their traits (CRE-046)")
+                .Covers("CRE-046")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 4)), 3, 8, Control.Scripted);
+            for (int i = 0; i < SlotReuseTraitIds.Length; i++)
+                b.Npc("orc" + i, "orc_warrior", SlotReuseSquares[i].x, SlotReuseSquares[i].y, Control.Ai);
+            return b
+                .GenerateActors(StageTraitCreaturesInPool)
+                .Initiative("fighter")
+                .Turn("fighter", 1, Step.Assert("no orc keeps a trait of its slot's earlier creature", ctx =>
+                {
+                    bool ok = true;
+                    for (int i = 0; i < SlotReuseTraitIds.Length; i++)
+                    {
+                        List<string> left = SlotTraits(ctx.Get("orc" + i));
+                        if (left.Count > 0)
+                        {
+                            ok = false;
+                            ctx.Note("orc" + i + " (slot of " + SlotReuseTraitIds[i] + ") keeps: " + string.Join(",", left));
+                        }
+                    }
+                    return ok;
+                }))
+                .Expect("No orc warrior keeps incorporeality, an aura, a breath weapon, stench, the mouther's abilities or regeneration (CRE-046)", Expect.AssertsPass())
+                .Expect("No orc uses Babble (the allip's aura, MM p.10)", Expect.Count("log", e => (e.Str("text") ?? "").IndexOf("Babble", StringComparison.OrdinalIgnoreCase) >= 0, 0, 0))
+                .Build();
+        }
+
+        /// <summary>
+        /// GenerateActors of rules/slot-reuse-plain: unless pool slots 0-4 already hold the trait creatures (the job ran
+        /// right after rules/slot-reuse-traits), spawn them there through GameManager.Harness_SpawnEnemies, the spawn
+        /// path the job then reuses. The RNG state is saved and restored around it, and the trace info is the same
+        /// either way, so the job's trace does not depend on it. Adds no actors.
+        /// </summary>
+        private static GeneratedActors StageTraitCreaturesInPool(ScenarioContext ctx)
+        {
+            GameManager gm = ctx.Gm;
+            bool held = gm != null && gm.NPCs != null && gm.NPCs.Count >= SlotReuseTraitIds.Length;
+            for (int i = 0; held && i < SlotReuseTraitIds.Length; i++)
+            {
+                CharacterController c = gm.NPCs[i];
+                held = c != null && c.Stats != null && c.Stats.SourceNpcDefinitionId == SlotReuseTraitIds[i]
+                    && HoldsExpectedTraits(SlotReuseTraitIds[i], c);
+            }
+
+            if (!held && gm != null)
+            {
+                UnityEngine.Random.State saved = UnityEngine.Random.state;
+                try
+                {
+                    gm.Harness_SpawnEnemies(new List<string>(SlotReuseTraitIds), SlotReuseSquares);
+                }
+                finally
+                {
+                    UnityEngine.Random.state = saved;
+                }
+            }
+            Debug.Log("[Scenario] rules/slot-reuse-plain: pool slots 0-4 " + (held ? "held the trait creatures of the previous job" : "were staged with the trait creatures"));
+
+            var gen = new GeneratedActors();
+            gen.Info.Set("slots", "0-4").Set("earlier", string.Join(",", SlotReuseTraitIds));
+            return gen;
         }
     }
 }

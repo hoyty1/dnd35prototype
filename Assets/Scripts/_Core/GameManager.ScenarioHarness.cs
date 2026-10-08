@@ -23,10 +23,11 @@ public partial class GameManager
 
     /// <summary>
     /// Builds the party from creation data through the real <see cref="SetupCreatedCharacters"/> path
-    /// without opening the level-up or encounter selection UI. Re-runnable in one Play session: the
-    /// slot's spell effects and concentration from an earlier run are removed while still bound to the
-    /// old stats, and SetupCreatedCharacters adds InventoryComponent and SpellcastingComponent
-    /// unconditionally, so existing ones are destroyed first. Slots beyond the data are deactivated.
+    /// without opening the level-up or encounter selection UI. Re-runnable in one Play session:
+    /// SetupCreatedCharacters resets each slot that held a character through
+    /// <see cref="ResetPCSlotForNewCharacter"/> (CRE-046), so nothing of an earlier run's character (spell
+    /// effects, spellcasting component, feat toggles, tags, trackers, links) stays. Slots beyond the data
+    /// are deactivated.
     /// Limitation: level-ups queued by creation (custom-rolled characters, or TargetLevel above the
     /// base level) are not applied, because the level-up UI is skipped. Returns null on success, or a
     /// reason (also logged) when there was no data or a slot was left with pending level-ups; the
@@ -42,15 +43,6 @@ public partial class GameManager
         }
 
         CharacterController[] slots = { PC1, PC2, PC3, PC4 };
-        for (int i = 0; i < slots.Length && i < data.Length; i++)
-        {
-            CharacterController pc = slots[i];
-            if (pc == null)
-                continue;
-
-            Harness_ClearSlotSpellState(pc);
-            DestroyAllComponents<InventoryComponent>(pc.gameObject);
-        }
 
         WaitingForCharacterCreation = false;
         SetupCreatedCharacters(data);
@@ -81,8 +73,9 @@ public partial class GameManager
     /// <c>Configure*TestParty</c> presets do (GameManager.TestConfigs.cs): Init, inventory with the
     /// class starting kit, RecalculateStats, status/concentration/spellcasting components, then the
     /// slot is activated. Set BAB through <c>CharacterStats.BaseAttackBonusOverride</c>; writes to
-    /// <c>BaseAttackBonus</c> are ignored (CHR-068). Spell effects and concentration left on the slot by
-    /// an earlier run are removed first, and casters always get a fresh SpellcastingComponent.
+    /// <c>BaseAttackBonus</c> are ignored (CHR-068). A slot that held a character is reset first through
+    /// <see cref="ResetPCSlotForNewCharacter"/> (CRE-046), so casters always get a fresh SpellcastingComponent
+    /// and nothing of the earlier character stays.
     /// </summary>
     internal CharacterController Harness_SetupPartySlot(int slot, CharacterStats stats, Vector2Int pos)
     {
@@ -101,9 +94,8 @@ public partial class GameManager
         Sprite pcDead = LoadSprite("Sprites/pc_dead");
         Sprite pcAlive = IconLoader.GetToken(stats.CharacterClass) ?? pcAliveFallback;
 
-        // A previous run may have left spell effects, concentration and a spellcasting component
-        // (with its buffs, spellbook and preparation lists) on this slot.
-        Harness_ClearSlotSpellState(pc);
+        // A previous run left another character on this slot: clear every trace of it (CRE-046).
+        ResetPCSlotForNewCharacter(pc);
 
         pc.Init(stats, pos, pcAlive, pcDead);
 
@@ -565,36 +557,5 @@ public partial class GameManager
             Destroy(cc.gameObject);
     }
 
-    /// <summary>
-    /// Removes what an earlier run left on a party slot: concentration and every spell effect (while
-    /// the managers are still bound to the old stats, so the reversals hit those stats), then the
-    /// spellcasting component with its buffs, spellbook and preparation lists. The controller's lazy
-    /// component caches and StatusEffectManager.Init fetch the replacement.
-    /// </summary>
-    private static void Harness_ClearSlotSpellState(CharacterController pc)
-    {
-        if (pc == null)
-            return;
-
-        ConcentrationManager conc = pc.GetComponent<ConcentrationManager>();
-        if (conc != null && conc.IsConcentrating)
-            conc.EndConcentration(silent: true);
-
-        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
-        if (statusMgr != null)
-            statusMgr.RemoveAllEffects();
-
-        DestroyAllComponents<SpellcastingComponent>(pc.gameObject);
-    }
-
-    private static void DestroyAllComponents<T>(GameObject go) where T : Component
-    {
-        if (go == null)
-            return;
-
-        T[] components = go.GetComponents<T>();
-        for (int i = 0; i < components.Length; i++)
-            UnityEngine.Object.DestroyImmediate(components[i]);
-    }
 }
 #endif

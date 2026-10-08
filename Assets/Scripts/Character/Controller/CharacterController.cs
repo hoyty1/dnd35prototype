@@ -3992,6 +3992,218 @@ public class CharacterController : MonoBehaviour
         _terrainManipulationDurationRemaining = terrainManip?.DurationRounds ?? 0;
     }
 
+    // ========== SLOT REUSE (CRE-046) ==========
+
+    /// <summary>
+    /// Components a freshly built character GameObject carries (SceneBootstrap and Awake add them) and that
+    /// <see cref="ResetForNewCreature"/> keeps, re-initialised by the spawn. Every other component (spellcasting,
+    /// spell effects, concentration, AI position memory, True Strike, ring regeneration, summon visuals and any
+    /// behaviour a later system attaches) belongs to the creature that held the controller and is destroyed.
+    /// InventoryComponent is kept because every spawn path re-initialises it with a new Inventory (and reuses the
+    /// existing component rather than adding a second one).
+    /// </summary>
+    private static readonly HashSet<Type> SlotReuseKeptComponentTypes = new HashSet<Type>
+    {
+        typeof(Transform),
+        typeof(SpriteRenderer),
+        typeof(CharacterController),
+        typeof(CharacterCombatStats),
+        typeof(CharacterEquipment),
+        typeof(CharacterInventory),
+        typeof(CharacterConditions),
+        typeof(ConditionManager),
+        typeof(StatusEffectIndicator),
+        typeof(InventoryComponent),
+    };
+
+    /// <summary>
+    /// Returns this controller to the state of a freshly created one before a new creature is initialised in it.
+    /// The enemy pool that SceneBootstrap builds is reused by every encounter, and before CRE-046 a slot kept the
+    /// previous creature's traits (an allip's incorporeality and Babble aura, a breath weapon, a stench aura, ...).
+    /// Called by GameManager.ResetCharacterSlotForSpawn, which every spawn path goes through: InitializeNPCFromDefinition
+    /// (encounters, test presets, the scenario harness and summons) and, for a party slot that gets a different
+    /// character, GameManager.ResetPCSlotForNewCharacter (character creation, the Configure*TestParty presets and the
+    /// scenario harness). Clears: the grapple link and pin state (the
+    /// opponent is released too), a mount, Command Undead links both ways, owned feint windows, every spell-effect
+    /// record on the controller, readied counterspell, turn and action-economy state, the attack pool and AI
+    /// maneuver memory, feat toggles, the attack damage mode, ability-zero bookkeeping, diseases and poisons, every
+    /// innate monster ability (regeneration, incorporeal, breath weapons, frightful presence, engulf, stench, aura,
+    /// ranged special attack, blood drain, terrain manipulation, acid spray cooldown), last-known
+    /// positions, HP state, AI profile and target priority, displayed race, tags, shield-bash AC suppression, sprite
+    /// tint and visibility, running coroutines, and every component outside <see cref="SlotReuseKeptComponentTypes"/>
+    /// (concentration is ended first, so an effect it holds on another creature ends). Stats stay until the spawn's
+    /// Init replaces them; links other characters and services keep to this controller are cleared by the GameManager
+    /// caller. A no-op in effect on a new controller.
+    /// </summary>
+    public void ResetForNewCreature(string reason = "slot reused")
+    {
+        StopAllCoroutines();
+        _currentScaleAnimation = null;
+        _grappleAlternateVisibilityCoroutine = null;
+
+        // Links to other creatures (resolved while the old stats are still bound).
+        ReleaseGrappleState(reason);
+        _isPinningOpponent = false;
+        _pinnedOpponent = null;
+        _pinnedBy = null;
+        _grappleDisplayPauseLocks = 0;
+
+        if (MountSystem.IsMounted(this))
+            MountSystem.ForceDismount(this, allowSoftFall: false);
+
+        RemoveCommandUndeadEffect();
+        if (_commandedUndeadList.Count > 0)
+        {
+            var commanded = new List<CommandUndeadEffectData>(_commandedUndeadList);
+            for (int i = 0; i < commanded.Count; i++)
+            {
+                CharacterController undead = commanded[i] != null ? commanded[i].ControlledUndead : null;
+                if (undead != null && undead != this && undead.ActiveCommandUndeadEffect == commanded[i])
+                    undead.RemoveCommandUndeadEffect();
+            }
+            _commandedUndeadList.Clear();
+        }
+
+        ClearOwnedFeintWindowsAndIndicators();
+        _activeFeintWindows.Clear();
+        _incomingFeintSources.Clear();
+        _turnsStartedCount = 0;
+        _lastKnownTargetPositions.Clear();
+
+        // Spell-effect records kept on the controller (their stat changes went to the old stats).
+        ActiveDisguiseSelfEffect = null;
+        ActiveExpeditiousRetreatEffect = null;
+        ActiveInvisibilityEffect = null;
+        ActiveSeeInvisibilityEffect = null;
+        ActiveGlitterdustEffect = null;
+        ActiveMelfsAcidArrowEffect = null;
+        ActiveBlindnessDeafnessEffect = null;
+        ActiveHasteEffect = null;
+        ActiveSlowEffect = null;
+        ActiveCommandUndeadEffect = null;
+        ActiveFalseLifeEffect = null;
+        ActiveGhoulTouchEffect = null;
+        ActiveScareEffect = null;
+        ActiveSpectralHandEffect = null;
+        ActiveAlignmentDetectionEffect = null;
+        _activeAttributeEnhancements.Clear();
+        _activeEnfeeblementEffect = null;
+        _activeTouchOfIdiocyEffect = null;
+        if (ReadiedCounterspell != null)
+        {
+            ReadiedCounterspell.Clear();
+            ReadiedCounterspell = null;
+        }
+
+        // Turn state, action economy, attack sequence and AI memory.
+        HasMovedThisTurn = false;
+        HasTakenFiveFootStep = false;
+        HasAttackedThisTurn = false;
+        IsWithdrawing = false;
+        WithdrawFirstStepProtected = false;
+        Actions.Reset();
+        ProgressiveAttackPool.Clear();
+        AIManeuverMemory.Clear();
+
+        // Feat toggles and the attack damage mode.
+        PowerAttackValue = 0;
+        RapidShotEnabled = false;
+        IsFightingDefensively = false;
+        CurrentAttackDamageMode = AttackDamageMode.Lethal;
+        _attackDamageModeManuallySetThisRound = false;
+
+        _abilityZeroAppliedHelpless = false;
+        _abilityZeroAppliedUnconscious = false;
+        _activeDiseases.Clear();
+        _activePoisons.Clear();
+
+        // Innate monster abilities: every one back to "none" (the spawn configures the new creature's own).
+        ConfigureBombardierAcidSprayCooldown(0);
+        ConfigureRegeneration(0, DamageBypassTag.None);
+        ConfigureIncorporeal(false);
+        ConfigureBreathWeapon(null);
+        ConfigureSecondaryBreathWeapon(null);
+        ConfigureFrightfulPresence(null);
+        ConfigureEngulf(null);
+        ConfigureStenchAura(0, 0);
+        ConfigureAuraAbility(null);
+        ConfigureRangedSpecialAttack(null);
+        ConfigureBloodDrain(null);
+        ConfigureTerrainManipulation(null);
+
+        _hasProcessedDeath = false;
+        _currentHPState = HPState.Healthy;
+
+        aiProfile = null;
+        EnemyUseCoupDeGraceOverride = null;
+        PriorityTargetName = null;
+        _displayedRace = null;
+        _wasBlurVisualActive = false;
+
+        EnsureTags().ClearAllTags();
+        _statusTagManager = new StatusTagManager(this);
+        EnsureEquipment().ResetShieldBashState();
+
+        if (_sr == null)
+            _sr = GetComponent<SpriteRenderer>();
+        if (_sr != null)
+        {
+            _sr.enabled = true;
+            _sr.color = Color.white;
+        }
+
+        // Components that belong to the old creature. Concentration is ended first so that an effect it keeps on
+        // another creature ends with it; the destroyed spell-effect manager takes the old creature's effects along.
+        ConcentrationManager concentration = GetComponent<ConcentrationManager>();
+        if (concentration != null && concentration.IsConcentrating)
+            concentration.EndConcentration(silent: true);
+
+        Component[] components = GetComponents<Component>();
+        for (int i = 0; i < components.Length; i++)
+        {
+            Component c = components[i];
+            if (c == null || SlotReuseKeptComponentTypes.Contains(c.GetType()))
+                continue;
+            DestroyImmediate(c);
+        }
+
+        _statusEffectManager = null;
+        _spellcastingComponent = null;
+        _concentrationManager = null;
+    }
+
+    /// <summary>
+    /// Drops what this character remembers about <paramref name="other"/>: its feint window against it, the feint
+    /// marker it set here, a counterspell readied against it, and its last-known square (also in an attached AI
+    /// LastKnownPositionTracker). Used when
+    /// <paramref name="other"/>'s controller is about to hold a different creature (CRE-046).
+    /// </summary>
+    public void ForgetCreature(CharacterController other)
+    {
+        if (other == null || other == this)
+            return;
+
+        for (int i = _activeFeintWindows.Count - 1; i >= 0; i--)
+        {
+            FeintWindow window = _activeFeintWindows[i];
+            if (window == null || window.Target == other)
+                _activeFeintWindows.RemoveAt(i);
+        }
+
+        if (_incomingFeintSources.Remove(other) && _incomingFeintSources.Count == 0 && Stats != null)
+            RemoveCondition(CombatConditionType.Feinted);
+
+        _lastKnownTargetPositions.Remove(other);
+
+        // A counterspell readied against the old creature must not fire against the new one in the same controller.
+        if (ReadiedCounterspell != null && ReadiedCounterspell.WatchedCaster == other)
+            ClearReadiedCounterspell();
+
+        LastKnownPositionTracker tracker = GetComponent<LastKnownPositionTracker>();
+        if (tracker != null)
+            tracker.ForgetTarget(other);
+    }
+
     /// <summary>Tick ranged special attack cooldown at start of turn.</summary>
     public void TickRangedSpecialAttackCooldown()
     {

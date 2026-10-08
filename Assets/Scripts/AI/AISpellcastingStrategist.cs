@@ -107,6 +107,17 @@ public static class AISpellcastingStrategist
         _failedSpellsPerTarget.Clear();
     }
 
+    /// <summary>
+    /// Drops the plan of the character with this instance id and what was learned against it as a target. Used when
+    /// the controller is reused for a different creature (CRE-046).
+    /// </summary>
+    public static void ForgetCharacter(int instanceId)
+    {
+        _activePlans.Remove(instanceId);
+        _ineffectiveDamageTypes.Remove(instanceId);
+        _failedSpellsPerTarget.Remove(instanceId);
+    }
+
     /// <summary>Record that a damage type was ineffective against a target.</summary>
     public static void RecordIneffectiveDamage(int targetId, DamageType type)
     {

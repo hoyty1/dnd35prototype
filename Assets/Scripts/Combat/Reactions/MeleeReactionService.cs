@@ -67,6 +67,16 @@ public static class MeleeReactionService
     }
 
     /// <summary>
+    /// Unregisters every effect active on <paramref name="character"/> (call while its stats are still bound). Used
+    /// when the controller is reused for a different creature (CRE-046).
+    /// </summary>
+    public static void UnregisterAllOn(CharacterController character)
+    {
+        if (character == null) return;
+        _effects.RemoveAll(e => e == null || e.IsActiveOn(character));
+    }
+
+    /// <summary>
     /// Remove all registered effects. Useful for scene cleanup / combat reset.
     /// </summary>
     public static void ClearAll()

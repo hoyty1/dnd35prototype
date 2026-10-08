@@ -140,13 +140,13 @@ All three use the minimum caster level for the spell level and iterate `SpellDat
 
 **ScrollData and WandData** (`Equipment/Items/ScrollData.cs`, `WandData.cs`) are the canonical payloads (commits d80e7c1, 0982d08). They hold the spell id, caster level, base and effective level, baked save DC, heighten level, metamagic feats, the arcane flag and gold value. Every creator still fills the legacy flat fields on ItemData as well (`ScrollSpellLevel`, `ScrollSavedDC`, `WandSpellId`, `WandCasterLevel`, `CurrentCharges`/`MaxCharges`, `ConsumableSpellName` and others).
 
-**Wand charges are stored twice**: `ItemData.CurrentCharges/MaxCharges` and `WandData.CurrentCharges/MaxCharges`. All three consume sites decrement both by hand (GameManager.cs:5622-5623, 6158-6159, 6289-6290). `WandValidator` checks only the legacy field, and the store sell price prefers the `WandData` values. If you add a charge write, update both. A wand at 0 charges stays in the inventory.
+**Wand charges are stored twice**: `ItemData.CurrentCharges/MaxCharges` and `WandData.CurrentCharges/MaxCharges`. All three consume sites decrement both by hand (GameManager.cs:5624-5625, 6160-6161, 6291-6292). `WandValidator` checks only the legacy field, and the store sell price prefers the `WandData` values. If you add a charge write, update both. A wand at 0 charges stays in the inventory.
 
 **Use pipeline.** Using any consumable costs a full-round action in combat:
 
 ```
 InventoryUI / QuickItemUsePanel
- -> GameManager.TryUseConsumableFromInventory   (GameManager.cs:4333; rejects !IsConsumable)
+ -> GameManager.TryUseConsumableFromInventory   (GameManager.cs:4335; rejects !IsConsumable)
       in combat: active PC, ChoosingAction, full-round action available
       -> ResolveConsumableUseProvocation        (:4479; AoO first unless IsWand)
  -> ApplyConsumableEffectAndConsume             (:5475) switch ConsumableEffect
@@ -162,7 +162,7 @@ InventoryUI / QuickItemUsePanel
 
 `TryUseScroll` and `TryUseWand` send a spell into the normal targeting pipeline when combat is running and the spell needs a target. That covers effect types Damage, Summon, Escape, Dispel, Wall, Divination and Utility, and target types SingleEnemy, SingleAlly, Area and Touch. The path is `Initiate{Scroll,Wand}CastThroughPipeline`, then `BeginPendingSpellTargeting`, with `_pendingScrollCastActive`/`_pendingWandCastActive` set. The action and the scroll or charge are consumed only after the cast resolves: `ConsumePendingSpellSlot` (Spell/Resolution/GameManager.SpellCasting.cs:174-187) calls `ConsumeScrollAfterCast` or `ConsumeWandChargeAfterCast` in place of spending a spell slot.
 
-Everything else goes through `TryApplySpellConsumableEffect`, which affects only the user. It handles healing, Mirror Image, and Buff/Debuff/Illusion/Control spells through `StatusEffectManager.AddEffect`. Any other effect returns "not supported for consumable use yet". `BuildConsumableSpellVariant` (GameManager.cs:6547) applies the stored metamagic with its own approximations. The spell pipeline itself is described in [Cast pipelines](spells.md#cast-pipelines).
+Everything else goes through `TryApplySpellConsumableEffect`, which affects only the user. It handles healing, Mirror Image, and Buff/Debuff/Illusion/Control spells through `StatusEffectManager.AddEffect`. Any other effect returns "not supported for consumable use yet". `BuildConsumableSpellVariant` (GameManager.cs:6549) applies the stored metamagic with its own approximations. The spell pipeline itself is described in [Cast pipelines](spells.md#cast-pipelines).
 
 Known deviations (details in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)):
 
@@ -186,7 +186,7 @@ Price for weapons is base + (effective bonus)^2 x 2000, and for armor and shield
 
 **Materials wired in play:**
 
-- `CharacterController` applies the masterwork +1 attack and the silver -1 damage (CharacterController.cs:6406-6409), and DR bypass through `ItemData.GetBypassTags`.
+- `CharacterController` applies the masterwork +1 attack and the silver -1 damage (CharacterController.cs:6618-6621), and DR bypass through `ItemData.GetBypassTags`.
 - `Inventory` applies ACP, max Dex, ASF and weight through `ItemData.Effective*`, and adamantine armor DR.
 - `CharacterStats` uses the mithral category shift only for armor proficiency and the Barbarian fast-movement check.
 
@@ -214,8 +214,8 @@ Several combat defects are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md): enc
 | Rings (`Equipment/Rings/`) | 54 variants: 37 passive, 9 active, 8 complex (`RingDatabase.Init`) | Store, crafting | Passive bonuses in `Inventory.ApplyRingBonuses`; Ring of Wizardry slots (`SpellcastingComponent.cs:1022`); Ring of Counterspells hook (`GameManager.SpellCasting.cs:2002`); Spell Turning pool and Ram charges on rest | Active abilities (`RingActivationManager.TryActivateRing`) are unreachable: the only entry is the consumable path, which rejects `Type == Ring`. Spell Storing/Counterspells cannot be loaded (`SpellStorageUI` is never opened). Ring of Regeneration never attaches `RegenerationEffect`, because it has no `RingAbilities` |
 | Rods (`Equipment/Rods/`) | 33 (21 metamagic, 7 combat, 5 utility; comments saying 36 are wrong) | Store, crafting; held in a hand slot | Tooltip only | `MetamagicRodActivation` is called only by `Tests/Equipment/RodTests.cs`. No casting or combat code reads rod fields; only tooltips, the store and the crafting registry do. The spell-side hook `MetamagicData.ApplyFromRod` is also called only by tests. Rod daily uses are never reset (`RodDatabase.ResetDailyUses/ResetWeeklyUses` are called only by tests) |
 | Wondrous (`Equipment/Wondrous/`) | 180 registration calls: about 170 real items plus 10 `TEST` items (WondrousItemDatabase.cs:266-277), which also appear in the store and crafting | Store, crafting | Passive bonuses in `Inventory.ApplyAllWondrousItemBonuses`; daily-use reset on rest | `WondrousItemActivation.TryActivate` is unreachable (`Type == Wondrous`). Even if reached it only spends a use and logs, except that Boots of Speed set haste flags (`CharacterStats.WondrousHasteActive`) that nothing reads. Boots of Speed haste, summons, Cubic Gate, Iron Cobra and similar items are data and tooltip only. `OnWeeklyReset` and `OnMonthlyReset` have no callers |
-| Staves (`Equipment/Staves/`) | 20 `StaffDefinition`s (status labels: 2 Full, 13 Partial, 5 Stub) | No | `StaffValidator`, `StaffSpellSelectionPanel` and `TryUseStaff` exist | No code creates an ItemData with `IsStaff = true`. The only writes are the clone copy and the expiry (GameManager.cs:6511). Craft Staff lists nothing |
-| Specific items (`Equipment/SpecificItems/`) | 60 definitions, 28 `SpecificItemBehavior` subclasses in `Equipment/Weapons` and `Equipment/Armor` | No | `CharacterController.cs:6475-7326` invokes `OnPreAttackRoll`, `OnDamageRoll`, `OnCriticalHit`, `OnHitApplied`, `OnKill` and defender `OnAttackedBy` | `CreateSpecificItem` has no callers. `OnEquip`, `Activate`, `OnLongRest` and other hooks are never called, so `IsEquipped`/`Wielder` guards stay false. The store "Specific" filter is always empty |
+| Staves (`Equipment/Staves/`) | 20 `StaffDefinition`s (status labels: 2 Full, 13 Partial, 5 Stub) | No | `StaffValidator`, `StaffSpellSelectionPanel` and `TryUseStaff` exist | No code creates an ItemData with `IsStaff = true`. The only writes are the clone copy and the expiry (GameManager.cs:6513). Craft Staff lists nothing |
+| Specific items (`Equipment/SpecificItems/`) | 60 definitions, 28 `SpecificItemBehavior` subclasses in `Equipment/Weapons` and `Equipment/Armor` | No | `CharacterController.cs:6687-7538` invokes `OnPreAttackRoll`, `OnDamageRoll`, `OnCriticalHit`, `OnHitApplied`, `OnKill` and defender `OnAttackedBy` | `CreateSpecificItem` has no callers. `OnEquip`, `Activate`, `OnLongRest` and other hooks are never called, so `IsEquipped`/`Wielder` guards stay false. The store "Specific" filter is always empty |
 
 Rest resets happen in `GameManager.RestorePartyAfterCombat` (GameManager.cs:1032-1035), which calls `RingActivationManager.OnRest` and `WondrousItemActivation.OnRest`. Nothing resets rods, weekly or monthly wondrous uses, or `CraftingTimeTracker`.
 
