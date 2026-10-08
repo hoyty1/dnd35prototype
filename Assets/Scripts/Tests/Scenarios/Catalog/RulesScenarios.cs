@@ -29,11 +29,14 @@ namespace Tests.Scenarios
     /// maneuvers that replace a natural attack (owner decision 2026-10-07).
     /// PHB p.239 (Haste: one extra attack on a full attack) for the hasted natural-weapon creature: one extra
     /// natural attack at that attack's normal bonus (owner decision 2026-10-07, CMB-106).
+    /// The AI maneuver stopgap (owner decision 2026-10-07, AI-060) is an AI decision limit, not a rule: after a
+    /// maneuver lands the AI attacks with its remaining steps, and it does not retry a failed maneuver type against
+    /// the same target that turn.
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 30;
+        public const int Count = 32;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -71,6 +74,8 @@ namespace Tests.Scenarios
             yield return S("haste-natural-extra-ui", () => HasteNaturalExtra(true));
             yield return S("haste-natural-moved", HasteNaturalMoved);
             yield return S("haste-natural-buttons-ui", HasteNaturalButtonsUi);
+            yield return S("ai-maneuver-stopgap-trip", () => AiManeuverStopgap(true));
+            yield return S("ai-maneuver-stopgap-trip-fail", () => AiManeuverStopgap(false));
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -904,6 +909,13 @@ namespace Tests.Scenarios
             c.Stats.CurrentHP += 200;
         }
 
+        /// <summary>A <see cref="SturdyDummy"/> that makes no attacks of opportunity, so a maneuver against it provokes nothing.</summary>
+        private static void SturdyDummyWithoutAoO(CharacterController c)
+        {
+            SturdyDummy(c);
+            c.Stats.CanMakeAttacksOfOpportunity = false;
+        }
+
         /// <summary>Round-1 attack modifiers of <paramref name="key"/> read bite, claw, claw, bite: one Haste attack at the bite's bonus.</summary>
         private static ExpectResult BiteClawClawHasteBite(TraceView v, string key)
         {
@@ -1038,6 +1050,72 @@ namespace Tests.Scenarios
                         : ExpectResult.Fail(attacks.Count + " attacks", attacks.Select(e => e.Seq).ToArray());
                 })
                 .Build();
+        }
+
+        // ── AI maneuver stopgap (owner decision 2026-10-07, CMB-102 open item 7, AI-060) ──
+
+        /// <summary>
+        /// An AI-run fighter 11 (+11/+6/+1, Humanoid profile: trip, then disarm an armed target) against a sturdy,
+        /// scripted orc holding a greataxe that makes no attacks of opportunity, so the trip provokes nothing (PHB
+        /// p.158) without the fighter needing Improved Trip. The feat is left out on purpose: its free attack after a
+        /// trip that lands (PHB p.96) is not built yet (CMB-079) and would add an attack to the count checked here.
+        /// The AI chooses every step itself (no typed steps). With the trip forced to land, the stopgap makes the
+        /// remaining two steps attacks on the prone orc, where the evaluation alone would disarm next; with every
+        /// trip touch attack a natural 1, the failed trip is not retried and the remaining two steps are attacks.
+        /// An AI decision limit, not a rule (AI-060).
+        /// </summary>
+        private static ScenarioDef AiManeuverStopgap(bool tripLands)
+        {
+            ScenarioBuilder b = Rules(tripLands ? "rules/ai-maneuver-stopgap-trip" : "rules/ai-maneuver-stopgap-trip-fail",
+                    tripLands
+                        ? "AI stopgap: after its trip lands, an AI fighter attacks the prone target with its remaining iteratives (AI-060)"
+                        : "AI stopgap: after its trip fails, an AI fighter does not retry the trip that turn and attacks instead (AI-060)")
+                .Covers("CMB-102", "AI-060", "PHB p.141", "PHB p.158")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 11)), 10, 10, Control.Ai)
+                .Profile("fighter", () => ScriptableObject.CreateInstance<DND35.AI.Profiles.HumanoidAIProfile>())
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("fighter", StripOffHand)
+                .Tweak("orc", SturdyDummyWithoutAoO)
+                .Initiative("fighter", "orc")
+                .Turn("orc", 0, Step.Pass());
+            if (tripLands)
+                b.Force(20, 20, "Trip touch attack", -1)
+                 .Force(20, 18, "Trip Strength check", -1)
+                 .Force(20, 2, "Trip defense check", -1);
+            else
+                b.Force(20, 1, "Trip touch attack", -1);
+
+            b.Expect("The fighter's turn is an AI turn", Expect.Controller("fighter", "ai"))
+             .Expect("The orc makes no AoO, so the trip needs no Improved Trip (fixture check)", Expect.None("aoo", e => e.Str("by") == "orc"))
+             .Expect(tripLands
+                    ? "One maneuver in the turn: a trip that lands; no disarm or grapple follows (AI-060)"
+                    : "One maneuver in the turn: a trip that fails; it is not retried (AI-060)", v =>
+             {
+                 List<TraceEvent> ms = v.Maneuvers("fighter").Where(e => e.Round == 1).ToList();
+                 if (ms.Count == 0) return ExpectResult.Fail("no maneuver: the AI did not trip");
+                 TraceEvent first = ms[0];
+                 string kinds = string.Join(",", ms.Select(e => Convert.ToString(e.Get("type"))));
+                 if (ms.Count != 1) return ExpectResult.Fail(ms.Count + " maneuvers (" + kinds + ")", ms.Select(e => e.Seq).ToArray());
+                 if (!(first.Get("type") is SpecialAttackType t) || t != SpecialAttackType.Trip) return ExpectResult.Fail("first maneuver " + kinds, first.Seq);
+                 if (first.Bool("success") != tripLands) return ExpectResult.Fail("trip success " + first.Get("success"), first.Seq);
+                 bool prone = HasCond(v.Final("orc"), "Prone");
+                 return prone == tripLands
+                     ? ExpectResult.Pass("1 trip, success " + tripLands + ", orc prone " + prone, first.Seq)
+                     : ExpectResult.Fail("orc prone " + prone, first.Seq);
+             })
+             .Expect("The remaining two iteratives are attacks after the trip, 5 apart (+6, +1; PHB p.143)", v =>
+             {
+                 TraceEvent trip = v.Maneuvers("fighter", SpecialAttackType.Trip).FirstOrDefault(e => e.Round == 1);
+                 if (trip == null) return ExpectResult.Fail("no trip");
+                 List<TraceEvent> attacks = v.Attacks("fighter", "orc", false, 1);
+                 if (attacks.Count != 2) return ExpectResult.Fail(attacks.Count + " attacks", attacks.Select(e => e.Seq).ToArray());
+                 if (attacks.Any(e => e.Seq < trip.Seq)) return ExpectResult.Fail("an attack came before the trip", trip.Seq);
+                 return attacks[0].Int("mod") - attacks[1].Int("mod") == 5
+                     ? ExpectResult.Pass("mods " + attacks[0].Int("mod") + ", " + attacks[1].Int("mod"), attacks[0].Seq, attacks[1].Seq)
+                     : ExpectResult.Fail("mods " + attacks[0].Int("mod") + ", " + attacks[1].Int("mod"), attacks[0].Seq, attacks[1].Seq);
+             });
+            return b.Build();
         }
     }
 }

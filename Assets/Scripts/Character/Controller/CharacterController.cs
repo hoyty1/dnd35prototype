@@ -411,6 +411,13 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public AttackPool ProgressiveAttackPool { get; } = new AttackPool();
 
+    /// <summary>
+    /// STOPGAP AI memory of this creature's own maneuvers this turn (owner decision 2026-10-07, AI-060):
+    /// read and written only by AIService's maneuver evaluation, cleared by <see cref="StartNewTurn"/>.
+    /// It limits AI choices only; no rule reads it. See <see cref="DND35.AI.AIManeuverTurnMemory"/>.
+    /// </summary>
+    public DND35.AI.AIManeuverTurnMemory AIManeuverMemory { get; } = new DND35.AI.AIManeuverTurnMemory();
+
     // ========== FEAT PROPERTIES ==========
 
     /// <summary>
@@ -10390,6 +10397,7 @@ public class CharacterController : MonoBehaviour
         Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered)
             || (Stats != null && Stats.IsSingleActionsOnly);
         ProgressiveAttackPool.Clear();
+        AIManeuverMemory.Clear(); // AI stopgap (AI-060): per-turn maneuver memory
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them
 

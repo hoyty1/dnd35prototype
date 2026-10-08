@@ -243,8 +243,9 @@ Assets/Scripts/
   _Core/ (16)            GameManager.cs + 9 GameManager.*.cs partials (ScenarioHarness is editor-only),
                          SceneBootstrap, GameEventSystem, ScenarioHooks, GameSettings, GameConstants, PlaneType
     Commands/ (3)        dormant command pattern
-  AI/ (9)                AISpellcastingStrategist, LastKnownPositionTracker, SpellCategoryClassifier,
-                         AIProfile base, NaturalAttackChoice, AIConsumableManager, AIBehaviorData,
+  AI/ (10)               AISpellcastingStrategist, LastKnownPositionTracker, SpellCategoryClassifier,
+                         AIProfile base, NaturalAttackChoice, AIManeuverTurnMemory (AI-060 stopgap),
+                         AIConsumableManager, AIBehaviorData,
                          SpellcasterAIBehaviorData, NPCTemplateAIConfigurator (+ README.md)
     Profiles/ (19)       AIProfile subclasses (namespace DND35.AI.Profiles)
     Custom/ (1)          unreferenced example profile

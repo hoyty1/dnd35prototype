@@ -279,22 +279,91 @@ public partial class GameManager
 
     private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target)
     {
-        return TryNPCSpecialAttackIfBeneficial(npc, target, null);
+        return TryNPCSpecialAttackIfBeneficial(npc, target, null, out _, out _);
     }
 
     private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target, SpecialAttackType? forcedChoice)
     {
-        if (npc == null || target == null)
-            return false;
+        return TryNPCSpecialAttackIfBeneficial(npc, target, forcedChoice, out _, out _);
+    }
 
-        bool hasImprovedGrab = npc.Stats != null && npc.Stats.HasImprovedGrab;
-        var coupTargets = GetAdjacentHelplessEnemiesForCoupDeGrace(npc);
+    /// <summary>
+    /// True when the NPC may coup de grace now: its profile (or override) allows it, a helpless enemy
+    /// is adjacent and the full-round action is free.
+    /// </summary>
+    private bool HasNPCCoupDeGraceOption(CharacterController npc, List<CharacterController> coupTargets)
+    {
         bool profileAllowsCoupDeGrace = npc.EnemyUseCoupDeGraceOverride
             ?? (npc.aiProfile != null && npc.aiProfile.ShouldUseCoupDeGrace(npc));
-        bool hasCoupOption = profileAllowsCoupDeGrace
+        return profileAllowsCoupDeGrace
+            && coupTargets != null
             && coupTargets.Count > 0
             && npc.Actions != null
             && npc.Actions.HasFullRoundAction;
+    }
+
+    /// <summary>
+    /// The maneuver the legacy chooser (an NPC with no AI profile) picks against
+    /// <paramref name="target"/>: coup de grace, else trip, else disarm (STR mod 3+), else grapple
+    /// (STR mod 4+, not with Improved Grab); null when none applies. A choice only: whether it can be
+    /// paid for now is checked by the executor (<c>TryNPCSpecialAttackIfBeneficial</c>).
+    /// </summary>
+    private SpecialAttackType? ChooseNPCFallbackManeuver(CharacterController npc, CharacterController target, bool hasCoupOption)
+    {
+        if (npc == null || npc.Stats == null || target == null || target.Stats == null)
+            return null;
+
+        if (hasCoupOption)
+            return SpecialAttackType.CoupDeGrace;
+
+        if (!target.Stats.IsProne
+            && npc.HasMeleeWeaponEquipped()
+            && npc.CanPerformSpecialAttack(SpecialAttackType.Trip))
+            return SpecialAttackType.Trip;
+
+        if (target.GetEquippedMainWeapon() != null
+            && npc.Stats.STRMod >= 3
+            && npc.CanPerformSpecialAttack(SpecialAttackType.Disarm))
+            return SpecialAttackType.Disarm;
+
+        if (npc.Stats.STRMod >= 4
+            && !npc.Stats.HasImprovedGrab
+            && npc.CanPerformSpecialAttack(SpecialAttackType.Grapple))
+            return SpecialAttackType.Grapple;
+
+        return null;
+    }
+
+    /// <summary>The legacy chooser's pick (<see cref="ChooseNPCFallbackManeuver"/>) without acting, for the AI's stopgap check (AI-060).</summary>
+    private SpecialAttackType? PeekNPCFallbackManeuver(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null)
+            return null;
+
+        return ChooseNPCFallbackManeuver(npc, target, HasNPCCoupDeGraceOption(npc, GetAdjacentHelplessEnemiesForCoupDeGrace(npc)));
+    }
+
+    /// <summary>
+    /// The NPC maneuver executor. Returns true when it acted (the maneuver's step or action was spent);
+    /// then <paramref name="attempted"/> is the maneuver type and <paramref name="succeeded"/> its
+    /// result (false also when an initiation AoO foiled the attempt). Both outputs only report: the AI's
+    /// stopgap maneuver memory (AIService, AI-060) reads them; no rule does.
+    /// </summary>
+    private bool TryNPCSpecialAttackIfBeneficial(
+        CharacterController npc,
+        CharacterController target,
+        SpecialAttackType? forcedChoice,
+        out SpecialAttackType? attempted,
+        out bool succeeded)
+    {
+        attempted = null;
+        succeeded = false;
+
+        if (npc == null || target == null)
+            return false;
+
+        var coupTargets = GetAdjacentHelplessEnemiesForCoupDeGrace(npc);
+        bool hasCoupOption = HasNPCCoupDeGraceOption(npc, coupTargets);
 
         if (npc.IsGrappling() && (!forcedChoice.HasValue || forcedChoice.Value != SpecialAttackType.CoupDeGrace))
             return false;
@@ -314,26 +383,7 @@ public partial class GameManager
         }
 
         if (!choice.HasValue)
-        {
-            if (hasCoupOption)
-                choice = SpecialAttackType.CoupDeGrace;
-            else if (!target.Stats.IsProne
-                && npc.HasMeleeWeaponEquipped()
-                && npc.CanPerformSpecialAttack(SpecialAttackType.Trip))
-                choice = SpecialAttackType.Trip;
-
-            if (choice == null
-                && target.GetEquippedMainWeapon() != null
-                && npc.Stats.STRMod >= 3
-                && npc.CanPerformSpecialAttack(SpecialAttackType.Disarm))
-                choice = SpecialAttackType.Disarm;
-
-            if (choice == null
-                && npc.Stats.STRMod >= 4
-                && !hasImprovedGrab
-                && npc.CanPerformSpecialAttack(SpecialAttackType.Grapple))
-                choice = SpecialAttackType.Grapple;
-        }
+            choice = ChooseNPCFallbackManeuver(npc, target, hasCoupOption);
 
         if (choice == null)
             return false;
@@ -420,6 +470,8 @@ public partial class GameManager
             }
 
             UpdateAllStatsUI();
+            attempted = choice.Value;
+            succeeded = false; // foiled before the check
             return true;
         }
 
@@ -459,6 +511,8 @@ public partial class GameManager
         }
 
         UpdateAllStatsUI();
+        attempted = choice.Value;
+        succeeded = result != null && result.Success;
         return true;
     }
 

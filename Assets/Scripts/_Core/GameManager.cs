@@ -11013,6 +11013,24 @@ public partial class GameManager : MonoBehaviour
         => TryNPCSpecialAttackIfBeneficial(npc, target, attackType);
 
     /// <summary>
+    /// As <see cref="TryNPCSpecialAttackIfBeneficialForAI(CharacterController, CharacterController)"/>, and reports the
+    /// maneuver it acted with and whether it succeeded (for the AI's stopgap maneuver memory, AI-060).
+    /// </summary>
+    public bool TryNPCSpecialAttackIfBeneficialForAI(CharacterController npc, CharacterController target, out SpecialAttackType? attempted, out bool succeeded)
+        => TryNPCSpecialAttackIfBeneficial(npc, target, null, out attempted, out succeeded);
+
+    /// <summary>
+    /// As <see cref="TryNPCSpecialAttackByTypeForAI(CharacterController, CharacterController, SpecialAttackType)"/>, and
+    /// reports whether the maneuver succeeded (for the AI's stopgap maneuver memory, AI-060).
+    /// </summary>
+    public bool TryNPCSpecialAttackByTypeForAI(CharacterController npc, CharacterController target, SpecialAttackType attackType, out bool succeeded)
+        => TryNPCSpecialAttackIfBeneficial(npc, target, attackType, out _, out succeeded);
+
+    /// <summary>The maneuver the legacy chooser (no AI profile) would pick, without acting (AI-060 stopgap check).</summary>
+    public SpecialAttackType? PeekNPCFallbackManeuverForAI(CharacterController npc, CharacterController target)
+        => PeekNPCFallbackManeuver(npc, target);
+
+    /// <summary>
     /// NPC attack action for AI routines. <paramref name="tryStepManeuver"/>, when given, may replace
     /// any melee attack step with a maneuver (CMB-102); it returns true when it acted.
     /// </summary>

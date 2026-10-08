@@ -85,6 +85,8 @@ public static class GrappleDamageRulesTests
         TestNaturalWeaponDisarmIsArmed();
         TestNaturalWeaponCreatureCannotSunder();
         TestNpcNaturalSequenceMakesOneSubstitute();
+        TestAiManeuverStopgapTripSucceedsThenAttacks();
+        TestAiManeuverStopgapFailedTripNotRetried();
         TestHasteAddsOneNaturalAttackStep();
         TestHasteNaturalStepUsesChosenNaturalAttack();
         TestHasteNaturalFullAttackAddsOneAttack();
@@ -1841,6 +1843,200 @@ public static class GrappleDamageRulesTests
             Cleanup(npc, target);
             if (profile != null)
                 Object.DestroyImmediate(profile);
+        }
+    }
+
+    // ── AI maneuver stopgap (owner decision 2026-10-07, CMB-102 open item 7, AI-060) ──
+    // An AI decision limit, not a rule: once a maneuver succeeds the AI attacks with the remaining
+    // steps, and a failed maneuver type is not retried against the same target that turn. Both tests
+    // run the real AIService evaluation (CreateMeleeStepManeuverEvaluator) through the NPC melee loop,
+    // with a Humanoid profile (trip, then disarm an armed target) and with no profile (the legacy
+    // chooser: trip, then disarm at STR mod 3+, then grapple at STR mod 4+).
+
+    /// <summary>
+    /// A BAB +11 fighter (+11/+6/+1, STR 26) with a longsword, AI-run, at (x, y). No Improved Trip on
+    /// purpose: its free attack after a trip that lands (PHB p.96) is not built yet (CMB-079) and would add
+    /// an attack, so these tests count only the iterative steps the AI chooses. The trip's attack of
+    /// opportunity (PHB p.158) is avoided on the target's side instead (<see cref="CreateArmedStopgapTarget"/>).
+    /// </summary>
+    private static CharacterController CreateAiTripper(string name, DND35.AI.AIProfile profile, int x, int y)
+    {
+        CharacterController npc = CreateIterativeAttacker(name);
+        npc.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        npc.IsControllable = false;
+        npc.aiProfile = profile;
+        npc.GridPosition = new Vector2Int(x, y);
+        return npc;
+    }
+
+    /// <summary>
+    /// A weak defender holding a longsword (so a disarm is on the table), 500 extra HP, at (x, y). It makes
+    /// no attacks of opportunity, so the AI tripper's trip provokes nothing without Improved Trip.
+    /// </summary>
+    private static CharacterController CreateArmedStopgapTarget(string name, int x, int y)
+    {
+        CharacterController target = CreateWeakDefender(name);
+        target.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        target.GridPosition = new Vector2Int(x, y);
+        target.Stats.AdjustMaxHP(500);
+        target.Stats.CurrentHP += 500;
+        target.Stats.CanMakeAttacksOfOpportunity = false;
+        return target;
+    }
+
+    private static void TestAiManeuverStopgapTripSucceedsThenAttacks()
+    {
+        GameManager gm = GameManager.Instance;
+        AIService ai = gm != null ? gm.GetComponent<AIService>() : null;
+        if (gm == null || ai == null)
+        {
+            Debug.Log("  [SKIP] GameManager/AIService is null; AI maneuver stopgap check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CharacterController, SpecialAttackType, SpecialAttackResult> savedManeuver = ScenarioHooks.ManeuverResolved;
+        var maneuverTypes = new System.Collections.Generic.List<SpecialAttackType>();
+        try
+        {
+            // The trip lands: touch attack natural 20, Strength check 20 against a defense roll of 1.
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Trip touch attack" || ctx == "Trip Strength check" ? 20
+                : ctx == "Trip defense check" ? 1
+                : natural;
+            ScenarioHooks.ManeuverResolved = (attacker, target, type, result) => maneuverTypes.Add(type);
+
+            int row = 0;
+            foreach (bool withProfile in new[] { true, false })
+            {
+                CharacterController npc = null;
+                CharacterController target = null;
+                DND35.AI.Profiles.HumanoidAIProfile profile = null;
+                string tag = withProfile ? " (Humanoid profile)" : " (no profile, legacy chooser)";
+                try
+                {
+                    if (withProfile)
+                        profile = ScriptableObject.CreateInstance<DND35.AI.Profiles.HumanoidAIProfile>();
+                    npc = CreateAiTripper(withProfile ? "StopgapTripHumanoid" : "StopgapTripLegacy", profile, 24, 4 + row);
+                    target = CreateArmedStopgapTarget(withProfile ? "StopgapTripHumanoidTarget" : "StopgapTripLegacyTarget", 25, 4 + row);
+                    row += 3;
+                    maneuverTypes.Clear();
+
+                    FullAttackResult sequence = RunNpcMeleeSequence(gm, npc, target, ai.CreateMeleeStepManeuverEvaluator(profile), out int maneuvers);
+
+                    Assert(maneuvers == 1 && maneuverTypes.Count == 1 && maneuverTypes[0] == SpecialAttackType.Trip
+                        && target.HasCondition(CombatConditionType.Prone),
+                        $"AI stopgap: the first step is a trip that lands and no further maneuver follows (maneuvers {maneuvers}: {string.Join(", ", maneuverTypes)}; AI-060)" + tag);
+                    Assert(sequence.Attacks.Count == 2 && sequence.Attacks[0].BreakdownBAB == 6 && sequence.Attacks[1].BreakdownBAB == 1
+                        && npc.ProgressiveAttackPool.MainHandStepsUsed == 3,
+                        $"AI stopgap: after the trip succeeds the remaining steps are attacks at +6 and +1 on the prone target (attacks {sequence.Attacks.Count}; AI-060)" + tag);
+                    Assert(target.GetEquippedMainWeapon() != null,
+                        "AI stopgap: the armed target is not disarmed after the successful trip" + tag);
+
+                    // Control: without the stopgap the evaluation would pick another maneuver now.
+                    SpecialAttackType? wouldPick = withProfile ? profile.GetPreferredManeuver(npc, target) : gm.PeekNPCFallbackManeuverForAI(npc, target);
+                    Assert(wouldPick == SpecialAttackType.Disarm && npc.AIManeuverMemory.ManeuverSucceededThisTurn,
+                        $"AI stopgap control: the evaluation alone would now pick a disarm ({(wouldPick.HasValue ? wouldPick.Value.ToString() : "none")}); the turn memory holds the success" + tag);
+
+                    npc.StartNewTurn();
+                    Assert(!npc.AIManeuverMemory.ManeuverSucceededThisTurn,
+                        "AI stopgap: the turn memory is cleared at the creature's next turn start" + tag);
+                }
+                catch (System.Exception ex)
+                {
+                    System.Exception inner = ex.InnerException ?? ex;
+                    Assert(false, $"AI maneuver stopgap (trip succeeds) check threw {inner.GetType().Name}: {inner.Message}" + tag);
+                }
+                finally
+                {
+                    Cleanup(npc, target);
+                    if (profile != null)
+                        Object.DestroyImmediate(profile);
+                }
+            }
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.ManeuverResolved = savedManeuver;
+        }
+    }
+
+    private static void TestAiManeuverStopgapFailedTripNotRetried()
+    {
+        GameManager gm = GameManager.Instance;
+        AIService ai = gm != null ? gm.GetComponent<AIService>() : null;
+        if (gm == null || ai == null)
+        {
+            Debug.Log("  [SKIP] GameManager/AIService is null; AI maneuver stopgap check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CharacterController, SpecialAttackType, SpecialAttackResult> savedManeuver = ScenarioHooks.ManeuverResolved;
+        var maneuverTypes = new System.Collections.Generic.List<SpecialAttackType>();
+        try
+        {
+            // Every trip touch attack is a natural 1, so every trip fails and the target stays standing.
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Trip touch attack" ? 1 : natural;
+            ScenarioHooks.ManeuverResolved = (attacker, target, type, result) => maneuverTypes.Add(type);
+
+            int row = 0;
+            foreach (bool withProfile in new[] { true, false })
+            {
+                CharacterController npc = null;
+                CharacterController target = null;
+                CharacterController other = null;
+                DND35.AI.Profiles.HumanoidAIProfile profile = null;
+                string tag = withProfile ? " (Humanoid profile)" : " (no profile, legacy chooser)";
+                try
+                {
+                    if (withProfile)
+                        profile = ScriptableObject.CreateInstance<DND35.AI.Profiles.HumanoidAIProfile>();
+                    npc = CreateAiTripper(withProfile ? "StopgapFailHumanoid" : "StopgapFailLegacy", profile, 28, 4 + row);
+                    target = CreateArmedStopgapTarget(withProfile ? "StopgapFailHumanoidTarget" : "StopgapFailLegacyTarget", 29, 4 + row);
+                    other = CreateArmedStopgapTarget(withProfile ? "StopgapFailHumanoidOther" : "StopgapFailLegacyOther", 29, 5 + row);
+                    row += 3;
+                    maneuverTypes.Clear();
+
+                    FullAttackResult sequence = RunNpcMeleeSequence(gm, npc, target, ai.CreateMeleeStepManeuverEvaluator(profile), out int maneuvers);
+
+                    int trips = maneuverTypes.FindAll(t => t == SpecialAttackType.Trip).Count;
+                    Assert(trips == 1 && maneuvers == 1 && !target.HasCondition(CombatConditionType.Prone),
+                        $"AI stopgap: a failed trip is not retried against the same target that turn (trips {trips}, maneuvers {maneuvers}: {string.Join(", ", maneuverTypes)}; AI-060)" + tag);
+                    Assert(sequence.Attacks.Count == 2 && sequence.Attacks[0].BreakdownBAB == 6 && sequence.Attacks[1].BreakdownBAB == 1,
+                        $"AI stopgap: after the failed trip the remaining steps are attacks at +6 and +1 (attacks {sequence.Attacks.Count})" + tag);
+
+                    DND35.AI.AIManeuverTurnMemory memory = npc.AIManeuverMemory;
+                    Assert(memory.HasFailed(target, SpecialAttackType.Trip)
+                        && !memory.ManeuverSucceededThisTurn
+                        && memory.Forbids(target, SpecialAttackType.Trip, out _)
+                        && !memory.Forbids(target, SpecialAttackType.Disarm, out _)
+                        && !memory.Forbids(other, SpecialAttackType.Trip, out _)
+                        && !memory.Forbids(target, SpecialAttackType.CoupDeGrace, out _),
+                        "AI stopgap: the failure forbids only a trip against that target; a disarm of it, a trip of another target and a coup de grace stay open" + tag);
+
+                    npc.StartNewTurn();
+                    Assert(!npc.AIManeuverMemory.HasFailed(target, SpecialAttackType.Trip),
+                        "AI stopgap: the failed trip is forgotten at the creature's next turn start" + tag);
+                }
+                catch (System.Exception ex)
+                {
+                    System.Exception inner = ex.InnerException ?? ex;
+                    Assert(false, $"AI maneuver stopgap (trip fails) check threw {inner.GetType().Name}: {inner.Message}" + tag);
+                }
+                finally
+                {
+                    Cleanup(npc, target, other);
+                    if (profile != null)
+                        Object.DestroyImmediate(profile);
+                }
+            }
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.ManeuverResolved = savedManeuver;
         }
     }
 

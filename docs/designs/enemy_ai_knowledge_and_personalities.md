@@ -444,6 +444,7 @@ That difference, shown in the trace, is the demonstration of fairness.
   - The considerations, `TraitDatabase` with Cowardly, Sadistic, Smart, Healer, Caster, Berserker and Mindless, `PersonalityFactory` and `PersonalityValidator`.
   - `AIDecisions` at every site listed in §5.2, plus `AITurnCache`.
   - `NPCDefinition.AIPersonality`, `AIDecisionTrace` v1, and the AI-004 Role cases.
+  - The maneuver-versus-attack choice at every attack step (AI-060): score a trip, disarm, sunder or grapple against the attack it would replace, from its odds (AI-035) and the value of its result for the creature's traits. It replaces the per-turn stopgap of 2026-10-07 (`AIService.TryExecutePreferredManeuver` with `AI/AIManeuverTurnMemory.cs`: no maneuver after one succeeded this turn, no retry of a failed type against the same target), which is then deleted (CMB-102 item 7).
 - **Data:**
   - `goblin_adept` (`Cowardly:0.6,Healer:0.4`).
   - An `orc_sadist` variant (`Sadistic:0.7,Berserker:0.3`).

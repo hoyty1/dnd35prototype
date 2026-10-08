@@ -2317,8 +2317,10 @@ public class AIService : MonoBehaviour
     /// <summary>
     /// Attack action whose melee steps the AI may each replace with a maneuver (CMB-102): before every
     /// step the usual maneuver evaluation runs (coup de grace, then the profile preference, then the
-    /// legacy chooser), so for example a trip with the first attack is followed by attacks on the
-    /// prone target. Trip, disarm, sunder and grapple use that step at its BAB
+    /// legacy chooser), limited by the per-turn stopgap in <see cref="TryExecutePreferredManeuver"/>
+    /// (AI-060): after a maneuver succeeds the remaining steps are attacks (a trip is followed by
+    /// attacks on the prone target), and a failed maneuver type is not retried against that target
+    /// that turn. Trip, disarm, sunder and grapple use that step at its BAB
     /// (ManeuverActionCost.ReplacesMeleeAttack); other maneuvers spend their own action and end it.
     /// </summary>
     private IEnumerator PerformMeleeAttackActionWithManeuvers(CharacterController npc, CharacterController target, AIProfile profile)
@@ -2337,6 +2339,16 @@ public class AIService : MonoBehaviour
     internal System.Func<CharacterController, CharacterController, bool> CreateMeleeStepManeuverEvaluator(AIProfile profile)
         => (actor, stepTarget) => ShouldUseManeuver(actor, stepTarget) && TryExecutePreferredManeuver(actor, stepTarget, profile);
 
+    // STOPGAP (owner decision 2026-10-07, CMB-102 open item 7): the maneuver evaluation below re-runs
+    // before every attack step, so on its own it chains maneuvers (trip, then disarm, then grapple)
+    // and retries failed ones. Until it is replaced by weighted personality scoring in the AI profiles
+    // (AI-060; docs/designs/enemy_ai_knowledge_and_personalities.md, weighted personalities step), a
+    // per-creature, per-turn memory (CharacterController.AIManeuverMemory, cleared at turn start)
+    // limits it: once a maneuver succeeds, the AI makes no further maneuver that turn and attacks
+    // with the remaining steps; after a maneuver fails, it does not retry that type against that
+    // target that turn (it attacks instead, or uses another maneuver if the evaluation picks one).
+    // A grapple that took hold keeps its grapple-action handoff, and coup de grace, the profile
+    // preference order and the legacy chooser are unchanged. AI decision only, not a rule.
     private bool TryExecutePreferredManeuver(CharacterController npc, CharacterController target, AIProfile profile)
     {
         if (npc == null || target == null)
@@ -2360,13 +2372,46 @@ public class AIService : MonoBehaviour
                     return false;
                 }
 
-                return _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, preferred.Value);
+                if (IsManeuverForbiddenByTurnStopgap(npc, target, preferred.Value))
+                    return false;
+
+                bool acted = _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, preferred.Value, out bool succeeded);
+                if (acted)
+                    npc.AIManeuverMemory.Record(target, preferred.Value, succeeded);
+                return acted;
             }
 
             return false;
         }
 
-        return _gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, target);
+        SpecialAttackType? legacyChoice = _gameManager.PeekNPCFallbackManeuverForAI(npc, target);
+        if (legacyChoice.HasValue && IsManeuverForbiddenByTurnStopgap(npc, target, legacyChoice.Value))
+            return false;
+
+        bool legacyActed = _gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, target, out SpecialAttackType? attempted, out bool legacySucceeded);
+        if (legacyActed && attempted.HasValue)
+            npc.AIManeuverMemory.Record(target, attempted.Value, legacySucceeded);
+        return legacyActed;
+    }
+
+    /// <summary>
+    /// The AI-060 stopgap check (see the comment above <see cref="TryExecutePreferredManeuver"/>): true when the
+    /// creature's per-turn maneuver memory forbids <paramref name="type"/> against <paramref name="target"/>.
+    /// The grapple handoff does not pass through here: after a grapple takes hold,
+    /// GameManager.PerformNPCMeleeAttackSequence stops the step loop and NPCMeleeAttackSequence hands the
+    /// remaining steps to AI_GrappleRestrictedTurn as grapple actions, and the executor
+    /// (TryNPCSpecialAttackIfBeneficial) refuses every maneuver but coup de grace while grappling.
+    /// </summary>
+    private static bool IsManeuverForbiddenByTurnStopgap(CharacterController npc, CharacterController target, SpecialAttackType type)
+    {
+        if (npc == null)
+            return false;
+
+        if (!npc.AIManeuverMemory.Forbids(target, type, out string reason))
+            return false;
+
+        Debug.Log($"[AI][Maneuver] {npc.Stats?.CharacterName ?? "<unknown>"} skips {type} against {target?.Stats?.CharacterName ?? "<null>"}: {reason} (AI-060 stopgap); it attacks instead.");
+        return true;
     }
 
     private static bool ShouldNPCUseCoupDeGrace(CharacterController npc, AIProfile profile)
