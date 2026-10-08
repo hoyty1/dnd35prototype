@@ -1583,13 +1583,22 @@ public partial class GameManager
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Summon("🐅", $"{charger.Stats.CharacterName} uses Pounce and unleashes a full natural attack at the end of the charge!"));
 
+                // A pounce is a full attack, so Haste adds one natural attack; the player picks its natural
+                // weapon (PHB p.239; owner decision 2026-10-07, CMB-106; CMB-124). Cancel uses the default. The
+                // chooser's labels add the charge's +2 (PHB p.154), which is applied just below.
+                int pounceHasteNaturalAttackIndex = -1;
+                if (charger.CanUseHasteExtraNaturalAttack())
+                    yield return StartCoroutine(PromptHasteNaturalAttackChoice(charger, target,
+                        choice => pounceHasteNaturalAttackIndex = choice, labelBonusOffset: 2));
+
                 charger.Stats.MoraleAttackBonus += 2;
                 FullAttackResult pounceResult;
                 FullAttackResult pounceRakeResult = null;
                 try
                 {
                     ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
-                    pounceResult = charger.FullAttack(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+                    pounceResult = charger.FullAttack(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null,
+                        hasteNaturalAttackIndex: pounceHasteNaturalAttackIndex);
 
                     if (charger.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
                         pounceRakeResult = charger.PerformRakeAttacks(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);

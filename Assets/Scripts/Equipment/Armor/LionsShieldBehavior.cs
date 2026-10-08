@@ -272,6 +272,7 @@ public class LionsShieldBehavior : SpecificItemBehavior
         stats.SetRakeAttack(def.RakeAttack);
         stats.HasImprovedGrab = def.HasImprovedGrab;
         stats.ImprovedGrabTriggerAttackName = def.ImprovedGrabTriggerAttackName;
+        stats.ImprovedGrabMaxTargetSize = def.ImprovedGrabMaxTargetSize;
         stats.SourceNpcDefinitionId = def.Id;
         stats.ChallengeRating = def.ChallengeRating;
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Animal" : def.CreatureType;

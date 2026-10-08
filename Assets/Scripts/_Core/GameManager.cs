@@ -7727,6 +7727,131 @@ public partial class GameManager : MonoBehaviour
             onCancel: ShowActionChoices);
     }
 
+    /// <summary>Menu name of the Haste natural-attack chooser (<see cref="PromptHasteNaturalAttackChoice"/>).</summary>
+    public const string HasteNaturalAttackMenuName = "HasteNaturalAttackMenu";
+
+    /// <summary>
+    /// The natural attacks a creature may make Haste's extra natural attack with: one per natural-attack name (the
+    /// first sequence index of that name), in sequence order, as the natural-attack buttons offer them (CMB-106).
+    /// </summary>
+    public List<int> GetHasteNaturalAttackChoiceIndices(CharacterController actor)
+    {
+        var indices = new List<int>();
+        if (actor == null || actor.Stats == null)
+            return indices;
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int count = actor.Stats.GetTotalNaturalAttackCount();
+        for (int i = 0; i < count; i++)
+        {
+            NaturalAttackDefinition natural = actor.Stats.GetNaturalAttackAtSequenceIndex(i);
+            if (natural == null)
+                continue;
+            string name = string.IsNullOrWhiteSpace(natural.Name) ? "Natural attack" : natural.Name.Trim();
+            if (seenNames.Add(name))
+                indices.Add(i);
+        }
+
+        return indices;
+    }
+
+    /// <summary>
+    /// PC choice of the natural attack that makes Haste's extra natural attack on the Full Attack button and on a
+    /// pounce (PHB p.239; owner decision 2026-10-07, CMB-106: the attacker chooses; CMB-124). Opens the same chooser
+    /// the natural-attack buttons use (CombatUI.ShowSpecialStyleSelectionMenu, labels from
+    /// ActionButtonPanel.BuildNaturalAttackChooserLabel), kept visible while the action buttons are hidden for the
+    /// attack, and waits for the pick. <paramref name="labelBonusOffset"/> is added to each label's bonus for a
+    /// situational modifier the attack will roll with but the stats do not hold yet (the pounce's charge +2, PHB p.154).
+    /// Cancel, a menu closed without an answer, or a creature with a single natural-attack type resolve to
+    /// <see cref="CharacterController.GetDefaultHasteNaturalAttackIndex"/> (highest bonus, then average damage) or the
+    /// only option. A creature not under player control gets the AI's own choice
+    /// (<see cref="ChooseHasteNaturalAttackIndexForAI"/>, riders included), as on the NPC paths.
+    /// The turn indicator is restored once the choice is made. <paramref name="onResolved"/> gets a natural-sequence index.
+    /// </summary>
+    internal IEnumerator PromptHasteNaturalAttackChoice(CharacterController attacker, CharacterController target,
+        Action<int> onResolved, int labelBonusOffset = 0)
+    {
+        if (attacker == null || attacker.Stats == null || !attacker.CanUseHasteExtraNaturalAttack())
+        {
+            onResolved?.Invoke(attacker != null ? attacker.GetDefaultHasteNaturalAttackIndex() : -1);
+            yield break;
+        }
+
+        if (!attacker.IsControllable)
+        {
+            onResolved?.Invoke(ChooseHasteNaturalAttackIndexForAI(attacker, target));
+            yield break;
+        }
+
+        int fallback = attacker.GetDefaultHasteNaturalAttackIndex();
+        List<int> indices = GetHasteNaturalAttackChoiceIndices(attacker);
+        if (CombatUI == null || indices.Count < 2)
+        {
+            onResolved?.Invoke(indices.Count == 1 ? indices[0] : fallback);
+            yield break;
+        }
+
+        var labels = new List<string>(indices.Count);
+        for (int i = 0; i < indices.Count; i++)
+        {
+            NaturalAttackDefinition natural = attacker.Stats.GetNaturalAttackAtSequenceIndex(indices[i]);
+            labels.Add(ActionButtonPanel.BuildNaturalAttackChooserLabel(natural.Name, natural.IsPrimary,
+                attacker.Stats.GetNaturalAttackBonus(natural) + labelBonusOffset, isHasteExtra: true));
+        }
+
+        bool resolved = false;
+        bool cancelled = false;
+        int chosen = fallback;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI.ShowSpecialStyleSelectionMenu(
+            menuName: HasteNaturalAttackMenuName,
+            optionLabels: labels,
+            optionEnabledStates: null,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex >= 0 && selectedIndex < indices.Count)
+                    chosen = indices[selectedIndex];
+                else
+                    cancelled = true;
+                resolved = true;
+            },
+            onCancel: () =>
+            {
+                cancelled = true;
+                resolved = true;
+            },
+            showWhileActionPanelHidden: true);
+
+        string previousIndicator = null;
+        bool indicatorChanged = false;
+        if (!resolved)
+        {
+            CombatUI.ShowCombatLog(CombatLogHelper.Info("⚡", $"{attacker.Stats.CharacterName}: choose the natural attack for Haste's extra attack (Cancel: the default)."));
+            previousIndicator = CombatUI.TurnIndicatorText != null ? CombatUI.TurnIndicatorText.text : null;
+            CombatUI.SetTurnIndicator("HASTE: Choose the natural attack for the extra attack | Cancel: default");
+            indicatorChanged = true;
+        }
+
+        // A menu closed by something else (ShowActionChoices hides it) counts as Cancel.
+        while (!resolved && CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen())
+            yield return null;
+
+        // The prompt no longer waits for input: put back the line it replaced.
+        if (indicatorChanged && previousIndicator != null)
+            CombatUI?.SetTurnIndicator(previousIndicator);
+
+        if (!resolved || cancelled)
+        {
+            chosen = fallback;
+            NaturalAttackDefinition fallbackAttack = fallback >= 0 ? attacker.Stats.GetNaturalAttackAtSequenceIndex(fallback) : null;
+            if (fallbackAttack != null)
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("↩", $"{attacker.Stats.CharacterName} makes Haste's extra attack with the default natural attack ({fallbackAttack.Name})."));
+        }
+
+        onResolved?.Invoke(chosen);
+    }
+
     public void OnThrownAttackButtonPressed()
     {
         CharacterController pc = ActivePC;

@@ -2592,6 +2592,17 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("🎯", $"{attacker.Stats.CharacterName} switches to {currentTarget.Stats.CharacterName}."));
             }
 
+            // Haste's extra natural attack: the player picks the natural weapon when the sequence reaches it
+            // (PHB p.239; owner decision 2026-10-07, CMB-106; CMB-124). Cancel uses the default.
+            int hasteNaturalAttackIndex = -1;
+            if (!rangedMode && attacker.IsHasteExtraNaturalStep(attackIndex) && attacker.CanUseHasteExtraNaturalAttack())
+            {
+                yield return StartCoroutine(PromptHasteNaturalAttackChoice(attacker, currentTarget, choice => hasteNaturalAttackIndex = choice));
+                if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead
+                    || currentTarget == null || currentTarget.Stats == null || currentTarget.Stats.IsDead)
+                    break;
+            }
+
             // Recompute flanking/range context each attack in case target/position changed.
             var allCombatants = GetAllCharacters();
             CharacterController flankPartner;
@@ -2614,7 +2625,8 @@ public partial class GameManager
                 partnerName,
                 rangeInfo,
                 startAttackIndex: attackIndex,
-                maxAttacks: 1);
+                maxAttacks: 1,
+                hasteNaturalAttackIndex: hasteNaturalAttackIndex);
 
             if (stepResult == null || stepResult.Attacks.Count == 0)
                 break;

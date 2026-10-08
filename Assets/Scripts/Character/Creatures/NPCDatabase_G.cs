@@ -711,6 +711,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 42,
             BAB = 3,
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Medium, // MM p.126: a mouther grabs Medium or smaller
             ImprovedGrabTriggerAttackName = "Bite",
             
             // ── Aura: Gibbering (Su) — MM p.126 ──

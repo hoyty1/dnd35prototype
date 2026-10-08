@@ -260,7 +260,7 @@ n is the number of creatures in the 310-entry work list (192 CSV creatures and 1
 | # | Ability (index id) | n | Code | AI | Verified notes |
 |---|---|---|---|---|---|
 | 1 | Damage reduction (`ability_damage_reduction`) | 53 | partial | n/a | Generic DR id; the name shown ("10/evil and magic") is just the first instance. `DamageBypassTag` flags exist (`DamageModel.cs:10`). Template DR and SR by HD: CRE-008. |
-| 2 | Improved grab | 49 | implemented | yes | `HasImprovedGrab` + trigger attack name; grab creatures may also grapple normally (CMB-014 fixed). Per-creature grab and constrict values need an MM check. |
+| 2 | Improved grab | 49 | implemented | yes | `HasImprovedGrab` + trigger attack name; grab creatures may also grapple normally (CMB-014 fixed). Size limit and per-creature grab maxima from the MM done (CMB-126); trigger attacks differ for a few entries (CRE-047); constrict values still need an MM check. |
 | 3 | Scent | 47 | partial | partial | Copied at spawn (`NPCSetup.cs:625`), read only for invisible-target scoring (`AIService.cs:1925-1946`). The hell hound entry's data_only/no rating was wrong. |
 | 4 | Flight | 42 | missing | partial | No fly speed exists on `NPCDefinition` (only `BaseSpeed`); flyers walk. |
 | 5 | Poison (injury, bite) | 25 | partial | yes | `PoisonOnHitId` is used by 13 attacks over 10 poison ids. Secondary damage timed in real seconds (CMB-007). |
@@ -340,7 +340,7 @@ PC usability before correction is 129 yes, 94 partial and 186 no. 29 Cleric- or 
 **Still open:**
 
 - **Grapple:**
-  - one natural weapon while grappling vs the full routine
+  - how many grapple natural attacks a natural-weapon creature gets: one per natural attack (as coded) or its BAB ladder (PHB p.156); owner question CMB-146 (one natural weapon per grapple attack is settled, MM p.314, CMB-127)
   - whether drawing a light weapon is an opposed check
   - escaping must beat every grappler (PHB p.156)
   - per-creature improved grab and constrict values

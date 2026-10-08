@@ -486,6 +486,8 @@ public class CombatUI : MonoBehaviour
     private GameObject _touchSpellPromptPanel;
     private GameObject _specialAttackPanel;
     private GameObject _specialStyleSelectionPanel;
+    /// <summary>Holder of a selection menu shown while the action panel is hidden (ShowSpecialStyleSelectionMenu, showWhileActionPanelHidden).</summary>
+    private GameObject _specialStyleSelectionHost;
     private GameObject _summonSelectionPanel;
     private GameObject _disarmWeaponSelectionPanel;
     private GameObject _pickUpItemSelectionPanel;
@@ -1178,7 +1180,8 @@ public class CombatUI : MonoBehaviour
         List<string> optionLabels,
         List<bool> optionEnabledStates,
         System.Action<int> onSelect,
-        System.Action onCancel)
+        System.Action onCancel,
+        bool showWhileActionPanelHidden = false)
     {
         string optionSummary = optionLabels == null ? "<null>" : string.Join(", ", optionLabels);
         LogSpecialStyleMenuLifecycle(
@@ -1203,8 +1206,30 @@ public class CombatUI : MonoBehaviour
                 optionEnabledStates.Add(true);
         }
 
+        // A prompt raised in the middle of an action (the Haste chooser of a full attack or a pounce, CMB-124) finds
+        // the action buttons hidden. With showWhileActionPanelHidden the menu is hosted in a copy of the action
+        // window's rectangle instead, so it is visible without showing (and enabling) the action buttons.
+        Transform menuParent = ActionPanel.transform;
+        if (showWhileActionPanelHidden && !ActionPanel.activeInHierarchy && ActionPanel.transform.parent != null)
+        {
+            _specialStyleSelectionHost = new GameObject("SpecialStyleSelectionHost");
+            RectTransform hostRt = _specialStyleSelectionHost.AddComponent<RectTransform>();
+            _specialStyleSelectionHost.transform.SetParent(ActionPanel.transform.parent, false);
+            RectTransform panelRt = ActionPanel.GetComponent<RectTransform>();
+            if (panelRt != null)
+            {
+                hostRt.anchorMin = panelRt.anchorMin;
+                hostRt.anchorMax = panelRt.anchorMax;
+                hostRt.pivot = panelRt.pivot;
+                hostRt.anchoredPosition = panelRt.anchoredPosition;
+                hostRt.sizeDelta = panelRt.sizeDelta;
+            }
+            _specialStyleSelectionHost.transform.SetAsLastSibling();
+            menuParent = _specialStyleSelectionHost.transform;
+        }
+
         _specialStyleSelectionPanel = new GameObject(string.IsNullOrEmpty(menuName) ? "SpecialStyleSelectionPanel" : menuName);
-        _specialStyleSelectionPanel.transform.SetParent(ActionPanel.transform, false);
+        _specialStyleSelectionPanel.transform.SetParent(menuParent, false);
 
         RectTransform rt = _specialStyleSelectionPanel.AddComponent<RectTransform>();
         rt.anchorMin = new Vector2(0.02f, 0.35f);
@@ -1281,6 +1306,11 @@ public class CombatUI : MonoBehaviour
             LogSpecialStyleMenuLifecycle("HIDE_MENU_CALLED", $"name={_specialStyleSelectionPanel.name}, active={_specialStyleSelectionPanel.activeSelf}, frame={Time.frameCount}");
             Destroy(_specialStyleSelectionPanel);
             _specialStyleSelectionPanel = null;
+            if (_specialStyleSelectionHost != null)
+            {
+                Destroy(_specialStyleSelectionHost);
+                _specialStyleSelectionHost = null;
+            }
             _specialStyleMenuWasActiveLastFrame = false;
             LogSpecialStyleMenuLifecycle("MENU_PANEL_DEACTIVATED", $"frame={Time.frameCount}");
         }
@@ -1600,6 +1630,43 @@ public class CombatUI : MonoBehaviour
             return null;
         foreach (Button b in _specialAttackPanel.GetComponentsInChildren<Button>(true))
             if (b != null && b.name == buttonName)
+                return b;
+        return null;
+    }
+
+    /// <summary>
+    /// Editor-only, read-only (scenario harness): the open selection submenu's name (ShowSpecialStyleSelectionMenu's
+    /// menuName), or null when none is open.
+    /// </summary>
+    internal string Harness_OpenSpecialStyleMenuName()
+        => _specialStyleSelectionPanel != null && _specialStyleSelectionPanel.activeInHierarchy ? _specialStyleSelectionPanel.name : null;
+
+    /// <summary>
+    /// Editor-only, read-only (scenario harness): the first option button of the open selection submenu whose label
+    /// starts with <paramref name="labelPrefix"/> (ordinal, case-insensitive), or null. The Cancel button is never returned.
+    /// </summary>
+    internal Button Harness_FindSpecialStyleOption(string labelPrefix)
+    {
+        if (_specialStyleSelectionPanel == null || string.IsNullOrEmpty(labelPrefix))
+            return null;
+        foreach (Button b in _specialStyleSelectionPanel.GetComponentsInChildren<Button>(true))
+        {
+            if (b == null || b.name == "Cancel")
+                continue;
+            Text t = b.GetComponentInChildren<Text>(true);
+            if (t != null && t.text != null && t.text.StartsWith(labelPrefix, System.StringComparison.OrdinalIgnoreCase))
+                return b;
+        }
+        return null;
+    }
+
+    /// <summary>Editor-only, read-only (scenario harness): the open selection submenu's Cancel button, or null.</summary>
+    internal Button Harness_FindSpecialStyleCancel()
+    {
+        if (_specialStyleSelectionPanel == null)
+            return null;
+        foreach (Button b in _specialStyleSelectionPanel.GetComponentsInChildren<Button>(true))
+            if (b != null && b.name == "Cancel")
                 return b;
         return null;
     }

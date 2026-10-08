@@ -188,7 +188,7 @@ public partial class GameManager
             return false;
         }
 
-        if (CharacterController.IsIterativeGrappleAttackAction(actionType) && !CanUseGrappleAttackOption(pc))
+        if (CharacterController.IsIterativeGrappleAttackAction(actionType) && !CanUseGrappleAttackOption(pc, actionType))
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no grapple attacks remaining in the shared attack pool this turn."));
             ShowActionChoices();
@@ -203,6 +203,12 @@ public partial class GameManager
         if (actionType == GrappleActionType.UseOpponentWeapon)
         {
             ShowUseOpponentWeaponHandSelectionMenu(pc);
+            return true;
+        }
+
+        if (actionType == GrappleActionType.AttackUnarmed && pc.UsesNaturalAttacksForGrappleAttack())
+        {
+            ShowGrappleNaturalAttackMenu(pc);
             return true;
         }
 
@@ -1064,7 +1070,7 @@ public partial class GameManager
         if (isPinned)
         {
             bool hasStandardAction = actor.Actions != null && actor.Actions.HasStandardAction;
-            bool hasIterativeAttack = CanUseGrappleAttackOption(actor);
+            bool hasIterativeAttack = CanUseGrappleAttackOption(actor, GrappleActionType.OpposedGrappleEscape);
             options.Add((
                 GrappleActionType.EscapeArtist,
                 $"Escape Artist check (Std): d20 + Escape Artist vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})",
@@ -1072,7 +1078,7 @@ public partial class GameManager
                 hasStandardAction ? string.Empty : "Standard action already spent."));
             options.Add((
                 GrappleActionType.OpposedGrappleEscape,
-                $"Break grapple (opposed grapple check, {CharacterStats.FormatMod(GetCurrentGrappleAttackBonus(actor))} BAB)",
+                $"Break grapple (opposed grapple check, {CharacterStats.FormatMod(GetCurrentGrappleAttackBonus(actor, GrappleActionType.OpposedGrappleEscape))} BAB)",
                 hasIterativeAttack,
                 hasIterativeAttack ? string.Empty : "No shared grapple attacks remaining."));
         }
@@ -1090,7 +1096,7 @@ public partial class GameManager
                 {
                     if (CharacterController.IsIterativeGrappleAttackAction(actionType))
                     {
-                        enabled = CanUseGrappleAttackOption(actor);
+                        enabled = CanUseGrappleAttackOption(actor, actionType);
                         if (!enabled)
                             disabledReason = "No shared grapple attacks remaining.";
                     }
@@ -1149,16 +1155,19 @@ public partial class GameManager
                     actorHasMainHandLightWeapon
                         ? $"Attack with Light Weapon: {actorMainHandLightWeapon.Name} (-4 attack roll, no grapple check)"
                         : $"Attack with Light Weapon (Unavailable: {actorLightWeaponReason})",
-                    actorHasMainHandLightWeapon && CanUseGrappleAttackOption(actor),
+                    actorHasMainHandLightWeapon && CanUseGrappleAttackOption(actor, GrappleActionType.AttackWithLightWeapon),
                     actorHasMainHandLightWeapon ? string.Empty : actorLightWeaponReason));
 
                 bool actorCanAttackUnarmed = actor.CanAttackUnarmedWhileGrappling(out string actorUnarmedReason);
+                string unarmedLabel = actor.UsesNaturalAttacksForGrappleAttack()
+                    ? "Natural Attack (one natural weapon, -4 attack roll, no grapple check)"
+                    : "Attack Unarmed (-4 attack roll, no grapple check)";
                 options.Add((
                     GrappleActionType.AttackUnarmed,
                     actorCanAttackUnarmed
-                        ? "Attack Unarmed (-4 attack roll, no grapple check)"
+                        ? unarmedLabel
                         : $"Attack Unarmed (Unavailable: {actorUnarmedReason})",
-                    actorCanAttackUnarmed && CanUseGrappleAttackOption(actor),
+                    actorCanAttackUnarmed && CanUseGrappleAttackOption(actor, GrappleActionType.AttackUnarmed),
                     actorCanAttackUnarmed ? string.Empty : actorUnarmedReason));
 
                 string useWeaponLabel = hasOpponentLightWeapon
@@ -1167,7 +1176,7 @@ public partial class GameManager
                 options.Add((
                     GrappleActionType.UseOpponentWeapon,
                     useWeaponLabel,
-                    hasOpponentLightWeapon && CanUseGrappleAttackOption(actor),
+                    hasOpponentLightWeapon && CanUseGrappleAttackOption(actor, GrappleActionType.UseOpponentWeapon),
                     hasOpponentLightWeapon ? string.Empty : $"{opponent.Stats.CharacterName} has no equipped light weapon."));
 
                 if (pinRenewalDue)
@@ -1260,7 +1269,99 @@ public partial class GameManager
             return;
         }
 
+        if (actionType == GrappleActionType.AttackUnarmed && actor.UsesNaturalAttacksForGrappleAttack())
+        {
+            ShowGrappleNaturalAttackMenu(actor);
+            return;
+        }
+
         ExecuteGrappleAction(actor, actionType);
+    }
+
+    /// <summary>
+    /// The natural attacks a grapple attack action can make for <paramref name="actor"/> (CMB-127): the shared options
+    /// (CharacterController.GetGrappleNaturalAttackOptions), with the active PC's natural-attack buttons' own record of
+    /// used natural attacks counted as used too.
+    /// </summary>
+    private List<CharacterController.GrappleNaturalAttackOption> GetGrappleNaturalAttackOptionsFor(CharacterController actor)
+    {
+        if (actor == null)
+            return new List<CharacterController.GrappleNaturalAttackOption>();
+
+        return actor.GetGrappleNaturalAttackOptions(index => IsNaturalAttackSequenceIndexUsed(actor, index));
+    }
+
+    /// <summary>Menu label of one grapple natural attack: name, primary or secondary, its normal bonus, and Haste when it is the Haste attack.</summary>
+    private static string BuildGrappleNaturalAttackLabel(CharacterController actor, CharacterController.GrappleNaturalAttackOption option)
+    {
+        NaturalAttackDefinition natural = actor.Stats.GetNaturalAttackAtSequenceIndex(option.NaturalAttackIndex);
+        string name = natural != null && !string.IsNullOrWhiteSpace(natural.Name) ? natural.Name.Trim() : "Natural attack";
+        string role = natural != null && natural.IsPrimary ? "primary" : "secondary";
+        int bonus = natural != null ? actor.Stats.GetNaturalAttackBonus(natural) : 0;
+        return option.IsHasteExtraAttack
+            ? $"{name} (Haste, {role} {CharacterStats.FormatMod(bonus)}, -4 grappling)"
+            : $"{name} ({role} {CharacterStats.FormatMod(bonus)}, -4 grappling)";
+    }
+
+    /// <summary>
+    /// PC grapple attack with a natural weapon (PHB p.156; MM p.314; CMB-127): the player picks which natural attack
+    /// this grapple attack action makes; with one option it is made at once. The step is committed with that natural
+    /// attack in ExecuteGrappleAction, as the AI's choice is in AI_GrappleRestrictedTurn.
+    /// </summary>
+    private void ShowGrappleNaturalAttackMenu(CharacterController actor)
+    {
+        LogMenuFlow("ShowGrappleNaturalAttackMenu:ENTER", actor);
+
+        if (actor == null || actor.Stats == null || !actor.IsGrappling())
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        List<CharacterController.GrappleNaturalAttackOption> options = GetGrappleNaturalAttackOptionsFor(actor);
+        if (options.Count == 0)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{actor.Stats.CharacterName} has no natural attack left this turn."));
+            ShowActionChoices();
+            return;
+        }
+
+        if (options.Count == 1)
+        {
+            ExecuteGrappleAction(actor, GrappleActionType.AttackUnarmed, null, null, options[0].NaturalAttackIndex, options[0].IsHasteExtraAttack);
+            return;
+        }
+
+        BeginGrappleContextMenuDisplayLock(actor);
+
+        var labels = new List<string>(options.Count);
+        for (int i = 0; i < options.Count; i++)
+            labels.Add(BuildGrappleNaturalAttackLabel(actor, options[i]));
+
+        LogMenuFlow("ShowGrappleNaturalAttackMenu:SHOW_MENU", actor, $"optionCount={options.Count}");
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI?.ShowSpecialStyleSelectionMenu(
+            menuName: "GrappleNaturalAttackMenu",
+            optionLabels: labels,
+            optionEnabledStates: null,
+            onSelect: selectedIndex =>
+            {
+                LogMenuFlow("ShowGrappleNaturalAttackMenu:OPTION_SELECTED", actor, $"selectedIndex={selectedIndex}");
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                ExecuteGrappleAction(actor, GrappleActionType.AttackUnarmed, null, null,
+                    options[selectedIndex].NaturalAttackIndex, options[selectedIndex].IsHasteExtraAttack);
+            },
+            onCancel: () =>
+            {
+                LogMenuFlow("ShowGrappleNaturalAttackMenu:CANCEL", actor);
+                ShowActionChoices();
+            });
     }
 
     private void ShowUseOpponentWeaponHandSelectionMenu(CharacterController actor)
@@ -1432,7 +1533,8 @@ public partial class GameManager
         LogMenuFlow("TestMenuStability:CHECK", ActivePC, $"t=1.6s, visible={CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen()}");
     }
 
-    private bool TryConsumeIterativeGrappleAttack(CharacterController actor, GrappleActionType actionType, out int attackBonusUsed, out int attacksRemaining)
+    private bool TryConsumeIterativeGrappleAttack(CharacterController actor, GrappleActionType actionType, out int attackBonusUsed, out int attacksRemaining,
+        int naturalAttackIndex = -1, bool naturalAttackIsHasteExtra = false)
     {
         attackBonusUsed = 0;
         attacksRemaining = 0;
@@ -1440,7 +1542,7 @@ public partial class GameManager
         if (actor == null || actor.Stats == null)
             return false;
 
-        if (!TryConsumeGrappleAttackAction(actor, out attackBonusUsed, out attacksRemaining, out string reason))
+        if (!TryConsumeGrappleAttackAction(actor, out attackBonusUsed, out attacksRemaining, out string reason, actionType, naturalAttackIndex, naturalAttackIsHasteExtra))
         {
             string fallback = string.IsNullOrWhiteSpace(reason)
                 ? "no grapple attacks remain in the shared pool"
@@ -1602,9 +1704,11 @@ public partial class GameManager
         CharacterController actor,
         GrappleActionType actionType,
         AttackDamageMode? grappleDamageModeOverride = null,
-        EquipSlot? opponentWeaponHandSlotOverride = null)
+        EquipSlot? opponentWeaponHandSlotOverride = null,
+        int naturalAttackIndex = -1,
+        bool naturalAttackIsHasteExtra = false)
     {
-        LogMenuFlow("ExecuteGrappleAction:ENTER", actor, $"actionType={actionType}, damageMode={grappleDamageModeOverride}, handOverride={opponentWeaponHandSlotOverride}");
+        LogMenuFlow("ExecuteGrappleAction:ENTER", actor, $"actionType={actionType}, damageMode={grappleDamageModeOverride}, handOverride={opponentWeaponHandSlotOverride}, natural={naturalAttackIndex}{(naturalAttackIsHasteExtra ? " (Haste)" : "")}");
 
         if (actor == null || actor.Stats == null)
         {
@@ -1636,7 +1740,7 @@ public partial class GameManager
 
         if (usesIterativeAttack)
         {
-            if (!TryConsumeIterativeGrappleAttack(actor, actionType, out attackBonusUsed, out attacksRemaining))
+            if (!TryConsumeIterativeGrappleAttack(actor, actionType, out attackBonusUsed, out attacksRemaining, naturalAttackIndex, naturalAttackIsHasteExtra))
             {
                 ShowActionChoices();
                 return;
@@ -1664,7 +1768,9 @@ public partial class GameManager
             actionType,
             grappleDamageModeOverride,
             opponentWeaponHandSlotOverride,
-            usesIterativeAttack ? attackBonusUsed : (int?)null);
+            usesIterativeAttack ? attackBonusUsed : (int?)null,
+            naturalAttackIndex,
+            naturalAttackIsHasteExtra);
 
         FinalizeGrappleActionResolution(actor, actionType, directResult, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining);
     }
@@ -1701,9 +1807,23 @@ public partial class GameManager
             int? iterativeAttackBonusOverride = null;
             int remainingAttacks = 0;
 
+            // A grapple attack with a natural weapon is one natural attack, the AI's pick (PHB p.156, CMB-127).
+            CharacterController.GrappleNaturalAttackOption naturalPick = CharacterController.GrappleNaturalAttackOption.None;
+            if (chosenAction.Value == GrappleActionType.AttackUnarmed && npc.UsesNaturalAttacksForGrappleAttack())
+            {
+                naturalPick = ChooseGrappleNaturalAttackForAI(npc, opponent);
+                if (naturalPick.NaturalAttackIndex < 0)
+                {
+                    // BuildNPCLegalGrappleActions offers the grapple natural attack only while one is left; never an unarmed strike instead.
+                    Debug.Log($"[AI][Grapple] {npc.Stats.CharacterName} has no natural attack left for a grapple attack; ending its grapple actions.");
+                    break;
+                }
+            }
+
             if (usesIterativeAttack)
             {
-                if (!TryConsumeIterativeGrappleAttack(npc, chosenAction.Value, out int attackBonusUsed, out remainingAttacks))
+                if (!TryConsumeIterativeGrappleAttack(npc, chosenAction.Value, out int attackBonusUsed, out remainingAttacks,
+                        naturalPick.NaturalAttackIndex, naturalPick.IsHasteExtraAttack))
                     break;
 
                 iterativeAttackBonusOverride = attackBonusUsed;
@@ -1729,7 +1849,8 @@ public partial class GameManager
                 AttackDamageMode? grappleDamageModeOverride = ShouldForceLethalGrappleDamageForNPC(npc, chosenAction.Value)
                     ? AttackDamageMode.Lethal
                     : null;
-                result = npc.ResolveGrappleAction(chosenAction.Value, grappleDamageModeOverride, null, iterativeAttackBonusOverride);
+                result = npc.ResolveGrappleAction(chosenAction.Value, grappleDamageModeOverride, null, iterativeAttackBonusOverride,
+                    naturalPick.NaturalAttackIndex, naturalPick.IsHasteExtraAttack);
             }
             else
             {
@@ -1984,24 +2105,12 @@ public partial class GameManager
             return true;
         }
 
+        // Each grapple attack action is one natural attack (PHB p.156, CMB-127); the rake's two claws come with
+        // the first one of the turn (MM p.314).
         if (!opponentPinned && legalActions.Contains(GrappleActionType.AttackUnarmed))
         {
-            int naturalAttackCount = 0;
-            List<NaturalAttackDefinition> naturalAttacks = npc.Stats.GetValidNaturalAttacks();
-            if (naturalAttacks != null)
-            {
-                for (int i = 0; i < naturalAttacks.Count; i++)
-                    naturalAttackCount += Mathf.Max(1, naturalAttacks[i].Count);
-            }
-
-            int rakeAttackCount = 0;
-            if (npc.Stats.HasRake)
-            {
-                NaturalAttackDefinition rakeAttack = npc.Stats.GetRakeAttackDefinition();
-                rakeAttackCount = Mathf.Max(1, rakeAttack != null ? rakeAttack.Count : 2);
-            }
-
-            Debug.Log($"[AI][Grapple] {npc.Stats.CharacterName} chooses full natural grapple routine: natural={naturalAttackCount}, rake={rakeAttackCount}, total={naturalAttackCount + rakeAttackCount}.");
+            bool rakesNow = npc.Stats.HasRake && !npc.ProgressiveAttackPool.RakeUsedThisTurn;
+            Debug.Log($"[AI][Grapple] {npc.Stats.CharacterName} attacks with a natural weapon in the grapple: {GetRemainingGrappleAttackActions(npc)} grapple attack(s) left, rake with this one: {rakesNow}.");
 
             chosenAction = GrappleActionType.AttackUnarmed;
             return true;
@@ -2028,7 +2137,7 @@ public partial class GameManager
         {
             if (CharacterController.IsIterativeGrappleAttackAction(actionType))
             {
-                if (!CanUseGrappleAttackOption(npc))
+                if (!CanUseGrappleAttackOption(npc, actionType))
                     return;
             }
             else if (!CharacterController.IsFreeGrappleAction(actionType) && !hasStandardAction)

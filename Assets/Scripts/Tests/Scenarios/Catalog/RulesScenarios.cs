@@ -152,6 +152,9 @@ namespace Tests.Scenarios
             yield return S("haste-natural-extra-ui", () => HasteNaturalExtra(true));
             yield return S("haste-natural-moved", HasteNaturalMoved);
             yield return S("haste-natural-buttons-ui", HasteNaturalButtonsUi);
+            yield return S("haste-natural-full-attack-ui", () => HasteNaturalChooserUi(pounce: false, hasteAttack: "Claw"));
+            yield return S("haste-natural-full-attack-ui-default", () => HasteNaturalChooserUi(pounce: false, hasteAttack: null));
+            yield return S("haste-natural-pounce-ui", () => HasteNaturalChooserUi(pounce: true, hasteAttack: "Claw"));
             yield return S("ai-maneuver-stopgap-trip", () => AiManeuverStopgap(true));
             yield return S("ai-maneuver-stopgap-trip-fail", () => AiManeuverStopgap(false));
             yield return S("stability-trip", () => StabilityCheck("rules/stability-trip", "A four-legged formian taskmaster resists a trip with +4 stability (PHB p.158, CMB-085)", "formian_taskmaster", SpecialAttackType.Trip, true));
@@ -2135,10 +2138,17 @@ namespace Tests.Scenarios
 
         // ── Haste's extra attack with natural weapons (PHB p.239; owner decision 2026-10-07, CMB-106) ──
 
-        /// <summary>The bite/claw/claw beast without weapons, hasted (Haste's effect only: the extra attack, not the +1).</summary>
+        /// <summary>
+        /// The bite/claw/claw beast without weapons, hasted as the Haste spell handler leaves it (GameManager_Spells_H):
+        /// the extra attack (ApplyHasteEffect) and the +1 attack, +1 dodge AC and +1 Reflex in the Stats fields the
+        /// formulas read (PHB p.239). ApplyHasteEffect alone leaves the +1s out (CMB-147).
+        /// </summary>
         private static void HastedBeast(CharacterController c)
         {
             StripAllWeapons(c);
+            c.Stats.HasteAttackBonus = 1;
+            c.Stats.HasteACBonus = 1;
+            c.Stats.HasteReflexBonus = 1;
             c.ApplyHasteEffect(10, null);
         }
 
@@ -2265,6 +2275,67 @@ namespace Tests.Scenarios
                         : ExpectResult.Fail(mods + ", expected bite, bite, claw (-5), claw", seqs);
                 })
                 .Build();
+        }
+
+        /// <summary>
+        /// The PC Full Attack button and the PC pounce let the player pick Haste's extra natural attack (PHB p.239; owner
+        /// decision 2026-10-07, CMB-106: the attacker chooses; CMB-124). The hasted bite/claw/claw hero full attacks the
+        /// adjacent dummy (Full Attack button; the coroutine's 5-foot step prompts are skipped), or charges it from three
+        /// squares away with Pounce (MM p.313: a full attack at the end of a charge, each attack with the charge's +2).
+        /// When the sequence reaches the Haste step the chooser opens with one option per natural-attack type; the step
+        /// clicks <paramref name="hasteAttack"/>, or Cancel, which keeps the default (the bite: highest bonus).
+        /// </summary>
+        private static ScenarioDef HasteNaturalChooserUi(bool pounce, string hasteAttack)
+        {
+            const string key = "hero";
+            bool picked = hasteAttack != null;
+            string extra = picked ? hasteAttack : "Bite";
+            string id = pounce ? "rules/haste-natural-pounce-ui"
+                : picked ? "rules/haste-natural-full-attack-ui" : "rules/haste-natural-full-attack-ui-default";
+            string title = pounce
+                ? "A hasted PC that pounces picks Haste's extra natural attack: bite, claw, claw, Haste claw, each with the charge's +2 (PHB p.239, MM p.313, CMB-124)"
+                : picked
+                    ? "The PC Full Attack button lets a hasted PC pick Haste's extra natural attack: bite, claw, claw, Haste claw (PHB p.239, CMB-124)"
+                    : "Cancelling the Full Attack button's Haste chooser keeps the default natural attack: bite, claw, claw, Haste bite (CMB-124)";
+            string stepLabel = pounce ? "Charge" : "FullAttack";
+
+            ScenarioBuilder b = Rules(id, title)
+                .Covers("CMB-124", "CMB-106", "PHB p.239", "MM p.312", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc(key, ActorSource.Stats(() =>
+                {
+                    CharacterStats s = NaturalBeast("Hero", false);
+                    s.HasPounce = pounce;
+                    return s;
+                }), 10, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", pounce ? 13 : 11, 10, Control.Scripted)
+                .Tweak(key, HastedBeast)
+                .Tweak("dummy", SturdyDummy)
+                .Initiative(key, "dummy")
+                .Turn("dummy", 0, Step.Pass())
+                .Turn(key, 1, pounce ? Step.Charge("dummy", hasteAttack: hasteAttack) : Step.FullAttack("dummy", hasteAttack))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller(key, "ui"))
+                .Expect("The " + stepLabel + " step is done and the Haste chooser was answered " + (picked ? "with the " + hasteAttack.ToLowerInvariant() : "with Cancel"), v =>
+                {
+                    List<TraceEvent> steps = v.Steps(key, stepLabel, 1);
+                    if (steps.Count == 0)
+                        return ExpectResult.Fail("no " + stepLabel + " step");
+                    TraceEvent st = steps[0];
+                    string note = st.Str("note") ?? "";
+                    string wanted = picked ? "Haste chooser: " + hasteAttack : "Haste chooser cancelled (default)";
+                    return st.Str("status") == "done" && note.Contains(wanted)
+                        ? ExpectResult.Pass(st.Str("step") + " done; " + note, st.Seq)
+                        : ExpectResult.Fail(st.Str("step") + " " + st.Str("status") + " (" + note + "), expected done with '" + wanted + "'", st.Seq);
+                })
+                // The bite rolls +8 (BAB 4, STR +3, Haste +1, PHB p.239), a claw +3 (secondary -5, MM p.312); a pounce adds
+                // the charge's +2 to every attack (PHB p.154). The trace's weapon field is not yet set when the attack event fires, so the
+                // Haste attack's weapon is read from its modifier: the claw's or the bite's.
+                .Expect("Bite, claw, claw, then the Haste " + extra.ToLowerInvariant() + " at its normal bonus"
+                    + (pounce ? ", each with the charge's +2: +10, +5, +5, +5 (PHB p.154, p.239; MM p.312-313)" : ": +8, +3, +3, " + (picked ? "+3" : "+8") + " (PHB p.239; MM p.312)"),
+                    pounce ? Expect.ModSequence(key, 1, 10, 5, 5, 5)
+                        : Expect.ModSequence(key, 1, 8, 3, 3, picked ? 3 : 8));
+
+            return b.Build();
         }
 
         private static ScenarioDef HasteNaturalMoved()

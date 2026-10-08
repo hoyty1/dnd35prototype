@@ -543,6 +543,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 94,
             BAB = 9,
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Colossal, // MM p.25: a behir grabs a creature of any size
             ImprovedGrabTriggerAttackName = "Bite",
             HasScent = true,
             HasRake = true,

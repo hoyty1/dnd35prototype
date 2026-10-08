@@ -348,8 +348,10 @@ public partial class GameManager
     // attack's BAB (primary full, secondary -5 or -2 with Multiattack, MM p.312). The PC gives up the
     // natural attack the Attack button would use next (the first one not used this turn), and that
     // natural attack is marked used; a sunder is refused when that natural attack deals no slashing or
-    // bludgeoning damage (PHB p.158, owner ruling 2026-10-08). Grapple actions while already grappling stay
-    // iterative steps (PHB p.156), so callers pass iterativeOnly for them.
+    // bludgeoning damage (PHB p.158, owner ruling 2026-10-08). Grapple actions while already grappling take the
+    // place of an attack too (PHB p.156): an iterative step for a weapon or unarmed fighter (callers pass
+    // iterativeOnly), one natural attack for a creature fighting with its natural attacks (CMB-127; a grapple
+    // natural attack gives up the natural attack it makes, passed as naturalAttackIndexOverride).
     // The list lives in ManeuverActionCost.ReplacesMeleeAttack. Bull rush and overrun are not on it:
     // they are standard actions or part of a charge (PHB p.154, p.157).
 
@@ -425,7 +427,8 @@ public partial class GameManager
     /// dual-wield main-hand penalty on a weapon step) and ends the PC Attack-button flow when no
     /// main-hand step remains.
     /// </summary>
-    private bool TryCommitMainHandManeuverStep(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out string reason, bool iterativeOnly = false, bool forSunder = false)
+    private bool TryCommitMainHandManeuverStep(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out string reason, bool iterativeOnly = false, bool forSunder = false,
+        int naturalAttackIndexOverride = -1, bool hasteOverride = false)
     {
         attackBonusUsed = 0;
         reason = string.Empty;
@@ -445,7 +448,19 @@ public partial class GameManager
 
         bool givesUpHasteExtraAttack = false;
         int naturalAttackIndex = -1;
-        if (kind == AttackStepKind.NaturalSequence)
+        if (kind == AttackStepKind.NaturalSequence && naturalAttackIndexOverride >= 0)
+        {
+            // A grapple natural attack gives up the natural attack it makes, PC or NPC (CMB-127). The shared commit
+            // refuses one the attack pool has as used; the active PC's natural-attack buttons keep their own record too.
+            naturalAttackIndex = naturalAttackIndexOverride;
+            givesUpHasteExtraAttack = hasteOverride;
+            if (!givesUpHasteExtraAttack && IsNaturalAttackSequenceIndexUsed(attacker, naturalAttackIndex))
+            {
+                reason = $"Natural attack #{naturalAttackIndex + 1} was already used this turn.";
+                return false;
+            }
+        }
+        else if (kind == AttackStepKind.NaturalSequence)
         {
             // A sunder gives up a natural attack that can sunder (PHB p.158, CMB-102); other maneuvers the next unused one.
             naturalAttackIndex = forSunder && IsPcNaturalManeuverAttacker(attacker)
@@ -462,7 +477,10 @@ public partial class GameManager
         {
             committed = attacker.TryCommitAttack(AttackStepKind.MainHand, out int step, out reason);
             if (committed)
+            {
                 attackBonusUsed = attacker.GetMainHandAttackStepBAB(step);
+                attacker.ProgressiveAttackPool.RecordSubstituteNaturalAttack(-1); // an iterative step gives up no natural attack
+            }
         }
         else
         {
@@ -484,7 +502,7 @@ public partial class GameManager
             {
                 Debug.Log($"[{maneuverLabel}][Flow] Replaces Haste's extra natural attack (at the {attacker.Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex)?.Name ?? "?"} bonus).");
             }
-            else if (naturalAttackIndex >= 0)
+            else if (naturalAttackIndex >= 0 && attacker == ActivePC)
             {
                 _usedNaturalAttackSequenceIndices.Add(naturalAttackIndex);
                 Debug.Log($"[{maneuverLabel}][Flow] Replaces natural attack #{naturalAttackIndex + 1} ({attacker.Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex)?.Name ?? "?"}).");
@@ -501,11 +519,13 @@ public partial class GameManager
         return true;
     }
 
-    private bool TryConsumeMainHandManeuverAttackAction(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out int attacksRemaining, out string reason, bool iterativeOnly = false)
+    private bool TryConsumeMainHandManeuverAttackAction(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out int attacksRemaining, out string reason, bool iterativeOnly = false,
+        int naturalAttackIndexOverride = -1, bool hasteOverride = false)
     {
         attacksRemaining = 0;
 
-        if (!TryCommitMainHandManeuverStep(attacker, maneuverLabel, out attackBonusUsed, out reason, iterativeOnly))
+        if (!TryCommitMainHandManeuverStep(attacker, maneuverLabel, out attackBonusUsed, out reason, iterativeOnly,
+                naturalAttackIndexOverride: naturalAttackIndexOverride, hasteOverride: hasteOverride))
             return false;
 
         attacksRemaining = GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly);
@@ -513,36 +533,98 @@ public partial class GameManager
         return true;
     }
 
-    public bool CanUseGrappleAttackOption(CharacterController attacker)
+    // Once grappling, each attack can be a grapple action (PHB p.156: one in place of each of your attacks, at
+    // successively lower BAB). Every grapple action that takes an attack (damage, pin, escape check, light weapon,
+    // unarmed strike, opponent's weapon) is an iterative step at its iterative BAB, for every creature, so its grapple
+    // check rolls at that BAB. The one exception is the grapple attack of a creature fighting with its natural attacks:
+    // it is ONE natural attack (MM p.314) and takes the place of that natural attack in the natural sequence, at that
+    // attack's bonus (CMB-127). Both kinds share the step counter, so a natural-weapon creature gets a grapple check
+    // only while its step count is still inside its iterative ladder. How many grapple natural attacks it gets (one
+    // per natural attack, as coded, or the iterative ladder) is open with the owner (CMB-146).
+
+    /// <summary>
+    /// True when <paramref name="actionType"/>, made by a grappling <paramref name="attacker"/>, is a grapple natural
+    /// attack: Attack Unarmed by a creature fighting with its natural attacks (CMB-127). It takes a natural step; every
+    /// other grapple action takes an iterative step.
+    /// </summary>
+    public static bool IsGrappleNaturalAttackStep(CharacterController attacker, GrappleActionType? actionType)
+        => attacker != null
+            && actionType == GrappleActionType.AttackUnarmed
+            && attacker.IsGrappling()
+            && attacker.UsesNaturalAttacksForGrappleAttack();
+
+    /// <summary>Grapple natural attacks still available this turn: natural steps left, capped by the natural attacks left to choose from.</summary>
+    private int GetRemainingGrappleNaturalAttackSteps(CharacterController attacker)
     {
-        if (attacker == null)
-            return false;
-
-        // Once grappling, each attack can be a grapple action at its iterative BAB (PHB p.156).
-        bool isAlreadyGrappling = attacker.IsGrappling();
-        if (!isAlreadyGrappling && !attacker.CanUseStandardGrapple())
-            return false;
-
-        return CanUseMainHandManeuverAttackOption(attacker, "Grapple", iterativeOnly: isAlreadyGrappling);
-    }
-
-    public int GetRemainingGrappleAttackActions(CharacterController attacker)
-    {
-        if (!CanUseGrappleAttackOption(attacker))
+        if (attacker == null || !attacker.IsGrappling() || !attacker.UsesNaturalAttacksForGrappleAttack())
             return 0;
 
-        return GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: attacker.IsGrappling());
+        int steps = GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: false);
+        return Mathf.Min(steps, GetGrappleNaturalAttackOptionsFor(attacker).Count);
     }
 
-    public int GetCurrentGrappleAttackBonus(CharacterController attacker)
+    /// <summary>
+    /// Whether <paramref name="attacker"/> can take a grapple action that uses an attack: start a grapple when not
+    /// grappling; once grappling, <paramref name="actionType"/> (an iterative step, or a natural step for a grapple
+    /// natural attack). With no action type, whether any such grapple action is available.
+    /// </summary>
+    public bool CanUseGrappleAttackOption(CharacterController attacker, GrappleActionType? actionType = null)
+        => GetRemainingGrappleAttackActions(attacker, actionType) > 0;
+
+    /// <summary>
+    /// Grapple actions of this kind still available this turn (see <see cref="CanUseGrappleAttackOption"/>). With no
+    /// action type, the larger of the iterative and the grapple natural attack counts.
+    /// </summary>
+    public int GetRemainingGrappleAttackActions(CharacterController attacker, GrappleActionType? actionType = null)
     {
-        if (!CanUseGrappleAttackOption(attacker))
+        if (attacker == null || attacker.Actions == null)
             return 0;
 
-        return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: attacker.IsGrappling());
+        if (!attacker.IsGrappling())
+            return attacker.CanUseStandardGrapple() ? GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: false) : 0;
+
+        if (IsGrappleNaturalAttackStep(attacker, actionType))
+            return GetRemainingGrappleNaturalAttackSteps(attacker);
+
+        int iterative = GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: true);
+        if (actionType.HasValue)
+            return iterative;
+
+        return Mathf.Max(iterative, GetRemainingGrappleNaturalAttackSteps(attacker));
     }
 
-    private bool TryConsumeGrappleAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
+    /// <summary>
+    /// The BAB the next grapple action of this kind uses: the iterative step's BAB (its grapple check), or for a
+    /// grapple natural attack the BAB of the natural attack it makes by default. With no action type, the iterative
+    /// step's while one is left, else the grapple natural attack's.
+    /// </summary>
+    public int GetCurrentGrappleAttackBonus(CharacterController attacker, GrappleActionType? actionType = null)
+    {
+        if (!CanUseGrappleAttackOption(attacker, actionType))
+            return 0;
+
+        if (!attacker.IsGrappling())
+            return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: false);
+
+        bool naturalStep = IsGrappleNaturalAttackStep(attacker, actionType)
+            || (!actionType.HasValue && GetRemainingMainHandManeuverAttackActions(attacker, iterativeOnly: true) <= 0);
+        if (!naturalStep)
+            return GetCurrentMainHandManeuverAttackBonusForUI(attacker, iterativeOnly: true);
+
+        CharacterController.GrappleNaturalAttackOption option = attacker.GetDefaultGrappleNaturalAttackOption(GetGrappleNaturalAttackOptionsFor(attacker));
+        return option.NaturalAttackIndex >= 0 ? attacker.GetNaturalAttackStepBAB(option.NaturalAttackIndex) : 0;
+    }
+
+    /// <summary>
+    /// Commits the attack step a grapple action takes (PHB p.156): starting a grapple replaces an attack (CMB-102);
+    /// once grappling, an iterative step, or for a grapple natural attack (<see cref="IsGrappleNaturalAttackStep"/>,
+    /// CMB-127) the natural attack <paramref name="naturalAttackIndex"/> and <paramref name="naturalAttackIsHasteExtra"/>
+    /// name, which is given up; with -1 the attacker's default option (highest bonus). A grapple natural attack with no
+    /// natural attack left, or one already used, is refused before the step is spent. <paramref name="attacksRemaining"/>
+    /// counts every grapple action still available.
+    /// </summary>
+    private bool TryConsumeGrappleAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason,
+        GrappleActionType? actionType = null, int naturalAttackIndex = -1, bool naturalAttackIsHasteExtra = false)
     {
         attackBonusUsed = 0;
         attacksRemaining = 0;
@@ -561,7 +643,38 @@ public partial class GameManager
             return false;
         }
 
-        return TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason, iterativeOnly: isAlreadyGrappling);
+        if (!isAlreadyGrappling)
+            return TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason);
+
+        bool naturalStep = IsGrappleNaturalAttackStep(attacker, actionType);
+        if (naturalStep)
+        {
+            if (naturalAttackIndex < 0)
+            {
+                CharacterController.GrappleNaturalAttackOption option = attacker.GetDefaultGrappleNaturalAttackOption(GetGrappleNaturalAttackOptionsFor(attacker));
+                naturalAttackIndex = option.NaturalAttackIndex;
+                naturalAttackIsHasteExtra = option.IsHasteExtraAttack;
+            }
+
+            if (naturalAttackIndex < 0)
+            {
+                reason = "no natural attack is left this turn";
+                return false;
+            }
+        }
+        else
+        {
+            naturalAttackIndex = -1;
+            naturalAttackIsHasteExtra = false;
+        }
+
+        if (!TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out _, out reason,
+                iterativeOnly: !naturalStep,
+                naturalAttackIndexOverride: naturalAttackIndex, hasteOverride: naturalAttackIsHasteExtra))
+            return false;
+
+        attacksRemaining = GetRemainingGrappleAttackActions(attacker);
+        return true;
     }
 
     // Bull rush is a standard action (or the end of a charge) for every creature, never one attack

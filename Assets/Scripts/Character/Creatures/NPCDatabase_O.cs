@@ -129,6 +129,7 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase" },
             Feats = new List<string> { "Weapon Finesse" },
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Colossal, // MM p.276: an octopus grabs an opponent of any size
             ImprovedGrabTriggerAttackName = "Tentacles",
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.62f, 0.48f, 0.68f, 1f),

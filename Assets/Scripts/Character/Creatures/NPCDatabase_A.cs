@@ -205,6 +205,7 @@ public static partial class NPCDatabase
             DamageReductionAmount = 2,
             DamageReductionBypass = DamageBypassTag.Bludgeoning,
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Large, // MM p.143: an annis grabs Large or smaller
             ImprovedGrabTriggerAttackName = "Claw",
             SpellResistance = 17,
             NaturalAttacks = new List<NaturalAttackDefinition>

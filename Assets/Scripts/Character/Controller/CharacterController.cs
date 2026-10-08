@@ -716,7 +716,8 @@ public class CharacterController : MonoBehaviour
     // natural-attack count), so it needs the full attack like any second step (PHB p.143). A creature
     // with a main weapon takes the iterative Haste step instead (CharacterCombatStats.GetIterativeAttackCount),
     // never both. PCs pick the natural attack through the natural-attack buttons (a used attack is offered
-    // again while the Haste attack is unused); the AI picks with AIProfile.ChooseHasteNaturalAttackIndex.
+    // again while the Haste attack is unused) or, on the Full Attack button and a pounce, through
+    // GameManager.PromptHasteNaturalAttackChoice (CMB-124); the AI picks with AIProfile.ChooseHasteNaturalAttackIndex.
 
     /// <summary>True while Haste grants its extra attack (PHB p.239).</summary>
     public bool HasHasteExtraAttack => HasActiveHasteEffect && ActiveHasteEffect.GrantsExtraAttack;
@@ -747,8 +748,9 @@ public class CharacterController : MonoBehaviour
     public void MarkHasteExtraNaturalAttackUsed() => ProgressiveAttackPool.MarkHasteExtraNaturalAttackUsed();
 
     /// <summary>
-    /// The natural attack Haste's extra attack uses when nobody chose one (the PC Attack and Full
-    /// Attack buttons, pounce, a maneuver given up in its place): the highest attack bonus, then the
+    /// The natural attack Haste's extra attack uses when nobody chose one (the PC iterative Attack
+    /// button, a cancelled PC Haste chooser on the Full Attack button or a pounce (CMB-124), a
+    /// maneuver given up in its place): the highest attack bonus, then the
     /// higher average damage, then the first in the sequence. The AI's own choice (with riders) is
     /// AIProfile.ChooseHasteNaturalAttackIndex. Returns a natural-sequence index, or -1 with none.
     /// </summary>

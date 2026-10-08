@@ -123,6 +123,7 @@ public static class GrappleDamageRulesTests
         TestImprovedGrabSizeOverrideData();
         TestPcHasteNaturalAttackOptions();
         TestPcHasteNaturalButtonSelection();
+        TestPcHasteChooserForFullAttackAndPounce();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
         TestBullRushImprovedFeatAddsPlus4();
         TestBullRushDefenderUsesStrengthAndDwarfStability();
@@ -3814,6 +3815,111 @@ public static class GrappleDamageRulesTests
         {
             scope?.Dispose();
             Cleanup(pc);
+        }
+    }
+
+    private static void TestPcHasteChooserForFullAttackAndPounce()
+    {
+        // The Full Attack button and the PC pounce ask which natural weapon makes Haste's extra attack
+        // (owner decision CMB-106: the attacker chooses; CMB-124) through GameManager.PromptHasteNaturalAttackChoice:
+        // one option per natural-attack type, the natural-attack chooser's labels; Cancel gets the default (highest
+        // bonus: the bite); a creature not under player control gets the AI's own pick (ChooseHasteNaturalAttackIndexForAI,
+        // the bite here: no riders). The full Ui flow is covered by the
+        // rules/haste-natural-full-attack-ui, -ui-default and rules/haste-natural-pounce-ui scenarios.
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; PC Haste chooser check needs Play mode");
+            return;
+        }
+
+        var pc = CreateHastedBiteClaws("PcHasteChooser", 4);
+        var foe = CreateHasteTarget("PcHasteChooserTarget");
+        PropertyInfo subPhaseProperty = typeof(GameManager).GetProperty("CurrentSubPhase");
+        object previousSubPhase = subPhaseProperty != null ? subPhaseProperty.GetValue(gm) : null;
+        try
+        {
+            System.Collections.Generic.List<int> choices = gm.GetHasteNaturalAttackChoiceIndices(pc);
+            Assert(choices.Count == 2 && choices[0] == 0 && choices[1] == 1,
+                "Haste chooser options: one per natural-attack type, bite (index 0) and claw (index 1)");
+            Assert(ActionButtonPanel.BuildNaturalAttackChooserLabel("Claw", false, -1, true) == "Claw (Haste, Secondary -1)"
+                && ActionButtonPanel.BuildNaturalAttackChooserLabel("Bite", true, 4, false) == "Bite (Primary +4)",
+                "The Haste chooser uses the natural-attack chooser's label format");
+
+            int resolved = -99;
+            pc.IsControllable = false;
+            System.Collections.IEnumerator npcPrompt = gm.PromptHasteNaturalAttackChoice(pc, foe, choice => resolved = choice);
+            bool npcWaits = npcPrompt.MoveNext();
+            Assert(!npcWaits && resolved == gm.ChooseHasteNaturalAttackIndexForAI(pc, foe) && resolved == 0,
+                "A creature not under player control opens no chooser and gets the AI's pick (the bite)");
+
+#if UNITY_EDITOR
+            pc.IsControllable = true;
+            resolved = -99;
+            System.Collections.IEnumerator prompt = gm.PromptHasteNaturalAttackChoice(pc, foe, choice => resolved = choice);
+            bool waits = prompt.MoveNext();
+            if (!waits || gm.CombatUI == null || gm.CombatUI.Harness_OpenSpecialStyleMenuName() != GameManager.HasteNaturalAttackMenuName)
+            {
+                Debug.Log("  [SKIP] the Haste chooser did not open (no CombatUI action panel); option click not checked");
+            }
+            else
+            {
+                UnityEngine.UI.Button claw = gm.CombatUI.Harness_FindSpecialStyleOption("Claw (Haste, Secondary");
+                Assert(claw != null, "The open Haste chooser offers 'Claw (Haste, Secondary ...)'");
+                if (claw != null)
+                    claw.onClick.Invoke();
+                bool stillWaiting = prompt.MoveNext();
+                Assert(!stillWaiting && resolved == 1, "Clicking the claw option resolves the Haste attack to the claw (index 1)");
+
+                resolved = -99;
+                System.Collections.IEnumerator cancelPrompt = gm.PromptHasteNaturalAttackChoice(pc, foe, choice => resolved = choice);
+                cancelPrompt.MoveNext();
+                UnityEngine.UI.Button cancel = gm.CombatUI.Harness_FindSpecialStyleCancel();
+                Assert(cancel != null, "The open Haste chooser has a Cancel button");
+                if (cancel != null)
+                    cancel.onClick.Invoke();
+                bool cancelWaiting = cancelPrompt.MoveNext();
+                Assert(!cancelWaiting && resolved == 0, "Cancel resolves the Haste attack to the default (the bite)");
+
+                // The pounce passes the charge's +2 (PHB p.154) as a label offset, so the chooser shows the bonus the
+                // attack rolls; the turn indicator the prompt replaced comes back once it is answered.
+                NaturalAttackDefinition clawAttack = pc.Stats.GetNaturalAttackAtSequenceIndex(1);
+                string chargeClawLabel = ActionButtonPanel.BuildNaturalAttackChooserLabel(clawAttack.Name, clawAttack.IsPrimary,
+                    pc.Stats.GetNaturalAttackBonus(clawAttack) + 2, true);
+                UnityEngine.UI.Text indicator = gm.CombatUI.TurnIndicatorText;
+                string previousIndicator = indicator != null ? indicator.text : null;
+                if (indicator != null)
+                    gm.CombatUI.SetTurnIndicator("Harness indicator before the Haste chooser");
+                resolved = -99;
+                System.Collections.IEnumerator pouncePrompt = gm.PromptHasteNaturalAttackChoice(pc, foe, choice => resolved = choice, labelBonusOffset: 2);
+                pouncePrompt.MoveNext();
+                UnityEngine.UI.Button chargeClaw = gm.CombatUI.Harness_FindSpecialStyleOption(chargeClawLabel);
+                Assert(chargeClaw != null, "With the charge's +2 offset the chooser labels the claw '" + chargeClawLabel + "'");
+                if (chargeClaw != null)
+                    chargeClaw.onClick.Invoke();
+                bool pounceWaiting = pouncePrompt.MoveNext();
+                Assert(!pounceWaiting && resolved == 1
+                    && (indicator == null || indicator.text == "Harness indicator before the Haste chooser"),
+                    "Clicking the offset claw resolves to the claw and restores the turn indicator");
+                if (indicator != null && previousIndicator != null)
+                    gm.CombatUI.SetTurnIndicator(previousIndicator);
+            }
+#endif
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"PC Haste chooser check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+#if UNITY_EDITOR
+            gm.CombatUI?.HideSpecialStyleSelectionMenu();
+#endif
+            if (subPhaseProperty != null && previousSubPhase != null)
+                subPhaseProperty.SetValue(gm, previousSubPhase);
+            Cleanup(pc);
+            Cleanup(foe);
         }
     }
 

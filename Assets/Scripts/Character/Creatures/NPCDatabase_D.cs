@@ -827,6 +827,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 6,
             BAB = 1,
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Large, // MM p.38: a darkmantle grabs Large or smaller
             ImprovedGrabTriggerAttackName = "Slam",
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

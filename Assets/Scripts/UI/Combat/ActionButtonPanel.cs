@@ -155,6 +155,8 @@ public class ActionButtonPanel : MonoBehaviour
         public int GrappleAttacksRemaining;
         public int CurrentGrappleAttackBonus;
         public string IterativeTag;
+        public bool HasGrappleUnarmedAttack;
+        public string GrappleUnarmedAttackTag;
         public string GrappleOpponentName;
         public bool HasAnimateRopeEscapeAction;
         public string AnimateRopeEscapeDisabledReason;
@@ -271,10 +273,17 @@ public class ActionButtonPanel : MonoBehaviour
 
         context.ShowOnlyPinnedEscapeActions = context.IsGrappling && (context.IsPinned || context.ActorPinnedInGrappleState);
         context.ShowOnlyPinnerActions = context.IsGrappling && context.IsPinningOpponent && !context.ShowOnlyPinnedEscapeActions;
-        context.HasIterativeGrappleAttack = context.Gm != null && context.Gm.CanUseGrappleAttackOption(pc);
-        context.GrappleAttacksRemaining = context.Gm != null ? context.Gm.GetRemainingGrappleAttackActions(pc) : 0;
-        context.CurrentGrappleAttackBonus = context.Gm != null ? context.Gm.GetCurrentGrappleAttackBonus(pc) : 0;
+        // Grapple checks and weapon grapple attacks take an iterative step (Pin stands for all of them); the grapple attack
+        // of a creature fighting with its natural attacks takes a natural step instead (PHB p.156, CMB-127).
+        context.HasIterativeGrappleAttack = context.Gm != null && context.Gm.CanUseGrappleAttackOption(pc, GrappleActionType.PinOpponent);
+        context.GrappleAttacksRemaining = context.Gm != null ? context.Gm.GetRemainingGrappleAttackActions(pc, GrappleActionType.PinOpponent) : 0;
+        context.CurrentGrappleAttackBonus = context.Gm != null ? context.Gm.GetCurrentGrappleAttackBonus(pc, GrappleActionType.PinOpponent) : 0;
         context.IterativeTag = $"BAB {CharacterStats.FormatMod(context.CurrentGrappleAttackBonus)} | {context.GrappleAttacksRemaining} left";
+        context.HasGrappleUnarmedAttack = context.Gm != null && context.Gm.CanUseGrappleAttackOption(pc, GrappleActionType.AttackUnarmed);
+        int grappleUnarmedRemaining = context.Gm != null ? context.Gm.GetRemainingGrappleAttackActions(pc, GrappleActionType.AttackUnarmed) : 0;
+        context.GrappleUnarmedAttackTag = pc.UsesNaturalAttacksForGrappleAttack()
+            ? $"{grappleUnarmedRemaining} left"
+            : $"BAB {CharacterStats.FormatMod(context.Gm != null ? context.Gm.GetCurrentGrappleAttackBonus(pc, GrappleActionType.AttackUnarmed) : 0)} | {grappleUnarmedRemaining} left";
         context.GrappleOpponentName = context.GrappleOpponent != null && context.GrappleOpponent.Stats != null
             ? context.GrappleOpponent.Stats.CharacterName
             : "Opponent";
@@ -388,16 +397,27 @@ public class ActionButtonPanel : MonoBehaviour
         for (int i = 1; i < options.Count; i++)
         {
             NaturalAttackButtonOption option = options[i];
-            string role = option.IsPrimary ? "Primary" : "Secondary";
-            string bonus = CharacterStats.FormatMod(option.AttackBonus);
             sequenceIndices.Add(option.SequenceIndex);
             attackNames.Add(option.AttackName);
-            labels.Add(option.IsHasteExtra
-                ? $"{option.AttackName} (Haste, {role} {bonus})"
-                : $"{option.AttackName} ({role} {bonus})");
+            labels.Add(BuildNaturalAttackChooserLabel(option.AttackName, option.IsPrimary, option.AttackBonus, option.IsHasteExtra));
         }
 
         gm.ShowNaturalAttackOptionMenu(sequenceIndices, attackNames, labels);
+    }
+
+    /// <summary>
+    /// Label of one natural-attack chooser option: "Name (Primary +5)", or "Name (Haste, Secondary +0)" for Haste's
+    /// extra natural attack (CMB-106). Shared by the natural-attack chooser and the Haste chooser of the Full Attack
+    /// button and pounce (GameManager.PromptHasteNaturalAttackChoice, CMB-124).
+    /// </summary>
+    public static string BuildNaturalAttackChooserLabel(string attackName, bool isPrimary, int attackBonus, bool isHasteExtra)
+    {
+        string name = string.IsNullOrWhiteSpace(attackName) ? "Natural attack" : attackName.Trim();
+        string role = isPrimary ? "Primary" : "Secondary";
+        string bonus = CharacterStats.FormatMod(attackBonus);
+        return isHasteExtra
+            ? $"{name} (Haste, {role} {bonus})"
+            : $"{name} ({role} {bonus})";
     }
 
     private static string BuildNaturalAttackButtonLabel(NaturalAttackButtonOption option)
@@ -990,14 +1010,16 @@ public class ActionButtonPanel : MonoBehaviour
         bool canUnarmedByRule = pc.CanAttackUnarmedWhileGrappling(out _);
         bool canUnarmedAttack = context.IsGrappling
             && !context.ShowOnlyPinnedEscapeActions
-            && context.HasIterativeGrappleAttack
+            && context.HasGrappleUnarmedAttack
             && canUnarmedByRule
             && CanUseGrappleActionWhilePinning(pc, GrappleActionType.AttackUnarmed);
+        // A creature fighting with its natural attacks makes one natural attack per grapple attack (PHB p.156, CMB-127).
+        string grappleAttackName = pc.UsesNaturalAttacksForGrappleAttack() ? "Grapple: Natural Attack" : "Grapple: Attack Unarmed";
         string grappleUnarmedLabel = canUnarmedAttack
-            ? $"Grapple: Attack Unarmed (-4, {context.IterativeTag})"
-            : (canUnarmedByRule && !context.HasIterativeGrappleAttack
-                ? "Grapple: Attack Unarmed (-4, No attacks left)"
-                : "Grapple: Attack Unarmed (-4, N/A)");
+            ? $"{grappleAttackName} (-4, {context.GrappleUnarmedAttackTag})"
+            : (canUnarmedByRule && !context.HasGrappleUnarmedAttack
+                ? $"{grappleAttackName} (-4, No attacks left)"
+                : $"{grappleAttackName} (-4, N/A)");
         states.Set(GrappleUnarmedAttackButton, new ActionButtonState(context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && !context.ShowOnlyPinnerActions, canUnarmedAttack, grappleUnarmedLabel));
 
         bool canPin = context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && context.HasIterativeGrappleAttack && CanUseGrappleActionWhilePinning(pc, GrappleActionType.PinOpponent);

@@ -563,6 +563,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 52,
             BAB = 5,
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Colossal, // MM p.186: the adhesive this models grapples any creature the slam hits
             ImprovedGrabTriggerAttackName = "Slam",
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
@@ -601,6 +602,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 44,
             BAB = 6,
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Large, // MM p.187: Small, Medium or Large; the Small minimum is not modelled (CMB-142)
             ImprovedGrabTriggerAttackName = "Tentacle",
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
@@ -681,6 +683,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Tongue", DamageDice = 0, DamageCount = 0, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = false, ParalysisOnHitDC = 17, ParalysisOnHitDurationRounds = 6 }
             },
             HasImprovedGrab = true,
+            ImprovedGrabMaxTargetSize = SizeCategory.Medium, // MM p.190: a creature of the mohrg's size or smaller (fixed at its stat-block size, CMB-143)
             ImprovedGrabTriggerAttackName = "Slam",
             CreatureTags = new List<string> { "Undead", "Darkvision60", "MM35" },
             Feats = new List<string> { "Alertness", "Dodge", "Improved Initiative", "Lightning Reflexes", "Mobility" },

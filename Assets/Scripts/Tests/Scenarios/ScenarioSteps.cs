@@ -42,7 +42,7 @@ namespace Tests.Scenarios
         public string NaturalAttackName { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
-        public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "BreakPin" };
+        public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "BreakPin", "Attack" };
 
         private Step(StepKind kind) { Kind = kind; }
 
@@ -71,13 +71,28 @@ namespace Tests.Scenarios
         /// </summary>
         public static Step NaturalAttack(string target, string attackName)
             => new Step(StepKind.NaturalAttack) { Target = target, NaturalAttackName = attackName };
-        /// <summary>A full attack; refused when the full round is no longer free.</summary>
-        public static Step FullAttack(string target) => new Step(StepKind.FullAttack) { Target = target };
+        /// <summary>
+        /// A full attack; refused when the full round is no longer free. Ui: the Full Attack button, then the target; the
+        /// coroutine's optional 5-foot step prompts are skipped (the actor's own square is clicked, as a player skips), and
+        /// when Haste's natural-attack chooser opens (CMB-124) the option for <paramref name="hasteAttack"/> is clicked, or
+        /// Cancel (the default natural attack) when it is null. The AI path picks with NaturalAttackChoice, so
+        /// <paramref name="hasteAttack"/> is Ui only.
+        /// </summary>
+        public static Step FullAttack(string target, string hasteAttack = null)
+            => new Step(StepKind.FullAttack) { Target = target, NaturalAttackName = hasteAttack };
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
-        /// <summary>Ui only: a grapple action button: Pin, ReleasePin, Damage, Escape or BreakPin.</summary>
+        /// <summary>Ui only: a grapple action button: Pin, ReleasePin, Damage, Escape or BreakPin (or Attack: use <see cref="GrappleAttack"/>).</summary>
         public static Step GrappleAction(string kind) => new Step(StepKind.GrappleAction) { GrappleKind = kind };
+        /// <summary>
+        /// Ui only: the grapple attack button (Attack Unarmed, or Natural Attack for a creature fighting with its natural
+        /// attacks). With <paramref name="naturalAttackName"/>, the natural-attack menu option that starts with that name
+        /// is clicked: the first unused attack of that name, else its Haste option (CMB-127, CMB-106). With one option
+        /// left the game makes it at once and no menu opens.
+        /// </summary>
+        public static Step GrappleAttack(string naturalAttackName = null)
+            => new Step(StepKind.GrappleAction) { GrappleKind = "Attack", NaturalAttackName = naturalAttackName };
         /// <summary>
         /// Casts a prepared spell at <paramref name="target"/>. Scripted: TryNPCPerformSpellCastForAI with a clone of the
         /// database spell (never the template); no metamagic on that path. Ui: the cast menu with the first unused
@@ -85,7 +100,13 @@ namespace Tests.Scenarios
         /// </summary>
         public static Step Cast(string spellId, string target, MetamagicData metamagic = null)
             => new Step(StepKind.Cast) { SpellId = spellId, Target = target, Metamagic = metamagic };
-        public static Step Charge(string target, bool bullRush = false) => new Step(StepKind.Charge) { Target = target, BullRush = bullRush };
+        /// <summary>
+        /// A charge (with <paramref name="bullRush"/>, a bull rush on a charge). Ui: the Charge button (or the menu's Bull
+        /// Rush (Charge) button), the target and the path confirmation; a pounce's Haste natural-attack chooser (CMB-124) is
+        /// answered as in <see cref="FullAttack"/> with <paramref name="hasteAttack"/> (Ui only).
+        /// </summary>
+        public static Step Charge(string target, bool bullRush = false, string hasteAttack = null)
+            => new Step(StepKind.Charge) { Target = target, BullRush = bullRush, NaturalAttackName = hasteAttack };
         /// <summary>Ui: answers the pending AoO confirmation; skipped when no confirmation is open. Skipped on the AI path.</summary>
         public static Step AnswerAoO(AoOAnswer answer) => new Step(StepKind.AnswerAoO) { Answer = answer };
         /// <summary>Does nothing (an Ui turn still ends with End Turn when the steps run out).</summary>
@@ -108,18 +129,19 @@ namespace Tests.Scenarios
                     return Kind + "(" + Cell.x + "," + Cell.y + ")";
                 case StepKind.Attack:
                 case StepKind.AttackAgain:
-                case StepKind.FullAttack:
                     return Kind + "(" + Target + ")";
+                case StepKind.FullAttack:
+                    return "FullAttack(" + Target + (string.IsNullOrEmpty(NaturalAttackName) ? "" : ",haste=" + NaturalAttackName) + ")";
                 case StepKind.NaturalAttack:
                     return "NaturalAttack(" + NaturalAttackName + "," + Target + ")";
                 case StepKind.Maneuver:
                     return "Maneuver(" + ManeuverType + "," + Target + (OffHand ? ",offhand" : "") + ")";
                 case StepKind.GrappleAction:
-                    return "GrappleAction(" + GrappleKind + ")";
+                    return "GrappleAction(" + GrappleKind + (string.IsNullOrEmpty(NaturalAttackName) ? "" : "," + NaturalAttackName) + ")";
                 case StepKind.Cast:
                     return "Cast(" + SpellId + "," + Target + (Metamagic != null && Metamagic.HasAnyMetamagic ? ",metamagic" : "") + ")";
                 case StepKind.Charge:
-                    return "Charge(" + Target + (BullRush ? ",bullrush" : "") + ")";
+                    return "Charge(" + Target + (BullRush ? ",bullrush" : "") + (string.IsNullOrEmpty(NaturalAttackName) ? "" : ",haste=" + NaturalAttackName) + ")";
                 case StepKind.AnswerAoO:
                     return "AnswerAoO(" + Answer + ")";
                 case StepKind.Assert:
@@ -161,6 +183,8 @@ namespace Tests.Scenarios
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
                 if (Kind == StepKind.Cast && Metamagic != null && Metamagic.HasAnyMetamagic)
                     return Describe() + ": the NPC cast path takes no metamagic";
+                if ((Kind == StepKind.FullAttack || Kind == StepKind.Charge) && !string.IsNullOrEmpty(NaturalAttackName))
+                    return Describe() + ": the Haste pick is Ui only (the AI path picks with NaturalAttackChoice)";
             }
             return null;
         }
@@ -557,6 +581,24 @@ namespace Tests.Scenarios
                 return;
             }
 
+            // Prompts a Full Attack or a pounce opens while the step is in flight: the optional 5-foot steps are skipped,
+            // and Haste's natural-attack chooser (CMB-124) is answered from the step.
+            if (_awaiting && prompt == "full-attack-5ft")
+            {
+                SkipFullAttackFiveFootStep(gm);
+                _actionFrame = frame;
+                _actionTime = Time.time;
+                return;
+            }
+            if (_awaiting && prompt == "submenu" && gm.CombatUI != null
+                && gm.CombatUI.Harness_OpenSpecialStyleMenuName() == GameManager.HasteNaturalAttackMenuName)
+            {
+                AnswerHasteNaturalAttackChooser(gm);
+                _actionFrame = frame;
+                _actionTime = Time.time;
+                return;
+            }
+
             bool ready = gm.IsPlayerTurn && gm.ActivePC == _actor && gm.CurrentSubPhase == GameManager.PlayerSubPhase.ChoosingAction && prompt == null;
             if (_awaiting)
             {
@@ -716,6 +758,8 @@ namespace Tests.Scenarios
                     break;
                 case StepKind.GrappleAction:
                     PressGrapple(gm, s.GrappleKind);
+                    if (s.GrappleKind == "Attack")
+                        PickGrappleNaturalAttack(gm, s.NaturalAttackName);
                     break;
                 case StepKind.Cast:
                 {
@@ -830,7 +874,7 @@ namespace Tests.Scenarios
             }
         }
 
-        private static void PressGrapple(GameManager gm, string kind)
+        private void PressGrapple(GameManager gm, string kind)
         {
             switch (kind)
             {
@@ -839,7 +883,86 @@ namespace Tests.Scenarios
                 case "Damage": gm.OnGrappleDamageButtonPressed(); break;
                 case "Escape": gm.OnGrappleEscapeCheckButtonPressed(); break;
                 case "BreakPin": gm.OnGrappleBreakPinButtonPressed(); break;
+                case "Attack": gm.OnGrappleUnarmedAttackButtonPressed(); break;
             }
+        }
+
+        /// <summary>
+        /// After the grapple attack button: clicks the natural-attack menu option for <paramref name="attackName"/> as a
+        /// player would (CMB-127). The options read "Name (primary ...)" or "Name (Haste, ...)", unused ones first, so the
+        /// first label starting with "Name (" is the unused attack of that name, else its Haste option. No menu: noted.
+        /// </summary>
+        private void PickGrappleNaturalAttack(GameManager gm, string attackName)
+        {
+            string menu = gm.CombatUI != null ? gm.CombatUI.Harness_OpenSpecialStyleMenuName() : null;
+            if (menu != "GrappleNaturalAttackMenu")
+            {
+                if (!string.IsNullOrEmpty(attackName))
+                    _awaitNote = "no natural-attack menu opened (one option is made at once)";
+                return;
+            }
+            if (string.IsNullOrEmpty(attackName))
+            {
+                _awaitNote = "the natural-attack menu opened but the step names no attack; cancelled";
+                gm.CombatUI.HideSpecialStyleSelectionMenu();
+                gm.Harness_CancelToActionChoices();
+                return;
+            }
+            UnityEngine.UI.Button option = gm.CombatUI.Harness_FindSpecialStyleOption(attackName.Trim() + " (");
+            if (option == null || !option.interactable)
+            {
+                _awaitNote = "no natural-attack option named " + attackName + "; cancelled";
+                gm.CombatUI.HideSpecialStyleSelectionMenu();
+                gm.Harness_CancelToActionChoices();
+                return;
+            }
+            option.onClick.Invoke();
+        }
+
+        /// <summary>
+        /// Skips the Full Attack coroutine's optional 5-foot step prompt by clicking the actor's own square, as a player
+        /// skips it (GameManager.HandleFiveFootStepClick -> CancelFiveFootStepSelection). Noted once per step.
+        /// </summary>
+        private void SkipFullAttackFiveFootStep(GameManager gm)
+        {
+            SquareCell own = gm.Grid != null ? gm.Grid.GetCell(_actor.GridPosition) : null;
+            if (own == null)
+                return;
+            gm.OnCellClicked(own);
+            const string note = "full-attack 5-foot step prompts skipped";
+            if (_awaitNote == null || !_awaitNote.Contains(note))
+                _awaitNote = _awaitNote == null ? note : _awaitNote + "; " + note;
+        }
+
+        /// <summary>
+        /// Answers Haste's natural-attack chooser on a Full Attack or a pounce (CMB-124): clicks the option whose label
+        /// starts with the step's natural attack name and " (", or Cancel (the default natural attack) when the step names
+        /// none or no such option exists. The answer is noted on the step.
+        /// </summary>
+        private void AnswerHasteNaturalAttackChooser(GameManager gm)
+        {
+            string attackName = _current != null ? _current.NaturalAttackName : null;
+            string note;
+            UnityEngine.UI.Button option = !string.IsNullOrEmpty(attackName)
+                ? gm.CombatUI.Harness_FindSpecialStyleOption(attackName.Trim() + " (")
+                : null;
+            if (option != null && option.interactable)
+            {
+                option.onClick.Invoke();
+                note = "Haste chooser: " + attackName;
+            }
+            else
+            {
+                UnityEngine.UI.Button cancel = gm.CombatUI.Harness_FindSpecialStyleCancel();
+                if (cancel != null)
+                    cancel.onClick.Invoke();
+                else
+                    gm.CombatUI.HideSpecialStyleSelectionMenu();
+                note = string.IsNullOrEmpty(attackName)
+                    ? "Haste chooser cancelled (default)"
+                    : "Haste chooser has no option named " + attackName + "; cancelled (default)";
+            }
+            _awaitNote = _awaitNote == null ? note : _awaitNote + "; " + note;
         }
 
         private static SpellData FindPreparedSpell(CharacterController a, string spellId)

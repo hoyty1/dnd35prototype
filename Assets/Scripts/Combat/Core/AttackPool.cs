@@ -14,9 +14,9 @@ public enum ProgressiveAttackMode
 /// </summary>
 public enum AttackStepKind
 {
-    /// <summary>An iterative weapon or unarmed swing, a maneuver that replaces one (trip, disarm, sunder, grapple), or a grapple action once grappling.</summary>
+    /// <summary>An iterative weapon or unarmed swing, a maneuver that replaces one (trip, disarm, sunder, grapple), or a grapple action once grappling (every one except a natural-weapon creature's grapple natural attack).</summary>
     MainHand,
-    /// <summary>The next natural attack of an innate natural-attack sequence (with Haste, one extra natural attack, CMB-106), or a maneuver that replaces one (at that natural attack's BAB).</summary>
+    /// <summary>The next natural attack of an innate natural-attack sequence (with Haste, one extra natural attack, CMB-106), or a maneuver or grapple natural attack that replaces one (at that natural attack's BAB; CMB-102, CMB-127).</summary>
     NaturalSequence,
     /// <summary>An off-hand attack: counts toward commitment but does not move the main-hand cursor.</summary>
     OffHand
@@ -66,6 +66,32 @@ public sealed class AttackPool
     /// </summary>
     public int LastSubstituteNaturalAttackIndex { get; private set; } = -1;
 
+    /// <summary>
+    /// True when the last maneuver or grapple substitute gave up Haste's extra natural attack (made with the natural
+    /// attack at <see cref="LastSubstituteNaturalAttackIndex"/>, CMB-106) rather than that natural attack itself. Read by
+    /// a grapple natural attack whose caller committed the step without naming the attack (CMB-127).
+    /// </summary>
+    public bool LastSubstituteWasHasteExtraAttack { get; private set; }
+
+    // Natural attacks made or given up this turn, by natural-sequence index (not serialized; turn-scoped).
+    private readonly System.Collections.Generic.HashSet<int> _usedNaturalAttackIndices = new System.Collections.Generic.HashSet<int>();
+
+    /// <summary>
+    /// True when the natural attack at this natural-sequence index was made, or given up for a maneuver, this turn
+    /// (Haste's extra attack with it is tracked by <see cref="HasteExtraNaturalAttackUsed"/> instead). Recorded for PCs
+    /// and NPCs alike by <see cref="CharacterController.FullAttack"/> (every natural attack path resolves through it) and
+    /// <see cref="CharacterController.TryCommitManeuverSubstituteStep"/>. Read where natural attacks are chosen out of
+    /// sequence order: the grapple attack action (PHB p.156, CMB-127) and a maneuver whose step's own natural attack
+    /// is already used (<see cref="CharacterController.ResolveSubstituteNaturalAttackIndex"/>).
+    /// </summary>
+    public bool IsNaturalAttackUsed(int naturalAttackIndex) => _usedNaturalAttackIndices.Contains(naturalAttackIndex);
+
+    /// <summary>
+    /// A rake (MM p.314) was made this turn: its two extra claw attacks come once a turn, not once per grapple attack
+    /// (CMB-127). Set by <see cref="CharacterController.PerformRakeAttacks"/>.
+    /// </summary>
+    public bool RakeUsedThisTurn { get; private set; }
+
     public bool IsFullAttack => Mode == ProgressiveAttackMode.FullAttackCommitted;
     public bool HasStartedAttacking => Mode != ProgressiveAttackMode.None;
     public bool NextAttackNeedsMoveAction => Mode == ProgressiveAttackMode.StandardAttackCommitted && !PendingStepPaid;
@@ -79,11 +105,26 @@ public sealed class AttackPool
         PendingStepPaid = false;
         HasteExtraNaturalAttackUsed = false;
         LastSubstituteNaturalAttackIndex = -1;
+        LastSubstituteWasHasteExtraAttack = false;
+        _usedNaturalAttackIndices.Clear();
+        RakeUsedThisTurn = false;
     }
 
-    internal void RecordSubstituteNaturalAttack(int naturalAttackIndex)
+    internal void MarkNaturalAttackUsed(int naturalAttackIndex)
+    {
+        if (naturalAttackIndex >= 0)
+            _usedNaturalAttackIndices.Add(naturalAttackIndex);
+    }
+
+    internal void MarkRakeUsed()
+    {
+        RakeUsedThisTurn = true;
+    }
+
+    internal void RecordSubstituteNaturalAttack(int naturalAttackIndex, bool wasHasteExtraAttack = false)
     {
         LastSubstituteNaturalAttackIndex = naturalAttackIndex;
+        LastSubstituteWasHasteExtraAttack = naturalAttackIndex >= 0 && wasHasteExtraAttack;
     }
 
     internal void MarkHasteExtraNaturalAttackUsed()
