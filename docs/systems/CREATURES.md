@@ -349,6 +349,7 @@ Ordered by impact on "fights play like 3.5e".
    - `BonusElementalDamage*`.
    - Swarm damage dice and poison (CRE-007, CRE-014); swarm AoOs and targeted-spell immunity (CMB-123, SPL-121).
    - Allips and wraiths spawn dead (CRE-044).
+   - Destroy undead and constructs at 0 HP instead of making them disabled, dying or stable (CRE-051, MM p.307, p.317).
    - Engulf (CMB-024).
    - Terrain manipulation, which needs movement cost first (CRE-013).
    - Regeneration with energy suppression and nonlethal conversion, plus a separate fast-healing field.
