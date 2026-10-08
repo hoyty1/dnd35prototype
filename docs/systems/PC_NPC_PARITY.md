@@ -61,7 +61,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | Perception of unseen creatures | NPC only | CMB-094 |
 | HP, dying, death | Mostly shared | CORE-015, AI-053 |
 | Damage mitigation | Divergent by origin | SPL-004, AI-040 |
-| Stat derivation | Divergent by origin | CRE-004, CHR-071, CRE-038, CHR-070, CRE-041, CHR-067, CRE-002, ITM-004 |
+| Stat derivation | Divergent by origin | CRE-004, CHR-071, CRE-038, CHR-070, CRE-041, CHR-067, CRE-056 |
 | Equipment-derived stats | Shared | - |
 | Ammo, thrown weapons | Divergent | CMB-019, CMB-096 |
 | Equipment changes, pick up | Divergent / PC only | ITM-069, AI-054 |
@@ -75,8 +75,6 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | SPL-054 | Spell handlers | NPC path runs 17 of 51 handlers (Ghoul Touch, Sound Burst, Searing Light, Prayer...) | depends | High | GameManager.SpellCasting.cs:2129-2346 vs NPCTurns.cs:938-1006 |
 | AI-001 | Area spells, metamagic | NPCs cannot cast any Area spell or apply metamagic | PC | High | NPCTurns.cs:820, 835, 911 |
 | CRE-004 | BAB, base saves | NPCs use creature-type progression over all HD | depends | High | NPCSetup.cs:689-725 |
-| CRE-002 | Alignment | NPCs spawn with no alignment | NPC | High | NPCSetup.cs:681-988 |
-| ITM-004 | NPC equipment | MainHand/OffHand/Ranged entries are silently dropped (58 hits) | PC | High | Inventory.cs:295-306 |
 | CHR-067 | Skills | NPC skill totals are 0 (not the ability modifier); `RollSkillCheck` returns an automatic fail | PC | High | CharacterStats.cs:5970-6029 |
 | SPL-004 | Damage mitigation | PC area spells and NPC breath/specials bypass `ApplyIncomingDamage` by different routes | depends | High | GameManager_Spells_Shared.cs:263; NPCTurns.cs:1548-1584 |
 | GRID-001 | Withdraw | PC withdraw single speed, first square provokes; AI withdraw correct | NPC | High | MovementService.cs:187-195 |
@@ -141,9 +139,7 @@ Dropped after spot-check:
 ## 5. Unification plan
 
 Cheap first, all localized:
-1. **Data and one-liners.** These close CRE-002, ITM-004, CMB-099, SPL-118, CRE-040, CMB-018 and part of CHR-071:
-   - copy `def.CharacterAlignment` (CRE-002);
-   - alias MainHand/OffHand/Ranged in `CanEquipIn` (ITM-004);
+1. **Data and one-liners.** These close CMB-099, SPL-118, CRE-040, CMB-018 and part of CHR-071 (CRE-002 and ITM-004 done 2026-10-08: the spawn copies the alignment, and `Inventory.EquipStartingLoadout` equips the MainHand, OffHand and Ranged aliases):
    - add a crit-immunity filter to `GetAdjacentHelplessEnemiesForCoupDeGrace` (CMB-099);
    - reorder the NPC counterspell before the invisibility break (SPL-118);
    - fix the acid spray numbers (CRE-040);

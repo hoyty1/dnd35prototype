@@ -163,10 +163,12 @@ public static class NpcProficiencyTests
     }
 
     /// <summary>
-    /// Checks a spawned creature's main weapon: proficient, no armor penalty, and the MM attack bonus. A weapon the
-    /// definition lists under EquipSlot.MainHand is dropped at spawn (ITM-004), so the test equips it in the right hand
-    /// itself. The spawned BAB can differ from the MM's (CRE-004: a warrior level on a 1-HD humanoid follows the
-    /// humanoid's 3/4 progression, +0 at 1 HD), so the expected bonus is the MM's minus the MM BAB plus the spawned BAB.
+    /// Checks a spawned creature's main weapon: proficient, no armor penalty, and the MM attack bonus. The weapon must
+    /// come from the spawn itself, also when the definition lists it under EquipSlot.MainHand (the ogre's greatclub;
+    /// ITM-004, fixed 2026-10-08: before, DirectEquip dropped it and the test equipped it by hand). The spawned BAB can
+    /// differ from the MM's (CRE-004: a warrior level on a 1-HD humanoid follows the humanoid's 3/4 progression, +0 at
+    /// 1 HD), so the expected bonus is the MM's minus the MM BAB plus the spawned BAB. A masterwork weapon the spawn may
+    /// roll by CR is not part of BuildAttackBonus, so it does not change the expected figure.
     /// Likewise a parenthesised NPC feat such as "Weapon Focus (greatclub)" does nothing (CHR-008), so the MM's feat
     /// term <paramref name="mmFeatAttack"/> is replaced by the feat term the game computed. What is left is exactly the
     /// part CHR-072 changes: the proficiency penalties.
@@ -183,19 +185,8 @@ public static class NpcProficiencyTests
             }
 
             ItemData weapon = cc.GetEquippedMainWeapon();
-            if (weapon == null)
-            {
-                // ITM-004: the MainHand alias is rejected by DirectEquip.
-#pragma warning disable CS0618 // string item ids are the NPC data's own ids
-                cc.InventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(weaponId), EquipSlot.RightHand);
-#pragma warning restore CS0618
-                cc.InventoryComp.CharacterInventory.RecalculateStats();
-                weapon = cc.GetEquippedMainWeapon();
-                Debug.Log($"  [NpcProficiencyTests] {npcId}: equipped its {weaponId} in the right hand (ITM-004)");
-            }
-
             Assert(weapon != null && weapon.Id != null && weapon.Id.EndsWith(weaponId),
-                npcId + " wields its " + weaponId, "main weapon " + (weapon != null ? weapon.Id : "none"));
+                npcId + " spawns wielding its " + weaponId + " (ITM-004 for MainHand entries)", "main weapon " + (weapon != null ? weapon.Id : "none"));
             if (weapon == null)
                 return;
 

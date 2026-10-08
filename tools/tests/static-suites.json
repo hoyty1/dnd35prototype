@@ -158,7 +158,18 @@
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CHR-072: NPC class (DMG p.108-109) and creature-type (MM p.305-317) weapon and armor proficiency through the PC checks; spawns through InitializeNPCFromDefinition, so needs a scene GameManager; equips MainHand weapons itself (ITM-004) and allows for the spawned BAB (CRE-004); a missing item id fails a check"
+      "notes": "CHR-072: NPC class (DMG p.108-109) and creature-type (MM p.305-317) weapon and armor proficiency through the PC checks; spawns through InitializeNPCFromDefinition, so needs a scene GameManager; the main weapon must come from the spawn, MainHand entries included (ITM-004); allows for the spawned BAB (CRE-004); a missing item id fails a check"
+    },
+    {
+      "type": "Tests.Character.NpcAlignmentGearTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 63,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CRE-002, ITM-004: hand aliases (CanEquipIn, DirectEquip, EquipFromInventory, GetEquipped, Unequip, EquipStartingLoadout), the spawn's ranged-wield test (AIService.RoutesToRangedTurn), template alignments on legal bases (celestial, fiendish MM p.31, p.108, law-chaos provisional, CRE-057; skeleton, zombie MM p.226, p.266) and spawned alignment and gear through InitializeNPCFromDefinition, so needs a scene GameManager"
     },
     {
       "type": "Tests.Character.NpcFeatDataTests",

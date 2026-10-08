@@ -58,6 +58,7 @@ public sealed class ZombieCreatureTemplate : ICreatureTemplate
 
         // Type and properties
         target.CreatureType = source.CreatureType;
+        target.CharacterAlignment = source.CharacterAlignment; // always neutral evil (CRE-002)
         target.NaturalArmorBonus = source.NaturalArmorBonus;
         target.IsExceptionallyStable = source.IsExceptionallyStable;
 

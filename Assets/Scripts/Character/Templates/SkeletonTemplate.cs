@@ -65,6 +65,9 @@ public static class SkeletonTemplate
         skel.CreatureType = "Undead";
         skel.MaterialComposition = MaterialComposition.Bone;
 
+        // ── Alignment: always neutral evil (MM p.226; CRE-002) ──
+        skel.CharacterAlignment = Alignment.NeutralEvil;
+
         // ── Stability (PHB p.154/157/158) ──
         // Legs survive the template (a wolf skeleton is still a quadruped), so the clone keeps
         // IsExceptionallyStable. A humanoid has two legs, so its flag can only come from a racial

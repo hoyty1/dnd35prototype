@@ -312,9 +312,16 @@ public partial class GameManager
 
         if (summon.Stats != null)
         {
+            // The summon list's alignment (Summon Monster tables, PHB p.287) wins; otherwise the definition's alignment, which the
+            // celestial or fiendish template has made good or evil, stays (CRE-002). The fallbacks below cover only a
+            // definition without an alignment.
             if (option.SummonedCreatureAlignment != Alignment.None)
             {
                 summon.Stats.CharacterAlignment = option.SummonedCreatureAlignment;
+            }
+            else if (summon.Stats.CharacterAlignment != Alignment.None)
+            {
+                // Keep the spawned alignment.
             }
             else if (isCelestial)
             {

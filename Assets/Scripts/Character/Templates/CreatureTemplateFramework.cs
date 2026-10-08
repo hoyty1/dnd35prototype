@@ -96,6 +96,11 @@ public abstract class OutsiderTemplateBase : ICreatureTemplate
 
         AddTemplateId(definition, TemplateId);
 
+        // Alignment: always good (any) for celestial, always evil (any) for fiendish (MM p.31, p.108). Only the
+        // good-evil component is fixed; keeping the base creature's law-chaos component is a provisional default pending
+        // the owner, and an illegal base (celestial on evil, fiendish on good) is not refused (CRE-057).
+        definition.CharacterAlignment = AlignmentHelper.WithGoodEvilAxis(definition.CharacterAlignment, IsGoodTemplate);
+
         int hd = Mathf.Max(1, definition.HitDice > 0 ? definition.HitDice : definition.Level);
         ApplyStatAdjustments(definition, hd);
         ApplyMitigation(definition, hd);

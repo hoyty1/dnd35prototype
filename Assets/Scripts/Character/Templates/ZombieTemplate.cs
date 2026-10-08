@@ -55,6 +55,9 @@ public static class ZombieTemplate
         zombie.CreatureType = "Undead";
         zombie.MaterialComposition = MaterialComposition.Organic; // still has flesh, unlike skeleton
 
+        // ── Alignment: always neutral evil (MM p.266; CRE-002) ──
+        zombie.CharacterAlignment = Alignment.NeutralEvil;
+
         // ── Stability (PHB p.154/157/158) ──
         // Legs survive the template, so the clone keeps IsExceptionallyStable. A humanoid's flag can
         // only come from a racial trait (dwarf or duergar stability), which a zombie loses along with

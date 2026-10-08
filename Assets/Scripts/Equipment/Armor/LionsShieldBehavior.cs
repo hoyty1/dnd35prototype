@@ -276,6 +276,7 @@ public class LionsShieldBehavior : SpecificItemBehavior
         stats.SourceNpcDefinitionId = def.Id;
         stats.ChallengeRating = def.ChallengeRating;
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Animal" : def.CreatureType;
+        stats.CharacterAlignment = def.CharacterAlignment; // as InitializeNPCFromDefinition does (CRE-002)
         stats.CanMakeAttacksOfOpportunity = def.CanMakeAttacksOfOpportunity;
         CreatureProficiency.ApplyFromDefinition(stats, def);
 

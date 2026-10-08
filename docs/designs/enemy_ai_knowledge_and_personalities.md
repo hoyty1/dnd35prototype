@@ -198,7 +198,7 @@ public readonly struct KnownFact { FactKey Key; int SubjectId; FactValue Value;
 public sealed class TraitDefinition {
   public string Id;                                   // "cowardly"
   public CognitionTier MinTier;                       // hard gate
-  public AlignmentHint Alignment;                     // warning only (needs CRE-002)
+  public AlignmentHint Alignment;                     // warning only (spawned alignment since CRE-002; CRE-056 gaps)
   public NPCAIProfileArchetype? ImpliedRole;          // Healer -> HealerAIProfile, Caster -> SpellcasterAIProfile
   public (ConsiderationId id, float w)[] Target;      // Σ|w| = 1, each consideration in [0,1]
   public OpinionRule[] Opinions;                      // (BoolDecision, Opinion, ConditionId, param)
@@ -429,7 +429,7 @@ That difference, shown in the trace, is the demonstration of fairness.
 | Before Phase 4 | NPC skills (no issue exists yet; file one) | `NPCDefinition` has no skills field and `InitializeSkills` never runs for NPCs, so trained-only checks always fail for monsters. |
 | | **ENC-015** | The DMG `SpawnResult` is dropped at `EncounterSelectionUI.cs:676`, so DMG encounters carry no intel context. |
 | | **CORE-002** | `OnCombatEnded` is skipped on victory. Combat end goes through `GameManager.EvaluateCombatEnd` (`_Core/GameManager.CombatEnd.cs`), which calls `HandleCombatVictoryDetected`. |
-| | **CRE-002** | Spawned monsters have no alignment (alignment hints, Zealot, *detect evil*). |
+| | **CRE-056** | Many monster definitions set no alignment, so they spawn unaligned (alignment hints, Zealot, *detect evil*); the spawn copies the data's alignment since CRE-002 was fixed (2026-10-08). |
 | | **CMB-028** | Surprise and encounter distance, needed for the Alert/Watched levels and Ambusher. |
 
 ---
@@ -556,5 +556,5 @@ That difference, shown in the trace, is the demonstration of fairness.
 4. **Is a sadistic coup de grace on downed PCs acceptable at Normal difficulty,** or should Easy and Normal add a rules gate?
 5. **Should the "Rumours" version of Gather Information exist** before a clock and town system exist, or wait for them? And is the abstract preparation budget an acceptable stand-in for hours?
 6. **Should Increment 3 (stances) and Phase 4 (knowledge rolls and hub intel) swap?** Stances finish request 2 but are blocked by the AI-047 and AI-010 rules fixes. Phase 4 finishes request 1 but needs monster skill data.
-7. **Should alignment stay a warning,** as proposed, or become a hard gate, such as Sadistic requiring Evil? A hard gate cannot work until CRE-002 is fixed.
+7. **Should alignment stay a warning,** as proposed, or become a hard gate, such as Sadistic requiring Evil? A hard gate needs alignment data on every definition (CRE-056; CRE-002, the spawn copy, was fixed 2026-10-08).
 8. **Should Rules mode eventually become the default,** or stay a difficulty and realism option?

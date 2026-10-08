@@ -675,8 +675,9 @@ public partial class GameManager
     /// <summary>
     /// Builds a creature from <paramref name="def"/> in <paramref name="npc"/>: first
     /// <see cref="ResetCharacterSlotForSpawn"/> (CRE-046), then stats, Init, every innate ability (each Configure* call
-    /// takes the definition's value, so a missing trait is configured as none), team, inventory, spellcasting,
-    /// effect and concentration managers and the AI profile.
+    /// takes the definition's value, so a missing trait is configured as none), alignment (CRE-002), team, inventory
+    /// (<see cref="Inventory.EquipStartingLoadout"/>, ITM-004), spellcasting, effect and concentration managers and the
+    /// AI profile.
     /// </summary>
     internal void InitializeNPCFromDefinition(CharacterController npc, NPCDefinition def,
         Vector2Int pos, Sprite alive, Sprite dead)
@@ -739,6 +740,9 @@ public partial class GameManager
         stats.SourceNpcDefinitionId = def.Id;
         stats.ChallengeRating = def.ChallengeRating;
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Humanoid" : def.CreatureType;
+        // The MM entry's alignment (after any template, which may set it), so smite, aligned weapons, Protection from
+        // Evil and the alignment spells see the creature (CRE-002). A summon or a test preset may override it after.
+        stats.CharacterAlignment = def.CharacterAlignment;
         // Weapon and armor proficiency from the creature type and the MM entry; real class levels add the class
         // tables in CharacterStats (CHR-072).
         CreatureProficiency.ApplyFromDefinition(stats, def);
@@ -879,6 +883,9 @@ public partial class GameManager
                 int.TryParse(crStr, out npcCR);
         }
 
+        // Starting gear (ITM-004): MainHand and OffHand entries are the right and left hand; a weapon listed under
+        // Ranged is held by a creature whose AI runs the ranged routine and carried in the pack by any other.
+        var startingGear = new List<KeyValuePair<ItemData, EquipSlot>>();
         foreach (var eq in def.EquipmentIds)
         {
             ItemData item = null;
@@ -900,10 +907,15 @@ public partial class GameManager
                 item = ItemDatabase.CloneItem(eq.ItemId);
 
             if (item != null)
-                inv.CharacterInventory.DirectEquip(item, eq.Slot);
+                startingGear.Add(new KeyValuePair<ItemData, EquipSlot>(item, eq.Slot));
             else
                 Debug.LogWarning($"[GameManager] Item not found: {eq.ItemId} for {def.Name}");
         }
+        // The AI profile is built here so the held weapon follows the same test the AI uses to pick its routine
+        // (AIService.RoutesToRangedTurn); it is assigned to the creature further down, as before.
+        DND35.AI.AIProfile runtimeProfile = BuildRuntimeAIProfile(def);
+        bool wieldsRangedWeapon = AIService.RoutesToRangedTurn(def.AIBehavior, runtimeProfile);
+        inv.CharacterInventory.EquipStartingLoadout(startingGear, wieldsRangedWeapon);
 
         foreach (string itemId in def.BackpackItemIds)
         {
@@ -983,7 +995,7 @@ public partial class GameManager
             concMgr = npc.gameObject.AddComponent<ConcentrationManager>();
         concMgr.Init(stats, npc);
 
-        npc.aiProfile = TrackRuntimeAIProfile(BuildRuntimeAIProfile(def));
+        npc.aiProfile = TrackRuntimeAIProfile(runtimeProfile);
         npc.EnemyUseCoupDeGraceOverride = def.UseCoupDeGrace;
         npc.PriorityTargetName = string.IsNullOrWhiteSpace(def.AITargetPriority) ? null : def.AITargetPriority;
 

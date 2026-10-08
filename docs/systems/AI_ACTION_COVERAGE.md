@@ -25,7 +25,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Two-weapon, off-hand, off-hand thrown | Never | no NPC dual-wield | Yes | AI-055 (off-hand math: CMB-008) |
 | Natural attacks | Auto | used only when no manufactured weapon is equipped; no choice between natural attacks, except Haste's extra natural attack (PHB p.239, owner decision 2026-10-07): `AIProfile.ChooseHasteNaturalAttackIndex` (default `AI/NaturalAttackChoice.cs`: a rider that matters against the target (an Improved Grab trigger only against a target small enough to grab), then the highest bonus, then the higher average damage) | Yes (picks each natural attack, and with Haste a used one again through the natural-attack buttons, or the Haste attack's weapon in the chooser of the Full Attack button and pounce, CMB-124) | CMB-077 |
 | Natural + weapon combination | Never | naturals only with no weapon | n/a | CMB-077 |
-| Ranged attack | Used | any routine with a ranged weapon equipped; kiter manages AoO risk | Yes | ITM-004 strips many bows |
+| Ranged attack | Used | any routine with a ranged weapon equipped; kiter manages AoO risk | Yes | Ranged-listed bows are held by creatures the AI runs through the ranged routine (`AIService.RoutesToRangedTurn`) and carried by others (ITM-004 fixed 2026-10-08); NPCs cannot switch weapons (ITM-069); CRE-052 (missing crossbow ids) |
 | Thrown weapons | Partial | only `WeaponCat == Ranged` items | Yes | CMB-019 |
 | Switch weapons, draw, pick up, drop held item | Never | only the UndeadMindless free re-equip; disarmed NPCs never re-arm | Partial (pick up, drop) | ITM-005 |
 | Reload | Partial | forced when unloaded; ends the turn | Yes | CMB-032 |
@@ -58,8 +58,8 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Turn undead | Never | PC menu flow; NPC undead that are turned lose their turns | Yes (turn only; no rebuke, command or bolster) | CMB-016, CMB-026, CMB-075, AI-054; 11.8.6, 11.8.7 |
 | Rage, Flurry of Blows | Never | PC-only buttons; the rules cores work for any actor | Yes | CHR-003; 11.8.7 |
 | Bardic music | Never | no database bard; DMG Bard spawns get the Spellcaster profile | Yes (Inspire Courage only) | CHR-026; 11.8.7 |
-| Paladin Smite Evil | Never | text in `SpecialAbilities` only | **No**: `SmiteEvilData` is never assigned, and the Smite button runs template smite only and is visible only to characters with template smite, so a PC paladin has no smite control (UI/Combat/ActionButtonPanel.cs:692-698) | CHR-020, CRE-002; 11.8.7 |
-| Template smite (celestial or fiendish template) | Partial | enemy-side summons only, once (5.7) | Yes (Smite button; only controllable templated creatures, such as the template-test allies) | CMB-021, CMB-003 (damage bonus lost), CRE-002 |
+| Paladin Smite Evil | Never | text in `SpecialAbilities` only | **No**: `SmiteEvilData` is never assigned, and the Smite button runs template smite only and is visible only to characters with template smite, so a PC paladin has no smite control (UI/Combat/ActionButtonPanel.cs:692-698) | CHR-020, CRE-056; 11.8.7 |
+| Template smite (celestial or fiendish template) | Partial | enemy-side summons only, once (5.7) | Yes (Smite button; only controllable templated creatures, such as the template-test allies) | CMB-021, CMB-003 (damage bonus lost), CRE-056 (targets whose data has no alignment) |
 | Destruction domain smite | Never | NPCs have no domains | Yes (Domain Power button; the +4 attack applies, the damage bonus never does) | CHR-005; 11.8.7 |
 | Domain powers | Never | NPCs have no domains | Yes (Strength, Destruction, Death, Sun, Travel, Plant, Luck, elemental turning) | CHR-023, CHR-062 |
 | Lay on Hands, Wild Shape, Favored Enemy and other data-only class features | Never | | No | CHR-020, CHR-053 |

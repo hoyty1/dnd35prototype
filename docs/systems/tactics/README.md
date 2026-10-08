@@ -238,7 +238,7 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 | 8 | SLA system (`SpecialAbilityEntry`) feeding spell actions | about 100 SLA ids (charm person, darkness, invisibility, stinking cloud, suggestion...) | High | High | CRE-015, CRE-017 |
 | 9 | Poison and disease riders: missing poison ids (Dex poisons, 14), swarm poison, real-time timing | 25+14+5 | Med | Med | CMB-007, CRE-014 |
 | 10 | Fast healing as its own field (not regeneration) | 22 | Low (AI: n/a) | Med | CRE-017 |
-| 11 | Smite (template and paladin): one executor; target alignment; the summon-AI formula | 22+8+11+4+3 | Med | Med | CMB-021, CMB-003, CRE-002, CHR-020, AI-056 |
+| 11 | Smite (template and paladin): one executor; target alignment; the summon-AI formula | 22+8+11+4+3 | Med | Med | CMB-021, CMB-003, CRE-056, CHR-020, AI-056 |
 | 12 | Breath weapons: action cost, saves, recharge, mephits, metallic secondaries | 19 (+2 secondary) | High | Med | AI-040, AI-032, AI-008, CRE-017 |
 | 13 | Senses for fair sight: scent (47, partial), tremorsense 15, blindsense 6, blindsight 5, all-around vision 5 | 78 | Med (knowledge increment 2) | High | AI-051, AI-007 |
 | 14 | Template defences: SR HD+5 at all HD; DR bypass combos; energy riders on natural attacks (data-only); trample | 14+53+4+2 | Low | Med | CRE-008, CRE-018, new CRE (riders) |
@@ -266,7 +266,7 @@ n is the number of creatures in the 310-entry work list (192 CSV creatures and 1
 | 5 | Poison (injury, bite) | 25 | partial | yes | `PoisonOnHitId` is used by 13 attacks over 10 poison ids. Secondary damage timed in real seconds (CMB-007). |
 | 6 | Constrict | 22 | missing | no | Text only in 10 creature files; no logic (`CREATURES.md:111`). |
 | 7 | Fast healing | 22 | missing | n/a | Mephits model it as `RegenerationAmount = 2` (CRE-017), so it is partly a stand-in. A downed regenerator now counts as out of the fight (CORE-034, fixed 2026-10-08). |
-| 8 | Smite good | 22 | partial | partial | `GainsSmiteGood` becomes `HasTemplateSmiteGood` (`NPCSetup.cs:829`). It fails because targets spawn without alignment (CRE-002); summon formula: AI-056. Family total with the `*_template` ids is 31+. |
+| 8 | Smite good | 22 | partial | partial | `GainsSmiteGood` becomes `HasTemplateSmiteGood` (`NPCSetup.cs:829`). It fails against targets whose data sets no alignment (CRE-056; the spawn copies alignment since CRE-002 was fixed on 2026-10-08); summon formula: AI-056. Family total with the `*_template` ids is 31+. |
 | 9 | Breath weapon | 19 | partial | partial | Dragons and hell hounds only; no action cost or save rules (AI-040); no recharge (AI-032). |
 | 10 | Vermin traits | 19 | implemented | n/a | Mind-affecting immunity by type (`CharacterStats.cs:3966-4012`). |
 | 11 | Spell resistance | 17 | implemented | n/a | Applies only when a spell sets `SpellResistanceApplies` (SPL-057). |

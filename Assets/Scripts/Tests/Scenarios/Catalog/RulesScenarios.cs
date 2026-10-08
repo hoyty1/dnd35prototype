@@ -104,7 +104,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 101;
+        public const int Count = 102;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -212,6 +212,7 @@ namespace Tests.Scenarios
             yield return S("large-encounter-sizes", LargeEncounterSizes);
             yield return S("ring-deflection", RingDeflection);
             yield return S("npc-proficiency", NpcProficiency);
+            yield return S("npc-spawn-alignment-gear", NpcSpawnAlignmentGear);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -2784,13 +2785,13 @@ namespace Tests.Scenarios
         /// owner ruling 2026-10-08); the ogre 15 again.
         /// </summary>
         /// <summary>
-        /// A <see cref="SturdyDummyWithoutAoO"/> ogre holding its greatclub (two-handed; <see cref="EquipGreatclub"/>, ITM-004)
+        /// A <see cref="SturdyDummyWithoutAoO"/> ogre holding a plain greatclub (two-handed; <see cref="EquipPlainGreatclub"/>)
         /// and no armor, so the sunder targets the greatclub.
         /// </summary>
         private static void SturdyOgreWithGreatclub(CharacterController c)
         {
             SturdyDummyWithoutAoO(c);
-            EquipGreatclub(c);
+            EquipPlainGreatclub(c);
             InventoryComponent inv = c.GetComponent<InventoryComponent>();
             if (inv == null || inv.CharacterInventory == null)
                 return;
@@ -3624,15 +3625,17 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// Puts a greatclub in the MM ogre's right hand. Its NPC data lists the greatclub under EquipSlot.MainHand, which
-        /// DirectEquip drops (ITM-004), so the ogre otherwise fights with an unarmed strike. Large NPCs whose weapon is
-        /// listed under RightHand (ogre_brute, test_ogre_gust) spawn armed; the scenario's "brute" covers that path.
+        /// Replaces the MM ogre's spawned greatclub with a plain one. The ogre spawns with its greatclub (its NPC data
+        /// lists it under EquipSlot.MainHand, ITM-004), but at CR 3 the spawn may roll a masterwork one by seed
+        /// (ItemMaterialFactory.GetRandomMaterialWeapon), and a scenario whose expected figures assume a plain weapon
+        /// uses this so they do not depend on the seed.
         /// </summary>
-        private static void EquipGreatclub(CharacterController c)
+        private static void EquipPlainGreatclub(CharacterController c)
         {
             InventoryComponent inv = c.GetComponent<InventoryComponent>();
-            if (inv == null || inv.CharacterInventory == null || inv.CharacterInventory.RightHandSlot != null)
+            if (inv == null || inv.CharacterInventory == null)
                 return;
+            inv.CharacterInventory.RightHandSlot = null;
 #pragma warning disable CS0618
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(DND35e.Identifiers.ItemIDs.GREATCLUB), EquipSlot.RightHand);
 #pragma warning restore CS0618
@@ -3654,8 +3657,9 @@ namespace Tests.Scenarios
         /// <summary>
         /// Each attacker makes one scripted attack with its weapon; the trace's attack dice must match the DMG tables
         /// for its size: a Medium longsword 1d8, a halfling's 1d6, an enlarged human's 2d6, a reduced human's 1d6, the
-        /// Small goblin's morningstar 1d6 and the Large ogre's greatclub 2d8, both for the MM ogre given its greatclub by
-        /// a tweak and for ogre_brute, which spawns with its greatclub (CMB-119).
+        /// Small goblin's morningstar 1d6 and the Large ogre's greatclub 2d8, both for the MM ogre, whose data lists the
+        /// greatclub under MainHand (ITM-004), and for ogre_brute, whose data lists it under RightHand (CMB-119). Both
+        /// spawn holding it.
         /// </summary>
         private static ScenarioDef WeaponSizeDamage()
         {
@@ -3677,7 +3681,6 @@ namespace Tests.Scenarios
                 .Tweak("halfling", StripOffHand)
                 .Tweak("enlarged", WithSizeSpell(DND35e.Identifiers.SpellNames.ENLARGE_PERSON))
                 .Tweak("reduced", WithSizeSpell(DND35e.Identifiers.SpellNames.REDUCE_PERSON))
-                .Tweak("ogre", EquipGreatclub)
                 .Initiative("medium", "halfling", "enlarged", "reduced", "goblin", "ogre", "brute")
                 .Turn("medium", 1, Step.Attack("d1"))
                 .Turn("halfling", 1, Step.Attack("d2"))
@@ -3696,7 +3699,7 @@ namespace Tests.Scenarios
                 .Expect("An enlarged human's longsword rolls 2d6 (Enlarge Person, PHB p.226; DMG Table 2-2)", RollsDice("enlarged", "2d6"))
                 .Expect("A reduced human's longsword rolls 1d6 (Reduce Person, PHB p.269; DMG Table 2-3)", RollsDice("reduced", "1d6"))
                 .Expect("The Small goblin's morningstar rolls 1d6 (MM p.133; DMG Table 2-3)", RollsDice("goblin", "1d6"))
-                .Expect("The Large ogre's greatclub rolls 2d8 (MM p.199; DMG Table 2-2)", RollsDice("ogre", "2d8"))
+                .Expect("The Large ogre's spawned greatclub (a MainHand entry, ITM-004) rolls 2d8 (MM p.199; DMG Table 2-2)", RollsDice("ogre", "2d8"))
                 .Expect("The Large ogre_brute's spawned greatclub rolls 2d8 (DMG Table 2-2)", RollsDice("brute", "2d8"))
                 .Build();
         }
@@ -4501,6 +4504,120 @@ namespace Tests.Scenarios
                 .Expect("The goblin's morningstar attack is +2 (MM p.133)", v => SingleWeaponAttackMod(v, "goblin", "morningstar", 2, 1))
                 .Expect("The orc's greataxe attack is +4 at the MM's BAB (MM p.203 falchion +4; the greataxe is database gear)", v => SingleWeaponAttackMod(v, "orc", "greataxe", 4, 1))
                 .Build();
+        }
+
+        // ── Spawned alignment and hand-alias gear (CRE-002, ITM-004) ──
+
+        /// <summary>
+        /// Spawned NPCs keep their definition's alignment (CRE-002) and the weapons and shields their data lists under the
+        /// MainHand, OffHand and Ranged aliases (ITM-004). Round 1: a Stats fighter (the warden, no shield) checks the
+        /// spawns and takes Protection from Evil (PHB p.266: +2 deflection to AC against attacks by evil creatures); then
+        /// the MM ogre (CE in its data; MM p.199 usually chaotic evil) attacks it with its greatclub, a MainHand entry, and
+        /// the elf warrior (CG; MM p.101; RangedKiter AI) shoots it with its longbow, a Ranged entry, while its longsword
+        /// is carried. The ogre's attack meets the warden's AC plus the ward's +2, the elf's the plain AC. The fixture
+        /// also checks the paladin's longsword and heavy shield (MainHand, OffHand; LG, PHB p.43), the ettin's two
+        /// morningstars (MainHand, OffHand; MM p.106), the monk's sling carried in the pack with its hands free (LN,
+        /// PHB p.40), and the alignments the templates set: the fiendish wolf neutral evil (the wolf is always neutral,
+        /// MM p.283; fiendish creatures always evil, MM p.108) and the wolf skeleton neutral evil (MM p.226). Before the
+        /// fix every spawn was Alignment.None, the ogre fought with an unarmed strike and the elf had no weapon.
+        /// </summary>
+        private static ScenarioDef NpcSpawnAlignmentGear()
+        {
+            return Rules("rules/npc-spawn-alignment-gear", "Spawned NPCs keep their MM alignment and their MainHand, OffHand and Ranged gear; Protection from Evil sees the evil ogre (CRE-002, ITM-004)")
+                .Covers("CRE-002", "ITM-004", "PHB p.266", "MM p.101", "MM p.106", "MM p.108", "MM p.199", "MM p.226", "MM p.283")
+                .MaxRounds(1)
+                .Pc("warden", ActorSource.Stats(() => Fighter("Warden", 3)), 10, 10, Control.Scripted)
+                .Npc("ogre", "ogre", 11, 10, Control.Scripted)
+                .Npc("elf", "elf_warrior", 3, 10, Control.Scripted)
+                .Npc("paladin", "human_paladin_3", 16, 3, Control.Idle)
+                .Npc("ettin", "ettin", 15, 15, Control.Idle)
+                .Npc("monk", "human_monk_3", 17, 8, Control.Idle)
+                .Npc("fwolf", "fiendish_wolf", 3, 3, Control.Idle)
+                .Npc("swolf", "skeleton_wolf", 5, 3, Control.Idle)
+                .Tweak("warden", c => { StripOffHand(c); SturdyDummy(c); })
+                .Initiative("warden", "ogre", "elf", "paladin", "ettin", "monk", "fwolf", "swolf")
+                .Turn("warden", 1, Step.Assert("spawned alignments and hand-alias gear match the NPC data; Protection from Evil is up", ctx =>
+                {
+                    bool ok = AlignmentIs(ctx, "ogre", Alignment.ChaoticEvil);
+                    ok &= AlignmentIs(ctx, "elf", Alignment.ChaoticGood);
+                    ok &= AlignmentIs(ctx, "paladin", Alignment.LawfulGood);
+                    ok &= AlignmentIs(ctx, "ettin", Alignment.ChaoticEvil);
+                    ok &= AlignmentIs(ctx, "monk", Alignment.LawfulNeutral);
+                    ok &= AlignmentIs(ctx, "fwolf", Alignment.NeutralEvil);
+                    ok &= AlignmentIs(ctx, "swolf", Alignment.NeutralEvil);
+
+                    global::Inventory ogre = InvOf(ctx, "ogre"), elf = InvOf(ctx, "elf"), paladin = InvOf(ctx, "paladin"), ettin = InvOf(ctx, "ettin"), monk = InvOf(ctx, "monk");
+                    ok &= SpawnCheck(ctx, "ogre holds its greatclub", IdHas(ogre.RightHandSlot, "greatclub"), IdOf(ogre.RightHandSlot));
+                    ok &= SpawnCheck(ctx, "elf holds its longbow", IdHas(elf.RightHandSlot, "longbow"), IdOf(elf.RightHandSlot));
+                    ok &= SpawnCheck(ctx, "elf carries its longsword", PackHolds(elf, "longsword"), "not in the pack");
+                    ok &= SpawnCheck(ctx, "paladin holds its longsword", IdHas(paladin.RightHandSlot, "longsword"), IdOf(paladin.RightHandSlot));
+                    ok &= SpawnCheck(ctx, "paladin holds its shield", paladin.LeftHandSlot != null && paladin.LeftHandSlot.IsShield, IdOf(paladin.LeftHandSlot));
+                    ok &= SpawnCheck(ctx, "ettin holds two morningstars", IdHas(ettin.RightHandSlot, "morningstar") && IdHas(ettin.LeftHandSlot, "morningstar"),
+                        IdOf(ettin.RightHandSlot) + "/" + IdOf(ettin.LeftHandSlot));
+                    ok &= SpawnCheck(ctx, "monk's hands are free and its sling is carried", monk.RightHandSlot == null && monk.LeftHandSlot == null && PackHolds(monk, "sling"),
+                        IdOf(monk.RightHandSlot));
+
+                    CharacterController w = ctx.Get("warden");
+                    ok &= SpawnCheck(ctx, "Protection from Evil applied", ApplySpell(ctx, w, DND35e.Identifiers.SpellNames.PROTECTION_FROM_EVIL), "not applied");
+                    int evilIncrease = AlignmentProtectionRules.DeflectionAcIncrease(AlignmentProtectionRules.GetBenefitsAgainst(w, Alignment.ChaoticEvil), w.Stats);
+                    ok &= SpawnCheck(ctx, "the ward adds +2 AC against a chaotic evil attacker", evilIncrease == 2, evilIncrease);
+                    ctx.Note("npc-spawn expect-ac-evil=" + (w.Stats.ArmorClass + evilIncrease));
+                    ctx.Note("npc-spawn expect-ac-good=" + w.Stats.ArmorClass);
+                    return ok;
+                }), Step.Pass())
+                .Turn("ogre", 1, Step.Attack("warden"))
+                .Turn("elf", 1, Step.Attack("warden"))
+                .Expect("Every spawn check holds", Expect.AssertsPass())
+                .Expect("The ogre attacks with its spawned greatclub against the warden's AC plus the ward's +2 (PHB p.266; MM p.199)",
+                    v => SpawnAttackMeetsAc(v, "ogre", "greatclub", false, "npc-spawn expect-ac-evil="))
+                .Expect("The elf shoots its spawned longbow against the warden's plain AC (a good attacker; MM p.101)",
+                    v => SpawnAttackMeetsAc(v, "elf", "longbow", true, "npc-spawn expect-ac-good="))
+                .Build();
+        }
+
+        private static global::Inventory InvOf(ScenarioContext ctx, string key) => ctx.Get(key).GetComponent<InventoryComponent>().CharacterInventory;
+
+        private static bool IdHas(ItemData item, string fragment) => item != null && item.Id != null && item.Id.Contains(fragment);
+
+        private static string IdOf(ItemData item) => item != null ? item.Id : "empty";
+
+        private static bool PackHolds(global::Inventory inv, string fragment)
+            => inv != null && inv.GeneralSlots != null && inv.GeneralSlots.Any(i => IdHas(i, fragment));
+
+        private static bool AlignmentIs(ScenarioContext ctx, string key, Alignment expected)
+        {
+            Alignment got = ctx.Get(key).Stats.CharacterAlignment;
+            return SpawnCheck(ctx, key + " is " + expected, got == expected, got);
+        }
+
+        /// <summary>True when <paramref name="ok"/>; otherwise notes the failed check and what was found.</summary>
+        private static bool SpawnCheck(ScenarioContext ctx, string what, bool ok, object got)
+        {
+            if (!ok)
+                ctx.Note("npc-spawn mismatch: " + what + ": got " + got);
+            return ok;
+        }
+
+        /// <summary>
+        /// Passes when <paramref name="key"/>'s round-1 attacks on the warden used <paramref name="weapon"/>, were ranged
+        /// or melee as <paramref name="ranged"/> says, and met the AC the note starting with <paramref name="notePrefix"/>
+        /// recorded.
+        /// </summary>
+        private static ExpectResult SpawnAttackMeetsAc(TraceView v, string key, string weapon, bool ranged, string notePrefix)
+        {
+            TraceEvent note = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(notePrefix, StringComparison.Ordinal));
+            if (note == null) return ExpectResult.Fail("no expectation note " + notePrefix);
+            int want = int.Parse(note.Str("text").Substring(notePrefix.Length));
+            List<TraceEvent> attacks = v.Attacks(key, "warden", false, 1);
+            int[] seqs = attacks.Select(e => e.Seq).ToArray();
+            if (attacks.Count == 0) return ExpectResult.Fail("no round-1 attack by " + key, note.Seq);
+            TraceEvent wrongWeapon = attacks.FirstOrDefault(e => (e.Str("weapon") ?? "").IndexOf(weapon, StringComparison.OrdinalIgnoreCase) < 0);
+            if (wrongWeapon != null) return ExpectResult.Fail(key + " attacked with " + wrongWeapon.Str("weapon"), wrongWeapon.Seq);
+            TraceEvent wrongKind = attacks.FirstOrDefault(e => e.Bool("ranged") != ranged);
+            if (wrongKind != null) return ExpectResult.Fail(key + "'s attack ranged=" + wrongKind.Bool("ranged"), wrongKind.Seq);
+            TraceEvent wrongAc = attacks.FirstOrDefault(e => e.Int("ac") != want);
+            if (wrongAc != null) return ExpectResult.Fail(key + "'s attack against AC " + wrongAc.Int("ac") + ", expected " + want, wrongAc.Seq);
+            return ExpectResult.Pass(attacks.Count + " " + weapon + " attack(s) against AC " + want, seqs);
         }
 
         /// <summary>

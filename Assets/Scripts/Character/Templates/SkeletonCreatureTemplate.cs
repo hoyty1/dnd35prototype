@@ -63,6 +63,7 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
 
         // Type and properties
         target.CreatureType = source.CreatureType;
+        target.CharacterAlignment = source.CharacterAlignment; // always neutral evil (CRE-002)
         target.NaturalArmorBonus = source.NaturalArmorBonus;
         target.MaterialComposition = source.MaterialComposition;
         target.IsExceptionallyStable = source.IsExceptionallyStable;

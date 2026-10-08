@@ -126,6 +126,21 @@ public static class AlignmentHelper
     }
 
     /// <summary>
+    /// <paramref name="a"/> moved to good (<paramref name="good"/> true) or evil on the good-evil axis, keeping its
+    /// law-chaos component; an unset alignment counts as neutral on that axis. For templates whose alignment is
+    /// "always good (any)" or "always evil (any)", such as celestial (MM p.31) and fiendish (MM p.108), which fix only
+    /// the good-evil component.
+    /// </summary>
+    public static Alignment WithGoodEvilAxis(Alignment a, bool good)
+    {
+        if (IsLawful(a))
+            return good ? Alignment.LawfulGood : Alignment.LawfulEvil;
+        if (IsChaotic(a))
+            return good ? Alignment.ChaoticGood : Alignment.ChaoticEvil;
+        return good ? Alignment.NeutralGood : Alignment.NeutralEvil;
+    }
+
+    /// <summary>
     /// Check if two alignments are within one step of each other.
     /// D&D 3.5e rule: a cleric's alignment must be within one step of their deity's alignment.
     /// One step means they can differ on one axis but not both.

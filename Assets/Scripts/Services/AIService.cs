@@ -52,6 +52,28 @@ public class AIService : MonoBehaviour
     private bool CombatEnded()
         => _gameManager == null || _gameManager.CurrentPhase == GameManager.TurnPhase.CombatOver;
 
+    /// <summary>
+    /// Whether <see cref="ExecuteNPCTurn"/> runs a non-summoned creature with this behaviour and profile through the
+    /// ranged-kiter routine: with a profile, a healer (its default route; it melees only when
+    /// <see cref="HealerAIProfile.DetermineCombatMode"/> picks melee for a physical attack, a stat comparison made at
+    /// run time), not a dragon (its own routine), not DefensiveMelee, otherwise RangedKiter or a Ranged
+    /// <see cref="AIProfile.CombatStyle"/>; without a profile, RangedKiter only (<c>NPCAIBehavior.Ranged</c> is not
+    /// routed, AI-003). The spawn uses the same test to decide which weapon a creature starts holding
+    /// (<see cref="Inventory.EquipStartingLoadout"/>, ITM-004).
+    /// </summary>
+    internal static bool RoutesToRangedTurn(NPCAIBehavior behavior, AIProfile profile)
+    {
+        if (profile == null)
+            return behavior == NPCAIBehavior.RangedKiter;
+        if (profile is HealerAIProfile)
+            return true;
+        if (profile is DragonAIProfile)
+            return false;
+        if (behavior == NPCAIBehavior.DefensiveMelee)
+            return false;
+        return behavior == NPCAIBehavior.RangedKiter || profile.CombatStyle == CombatStyle.Ranged;
+    }
+
     public IEnumerator ExecuteNPCTurn(CharacterController npc, NPCAIBehavior behavior)
     {
         if (_gameManager == null || npc == null || npc.Stats == null || CombatEnded())
@@ -322,7 +344,7 @@ public class AIService : MonoBehaviour
             {
                 yield return _gameManager.StartCoroutine(ExecuteDefensiveMeleeTurn(npc, targetPC));
             }
-            else if (behavior == NPCAIBehavior.RangedKiter || profile.CombatStyle == CombatStyle.Ranged)
+            else if (RoutesToRangedTurn(behavior, profile))
             {
                 yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
             }

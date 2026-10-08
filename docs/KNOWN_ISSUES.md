@@ -34,13 +34,13 @@ Entries per section:
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 8 | 58 | 54 | 120 | SPL-122 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 8 | 28 | 40 | 76 | CHR-077 |
-| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 28 | 22 | 54 | CRE-056 |
+| [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 28 | 23 | 55 | CRE-058 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
-| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 3 | 33 | 35 | 71 | ITM-074 |
+| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 2 | 33 | 35 | 70 | ITM-074 |
 | [AI](issues/AI.md) | AI | 1 | 19 | 40 | 60 | AI-062 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 25 | 32 | TST-036 |
-| **All** | | 28 | 281 | 369 | 678 | |
+| **All** | | 27 | 281 | 370 | 678 | |
 
 ## Top issues
 
@@ -61,8 +61,7 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [SPL-004](issues/SPL.md) | High | Spells and metamagic | Custom spell damage bypasses energy resistance, immunity and DR | Yes |
 | [SPL-005](issues/SPL.md) | High | Spells and metamagic | Generic spell dice do not scale with caster level; Cure/Inflict ignore undead | Yes |
 | [SPL-037](issues/SPL.md) | High | Spells and metamagic | Spell-specific branches at the end of ApplySpellBuff never run | Yes |
-| [CRE-002](issues/CRE.md) | High | Creatures, templates and summoning | Spawned NPCs have no alignment, so smite, aligned weapons and alignment spells ignore them | Yes |
 | [CRE-004](issues/CRE.md) | High | Creatures, templates and summoning | Spawned NPCs ignore class BAB and saves | Yes |
-| [ITM-004](issues/ITM.md) | High | Items, store, crafting and treasure | NPCs spawn without weapons and shields listed under MainHand, OffHand or Ranged | Yes |
+| [CRE-056](issues/CRE.md) | High | Creatures, templates and summoning | 212 of 389 NPC definitions (all dragons, animals and vermin, goblin, gnoll, bugbear) set no alignment, so smite and Protection from Evil ignore them | Yes |
 | [AI-001](issues/AI.md) | High | AI | NPCs never cast area spells, although AI scoring favours them | Yes |
 | [CHR-071](issues/CHR.md) | High | Characters, feats and classes | PC Hit Dice stay at creation level, so HD-gated spells (Sleep, Color Spray) treat levelled PCs as level 1 | Yes |

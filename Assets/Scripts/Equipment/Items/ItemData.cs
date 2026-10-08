@@ -1982,10 +1982,31 @@ public class ItemData
         return 0;
     }
 
-    /// <summary>Can this item be equipped in the given slot?</summary>
+    /// <summary>
+    /// The inventory slot an NPC-data hand alias stands for (ITM-004): <see cref="EquipSlot.MainHand"/> and
+    /// <see cref="EquipSlot.Ranged"/> are the right hand, <see cref="EquipSlot.OffHand"/> the left hand. Every other
+    /// slot is returned unchanged. The inventory has no MainHand, OffHand or Ranged slot of its own.
+    /// </summary>
+    public static EquipSlot ResolveHandAlias(EquipSlot slot)
+    {
+        switch (slot)
+        {
+            case EquipSlot.MainHand:
+            case EquipSlot.Ranged:
+                return EquipSlot.RightHand;
+            case EquipSlot.OffHand:
+                return EquipSlot.LeftHand;
+            default:
+                return slot;
+        }
+    }
+
+    /// <summary>Can this item be equipped in the given slot? A MainHand, OffHand or Ranged target is checked as the hand it stands for (<see cref="ResolveHandAlias"/>, ITM-004).</summary>
     public bool CanEquipIn(EquipSlot targetSlot)
     {
         if (Slot == EquipSlot.None) return false;
+        if (Slot == targetSlot) return true;
+        targetSlot = ResolveHandAlias(targetSlot);
         if (Slot == targetSlot) return true;
 
         // Backward-compatible aliasing between legacy Armor and new ArmorRobe slot name.

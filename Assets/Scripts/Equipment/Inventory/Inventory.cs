@@ -213,10 +213,11 @@ public class Inventory
         return removed;
     }
 
-    /// <summary>Get the equipped item in a given slot.</summary>
+    /// <summary>Get the equipped item in a given slot. A MainHand, OffHand or Ranged slot reads the hand it stands for
+    /// (<see cref="ItemData.ResolveHandAlias"/>, ITM-004).</summary>
     public ItemData GetEquipped(EquipSlot slot)
     {
-        switch (slot)
+        switch (ItemData.ResolveHandAlias(slot))
         {
             case EquipSlot.Head: return HeadSlot;
             case EquipSlot.FaceEyes: return FaceEyesSlot;
@@ -290,18 +291,85 @@ public class Inventory
 
     /// <summary>
     /// Directly equip an item (used during character setup).
-    /// Does NOT put it in general inventory first.
+    /// Does NOT put it in general inventory first, and replaces whatever the slot held. A MainHand or OffHand slot
+    /// (NPC data) equips the hand it stands for (<see cref="ItemData.ResolveHandAlias"/>, ITM-004). The Ranged alias
+    /// is refused: whether a carried ranged weapon is held, and what it displaces, is a loadout decision
+    /// (<see cref="EquipStartingLoadout"/>), and replacing the right hand here would silently drop its weapon.
+    /// Returns false, with a warning, when the item cannot go in that slot; the item is then not equipped.
     /// </summary>
-    public void DirectEquip(ItemData item, EquipSlot slot)
+    public bool DirectEquip(ItemData item, EquipSlot slot)
     {
-        if (item == null) return;
+        if (item == null) return false;
         if (slot == EquipSlot.Slotless)
+            return EquipSlotless(item);
+        if (slot == EquipSlot.Ranged)
         {
-            EquipSlotless(item);
-            return;
+            Debug.LogWarning($"[Inventory] DirectEquip: {item.Name} ({item.Id}) was given the Ranged slot; use EquipStartingLoadout or a hand slot. Not equipped.");
+            return false;
         }
-        if (!item.CanEquipIn(slot)) return;
-        SetEquipSlot(slot, item);
+        if (!item.CanEquipIn(slot))
+        {
+            Debug.LogWarning($"[Inventory] DirectEquip: {item.Name} ({item.Id}, slot {item.Slot}) cannot be equipped in {slot}; not equipped.");
+            return false;
+        }
+        SetEquipSlot(ItemData.ResolveHandAlias(slot), item);
+        if (!_isRecalculating) RecalculateStats();
+        return true;
+    }
+
+    /// <summary>
+    /// Equips a creature's starting gear from NPC data (<c>NPCDefinition.EquipmentIds</c>; ITM-004). Hand aliases
+    /// resolve as in <see cref="DirectEquip"/>: MainHand is the right hand, OffHand the left hand. A weapon listed under
+    /// <see cref="EquipSlot.Ranged"/> is a carried second weapon: when <paramref name="wieldRanged"/> is true (a
+    /// creature whose AI fights at range) the first one goes in the right hand and the melee weapon that was there goes
+    /// to the pack (and the left-hand item too when the ranged weapon is two-handed, by RecalculateStats' two-handed
+    /// rule); otherwise the ranged weapon goes to the pack. The caller decides <paramref name="wieldRanged"/> with the
+    /// AI's own routing test (AIService.RoutesToRangedTurn). NPCs cannot draw a stowed weapon (ITM-069; only mindless
+    /// undead re-equip, after a disarm), so the weapon a creature starts holding is the one it fights with; once NPCs
+    /// can draw (a move action, PHB p.142), revisit this choice. An item that cannot be equipped is put in the pack
+    /// (with DirectEquip's warning) rather than lost.
+    /// </summary>
+    public void EquipStartingLoadout(System.Collections.Generic.IList<System.Collections.Generic.KeyValuePair<ItemData, EquipSlot>> gear, bool wieldRanged)
+    {
+        if (gear == null)
+            return;
+
+        var rangedWeapons = new System.Collections.Generic.List<ItemData>();
+        for (int i = 0; i < gear.Count; i++)
+        {
+            ItemData item = gear[i].Key;
+            if (item == null)
+                continue;
+            if (gear[i].Value == EquipSlot.Ranged)
+            {
+                rangedWeapons.Add(item);
+                continue;
+            }
+            if (!DirectEquip(item, gear[i].Value))
+                AddItem(item);
+        }
+
+        for (int i = 0; i < rangedWeapons.Count; i++)
+        {
+            ItemData ranged = rangedWeapons[i];
+            if (wieldRanged && i == 0 && ranged.CanEquipIn(EquipSlot.RightHand))
+            {
+                ItemData displaced = RightHandSlot;
+                if (displaced != null)
+                {
+                    SetEquipSlot(EquipSlot.RightHand, null);
+                    AddItem(displaced);
+                }
+                // A two-handed ranged weapon (a bow) moves the left-hand item to the pack through RecalculateStats'
+                // two-handed rule.
+                DirectEquip(ranged, EquipSlot.RightHand);
+            }
+            else
+            {
+                AddItem(ranged);
+            }
+        }
+
         if (!_isRecalculating) RecalculateStats();
     }
 
@@ -384,6 +452,9 @@ public class Inventory
 
     private void SetEquipSlot(EquipSlot slot, ItemData item)
     {
+        // A MainHand, OffHand or Ranged slot is the hand it stands for (ITM-004), so every path CanEquipIn approves
+        // lands in a real slot.
+        slot = ItemData.ResolveHandAlias(slot);
         if (item != null)
             item.EnsureDurabilityInitialized();
 
