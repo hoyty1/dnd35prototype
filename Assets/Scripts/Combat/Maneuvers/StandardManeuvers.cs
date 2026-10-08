@@ -188,10 +188,23 @@ public partial class GameManager
         if (attacker == null || attacker.Actions == null)
             return false;
 
-        // Sunder needs a manufactured weapon (the check the AI and the NPC executor use too), so a
-        // creature fighting with natural attacks or unarmed is not offered it (CMB-102).
-        if (!attacker.HasMeleeWeaponEquipped() || !attacker.CanSunderWithMainWeapon(out _))
+        // Sunder needs a weapon or a natural attack that deals slashing or bludgeoning damage (PHB p.158;
+        // owner ruling 2026-10-08, CMB-102). The active PC fighting with natural attacks sunders with the
+        // natural attack its maneuvers give up next, when that one can (GetPcSunderNaturalAttackIndex); any
+        // other creature with the shared check the AI and the NPC executor use (CanSunderWithAttack at its
+        // current step). Both sides give up the next natural attack in order (CMB-102 open item 8).
+        if (!attacker.HasMeleeWeaponEquipped())
             return false;
+
+        if (IsPcNaturalManeuverAttacker(attacker))
+        {
+            if (GetPcSunderNaturalAttackIndex(attacker, out _) < 0)
+                return false;
+        }
+        else if (!attacker.CanSunderWithAttack(-1, out _))
+        {
+            return false;
+        }
 
         return CanUseMainHandManeuverAttackOption(attacker, "Sunder");
     }
@@ -201,7 +214,10 @@ public partial class GameManager
         if (!CanUseMainHandSunderAttackOption(attacker))
             return 0;
 
-        return GetRemainingMainHandManeuverAttackActions(attacker);
+        int remaining = GetRemainingMainHandManeuverAttackActions(attacker);
+        if (IsPcNaturalManeuverAttacker(attacker))
+            remaining = Mathf.Min(remaining, GetPcSunderCapableNaturalAttackCount(attacker));
+        return remaining;
     }
 
     public int GetCurrentMainHandSunderAttackBonus(CharacterController attacker)
@@ -209,7 +225,62 @@ public partial class GameManager
         if (!CanUseMainHandSunderAttackOption(attacker))
             return 0;
 
+        if (IsPcNaturalManeuverAttacker(attacker))
+            return attacker.GetNaturalAttackStepBAB(GetPcSunderNaturalAttackIndex(attacker, out _));
+
         return GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+    }
+
+    /// <summary>The active PC fighting with its natural attacks: its maneuvers give up natural attacks it picks (CMB-102).</summary>
+    private bool IsPcNaturalManeuverAttacker(CharacterController attacker)
+        => attacker != null && attacker == ActivePC && attacker.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence;
+
+    /// <summary>
+    /// The natural attack a PC sunder gives up: the one every PC maneuver gives up (the first natural attack
+    /// not used this turn, <see cref="GetPcManeuverNaturalAttackIndex(CharacterController, out bool)"/>), when it
+    /// deals slashing or bludgeoning damage (PHB p.158, CMB-102); -1 when it does not. This is the NPC rule too:
+    /// an NPC sunders with the natural attack at its current step (<see cref="CharacterController.CanSunderWithAttack"/>),
+    /// and neither side can skip ahead to a later natural attack (CMB-102 open item 8). At Haste's extra natural
+    /// attack (<paramref name="givesUpHasteExtraAttack"/>), the attacker's choice, it is made with a natural attack
+    /// that can sunder (<see cref="CharacterController.GetSunderNaturalAttackIndexForStep"/>, as for NPCs; CMB-106).
+    /// </summary>
+    private int GetPcSunderNaturalAttackIndex(CharacterController attacker, out bool givesUpHasteExtraAttack)
+    {
+        givesUpHasteExtraAttack = false;
+        if (!IsPcNaturalManeuverAttacker(attacker))
+            return -1;
+
+        int index = GetPcManeuverNaturalAttackIndex(attacker, out bool hasteStep);
+        if (index < 0)
+            return -1;
+
+        if (hasteStep)
+        {
+            index = attacker.GetSunderNaturalAttackIndexForStep(attacker.GetHasteExtraNaturalStepIndex());
+            givesUpHasteExtraAttack = index >= 0;
+            return index;
+        }
+
+        return attacker.CanNaturalAttackSunder(index) ? index : -1;
+    }
+
+    /// <summary>Unused natural attacks of the active PC that can sunder, plus Haste's extra natural attack while it is unused and one can: an upper bound, since each sunder needs the next unused natural attack to be one of them.</summary>
+    private int GetPcSunderCapableNaturalAttackCount(CharacterController attacker)
+    {
+        if (!IsPcNaturalManeuverAttacker(attacker))
+            return 0;
+
+        int count = attacker.Stats.GetTotalNaturalAttackCount();
+        int capable = 0;
+        for (int i = 0; i < count; i++)
+        {
+            if (!_usedNaturalAttackSequenceIndices.Contains(i) && attacker.CanNaturalAttackSunder(i))
+                capable++;
+        }
+
+        if (attacker.CanUseHasteExtraNaturalAttack() && attacker.GetFirstSunderCapableNaturalAttackIndex() >= 0)
+            capable++;
+        return capable;
     }
 
     public bool ShouldShowOffHandSunderButton(CharacterController attacker)
@@ -276,8 +347,9 @@ public partial class GameManager
     // iterative BAB); a creature fighting with its natural attacks gives up one natural attack, at that
     // attack's BAB (primary full, secondary -5 or -2 with Multiattack, MM p.312). The PC gives up the
     // natural attack the Attack button would use next (the first one not used this turn), and that
-    // natural attack is marked used. Grapple actions while already grappling stay iterative steps
-    // (PHB p.156), so callers pass iterativeOnly for them.
+    // natural attack is marked used; a sunder is refused when that natural attack deals no slashing or
+    // bludgeoning damage (PHB p.158, owner ruling 2026-10-08). Grapple actions while already grappling stay
+    // iterative steps (PHB p.156), so callers pass iterativeOnly for them.
     // The list lives in ManeuverActionCost.ReplacesMeleeAttack. Bull rush and overrun are not on it:
     // they are standard actions or part of a charge (PHB p.154, p.157).
 
@@ -353,7 +425,7 @@ public partial class GameManager
     /// dual-wield main-hand penalty on a weapon step) and ends the PC Attack-button flow when no
     /// main-hand step remains.
     /// </summary>
-    private bool TryCommitMainHandManeuverStep(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out string reason, bool iterativeOnly = false)
+    private bool TryCommitMainHandManeuverStep(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out string reason, bool iterativeOnly = false, bool forSunder = false)
     {
         attackBonusUsed = 0;
         reason = string.Empty;
@@ -372,7 +444,19 @@ public partial class GameManager
         }
 
         bool givesUpHasteExtraAttack = false;
-        int naturalAttackIndex = kind == AttackStepKind.NaturalSequence ? GetPcManeuverNaturalAttackIndex(attacker, out givesUpHasteExtraAttack) : -1;
+        int naturalAttackIndex = -1;
+        if (kind == AttackStepKind.NaturalSequence)
+        {
+            // A sunder gives up a natural attack that can sunder (PHB p.158, CMB-102); other maneuvers the next unused one.
+            naturalAttackIndex = forSunder && IsPcNaturalManeuverAttacker(attacker)
+                ? GetPcSunderNaturalAttackIndex(attacker, out givesUpHasteExtraAttack)
+                : GetPcManeuverNaturalAttackIndex(attacker, out givesUpHasteExtraAttack);
+            if (forSunder && IsPcNaturalManeuverAttacker(attacker) && naturalAttackIndex < 0)
+            {
+                reason = "The next natural attack deals no slashing or bludgeoning damage, so it cannot sunder (PHB p.158).";
+                return false;
+            }
+        }
         bool committed;
         if (iterativeOnly)
         {
@@ -623,7 +707,7 @@ public partial class GameManager
 
         if (!useOffHand)
         {
-            if (!TryCommitMainHandManeuverStep(attacker, "Sunder", out attackBonusUsed, out reason))
+            if (!TryCommitMainHandManeuverStep(attacker, "Sunder", out attackBonusUsed, out reason, forSunder: true))
                 return false;
 
             usedOffHand = false;

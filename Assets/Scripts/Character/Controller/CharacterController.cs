@@ -1022,22 +1022,112 @@ public class CharacterController : MonoBehaviour
     public AttackStepKind GetManeuverSubstituteStepKind() => GetMeleeAttackStepKind();
 
     /// <summary>
-    /// Sunder needs a manufactured weapon in hand: <see cref="ResolveSunder"/> uses its damage and
-    /// handedness. A creature fighting with natural attacks or unarmed cannot sunder here. Whether a
-    /// natural weapon may sunder (PHB p.158 asks for a slashing or bludgeoning weapon; MM p.312 counts
-    /// a natural-weapon attacker as armed) is an open owner question (CMB-102). Checked by the PC
-    /// buttons, the AI and the NPC executor before any attack step is spent.
+    /// Sunder is a melee attack with a slashing or bludgeoning weapon (PHB p.158). The one legality check
+    /// for PCs and NPCs (the PC Sunder button, <c>AIService.ShouldUseManeuver</c>, the NPC executor and
+    /// <see cref="ResolveSunder"/>), made before any attack step is spent:
+    /// - a manufactured weapon in hand may sunder (its damage type is not checked yet, CMB-139);
+    /// - a creature fighting with its natural attacks sunders with the natural attack the sunder replaces,
+    ///   which must deal slashing or bludgeoning damage (owner ruling 2026-10-08, CMB-102; MM p.312: a bite,
+    ///   claw, talon, slam or tentacle can, a gore or sting cannot; <see cref="NaturalAttackDefinition.CanSunder"/>);
+    /// - a creature with neither cannot sunder; an unarmed strike, also one an NPC lists as a natural attack
+    ///   (the monks), is refused on both sides until the owner rules on it (CMB-141).
+    /// <paramref name="naturalAttackIndex"/> names the natural attack given up; a negative value means the
+    /// one at the current step, the order the NPC sequence resolves them in
+    /// (<see cref="GetSunderNaturalAttackIndexForStep"/>).
     /// </summary>
-    public bool CanSunderWithMainWeapon(out string reason)
+    public bool CanSunderWithAttack(int naturalAttackIndex, out string reason)
     {
+        string actorName = Stats != null ? Stats.CharacterName : name;
         if (GetEquippedMainWeapon() != null)
         {
             reason = string.Empty;
             return true;
         }
 
-        reason = $"{(Stats != null ? Stats.CharacterName : name)} cannot sunder without a weapon.";
+        if (!UsesInnateNaturalAttackSequence())
+        {
+            reason = $"{actorName} cannot sunder without a weapon.";
+            return false;
+        }
+
+        int index = naturalAttackIndex >= 0
+            ? naturalAttackIndex
+            : GetSunderNaturalAttackIndexForStep(ProgressiveAttackPool.MainHandStepsUsed);
+        NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(index);
+        if (natural == null)
+        {
+            reason = $"{actorName} has no natural attack left that can sunder.";
+            return false;
+        }
+
+        if (natural.IsUnarmedStrike)
+        {
+            reason = $"{actorName} cannot sunder without a weapon.";
+            return false;
+        }
+
+        if (!natural.CanSunder)
+        {
+            reason = $"{actorName}'s {natural.Name} deals no slashing or bludgeoning damage, so it cannot sunder (PHB p.158).";
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    /// <summary>
+    /// True when this creature fights with natural weapons (MM p.312: armed): it uses its innate natural
+    /// sequence and at least one of its natural attacks is not an unarmed strike. An NPC that lists only
+    /// unarmed strikes as natural attacks (the monks) is unarmed, as a PC monk is: its disarm takes the
+    /// light-weapon -4 and catches the weapon (PHB p.155), and it cannot sunder (CMB-141).
+    /// </summary>
+    public bool FightsWithNaturalWeapons()
+    {
+        if (Stats == null || Stats.NaturalAttacks == null || !UsesInnateNaturalAttackSequence())
+            return false;
+
+        foreach (NaturalAttackDefinition natural in Stats.NaturalAttacks)
+        {
+            if (natural != null && !natural.IsUnarmedStrike)
+                return true;
+        }
+
         return false;
+    }
+
+    /// <summary>True when the natural attack at this place of the innate sequence deals slashing or bludgeoning damage (PHB p.158, CMB-102).</summary>
+    public bool CanNaturalAttackSunder(int naturalAttackIndex)
+    {
+        NaturalAttackDefinition natural = Stats != null ? Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex) : null;
+        return natural != null && natural.CanSunder;
+    }
+
+    /// <summary>The first natural attack of the innate sequence that can sunder, or -1.</summary>
+    public int GetFirstSunderCapableNaturalAttackIndex()
+    {
+        int count = Stats != null ? Stats.GetTotalNaturalAttackCount() : 0;
+        for (int i = 0; i < count; i++)
+        {
+            if (CanNaturalAttackSunder(i))
+                return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// The natural attack a sunder made at natural-sequence step <paramref name="stepIndex"/> is made with:
+    /// the natural attack at that step; at Haste's extra natural attack (an attack of the attacker's choice,
+    /// CMB-106) the default Haste natural attack when it can sunder, else the first one that can (-1 if none).
+    /// </summary>
+    public int GetSunderNaturalAttackIndexForStep(int stepIndex)
+    {
+        if (!IsHasteExtraNaturalStep(stepIndex))
+            return stepIndex;
+
+        int hasteIndex = GetDefaultHasteNaturalAttackIndex();
+        return CanNaturalAttackSunder(hasteIndex) ? hasteIndex : GetFirstSunderCapableNaturalAttackIndex();
     }
 
     /// <summary>
@@ -11660,6 +11750,26 @@ public class CharacterController : MonoBehaviour
         return Stats != null;
     }
 
+    /// <summary>
+    /// BAB of the opposed grapple check that follows a grapple's touch attack made at
+    /// <paramref name="touchAttackBab"/>. An iterative step keeps its BAB (PHB p.156). When the grapple
+    /// replaced a natural attack (<see cref="TryCommitManeuverSubstituteStep"/> records which), that natural
+    /// attack's secondary penalty (MM p.312; -2 with Multiattack, MM p.304) is taken off again: it applies to
+    /// the touch attack only (owner ruling 2026-10-08, CMB-102). Never above the creature's full BAB.
+    /// </summary>
+    public int GetGrappleCheckBabAfterTouchAttack(int touchAttackBab, bool touchAttackBabFromStep)
+    {
+        if (!touchAttackBabFromStep || Stats == null || GetManeuverSubstituteStepKind() != AttackStepKind.NaturalSequence)
+            return touchAttackBab;
+
+        NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(ProgressiveAttackPool.LastSubstituteNaturalAttackIndex);
+        int secondaryPenalty = natural != null ? Stats.GetNaturalAttackSequencePenalty(natural) : 0;
+        if (secondaryPenalty >= 0)
+            return touchAttackBab;
+
+        return Mathf.Max(touchAttackBab, Mathf.Min(touchAttackBab - secondaryPenalty, Stats.BaseAttackBonus));
+    }
+
     private SpecialAttackResult ResolveGrapple(CharacterController target, int? iterativeAttackBonusOverride = null)
     {
         if (target == null || target.Stats == null || Stats == null)
@@ -11771,10 +11881,12 @@ public class CharacterController : MonoBehaviour
         }
 
         // The step's BAB enters the opposed grapple check too: for an iterative step that is RAW (PHB
-        // p.156, multiple grapples at successively lower BAB). For a grapple that replaces a secondary
-        // natural attack, the -5 (or -2 with Multiattack) also lands on the grapple check, although
-        // MM p.312 names only the attack roll. Interpretation pending the owner (CMB-102).
-        GrappleCheckResult attackerCheck = RollGrappleCheck(attackBab);
+        // p.156, multiple grapples at successively lower BAB). A grapple that replaces a secondary natural
+        // attack takes the -5 (or -2 with Multiattack) on the touch attack only: it is a penalty on the
+        // attack roll (MM p.312), and natural attacks use the full BAB, so the grapple check does not take
+        // it (owner ruling 2026-10-08, CMB-102).
+        int grappleCheckBab = GetGrappleCheckBabAfterTouchAttack(attackBab, iterativeAttackBonusOverride.HasValue);
+        GrappleCheckResult attackerCheck = RollGrappleCheck(grappleCheckBab);
         GrappleCheckResult defenderCheck = target.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
 
         // PHB p.156 step 3: the hold automatically fails against a target two or more size
@@ -11925,18 +12037,45 @@ public class CharacterController : MonoBehaviour
             };
         }
 
+        // The weapon or natural attack the sunder is made with (CanSunderWithAttack). A natural-attack
+        // creature uses the natural attack the sunder replaced (recorded by TryCommitManeuverSubstituteStep),
+        // or, when no substitute step was committed, the one at its current step (CMB-102).
         ItemData attackerWeapon = attackerWeaponOverride;
-        string noSunderWeaponReason = string.Empty;
-        if (attackerWeapon == null && CanSunderWithMainWeapon(out noSunderWeaponReason))
-            attackerWeapon = GetEquippedMainWeapon();
+        NaturalAttackDefinition sunderNatural = null;
         if (attackerWeapon == null)
         {
-            return new SpecialAttackResult
+            int naturalIndex = -1;
+            if (GetEquippedMainWeapon() == null && UsesInnateNaturalAttackSequence())
             {
-                ManeuverName = "Sunder",
-                Success = false,
-                Log = noSunderWeaponReason
-            };
+                naturalIndex = ProgressiveAttackPool.LastSubstituteNaturalAttackIndex >= 0
+                    ? ProgressiveAttackPool.LastSubstituteNaturalAttackIndex
+                    : GetSunderNaturalAttackIndexForStep(ProgressiveAttackPool.MainHandStepsUsed);
+                if (naturalIndex < 0)
+                    naturalIndex = GetFirstSunderCapableNaturalAttackIndex();
+            }
+
+            if (!CanSunderWithAttack(naturalIndex, out string noSunderWeaponReason))
+            {
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Sunder",
+                    Success = false,
+                    Log = noSunderWeaponReason
+                };
+            }
+
+            attackerWeapon = GetEquippedMainWeapon();
+            if (attackerWeapon == null)
+                sunderNatural = Stats.GetNaturalAttackAtSequenceIndex(naturalIndex);
+            if (attackerWeapon == null && sunderNatural == null)
+            {
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Sunder",
+                    Success = false,
+                    Log = $"{Stats.CharacterName} has no weapon or natural attack that can sunder."
+                };
+            }
         }
 
         targetItem.EnsureDurabilityInitialized();
@@ -11945,7 +12084,16 @@ public class CharacterController : MonoBehaviour
         int defenseRoll = DiceService.D20("Sunder defense roll");
         int attackBab = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
         int improvedSunderBonus = Stats.HasFeat("Improved Sunder") ? 4 : 0;
-        int handednessBonus = GetSunderHandednessModifier(attackerWeapon, targetItem);
+        // PHB p.158 Step 2: each side rolls with its own weapon, +4 for a two-handed one and -4 for a light
+        // one, and the larger combatant gets +4 per size category of difference. The defender rolls with the
+        // targeted weapon, or its main-hand weapon when a shield or armor is targeted (none: 0). A natural
+        // weapon gets no handedness modifier, as on a disarm roll (owner ruling 2026-10-08 for disarm; for
+        // sunder pending owner confirmation, CMB-141).
+        int handednessBonus = sunderNatural != null ? NaturalWeaponDisarmHandednessModifier : GetSunderHandednessModifier(attackerWeapon);
+        int sizeBonus = GetLargerCombatantSizeBonus(this, target);
+        ItemData defenderWeapon = targetItem.IsWeapon && !targetItem.IsShield ? targetItem : target.GetEquippedMainWeapon();
+        int defenderHandednessBonus = GetSunderHandednessModifier(defenderWeapon);
+        int defenderSizeBonus = GetLargerCombatantSizeBonus(target, this);
 
         int attackTotal = attackRoll
             + attackBab
@@ -11953,28 +12101,36 @@ public class CharacterController : MonoBehaviour
             + Stats.SizeModifier
             + Stats.ConditionAttackPenalty
             + improvedSunderBonus
-            + handednessBonus;
+            + handednessBonus
+            + sizeBonus;
 
         int defenseTotal = defenseRoll
             + target.Stats.BaseAttackBonus
             + target.Stats.STRMod
             + target.Stats.SizeModifier
-            + target.Stats.ConditionAttackPenalty;
+            + target.Stats.ConditionAttackPenalty
+            + defenderHandednessBonus
+            + defenderSizeBonus;
 
         var logLines = new List<string>();
         string handLabel = usedOffHand ? "Off-Hand" : "Main Hand";
         string targetLabel = GetSunderTargetDisplayLabel(targetKind, targetItem);
 
-        logLines.Add($"{Stats.CharacterName} attempts to sunder {target.Stats.CharacterName}'s {targetLabel} ({handLabel})");
+        logLines.Add(sunderNatural != null
+            ? $"{Stats.CharacterName} attempts to sunder {target.Stats.CharacterName}'s {targetLabel} ({sunderNatural.Name})"
+            : $"{Stats.CharacterName} attempts to sunder {target.Stats.CharacterName}'s {targetLabel} ({handLabel})");
         logLines.Add(
             $"Attacker check: d20 {attackRoll} + BAB {CharacterStats.FormatMod(attackBab)} + STR {CharacterStats.FormatMod(Stats.STRMod)} + size {CharacterStats.FormatMod(Stats.SizeModifier)}"
             + (Stats.ConditionAttackPenalty != 0 ? $" + condition {CharacterStats.FormatMod(Stats.ConditionAttackPenalty)}" : string.Empty)
             + (improvedSunderBonus != 0 ? $" + Improved Sunder {CharacterStats.FormatMod(improvedSunderBonus)}" : string.Empty)
-            + (handednessBonus != 0 ? $" + leverage {CharacterStats.FormatMod(handednessBonus)}" : string.Empty)
+            + (handednessBonus != 0 ? $" + handedness {CharacterStats.FormatMod(handednessBonus)}" : string.Empty)
+            + (sizeBonus != 0 ? $" + larger size {CharacterStats.FormatMod(sizeBonus)}" : string.Empty)
             + (attackerDualWieldPenaltyForLog != 0 ? $" [includes dual-wield penalty {CharacterStats.FormatMod(attackerDualWieldPenaltyForLog)} in BAB]" : string.Empty)
             + $" = {attackTotal}");
         logLines.Add($"Defender check: d20 {defenseRoll} + BAB {CharacterStats.FormatMod(target.Stats.BaseAttackBonus)} + STR {CharacterStats.FormatMod(target.Stats.STRMod)} + size {CharacterStats.FormatMod(target.Stats.SizeModifier)}"
             + (target.Stats.ConditionAttackPenalty != 0 ? $" + condition {CharacterStats.FormatMod(target.Stats.ConditionAttackPenalty)}" : string.Empty)
+            + (defenderHandednessBonus != 0 ? $" + handedness {CharacterStats.FormatMod(defenderHandednessBonus)}" : string.Empty)
+            + (defenderSizeBonus != 0 ? $" + larger size {CharacterStats.FormatMod(defenderSizeBonus)}" : string.Empty)
             + $" = {defenseTotal}");
 
         if (attackTotal < defenseTotal)
@@ -11995,21 +12151,28 @@ public class CharacterController : MonoBehaviour
 
         int damageDiceSides;
         int damageDiceCount;
-        if (attackerWeapon != null)
+        int damageAbility;
+        int damageBonus;
+        if (sunderNatural != null)
+        {
+            // The natural attack's own damage: its dice scaled for size and its Strength share (half for a
+            // secondary attack, MM p.312).
+            Stats.GetScaledNaturalAttackDamage(sunderNatural, out damageDiceCount, out damageDiceSides);
+            damageDiceSides = Mathf.Max(1, damageDiceSides);
+            damageDiceCount = Mathf.Max(1, damageDiceCount);
+            damageAbility = Stats.GetNaturalAttackDamageBonus(sunderNatural);
+            damageBonus = sunderNatural.BonusDamage;
+        }
+        else
         {
             GetScaledWeaponDamageDice(attackerWeapon, out damageDiceCount, out damageDiceSides);
             damageDiceSides = Mathf.Max(1, damageDiceSides);
             damageDiceCount = Mathf.Max(1, damageDiceCount);
-        }
-        else
-        {
-            damageDiceSides = Mathf.Max(1, Stats.BaseDamageDice);
-            damageDiceCount = Mathf.Max(1, Stats.BaseDamageCount);
+            damageAbility = Stats.GetWeaponDamageModifier(attackerWeapon, usedOffHand);
+            damageBonus = attackerWeapon.BonusDamage;
         }
 
         int damageRoll = Stats.RollBaseDamage(damageDiceSides, damageDiceCount);
-        int damageAbility = Stats.GetWeaponDamageModifier(attackerWeapon, usedOffHand);
-        int damageBonus = attackerWeapon.BonusDamage;
         int rawDamage = Mathf.Max(1, damageRoll + damageAbility + damageBonus);
 
         targetItem.ApplySunderDamage(rawDamage, out int effectiveDamage, out int hpBefore, out int hpAfter);
@@ -12067,26 +12230,6 @@ public class CharacterController : MonoBehaviour
             case SunderTargetKind.Armor: return $"armor ({itemName})";
             default: return itemName;
         }
-    }
-
-    private static int GetSunderHandednessModifier(ItemData attackerWeapon, ItemData targetItem)
-    {
-        if (attackerWeapon == null || targetItem == null)
-            return 0;
-
-        bool attackerTwoHanded = IsWeaponTwoHanded(attackerWeapon);
-        bool attackerLight = attackerWeapon.IsLightWeapon || attackerWeapon.WeaponSize == WeaponSizeCategory.Light;
-
-        bool targetTwoHanded = IsWeaponTwoHanded(targetItem);
-        bool targetOneHandedOrLight = targetItem.IsShield || !targetTwoHanded;
-
-        if (attackerTwoHanded && targetOneHandedOrLight)
-            return 4;
-
-        if (attackerLight && targetTwoHanded)
-            return -4;
-
-        return 0;
     }
 
     private static bool TryGetSunderTargetItem(CharacterController target, EquipSlot? preferredSlot, out ItemData item, out EquipSlot resolvedSlot, out SunderTargetKind kind)
@@ -12594,12 +12737,20 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// Handedness modifier of a natural weapon on a disarm roll: a one-handed weapon of the creature's own
+    /// size, so 0 (owner ruling 2026-10-08, CMB-102; PHB p.155). <see cref="ResolveSunder"/> uses the same
+    /// value for a natural weapon, pending owner confirmation (CMB-141).
+    /// </summary>
+    public const int NaturalWeaponDisarmHandednessModifier = 0;
+
+    /// <summary>
     /// PHB p.155: a disarmer that attempted the disarm unarmed now has the weapon; an armed one knocks
     /// it to the ground in the defender's square. A creature attacking with its natural weapons is
     /// armed (MM p.312), so it does not catch the weapon, and its natural sequence goes on (CMB-102).
+    /// An unarmed strike listed as a natural attack (the NPC monks) is unarmed (<see cref="FightsWithNaturalWeapons"/>).
     /// </summary>
     private static bool DisarmerCatchesWeapon(CharacterController disarmer, ItemData disarmerHeldWeapon)
-        => disarmerHeldWeapon == null && (disarmer == null || !disarmer.UsesInnateNaturalAttackSequence());
+        => disarmerHeldWeapon == null && (disarmer == null || !disarmer.FightsWithNaturalWeapons());
 
     private static DisarmCheckResult RollDisarmCheck(
         CharacterController attacker,
@@ -12612,17 +12763,23 @@ public class CharacterController : MonoBehaviour
         int? attackerBaseAttackBonusOverride = null,
         int attackerDualWieldPenaltyForLog = 0)
     {
-        // An unarmed strike counts as a light weapon (-4, PHB p.155). A natural weapon is not an unarmed
-        // strike (MM p.312: armed) and RAW gives it no light or two-handed modifier, so it adds 0
-        // (interpretation pending the owner, CMB-102).
-        bool attackerUsesNaturalWeapon = attackerHeldItem == null && attacker.UsesInnateNaturalAttackSequence();
-        int atkHeldItemMod = GetDisarmHeldItemModifier(attackerHeldItem, treatUnarmedAsLight: !attackerUsesNaturalWeapon);
-        int atkSizeDiffMod = GetDisarmSizeDifferenceModifier(attacker, defender);
+        // An unarmed strike counts as a light weapon (-4, PHB p.155), also when an NPC lists it as a natural
+        // attack (the monks; FightsWithNaturalWeapons). A natural weapon is not an unarmed strike (MM p.312:
+        // armed); it counts as a one-handed weapon of the creature's own size, so it gets neither the
+        // two-handed +4 nor the light -4 (owner ruling 2026-10-08, CMB-102). The larger combatant gets +4 per
+        // size category of difference (PHB p.155); the smaller one takes no penalty. The code compares the
+        // combatants, as PHB p.155 does; the owner's ruling worded it as the two items, which is the same
+        // while each weapon is its wielder's size (CMB-141).
+        bool attackerUsesNaturalWeapon = attackerHeldItem == null && attacker.FightsWithNaturalWeapons();
+        int atkHeldItemMod = attackerUsesNaturalWeapon
+            ? NaturalWeaponDisarmHandednessModifier
+            : GetDisarmHeldItemModifier(attackerHeldItem, treatUnarmedAsLight: true);
+        int atkSizeDiffMod = GetLargerCombatantSizeBonus(attacker, defender);
         int atkImprovedDisarmMod = attacker.Stats.HasFeat("Improved Disarm") ? 4 : 0;
 
         int defHeldItemMod = GetDisarmHeldItemModifier(defenderHeldItem, treatUnarmedAsLight: false);
         int defNonMeleeHeldItemPenalty = GetDisarmNonMeleeHeldItemPenalty(defenderHeldItem);
-        int defSizeDiffMod = GetDisarmSizeDifferenceModifier(defender, attacker);
+        int defSizeDiffMod = GetLargerCombatantSizeBonus(defender, attacker);
         // Improved Disarm helps only the creature making the disarm attempt (PHB p.95), so the
         // defender never adds it here; a counter-disarm swaps the roles (CMB-014).
         const int defImprovedDisarmMod = 0;
@@ -12869,13 +13026,35 @@ public class CharacterController : MonoBehaviour
         return 0;
     }
 
-    private static int GetDisarmSizeDifferenceModifier(CharacterController actor, CharacterController opponent)
+    /// <summary>
+    /// The size term of the disarm and sunder opposed rolls (PHB p.155, p.158): the larger combatant gets +4
+    /// per size category of difference; the smaller one gets nothing (no penalty), so the swing is 4 per category.
+    /// </summary>
+    private static int GetLargerCombatantSizeBonus(CharacterController actor, CharacterController opponent)
     {
         if (actor == null || opponent == null || actor.Stats == null || opponent.Stats == null)
             return 0;
 
         int sizeStepDifference = (int)actor.Stats.CurrentSizeCategory - (int)opponent.Stats.CurrentSizeCategory;
-        return sizeStepDifference * 4;
+        return Mathf.Max(0, sizeStepDifference) * 4;
+    }
+
+    /// <summary>
+    /// The handedness term of a sunder opposed roll for the weapon a combatant rolls with (PHB p.158): +4 for a
+    /// two-handed weapon, -4 for a light one, 0 for a one-handed weapon, a non-weapon or no weapon.
+    /// </summary>
+    private static int GetSunderHandednessModifier(ItemData weapon)
+    {
+        if (weapon == null || !weapon.IsWeapon)
+            return 0;
+
+        if (IsWeaponTwoHanded(weapon) || weapon.WeaponSize == WeaponSizeCategory.TwoHanded)
+            return 4;
+
+        if (weapon.IsLightWeapon || weapon.WeaponSize == WeaponSizeCategory.Light)
+            return -4;
+
+        return 0;
     }
 
     private static int GetDisarmNonMeleeHeldItemPenalty(ItemData heldItem)

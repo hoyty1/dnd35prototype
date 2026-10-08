@@ -305,7 +305,7 @@ public static partial class NPCDatabase
             NaturalArmorBonus = 1,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Battleaxe", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Battleaxe", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, PhysicalDamageTypes = DamageBypassTag.Slashing } // weapon stand-in: battleaxe, PHB p.116
             },
             BaseSpeed = 6,
             BaseHitDieHP = 11,

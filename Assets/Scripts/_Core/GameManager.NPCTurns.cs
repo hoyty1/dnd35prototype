@@ -435,12 +435,27 @@ public partial class GameManager
             return false;
         }
 
-        // Sunder needs a manufactured weapon (CharacterController.CanSunderWithMainWeapon, the check the
-        // PC buttons and the AI use), refused before any attack step or AoO is spent.
-        if (choice.Value == SpecialAttackType.Sunder && !npc.CanSunderWithMainWeapon(out string sunderReason))
+        // Sunder needs a weapon or a natural attack that deals slashing or bludgeoning damage
+        // (CharacterController.CanSunderWithAttack, the check the PC buttons and the AI use; PHB p.158,
+        // owner ruling 2026-10-08, CMB-102), refused before any attack step or AoO is spent. A natural-attack
+        // NPC sunders with the natural attack at its current step; at Haste's extra natural attack it picks
+        // one that can sunder (GetSunderNaturalAttackIndexForStep).
+        if (choice.Value == SpecialAttackType.Sunder && !npc.CanSunderWithAttack(-1, out string sunderReason))
         {
             Debug.Log($"[AI][SpecialAttack] {sunderReason}");
             return false;
+        }
+
+        int substituteNaturalIndex = -1;
+        bool substituteGivesUpHaste = false;
+        if (choice.Value == SpecialAttackType.Sunder && npc.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence)
+        {
+            int currentStep = npc.ProgressiveAttackPool.MainHandStepsUsed;
+            if (npc.IsHasteExtraNaturalStep(currentStep))
+            {
+                substituteNaturalIndex = npc.GetSunderNaturalAttackIndexForStep(currentStep);
+                substituteGivesUpHaste = substituteNaturalIndex >= 0;
+            }
         }
 
         // Trip, disarm, sunder and grapple replace one melee attack (PHB p.141 Table 8-2 note 7):
@@ -453,7 +468,7 @@ public partial class GameManager
         int? stepBab = null;
         if (replacesAttack)
         {
-            if (!npc.TryCommitManeuverSubstituteStep(-1, out int maneuverBab, out _, out string why))
+            if (!npc.TryCommitManeuverSubstituteStep(substituteNaturalIndex, out int maneuverBab, out _, out string why, substituteGivesUpHaste))
             {
                 Debug.Log($"[AI][SpecialAttack] {npc.Stats.CharacterName} cannot use {choice.Value} as an attack: {why}");
                 return false;

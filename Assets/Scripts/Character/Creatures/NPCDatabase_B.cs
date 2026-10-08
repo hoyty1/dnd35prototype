@@ -138,7 +138,7 @@ public static partial class NPCDatabase
             NaturalArmorBonus = 3,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Morningstar", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Morningstar", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, PhysicalDamageTypes = DamageBypassTag.Bludgeoning | DamageBypassTag.Piercing } // weapon stand-in: morningstar, PHB p.116
             },
             BaseSpeed = 6,
             BaseHitDieHP = 16,

@@ -2314,7 +2314,7 @@ public class AIService : MonoBehaviour
                     return profile.ShouldInitiateGrapple(npc, target);
 
                 if (preferred.Value == SpecialAttackType.Sunder)
-                    return target.HasSunderableItemEquipped() && npc.CanSunderWithMainWeapon(out _);
+                    return target.HasSunderableItemEquipped() && npc.CanSunderWithAttack(-1, out _); // PHB p.158, CMB-102
 
                 return true;
             }

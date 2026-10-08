@@ -50,6 +50,14 @@ public class NaturalAttackDefinition
     public bool IsPrimary = true;
     public string PoisonOnHitId;
 
+    /// <summary>
+    /// Physical damage types this natural attack deals, as the Bludgeoning, Piercing and Slashing flags
+    /// of <see cref="DamageBypassTag"/>. None (the default) means "by the attack's name", per the MM p.312
+    /// list (<see cref="GetDefaultPhysicalDamageTypes"/>); set it for an attack that list does not name.
+    /// Read through <see cref="GetPhysicalDamageTypes"/>. Today only sunder reads it (CMB-102).
+    /// </summary>
+    public DamageBypassTag PhysicalDamageTypes = DamageBypassTag.None;
+
     // --- On-hit special effects (Tiers 1-3 monsters) ---
     /// <summary>Fort save DC for paralysis on hit (0 = no paralysis). Duration in rounds.</summary>
     public int ParalysisOnHitDC;
@@ -79,6 +87,75 @@ public class NaturalAttackDefinition
     public bool HasBloodDrain;
     public int BloodDrainConDamagePerRound;
 
+    private const DamageBypassTag PhysicalDamageMask = DamageBypassTag.Bludgeoning | DamageBypassTag.Piercing | DamageBypassTag.Slashing;
+
+    /// <summary>The physical damage types of this attack: <see cref="PhysicalDamageTypes"/> when set, else by name (MM p.312).</summary>
+    public DamageBypassTag GetPhysicalDamageTypes()
+    {
+        DamageBypassTag explicitTypes = PhysicalDamageTypes & PhysicalDamageMask;
+        return explicitTypes != DamageBypassTag.None ? explicitTypes : GetDefaultPhysicalDamageTypes(Name);
+    }
+
+    /// <summary>
+    /// Sunder needs a slashing or bludgeoning weapon (PHB p.158). A natural attack may sunder when it deals
+    /// either (owner ruling 2026-10-08, CMB-102): bites, claws, talons, slams, slaps and tentacles can; gores
+    /// and stings, which deal only piercing damage, cannot. An unarmed strike listed as a natural attack (the
+    /// NPC monks) is not a natural weapon and cannot sunder, as a PC's unarmed strike cannot, until the owner
+    /// rules on unarmed sunder (CMB-141).
+    /// </summary>
+    public bool CanSunder => !IsUnarmedStrike
+        && (GetPhysicalDamageTypes() & (DamageBypassTag.Bludgeoning | DamageBypassTag.Slashing)) != DamageBypassTag.None;
+
+    /// <summary>
+    /// True for an entry named "Unarmed Strike" (the NPC monks list their unarmed strike as a natural attack).
+    /// It is bludgeoning (PHB p.116 Table 7-5) but not a natural weapon: disarm treats it as a light weapon
+    /// (PHB p.155) and sunder refuses it (CMB-141), as for a PC's unarmed strike.
+    /// </summary>
+    public bool IsUnarmedStrike => GetBaseAttackName(Name) == "unarmed strike";
+
+    /// <summary>The attack name in lower case without a parenthetical ("Bite (lion)" is "bite").</summary>
+    private static string GetBaseAttackName(string attackName)
+    {
+        if (string.IsNullOrWhiteSpace(attackName))
+            return string.Empty;
+
+        string name = attackName.ToLowerInvariant();
+        int parenthesis = name.IndexOf('(');
+        if (parenthesis >= 0)
+            name = name.Substring(0, parenthesis);
+        return name.Trim();
+    }
+
+    /// <summary>
+    /// Damage types of a natural attack by its name, from the MM p.312 list of natural weapon types: bite
+    /// bludgeoning, piercing and slashing; claw or talon piercing and slashing (a rake is a claw attack); gore
+    /// piercing (an antler or horn, so "horn" too); slap or slam bludgeoning (a tail slap too); sting piercing;
+    /// tentacle bludgeoning. The MM dragon entry (p.68) describes a wing attack as a slam, so "wing" is
+    /// bludgeoning, and an unarmed strike is bludgeoning (PHB p.116 Table 7-5; it still cannot sunder,
+    /// <see cref="IsUnarmedStrike"/>). Matched case-insensitively on
+    /// the name without a parenthetical ("Bite (lion)"). Any other name returns None: touches, rays and other
+    /// attacks that deal no physical damage, and names the list does not cover (filed as CMB-138; set
+    /// <see cref="PhysicalDamageTypes"/> in the data once the owner classifies them).
+    /// </summary>
+    public static DamageBypassTag GetDefaultPhysicalDamageTypes(string attackName)
+    {
+        string name = GetBaseAttackName(attackName);
+        if (name.Length == 0)
+            return DamageBypassTag.None;
+
+        if (name.Contains("bite"))
+            return DamageBypassTag.Bludgeoning | DamageBypassTag.Piercing | DamageBypassTag.Slashing;
+        if (name.Contains("claw") || name.Contains("talon") || name == "rake")
+            return DamageBypassTag.Piercing | DamageBypassTag.Slashing;
+        if (name.Contains("gore") || name == "horn" || name.Contains("sting"))
+            return DamageBypassTag.Piercing;
+        if (name.Contains("slam") || name.Contains("slap") || name.Contains("tentacle")
+            || name == "wing" || name == "wings" || name == "unarmed strike")
+            return DamageBypassTag.Bludgeoning;
+
+        return DamageBypassTag.None;
+    }
+
     public int GetDamageBonus(int strengthModifier)
     {
         switch (BonusDamageSource)
@@ -107,6 +184,7 @@ public class NaturalAttackDefinition
             Range = Mathf.Max(1, Range),
             IsPrimary = IsPrimary,
             PoisonOnHitId = PoisonOnHitId,
+            PhysicalDamageTypes = PhysicalDamageTypes,
             ParalysisOnHitDC = ParalysisOnHitDC,
             ParalysisOnHitDurationRounds = ParalysisOnHitDurationRounds,
             EnergyDrainOnHit = EnergyDrainOnHit,

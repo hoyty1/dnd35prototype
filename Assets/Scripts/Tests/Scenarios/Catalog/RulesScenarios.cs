@@ -31,6 +31,10 @@ namespace Tests.Scenarios
     /// p.141 Table 8-2 note (trip, disarm and grapple replace a melee attack).
     /// MM p.312 (primary natural attacks at full bonus, secondary at -5) and p.304 (Multiattack: -2) for the
     /// maneuvers that replace a natural attack (owner decision 2026-10-07).
+    /// Natural weapons (owner rulings 2026-10-08, CMB-102): a natural attack may sunder when it deals slashing or
+    /// bludgeoning damage (PHB p.158; MM p.312: bite B/P/S, claw P/S, gore P); on a disarm roll it is a one-handed weapon
+    /// of the creature's own size (PHB p.155: no handedness modifier); a secondary natural attack's penalty applies to a
+    /// grapple's touch attack only, not to the opposed grapple check (MM p.312 names the attack roll).
     /// PHB p.239 (Haste: one extra attack on a full attack) for the hasted natural-weapon creature: one extra
     /// natural attack at that attack's normal bonus (owner decision 2026-10-07, CMB-106).
     /// Bull rush AoOs (owner decision 2026-10-07): entering the defender's space is the bull rush's own provocation
@@ -65,7 +69,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 58;
+        public const int Count = 62;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -117,6 +121,10 @@ namespace Tests.Scenarios
             yield return S("maneuver-replaces-natural", () => ManeuverReplacesNatural(false));
             yield return S("maneuver-replaces-natural-multiattack", () => ManeuverReplacesNatural(true));
             yield return S("maneuver-replaces-natural-ui", ManeuverReplacesNaturalUi);
+            yield return S("natural-weapon-maneuvers", NaturalWeaponManeuvers);
+            yield return S("natural-sunder-gore-refused", NaturalSunderGoreRefused);
+            yield return S("natural-sunder-ui", NaturalSunderUi);
+            yield return S("natural-maneuvers-size", NaturalManeuversSize);
             yield return S("haste-natural-extra", () => HasteNaturalExtra(false));
             yield return S("haste-natural-extra-ui", () => HasteNaturalExtra(true));
             yield return S("haste-natural-moved", HasteNaturalMoved);
@@ -1664,6 +1672,237 @@ namespace Tests.Scenarios
                     return m0 - m1 == 5 && m1 == m2
                         ? ExpectResult.Pass("touch mods " + m0 + ", " + m1 + ", " + m2, trips[0].Seq, trips[2].Seq)
                         : ExpectResult.Fail("touch mods " + m0 + ", " + m1 + ", " + m2, trips[0].Seq, trips[2].Seq);
+                })
+                .Build();
+        }
+
+        // ── Natural weapons: sunder, disarm and grapple (owner rulings 2026-10-08, CMB-102) ──
+
+        /// <summary>
+        /// A Human fighter 6 (BAB +6, STR 16) fighting with the given natural attacks and no weapon (strip the kit
+        /// with <see cref="StripAllWeapons"/>), with Improved Sunder, Improved Disarm and Improved Grapple, so no
+        /// maneuver provokes and each adds +4 (PHB p.95-96).
+        /// </summary>
+        private static CharacterStats NaturalManeuverBeast(string name, params NaturalAttackDefinition[] naturals)
+        {
+            CharacterStats s = Fighter(name, 6, "Improved Sunder", "Improved Disarm", "Improved Grapple");
+            s.NaturalAttacks.Clear();
+            foreach (NaturalAttackDefinition natural in naturals)
+                s.NaturalAttacks.Add(natural);
+            return s;
+        }
+
+        private static NaturalAttackDefinition NaturalPrimary(string name) =>
+            new NaturalAttackDefinition { Name = name, DamageDice = 6, DamageCount = 1, Count = 1, IsPrimary = true };
+
+        private static NaturalAttackDefinition NaturalSecondaryPair(string name) =>
+            new NaturalAttackDefinition { Name = name, DamageDice = 4, DamageCount = 1, Count = 2, IsPrimary = false, BonusDamageSource = DamageBonusSource.StrengthHalf };
+
+        /// <summary>The attacker's modifier on a maneuver's check (the check minus the d20; for a grapple whose touch attack hit, the grapple check).</summary>
+        private static int CheckMod(TraceEvent maneuver) => maneuver.Int("check") - maneuver.Int("checkRoll");
+
+        /// <summary>A <see cref="SturdyDummyWithoutAoO"/> holding only its main-hand weapon (no armor or off-hand item), so a PC sunder opens no item chooser.</summary>
+        private static void SturdyArmedDummyWeaponOnly(CharacterController c)
+        {
+            SturdyDummyWithoutAoO(c);
+            InventoryComponent inv = c.GetComponent<InventoryComponent>();
+            if (inv == null || inv.CharacterInventory == null)
+                return;
+            inv.CharacterInventory.LeftHandSlot = null;
+            inv.CharacterInventory.ArmorRobeSlot = null;
+            inv.CharacterInventory.RecalculateStats();
+        }
+
+        /// <summary>
+        /// A bite/claw/claw beast (BAB +6, STR +3, the three Improved feats) sunders with its bite, disarms with a claw and
+        /// grapples with the other claw, against a Medium orc holding a greataxe. Every check is forced to fail (the grapple's
+        /// touch attack to hit), so the modifiers can be read: the bite sunder at +6 +3 +4 = 13 with no handedness modifier;
+        /// the claw disarm 5 lower (secondary, MM p.312; a natural weapon is one-handed of the creature's size, so no
+        /// handedness or size term between two Medium creatures, PHB p.155); the claw grapple's opposed check at the full
+        /// BAB, 13 again (the -5 is on its touch attack only, MM p.312). Owner rulings 2026-10-08 (CMB-102).
+        /// </summary>
+        private static ScenarioDef NaturalWeaponManeuvers()
+        {
+            return Rules("rules/natural-weapon-maneuvers", "A natural weapon sunders, disarms and grapples by the owner's rulings (PHB p.155-158, MM p.312)")
+                .Covers("CMB-102", "PHB p.155", "PHB p.156", "PHB p.158", "MM p.312")
+                .MaxRounds(1)
+                .Pc("beast", ActorSource.Stats(() => NaturalManeuverBeast("Beast", NaturalPrimary("Bite"), NaturalSecondaryPair("Claw"))), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("beast", StripAllWeapons)
+                .Tweak("orc", SturdyDummyWithoutAoO)
+                .Initiative("beast", "orc")
+                .Force(20, 1, "Sunder attack roll")
+                .Force(20, 20, "Sunder defense roll")
+                .Force(20, 1, "Disarm attack roll")
+                .Force(20, 20, "Disarm defense roll")
+                .Force(20, 20, "Touch attack")
+                .Force(20, 1, "Grapple check")
+                .Force(20, 20, "Grapple check")
+                .Turn("orc", 0, Step.Pass())
+                .Turn("beast", 1, Step.Maneuver(SpecialAttackType.Sunder, "orc"), Step.Maneuver(SpecialAttackType.Disarm, "orc"),
+                    Step.Maneuver(SpecialAttackType.Grapple, "orc"))
+                .Expect("Sunder (bite), disarm and grapple (claws) are all done", Expect.All(
+                    Expect.StepStatus("beast", 1, "Maneuver", 0, "done"),
+                    Expect.StepStatus("beast", 1, "Maneuver", 1, "done"),
+                    Expect.StepStatus("beast", 1, "Maneuver", 2, "done")))
+                .Expect("A bite may sunder (slashing and bludgeoning, PHB p.158): +6 BAB +3 STR +4 Improved Sunder, no handedness modifier", v =>
+                {
+                    TraceEvent sunder = v.Maneuvers("beast", SpecialAttackType.Sunder).FirstOrDefault(e => e.Round == 1);
+                    if (sunder == null) return ExpectResult.Fail("no sunder by the beast");
+                    if (sunder.Int("checkRoll") != 1) return ExpectResult.Fail("the sunder roll was not the forced 1", sunder.Seq);
+                    return CheckMod(sunder) == 13
+                        ? ExpectResult.Pass("sunder mod 13", sunder.Seq)
+                        : ExpectResult.Fail("sunder mod " + CheckMod(sunder), sunder.Seq);
+                })
+                .Expect("The claw disarm rolls 5 lower than the bite sunder: secondary -5, a natural weapon gets no handedness modifier (PHB p.155)", v =>
+                {
+                    TraceEvent sunder = v.Maneuvers("beast", SpecialAttackType.Sunder).FirstOrDefault(e => e.Round == 1);
+                    TraceEvent disarm = v.Maneuvers("beast", SpecialAttackType.Disarm).FirstOrDefault(e => e.Round == 1);
+                    if (sunder == null || disarm == null) return ExpectResult.Fail("sunder " + (sunder != null) + ", disarm " + (disarm != null));
+                    if (disarm.Int("checkRoll") != 1) return ExpectResult.Fail("the disarm roll was not the forced 1", disarm.Seq);
+                    return CheckMod(sunder) - CheckMod(disarm) == 5
+                        ? ExpectResult.Pass("sunder " + CheckMod(sunder) + ", disarm " + CheckMod(disarm), sunder.Seq, disarm.Seq)
+                        : ExpectResult.Fail("sunder " + CheckMod(sunder) + ", disarm " + CheckMod(disarm), sunder.Seq, disarm.Seq);
+                })
+                .Expect("The claw grapple's opposed check uses the full BAB: the same modifier as the bite sunder (MM p.312)", v =>
+                {
+                    TraceEvent sunder = v.Maneuvers("beast", SpecialAttackType.Sunder).FirstOrDefault(e => e.Round == 1);
+                    TraceEvent grapple = v.Maneuvers("beast", SpecialAttackType.Grapple).FirstOrDefault(e => e.Round == 1);
+                    if (sunder == null || grapple == null) return ExpectResult.Fail("sunder " + (sunder != null) + ", grapple " + (grapple != null));
+                    if (grapple.Int("checkRoll") != 1) return ExpectResult.Fail("the grapple check was not the forced 1 (did the touch attack miss?)", grapple.Seq);
+                    return CheckMod(grapple) == CheckMod(sunder)
+                        ? ExpectResult.Pass("grapple check mod " + CheckMod(grapple), grapple.Seq, sunder.Seq)
+                        : ExpectResult.Fail("grapple check mod " + CheckMod(grapple) + ", sunder mod " + CheckMod(sunder), grapple.Seq, sunder.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>A beast whose only natural attack is a gore (piercing, MM p.312) cannot sunder; its step attacks instead.</summary>
+        private static ScenarioDef NaturalSunderGoreRefused()
+        {
+            return Rules("rules/natural-sunder-gore-refused", "A gore deals only piercing damage, so it cannot sunder (PHB p.158, MM p.312)")
+                .Covers("CMB-102", "PHB p.158", "MM p.312")
+                .MaxRounds(1)
+                .Pc("beast", ActorSource.Stats(() => NaturalManeuverBeast("Beast", NaturalPrimary("Gore"))), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("beast", StripAllWeapons)
+                .Tweak("orc", SturdyDummyWithoutAoO)
+                .Initiative("beast", "orc")
+                .Turn("orc", 0, Step.Pass())
+                .Turn("beast", 1, Step.Maneuver(SpecialAttackType.Sunder, "orc"), Step.Attack("orc"))
+                .Expect("The sunder is refused and the gore attacks", Expect.All(
+                    Expect.StepStatus("beast", 1, "Maneuver", 0, "refused"),
+                    Expect.StepStatus("beast", 1, "Attack", 0, "done")))
+                .Expect("No sunder is attempted", Expect.None("maneuver", e => e.Str("by") == "beast"))
+                .Build();
+        }
+
+        /// <summary>
+        /// The PC Sunder button of a gore/claw/claw creature gives up the next unused natural attack, as an NPC gives up the one
+        /// at its step (PC_NPC_PARITY; CMB-102 open item 8): refused while the gore (piercing only) is next; after the gore
+        /// attacks, the sunder gives up the first claw at the claw's bonus, +6 -5 +3 +4 Improved Sunder = 8.
+        /// </summary>
+        private static ScenarioDef NaturalSunderUi()
+        {
+            return Rules("rules/natural-sunder-ui", "A PC's Sunder button needs its next natural attack to sunder: not the gore, then a claw (PHB p.158, MM p.312, PC_NPC_PARITY)")
+                .Covers("CMB-102", "PHB p.158", "MM p.312", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => NaturalManeuverBeast("Hero", NaturalPrimary("Gore"), NaturalSecondaryPair("Claw"))), 10, 10, Control.Ui)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("hero", StripAllWeapons)
+                .Tweak("orc", SturdyArmedDummyWeaponOnly)
+                .Initiative("hero", "orc")
+                .Force(20, 1, "Sunder attack roll")
+                .Force(20, 20, "Sunder defense roll")
+                .Turn("orc", 0, Step.Pass())
+                .Turn("hero", 1,
+                    Step.Maneuver(SpecialAttackType.Sunder, "orc"),
+                    Step.NaturalAttack("orc", "Gore"),
+                    Step.Maneuver(SpecialAttackType.Sunder, "orc"),
+                    Step.Assert("the gore and the first claw are marked used; the second claw is not", ctx =>
+                    {
+                        CharacterController hero = ctx.Get("hero");
+                        return ctx.Gm.IsNaturalAttackSequenceIndexUsed(hero, 0) && ctx.Gm.IsNaturalAttackSequenceIndexUsed(hero, 1)
+                            && !ctx.Gm.IsNaturalAttackSequenceIndexUsed(hero, 2);
+                    }))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The first sunder is refused (the gore is next), the gore attacks, the second sunder is done with a claw", Expect.All(
+                    Expect.StepStatus("hero", 1, "Maneuver", 0, "refused"),
+                    Expect.StepStatus("hero", 1, "NaturalAttack", 0, "done"),
+                    Expect.StepStatus("hero", 1, "Maneuver", 1, "done"),
+                    Expect.AssertsPass()))
+                .Expect("The sunder rolls at the claw's bonus: +6 -5 +3 +4 = 8", v =>
+                {
+                    List<TraceEvent> sunders = v.Maneuvers("hero", SpecialAttackType.Sunder).Where(e => e.Round == 1).ToList();
+                    if (sunders.Count != 1) return ExpectResult.Fail(sunders.Count + " sunders by the hero", sunders.Select(e => e.Seq).ToArray());
+                    return CheckMod(sunders[0]) == 8
+                        ? ExpectResult.Pass("sunder mod 8", sunders[0].Seq)
+                        : ExpectResult.Fail("sunder mod " + CheckMod(sunders[0]), sunders[0].Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// The size and handedness terms of the disarm and sunder opposed rolls (PHB p.155, p.158): a Medium bite/claw/claw
+        /// beast (BAB +6, STR +3, the Improved feats) against a Large ogre (BAB +3, STR +5, size -1) holding its greatclub
+        /// (two-handed). Every roll is forced to fail. Only the larger combatant gets +4 per size category; the smaller one
+        /// takes no penalty. The bite sunder: 6 +3 +4 = 13 with no handedness or size term (a natural weapon, CMB-141);
+        /// the ogre 3 +5 -1 +4 greatclub +4 larger = 15. The claw disarm: 1 +3 +4 = 8 (a one-handed weapon of its own size,
+        /// owner ruling 2026-10-08); the ogre 15 again.
+        /// </summary>
+        /// <summary>
+        /// A <see cref="SturdyDummyWithoutAoO"/> ogre holding its greatclub (two-handed; <see cref="EquipGreatclub"/>, ITM-004)
+        /// and no armor, so the sunder targets the greatclub.
+        /// </summary>
+        private static void SturdyOgreWithGreatclub(CharacterController c)
+        {
+            SturdyDummyWithoutAoO(c);
+            EquipGreatclub(c);
+            InventoryComponent inv = c.GetComponent<InventoryComponent>();
+            if (inv == null || inv.CharacterInventory == null)
+                return;
+            inv.CharacterInventory.ArmorRobeSlot = null;
+            inv.CharacterInventory.RecalculateStats();
+        }
+
+        private static ScenarioDef NaturalManeuversSize()
+        {
+            return Rules("rules/natural-maneuvers-size", "Disarm and sunder against a larger foe: only the larger side gets +4, each side its own handedness (PHB p.155, p.158)")
+                .Covers("CMB-102", "PHB p.155", "PHB p.158", "MM p.312")
+                .MaxRounds(1)
+                .Pc("beast", ActorSource.Stats(() => NaturalManeuverBeast("Beast", NaturalPrimary("Bite"), NaturalSecondaryPair("Claw"))), 10, 10, Control.Scripted)
+                .Npc("ogre", "ogre", 11, 10, Control.Scripted)
+                .Tweak("beast", StripAllWeapons)
+                .Tweak("ogre", SturdyOgreWithGreatclub)
+                .Initiative("beast", "ogre")
+                .Force(20, 1, "Sunder attack roll")
+                .Force(20, 20, "Sunder defense roll")
+                .Force(20, 1, "Disarm attack roll")
+                .Force(20, 20, "Disarm defense roll")
+                .Turn("ogre", 0, Step.Pass())
+                .Turn("beast", 1, Step.Maneuver(SpecialAttackType.Sunder, "ogre"), Step.Maneuver(SpecialAttackType.Disarm, "ogre"))
+                .Expect("Sunder (bite) and disarm (claw) are both done", Expect.All(
+                    Expect.StepStatus("beast", 1, "Maneuver", 0, "done"),
+                    Expect.StepStatus("beast", 1, "Maneuver", 1, "done")))
+                .Expect("Sunder: the Medium bite 13 (no size penalty), the Large ogre's greatclub 15 (+4 two-handed, +4 larger)", v =>
+                {
+                    TraceEvent sunder = v.Maneuvers("beast", SpecialAttackType.Sunder).FirstOrDefault(e => e.Round == 1);
+                    if (sunder == null) return ExpectResult.Fail("no sunder by the beast");
+                    if (sunder.Int("checkRoll") != 1 || sunder.Int("opposedRoll") != 20) return ExpectResult.Fail("the sunder rolls were not the forced 1 and 20", sunder.Seq);
+                    int opposed = sunder.Int("opposed") - sunder.Int("opposedRoll");
+                    return CheckMod(sunder) == 13 && opposed == 15
+                        ? ExpectResult.Pass("sunder 13 vs 15", sunder.Seq)
+                        : ExpectResult.Fail("sunder " + CheckMod(sunder) + " vs " + opposed, sunder.Seq);
+                })
+                .Expect("Disarm: the Medium claw 8 (no size penalty), the Large ogre's greatclub 15 (+4 two-handed, +4 larger)", v =>
+                {
+                    TraceEvent disarm = v.Maneuvers("beast", SpecialAttackType.Disarm).FirstOrDefault(e => e.Round == 1);
+                    if (disarm == null) return ExpectResult.Fail("no disarm by the beast");
+                    if (disarm.Int("checkRoll") != 1 || disarm.Int("opposedRoll") != 20) return ExpectResult.Fail("the disarm rolls were not the forced 1 and 20", disarm.Seq);
+                    int opposed = disarm.Int("opposed") - disarm.Int("opposedRoll");
+                    return CheckMod(disarm) == 8 && opposed == 15
+                        ? ExpectResult.Pass("disarm 8 vs 15", disarm.Seq)
+                        : ExpectResult.Fail("disarm " + CheckMod(disarm) + " vs " + opposed, disarm.Seq);
                 })
                 .Build();
         }

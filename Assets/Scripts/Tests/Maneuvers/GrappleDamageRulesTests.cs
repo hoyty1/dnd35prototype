@@ -97,7 +97,12 @@ public static class GrappleDamageRulesTests
         TestPcManeuverReplacesNaturalAttackAtItsBonus();
         TestNpcManeuverReplacesLaterNaturalAttack();
         TestNaturalWeaponDisarmIsArmed();
-        TestNaturalWeaponCreatureCannotSunder();
+        TestNaturalAttackDamageTypes();
+        TestNaturalWeaponSunderBySlashingOrBludgeoning();
+        TestNaturalWeaponDisarmOneHandedOwnSize();
+        TestSunderOpposedRollSizeAndHandedness();
+        TestNaturalSunderAtHasteStep();
+        TestNaturalSecondaryGrapplePenaltyOnTouchOnly();
         TestNpcNaturalSequenceMakesOneSubstitute();
         TestAiManeuverStopgapTripSucceedsThenAttacks();
         TestAiManeuverStopgapFailedTripNotRetried();
@@ -2287,23 +2292,151 @@ public static class GrappleDamageRulesTests
         }
     }
 
-    private static void TestNaturalWeaponCreatureCannotSunder()
+    /// <summary>A creature with one natural attack per entry (name, primary, count), BAB through BaseAttackBonusOverride, no weapon.</summary>
+    private static CharacterController CreateNaturalCreature(string name, int bab, params (string label, bool primary, int count)[] attacks)
     {
-        // ResolveSunder needs a manufactured weapon, so the PC button, the AI and the NPC executor
-        // refuse sunder for a natural-weapon creature before any attack step is spent (CMB-102;
-        // whether natural weapons may sunder is an open owner question).
+        var creature = CreateIterativeAttacker(name);
+        creature.Stats.BaseAttackBonusOverride = bab;
+        creature.Stats.NaturalAttacks.Clear();
+        foreach (var attack in attacks)
+        {
+            creature.Stats.NaturalAttacks.Add(new NaturalAttackDefinition
+            {
+                Name = attack.label, DamageDice = attack.primary ? 6 : 4, DamageCount = 1, Count = attack.count, IsPrimary = attack.primary,
+                BonusDamageSource = attack.primary ? DamageBonusSource.Strength : DamageBonusSource.StrengthHalf
+            });
+        }
+        return creature;
+    }
+
+    private static bool NaturalAttackNamedCanSunder(string attackName)
+        => new NaturalAttackDefinition { Name = attackName, DamageDice = 4 }.CanSunder;
+
+    private static void TestNaturalAttackDamageTypes()
+    {
+        // MM p.312 natural weapon types, by name: bite B/P/S, claw and talon P/S, gore P, slap and slam B,
+        // sting P, tentacle B; the MM dragon wing is a slam (MM p.68); an unarmed strike is B (PHB p.116).
+        // Sunder needs slashing or bludgeoning (PHB p.158; owner ruling 2026-10-08, CMB-102).
+        const DamageBypassTag B = DamageBypassTag.Bludgeoning, P = DamageBypassTag.Piercing, S = DamageBypassTag.Slashing;
+        var expected = new (string name, DamageBypassTag types)[]
+        {
+            ("Bite", B | P | S), ("Bite (lion)", B | P | S), ("Claw", P | S), ("Claws", P | S), ("Foreclaw", P | S), ("Talons", P | S),
+            ("Rake", P | S), ("Gore", P), ("Gore (goat)", P), ("Horn", P), ("Sting", P), ("Slam", B), ("Tail Slap", B),
+            ("Tentacle", B), ("Tentacles", B), ("Wing", B), ("Unarmed Strike", B),
+            ("Hoof", DamageBypassTag.None), ("Incorporeal Touch", DamageBypassTag.None), (null, DamageBypassTag.None)
+        };
+        var wrong = new System.Collections.Generic.List<string>();
+        foreach (var e in expected)
+        {
+            DamageBypassTag actual = NaturalAttackDefinition.GetDefaultPhysicalDamageTypes(e.name);
+            if (actual != e.types)
+                wrong.Add($"{e.name ?? "<null>"}={actual}");
+        }
+        Assert(wrong.Count == 0, "Natural attack damage types by name follow MM p.312" + (wrong.Count > 0 ? ": wrong " + string.Join(", ", wrong) : string.Empty));
+
+        Assert(NaturalAttackNamedCanSunder("Bite") && NaturalAttackNamedCanSunder("Claw") && NaturalAttackNamedCanSunder("Slam")
+            && NaturalAttackNamedCanSunder("Tentacle") && NaturalAttackNamedCanSunder("Tail Slap")
+            && !NaturalAttackNamedCanSunder("Gore") && !NaturalAttackNamedCanSunder("Sting") && !NaturalAttackNamedCanSunder("Horn")
+            && !NaturalAttackNamedCanSunder("Hoof"),
+            "Bites, claws, slams and tentacles can sunder; gores, stings and other piercing-only attacks cannot (PHB p.158)");
+        Assert(new NaturalAttackDefinition { Name = "Unarmed Strike" }.IsUnarmedStrike && !NaturalAttackNamedCanSunder("Unarmed Strike")
+            && !new NaturalAttackDefinition { Name = "Slam" }.IsUnarmedStrike,
+            "An 'Unarmed Strike' natural attack (the NPC monks) is bludgeoning but cannot sunder, as a PC's unarmed strike cannot (CMB-141)");
+
+        var explicitPiercing = new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, PhysicalDamageTypes = P };
+        NaturalAttackDefinition clone = explicitPiercing.Clone();
+        Assert(explicitPiercing.GetPhysicalDamageTypes() == P && !explicitPiercing.CanSunder && clone.PhysicalDamageTypes == P,
+            "An explicit PhysicalDamageTypes overrides the name and survives Clone");
+
+        NPCDatabase.Init();
+        NPCDefinition bugbear = NPCDatabase.Get("bugbear");
+        NPCDefinition gnoll = NPCDatabase.Get("gnoll");
+        Assert(bugbear != null && bugbear.NaturalAttacks.Count > 0 && bugbear.NaturalAttacks[0].GetPhysicalDamageTypes() == (B | P)
+            && gnoll != null && gnoll.NaturalAttacks.Count > 0 && gnoll.NaturalAttacks[0].GetPhysicalDamageTypes() == S,
+            "The weapon stand-ins in the data carry their weapon's types (bugbear morningstar B/P, gnoll battleaxe S; PHB p.116)");
+
+        // Every damaging natural attack in the creature data is classified, except the names filed under
+        // CMB-138 (no MM p.312 type: the owner classifies them) and the touches and rays that deal no
+        // physical damage.
+        var allowedUnclassified = new System.Collections.Generic.HashSet<string>
+        {
+            "Hoof", "Head butt", "Quills", "Snakes", "Chain",
+            "Incorporeal Touch", "Paralyzing Touch", "Light Ray", "Shock"
+        };
+        var unexpected = new System.Collections.Generic.SortedSet<string>();
+        foreach (NPCDefinition def in NPCDatabase.AllNPCs)
+        {
+            if (def == null || def.NaturalAttacks == null)
+                continue;
+            foreach (NaturalAttackDefinition natural in def.NaturalAttacks)
+            {
+                if (natural == null || natural.DamageDice <= 0 || natural.DamageCount <= 0)
+                    continue;
+                if (natural.GetPhysicalDamageTypes() == DamageBypassTag.None && !allowedUnclassified.Contains(natural.Name ?? string.Empty))
+                    unexpected.Add($"{def.Id}:{natural.Name}");
+            }
+        }
+        Assert(unexpected.Count == 0, "Every damaging natural attack in the data has a damage type or is filed under CMB-138"
+            + (unexpected.Count > 0 ? ": " + string.Join(", ", unexpected) : string.Empty));
+    }
+
+    private static void TestNaturalWeaponSunderBySlashingOrBludgeoning()
+    {
+        // Owner ruling 2026-10-08 (CMB-102): a natural attack may sunder when it deals slashing or
+        // bludgeoning damage (PHB p.158). One check, CanSunderWithAttack, for the PC buttons, the AI and
+        // the NPC executor; the sunder rolls at the replaced natural attack's bonus and deals its damage.
         var bear = CreateBiteClawsCreature("NaturalSunderBear", 6, false);
-        var defender = CreateWeakDefender("NaturalSunderDefender");
+        var goring = CreateNaturalCreature("NaturalSunderGore", 6, ("Gore", true, 1));
+        var goreClaws = CreateNaturalCreature("NaturalSunderGoreClaws", 6, ("Gore", true, 1), ("Claw", false, 2));
+        var unarmed = CreateTestCharacter("NaturalSunderUnarmed", "Fighter");
+        var monk = CreateNaturalCreature("NaturalSunderMonk", 6, ("Unarmed Strike", true, 1));
         var fighter = CreateIterativeAttacker("NaturalSunderFighter");
+        var defender = CreateWeakDefender("NaturalSunderDefender");
         bear.GridPosition = new Vector2Int(16, 12);
         defender.GridPosition = new Vector2Int(17, 12);
         bear.IsControllable = false;
-        defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        goring.IsControllable = false;
+        unarmed.Stats.NaturalAttacks.Clear();
+        ItemData sword = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+        defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(sword, EquipSlot.RightHand);
         fighter.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        ActivePcScope scope = null;
         try
         {
-            Assert(!bear.CanSunderWithMainWeapon(out string reason) && !string.IsNullOrEmpty(reason) && fighter.CanSunderWithMainWeapon(out _),
-                "Sunder needs a weapon: refused for a natural-weapon creature, allowed for a sword fighter");
+            Assert(bear.CanSunderWithAttack(-1, out _) && fighter.CanSunderWithAttack(-1, out _)
+                && !goring.CanSunderWithAttack(-1, out string goreReason) && goreReason.Contains("Gore")
+                && !unarmed.CanSunderWithAttack(-1, out string unarmedReason) && !string.IsNullOrEmpty(unarmedReason)
+                && !monk.CanSunderWithAttack(-1, out string monkReason) && monkReason == unarmedReason.Replace("NaturalSunderUnarmed", "NaturalSunderMonk"),
+                "Sunder legality: a bite or a sword may sunder; a gore (piercing only), an empty hand without natural attacks or an 'Unarmed Strike' natural attack may not");
+            Assert(!goreClaws.CanSunderWithAttack(-1, out _) && goreClaws.CanSunderWithAttack(1, out _)
+                && goreClaws.GetFirstSunderCapableNaturalAttackIndex() == 1 && goreClaws.GetSunderNaturalAttackIndexForStep(0) == 0,
+                "A gore/claw/claw creature: not with the gore at its first step, but with a claw");
+
+            // Bite then claw: both sunders fail (forced rolls), so their modifiers can be compared: the claw's
+            // is 5 lower (secondary attack, MM p.312), and neither gets a handedness modifier.
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Sunder attack roll" ? 1 : ctx == "Sunder defense roll" ? 20 : natural;
+            bool biteCommitted = bear.TryCommitManeuverSubstituteStep(-1, out int biteBab, out _, out _);
+            SpecialAttackResult biteSunder = bear.ExecuteSpecialAttack(SpecialAttackType.Sunder, defender, sunderAttackBonusOverride: biteBab);
+            bool clawCommitted = bear.TryCommitManeuverSubstituteStep(-1, out int clawBab, out _, out _);
+            SpecialAttackResult clawSunder = bear.ExecuteSpecialAttack(SpecialAttackType.Sunder, defender, sunderAttackBonusOverride: clawBab);
+            int biteMod = biteSunder.CheckTotal - biteSunder.CheckRoll;
+            int clawMod = clawSunder.CheckTotal - clawSunder.CheckRoll;
+            int expectedBiteMod = 6 + bear.Stats.STRMod + bear.Stats.SizeModifier + bear.Stats.ConditionAttackPenalty;
+            Assert(biteCommitted && clawCommitted && biteBab == 6 && clawBab == 1 && !biteSunder.Success && !clawSunder.Success
+                && biteSunder.Log.Contains("(Bite)") && clawSunder.Log.Contains("(Claw)") && biteMod == expectedBiteMod && biteMod - clawMod == 5,
+                $"A natural sunder rolls at the replaced attack's bonus with no handedness modifier: bite {biteMod}, claw {clawMod} (expected {expectedBiteMod}, 5 apart)");
+
+            // The second claw lands: damage is the claw's 1d4 plus half Strength (secondary, MM p.312).
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Sunder attack roll" ? 20 : ctx == "Sunder defense roll" ? 1 : natural;
+            bear.TryCommitManeuverSubstituteStep(-1, out int claw2Bab, out _, out _);
+            SpecialAttackResult hit = bear.ExecuteSpecialAttack(SpecialAttackType.Sunder, defender, sunderAttackBonusOverride: claw2Bab);
+            int halfStr = Mathf.FloorToInt(bear.Stats.STRMod * 0.5f);
+            Assert(hit.Success && hit.Log.Contains("Damage: 1d4") && hit.Log.Contains("ability " + CharacterStats.FormatMod(halfStr)),
+                $"A natural sunder deals the natural attack's damage (claw 1d4, half STR {CharacterStats.FormatMod(halfStr)})");
+            ScenarioHooks.RollFilter = savedFilter;
 
             GameManager gm = GameManager.Instance;
             if (gm == null)
@@ -2312,13 +2445,41 @@ public static class GrappleDamageRulesTests
                 return;
             }
 
-            Assert(!gm.CanUseSunderAttackOption(bear) && gm.GetRemainingSunderAttackActions(bear) == 0 && gm.CanUseSunderAttackOption(fighter),
-                "PC Sunder button is not offered to a natural-weapon creature");
+            Assert(!gm.CanUseSunderAttackOption(goring) && gm.GetRemainingSunderAttackActions(goring) == 0 && gm.CanUseSunderAttackOption(fighter),
+                "PC Sunder button: not offered to a creature whose only natural attack is a gore");
 
-            bool npcSunder = gm.TryNPCSpecialAttackByTypeForAI(bear, defender, SpecialAttackType.Sunder);
-            Assert(!npcSunder && bear.ProgressiveAttackPool.MainHandStepsUsed == 0 && bear.Actions.HasStandardAction
-                && defender.GetEquippedMainWeapon() != null,
-                "NPC sunder by a natural-weapon creature is refused and spends no attack step");
+            ItemData sword2 = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+            defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(sword2, EquipSlot.RightHand);
+            goring.GridPosition = new Vector2Int(17, 13);
+            bool npcGoreSunder = gm.TryNPCSpecialAttackByTypeForAI(goring, defender, SpecialAttackType.Sunder);
+            Assert(!npcGoreSunder && goring.ProgressiveAttackPool.MainHandStepsUsed == 0 && goring.Actions.HasStandardAction,
+                "NPC sunder with a gore is refused and spends no attack step");
+
+            MethodInfo consumeSunder = typeof(GameManager).GetMethod("TryConsumeSunderAttackAction", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert(consumeSunder != null, "GameManager.TryConsumeSunderAttackAction is available for the PC natural sunder test");
+            scope = ActivePcScope.Enter(gm, goreClaws);
+            if (scope != null && consumeSunder != null)
+            {
+                // The PC gives up the next unused natural attack, as the NPC gives up the one at its step
+                // (PC_NPC_PARITY; CMB-102 open item 8): with the gore next, the sunder is refused.
+                object[] refusedArgs = { goreClaws, false, 0, 0, null, false, null };
+                bool refused = !(bool)consumeSunder.Invoke(gm, refusedArgs);
+                Assert(!gm.CanUseSunderAttackOption(goreClaws) && gm.GetRemainingSunderAttackActions(goreClaws) == 0 && refused
+                    && goreClaws.ProgressiveAttackPool.MainHandStepsUsed == 0 && !gm.IsNaturalAttackSequenceIndexUsed(goreClaws, 0),
+                    "PC Sunder for a gore/claw/claw creature while the gore is next: not offered, refused, no step spent (the NPC rule)");
+
+                // The gore attacks first; then the Sunder button gives up the first claw at the claw's +1.
+                bool goreCommitted = goreClaws.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+                gm.Combat_MarkNaturalAttackSequenceIndexUsed(0);
+                Assert(goreCommitted && gm.CanUseSunderAttackOption(goreClaws) && gm.GetRemainingSunderAttackActions(goreClaws) == 2
+                    && gm.GetCurrentSunderAttackBonus(goreClaws) == 1,
+                    "PC Sunder after the gore attacked: 2 sunders (the claws) at the claw's BAB +1");
+                object[] args = { goreClaws, false, 0, 0, null, false, null };
+                bool consumed = (bool)consumeSunder.Invoke(gm, args);
+                Assert(consumed && (int)args[2] == 1 && gm.IsNaturalAttackSequenceIndexUsed(goreClaws, 1) && !gm.IsNaturalAttackSequenceIndexUsed(goreClaws, 2)
+                    && goreClaws.ProgressiveAttackPool.LastSubstituteNaturalAttackIndex == 1 && gm.GetRemainingSunderAttackActions(goreClaws) == 1,
+                    "The PC sunder gives up the first claw at +1, and one claw sunder is left");
+            }
         }
         catch (System.Exception ex)
         {
@@ -2327,7 +2488,311 @@ public static class GrappleDamageRulesTests
         }
         finally
         {
-            Cleanup(bear, defender, fighter);
+            ScenarioHooks.RollFilter = savedFilter;
+            scope?.Dispose();
+            Cleanup(bear, goring, goreClaws, unarmed, monk, fighter, defender);
+        }
+    }
+
+    private static void TestNaturalWeaponDisarmOneHandedOwnSize()
+    {
+        // Owner ruling 2026-10-08 (CMB-102): on a disarm roll a natural weapon counts as a one-handed weapon
+        // of the creature's own size: no +4 two-handed or -4 light modifier, and the normal +4 per size
+        // category of difference for the larger combatant only (PHB p.155).
+        var bear = CreateBiteClawsCreature("NaturalDisarmSizeBear", 6, false);
+        var defender = CreateWeakDefender("NaturalDisarmSizeDefender");
+        var created = new System.Collections.Generic.List<CharacterController> { bear, defender };
+        ItemData sword = ItemDatabase.CloneItem(ItemID.WeaponLongsword);
+        defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(sword, EquipSlot.RightHand);
+        try
+        {
+            MethodInfo rollDisarm = typeof(CharacterController).GetMethod("RollDisarmCheck", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert(rollDisarm != null, "RollDisarmCheck is available for the natural disarm size test");
+            if (rollDisarm == null)
+                return;
+
+            int baseMod = bear.Stats.BaseAttackBonus + bear.Stats.STRMod + bear.Stats.SizeModifier + bear.Stats.ConditionAttackPenalty;
+            int natural = RollNaturalDisarmModifier(rollDisarm, bear, defender, null, sword, "Attacker");
+            int oneHanded = RollNaturalDisarmModifier(rollDisarm, bear, defender, ItemDatabase.CloneItem(ItemID.WeaponLongsword), sword, "Attacker");
+            int twoHanded = RollNaturalDisarmModifier(rollDisarm, bear, defender, ItemDatabase.CloneItem(ItemID.WeaponGreatsword), sword, "Attacker");
+            int light = RollNaturalDisarmModifier(rollDisarm, bear, defender, ItemDatabase.CloneItem(ItemID.WeaponDagger), sword, "Attacker");
+            Assert(CharacterController.NaturalWeaponDisarmHandednessModifier == 0 && natural == baseMod && natural == oneHanded
+                && twoHanded == natural + 4 && light == natural - 4,
+                $"Medium natural weapon disarms as a one-handed weapon: natural {natural}, longsword {oneHanded}, greatsword {twoHanded}, dagger {light}");
+
+            int defenderVsMedium = RollNaturalDisarmModifier(rollDisarm, bear, defender, null, sword, "Defender");
+            bear.Stats.CurrentSizeCategory = SizeCategory.Large;
+            int largeBase = bear.Stats.BaseAttackBonus + bear.Stats.STRMod + bear.Stats.SizeModifier + bear.Stats.ConditionAttackPenalty;
+            int largeNatural = RollNaturalDisarmModifier(rollDisarm, bear, defender, null, sword, "Attacker");
+            int largeOneHanded = RollNaturalDisarmModifier(rollDisarm, bear, defender, ItemDatabase.CloneItem(ItemID.WeaponLongsword), sword, "Attacker");
+            int defenderVsLarge = RollNaturalDisarmModifier(rollDisarm, bear, defender, null, sword, "Defender");
+            bear.Stats.CurrentSizeCategory = SizeCategory.Medium;
+            // PHB p.155: only the larger combatant gets the +4 per size category; the smaller one takes no penalty.
+            Assert(largeNatural == largeBase + 4 && largeNatural == largeOneHanded && defenderVsLarge == defenderVsMedium,
+                $"A Large natural-weapon creature gets +4 for one size category over a Medium defender, who takes no penalty (natural {largeNatural}, base {largeBase}; defender {defenderVsMedium} -> {defenderVsLarge})");
+
+            // The other way round: a Large defender gets the +4 and the Medium natural attacker takes nothing.
+            int attackerVsMedium = RollNaturalDisarmModifier(rollDisarm, bear, defender, null, sword, "Attacker");
+            defender.Stats.CurrentSizeCategory = SizeCategory.Large;
+            int largeDefenderBase = defender.Stats.BaseAttackBonus + defender.Stats.STRMod + defender.Stats.SizeModifier + defender.Stats.ConditionAttackPenalty;
+            int defenderLarge = RollNaturalDisarmModifier(rollDisarm, bear, defender, null, sword, "Defender");
+            int attackerVsLarge = RollNaturalDisarmModifier(rollDisarm, bear, defender, null, sword, "Attacker");
+            defender.Stats.CurrentSizeCategory = SizeCategory.Medium;
+            Assert(defenderLarge == largeDefenderBase + 4 && attackerVsLarge == attackerVsMedium,
+                $"A Large defender gets +4 against a Medium natural-weapon disarmer, who takes no penalty (defender {defenderLarge}, base {largeDefenderBase}; attacker {attackerVsMedium} -> {attackerVsLarge})");
+
+            // An unarmed strike an NPC lists as a natural attack (the monks) is unarmed: the light -4, and it
+            // catches the weapon (PHB p.155), as a PC's unarmed strike does.
+            var monk = CreateNaturalCreature("NaturalDisarmUnarmedMonk", 6, ("Unarmed Strike", true, 1));
+            created.Add(monk);
+            int monkBase = monk.Stats.BaseAttackBonus + monk.Stats.STRMod + monk.Stats.SizeModifier + monk.Stats.ConditionAttackPenalty;
+            int monkMod = RollNaturalDisarmModifier(rollDisarm, monk, defender, null, sword, "Attacker");
+            MethodInfo catches = typeof(CharacterController).GetMethod("DisarmerCatchesWeapon", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert(catches != null && monk.UsesInnateNaturalAttackSequence() && !monk.FightsWithNaturalWeapons() && monkMod == monkBase - 4
+                && (bool)catches.Invoke(null, new object[] { monk, null }) && !(bool)catches.Invoke(null, new object[] { bear, null }),
+                $"An 'Unarmed Strike' natural attack disarms as an unarmed strike: -4 ({monkMod} vs base {monkBase}) and catches the weapon; a bite does not");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Natural disarm size check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            Cleanup(created.ToArray());
+        }
+    }
+
+    private static int RollNaturalDisarmModifier(MethodInfo rollDisarm, CharacterController attacker, CharacterController defender,
+        ItemData attackerItem, ItemData defenderItem, string side)
+        => GetDisarmModifier(rollDisarm.Invoke(null, new object[] { attacker, defender, attackerItem, defenderItem, EquipSlot.RightHand, 0, string.Empty, null, 0 }), side);
+
+    /// <summary>A forced failing sunder by <paramref name="attacker"/>: (attacker modifier, defender modifier) of its opposed roll.</summary>
+    private static (int attack, int defense, SpecialAttackResult result) ForcedSunderModifiers(CharacterController attacker, CharacterController defender, int? bab = null)
+    {
+        SpecialAttackResult r = attacker.ExecuteSpecialAttack(SpecialAttackType.Sunder, defender, sunderAttackBonusOverride: bab);
+        return r == null ? (int.MinValue, int.MinValue, null) : (r.CheckTotal - r.CheckRoll, r.OpposedTotal - r.OpposedRoll, r);
+    }
+
+    private static int PlainOpposedMod(CharacterController c)
+        => c.Stats.BaseAttackBonus + c.Stats.STRMod + c.Stats.SizeModifier + c.Stats.ConditionAttackPenalty;
+
+    private static void TestSunderOpposedRollSizeAndHandedness()
+    {
+        // PHB p.158 Step 2: both sides roll with their own weapon (+4 two-handed, -4 light) and the larger
+        // combatant gets +4 per size category of difference; the smaller one takes no penalty. A natural weapon
+        // gets no handedness modifier (as on a disarm roll; pending owner confirmation for sunder, CMB-141).
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        var bear = CreateBiteClawsCreature("SunderRollBear", 6, false);
+        var fighter = CreateIterativeAttacker("SunderRollFighter");
+        var defender = CreateWeakDefender("SunderRollDefender");
+        bear.GridPosition = new Vector2Int(16, 12);
+        fighter.GridPosition = new Vector2Int(18, 12);
+        defender.GridPosition = new Vector2Int(17, 12);
+        var defenderInventory = defender.GetComponent<InventoryComponent>().CharacterInventory;
+        var fighterInventory = fighter.GetComponent<InventoryComponent>().CharacterInventory;
+        try
+        {
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Sunder attack roll" ? 1 : ctx == "Sunder defense roll" ? 20 : natural;
+            int bearBase = PlainOpposedMod(bear) + 0; // the bite at full BAB, no handedness, no size
+            int defenderBase = PlainOpposedMod(defender);
+
+            defenderInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            var vsLongsword = ForcedSunderModifiers(bear, defender, 6);
+            defenderInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponGreataxe), EquipSlot.RightHand);
+            var vsGreataxe = ForcedSunderModifiers(bear, defender, 6);
+            defenderInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponDagger), EquipSlot.RightHand);
+            var vsDagger = ForcedSunderModifiers(bear, defender, 6);
+            Assert(vsLongsword.attack == bearBase && vsGreataxe.attack == bearBase && vsDagger.attack == bearBase
+                && vsLongsword.defense == defenderBase && vsGreataxe.defense == defenderBase + 4 && vsDagger.defense == defenderBase - 4,
+                $"The defender rolls with its own weapon: longsword {vsLongsword.defense}, greataxe {vsGreataxe.defense}, dagger {vsDagger.defense} (base {defenderBase}); the bite {vsLongsword.attack} gets no handedness modifier");
+
+            defenderInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            bear.Stats.CurrentSizeCategory = SizeCategory.Large;
+            int largeBearBase = PlainOpposedMod(bear);
+            var largeBear = ForcedSunderModifiers(bear, defender, 6);
+            bear.Stats.CurrentSizeCategory = SizeCategory.Medium;
+            defender.Stats.CurrentSizeCategory = SizeCategory.Large;
+            int largeDefenderBase = PlainOpposedMod(defender);
+            var largeDefender = ForcedSunderModifiers(bear, defender, 6);
+            defender.Stats.CurrentSizeCategory = SizeCategory.Medium;
+            Assert(largeBear.attack == largeBearBase + 4 && largeBear.defense == defenderBase
+                && largeDefender.attack == bearBase && largeDefender.defense == largeDefenderBase + 4,
+                $"The larger combatant gets +4 per size category and the smaller none: Large bite {largeBear.attack} (base {largeBearBase}) vs {largeBear.defense}; bite {largeDefender.attack} vs Large defender {largeDefender.defense} (base {largeDefenderBase})");
+
+            // BAB +1, so the forced rolls (1 against 20) still lose and the defender's weapon survives.
+            fighter.Stats.BaseAttackBonusOverride = 1;
+            fighterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponGreatsword), EquipSlot.RightHand);
+            int fighterBase = PlainOpposedMod(fighter);
+            var greatsword = ForcedSunderModifiers(fighter, defender);
+            fighterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponDagger), EquipSlot.RightHand);
+            defenderInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponGreataxe), EquipSlot.RightHand);
+            var daggerVsGreataxe = ForcedSunderModifiers(fighter, defender);
+            Assert(greatsword.result != null && !greatsword.result.Success && daggerVsGreataxe.result != null && !daggerVsGreataxe.result.Success
+                && greatsword.attack == fighterBase + 4 && greatsword.defense == defenderBase
+                && daggerVsGreataxe.attack == fighterBase - 4 && daggerVsGreataxe.defense == defenderBase + 4,
+                $"Weapon sunders: greatsword {greatsword.attack} vs longsword {greatsword.defense}; dagger {daggerVsGreataxe.attack} vs greataxe {daggerVsGreataxe.defense} (bases {fighterBase}, {defenderBase})");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Sunder opposed roll check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(bear, fighter, defender);
+        }
+    }
+
+    private static void TestNaturalSunderAtHasteStep()
+    {
+        // Haste's extra natural attack is made with a natural attack of the attacker's choice (CMB-106). A
+        // sunder in its place uses the default Haste attack when that one can sunder, else the first natural
+        // attack that can: for a hasted gore/claw/claw creature (the gore has the highest bonus), a claw.
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; Haste natural sunder check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CharacterController, SpecialAttackType, SpecialAttackResult> savedManeuver = ScenarioHooks.ManeuverResolved;
+        var npc = CreateNaturalCreature("HasteSunderNpc", 6, ("Gore", true, 1), ("Claw", false, 2));
+        var pc = CreateNaturalCreature("HasteSunderPc", 6, ("Gore", true, 1), ("Claw", false, 2));
+        var defender = CreateWeakDefender("HasteSunderDefender");
+        npc.ApplyHasteEffect(10, null);
+        pc.ApplyHasteEffect(10, null);
+        npc.IsControllable = false;
+        npc.GridPosition = new Vector2Int(16, 12);
+        defender.GridPosition = new Vector2Int(17, 12);
+        pc.GridPosition = new Vector2Int(18, 12);
+        defender.Stats.CanMakeAttacksOfOpportunity = false;
+        defender.Stats.AdjustMaxHP(500);
+        defender.Stats.CurrentHP += 500;
+        defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+        ActivePcScope scope = null;
+        SpecialAttackResult npcSunder = null;
+        try
+        {
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Sunder attack roll" ? 1 : ctx == "Sunder defense roll" ? 20 : natural;
+            ScenarioHooks.ManeuverResolved = (attacker, target, type, result) =>
+            {
+                if (attacker == npc && type == SpecialAttackType.Sunder)
+                    npcSunder = result;
+            };
+
+            Assert(npc.HasHasteExtraNaturalAttack() && npc.GetDefaultHasteNaturalAttackIndex() == 0
+                && npc.GetSunderNaturalAttackIndexForStep(npc.GetHasteExtraNaturalStepIndex()) == 1,
+                "Hasted gore/claw/claw: the default Haste attack is the gore; a sunder at the Haste step uses the first claw");
+
+            // NPC: the gore and both claws attack (three steps), then the sunder replaces Haste's extra attack.
+            bool stepsCommitted = true;
+            for (int i = 0; i < 3; i++)
+                stepsCommitted &= npc.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+            bool legal = npc.CanSunderWithAttack(-1, out string why);
+            gm.TryNPCSpecialAttackByTypeForAI(npc, defender, SpecialAttackType.Sunder);
+            int expectedClawMod = 1 + npc.Stats.STRMod + npc.Stats.SizeModifier + npc.Stats.ConditionAttackPenalty;
+            Assert(stepsCommitted && legal && npcSunder != null && npcSunder.Log.Contains("(Claw)")
+                && npcSunder.CheckTotal - npcSunder.CheckRoll == expectedClawMod
+                && npc.ProgressiveAttackPool.HasteExtraNaturalAttackUsed && npc.ProgressiveAttackPool.LastSubstituteNaturalAttackIndex == 1
+                && npc.ProgressiveAttackPool.MainHandStepsUsed == 4,
+                $"NPC sunder at the Haste step: made with a claw at {expectedClawMod} and Haste's extra attack marked used"
+                + (npcSunder != null ? $" (got {npcSunder.CheckTotal - npcSunder.CheckRoll}, last substitute {npc.ProgressiveAttackPool.LastSubstituteNaturalAttackIndex})" : $" (no sunder; {why})"));
+
+            // PC: with every natural attack used, the Sunder button gives up Haste's extra attack, made with a claw.
+            MethodInfo consumeSunder = typeof(GameManager).GetMethod("TryConsumeSunderAttackAction", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert(consumeSunder != null, "GameManager.TryConsumeSunderAttackAction is available for the Haste natural sunder test");
+            scope = ActivePcScope.Enter(gm, pc);
+            if (scope != null && consumeSunder != null)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    pc.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+                    gm.Combat_MarkNaturalAttackSequenceIndexUsed(i);
+                }
+
+                bool offered = gm.CanUseSunderAttackOption(pc) && gm.GetRemainingSunderAttackActions(pc) == 1 && gm.GetCurrentSunderAttackBonus(pc) == 1;
+                object[] args = { pc, false, 0, 0, null, false, null };
+                bool consumed = (bool)consumeSunder.Invoke(gm, args);
+                Assert(offered && consumed && (int)args[2] == 1 && pc.ProgressiveAttackPool.HasteExtraNaturalAttackUsed
+                    && pc.ProgressiveAttackPool.LastSubstituteNaturalAttackIndex == 1 && gm.GetRemainingSunderAttackActions(pc) == 0,
+                    $"PC sunder in place of Haste's extra attack: offered once at the claw's +1, made with a claw (offered {offered}, BAB {(int)args[2]})");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Haste natural sunder check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.ManeuverResolved = savedManeuver;
+            scope?.Dispose();
+            Cleanup(npc, pc, defender);
+        }
+    }
+
+    private static void TestNaturalSecondaryGrapplePenaltyOnTouchOnly()
+    {
+        // Owner ruling 2026-10-08 (CMB-102): a grapple that replaces a secondary natural attack takes the
+        // -5 (-2 with Multiattack) on its touch attack (an attack roll, MM p.312) but not on the opposed
+        // grapple check. An iterative grapple keeps its step BAB on both (PHB p.156).
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        var created = new System.Collections.Generic.List<CharacterController>();
+        try
+        {
+            ScenarioHooks.RollFilter = (sides, ctx, natural) =>
+                ctx == "Touch attack" ? 20 : ctx == "Grapple check" ? 10 : natural;
+
+            foreach (bool multiattack in new[] { false, true })
+            {
+                string tag = multiattack ? " (Multiattack)" : string.Empty;
+                int expectedTouchBab = multiattack ? 4 : 1;
+                var primary = CreateBiteClawsCreature("SecondaryGrapplePrimary" + tag, 6, multiattack);
+                var secondary = CreateBiteClawsCreature("SecondaryGrappleClaw" + tag, 6, multiattack);
+                var target1 = CreateWeakDefender("SecondaryGrappleTarget1" + tag);
+                var target2 = CreateWeakDefender("SecondaryGrappleTarget2" + tag);
+                created.AddRange(new[] { primary, secondary, target1, target2 });
+                primary.GridPosition = new Vector2Int(2, 2);
+                target1.GridPosition = new Vector2Int(3, 2);
+                secondary.GridPosition = new Vector2Int(2, 6);
+                target2.GridPosition = new Vector2Int(3, 6);
+
+                primary.TryCommitManeuverSubstituteStep(-1, out int biteBab, out _, out _);
+                SpecialAttackResult biteGrapple = primary.ExecuteSpecialAttack(SpecialAttackType.Grapple, target1, grappleAttackBonusOverride: biteBab);
+
+                secondary.TryCommitManeuverSubstituteStep(-1, out _, out _, out _); // the bite, given up for something else
+                secondary.TryCommitManeuverSubstituteStep(-1, out int clawBab, out _, out _);
+                SpecialAttackResult clawGrapple = secondary.ExecuteSpecialAttack(SpecialAttackType.Grapple, target2, grappleAttackBonusOverride: clawBab);
+
+                int biteCheckMod = biteGrapple.CheckTotal - biteGrapple.CheckRoll;
+                int clawCheckMod = clawGrapple.CheckTotal - clawGrapple.CheckRoll;
+                Assert(biteBab == 6 && clawBab == expectedTouchBab && clawGrapple.Log.Contains($"  BAB: {CharacterStats.FormatMod(expectedTouchBab)}")
+                    && secondary.GetGrappleCheckBabAfterTouchAttack(clawBab, true) == 6,
+                    $"A grapple replacing a secondary claw makes its touch attack at BAB {CharacterStats.FormatMod(expectedTouchBab)} (MM p.312)" + tag);
+                Assert(biteCheckMod == clawCheckMod && clawCheckMod == 6 + secondary.Stats.STRMod + secondary.GetGrappleSizeModifier(),
+                    $"Its opposed grapple check uses the full BAB, as the bite's does: check modifiers bite {biteCheckMod}, claw {clawCheckMod}" + tag);
+            }
+
+            var fighter = CreateIterativeAttacker("IterativeGrappleCheckBab");
+            created.Add(fighter);
+            Assert(fighter.GetGrappleCheckBabAfterTouchAttack(6, true) == 6 && fighter.GetGrappleCheckBabAfterTouchAttack(1, true) == 1,
+                "An iterative grapple keeps its step BAB on the grapple check (PHB p.156)");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Secondary natural grapple check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(created.ToArray());
         }
     }
 
