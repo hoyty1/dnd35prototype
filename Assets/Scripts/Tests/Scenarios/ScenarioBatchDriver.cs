@@ -306,6 +306,7 @@ namespace Tests.Scenarios
              .Set("state", IsPaused ? "paused" : "idle")
              .Set("results", results.Count)
              .Set("verdicts", counts)
+             .Set("warnings", WarningTotal(results) > 0 ? (object)WarningTotal(results) : null)
              .Set("batchPath", BatchFilePath.Replace('\\', '/'));
             string soak = SessionState.GetString(SoakReportKey, "");
             if (soak.Length > 0)
@@ -446,7 +447,7 @@ namespace Tests.Scenarios
             if (f[0] != runner.RunId)
                 return;
             string entry = f.Length > 1 ? f[1] : current;
-            AddResult(entry, runner.RunId, runner.RunVerdict ?? "?", SummaryPathOf(runner.RunId), runner.SummaryError);
+            AddResult(entry, runner.RunId, runner.RunVerdict ?? "?", SummaryPathOf(runner.RunId), runner.SummaryError, runner.RunWarnings.Count);
             PopHead(entry);
             SessionState.EraseString(CurrentKey);
             if (Queue().Count == 0)
@@ -516,11 +517,17 @@ namespace Tests.Scenarios
             return raw.Length == 0 ? new List<string[]>() : raw.Split('\n').Where(l => l.Length > 0).Select(l => l.Split('\t')).ToList();
         }
 
-        private static void AddResult(string entry, string runId, string verdict, string summaryPath, string error)
+        /// <summary>Sum of the runs' summary warning counts (field 6 of a result line).</summary>
+        private static int WarningTotal(List<string[]> results)
+            => results.Sum(r => r.Length > 6 && int.TryParse(r[6], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int w) ? w : 0);
+
+        /// <summary>Records a run's result; <paramref name="warnings"/> is the run's summary warning count (for example a combat-log leak), 0 when none or unknown.</summary>
+        private static void AddResult(string entry, string runId, string verdict, string summaryPath, string error, int warnings = 0)
         {
             string Clean(string s) => (s ?? "").Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
             string line = string.Join("\t", Clean(entry), Clean(runId), Clean(verdict), Clean(summaryPath), Clean(error),
-                DateTime.UtcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture));
+                DateTime.UtcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+                warnings > 0 ? warnings.ToString(System.Globalization.CultureInfo.InvariantCulture) : "");
             string raw = SessionState.GetString(ResultsKey, "");
             SessionState.SetString(ResultsKey, raw.Length == 0 ? line : raw + "\n" + line);
         }
@@ -533,6 +540,7 @@ namespace Tests.Scenarios
             var o = new JsonObj();
             o.Set("filter", parts[0]).Set("seeds", parts.Length > 1 ? parts[1] : null).Set("options", parts.Length > 2 && parts[2].Length > 0 ? parts[2] : null)
              .Set("runId", Get(1)).Set("verdict", Get(2)).Set("summaryPath", Get(3)).Set("error", Get(4)).Set("utc", Get(5))
+             .Set("warnings", int.TryParse(Get(6), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int warnings) && warnings > 0 ? (object)warnings : null)
              .Set("summaryExists", Get(3) != null && File.Exists(Get(3)));
             return o;
         }

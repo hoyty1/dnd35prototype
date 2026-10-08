@@ -38,9 +38,9 @@ Entries per section:
 | [Encounters](issues/ENC.md) | ENC | 1 | 7 | 14 | 22 | ENC-023 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 32 | 35 | 71 | ITM-072 |
 | [AI](issues/AI.md) | AI | 1 | 19 | 39 | 59 | AI-061 |
-| [UI](issues/UI.md) | UI | 1 | 12 | 38 | 51 | UI-052 |
-| [Tests](issues/TST.md) | TST | 0 | 7 | 24 | 31 | TST-035 |
-| **All** | | 34 | 269 | 353 | 656 | |
+| [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
+| [Tests](issues/TST.md) | TST | 0 | 7 | 25 | 32 | TST-036 |
+| **All** | | 33 | 269 | 354 | 656 | |
 
 ## Top issues
 
@@ -51,7 +51,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [CORE-001](issues/CORE.md) | High | Runtime loop and core | Party wipe soft-locks the game (no defeat screen or exit path) | Yes |
 | [CORE-034](issues/CORE.md) | High | Runtime loop and core | A downed regenerating or fast-healing enemy is never counted as defeated, so the fight cannot be won | Yes |
 | [ENC-001](issues/ENC.md) | High | Encounters | Enemies 6+ spawn off the grid and cannot move; more than 15 enemies are dropped | Yes |
-| [UI-001](issues/UI.md) | High | UI | Combat log adds about 50 pooled GameObjects on every log call (588 in one FlankingReach suite run; 175,466 after 28 soak fights, under 1 frame per second) | Yes |
 | [CMB-003](issues/CMB.md) | High | Combat | Morale and situational damage bonuses never reach weapon damage | Yes |
 | [CMB-004](issues/CMB.md) | High | Combat | Critical hits multiply only weapon dice; coup de grace multiplies sneak attack | Yes |
 | [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at the round boundary (GameManager.OnNewRound -> ConditionService.OnRoundEnd), so 1-round conditions can cost the target nothing | Yes |

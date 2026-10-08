@@ -54,11 +54,12 @@ namespace Tests.Scenarios
     /// The AI maneuver stopgap (owner decision 2026-10-07, AI-060) is an AI decision limit, not a rule: after a
     /// maneuver lands the AI attacks with its remaining steps, and it does not retry a failed maneuver type against
     /// the same target that turn.
+    /// rules/combat-log-pool is not a rules check: it guards the combat log's line pool against the UI-001 leak.
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 55;
+        public const int Count = 56;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -120,6 +121,7 @@ namespace Tests.Scenarios
             yield return S("stability-bullrush", () => StabilityCheck("rules/stability-bullrush", "A four-legged formian taskmaster resists a bull rush with +4 stability (PHB p.154, CMB-085)", "formian_taskmaster", SpecialAttackType.BullRushAttack, true));
             yield return S("stability-trip-control", () => StabilityCheck("rules/stability-trip-control", "A barghest in its natural form (the only modelled form) gets no stability against a trip (PHB p.158, CMB-085)", "barghest", SpecialAttackType.Trip, false));
             yield return S("weapon-size-damage", WeaponSizeDamage);
+            yield return S("combat-log-pool", CombatLogPool);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -2007,6 +2009,127 @@ namespace Tests.Scenarios
                 .Expect("The Large ogre's greatclub rolls 2d8 (MM p.199; DMG Table 2-2)", RollsDice("ogre", "2d8"))
                 .Expect("The Large ogre_brute's spawned greatclub rolls 2d8 (DMG Table 2-2)", RollsDice("brute", "2d8"))
                 .Build();
+        }
+
+        // ── Combat log pool (UI-001) ────────────────────────────────────
+
+        /// <summary>Combat log lines the scribe writes on each of its turns (more than the log keeps, so lines are trimmed and reused).</summary>
+        private const int LogPoolLinesPerTurn = CombatLogPanel.MaxMessages + 20;
+
+        /// <summary>
+        /// Not a rules check: the combat log's line objects stay bounded (UI-001). A scripted scribe writes 520 lines
+        /// through CombatUI.ShowCombatLog on each of its two turns and notes, in deterministic terms, what it finds
+        /// right after: no new inactive PooledLogMsg root object; the panel has exactly one CombatLogPool holder; the
+        /// scrollable log keeps at most 500 lines; the combat-log line objects anywhere in the scene (counted by
+        /// FindObjectsByType, so lines left under an old holder or anywhere else count too) number at most
+        /// CombatLogPanel.MaxLineObjects (501); and the second turn adds no line object. Before the fix each log call
+        /// built a new pool and orphaned its 50 prewarmed lines; a regression that rebuilt the pool under a new holder
+        /// would fail the holder, bound and turn-2 checks. The leak sweep (every 30 frames) cannot hide a leak here:
+        /// the scribe writes and counts within one frame.
+        /// </summary>
+        private static ScenarioDef CombatLogPool()
+        {
+            return Rules("rules/combat-log-pool", "The combat log reuses its pooled lines: no orphans, one pool, bounded object count (UI-001)")
+                .Covers("UI-001")
+                .MaxRounds(2)
+                .Pc("scribe", ActorSource.Stats(() => Fighter("Scribe", 1)), 5, 10, Control.Scripted)
+                .Npc("dummy", "target_dummy", 15, 10, Control.Idle)
+                .Initiative("scribe", "dummy")
+                .Script("scribe", WriteLogLines)
+                .Expect("The fight is halted as a stalemate when round 3 begins", Expect.Outcome(Outcome.Stalemate))
+                .Expect("Both turns note their counts", v => LogPoolNotes(v).Count == 2
+                    ? ExpectResult.Pass("2 notes") : ExpectResult.Fail(LogPoolNotes(v).Count + " log-pool notes, expected 2"))
+                .Expect("Writing 520 lines leaves no inactive PooledLogMsg object at the scene root (UI-001)", v => LogPoolCheck(v, "roots+0"))
+                .Expect("The panel keeps exactly one line pool (one CombatLogPool holder)", v => LogPoolCheck(v, "holders=1"))
+                .Expect("The scrollable log keeps at most 500 lines and the scene holds at most 501 combat-log line objects", v => LogPoolCheck(v, "visible<=max", "lines<=max"))
+                .Expect("The second turn reuses pooled lines and adds no line object", v =>
+                {
+                    TraceEvent n = LogPoolNotes(v).FirstOrDefault(e => e.Str("text").StartsWith("log-pool turn 2", StringComparison.Ordinal));
+                    if (n == null) return ExpectResult.Fail("no turn-2 note");
+                    return n.Str("text").Contains("lines+0") ? ExpectResult.Pass(n.Str("text"), n.Seq) : ExpectResult.Fail(n.Str("text"), n.Seq);
+                })
+                .Build();
+        }
+
+        private static List<TraceEvent> LogPoolNotes(TraceView v)
+            => v.Of("note").Where(e => (e.Str("text") ?? "").StartsWith("log-pool turn", StringComparison.Ordinal)).ToList();
+
+        private static ExpectResult LogPoolCheck(TraceView v, params string[] needles)
+        {
+            List<TraceEvent> notes = LogPoolNotes(v);
+            if (notes.Count == 0) return ExpectResult.Fail("no log-pool note");
+            foreach (TraceEvent n in notes)
+                foreach (string needle in needles)
+                    if (!n.Str("text").Contains(needle))
+                        return ExpectResult.Fail(n.Str("text"), n.Seq);
+            return ExpectResult.Pass(string.Join(" | ", notes.Select(n => n.Str("text"))));
+        }
+
+        private static int _logPoolLinesAfterTurn1;
+
+        /// <summary>
+        /// Scribe script: writes <see cref="LogPoolLinesPerTurn"/> log lines and notes what it finds. Absolute counts
+        /// below the bound depend on what earlier jobs in the Play session logged, so the note holds only deltas,
+        /// bounds and the holder count; an out-of-bound count is written out, since a failing run has no hash to keep.
+        /// </summary>
+        private static System.Collections.IEnumerator WriteLogLines(ScenarioContext ctx, CharacterController scribe)
+        {
+            CombatUI ui = ctx.Gm != null ? ctx.Gm.CombatUI : null;
+            int round = ctx.Gm != null ? ctx.Gm.CurrentRound : 0;
+            int turn = round <= 1 ? 1 : 2;
+            if (ui == null || ui.CombatLogContent == null)
+            {
+                ctx.Note("log-pool turn " + turn + ": no CombatUI or log content");
+                yield break;
+            }
+
+            int rootsBefore = CountLogPoolRoots();
+            for (int i = 1; i <= LogPoolLinesPerTurn; i++)
+                ui.ShowCombatLog("Scribe log line " + turn + "." + i);
+
+            CombatLogPanel panel = ui.GetComponent<CombatLogPanel>();
+            int roots = CountLogPoolRoots() - rootsBefore;
+            int visible = ui.CombatLogContent.transform.childCount;
+            int holders = -1;
+            if (panel != null)
+                panel.CountLineObjects(out holders);
+            int lines = CountLogLineObjects();
+            string note = "log-pool turn " + turn + ": roots" + (roots >= 0 ? "+" : "") + roots
+                + (panel != null ? " holders=" + holders : " (no panel)")
+                + (visible <= CombatLogPanel.MaxMessages ? " visible<=max" : " visible=" + visible)
+                + (lines <= CombatLogPanel.MaxLineObjects ? " lines<=max" : " lines=" + lines);
+            if (turn == 1)
+                _logPoolLinesAfterTurn1 = lines;
+            else
+                note += " lines" + (lines - _logPoolLinesAfterTurn1 >= 0 ? "+" : "") + (lines - _logPoolLinesAfterTurn1);
+            ctx.Note(note);
+        }
+
+        private static int CountLogPoolRoots()
+        {
+            int n = 0;
+            foreach (GameObject go in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
+                if (go != null && !go.activeSelf && go.name == CombatLogPanel.PooledLineName)
+                    n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Every combat-log line object in the loaded scenes, active or not and wherever it is parented: a GameObject
+        /// with a Text and a LayoutElement named PooledLogMsg (free) or LogMsg_N (visible), as CombatLogPanel makes them.
+        /// </summary>
+        private static int CountLogLineObjects()
+        {
+            int n = 0;
+            foreach (UnityEngine.UI.LayoutElement le in UnityEngine.Object.FindObjectsByType<UnityEngine.UI.LayoutElement>(FindObjectsInactive.Include))
+            {
+                if (le == null) continue;
+                string name = le.gameObject.name;
+                if ((name == CombatLogPanel.PooledLineName || name.StartsWith("LogMsg_", StringComparison.Ordinal))
+                    && le.GetComponent<UnityEngine.UI.Text>() != null)
+                    n++;
+            }
+            return n;
         }
     }
 }

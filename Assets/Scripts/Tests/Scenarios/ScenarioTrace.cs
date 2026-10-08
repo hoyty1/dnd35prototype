@@ -303,7 +303,7 @@ namespace Tests.Scenarios
                 Ev = ev
             };
             _events.Add(e);
-            if (ev != "log" && ev != "hp" && ev != "nl" && ev != "dice")
+            if (ev != "log" && ev != "hp" && ev != "nl" && ev != "dice" && ev != "log-leak")
                 MarkProgress();
             return e;
         }
@@ -772,7 +772,9 @@ namespace Tests.Scenarios
         {
             var lines = new List<string>(_events.Count);
             foreach (TraceEvent e in _events)
-                if (e.Ev != "watchdog") // editor pauses and other host events depend on timing, not on the game
+                // Editor pauses and other host events depend on timing, not on the game; so do the counts of the
+                // combat-log leak sweep, which runs every N frames (ScenarioRunner.SweepLogLeak).
+                if (e.Ev != "watchdog" && e.Ev != "log-leak")
                     lines.Add(e.ToJson(true));
             return lines;
         }

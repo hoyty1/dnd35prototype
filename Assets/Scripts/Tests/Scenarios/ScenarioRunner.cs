@@ -174,10 +174,21 @@ namespace Tests.Scenarios
         public int HookErrorViolations;
         /// <summary>The definition's GenerateActors result for this job (Def is then a per-job copy), or null.</summary>
         public GeneratedActors Generated;
-        /// <summary>Orphaned combat-log objects destroyed during this job (UI-001).</summary>
+        /// <summary>Stray combat-log lines destroyed during this job by the leak sweep (a leak like the fixed UI-001).</summary>
         public int LogLeakSwept;
+        /// <summary>The last out-of-bound combat-log panel state the sweep recorded this job: {pool holders, line objects}, or null.</summary>
+        public int[] LogPanelOver;
+        /// <summary>Sweeps that found a leak before the trace was written. Emitted as 'log-leak' events after the verdict event, so no other event's seq moves.</summary>
+        public readonly List<LogLeakFind> LogLeakFinds = new List<LogLeakFind>();
 
         public bool Decided => Outcome != Outcome.None;
+
+        /// <summary>One sweep that found a combat-log leak: frames since the job started, round, which sweep, root lines destroyed, and the panel's pool holders and line objects when they were out of bounds (else -1).</summary>
+        public sealed class LogLeakFind
+        {
+            public int AtF, AtR, Destroyed, Holders = -1, Lines = -1;
+            public string When;
+        }
 
         /// <summary>Ends the job with <paramref name="outcome"/>; the trace stops recording game events. haltNow halts combat inside the current callback (safe only where TurnService returns right after, e.g. a TurnStarted handler).</summary>
         public void Decide(Outcome outcome, string reason, bool haltNow, string diag = null)
@@ -308,6 +319,8 @@ namespace Tests.Scenarios
         public enum RunState { Idle, Running, Done, Interrupted }
 
         internal static ScenarioRunner Instance;
+        /// <summary>Jobs that started a fight in this domain (this Play session); the static-suite runner warns when it runs after them (docs/TESTING.md 2.6).</summary>
+        internal static int JobsStartedThisDomain;
         /// <summary>Raised once when a run finishes normally (after its summary is written; not on an interruption).</summary>
         internal static event Action<ScenarioRunner> RunEnded;
         internal static bool SessionDirty;
@@ -317,11 +330,13 @@ namespace Tests.Scenarios
         private static int _baselineNpcCount = -1;
 
         public const int PhaseFrameTimeout = 600;
-        /// <summary>Frames between sweeps of the combat-log leak (UI-001) while a job runs.</summary>
+        /// <summary>Frames between combat-log leak sweeps while a job runs (a safety net since UI-001 was fixed).</summary>
         public const int LogLeakSweepFrames = 30;
         public static readonly string[] DefaultParty = { "Fighter", "Rogue", "Cleric", "Wizard" };
 
         internal RunState State = RunState.Idle;
+        /// <summary>Run-level warnings for the summary (for example a combat-log leak the sweep had to clean up).</summary>
+        internal readonly List<string> RunWarnings = new List<string>();
         internal string RunId;
         internal string RunDir;
         internal string Filter;
@@ -737,6 +752,7 @@ namespace Tests.Scenarios
             {
                 Random.InitState(unchecked(job.Seed * 7919 + 17));
                 job.Started = true;
+                JobsStartedThisDomain++;
                 TryRun(job, "start", gm.Harness_StartCombat, Outcome.Exception);
             }
 
@@ -761,7 +777,7 @@ namespace Tests.Scenarios
                 }
                 job.Checks.Frame();
                 if ((Time.frameCount - job.StartFrame) % LogLeakSweepFrames == 0)
-                    job.LogLeakSwept += SweepLogLeak();
+                    SweepLogLeak(job, "monitor");
                 if (!job.Decided && job.WallCapSeconds > 0 && Time.realtimeSinceStartup - job.StartRealtime > job.WallCapSeconds)
                     job.Decide(Outcome.Timeout, "wall-clock cap " + job.WallCapSeconds + " s", false);
                 if (!job.Decided)
@@ -780,7 +796,8 @@ namespace Tests.Scenarios
                 TryRun(job, "halt-recheck", () => gm.Harness_HaltCombat(job.Outcome.ToString() + "-recheck"), Outcome.Exception);
             }
 
-            // j. Finalize
+            // j. Finalize (sweep first, so a leak during the job is in the trace)
+            SweepLogLeak(job, "end");
             JobResult result = null;
             Exception finalizeError = TryRunFinal(() => result = Finalize(job, gm), job);
             if (result == null)
@@ -789,9 +806,19 @@ namespace Tests.Scenarios
 
             // k. Cleanup (the wall time and frames below include it)
             Cleanup(job, gm);
-            job.LogLeakSwept += SweepLogLeak();
+            SweepLogLeak(job, "cleanup");
+            var leaks = new List<string>();
             if (job.LogLeakSwept > 0)
-                result.Notes.Add("destroyed " + job.LogLeakSwept + " inactive PooledLogMsg objects (UI-001)");
+                leaks.Add("combat-log leak: the sweep destroyed " + job.LogLeakSwept + " inactive " + CombatLogPanel.PooledLineName
+                    + " root objects (CombatLogPanel keeps its free lines under its pool holder, so none should exist; UI-001 was this leak)");
+            if (job.LogPanelOver != null)
+                leaks.Add("combat-log leak: the panel held " + job.LogPanelOver[1] + " line objects in " + job.LogPanelOver[0] + " "
+                    + CombatLogPanel.PoolHolderName + " holders (at most " + CombatLogPanel.MaxLineObjects + " in 1 expected; UI-001 rebuilt its pool like this)");
+            foreach (string leak in leaks)
+            {
+                result.Notes.Add(leak);
+                RunWarnings.Add(job.Def.Id + " s" + job.Seed + (job.Options.Repeat > 1 ? " r" + job.Rep : "") + ": " + leak);
+            }
             result.WallSec = Time.realtimeSinceStartup - job.StartRealtime;
             result.Frames = Time.frameCount - job.StartFrame;
             result.FocusedFrames = job.FocusedFrames;
@@ -805,13 +832,70 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// Destroys every inactive "PooledLogMsg" root object. Almost all of them are left behind by UI-001
-        /// (CombatLogPanel rebuilds its 50-line pool on each log call); the current pool's free entries are inactive
-        /// roots too and go with them, which is harmless only while UI-001 rebuilds the pool on every call. Remove or
-        /// narrow this sweep when UI-001 is fixed. Without it a Play session gathers about 6,000 of them per fight
-        /// (175,466 after 28 soak fights on 2026-10-07) and the frame rate falls below 1 frame per second. The pool's
-        /// Get skips destroyed entries (the static-suite runner sweeps the same way, TESTING.md 3). It never
-        /// touches game state or the RNG, so traces and hashes do not change. Returns the number destroyed.
+        /// Safety net for combat-log leaks. Sweeps stray root lines (see <see cref="SweepLogLeak()"/>) and checks the
+        /// game's CombatLogPanel (<see cref="CombatLogPanel.CountLineObjects"/>): more than one pool holder or more
+        /// than <see cref="CombatLogPanel.MaxLineObjects"/> line objects is a leak that is not at the scene root; it
+        /// is reported, not cleaned up. A find is reported as a 'log-leak' trace event (written after the verdict
+        /// event and left out of the trace hash, because what a sweep finds depends on frame timing; the event's own
+        /// atF and atR give the sweep's frame and round), a console warning on the job's first find, and at the end of
+        /// the job a result note and a run warning in the summary. A panel state is recorded again only when its
+        /// holder or line count grew past the last one recorded. <paramref name="when"/> is "monitor", "end" or
+        /// "cleanup"; the cleanup sweep runs after the trace is written, so it only counts.
+        /// </summary>
+        private static void SweepLogLeak(ScenarioJob job, string when)
+        {
+            int n = SweepLogLeak();
+            int holders = -1, lines = -1;
+            try
+            {
+                CombatLogPanel panel = job.Gm != null && job.Gm.CombatUI != null ? job.Gm.CombatUI.GetComponent<CombatLogPanel>() : null;
+                if (panel != null)
+                {
+                    int h;
+                    int l = panel.CountLineObjects(out h);
+                    bool over = h > 1 || l > CombatLogPanel.MaxLineObjects;
+                    bool grew = job.LogPanelOver == null || h > job.LogPanelOver[0] || l > job.LogPanelOver[1];
+                    if (over && grew)
+                    {
+                        holders = h;
+                        lines = l;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[ScenarioHarness] combat-log panel check: " + ex.Message);
+            }
+            if (n <= 0 && holders < 0)
+                return;
+            bool first = job.LogLeakSwept == 0 && job.LogPanelOver == null;
+            job.LogLeakSwept += n;
+            if (holders >= 0)
+                job.LogPanelOver = new[] { holders, lines };
+            if (when != "cleanup")
+                job.LogLeakFinds.Add(new ScenarioJob.LogLeakFind
+                {
+                    AtF = Time.frameCount - job.StartFrame,
+                    AtR = job.Gm != null ? job.Gm.CurrentRound : 0,
+                    Destroyed = n,
+                    Holders = holders,
+                    Lines = lines,
+                    When = when
+                });
+            if (first)
+                Debug.LogWarning("[ScenarioHarness] combat-log leak in " + job.Def.Id + " s" + job.Seed + " (sweep: " + when + "): "
+                    + (n > 0 ? "destroyed " + n + " inactive " + CombatLogPanel.PooledLineName + " root objects" : "")
+                    + (n > 0 && holders >= 0 ? "; " : "")
+                    + (holders >= 0 ? "the panel holds " + lines + " line objects in " + holders + " " + CombatLogPanel.PoolHolderName + " holders" : ""));
+        }
+
+        /// <summary>
+        /// Destroys every inactive "PooledLogMsg" root object in the active scene and returns the count. Since UI-001
+        /// was fixed (2026-10-08) CombatLogPanel builds its pool once and parks free lines under an inactive holder
+        /// object, so the sweep normally finds nothing; anything it does find is a new leak, which the caller reports.
+        /// Before the fix every combat log call orphaned about 50 of them: 175,466 after 28 soak fights on 2026-10-07,
+        /// below 1 frame per second. The pool's Get skips destroyed entries. The sweep never touches game state or
+        /// the RNG.
         /// </summary>
         internal static int SweepLogLeak()
         {
@@ -820,8 +904,9 @@ namespace Tests.Scenarios
             {
                 foreach (GameObject go in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
                 {
-                    if (go != null && !go.activeSelf && go.name == "PooledLogMsg")
+                    if (go != null && !go.activeSelf && go.name == CombatLogPanel.PooledLineName)
                     {
+                        go.name = CombatLogPanel.PooledLineName + " (swept)"; // Destroy is deferred: a later sweep this frame must not count it again
                         Destroy(go);
                         n++;
                     }
@@ -1236,6 +1321,14 @@ namespace Tests.Scenarios
 
             result.Verdict = VerdictRules.Compute(job.Outcome, job.ExpectationResults, job.Unwaived, job.Waived, job.HookErrorViolations);
             trace.Emit("verdict").Set("verdict", result.Verdict).Set("unwaived", job.Unwaived).Set("waived", job.Waived).Set("hookErrors", job.HookErrorViolations);
+            // Last, so a leak shifts no other event's seq (the hash leaves these events out).
+            foreach (ScenarioJob.LogLeakFind leak in job.LogLeakFinds)
+            {
+                TraceEvent le = trace.Emit("log-leak").Set("destroyed", leak.Destroyed).Set("when", leak.When)
+                     .Set("atF", leak.AtF).Set("atR", leak.AtR);
+                if (leak.Holders >= 0)
+                    le.Set("holders", leak.Holders).Set("lines", leak.Lines);
+            }
 
             foreach (TraceEvent v in trace.Events)
             {
@@ -1523,6 +1616,7 @@ namespace Tests.Scenarios
              .Set("totals", Totals()).Set("byId", byId)
              .Set("waiverHits", hits).Set("unusedWaivers", unused)
              .Set("needsFresh", SessionDirty).Set("dirtyReason", DirtyReason)
+             .Set("warnings", RunWarnings.Count > 0 ? RunWarnings : null)
              .Set("wallSec", Time.realtimeSinceStartup - _runStartRealtime);
             if (Results.Any(r => r.Soak != null))
             {
@@ -1538,7 +1632,8 @@ namespace Tests.Scenarios
                 SummaryError = null;
                 var idx = new JsonObj();
                 idx.Set("runId", RunId).Set("utc", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture)).Set("verdict", RunVerdict)
-                   .Set("filter", Filter).Set("seeds", SeedsText).Set("options", Options.ToString()).Set("totals", Totals());
+                   .Set("filter", Filter).Set("seeds", SeedsText).Set("options", Options.ToString()).Set("totals", Totals())
+                   .Set("warnings", RunWarnings.Count > 0 ? (object)RunWarnings.Count : null);
                 File.AppendAllText(Path.Combine(ScenariosDir, "index.jsonl"), Json.Serialize(idx) + "\n", new UTF8Encoding(false));
             }
             catch (Exception ex)

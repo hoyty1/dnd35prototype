@@ -269,7 +269,7 @@ Pitfalls:
 
 ## Add a combat-log message
 
-1. Inside a GameManager partial: `CombatUI?.ShowCombatLog(CombatLogHelper.<Semantic>("<icon>", $"..."));` (about 1,200 call sites). `CombatUI.ShowCombatLog` (`UI/Combat/CombatUI.cs:279`) -> `CombatLogPanel.AddMessage` (`UI/Combat/CombatLogPanel.cs:93`; `MaxMessages = 500`).
+1. Inside a GameManager partial: `CombatUI?.ShowCombatLog(CombatLogHelper.<Semantic>("<icon>", $"..."));` (about 1,200 call sites). `CombatUI.ShowCombatLog` (`UI/Combat/CombatUI.cs:279`) -> `CombatLogPanel.AddMessage` (`UI/Combat/CombatLogPanel.cs:146`; `MaxMessages = 500`).
 2. Pick the helper by meaning from `Combat/Logging/CombatLogHelper.cs` (`:52-284`): `SpellEffect/BuffApplied`, `Buff`, `Damage/DamageWithHP`, `Failure/CriticalFailure`, `Success/Healing/SpellResisted`, `Info/NoEffect`, `Warning`, `Special`, `SaveResult(targetName, success, saveType, roll, dc)`, `ConditionApplied/ConditionFaded`, `Expired`, `Summon/SummonRaw`, `SpellResistance`, `Immune`, `Interrupted/InterruptedRaw`, `Debuff`, `Defensive`, `Curse`, `Death`, `Stub/StubRaw`, `StatusEnd`, `PaleBlue/IceBlue/RoyalBlue`, `Color(text, hex)` with the `Color*` constants. Most take `(icon, message)`; check the signature.
 3. Services use their provider (`private CombatUI CombatUI => _combatUIProvider?.Invoke();`, e.g. `Services/DispelMagicService.cs:48`). Static classes and components use `GameManager.Instance?.CombatUI?.ShowCombatLog(...)` or `CombatLogger.Show(msg)`. Pure rule services take an `Action<string>` callback (`EffectService.TickClericSpell2Durations`).
 4. Multi-line blocks: build a `StringBuilder` framed by `═══` lines and push once (`GameManager_Spells_MagicFang.cs:99-106`, `TryResolveConeOfColdSpell`). Spells resolved by `SpellCaster` already produce `SpellResult.GetFormattedLog()` with dice (8758492).
@@ -282,7 +282,7 @@ Pitfalls:
 - `StatusEffectManager.LogCombatMessage` only writes `Debug.Log`: "doesn't stack" messages never reach the in-game log.
 - Always use `CombatUI?.`; CombatUI is null in tests and early init.
 - Helpers wrap the whole string in one `<color>` tag; do not pass pre-colored strings (`ApplySpellBuff` nests colors near `GameManager.SpellCasting.cs:7700`). An empty icon gives a leading space.
-- `CombatLogPanel` rewrites substrings such as "- HIT!", "CRITICAL HIT!", "has been slain!" for highlighting (`CombatLogPanel.cs:362-377`).
+- `CombatLogPanel` rewrites substrings such as "- HIT!", "CRITICAL HIT!", "has been slain!" for highlighting (`CombatLogPanel.cs:417-432`).
 - Prefer `CombatUI?.ShowCombatLog` inside GameManager partials and services; `CombatLogger` (`Combat/Logging/CombatLogger.cs`) is mostly `Format*` string builders, and its `Show` has only 2 callers, both in the unused `SpellResolutionService`.
 
 # Items and economy

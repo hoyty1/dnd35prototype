@@ -139,7 +139,7 @@ namespace Tests.Scenarios
         /// <see cref="Start(string,string,string)"/>, applied to each) and enters Play mode. Each session starts its
         /// run when GameManager is ready, records the summary path and exits Play mode; the next entry gets a new
         /// session. Option perSession=N (handled here, not passed to Start) also splits the seeds into sessions of
-        /// N seeds each, for long soaks (the combat log slows a session down, UI-001); the batch then merges the soak
+        /// N seeds each, for long soaks (fresh sessions keep state from piling up); the batch then merges the soak
         /// statistics of its runs into Logs/Scenarios/soak-&lt;batchId&gt;.json. At most 50 entries. Poll in edit mode with <see cref="Poll"/> (field "batch") or read
         /// Logs/Scenarios/batch.json. See docs/TESTING.md 3.5.
         /// </summary>

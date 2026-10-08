@@ -662,6 +662,7 @@ public class CombatUI : MonoBehaviour
         if (_combatLogPanel == null)
             _combatLogPanel = gameObject.AddComponent<CombatLogPanel>();
 
+        // Refreshes the references on every call; the panel builds its line pool only once (UI-001).
         _combatLogPanel.Initialize(this, CombatLogText, CombatLogContent, CombatLogScrollRect);
     }
 

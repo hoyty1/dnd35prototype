@@ -146,7 +146,7 @@ namespace Tests.Runner
         public List<string> leaked = new List<string>();
         /// <summary>Every new root object that was neither a kept singleton nor a known leak.</summary>
         public int leakedCount;
-        /// <summary>Leaks the game is known to cause, aggregated, for example "PooledLogMsg x150 (UI-001)".</summary>
+        /// <summary>Leaks the game is known to cause (KnownLeakIssues), aggregated, for example "Name x150 (ISSUE-ID, destroyed)".</summary>
         public List<string> knownLeaks = new List<string>();
         /// <summary>Game-owned singletons the suite created and the runner kept, with a count when more than one.</summary>
         public List<string> singletonsCreated = new List<string>();
@@ -235,13 +235,10 @@ namespace Tests.Runner
         /// <summary>
         /// Root objects the game is known to leak, by name, with the issue that explains them. They are destroyed
         /// like other leaks but reported as one aggregated knownLeaks entry instead of filling the leaked names.
-        /// PooledLogMsg: every combat log call rebuilds CombatLogPanel's pool and orphans the 50 lines prewarmed
-        /// at the scene root (UI-001); ObjectPool.Get skips destroyed entries, so destroying them is safe.
+        /// Empty since UI-001 was fixed (2026-10-08): CombatLogPanel no longer orphans "PooledLogMsg" lines at the
+        /// scene root, so a stray one now counts as an ordinary leak (leakedCount, leaked).
         /// </summary>
-        private static readonly Dictionary<string, string> KnownLeakIssues = new Dictionary<string, string>
-        {
-            { "PooledLogMsg", "UI-001" },
-        };
+        private static readonly Dictionary<string, string> KnownLeakIssues = new Dictionary<string, string>();
 
         /// <summary>Project-root files a suite is known to write; only these are deleted after a suite.</summary>
         private static readonly string[] DeletableRootFiles = { "phase5_6_test_results.txt" };
@@ -523,6 +520,10 @@ namespace Tests.Runner
                 report.sceneGameManager = GameManager.Instance != null;
                 if (!report.sceneGameManager)
                     report.warnings.Add("Play pass without a scene GameManager: suites that rely on it take their fallback branches.");
+                if (Tests.Scenarios.ScenarioRunner.JobsStartedThisDomain > 0)
+                    report.warnings.Add("The scenario harness ran " + Tests.Scenarios.ScenarioRunner.JobsStartedThisDomain
+                        + " fights earlier in this Play session; static results can differ from a fresh session (once seen as false"
+                        + " GrappleDamageRulesTests regressions, cause unknown, TST-035). Rerun in a fresh Play session before trusting a regression.");
             }
 
             string[] filters = (o.Filter ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)

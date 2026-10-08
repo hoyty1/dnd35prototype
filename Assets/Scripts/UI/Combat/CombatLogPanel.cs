@@ -20,7 +20,7 @@ public class CombatLogPanel : MonoBehaviour
 
     // Message history
     private readonly List<string> _messageHistory = new List<string>();
-    private const int MaxMessages = 500;
+    public const int MaxMessages = 500;
 
     // Formatting/cache
     private readonly StringBuilder _builder = new StringBuilder();
@@ -31,6 +31,27 @@ public class CombatLogPanel : MonoBehaviour
     private ObjectPool<Text> _logMessagePool;
     private const int PoolPrewarmCount = 50;
 
+    /// <summary>Name of a log line while it waits in the pool (the harness sweeps look for stray roots with it).</summary>
+    public const string PooledLineName = "PooledLogMsg";
+
+    /// <summary>Name of the inactive child object that holds the pool's free lines.</summary>
+    public const string PoolHolderName = "CombatLogPool";
+
+    /// <summary>
+    /// Most line objects the panel ever holds: <see cref="MaxMessages"/> visible lines plus the one AddMessage takes
+    /// before it trims the oldest. The pool creates a line only when it has no free one, so visible plus free lines
+    /// never exceed this (the pool's maxSize, 550, is only its configured cap).
+    /// </summary>
+    public const int MaxLineObjects = MaxMessages + 1;
+
+    /// <summary>Inactive child of this panel's GameObject that holds the pool's free lines, so they are never scene roots.</summary>
+    private Transform _poolHolder;
+
+    /// <summary>
+    /// Sets the UI references. CombatUI calls this before every log call so references assigned late are picked up;
+    /// the line pool is built only on the first call (rebuilding it on every call orphaned its 50 prewarmed lines
+    /// each time, UI-001).
+    /// </summary>
     public void Initialize(CombatUI combatUI, Text legacyCombatLogText, GameObject combatLogContent, ScrollRect combatLogScrollRect)
     {
         _combatUI = combatUI;
@@ -38,11 +59,40 @@ public class CombatLogPanel : MonoBehaviour
         _combatLogContent = combatLogContent;
         _combatLogScrollRect = combatLogScrollRect;
 
-        InitializeLogMessagePool();
+        if (_logMessagePool == null)
+            InitializeLogMessagePool();
+    }
+
+    /// <summary>
+    /// Leak diagnostic (UI-001): returns the line objects this panel holds, the visible lines in the log content
+    /// plus the free lines under every <see cref="PoolHolderName"/> child, and gives the number of those holder
+    /// children. With one pool, holders is 1 (0 before the first log call) and the count at most
+    /// <see cref="MaxLineObjects"/>.
+    /// </summary>
+    public int CountLineObjects(out int poolHolders)
+    {
+        poolHolders = 0;
+        int lines = 0;
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            Transform child = transform.GetChild(i);
+            if (child.name != PoolHolderName)
+                continue;
+            poolHolders++;
+            lines += child.childCount;
+        }
+        if (_combatLogContent != null)
+            lines += _combatLogContent.transform.childCount;
+        return lines;
     }
 
     private void InitializeLogMessagePool()
     {
+        GameObject holder = new GameObject(PoolHolderName);
+        holder.SetActive(false);
+        holder.transform.SetParent(transform, false);
+        _poolHolder = holder.transform;
+
         // Resolve font once — shared by every pooled Text component.
         Font sharedFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (sharedFont == null)
@@ -53,7 +103,9 @@ public class CombatLogPanel : MonoBehaviour
         _logMessagePool = new ObjectPool<Text>(
             createFunc: () =>
             {
-                GameObject go = new GameObject("PooledLogMsg");
+                GameObject go = new GameObject(PooledLineName);
+                if (_poolHolder != null)
+                    go.transform.SetParent(_poolHolder, false);
                 Text t = go.AddComponent<Text>();
                 t.supportRichText = true;
                 t.font = sharedFont;
@@ -78,8 +130,9 @@ public class CombatLogPanel : MonoBehaviour
             {
                 t.text = string.Empty;
                 t.gameObject.SetActive(false);
-                // Re-parent to pool holder (no visible parent) to keep hierarchy clean.
-                t.transform.SetParent(null, false);
+                t.gameObject.name = PooledLineName;
+                // Park the free line under the inactive pool holder (never at the scene root).
+                t.transform.SetParent(_poolHolder, false);
             },
             maxSize: MaxMessages + PoolPrewarmCount
         );
