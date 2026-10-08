@@ -893,8 +893,10 @@ public partial class GameManager
     /// true when the attacker ends the bull rush dead, dying or unconscious.
     /// <paramref name="diagonalsMovedThisCharge"/> continues the 5-10-5 diagonal count of a charge
     /// path; <paramref name="attackerAlreadyProvoked"/> lists opponents that already had a movement
-    /// opportunity against the attacker this action (the charge path and the bull rush initiation,
-    /// CMB-113), which get no further AoO as it follows.
+    /// AoO against the attacker this round (the charge path), which get no further AoO as it follows
+    /// (PHB p.138: one opportunity per opponent for movement in the same round). An AoO at the bull
+    /// rush's start is not a movement opportunity, so its maker is not listed (follows from the owner
+    /// decision 2026-10-07 that the entry is the bull rush's own provocation, not movement).
     /// </summary>
     private void ResolveBullRushPushAndFollow(
         CharacterController attacker,
@@ -1039,9 +1041,11 @@ public partial class GameManager
     /// from every opponent threatening a square it leaves, except the other participant, at most
     /// once per opponent per push and per follow (PHB p.154, p.138); the follow set starts from
     /// <paramref name="attackerAlreadyProvoked"/>. Each such AoO may strike the other participant
-    /// instead (<see cref="ResolveBullRushAoO"/>). The push also stops when the defender is dead or
-    /// off the grid; pending the owner (CMB-115) a prone, dying or unconscious defender keeps being
-    /// pushed. Logs only what happened.
+    /// instead (<see cref="ResolveBullRushAoO"/>). Owner decision 2026-10-07: a push interrupted by an
+    /// AoO goes on unless the defender dies (or leaves the combat), so a defender knocked prone,
+    /// dying or unconscious keeps being pushed; a push into an occupied square or a wall stops
+    /// there. The squares beyond the first still need the attacker to move with the defender (PHB
+    /// p.154), so an AoO that stops or drops the follower ends them. Logs only what happened.
     /// </summary>
     private BullRushMovementOutcome ExecuteBullRushMovement(
         CharacterController attacker,

@@ -86,7 +86,13 @@ public static class BullRushRulesTests
             int speed = BullRushRules.GetSpeedSquares(actor);
             Assert(speed > 0, $"Test actor has a speed ({speed} squares)");
             Assert(BullRushRules.GetMovementLimitSquares(actor, false, 0) == speed,
-                "Standard bull rush: movement limit is the speed (earlier move not subtracted, CMB-114)");
+                "Standard bull rush: movement limit is the speed (earlier move not subtracted; owner decision 2026-10-07)");
+            actor.HasMovedThisTurn = true;
+            bool moveSpent = actor.Actions != null && actor.Actions.UseMoveAction();
+            Assert(moveSpent && BullRushRules.GetMovementLimitSquares(actor, false, 0) == speed,
+                "Standard bull rush after a move action this turn: the limit is still the speed (owner decision 2026-10-07)");
+            actor.HasMovedThisTurn = false;
+            actor.Actions?.Reset();
             Assert(BullRushRules.GetMovementLimitSquares(actor, true, 0) == speed * 2,
                 "Charge bull rush with no movement: twice the speed");
             Assert(BullRushRules.GetMovementLimitSquares(actor, true, 3) == speed * 2 - 3,
@@ -488,9 +494,11 @@ public static class BullRushRulesTests
 
     private static void TestScenarioAlreadyProvokedOpponentsSkipFollowAoO()
     {
-        // An opponent that already had its movement opportunity against the attacker this action (on
-        // the charge path or at the bull rush's start) gets no second AoO as the attacker follows
-        // (PHB p.138, CMB-113). Control: without that, the same opponent takes one.
+        // An opponent that already had its movement opportunity against the attacker this round (on
+        // the charge path) gets no second AoO as the attacker follows (PHB p.138). An AoO at the bull
+        // rush's start is not a movement opportunity and does not seed this set (follows from the
+        // owner decision 2026-10-07 that the entry is the bull rush's own provocation; checked by
+        // rules/maneuver-bullrush-reflexes). Control: without the seed, the same opponent takes one.
         if (!TryBeginScenario("Already provoked", out Scenario s))
             return;
         try
@@ -504,7 +512,7 @@ public static class BullRushRulesTests
             Assert(attacker.GridPosition == new Vector2Int(13, 12) && target.GridPosition == new Vector2Int(14, 12),
                 $"Already provoked: push 1 and follow 1 (at {target.GridPosition}, {attacker.GridPosition})");
             Assert(watcher.Stats.AttacksOfOpportunityUsed == 0,
-                $"An opponent that already provoked this action takes no AoO on the follow (used {watcher.Stats.AttacksOfOpportunityUsed})");
+                $"An opponent that already had a movement AoO this round takes no AoO on the follow (used {watcher.Stats.AttacksOfOpportunityUsed})");
 
             ResolvePush(s.Gm, attacker, target, margin: 0);
             Assert(attacker.GridPosition == new Vector2Int(14, 12),

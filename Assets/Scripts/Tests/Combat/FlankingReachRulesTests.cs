@@ -312,11 +312,21 @@ public class FlankingReachRulesTests : MonoBehaviour
             Assert(bullRush.Count == 2 && bullRush.Contains(target) && bullRush.Contains(sideFoe) && !bullRush.Contains(farFoe),
                 $"{side} bull rush provokes from every threatening enemy (got {bullRush.Count})", ref passed, ref failed);
 
-            // A charge bull rush skips enemies that already had their AoO during the charge move.
-            List<CharacterController> chargeBullRush = ThreatSystem.GetManeuverAoOProvokers(
-                attacker, target, SpecialAttackType.BullRushCharge, all, new HashSet<CharacterController> { sideFoe });
-            Assert(chargeBullRush.Count == 1 && chargeBullRush[0] == target,
-                $"{side} charge bull rush excludes enemies that already provoked during the charge", ref passed, ref failed);
+            // A charge bull rush: entering the defender's space is the bull rush's own provocation
+            // (PHB p.154, owner decision 2026-10-07), so an enemy that already made a movement AoO
+            // during the charge takes another if it has one left this round (Combat Reflexes); with
+            // its one AoO spent it takes none (PHB p.137).
+            sideFoe.Stats.AttacksOfOpportunityUsed = 1;
+            sideFoe.Stats.MaxAttacksOfOpportunity = 1;
+            List<CharacterController> chargeSpent = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.BullRushCharge, all);
+            Assert(chargeSpent.Count == 1 && chargeSpent[0] == target,
+                $"{side} charge bull rush: an enemy whose one AoO went on the charge move gets none at the entry", ref passed, ref failed);
+            sideFoe.Stats.MaxAttacksOfOpportunity = 2;
+            List<CharacterController> chargeReflexes = ThreatSystem.GetManeuverAoOProvokers(attacker, target, SpecialAttackType.BullRushCharge, all);
+            Assert(chargeReflexes.Count == 2 && chargeReflexes.Contains(target) && chargeReflexes.Contains(sideFoe),
+                $"{side} charge bull rush: an enemy with an AoO left after its charge-move AoO takes one at the entry (PHB p.154)", ref passed, ref failed);
+            sideFoe.Stats.AttacksOfOpportunityUsed = 0;
+            sideFoe.Stats.MaxAttacksOfOpportunity = 1;
 
             attacker.Stats.Feats.Add("Improved Grapple");
             attacker.Stats.Feats.Add("Improved Sunder");

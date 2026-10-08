@@ -898,21 +898,21 @@ public partial class GameManager
     /// <summary>
     /// Resolves the AoOs a maneuver provokes when it starts, for PCs and NPCs alike
     /// (rules in <see cref="ThreatSystem.GetManeuverAoOProvokers"/>). The caller has already
-    /// spent the action; on anything but Proceed the attempt is lost. Every opponent that makes
-    /// an AoO here is added to <paramref name="provokersOut"/> when given (the bull rush follow
-    /// gives them no second movement AoO, CMB-113).
+    /// spent the action; on anything but Proceed the attempt is lost. A bull rush's initiation AoO
+    /// is its own provocation (PHB p.154, owner decision 2026-10-07), so an enemy that had a movement
+    /// AoO earlier this round (a charge bull rush) may still take it. Following from that decision
+    /// (PHB p.138), it also does not count as the enemy's movement opportunity when the attacker
+    /// follows the pushed defender.
     /// </summary>
     private ManeuverAoOOutcome ResolveManeuverInitiationAoOs(
         CharacterController attacker,
         CharacterController target,
-        SpecialAttackType type,
-        ICollection<CharacterController> alreadyProvokedThisMove = null,
-        ICollection<CharacterController> provokersOut = null)
+        SpecialAttackType type)
     {
         if (attacker == null || attacker.Stats == null)
             return ManeuverAoOOutcome.AttackerIncapacitated;
 
-        List<CharacterController> provokers = ThreatSystem.GetManeuverAoOProvokers(attacker, target, type, GetAllCharacters(), alreadyProvokedThisMove);
+        List<CharacterController> provokers = ThreatSystem.GetManeuverAoOProvokers(attacker, target, type, GetAllCharacters());
         string maneuverLabel = ThreatSystem.GetManeuverAoOLabel(type);
         bool isBullRush = type == SpecialAttackType.BullRushAttack || type == SpecialAttackType.BullRushCharge;
 
@@ -926,8 +926,6 @@ public partial class GameManager
                 : ThreatSystem.ExecuteAoO(provokers[i], attacker, trigger: "maneuver");
             if (maneuverAoO == null)
                 continue;
-
-            provokersOut?.Add(provokers[i]);
 
             if (!isBullRush || provokers[i] == target)
                 CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"{maneuverLabel} initiation AoO: {maneuverAoO.GetDetailedSummary()}"));
@@ -948,7 +946,8 @@ public partial class GameManager
             }
 
             // A strayed AoO that leaves the defender dying or unconscious may end the combat (CORE-011);
-            // otherwise the bull rush goes on against it, the same provisional choice as the push (CMB-115).
+            // otherwise the bull rush goes on against it: only the defender's death stops a bull rush, as
+            // during the push (owner decision 2026-10-07).
             if (isBullRush && target != null && target.Stats != null && targetHpBefore > 0 && target.Stats.CurrentHP <= 0
                 && CheckCombatVictory("BullRush.InitiationAoO", target))
                 return ManeuverAoOOutcome.Disrupted;
@@ -1972,8 +1971,7 @@ public partial class GameManager
         }
 
         // Shared with the NPC executor (TryNPCSpecialAttackIfBeneficial, CMB-076).
-        var initiationProvokers = new HashSet<CharacterController>();
-        if (ResolveManeuverInitiationAoOs(attacker, target, type, provokersOut: initiationProvokers) != ManeuverAoOOutcome.Proceed)
+        if (ResolveManeuverInitiationAoOs(attacker, target, type) != ManeuverAoOOutcome.Proceed)
         {
             Grid.ClearAllHighlights();
             _highlightedCells.Clear();
@@ -2098,8 +2096,7 @@ public partial class GameManager
                             FinalizeSpecialAttackAttackerDropped(attacker);
                         else
                             FinalizeSpecialAttackResolution(attacker, target);
-                    },
-                    attackerAlreadyProvoked: initiationProvokers);
+                    });
                 return;
             }
 

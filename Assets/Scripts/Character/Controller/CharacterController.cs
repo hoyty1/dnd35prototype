@@ -11461,9 +11461,10 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Shared bull rush legality for PCs and NPCs (PHB p.154, CMB-102). Spends nothing. Refuses when
     /// the target is missing, dead or this creature; the target is a swarm (MM p.316); this creature
-    /// is a swarm (interpretation, see below); either side is incorporeal (MM p.311); this creature
-    /// is grappling or pinned (PHB p.156); the target is more than one size category larger; or the
-    /// target is not adjacent (the bull rusher must enter its space).
+    /// is a swarm (house interpretation confirmed by the owner, see below); either side is
+    /// incorporeal (MM p.311); this creature is grappling or pinned (PHB p.156); the target is more
+    /// than one size category larger; or the target is not adjacent (the bull rusher must enter its
+    /// space).
     /// <paramref name="atEndOfCharge"/> true is for the charge planner only, which calls it before
     /// the move: it skips the adjacency rule, which the charge endpoints satisfy. The bull rush itself
     /// (ResolveBullRush, ResolveChargeBullRush) always checks with false, after the move.
@@ -11483,9 +11484,9 @@ public class CharacterController : MonoBehaviour
             return false;
         }
 
-        // Interpretation kept from the old ResolveBullRush, not stated RAW: MM p.316 says a swarm
-        // cannot be bull rushed and makes no standard melee attacks, but does not bar a swarm from
-        // bull rushing. Pending an owner decision (CMB-112).
+        // House interpretation, owner decision 2026-10-07: a swarm cannot bull rush. MM p.316 bars
+        // bull rushing a swarm and gives swarms no standard melee attacks, but does not say a swarm
+        // cannot bull rush; the owner kept the refusal (listed in docs/systems/RULES_COVERAGE.md).
         if (Stats != null && Stats.IsSwarm)
         {
             reason = "a swarm cannot bull rush";

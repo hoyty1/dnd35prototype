@@ -450,8 +450,7 @@ public partial class GameManager
         // Same initiation AoOs as the PC wrapper (CMB-076). A foiled attempt still spends
         // its action; an NPC dropped by the AoO ends its turn (callers return after this).
         int hpBeforeManeuverAoOs = npc.Stats.CurrentHP;
-        var initiationProvokers = new HashSet<CharacterController>();
-        ManeuverAoOOutcome maneuverAoOOutcome = ResolveManeuverInitiationAoOs(npc, target, choice.Value, provokersOut: initiationProvokers);
+        ManeuverAoOOutcome maneuverAoOOutcome = ResolveManeuverInitiationAoOs(npc, target, choice.Value);
         if (maneuverAoOOutcome != ManeuverAoOOutcome.Proceed)
         {
             // The PC wrapper spends its action before the AoOs, so an AoO that drops the PC to
@@ -491,8 +490,7 @@ public partial class GameManager
         if (result.Success)
         {
             if (choice.Value == SpecialAttackType.BullRushAttack || choice.Value == SpecialAttackType.BullRushCharge)
-                ResolveBullRushPushAndFollow(npc, target, result, isCharge: false, squaresMovedThisCharge: 0, onComplete: null,
-                    attackerAlreadyProvoked: initiationProvokers);
+                ResolveBullRushPushAndFollow(npc, target, result, isCharge: false, squaresMovedThisCharge: 0, onComplete: null);
             else if (choice.Value == SpecialAttackType.Overrun)
                 TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
         }

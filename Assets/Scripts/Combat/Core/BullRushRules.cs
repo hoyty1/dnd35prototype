@@ -45,16 +45,17 @@ public static class BullRushRules
     }
 
     /// <summary>
-    /// The attacker's normal movement limit for following a pushed defender, in squares (PHB p.154).
-    /// A standard bull rush allows the attacker's current speed (0 while prone or entangled by a web,
-    /// <see cref="GetSpeedSquares"/>). A charge bull rush allows twice the speed minus the squares the
-    /// charge already cost (PHB p.154-155). It is 0, so the attacker cannot follow, when the attacker
-    /// is incapacitated or a condition blocks its movement, or after a 5-foot step this turn (PHB
-    /// p.144: no 5-foot step in a round in which you move any distance, and following is movement).
-    /// Provisional, pending the owner (CMB-114): for a standard bull rush the turn's other movement
-    /// is not counted in either direction. A move action taken earlier this turn does not shrink the
-    /// limit, and the squares followed do not reduce a move action taken afterwards. PHB p.154 says
-    /// only that the attacker "can't exceed [its] normal movement limit".
+    /// The attacker's normal movement limit for following a pushed defender, in squares (PHB p.154:
+    /// the attacker cannot exceed its normal movement limit). Owner decision 2026-10-07: a standard
+    /// bull rush allows the attacker's current speed (0 while prone or entangled by a web,
+    /// <see cref="GetSpeedSquares"/>), and a move action taken earlier in the same turn does not count
+    /// against it; a charge bull rush allows twice the speed minus the squares the charge already
+    /// cost, so the charge distance plus the follow distance is at most twice the speed (PHB
+    /// p.154-155). The squares followed are not deducted from a move action taken after a standard
+    /// bull rush either (the decision does not address that direction; open owner question CMB-129). It is 0, so the
+    /// attacker cannot follow, when the attacker is incapacitated or a condition blocks its
+    /// movement, or after a 5-foot step this turn (PHB p.144: no 5-foot step in a round in which you
+    /// move any distance, and following is movement).
     /// </summary>
     public static int GetMovementLimitSquares(CharacterController attacker, bool isCharge, int squaresAlreadyMoved)
     {

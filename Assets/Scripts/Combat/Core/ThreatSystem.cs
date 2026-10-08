@@ -687,18 +687,18 @@ public static class ThreatSystem
     }
 
     /// <summary>
-    /// The enemies that get an AoO when <paramref name="attacker"/> starts this maneuver.
-    /// <paramref name="excluded"/> lists enemies that get no AoO here because they already had one
-    /// during the same charge move (a bull rush at the end of a charge). That is an interpretation
-    /// pending the owner (CMB-113): PHB p.138 makes leaving several threatened squares in one move a
-    /// single opportunity, but entering the defender's space (PHB p.154) may be a separate one.
+    /// The enemies that get an AoO when <paramref name="attacker"/> starts this maneuver: each one
+    /// still able to make an AoO this round (<see cref="CanMakeAoO"/>). For a bull rush at the end
+    /// of a charge that includes enemies that already had a movement AoO during the charge: entering
+    /// the defender's space is the bull rush's own provocation (PHB p.154), separate from the charge
+    /// movement, whose squares PHB p.138 counts as one opportunity (owner decision 2026-10-07). So
+    /// only an enemy with an AoO left this round, normally through Combat Reflexes, takes a second.
     /// </summary>
     public static List<CharacterController> GetManeuverAoOProvokers(
         CharacterController attacker,
         CharacterController target,
         SpecialAttackType type,
-        List<CharacterController> allCharacters,
-        ICollection<CharacterController> excluded = null)
+        List<CharacterController> allCharacters)
     {
         var provokers = new List<CharacterController>();
         if (attacker == null || attacker.Stats == null || !DoesManeuverProvokeAoO(type, attacker))
@@ -723,9 +723,6 @@ public static class ThreatSystem
             // disarm or sunder against a foe that cannot reach back provokes nothing.
             provokers.Add(target);
         }
-
-        if (excluded != null)
-            provokers.RemoveAll(enemy => excluded.Contains(enemy));
 
         provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoO(enemy));
         return provokers;

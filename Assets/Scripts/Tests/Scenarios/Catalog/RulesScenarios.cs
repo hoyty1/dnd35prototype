@@ -29,6 +29,9 @@ namespace Tests.Scenarios
     /// maneuvers that replace a natural attack (owner decision 2026-10-07).
     /// PHB p.239 (Haste: one extra attack on a full attack) for the hasted natural-weapon creature: one extra
     /// natural attack at that attack's normal bonus (owner decision 2026-10-07, CMB-106).
+    /// Bull rush AoOs (owner decision 2026-10-07): entering the defender's space is the bull rush's own provocation
+    /// (PHB p.154), separate from movement; moving out of squares one opponent threatens counts as one opportunity for
+    /// the whole round (PHB p.138), and a creature makes one AoO a round, 1 + DEX modifier with Combat Reflexes (PHB p.92).
     /// The AI maneuver stopgap (owner decision 2026-10-07, AI-060) is an AI decision limit, not a rule: after a
     /// maneuver lands the AI attacks with its remaining steps, and it does not retry a failed maneuver type against
     /// the same target that turn.
@@ -36,7 +39,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 32;
+        public const int Count = 35;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -60,6 +63,9 @@ namespace Tests.Scenarios
             yield return S("maneuver-trip-ui", TripUi);
             yield return S("maneuver-disarm", Disarm);
             yield return S("maneuver-bullrush", BullRush);
+            yield return S("maneuver-bullrush-charge-reflexes", () => BullRushWatcherAoOs(true, true));
+            yield return S("maneuver-bullrush-charge-control", () => BullRushWatcherAoOs(true, false));
+            yield return S("maneuver-bullrush-reflexes", () => BullRushWatcherAoOs(false, true));
             yield return S("maneuver-grapple", Grapple);
             yield return S("maneuver-freetrip", FreeTrip);
             yield return S("single-vs-full-attack", () => SingleVsFull(false));
@@ -543,6 +549,115 @@ namespace Tests.Scenarios
                         : ExpectResult.Fail("fighter at " + f + " after a push of " + d, m.Seq);
                 })
                 .Build();
+        }
+
+        /// <summary>
+        /// A watching goblin's AoOs during a bull rush (PHB p.154, p.138, p.92; owner decision 2026-10-07). The goblin
+        /// (DEX 16; with <paramref name="combatReflexes"/> 4 AoOs a round, else 1) stands at (10,9), so it threatens the
+        /// squares (9,10), (10,10) and (11,10). The orc defender at (11,10) makes no AoO, to keep the count to the goblin.
+        /// With <paramref name="charge"/> the fighter charges from (4,10) and leaves (9,10) on the way (one movement AoO),
+        /// enters the orc's space from (10,10) (the bull rush's own provocation: a second AoO only with Combat Reflexes)
+        /// and follows out of (10,10) and (11,10) (movement in the same round: no further AoO). Without a charge the
+        /// fighter starts at (10,10): the entry provokes, and the follow is the round's first movement opportunity, so the
+        /// goblin with Combat Reflexes takes one more. Forced dice give a margin of at least 15, so the push and follow
+        /// run at least 3 squares east.
+        /// </summary>
+        private static ScenarioDef BullRushWatcherAoOs(bool charge, bool combatReflexes)
+        {
+            string id = charge
+                ? (combatReflexes ? "rules/maneuver-bullrush-charge-reflexes" : "rules/maneuver-bullrush-charge-control")
+                : "rules/maneuver-bullrush-reflexes";
+            string title = charge
+                ? (combatReflexes
+                    ? "Charge bull rush: a Combat Reflexes watcher takes the charge-move AoO and the entry AoO, none on the follow (PHB p.154, p.138)"
+                    : "Charge bull rush: a watcher without Combat Reflexes spends its one AoO on the charge move (PHB p.137, p.154)")
+                : "Bull rush: a Combat Reflexes watcher takes the entry AoO and one follow AoO (PHB p.154, p.138)";
+
+            ScenarioBuilder b = Rules(id, title)
+                .Covers("CMB-113", "CMB-128", "PHB p.92", "PHB p.137", "PHB p.138", "PHB p.154")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), charge ? 4 : 10, 10, Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Npc("goblin", "goblin", 10, 9, Control.Scripted)
+                .Tweak("orc", SturdyDummyWithoutAoO)
+                .Tweak("goblin", c =>
+                {
+                    c.Stats.DEX = 16;
+                    if (combatReflexes)
+                        c.Stats.Feats.Add("Combat Reflexes");
+                })
+                .Initiative("goblin", "orc", "fighter")
+                .Force(20, 20, "Bull rush check")
+                .Force(20, 1, "Bull rush defense")
+                .Turn("goblin", 1, Step.Pass())
+                .Turn("orc", 1, Step.Pass())
+                .Turn("fighter", 1, charge ? Step.Charge("orc", bullRush: true) : Step.Maneuver(SpecialAttackType.BullRushAttack, "orc"))
+                .Expect("The orc makes no AoO (fixture check)", Expect.None("aoo", e => e.Str("by") == "orc"))
+                .Expect("The bull rush succeeds and the fighter moves with the orc (fixture check)", v =>
+                {
+                    SpecialAttackType type = charge ? SpecialAttackType.BullRushCharge : SpecialAttackType.BullRushAttack;
+                    TraceEvent m = v.Maneuvers("fighter", type).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    if (!m.Bool("success")) return ExpectResult.Fail("bull rush failed with forced dice", m.Seq);
+                    if (ScenarioChecks.IsDownSnapshot(v.Final("fighter"))) return ExpectResult.Inconclusive("the fighter was dropped");
+                    Vector2Int? o = Pos(v.Final("orc")), f = Pos(v.Final("fighter"));
+                    if (o == null || f == null) return ExpectResult.Fail("no final positions");
+                    return o.Value.y == 10 && o.Value.x >= 14 && f.Value == new Vector2Int(o.Value.x - 1, 10)
+                        ? ExpectResult.Pass("orc at " + o + ", fighter at " + f, m.Seq)
+                        : ExpectResult.Fail("orc at " + o + ", fighter at " + f, m.Seq);
+                });
+
+            if (charge)
+            {
+                b.Expect("The goblin makes one movement AoO during the charge, before the bull rush (PHB p.137)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.BullRushCharge).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    List<TraceEvent> moveAoOs = v.AoOs("goblin", null, "movement");
+                    return moveAoOs.Count == 1 && moveAoOs[0].Seq < m.Seq
+                        ? ExpectResult.Pass("movement AoO #" + moveAoOs[0].Seq + " before #" + m.Seq, moveAoOs[0].Seq, m.Seq)
+                        : ExpectResult.Fail(moveAoOs.Count + " movement AoOs", moveAoOs.Select(e => e.Seq).ToArray());
+                });
+                b.Expect(combatReflexes
+                    ? "Entering the orc's space provokes a second AoO from the goblin with Combat Reflexes: the bull rush's own provocation (PHB p.154)"
+                    : "Without Combat Reflexes the goblin has no AoO left for the entry (one AoO a round, PHB p.137)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.BullRushCharge).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    List<TraceEvent> entry = v.AoOs("goblin", null, "maneuver");
+                    if (!combatReflexes)
+                        return entry.Count == 0
+                            ? ExpectResult.Pass("no entry AoO", m.Seq)
+                            : ExpectResult.Fail(entry.Count + " entry AoOs", entry.Select(e => e.Seq).ToArray());
+                    return entry.Count == 1 && entry[0].Seq < m.Seq
+                        ? ExpectResult.Pass("entry AoO #" + entry[0].Seq + " (at " + entry[0].Str("target") + ") before #" + m.Seq, entry[0].Seq, m.Seq)
+                        : ExpectResult.Fail(entry.Count + " entry AoOs", entry.Select(e => e.Seq).ToArray());
+                });
+                b.Expect("No AoO from the goblin as the fighter follows: its movement opportunity this round went on the charge (PHB p.138)",
+                    Expect.None("aoo", e => e.Str("by") == "goblin" && e.Str("trigger") == "bullrush-move"));
+            }
+            else
+            {
+                b.Expect("Entering the orc's space provokes the goblin's AoO before the bull rush resolves (PHB p.154)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.BullRushAttack).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no bull rush");
+                    List<TraceEvent> entry = v.AoOs("goblin", null, "maneuver");
+                    return entry.Count == 1 && entry[0].Seq < m.Seq
+                        ? ExpectResult.Pass("entry AoO #" + entry[0].Seq + " before #" + m.Seq, entry[0].Seq, m.Seq)
+                        : ExpectResult.Fail(entry.Count + " entry AoOs", entry.Select(e => e.Seq).ToArray());
+                });
+                b.Expect("The follow out of the goblin's squares provokes one more AoO: the entry AoO is not a movement opportunity (PHB p.154, p.138)", v =>
+                {
+                    List<TraceEvent> follow = v.AoOs("goblin", null, "bullrush-move");
+                    List<TraceEvent> entry = v.AoOs("goblin", null, "maneuver");
+                    return follow.Count == 1 && entry.Count == 1 && follow[0].Seq > entry[0].Seq
+                        ? ExpectResult.Pass("follow AoO #" + follow[0].Seq, follow[0].Seq)
+                        : ExpectResult.Fail(follow.Count + " follow AoOs, " + entry.Count + " entry AoOs", follow.Concat(entry).Select(e => e.Seq).ToArray());
+                });
+            }
+
+            return b.Build();
         }
 
         private static ScenarioDef Grapple()
