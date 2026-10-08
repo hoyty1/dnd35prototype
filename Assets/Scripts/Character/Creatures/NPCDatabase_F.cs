@@ -182,6 +182,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "formian_taskmaster",
+            IsExceptionallyStable = true, // PHB p.154/157/158: ant-centaur body on four legs (MM p.108-110; owner decision 2026-10-07, CMB-085)
             Name = "Formian Taskmaster",
             ChallengeRating = "7",
             Level = 6,
@@ -223,6 +224,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "formian_worker",
+            IsExceptionallyStable = true, // PHB p.154/157/158: ant-centaur body on four legs (MM p.108-109; owner decision 2026-10-07, CMB-085)
             Name = "Formian Worker",
             ChallengeRating = "1/2",
             Level = 1,

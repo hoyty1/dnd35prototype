@@ -397,6 +397,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "barghest",
+            IsExceptionallyStable = false, // stable only in wolf form (owner decision 2026-10-07, CMB-085); the data is the natural goblin-wolf hybrid form (bite and claws, MM p.22-23) and Change Shape is text only, so no +4
             Name = "Barghest",
             ChallengeRating = "4",
             Level = 6,
@@ -755,6 +756,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "greater_barghest",
+            IsExceptionallyStable = false, // stable only in dire wolf form (owner decision 2026-10-07, CMB-085); the data is the natural goblin-wolf hybrid form (bite and claws, MM p.22-23) and Change Shape is text only, so no +4
             Name = "Greater Barghest",
             ChallengeRating = "7",
             Level = 9,

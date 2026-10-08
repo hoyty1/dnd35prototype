@@ -75,6 +75,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "ape",
+            IsExceptionallyStable = false, // two legs plus arms (owner decision 2026-10-07, CMB-085)
             Name = "Ape",
             ChallengeRating = "2",
             Level = 4,
@@ -294,6 +295,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "arrowhawk_juvenile",
+            IsExceptionallyStable = false, // no legs (owner decision 2026-10-07, CMB-085)
             Name = "Arrowhawk, Juvenile",
             ChallengeRating = "3",
             Level = 3,

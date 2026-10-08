@@ -507,6 +507,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "chuul",
+            IsExceptionallyStable = true, // PHB p.154/157/158: lobster-like, more than two legs (MM p.35; owner decision 2026-10-07, CMB-085)
             Name = "Chuul",
             ChallengeRating = "7",
             Level = 11,

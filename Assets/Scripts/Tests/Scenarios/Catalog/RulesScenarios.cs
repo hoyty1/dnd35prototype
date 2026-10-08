@@ -18,6 +18,10 @@ namespace Tests.Scenarios
     /// - target_dummy: Commoner 1, Medium, base hit-die HP 50, natural armor -4, no feats, no weapon.
     /// - wolf: Animal 2, Medium, STR 13, BAB 1, HasTripAttack (MM p.283), Weapon Focus and Track.
     /// - goblin: the 1-HD MM goblin of the smoke scenarios.
+    /// - formian_taskmaster: Outsider 6 HD, Medium, STR 17, DEX 16, IsExceptionallyStable (four legs, MM p.108-110;
+    ///   owner decision 2026-10-07, CMB-085).
+    /// - barghest: Outsider 6 HD, Medium, STR 17, DEX 15, not stable (only its wolf form would be, and the game models
+    ///   no wolf form; owner decision 2026-10-07, CMB-085).
     /// Stats actors are Human fighters built with named arguments (CHR-032) and BAB set through
     /// BaseAttackBonusOverride (CHR-068); feat strings are the case-sensitive HasFeat names (CHR-030):
     /// "Improved Trip", "Improved Grapple", "Weapon Focus".
@@ -39,7 +43,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 35;
+        public const int Count = 38;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -82,6 +86,9 @@ namespace Tests.Scenarios
             yield return S("haste-natural-buttons-ui", HasteNaturalButtonsUi);
             yield return S("ai-maneuver-stopgap-trip", () => AiManeuverStopgap(true));
             yield return S("ai-maneuver-stopgap-trip-fail", () => AiManeuverStopgap(false));
+            yield return S("stability-trip", () => StabilityCheck("rules/stability-trip", "A four-legged formian taskmaster resists a trip with +4 stability (PHB p.158, CMB-085)", "formian_taskmaster", SpecialAttackType.Trip, true));
+            yield return S("stability-bullrush", () => StabilityCheck("rules/stability-bullrush", "A four-legged formian taskmaster resists a bull rush with +4 stability (PHB p.154, CMB-085)", "formian_taskmaster", SpecialAttackType.BullRushAttack, true));
+            yield return S("stability-trip-control", () => StabilityCheck("rules/stability-trip-control", "A barghest in its natural form (the only modelled form) gets no stability against a trip (PHB p.158, CMB-085)", "barghest", SpecialAttackType.Trip, false));
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -547,6 +554,52 @@ namespace Tests.Scenarios
                     return followed || stayed
                         ? ExpectResult.Pass("pushed " + d + " (margin " + margin + "), attacker " + (followed ? "followed" : "stayed"), m.Seq)
                         : ExpectResult.Fail("fighter at " + f + " after a push of " + d, m.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// CMB-085 (owner decision 2026-10-07): the stability flag from the NPC data reaches the defender's check in a
+        /// played trip or bull rush. A 6th-level fighter with Improved Trip and Improved Bull Rush (no AoO from those)
+        /// acts against <paramref name="npcId"/>, which makes no AoO either; forced dice (touch attack 20, attacker 20,
+        /// defender 1) make the maneuver succeed. The defender's modifier in the trace (opposed total minus its d20)
+        /// must be the PHB one: trip (p.158) the better of STR and DEX modifier, bull rush (p.154) the STR modifier,
+        /// plus the special size modifier, plus 4 only when the creature is exceptionally stable. The expected
+        /// numbers come from the shared database entry, read only (never mutated).
+        /// </summary>
+        private static ScenarioDef StabilityCheck(string id, string title, string npcId, SpecialAttackType type, bool expectStable)
+        {
+            bool trip = type == SpecialAttackType.Trip;
+            return Rules(id, title)
+                .Covers("CMB-085", trip ? "PHB p.158" : "PHB p.154")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6, "Improved Trip", "Improved Bull Rush")), 10, 10, Control.Scripted)
+                .Npc("foe", npcId, 11, 10, Control.Scripted)
+                .Tweak("foe", SturdyDummyWithoutAoO)
+                .Initiative("fighter", "foe")
+                .Force(20, 20, "Trip touch attack")
+                .Force(20, 20, trip ? "Trip Strength check" : "Bull rush check")
+                .Force(20, 1, trip ? "Trip defense check" : "Bull rush defense")
+                .Turn("fighter", 1, Step.Maneuver(type, "foe"))
+                .Turn("foe", 1, Step.Pass())
+                .Expect("The maneuver step is done", Expect.StepStatus("fighter", 1, "Maneuver", 0, "done"))
+                .Expect(expectStable ? "The defender's check includes +4 stability" : "The defender's check has no stability bonus", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", type).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no " + type);
+                    NPCDefinition def = NPCDatabase.Get(npcId);
+                    if (def == null) return ExpectResult.Fail("no NPC entry " + npcId);
+                    if (def.IsExceptionallyStable != expectStable)
+                        return ExpectResult.Fail(npcId + " IsExceptionallyStable is " + def.IsExceptionallyStable, m.Seq);
+                    int strMod = Mathf.FloorToInt((def.STR - 10) / 2f);
+                    int dexMod = Mathf.FloorToInt((def.DEX - 10) / 2f);
+                    int expected = (trip ? Math.Max(strMod, dexMod) : strMod) + def.SizeCategory.GetGrappleModifier() + (expectStable ? 4 : 0);
+                    int actual = m.Int("opposed") - m.Int("opposedRoll");
+                    if (m.Int("opposedRoll") != 1)
+                        return ExpectResult.Inconclusive("defender d20 " + m.Int("opposedRoll") + " (a tie reroll?)");
+                    return actual == expected
+                        ? ExpectResult.Pass("defender modifier " + actual + (expectStable ? " with +4 stability" : ", no stability"), m.Seq)
+                        : ExpectResult.Fail("defender modifier " + actual + ", expected " + expected, m.Seq);
                 })
                 .Build();
         }

@@ -33,6 +33,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "monkey",
+            IsExceptionallyStable = false, // two legs plus arms (owner decision 2026-10-07, CMB-085)
             Name = "Monkey",
             ChallengeRating = "1/6",
             Level = 1,

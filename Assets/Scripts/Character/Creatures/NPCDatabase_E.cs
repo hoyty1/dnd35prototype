@@ -575,6 +575,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "ethereal_filcher",
+            IsExceptionallyStable = true, // PHB p.154/157/158: stable by owner decision 2026-10-07, CMB-085 (three legs); the MM p.104 text describes a single leg, so the owner is asked to reconfirm
             Name = "Ethereal Filcher",
             ChallengeRating = "3",
             Level = 5,

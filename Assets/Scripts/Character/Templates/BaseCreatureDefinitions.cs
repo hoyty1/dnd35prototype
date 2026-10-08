@@ -18,6 +18,7 @@ public static class BaseCreatureDefinitions
         return new NPCDefinition
         {
             Id = "base_owlbear",
+            IsExceptionallyStable = false, // two legs (owner decision 2026-10-07, CMB-085)
             Name = "Owlbear",
             HitDice = 5,
             SizeCategory = SizeCategory.Large,

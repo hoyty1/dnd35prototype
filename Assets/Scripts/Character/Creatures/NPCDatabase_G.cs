@@ -1194,6 +1194,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "girallon",
+            IsExceptionallyStable = false, // two legs plus four arms (owner decision 2026-10-07, CMB-085)
             Name = "Girallon",
             ChallengeRating = "6",
             Level = 7,

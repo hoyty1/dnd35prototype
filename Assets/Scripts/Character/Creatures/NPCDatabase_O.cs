@@ -110,6 +110,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "octopus",
+            IsExceptionallyStable = false, // aquatic, no footing (owner decision 2026-10-07, CMB-085)
             Name = "Octopus",
             Level = 2,
             CharacterClass = "Warrior",
@@ -255,6 +256,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "owlbear",
+            IsExceptionallyStable = false, // two legs (owner decision 2026-10-07, CMB-085)
             Name = "Owlbear",
             ChallengeRating = "4",
             Level = 5,

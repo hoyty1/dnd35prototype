@@ -75,6 +75,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "howler",
+            IsExceptionallyStable = true, // PHB p.154/157/158: hound- or feline-like, four legs (MM p.154; owner decision 2026-10-07, CMB-085)
             Name = "Howler",
             ChallengeRating = "3",
             Level = 6,
@@ -731,6 +732,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hydra_5head",
+            IsExceptionallyStable = true, // PHB p.154/157/158: reptile-like body, legs not counted in MM p.155; stable by owner decision 2026-10-07 (CMB-085)
             Name = "Five-Headed Hydra",
             ChallengeRating = "4",
             Level = 5,
@@ -783,6 +785,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hydra_7head",
+            IsExceptionallyStable = true, // PHB p.154/157/158: reptile-like body, legs not counted in MM p.155; stable by owner decision 2026-10-07 (CMB-085)
             Name = "Seven-Headed Hydra",
             ChallengeRating = "6",
             Level = 7,
@@ -835,6 +838,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "hydra_9head",
+            IsExceptionallyStable = true, // PHB p.154/157/158: reptile-like body, legs not counted in MM p.155; stable by owner decision 2026-10-07 (CMB-085)
             Name = "Nine-Headed Hydra",
             ChallengeRating = "8",
             Level = 9,

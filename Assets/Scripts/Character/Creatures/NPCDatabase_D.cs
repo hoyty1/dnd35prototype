@@ -852,6 +852,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "dire_ape",
+            IsExceptionallyStable = false, // two legs plus arms (owner decision 2026-10-07, CMB-085)
             Name = "Dire Ape",
             ChallengeRating = "3",
             Level = 5,

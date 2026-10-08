@@ -101,6 +101,7 @@ public static class GrappleDamageRulesTests
         TestBullRushImprovedFeatAddsPlus4();
         TestBullRushDefenderUsesStrengthAndDwarfStability();
         TestExceptionallyStableCreatureData();
+        TestOwnerStabilityClassification();
         TestExceptionallyStableDefenderGetsPlus4();
         TestStableDwarfGetsSinglePlus4AndNoneWhileMounted();
         TestNpcSetupCopiesExceptionallyStable();
@@ -2704,6 +2705,39 @@ public static class GrappleDamageRulesTests
         worgZombieClone.AppliedTemplateIds = new System.Collections.Generic.List<string> { "zombie" };
         NPCDefinition worgZombie = CreatureTemplateRegistry.ApplyTemplatesClone(worgZombieClone);
         Assert(worgZombie != null && worgZombie.IsExceptionallyStable, "A worg zombie keeps its four legs' stability");
+    }
+
+    // CMB-085 owner decision 2026-10-07: the creatures whose legs the MM text left unclear.
+    // Reads the shared templates only.
+    private static void TestOwnerStabilityClassification()
+    {
+        string[] stable =
+        {
+            "chuul", "formian_worker", "formian_taskmaster",
+            "hydra_5head", "hydra_7head", "hydra_9head", "howler", "ethereal_filcher"
+        };
+        foreach (string id in stable)
+        {
+            NPCDefinition def = NPCDatabase.Get(id);
+            Assert(def != null && def.IsExceptionallyStable, $"{id} is exceptionally stable (owner decision, CMB-085)");
+        }
+
+        // Two legs plus arms, no legs, or aquatic with no footing. The barghests are stable only
+        // in wolf form; the data is their natural goblin-wolf hybrid form and Change Shape is text only.
+        string[] notStable =
+        {
+            "ape", "dire_ape", "monkey", "girallon", "arrowhawk_juvenile", "octopus", "owlbear",
+            "skeleton_owlbear", "zombie_owlbear", "barghest", "greater_barghest"
+        };
+        foreach (string id in notStable)
+        {
+            NPCDefinition def = NPCDatabase.Get(id);
+            Assert(def != null && !def.IsExceptionallyStable, $"{id} is not exceptionally stable (owner decision, CMB-085)");
+        }
+
+        NPCDefinition chuul = NPCDatabase.Get("chuul");
+        if (chuul != null)
+            Assert(chuul.Clone().IsExceptionallyStable, "A chuul clone keeps the flag");
     }
 
     private static void TestExceptionallyStableDefenderGetsPlus4()
