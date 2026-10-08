@@ -7517,17 +7517,26 @@ public partial class GameManager
             SpellData scaledSpell = spell;
             scaledSpell.BuffDeflectionBonus = deflectionBonus;
 
+            int deflectionBefore = target.Stats.EffectiveDeflectionBonus;
             ActiveSpellEffect effect = targetStatusMgr.AddEffect(scaledSpell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown", casterLevel);
             if (effect != null)
             {
-                target.Stats.DeflectionBonus = Mathf.Max(target.Stats.DeflectionBonus, deflectionBonus);
+                // AddEffect already applied the bonus to DeflectionBonus (AppliedDeflectionBonus) and reverses it
+                // on removal; this field only feeds the status indicator. A Ring of Protection is kept apart and
+                // combined at read time (CharacterStats.EffectiveDeflectionBonus, ITM-001).
                 target.Stats.ShieldOfFaithDeflectionBonus = deflectionBonus;
 
                 SpellcastingComponent targetSpellComp = target.Spellcasting;
                 if (targetSpellComp != null)
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
 
-                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🛡", $"️ {target.Stats.CharacterName} gains +{deflectionBonus} deflection bonus to AC from Shield of Faith (CL {casterLevel}) [{effect.GetDurationDisplayString()}]"));
+                // Deflection bonuses do not stack (PHB p.171): say so when a ring or another deflection effect
+                // is already as high, so the log does not claim an AC gain that did not happen.
+                int deflectionGain = target.Stats.EffectiveDeflectionBonus - deflectionBefore;
+                string stackingNote = deflectionGain >= deflectionBonus ? ""
+                    : deflectionGain <= 0 ? $" (no AC gain: existing deflection +{deflectionBefore} is as high or higher)"
+                    : $" (AC rises by only +{deflectionGain}: deflection bonuses do not stack)";
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🛡", $"️ {target.Stats.CharacterName} gains +{deflectionBonus} deflection bonus to AC from Shield of Faith (CL {casterLevel}){stackingNote} [{effect.GetDurationDisplayString()}]"));
                 Debug.Log($"[GameManager] Shield of Faith applied to {target.Stats.CharacterName}: +{deflectionBonus} deflection, CL {casterLevel}");
             }
 

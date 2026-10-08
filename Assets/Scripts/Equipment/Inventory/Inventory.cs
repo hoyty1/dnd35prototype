@@ -535,11 +535,12 @@ public class Inventory
             // --- Ring Bonuses (D&D 3.5e DMG pp. 229–233) ---
             // Reset all ring-derived stats, then re-apply from both ring slots.
             // Same bonus type from two rings does NOT stack (use highest per D&D 3.5e stacking rules).
+            // Ring deflection lives in RingDeflectionBonus; CharacterStats.EffectiveDeflectionBonus takes the
+            // higher of it and spell deflection at read time (deflection bonuses do not stack, PHB p.171).
             ResetRingBonuses();
             ApplyRingBonuses(LeftRingSlot);
             ApplyRingBonuses(RightRingSlot);
 
-            // Apply ring deflection bonus to AC (stacks with highest only — use max with spell deflection)
             if (OwnerStats.RingForceShieldBonus > 0)
             {
                 // Ring of Force Shield: shield bonus that does NOT stack with physical shield
@@ -898,10 +899,8 @@ public class Inventory
     {
         if (OwnerStats == null) return;
 
-        // Remove ring-applied deflection bonus (only the ring portion)
-        // DeflectionBonus may also contain spell bonuses; ring adds on top.
-        // We track ring deflection separately and add via max in ApplyRingBonuses.
-        _ringDeflectionBonus = 0;
+        // Ring deflection has its own field, so resetting it never touches spell deflection (ITM-001).
+        OwnerStats.RingDeflectionBonus = 0;
 
         OwnerStats.RingResistanceSaveBonus = 0;
         OwnerStats.RingForceShieldBonus = 0;
@@ -921,7 +920,6 @@ public class Inventory
         RemoveRingEnergyResistances();
     }
 
-    private int _ringDeflectionBonus;
     private readonly System.Collections.Generic.List<ResistEnergyEffectData> _ringEnergyResistEffects
         = new System.Collections.Generic.List<ResistEnergyEffectData>();
 
@@ -934,15 +932,10 @@ public class Inventory
         if (ring == null || !ring.IsRing || OwnerStats == null) return;
 
         // --- Deflection bonus to AC ---
-        // D&D 3.5e: Deflection bonuses do not stack; use highest.
-        // Ring adds to DeflectionBonus field (which also holds spell bonuses like Shield of Faith).
+        // D&D 3.5e: deflection bonuses do not stack; the higher ring applies here, and
+        // CharacterStats.EffectiveDeflectionBonus takes the higher of ring and spell deflection.
         if (ring.RingDeflectionBonus > 0)
-        {
-            int newRingDeflection = Mathf.Max(_ringDeflectionBonus, ring.RingDeflectionBonus);
-            // Adjust OwnerStats.DeflectionBonus: remove old ring portion, add new
-            OwnerStats.DeflectionBonus += (newRingDeflection - _ringDeflectionBonus);
-            _ringDeflectionBonus = newRingDeflection;
-        }
+            OwnerStats.RingDeflectionBonus = Mathf.Max(OwnerStats.RingDeflectionBonus, ring.RingDeflectionBonus);
 
         // --- Resistance bonus to all saves ---
         // D&D 3.5e: Resistance bonuses do not stack; use highest.
@@ -1048,6 +1041,7 @@ public class Inventory
         OwnerStats.WondrousNaturalArmorBonus = 0;
         OwnerStats.WondrousBracersArmorBonus = 0;
         OwnerStats.WondrousSaveAllBonus = 0;
+        OwnerStats.WondrousLuckSaveBonus = 0;
         OwnerStats.WondrousSpeedBonus = 0;
 
         // Reset wondrous movement modes
@@ -1156,7 +1150,11 @@ public class Inventory
         // --- Saving Throw Bonuses ---
         if (item.WondrousSaveBonus > 0 && !string.IsNullOrEmpty(item.WondrousSaveType))
         {
-            if (item.WondrousSaveType == "all")
+            // The Stone of Good Luck's bonus is a luck bonus (DMG p.267), not resistance: it stacks with a cloak,
+            // ring or ward of resistance, so it is kept out of WondrousSaveAllBonus (ITM-001 review).
+            if (item.WondrousSaveType == "all" && item.Id == WondrousItemNames.STONE_OF_GOOD_LUCK)
+                OwnerStats.WondrousLuckSaveBonus = Mathf.Max(OwnerStats.WondrousLuckSaveBonus, item.WondrousSaveBonus);
+            else if (item.WondrousSaveType == "all")
                 OwnerStats.WondrousSaveAllBonus = Mathf.Max(OwnerStats.WondrousSaveAllBonus, item.WondrousSaveBonus);
         }
 

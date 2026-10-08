@@ -1952,13 +1952,13 @@ public class CharacterStats
     public int EffectiveResistanceSaveBonus => Mathf.Max(RingResistanceSaveBonus, WondrousSaveAllBonus);
 
     /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus + resistance (best of ring/wondrous) + condition modifiers.</summary>
-    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + LuckSaveBonus + EffectiveResistanceSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
+    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + LuckSaveBonus + WondrousLuckSaveBonus + EffectiveResistanceSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
 
     /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus + resistance (best of ring/wondrous) + condition modifiers.</summary>
-    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + LuckSaveBonus + EffectiveResistanceSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
+    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + LuckSaveBonus + WondrousLuckSaveBonus + EffectiveResistanceSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
 
     /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus + resistance (best of ring/wondrous) + condition modifiers.</summary>
-    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + LuckSaveBonus + EffectiveResistanceSaveBonus + ConditionWillModifier;
+    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + LuckSaveBonus + WondrousLuckSaveBonus + EffectiveResistanceSaveBonus + ConditionWillModifier;
 
     // ========== FEATS (D&D 3.5) ==========
     /// <summary>Set of feats this character has.</summary>
@@ -2986,8 +2986,17 @@ public class CharacterStats
     /// </summary>
     public int SpellACBonus;
 
-    /// <summary>Deflection bonus to AC from spells (e.g., Shield of Faith).</summary>
+    /// <summary>
+    /// Deflection bonus to AC from spells (e.g., Shield of Faith), written by StatusEffectManager. Item deflection
+    /// is kept apart in <see cref="RingDeflectionBonus"/>; AC formulas read <see cref="EffectiveDeflectionBonus"/>.
+    /// </summary>
     public int DeflectionBonus;
+
+    /// <summary>
+    /// The deflection bonus that applies to AC: the higher of spell deflection and ring deflection
+    /// (PHB p.171: bonuses of the same type do not stack; only the better one applies; ITM-001).
+    /// </summary>
+    public int EffectiveDeflectionBonus => Mathf.Max(DeflectionBonus, RingDeflectionBonus);
 
     /// <summary>Morale bonus to attack rolls from spells (e.g., Bless).</summary>
     public int MoraleAttackBonus;
@@ -2998,7 +3007,7 @@ public class CharacterStats
     /// <summary>Morale bonus to saving throws from spells (e.g., Bless).</summary>
     public int MoraleSaveBonus;
 
-    /// <summary>Luck bonus to saving throws from items (e.g., Luck Blade, Stone of Good Luck).</summary>
+    /// <summary>Luck bonus to saving throws from items toggled on equip (Luck Blade).</summary>
     public int LuckSaveBonus;
 
     // ── Sanctuary ──
@@ -3049,6 +3058,11 @@ public class CharacterStats
     // These fields are set by Inventory.RecalculateStats() when rings are equipped.
     // They use the "best value wins" stacking rule for same bonus type.
 
+    /// <summary>
+    /// Deflection bonus to AC from equipped rings (Ring of Protection +1 to +5; the higher of two rings), recomputed
+    /// from zero on every Inventory.RecalculateStats. Read through <see cref="EffectiveDeflectionBonus"/>.
+    /// </summary>
+    public int RingDeflectionBonus;
     /// <summary>Resistance bonus to all saving throws from equipped rings (Ring of Resistance +1–+5). Does not stack with spell resistance bonuses.</summary>
     public int RingResistanceSaveBonus;
     /// <summary>Competence bonus to Climb from equipped rings (Ring of Climbing: +5).</summary>
@@ -3083,6 +3097,9 @@ public class CharacterStats
     public int WondrousBracersArmorBonus;
     /// <summary>Resistance bonus to all saves from Cloak of Resistance (+1 to +5). Highest wins with ring resistance.</summary>
     public int WondrousSaveAllBonus;
+    /// <summary>Luck bonus to all saves from a worn wondrous item (Stone of Good Luck +1, DMG p.267). Rebuilt by
+    /// Inventory.ApplyAllWondrousItemBonuses; kept out of the resistance bonus so it stacks with cloaks and wards.</summary>
+    public int WondrousLuckSaveBonus;
     /// <summary>Enhancement bonus to base land speed from Boots of Striding (+10 ft). Highest wins.</summary>
     public int WondrousSpeedBonus;
     /// <summary>Displacement miss chance from Cloak of Displacement (20=minor, 50=major). Highest wins. Does not stack with concealment; uses best.</summary>
@@ -3337,7 +3354,7 @@ public class CharacterStats
             // Magic Vestment adds enhancement bonus to armor (stacks with base armor, not with other armor enhancements).
             int effectiveArmorBonus = Mathf.Max(ArmorBonus + MagicVestmentACBonus, SpellACBonus);
             return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + WondrousNaturalArmorBonus + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty
+                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + EffectiveDeflectionBonus + ConditionACPenalty
                    + HasteACBonus + SlowACPenalty + WondrousInsightACBonus;
         }
     }
@@ -3355,7 +3372,7 @@ public class CharacterStats
                 dexToAC = MaxDexBonus;
 
             return 10 + dexToAC + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty
+                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + EffectiveDeflectionBonus + ConditionACPenalty
                    + HasteACBonus + SlowACPenalty;
         }
     }

@@ -7115,10 +7115,12 @@ public class CharacterController : MonoBehaviour
             target,
             Stats != null ? Stats.CharacterAlignment : Alignment.None);
 
-        if (protection.DeflectionAcBonus > 0)
+        // The ward's deflection does not stack with the target's own deflection (ring or spell): only the excess applies.
+        int protectionDeflection = AlignmentProtectionRules.DeflectionAcIncrease(protection, target != null ? target.Stats : null);
+        if (protectionDeflection > 0)
         {
-            targetAC += protection.DeflectionAcBonus;
-            result.ProtectionDeflectionBonusToAc = protection.DeflectionAcBonus;
+            targetAC += protectionDeflection;
+            result.ProtectionDeflectionBonusToAc = protectionDeflection;
             result.ProtectionSourceName = protection.SourceSpellName;
         }
 

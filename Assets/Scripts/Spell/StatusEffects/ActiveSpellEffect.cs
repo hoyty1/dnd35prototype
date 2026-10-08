@@ -350,6 +350,21 @@ public struct AlignmentProtectionBenefits
 
 public static class AlignmentProtectionRules
 {
+    /// <summary>
+    /// How much the ward's deflection bonus raises the target's AC: only the part above the deflection the target
+    /// already has (Ring of Protection or a deflection spell). PHB p.171: bonuses of the same type do not stack;
+    /// only the better one applies (ITM-001).
+    /// </summary>
+    public static int DeflectionAcIncrease(AlignmentProtectionBenefits benefits, CharacterStats target)
+        => Mathf.Max(0, benefits.DeflectionAcBonus - (target != null ? target.EffectiveDeflectionBonus : 0));
+
+    /// <summary>
+    /// How much the ward's resistance bonus raises the target's save: only the part above the item resistance bonus
+    /// it already has (cloak or ring of resistance, CharacterStats.EffectiveResistanceSaveBonus). PHB p.171.
+    /// </summary>
+    public static int ResistanceSaveIncrease(AlignmentProtectionBenefits benefits, CharacterStats target)
+        => Mathf.Max(0, benefits.ResistanceSaveBonus - (target != null ? target.EffectiveResistanceSaveBonus : 0));
+
     public static bool TryGetProtectionTypeForSpell(string spellId, out AlignmentProtectionType type)
     {
         type = AlignmentProtectionType.None;

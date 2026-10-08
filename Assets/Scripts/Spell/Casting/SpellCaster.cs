@@ -156,10 +156,12 @@ public static class SpellCaster
             int touchAC = SpellcastingComponent.GetTouchAC(targetStats)
                 + ((targetController != null && targetController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyACBonus : 0);
 
-            if (protection.DeflectionAcBonus > 0)
+            // The ward's deflection does not stack with the target's own deflection: only the excess applies.
+            int protectionDeflection = AlignmentProtectionRules.DeflectionAcIncrease(protection, targetStats);
+            if (protectionDeflection > 0)
             {
-                touchAC += protection.DeflectionAcBonus;
-                result.ProtectionAcBonus = protection.DeflectionAcBonus;
+                touchAC += protectionDeflection;
+                result.ProtectionAcBonus = protectionDeflection;
             }
 
             int animateRopeRangePenalty = 0;
@@ -1016,9 +1018,11 @@ public static class SpellCaster
             baseSave += 5;
         }
 
-        if (protection.HasMatch && protection.ResistanceSaveBonus > 0)
+        // The ward's resistance bonus does not stack with a cloak or ring of resistance: only the excess applies.
+        int protectionResistanceIncrease = protection.HasMatch ? AlignmentProtectionRules.ResistanceSaveIncrease(protection, stats) : 0;
+        if (protectionResistanceIncrease > 0)
         {
-            protectionSaveBonus = protection.ResistanceSaveBonus;
+            protectionSaveBonus = protectionResistanceIncrease;
             baseSave += protectionSaveBonus;
         }
 

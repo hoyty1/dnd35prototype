@@ -308,12 +308,10 @@ public class StatusEffectManager : MonoBehaviour
             _stats.MagicStoneCasterLevel = 0;
         }
 
-        // D&D 3.5e: Clear Shield of Faith deflection bonus when the spell effect expires or is removed.
+        // Shield of Faith: ReverseStatModifications above already removed its deflection (AppliedDeflectionBonus);
+        // only the indicator field is cleared here, so the bonus is not subtracted twice (ITM-001).
         if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SHIELD_OF_FAITH, System.StringComparison.Ordinal) && _stats != null)
-        {
-            _stats.DeflectionBonus = Mathf.Max(0, _stats.DeflectionBonus - _stats.ShieldOfFaithDeflectionBonus);
             _stats.ShieldOfFaithDeflectionBonus = 0;
-        }
 
         // Also remove from SpellcastingComponent's ActiveBuffs for backward compat
         if (_spellComp != null && effect.Spell != null)
@@ -524,9 +522,10 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedShieldBonus != 0)
             _stats.ShieldBonus += effect.AppliedShieldBonus;
 
-        // Deflection bonus
+        // Deflection bonus: spell deflection bonuses do not stack (PHB p.171), so the field holds the highest
+        // applied one (e.g. Shield of Faith +2 with Shield Other +1 gives +2), not their sum (ITM-001).
         if (effect.AppliedDeflectionBonus != 0)
-            _stats.DeflectionBonus += effect.AppliedDeflectionBonus;
+            RecomputeSpellDeflection(effect, null);
 
         // Temp HP — False Life is handled separately via FalseLifeEffectData (1d10+CL calculation).
         // Only apply static temp HP for other spells that use BuffTempHP directly.
@@ -568,6 +567,23 @@ public class StatusEffectManager : MonoBehaviour
             ApplySkillBonus(effect.AppliedSkillName, effect.AppliedSkillBonus);
     }
 
+    /// <summary>
+    /// Set CharacterStats.DeflectionBonus to the highest deflection bonus among the applied spell effects
+    /// (same-type bonuses do not stack, PHB p.171). <paramref name="adding"/> is an effect being applied that is
+    /// not yet in ActiveEffects; <paramref name="removing"/> is one being reversed. Ring deflection is kept in
+    /// RingDeflectionBonus and combined at read time (CharacterStats.EffectiveDeflectionBonus).
+    /// </summary>
+    private void RecomputeSpellDeflection(ActiveSpellEffect adding, ActiveSpellEffect removing)
+    {
+        int highest = adding != null ? Mathf.Max(0, adding.AppliedDeflectionBonus) : 0;
+        foreach (var active in ActiveEffects)
+        {
+            if (active == null || active == removing || !active.IsApplied) continue;
+            if (active.AppliedDeflectionBonus > highest) highest = active.AppliedDeflectionBonus;
+        }
+        _stats.DeflectionBonus = highest;
+    }
+
     /// <summary>Reverse stat modifications from an expired/removed effect.</summary>
     private void ReverseStatModifications(ActiveSpellEffect effect)
     {
@@ -596,7 +612,7 @@ public class StatusEffectManager : MonoBehaviour
             _stats.ShieldBonus -= effect.AppliedShieldBonus;
 
         if (effect.AppliedDeflectionBonus != 0)
-            _stats.DeflectionBonus -= effect.AppliedDeflectionBonus;
+            RecomputeSpellDeflection(null, effect);
 
         // False Life temp HP removal is handled by CharacterController.RemoveFalseLifeEffect()
         if (effect.AppliedTempHP != 0 && (effect.Spell == null || effect.Spell.SpellId != SpellNames.FALSE_LIFE))

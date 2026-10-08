@@ -366,7 +366,7 @@ Files: `Equipment/Rings/RingNames.cs`, `RingFactory.cs`, `RingDatabase.cs`, `Rin
 
 Pitfalls:
 - Active abilities are unreachable from the UI, for the same `IsConsumable` reason as wondrous items. Only passive bonuses and the equip/rest hooks run.
-- Ring of Protection deflection stacks on every recalculation: `ResetRingBonuses` zeroes a private field without subtracting it from `OwnerStats.DeflectionBonus`. Do not copy that pattern for a new AC bonus.
+- A new equipment AC or save bonus gets its own `CharacterStats` field, zeroed in the reset step of `RecalculateStats` and set with `Mathf.Max`; when spells grant the same bonus type, combine the two at read time (as `EffectiveDeflectionBonus` does for ring and spell deflection, ITM-001). Never add an item bonus into a field that spells also write (the Shield spell and `ShieldBonus` still do, ITM-073).
 - `TestHelpers.EnsureCoreDatabasesInitialized` does not call `RingDatabase.RegisterAllRingsInItemDatabase`; tests must.
 
 ## Add a rod

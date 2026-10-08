@@ -36,11 +36,11 @@ Entries per section:
 | [Characters, feats and classes](issues/CHR.md) | CHR | 9 | 27 | 38 | 74 | CHR-075 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 4 | 26 | 20 | 50 | CRE-052 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
-| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 4 | 32 | 36 | 72 | ITM-073 |
+| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 3 | 33 | 35 | 71 | ITM-074 |
 | [AI](issues/AI.md) | AI | 1 | 19 | 40 | 60 | AI-062 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 25 | 32 | TST-036 |
-| **All** | | 30 | 277 | 366 | 673 | |
+| **All** | | 29 | 278 | 365 | 672 | |
 
 ## Top issues
 
@@ -64,7 +64,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [CRE-002](issues/CRE.md) | High | Creatures, templates and summoning | Spawned NPCs have no alignment, so smite, aligned weapons and alignment spells ignore them | Yes |
 | [CRE-004](issues/CRE.md) | High | Creatures, templates and summoning | Spawned NPCs ignore class BAB and saves | Yes |
 | [ITM-004](issues/ITM.md) | High | Items, store, crafting and treasure | NPCs spawn without weapons and shields listed under MainHand, OffHand or Ranged | Yes |
-| [ITM-001](issues/ITM.md) | High | Items, store, crafting and treasure | Ring of Protection deflection accumulates on every stat recalculation | Yes |
 | [AI-001](issues/AI.md) | High | AI | NPCs never cast area spells, although AI scoring favours them | Yes |
 | [CHR-072](issues/CHR.md) | High | Characters, feats and classes | NPC classes and creature types grant no weapon or armor proficiency, so armed monsters take -4 (and armor check penalties) on attacks | Yes |
 | [CHR-071](issues/CHR.md) | High | Characters, feats and classes | PC Hit Dice stay at creation level, so HD-gated spells (Sleep, Color Spray) treat levelled PCs as level 1 | Yes |

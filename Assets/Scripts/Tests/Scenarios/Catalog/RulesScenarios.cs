@@ -102,7 +102,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 99;
+        public const int Count = 100;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -208,6 +208,7 @@ namespace Tests.Scenarios
             yield return S("combat-end-petrified-defeat", () => CombatEndPetrified(true));
             yield return S("large-encounter-goblins", LargeEncounterGoblins);
             yield return S("large-encounter-sizes", LargeEncounterSizes);
+            yield return S("ring-deflection", RingDeflection);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -4307,6 +4308,162 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass("all " + keys.Count + " acted")
                         : ExpectResult.Fail("never acted: " + string.Join(",", idle));
                 });
+        }
+
+        // ── Item deflection (ITM-001) ───────────────────────────────────
+
+        /// <summary>
+        /// Ring of Protection deflection (ITM-001). DMG p.232: the ring grants a deflection bonus to AC; PHB p.171: two
+        /// bonuses of the same type do not stack, only the better one applies, while different types (luck and
+        /// resistance) do; PHB p.278 Shield of Faith and Shield Other and PHB p.266 Protection from Evil grant deflection
+        /// bonuses too, and the ward and Shield Other a resistance bonus on saves; DMG p.253 Cloak of Resistance; DMG
+        /// p.267 Stone of Good Luck (luck bonus on saves). A Stats fighter (no shield) wears a Ring of Protection +2 from
+        /// setup; an NE goblin attacks it once a round, so its attack event records the AC the attack path uses.
+        /// Round 1: unequipping the ring lowers AC and touch AC by exactly 2; re-equipping and five recalculations keep
+        /// it at +2 (before the fix every recalculation added the ring again and unequipping removed nothing); a second
+        /// ring (+1) changes nothing. Round 2: with only the +1 ring, Shield of Faith (+2 at caster level 1) gives +2,
+        /// not +3; when it ends the ring's +1 is still there and spell deflection is back to 0 (before the fix the
+        /// spell's end subtracted its bonus twice and took the ring's with it); it is then cast again. Shield Other (+1)
+        /// on top changes nothing (spell deflection 2, not 3), ending Shield of Faith under it leaves +1, and Shield of
+        /// Faith is cast once more and Shield Other ended. Round 3: with Shield of Faith +2 and the +1 ring, Protection
+        /// from Evil (+2 against the evil goblin) adds 0 AC; its resistance bonus adds +1 over a Cloak of Resistance +1,
+        /// and a Stone of Good Luck adds +1 luck to Will without cutting the ward's part; with Shield of Faith ended the
+        /// ward adds 1 over the ring. Spells are applied with GameManager.Harness_ApplySpellBuff (the shared effect step
+        /// of a landed cast).
+        /// </summary>
+        private static ScenarioDef RingDeflection()
+        {
+            int bare = int.MinValue, bareTouch = int.MinValue; // AC and touch AC without deflection, measured in round 1 of each job
+            return Rules("rules/ring-deflection", "Ring of Protection deflection counts once and does not stack with other deflection (ITM-001)")
+                .Covers("ITM-001", "DMG p.232", "PHB p.171", "PHB p.266", "PHB p.278")
+                .MaxRounds(3)
+                .Pc("wearer", ActorSource.Stats(() => Fighter("Wearer", 3)), 5, 10, Control.Scripted)
+                .Npc("goblin", "goblin", 6, 10, Control.Scripted)
+                .Tweak("wearer", c => { StripOffHand(c); EquipProtectionRing(c, EquipSlot.LeftRing, 2); })
+                .Tweak("goblin", c => c.Stats.CharacterAlignment = Alignment.NeutralEvil)
+                .Initiative("wearer", "goblin")
+                .Turn("wearer", 1, Step.Assert("a Ring of Protection +2 adds exactly +2 to AC and touch AC, however often stats are recalculated", ctx =>
+                {
+                    CharacterController w = ctx.Get("wearer");
+                    global::Inventory inv = w.GetComponent<InventoryComponent>().CharacterInventory;
+                    CharacterStats s = w.Stats;
+                    int withRing = s.ArmorClass, touchWith = s.TouchArmorClass;
+                    bool ok = AcCheck(ctx, "unequip the +2 ring", inv.Unequip(EquipSlot.LeftRing) ? 1 : 0, 1);
+                    bare = s.ArmorClass;
+                    bareTouch = s.TouchArmorClass;
+                    ok &= AcCheck(ctx, "AC with the ring minus AC without", withRing - bare, 2);
+                    ok &= AcCheck(ctx, "touch AC with the ring minus touch AC without", touchWith - bareTouch, 2);
+                    EquipProtectionRing(w, EquipSlot.LeftRing, 2);
+                    for (int i = 1; i <= 5; i++)
+                    {
+                        inv.RecalculateStats();
+                        ok &= AcCheck(ctx, "AC after recalculation " + i, s.ArmorClass, bare + 2);
+                    }
+                    EquipProtectionRing(w, EquipSlot.RightRing, 1);
+                    ok &= AcCheck(ctx, "rings +2 and +1: only the higher applies", s.ArmorClass, bare + 2);
+                    ok &= AcCheck(ctx, "spell deflection stays 0", s.DeflectionBonus, 0);
+                    ctx.Note("ring-deflection r1 expect-ac=" + (bare + 2));
+                    return ok;
+                }))
+                .Turn("wearer", 2, Step.Assert("Shield of Faith and a ring: the higher deflection applies, and the ring survives the spell's end", ctx =>
+                {
+                    CharacterController w = ctx.Get("wearer");
+                    global::Inventory inv = w.GetComponent<InventoryComponent>().CharacterInventory;
+                    CharacterStats s = w.Stats;
+                    bool ok = AcCheck(ctx, "unequip the +2 ring", inv.Unequip(EquipSlot.LeftRing) ? 1 : 0, 1);
+                    ok &= AcCheck(ctx, "the +1 ring alone", s.ArmorClass, bare + 1);
+                    ok &= AcCheck(ctx, "Shield of Faith applied", ApplySpell(ctx, w, DND35e.Identifiers.SpellNames.SHIELD_OF_FAITH) ? 1 : 0, 1);
+                    ok &= AcCheck(ctx, "Shield of Faith +2 with the +1 ring", s.ArmorClass, bare + 2);
+                    ok &= AcCheck(ctx, "touch AC, Shield of Faith +2 with the +1 ring", s.TouchArmorClass, bareTouch + 2);
+                    w.StatusEffectManager.RemoveEffectsBySpellId(DND35e.Identifiers.SpellNames.SHIELD_OF_FAITH);
+                    ok &= AcCheck(ctx, "Shield of Faith ended: the +1 ring remains", s.ArmorClass, bare + 1);
+                    ok &= AcCheck(ctx, "Shield of Faith ended: spell deflection back to 0", s.DeflectionBonus, 0);
+                    ok &= AcCheck(ctx, "Shield of Faith applied again", ApplySpell(ctx, w, DND35e.Identifiers.SpellNames.SHIELD_OF_FAITH) ? 1 : 0, 1);
+                    ok &= AcCheck(ctx, "Shield of Faith +2 with the +1 ring, again", s.ArmorClass, bare + 2);
+                    ok &= AcCheck(ctx, "Shield Other applied", ApplySpell(ctx, w, DND35e.Identifiers.SpellNames.SHIELD_OTHER) ? 1 : 0, 1);
+                    ok &= AcCheck(ctx, "Shield of Faith +2 and Shield Other +1: spell deflection", s.DeflectionBonus, 2);
+                    ok &= AcCheck(ctx, "Shield of Faith +2, Shield Other +1 and the +1 ring", s.ArmorClass, bare + 2);
+                    w.StatusEffectManager.RemoveEffectsBySpellId(DND35e.Identifiers.SpellNames.SHIELD_OF_FAITH);
+                    ok &= AcCheck(ctx, "Shield of Faith ended under Shield Other: spell deflection", s.DeflectionBonus, 1);
+                    ok &= AcCheck(ctx, "Shield of Faith ended under Shield Other: AC", s.ArmorClass, bare + 1);
+                    ok &= AcCheck(ctx, "Shield of Faith applied a third time", ApplySpell(ctx, w, DND35e.Identifiers.SpellNames.SHIELD_OF_FAITH) ? 1 : 0, 1);
+                    w.StatusEffectManager.RemoveEffectsBySpellId(DND35e.Identifiers.SpellNames.SHIELD_OTHER);
+                    ok &= AcCheck(ctx, "Shield Other ended: spell deflection", s.DeflectionBonus, 2);
+                    ok &= AcCheck(ctx, "Shield Other ended: AC", s.ArmorClass, bare + 2);
+                    ctx.Note("ring-deflection r2 expect-ac=" + (bare + 2));
+                    return ok;
+                }))
+                .Turn("wearer", 3, Step.Assert("Protection from Evil adds only what other deflection and resistance bonuses do not already give", ctx =>
+                {
+                    CharacterController w = ctx.Get("wearer");
+                    global::Inventory inv = w.GetComponent<InventoryComponent>().CharacterInventory;
+                    CharacterStats s = w.Stats;
+                    bool ok = AcCheck(ctx, "Shield of Faith +2 with the +1 ring", s.ArmorClass, bare + 2);
+                    ok &= AcCheck(ctx, "Protection from Evil applied", ApplySpell(ctx, w, DND35e.Identifiers.SpellNames.PROTECTION_FROM_EVIL) ? 1 : 0, 1);
+                    AlignmentProtectionBenefits ward = AlignmentProtectionRules.GetBenefitsAgainst(w, ctx.Get("goblin").Stats.CharacterAlignment);
+                    ok &= AcCheck(ctx, "the ward's deflection against the goblin", ward.DeflectionAcBonus, 2);
+                    ok &= AcCheck(ctx, "the ward's resistance bonus against the goblin", ward.ResistanceSaveBonus, 2);
+                    ok &= AcCheck(ctx, "the ward raises AC over Shield of Faith +2 by", AlignmentProtectionRules.DeflectionAcIncrease(ward, s), 0);
+                    int willBare = s.WillSave;
+                    ok &= AcCheck(ctx, "the ward raises saves with no item resistance by", AlignmentProtectionRules.ResistanceSaveIncrease(ward, s), 2);
+                    inv.DirectEquip(WondrousItemFactory.CreateCloakOfResistance(1), EquipSlot.Back);
+                    ok &= AcCheck(ctx, "Cloak of Resistance +1 raises Will by", s.WillSave - willBare, 1);
+                    ok &= AcCheck(ctx, "the ward raises saves over the +1 cloak by", AlignmentProtectionRules.ResistanceSaveIncrease(ward, s), 1);
+                    inv.DirectEquip(WondrousItemFactory.CreateStoneOfGoodLuck(), EquipSlot.Slotless);
+                    ok &= AcCheck(ctx, "cloak +1 and Stone of Good Luck (luck +1) raise Will by", s.WillSave - willBare, 2);
+                    ok &= AcCheck(ctx, "the ward raises saves over cloak and luckstone by", AlignmentProtectionRules.ResistanceSaveIncrease(ward, s), 1);
+                    w.StatusEffectManager.RemoveEffectsBySpellId(DND35e.Identifiers.SpellNames.SHIELD_OF_FAITH);
+                    ok &= AcCheck(ctx, "Shield of Faith ended: the +1 ring remains", s.ArmorClass, bare + 1);
+                    ok &= AcCheck(ctx, "the ward raises AC over the +1 ring by", AlignmentProtectionRules.DeflectionAcIncrease(ward, s), 1);
+                    ctx.Note("ring-deflection r3 expect-ac=" + (bare + 2));
+                    return ok;
+                }))
+                .Turn("goblin", 0, Step.Attack("wearer"))
+                .Expect("Every deflection check holds (DMG p.232, PHB p.171)", Expect.AssertsPass())
+                .Expect("Each round the goblin's attack meets the AC the wearer's check expects (ring, Shield of Faith, Protection from Evil)", v =>
+                {
+                    for (int round = 1; round <= 3; round++)
+                    {
+                        TraceEvent note = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith("ring-deflection r" + round + " expect-ac=", StringComparison.Ordinal));
+                        if (note == null) return ExpectResult.Fail("no round-" + round + " expectation note");
+                        int want = int.Parse(note.Str("text").Substring(note.Str("text").IndexOf('=') + 1));
+                        List<TraceEvent> attacks = v.Attacks("goblin", "wearer", false, round);
+                        if (attacks.Count == 0) return ExpectResult.Fail("no goblin attack in round " + round, note.Seq);
+                        TraceEvent wrong = attacks.FirstOrDefault(e => e.Int("ac") != want);
+                        if (wrong != null) return ExpectResult.Fail("round " + round + ": attack against AC " + wrong.Int("ac") + ", expected " + want, wrong.Seq);
+                    }
+                    return ExpectResult.Pass("3 rounds of attacks against the expected AC");
+                })
+                .Build();
+        }
+
+        /// <summary>Equips a new Ring of Protection +<paramref name="bonus"/> (RingFactory, DMG p.232) in <paramref name="slot"/>.</summary>
+        private static void EquipProtectionRing(CharacterController c, EquipSlot slot, int bonus)
+        {
+            InventoryComponent inv = c.GetComponent<InventoryComponent>();
+            if (inv == null || inv.CharacterInventory == null)
+                return;
+            inv.CharacterInventory.DirectEquip(RingFactory.CreateProtectionRing(bonus), slot);
+        }
+
+        /// <summary>Applies a clone of <paramref name="spellId"/> to <paramref name="target"/> as a landed self-cast (Harness_ApplySpellBuff).</summary>
+        private static bool ApplySpell(ScenarioContext ctx, CharacterController target, string spellId)
+        {
+            SpellDatabase.Init();
+            SpellData spell = SpellDatabase.GetSpell(spellId);
+            if (spell == null || ctx.Gm == null)
+                return false;
+            ctx.Gm.Harness_ApplySpellBuff(target, target, spell.Clone());
+            return target.StatusEffectManager != null && target.StatusEffectManager.HasEffect(spellId);
+        }
+
+        /// <summary>True when <paramref name="got"/> equals <paramref name="want"/>; otherwise notes the mismatch.</summary>
+        private static bool AcCheck(ScenarioContext ctx, string what, int got, int want)
+        {
+            if (got == want)
+                return true;
+            ctx.Note("ring-deflection mismatch: " + what + ": got " + got + ", expected " + want);
+            return false;
         }
 
         private static Vector2Int? ActorPos(TraceView v, string key)

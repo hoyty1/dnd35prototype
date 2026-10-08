@@ -118,10 +118,10 @@ Three similarly named types are easy to confuse:
 8. Weapon stats from the right hand, the left hand or a spiked gauntlet. If there is none, it falls back to the primary natural attack or 1d3 unarmed.
 9. `OwnerCharacter.RefreshEquipmentTags()`.
 
-**Bonus stacking.** Ring and wondrous bonuses are reset to 0 on each recalculation and reapplied with "highest wins per bonus type" (`Mathf.Max`). Boolean grants are OR'ed. Three writes break that pattern; all are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md):
+**Bonus stacking.** Ring and wondrous bonuses are reset to 0 on each recalculation and reapplied with "highest wins per bonus type" (`Mathf.Max`). Boolean grants are OR'ed. Ring deflection has its own field, `CharacterStats.RingDeflectionBonus`; the AC formulas read `EffectiveDeflectionBonus`, the higher of it and the spell field `DeflectionBonus`, which StatusEffectManager sets to the highest applied spell deflection (ITM-001, fixed 2026-10-08; checked in Play mode by `rules/ring-deflection`). The Stone of Good Luck's save bonus goes to the luck field `WondrousLuckSaveBonus`, not the resistance field `WondrousSaveAllBonus`. A Protection from Evil ward adds only what exceeds the target's own deflection and resistance bonuses (`AlignmentProtectionRules.DeflectionAcIncrease`, `ResistanceSaveIncrease`). These writes still break the pattern; all are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md):
 
-- Ring deflection is added into the shared `CharacterStats.DeflectionBonus` with `+=`. `ResetRingBonuses` zeroes only the private tracker (Inventory.cs:896, :935), so the bonus likely accumulates on every recalculation. Spells use the same field. This is not verified in Play mode.
-- `FreedomOfMovementActive` (Inventory.cs:985) is set by a ring and never cleared.
+- The Shield spell adds +4 into `ShieldBonus`, which every recalculation rebuilds from the held shield, so a recalculation during the spell erases it (ITM-073).
+- `FreedomOfMovementActive` (Inventory.cs:986) is set by a ring and never cleared.
 - Wondrous spell resistance raises `SpellResistance` with `Max` and is never reverted.
 
 Several `Ring*`/`Wondrous*` flags on `CharacterStats` are written here but never read by gameplay: feather fall, water walking, sustenance, mind shielding, flight, spider climb, levitation, caster-level bonus, see invisible and others. Grep for a reader before relying on one.

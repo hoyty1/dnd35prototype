@@ -871,7 +871,7 @@ public class CharacterSheetUI : MonoBehaviour
 
         string acBreakdown = $"  10 + Armor {stats.ArmorBonus} + Shield {stats.ShieldBonus} + Natural {stats.NaturalArmorBonus} + DEX {FormatMod(effectiveDex)}";
         if (stats.SpellACBonus > 0) acBreakdown += $" + Spell {stats.SpellACBonus}";
-        if (stats.DeflectionBonus > 0) acBreakdown += $" + Deflect {stats.DeflectionBonus}";
+        if (stats.EffectiveDeflectionBonus > 0) acBreakdown += $" + Deflect {stats.EffectiveDeflectionBonus}";
         if (stats.SizeModifier != 0) acBreakdown += $" + Size {FormatMod(stats.SizeModifier)}";
         AddLine(content, acBreakdown, 9, DimText, FontStyle.Normal, 13);
 

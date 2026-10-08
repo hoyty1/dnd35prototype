@@ -2892,7 +2892,7 @@ public class SpellcastingComponent : MonoBehaviour
         if (target.MaxDexBonus >= 0 && dexToAC > target.MaxDexBonus)
             dexToAC = target.MaxDexBonus;
 
-        return 10 + dexToAC + target.SizeModifier + target.DeflectionBonus
+        return 10 + dexToAC + target.SizeModifier + target.EffectiveDeflectionBonus
                + target.FeatACBonus + target.MonkACBonus + target.RageACPenalty + target.SpellRageACPenalty;
     }
 

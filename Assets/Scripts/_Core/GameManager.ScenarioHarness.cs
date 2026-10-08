@@ -458,6 +458,18 @@ public partial class GameManager
         OnSpellSelectedWithMetamagic(spell, metamagic);
     }
 
+    /// <summary>
+    /// Applies a buff spell's effect exactly as a landed cast does (<c>ApplySpellBuff</c>, the shared PC and NPC
+    /// effect step), without the slot, action and targeting steps around it. Pass a clone, never a database
+    /// template (CLAUDE.md). Used by rules scenarios that need a spell effect on an actor that has no slot for it.
+    /// </summary>
+    internal ActiveSpellEffect Harness_ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell)
+    {
+        if (target == null || spell == null)
+            return null;
+        return ApplySpellBuff(caster ?? target, target, spell, (caster ?? target).Spellcasting);
+    }
+
     /// <summary>The AoO confirmation the player is being asked to answer, or null.</summary>
     internal AoOProvokingActionInfo Harness_PendingAoO
         => _waitingForAoOConfirmation ? _pendingAoOAction : null;
