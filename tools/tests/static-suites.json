@@ -1225,7 +1225,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 510,
+      "passed": 528,
       "failed": 7,
       "flakyFailures": 0,
       "knownFailures": [

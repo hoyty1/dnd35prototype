@@ -259,14 +259,19 @@ namespace DND35.AI
 
         /// <summary>
         /// Default counter-trip choice (CMB-079; owner direction 2026-10-07: counter-trip unless it is clearly
-        /// bad). Declines when the reaction would end this creature's invisibility or Sanctuary (it counts as
-        /// an attack), or when its chance to win the opposed check is below
+        /// bad). Declines against an ally (TeamUtility.IsAlly: a tripper on this creature's own side, such as a
+        /// confused or charmed companion; the rule lets any defender react, so the side is this choice's
+        /// concern, owner ruling 2026-10-08, CMB-136); when the reaction would end this creature's invisibility
+        /// or Sanctuary (it counts as an attack); or when its chance to win the opposed check is below
         /// <see cref="CounterTripMinimumWinChance"/> (CharacterController.EstimateOpposedCheckWinChance with
         /// the counter-trip modifiers); otherwise trips back.
         /// </summary>
         public static bool DefaultShouldCounterTrip(CharacterController self, CharacterController tripper)
         {
             if (self == null || tripper == null || self.Stats == null || tripper.Stats == null)
+                return false;
+
+            if (TeamUtility.IsAlly(self, tripper))
                 return false;
 
             if (self.HasActiveInvisibilityEffect || self.Stats.SanctuaryActive)

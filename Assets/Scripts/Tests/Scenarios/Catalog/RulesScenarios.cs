@@ -60,6 +60,11 @@ namespace Tests.Scenarios
     /// Strength and Dexterity (the defender's choice: the AI decides for an AI-run defender, a controllable one gets a
     /// prompt, answered here by the runner as each scenario says); after a trip that lands, Improved Trip gives an
     /// immediate melee attack at the bonus of the attack the trip used, which spends no step of the sequence.
+    /// Owner rulings 2026-10-08 (CMB-136; PHB p.158, p.145, p.96, p.139 rechecked): any defender may trip back, an ally
+    /// of the tripper too (the AI default declines against an ally); a conscious defender at 0 HP or below (disabled)
+    /// may trip back, since it is a reaction, not an action; the Improved Trip attack uses the main weapon when it can
+    /// attack the tripped foe, else the off-hand weapon, else an unarmed strike, which provokes the armed foe's AoO
+    /// first unless the tripper has Improved Unarmed Strike.
     /// Weapon damage by size (CMB-119): DMG Tables 2-2 and 2-3 (p.28) scale a Medium weapon's damage one row per
     /// size category; PHB Table 7-5 (p.116) gives a Small longsword 1d6; Enlarge Person (PHB p.226) and Reduce Person
     /// (p.269) resize the wielder's weapon with it; MM goblin (p.133, morningstar 1d6) and ogre (p.199, greatclub 2d8).
@@ -93,7 +98,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 85;
+        public const int Count = 92;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -122,6 +127,13 @@ namespace Tests.Scenarios
             yield return S("maneuver-trip-counter-ui-ai", () => CounterTripUiAi(true));
             yield return S("maneuver-trip-counter-ui-ai-decline", () => CounterTripUiAi(false));
             yield return S("maneuver-trip-size", TripSize);
+            yield return S("maneuver-trip-counter-ally-ui", () => CounterTripAlly(true));
+            yield return S("maneuver-trip-counter-ally-ai", () => CounterTripAlly(false));
+            yield return S("maneuver-trip-counter-disabled", CounterTripDisabled);
+            yield return S("maneuver-trip-improved-unarmed", () => ImprovedTripFallback("unarmed"));
+            yield return S("maneuver-trip-improved-unarmed-ius", () => ImprovedTripFallback("unarmed-ius"));
+            yield return S("maneuver-trip-improved-offhand", () => ImprovedTripFallback("offhand"));
+            yield return S("maneuver-trip-improved-unarmed-dropped-ui", ImprovedTripUnarmedDropsUi);
             yield return S("maneuver-disarm", Disarm);
             yield return S("maneuver-bullrush", BullRush);
             yield return S("maneuver-bullrush-charge-reflexes", () => BullRushWatcherAoOs(true, true));
@@ -853,6 +865,294 @@ namespace Tests.Scenarios
                     return ms.Count == 1 && ms[0].Str("target") == "orc"
                         ? ExpectResult.Pass("one trip, at the orc", ms[0].Seq)
                         : ExpectResult.Fail(ms.Count + " maneuvers", ms.Select(e => e.Seq).ToArray());
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// Any defender may trip back after a failed trip, whatever its side (owner ruling 2026-10-08, CMB-136; PHB p.158
+        /// names no side). <paramref name="ui"/>: a scripted fighter trips its controllable ally, the Ui hero, and loses the
+        /// opposed check; the hero is asked like any defender, the runner answers Trip Back and the forced counter-trip
+        /// lands. Otherwise a scripted orc trips its AI-run orc ally: the rule allows the counter-trip, and the AI default
+        /// (AIProfile.DefaultShouldCounterTrip) declines it against an ally, so nothing follows but the decline line.
+        /// </summary>
+        private static ScenarioDef CounterTripAlly(bool ui)
+        {
+            ScenarioBuilder b = Rules(ui ? "rules/maneuver-trip-counter-ally-ui" : "rules/maneuver-trip-counter-ally-ai",
+                    ui
+                        ? "A controllable defender tripped by an ally is asked and trips back (PHB p.158, CMB-136)"
+                        : "An AI-run defender tripped by an ally may trip back but declines (PHB p.158, CMB-136)")
+                .Covers("CMB-136", "PHB p.158", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Force(20, 20, "Trip touch attack")
+                .Force(20, 2, "Trip Strength check")
+                .Force(20, 18, "Trip defense check")
+                .Force(20, 18, "Counter-trip check")
+                .Force(20, 2, "Counter-trip resist check");
+
+            if (ui)
+            {
+                b.Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 10, 10, Control.Ui)
+                    .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), 11, 10, Control.Scripted)
+                    .Npc("orc", "orc_berserker", 16, 16, Control.Scripted)
+                    .Tweak("hero", StripOffHand)
+                    .Tweak("fighter", SturdyDummy)
+                    .Initiative("fighter", "hero", "orc")
+                    .CounterTripAnswer("hero", true)
+                    .Turn("fighter", 1, Step.Maneuver(SpecialAttackType.Trip, "hero"))
+                    .Turn("orc", 1, Step.Pass())
+                    .Expect("The fighter's trip of its ally is attempted", Expect.StepStatus("fighter", 1, "Maneuver", 0, "done"))
+                    .Expect("The fighter's trip fails and the hero stays standing", v =>
+                    {
+                        TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.Trip).FirstOrDefault(e => !e.Bool("counter"));
+                        if (m == null) return ExpectResult.Fail("no trip by the fighter");
+                        return !m.Bool("success") && !HasCond(v.Final("hero"), "Prone") ? ExpectResult.Pass("trip failed", m.Seq) : ExpectResult.Fail("success " + m.Get("success"), m.Seq);
+                    })
+                    .Expect("The hero is asked although the tripper is its ally, once, answered Trip Back", v =>
+                    {
+                        List<TraceEvent> notes = v.Of("note").Where(e => e.Str("text").StartsWith("counter-trip prompt for hero", StringComparison.Ordinal)).ToList();
+                        if (notes.Count != 1) return ExpectResult.Fail(notes.Count + " counter-trip prompts for the hero", notes.Select(e => e.Seq).ToArray());
+                        return notes[0].Str("text").Contains("answered TripBack") ? ExpectResult.Pass(notes[0].Str("text"), notes[0].Seq) : ExpectResult.Fail(notes[0].Str("text"), notes[0].Seq);
+                    })
+                    .Expect("The hero trips its ally back: no touch attack, fighter prone (PHB p.158)", v =>
+                    {
+                        TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.Trip).FirstOrDefault(e => !e.Bool("counter"));
+                        TraceEvent counter = v.Maneuvers("hero", SpecialAttackType.Trip).FirstOrDefault(e => e.Bool("counter"));
+                        if (m == null || counter == null) return ExpectResult.Fail("no trip or no counter-trip");
+                        if (counter.Str("target") != "fighter") return ExpectResult.Fail("counter-trip target " + counter.Str("target"), counter.Seq);
+                        if (v.Of("dice").Count(e => e.Str("ctx") == "Trip touch attack") != 1) return ExpectResult.Fail("the counter-trip rolled a touch attack", counter.Seq);
+                        if (!counter.Bool("success")) return ExpectResult.Fail("counter-trip failed with forced dice", counter.Seq);
+                        return HasCond(v.Final("fighter"), "Prone") ? ExpectResult.Pass("fighter prone", m.Seq, counter.Seq) : ExpectResult.Fail("fighter not prone", counter.Seq);
+                    });
+            }
+            else
+            {
+                b.Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), 6, 10, Control.Scripted)
+                    .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                    .Npc("orc2", "orc_berserker", 12, 10, Control.Scripted)
+                    .Tweak("orc", SturdyDummy)
+                    .Tweak("orc2", SturdyDummy)
+                    .Initiative("orc", "orc2", "fighter")
+                    .Turn("orc", 1, Step.Maneuver(SpecialAttackType.Trip, "orc2"))
+                    .Turn("orc2", 1, Step.Pass())
+                    .Turn("fighter", 1, Step.Pass())
+                    .Expect("The orc's trip of its ally is attempted and fails", v =>
+                    {
+                        TraceEvent m = v.Maneuvers("orc", SpecialAttackType.Trip).FirstOrDefault(e => !e.Bool("counter"));
+                        if (m == null) return ExpectResult.Fail("no trip by the orc");
+                        if (m.Str("target") != "orc2") return ExpectResult.Fail("trip target " + m.Str("target"), m.Seq);
+                        return !m.Bool("success") ? ExpectResult.Pass("trip failed", m.Seq) : ExpectResult.Fail("the trip landed", m.Seq);
+                    })
+                    .Expect("The ally is offered the counter-trip and declines it (AIProfile default against an ally, CMB-136)", v =>
+                    {
+                        List<TraceEvent> declines = v.Log("does not try to trip .* back");
+                        if (declines.Count != 1) return ExpectResult.Fail(declines.Count + " decline lines", declines.Select(e => e.Seq).ToArray());
+                        if (v.Maneuvers("orc2").Any()) return ExpectResult.Fail("orc2 tripped back");
+                        return !HasCond(v.Final("orc"), "Prone") ? ExpectResult.Pass(declines[0].Str("text"), declines[0].Seq) : ExpectResult.Fail("orc prone");
+                    });
+            }
+            return b.Build();
+        }
+
+        /// <summary>
+        /// A disabled defender trips back (owner ruling 2026-10-08, CMB-136): the orc is at 0 HP (disabled, PHB p.145) and
+        /// the fighter's Improved Trip (no initiation AoO) loses the opposed check. The counter-trip is a reaction, not an
+        /// action, so the AI-run orc trips back, and it stays at 0 HP and disabled (no strenuous-action hit point).
+        /// </summary>
+        private static ScenarioDef CounterTripDisabled()
+        {
+            return Rules("rules/maneuver-trip-counter-disabled", "A disabled defender (0 HP) trips back after a failed trip (PHB p.145, p.158; CMB-136)")
+                .Covers("CMB-136", "PHB p.145", "PHB p.158")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6, "Improved Trip")), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("fighter", SturdyDummy)
+                .Tweak("orc", c => c.Stats.CurrentHP = 0)
+                .Initiative("fighter", "orc")
+                .Force(20, 20, "Trip touch attack")
+                .Force(20, 2, "Trip Strength check")
+                .Force(20, 18, "Trip defense check")
+                .Force(20, 18, "Counter-trip check")
+                .Force(20, 2, "Counter-trip resist check")
+                .Turn("fighter", 1, Step.Maneuver(SpecialAttackType.Trip, "orc"))
+                .Turn("orc", 1, Step.Pass())
+                .Expect("The orc starts the fight disabled at 0 HP (fixture check)", v =>
+                {
+                    JsonObj snap = v.Snapshot("orc", 1);
+                    return snap != null && snap.Get("st") is HPState st && st == HPState.Disabled
+                        ? ExpectResult.Pass("orc disabled")
+                        : ExpectResult.Fail("orc state " + (snap != null ? snap.Get("st") : "missing"));
+                })
+                .Expect("The fighter's trip fails", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.Trip).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no trip");
+                    return !m.Bool("success") ? ExpectResult.Pass("failed", m.Seq) : ExpectResult.Fail("the trip landed", m.Seq);
+                })
+                .Expect("The disabled orc trips the fighter back and the fighter is prone (PHB p.158, CMB-136)", v =>
+                {
+                    TraceEvent counter = v.Maneuvers("orc", SpecialAttackType.Trip).FirstOrDefault(e => e.Bool("counter"));
+                    if (counter == null) return ExpectResult.Fail("no counter-trip by the disabled orc");
+                    if (!counter.Bool("success")) return ExpectResult.Fail("counter-trip failed with forced dice", counter.Seq);
+                    return HasCond(v.Final("fighter"), "Prone") ? ExpectResult.Pass("fighter prone", counter.Seq) : ExpectResult.Fail("fighter not prone", counter.Seq);
+                })
+                .Expect("The counter-trip costs the disabled orc no hit point (a reaction, not a strenuous action)", v =>
+                {
+                    JsonObj fin = v.Final("orc");
+                    object hp = fin != null ? fin.Get("hp") : null;
+                    return fin != null && Convert.ToInt32(hp) == 0 && fin.Get("st") is HPState st && st == HPState.Disabled
+                        ? ExpectResult.Pass("orc at 0 HP, disabled")
+                        : ExpectResult.Fail("orc HP " + hp + ", state " + (fin != null ? fin.Get("st") : "missing"));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// Improved Trip's attack when the main weapon cannot attack the tripped foe (owner ruling 2026-10-08, CMB-136;
+        /// PHB p.96 "a melee attack against that opponent", p.139). The fighter trips an adjacent orc with forced dice and
+        /// no initiation AoO (Improved Trip). <paramref name="variant"/> "unarmed": a longspear (reach, cannot attack
+        /// adjacent), so an unarmed strike at the trip's bonus, after the armed orc's AoO (no Improved Unarmed Strike);
+        /// "unarmed-ius": the same with Improved Unarmed Strike, no AoO; "offhand": a sling (a ranged weapon, no melee
+        /// attack) in the main hand and a dagger in the off hand, so the dagger, as an off-hand attack, no AoO.
+        /// </summary>
+        private static ScenarioDef ImprovedTripFallback(string variant)
+        {
+            bool offHand = variant == "offhand";
+            bool ius = variant == "unarmed-ius";
+            string weaponName = offHand ? "Dagger" : "Unarmed strike";
+            string title = offHand
+                ? "Improved Trip with a sling in hand, adjacent foe: the off-hand dagger attacks (PHB p.96, CMB-136)"
+                : ius
+                    ? "Improved Trip with a longspear, adjacent foe: an unarmed strike, no AoO with Improved Unarmed Strike (PHB p.96, p.139, CMB-136)"
+                    : "Improved Trip with a longspear, adjacent foe: an unarmed strike after the foe's AoO (PHB p.96, p.139, CMB-136)";
+            ScenarioBuilder b = Rules("rules/maneuver-trip-improved-" + variant, title)
+                .Covers("CMB-136", "PHB p.96", "PHB p.139")
+                .MaxRounds(1)
+                .Pc("fighter", ActorSource.Stats(() => ius ? Fighter("Fighter", 6, "Improved Trip", "Improved Unarmed Strike") : Fighter("Fighter", 6, "Improved Trip")), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("fighter", c =>
+                {
+                    StripOffHand(c);
+                    InventoryComponent inv = c.GetComponent<InventoryComponent>();
+#pragma warning disable CS0618 // the longspear has no ItemID value
+                    inv.CharacterInventory.DirectEquip(offHand
+                        ? ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponSling)
+                        : ItemDatabase.CloneItem(DND35e.Identifiers.ItemIDs.LONGSPEAR), EquipSlot.RightHand);
+#pragma warning restore CS0618
+                    if (offHand)
+                        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponDagger), EquipSlot.LeftHand);
+                    inv.CharacterInventory.RecalculateStats();
+                    SturdyDummy(c);
+                })
+                .Tweak("orc", SturdyDummy)
+                .Initiative("fighter", "orc")
+                .Force(20, 20, "Trip touch attack")
+                .Force(20, 18, "Trip Strength check")
+                .Force(20, 2, "Trip defense check")
+                .Turn("fighter", 1, Step.Maneuver(SpecialAttackType.Trip, "orc"))
+                .Turn("orc", 1, Step.Pass())
+                .Expect("The trip step is done", Expect.StepStatus("fighter", 1, "Maneuver", 0, "done"))
+                .Expect("Improved Trip provokes no AoO for the trip (PHB p.96)", Expect.None("aoo", e => e.Str("trigger") == "maneuver"))
+                .Expect("The trip succeeds and the orc is prone", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.Trip).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no trip");
+                    return m.Bool("success") && HasCond(v.Final("orc"), "Prone") ? ExpectResult.Pass("orc prone", m.Seq) : ExpectResult.Fail("success " + m.Get("success"), m.Seq);
+                })
+                .Expect("One Improved Trip attack, with the " + weaponName + ", at the trip's bonus (BAB +6, STR +3: mod 9)", v =>
+                {
+                    TraceEvent m = v.Maneuvers("fighter", SpecialAttackType.Trip).FirstOrDefault();
+                    List<TraceEvent> attacks = v.Attacks("fighter", "orc", false, 1);
+                    int[] seqs = attacks.Select(e => e.Seq).ToArray();
+                    if (m == null) return ExpectResult.Fail("no trip");
+                    if (attacks.Count != 1) return ExpectResult.Fail(attacks.Count + " attacks by the fighter", seqs);
+                    if (attacks[0].Seq < m.Seq) return ExpectResult.Fail("the attack came before the trip", seqs);
+                    if (attacks[0].Str("weapon") != weaponName) return ExpectResult.Fail("weapon " + attacks[0].Str("weapon"), seqs);
+                    return attacks[0].Int("mod") == 9
+                        ? ExpectResult.Pass(weaponName + ", mod 9", seqs)
+                        : ExpectResult.Fail("mod " + attacks[0].Int("mod"), seqs);
+                });
+
+            if (offHand || ius)
+                b.Expect("The " + weaponName.ToLowerInvariant() + " provokes no AoO (" + (ius ? "Improved Unarmed Strike, " : "a weapon, ") + "PHB p.139)",
+                    Expect.None("aoo", e => e.Str("by") == "orc"));
+            else
+                b.Expect("The unarmed strike provokes the armed orc's AoO, which comes before it (PHB p.139)", v =>
+                {
+                    List<TraceEvent> aoos = v.AoOs("orc", "fighter");
+                    TraceEvent strike = v.Attacks("fighter", "orc", false, 1).FirstOrDefault();
+                    if (aoos.Count != 1) return ExpectResult.Fail(aoos.Count + " AoOs by the orc", aoos.Select(e => e.Seq).ToArray());
+                    if (aoos[0].Str("trigger") != "unarmed") return ExpectResult.Fail("AoO trigger " + aoos[0].Str("trigger"), aoos[0].Seq);
+                    if (strike == null) return ExpectResult.Fail("no unarmed strike", aoos[0].Seq);
+                    return aoos[0].Seq < strike.Seq
+                        ? ExpectResult.Pass("AoO " + aoos[0].Seq + " before the strike " + strike.Seq, aoos[0].Seq, strike.Seq)
+                        : ExpectResult.Fail("the AoO came after the strike", aoos[0].Seq, strike.Seq);
+                });
+            return b.Build();
+        }
+
+        /// <summary>
+        /// A Ui hero (Improved Trip, no Improved Unarmed Strike, 1 HP) holding a sling, with plain gauntlets on, trips the
+        /// adjacent orc. The sling makes no melee attack and the hero has no off-hand weapon, so the Improved Trip attack is
+        /// an unarmed strike (a gauntlet attack is an unarmed attack, PHB p.118), which provokes the armed orc's AoO first
+        /// (PHB p.139). (The PC trip target list uses the main weapon's reach, so a Ui hero with a longspear cannot pick an
+        /// adjacent foe, CMB-104.) The forced AoO hit drops the hero, who then makes no unarmed strike, and its turn ends at
+        /// once instead of offering its remaining attack (GameManager.FinalizeSpecialAttackAttackerDropped, CMB-136 review).
+        /// </summary>
+        private static ScenarioDef ImprovedTripUnarmedDropsUi()
+        {
+            return Rules("rules/maneuver-trip-improved-unarmed-dropped-ui", "A Ui hero dropped by the AoO before its unarmed Improved Trip attack: no strike, its turn ends (PHB p.139, CMB-136)")
+                .Covers("CMB-136", "PHB p.96", "PHB p.139", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6, "Improved Trip")), 10, 10, Control.Ui)
+                // A second PC keeps the party fighting when the hero drops (combat ends when a whole side is down).
+                .Pc("ally", ActorSource.Stats(() => Fighter("Ally", 6)), 3, 3, Control.Scripted)
+                .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
+                .Tweak("hero", c =>
+                {
+                    StripOffHand(c);
+                    InventoryComponent inv = c.GetComponent<InventoryComponent>();
+                    inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponSling), EquipSlot.RightHand);
+#pragma warning disable CS0618 // the plain gauntlet has no ItemID value
+                    inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(DND35e.Identifiers.ItemIDs.GAUNTLET), EquipSlot.Hands);
+#pragma warning restore CS0618
+                    inv.CharacterInventory.RecalculateStats();
+                    c.Stats.CurrentHP = 1;
+                })
+                .Tweak("orc", SturdyDummy)
+                .Initiative("hero", "orc", "ally")
+                .Force(20, 20, "Trip touch attack")
+                .Force(20, 18, "Trip Strength check")
+                .Force(20, 2, "Trip defense check")
+                .Force(20, 19, null, -1) // every other d20 (initiative, the orc's AoO roll): a hit, no threat (greataxe 20/x3)
+                .Turn("hero", 1, Step.Maneuver(SpecialAttackType.Trip, "orc"))
+                .Turn("orc", 1, Step.Pass())
+                .Turn("ally", 1, Step.Pass())
+                .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
+                .Expect("The trip step is done", Expect.StepStatus("hero", 1, "Maneuver", 0, "done"))
+                .Expect("The trip succeeds and the orc is prone", v =>
+                {
+                    TraceEvent m = v.Maneuvers("hero", SpecialAttackType.Trip).FirstOrDefault();
+                    if (m == null) return ExpectResult.Fail("no trip");
+                    return m.Bool("success") && HasCond(v.Final("orc"), "Prone") ? ExpectResult.Pass("orc prone", m.Seq) : ExpectResult.Fail("success " + m.Get("success"), m.Seq);
+                })
+                .Expect("The orc's AoO for the unarmed strike drops the hero, who makes no strike (PHB p.139)", v =>
+                {
+                    List<TraceEvent> aoos = v.AoOs("orc", "hero");
+                    if (aoos.Count != 1) return ExpectResult.Fail(aoos.Count + " AoOs by the orc", aoos.Select(e => e.Seq).ToArray());
+                    if (aoos[0].Str("trigger") != "unarmed") return ExpectResult.Fail("AoO trigger " + aoos[0].Str("trigger"), aoos[0].Seq);
+                    if (!ScenarioChecks.IsDownSnapshot(v.Final("hero"))) return ExpectResult.Fail("the hero is still up", aoos[0].Seq);
+                    List<TraceEvent> strikes = v.Attacks("hero", "orc", false, 1);
+                    return strikes.Count == 0
+                        ? ExpectResult.Pass("hero down, no strike", aoos[0].Seq)
+                        : ExpectResult.Fail(strikes.Count + " attacks by the dropped hero", strikes.Select(e => e.Seq).ToArray());
+                })
+                .Expect("The dropped hero's turn ends at once (no action menu for a downed PC)", v =>
+                {
+                    List<TraceEvent> lines = v.Log("Hero is incapacitated during the trip");
+                    return lines.Count == 1
+                        ? ExpectResult.Pass(lines[0].Str("text"), lines[0].Seq)
+                        : ExpectResult.Fail(lines.Count + " incapacitation lines", lines.Select(e => e.Seq).ToArray());
                 })
                 .Build();
         }

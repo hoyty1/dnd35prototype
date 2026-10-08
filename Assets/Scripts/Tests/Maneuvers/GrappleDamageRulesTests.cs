@@ -153,6 +153,8 @@ public static class GrappleDamageRulesTests
         TestImprovedTripFollowUpNaturalAndFreeTrip();
         TestImprovedTripFollowUpAfterTripReactions();
         TestCounterTripTriggersMeleeReactions();
+        TestCounterTripByDisabledDefender();
+        TestImprovedTripFollowUpWeaponFallback();
         TestDefenderImprovedDisarmGivesNoBonus();
         TestImprovedDisarmDeniesCounterDisarm();
         TestGrappleHoldFailsAgainstMuchLargerTarget();
@@ -4779,16 +4781,22 @@ public static class GrappleDamageRulesTests
         var even = CreateTestCharacter("CounterTripChoiceEven", "Fighter");          // STR 26: +8
         var weak = CreateWeakDefender("CounterTripChoiceWeak");
         weak.Stats.STR = 1;                                                            // -5: about 5% to win
+        var allyOfTripper = CreateTestCharacter("CounterTripChoiceAlly", "Fighter");  // STR 26, the tripper's own side
+        // The test characters start on the Enemy team; the defenders face an enemy tripper.
+        even.SetTeam(CharacterTeam.Player);
+        weak.SetTeam(CharacterTeam.Player);
         try
         {
             Assert(DND35.AI.AIProfile.DefaultShouldCounterTrip(even, tripper),
                 "AI counter-trip choice: an even check trips back (owner direction: unless clearly bad)");
             Assert(!DND35.AI.AIProfile.DefaultShouldCounterTrip(weak, tripper),
                 "AI counter-trip choice: a much weaker check (13 points, about 5%) declines");
+            Assert(!DND35.AI.AIProfile.DefaultShouldCounterTrip(allyOfTripper, tripper),
+                "AI counter-trip choice: an even check against an ally declines (owner ruling 2026-10-08, CMB-136)");
         }
         finally
         {
-            Cleanup(tripper, even, weak);
+            Cleanup(tripper, even, weak, allyOfTripper);
         }
     }
 
@@ -4803,12 +4811,15 @@ public static class GrappleDamageRulesTests
 
         System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
         System.Action<CharacterController, CharacterController, SpecialAttackType, SpecialAttackResult> savedManeuver = ScenarioHooks.ManeuverResolved;
+        System.Action<string> savedLog = ScenarioHooks.CombatLog;
         var counters = new System.Collections.Generic.List<CharacterController>();
+        var logLines = new System.Collections.Generic.List<string>();
         CharacterController npc = null, enemy = null, npc2 = null, ally = null;
         try
         {
             ScenarioHooks.RollFilter = TripDice(20, 1, 20, 20, 1);
             ScenarioHooks.ManeuverResolved = (by, target, type, r) => { if (r != null && r.IsCounterTrip) counters.Add(by); };
+            ScenarioHooks.CombatLog = line => { if (line != null) logLines.Add(line); };
 
             npc = CreateIterativeAttacker("ExecutorCounterTripNpc");
             npc.IsControllable = false;
@@ -4832,9 +4843,15 @@ public static class GrappleDamageRulesTests
             ally.IsControllable = false;
             ally.Stats.CanMakeAttacksOfOpportunity = false;
             ally.GridPosition = new Vector2Int(31, 33);
+            logLines.Clear();
             bool actedOnAlly = gm.TryNPCSpecialAttackByTypeForAI(npc2, ally, SpecialAttackType.Trip);
-            Assert(actedOnAlly && counters.Count == 0 && !npc2.HasCondition(CombatConditionType.Prone),
-                "A failed trip by a creature of the defender's own side gets no counter-trip offer");
+            // The decline line is written only when HandleTripAftermath asks the AI-run ally (AIService.ShouldCounterTrip),
+            // so it proves the offer reached the decision layer; a side gate in the rule would skip it.
+            string declineLine = $"{ally.Stats.CharacterName} does not try to trip {npc2.Stats.CharacterName} back.";
+            int declines = logLines.FindAll(l => l.Contains(declineLine)).Count;
+            Assert(actedOnAlly && counters.Count == 0 && !npc2.HasCondition(CombatConditionType.Prone)
+                && ally.CanCounterTrip(npc2, out _) && declines == 1,
+                $"A failed trip by the defender's ally: the counter-trip is offered to the AI-run ally, which declines once (owner ruling 2026-10-08, CMB-136; {declines} decline lines)");
         }
         catch (System.Exception ex)
         {
@@ -4845,6 +4862,7 @@ public static class GrappleDamageRulesTests
         {
             ScenarioHooks.RollFilter = savedFilter;
             ScenarioHooks.ManeuverResolved = savedManeuver;
+            ScenarioHooks.CombatLog = savedLog;
             Cleanup(npc, enemy, npc2, ally);
         }
     }
@@ -5121,6 +5139,261 @@ public static class GrappleDamageRulesTests
             MeleeReactionService.Unregister(spy);
             ScenarioHooks.RollFilter = savedFilter;
             Cleanup(npc, enemy);
+        }
+    }
+
+    /// <summary>
+    /// A conscious defender at 0 HP or below may trip back (owner ruling 2026-10-08, CMB-136): a disabled creature
+    /// (PHB p.145) and a Diehard creature below 0 HP react, since the counter-trip is a reaction, not an action, and it
+    /// costs them no hit point; a dying (unconscious) creature does not.
+    /// </summary>
+    private static void TestCounterTripByDisabledDefender()
+    {
+        var tripper = CreateTestCharacter("CounterTripDisabledTripper", "Fighter");
+        var disabled = CreateTestCharacter("CounterTripDisabledDefender", "Fighter");
+        var diehard = CreateTestCharacter("CounterTripDiehardDefender", "Fighter");
+        var dying = CreateTestCharacter("CounterTripDyingDefender", "Fighter");
+        tripper.GridPosition = new Vector2Int(60, 30);
+        disabled.GridPosition = new Vector2Int(61, 30);
+        diehard.GridPosition = new Vector2Int(60, 31);
+        dying.GridPosition = new Vector2Int(61, 31);
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        try
+        {
+            disabled.Stats.CurrentHP = 0;
+            diehard.Stats.Feats.Add("Diehard");
+            diehard.Stats.CurrentHP = -3;
+            dying.Stats.CurrentHP = -3;
+
+            bool disabledMay = disabled.CanCounterTrip(tripper, out string disabledReason);
+            Assert(disabled.CurrentHPState == HPState.Disabled && disabledMay,
+                $"A disabled defender (0 HP, PHB p.145) may trip back: a reaction, not an action (state {disabled.CurrentHPState}, reason {disabledReason})");
+            Assert(diehard.CurrentHPState == HPState.Disabled && diehard.CanCounterTrip(tripper, out _),
+                $"A Diehard defender below 0 HP (conscious, disabled) may trip back (state {diehard.CurrentHPState})");
+            Assert(dying.CurrentHPState == HPState.Dying && !dying.CanCounterTrip(tripper, out string dyingReason) && dyingReason != null,
+                $"A dying, unconscious defender cannot trip back (state {dying.CurrentHPState})");
+
+            ScenarioHooks.RollFilter = TripDice(20, 1, 20, 20, 1);
+            SpecialAttackResult trip = tripper.ExecuteSpecialAttack(SpecialAttackType.Trip, disabled);
+            Assert(trip != null && !trip.Success && trip.CounterTripAllowed,
+                "A trip lost at the opposed check against a disabled defender offers the counter-trip (PHB p.158)");
+            SpecialAttackResult counter = disabled.ResolveCounterTrip(tripper);
+            Assert(counter != null && counter.Success && tripper.HasCondition(CombatConditionType.Prone)
+                && disabled.Stats.CurrentHP == 0 && disabled.CurrentHPState == HPState.Disabled,
+                $"The disabled defender's counter-trip lands and costs it no hit point (HP {disabled.Stats.CurrentHP}, state {disabled.CurrentHPState})");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Disabled counter-trip check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(tripper, disabled, diehard, dying);
+        }
+    }
+
+    /// <summary>A copy of a weapon that has only a string id (the longspear and the whip have no ItemID value).</summary>
+    private static ItemData CloneWeaponByStringId(string id)
+    {
+#pragma warning disable CS0618 // CloneItem(string): these weapons have no ItemID enum value
+        return ItemDatabase.CloneItem(id);
+#pragma warning restore CS0618
+    }
+
+    private static CharacterController CreateImprovedTripper(string name, Vector2Int position, ItemData mainHand, ItemData offHand = null)
+    {
+        CharacterController tripper = CreateIterativeAttacker(name);
+        global::Inventory inventory = tripper.GetComponent<InventoryComponent>().CharacterInventory;
+        inventory.DirectEquip(mainHand, EquipSlot.RightHand);
+        if (offHand != null)
+            inventory.DirectEquip(offHand, EquipSlot.LeftHand);
+        inventory.RecalculateStats();
+        tripper.Stats.Feats.Add("Improved Trip");
+        tripper.IsControllable = false;
+        tripper.GridPosition = position;
+        return tripper;
+    }
+
+    private static CharacterController CreateSturdyTripTarget(string name, Vector2Int position, bool armed)
+    {
+        CharacterController target = CreateWeakDefender(name);
+        if (armed)
+        {
+            global::Inventory inventory = target.GetComponent<InventoryComponent>().CharacterInventory;
+            inventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            inventory.RecalculateStats();
+        }
+        target.GridPosition = position;
+        target.Stats.AdjustMaxHP(500);
+        target.Stats.CurrentHP += 500;
+        // The trippers stay on the Enemy team the test characters start on; the target is their foe.
+        target.SetTeam(CharacterTeam.Player);
+        return target;
+    }
+
+    /// <summary>
+    /// The Improved Trip attack's weapon (owner ruling 2026-10-08, CMB-136; PHB p.96 "a melee attack against that
+    /// opponent", p.139): the main weapon when it can attack the tripped opponent; else the off-hand weapon, as an
+    /// off-hand attack (a shield bash drops the shield's AC, PHB p.125); else an unarmed strike, which provokes the
+    /// armed target's attack of opportunity first unless the tripper's unarmed attack is armed (Improved Unarmed
+    /// Strike, natural weapons) or the target is its teammate. Run through the NPC executor and through the PC
+    /// wrapper's shared resolver and aftermath.
+    /// </summary>
+    private static void TestImprovedTripFollowUpWeaponFallback()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; Improved Trip weapon fallback check needs Play mode");
+            return;
+        }
+
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        System.Action<CharacterController, CombatResult> savedAttack = ScenarioHooks.AttackResolved;
+        System.Action<CharacterController, CharacterController, string, CombatResult> savedAoO = ScenarioHooks.AoOResolved;
+        var events = new System.Collections.Generic.List<string>();
+        var attacks = new System.Collections.Generic.List<(CharacterController by, CombatResult result)>();
+        CharacterController spear = null, spearTarget = null, ius = null, iusTarget = null, sling = null, slingTarget = null,
+            basher = null, basherTarget = null, bare = null, bareTarget = null, sword = null, swordTarget = null,
+            mate = null, mateTarget = null, clawed = null, clawedTarget = null, archer = null, monkArcher = null, diehard = null, dying = null;
+        try
+        {
+            ScenarioHooks.RollFilter = TripDice(20, 20, 1);
+            ScenarioHooks.AttackResolved = (by, r) => { attacks.Add((by, r)); events.Add("attack " + by.Stats.CharacterName + " " + r.WeaponName); };
+            ScenarioHooks.AoOResolved = (by, t, trigger, r) => events.Add("aoo " + by.Stats.CharacterName + " " + trigger);
+
+            // Longspear (reach, cannot attack adjacent) against an adjacent armed target: an unarmed strike at the
+            // trip's bonus, after the target's AoO (no Improved Unarmed Strike).
+            spear = CreateImprovedTripper("TripFallbackSpear", new Vector2Int(60, 34), CloneWeaponByStringId(ItemIDs.LONGSPEAR));
+            spearTarget = CreateSturdyTripTarget("TripFallbackSpearTarget", new Vector2Int(61, 34), armed: true);
+            Assert(spear.SelectImprovedTripAttack(spearTarget, out _, out _) == CharacterController.ImprovedTripAttackSource.UnarmedStrike
+                && spear.DoesUnarmedAttackProvoke(spearTarget),
+                "Improved Trip weapon: a longspear cannot attack an adjacent foe, so an unarmed strike, which provokes from an armed target (PHB p.139)");
+            bool spearActed = gm.TryNPCSpecialAttackByTypeForAI(spear, spearTarget, SpecialAttackType.Trip);
+            int aooAt = events.FindIndex(e => e == "aoo " + spearTarget.Stats.CharacterName + " unarmed");
+            int strikeAt = events.FindIndex(e => e == "attack " + spear.Stats.CharacterName + " Unarmed strike");
+            CombatResult strike = attacks.Find(a => a.by == spear).result;
+            Assert(spearActed && spearTarget.HasCondition(CombatConditionType.Prone) && aooAt >= 0 && strikeAt > aooAt
+                && strike != null && strike.BreakdownBAB == 11 && attacks.FindAll(a => a.by == spear).Count == 1,
+                $"Improved Trip with a longspear, adjacent: the target's AoO, then one unarmed strike at the trip's +11 (events: {string.Join(" | ", events)})");
+
+            // The same with Improved Unarmed Strike: no AoO.
+            events.Clear();
+            attacks.Clear();
+            ius = CreateImprovedTripper("TripFallbackIus", new Vector2Int(60, 37), CloneWeaponByStringId(ItemIDs.LONGSPEAR));
+            ius.Stats.Feats.Add("Improved Unarmed Strike");
+            iusTarget = CreateSturdyTripTarget("TripFallbackIusTarget", new Vector2Int(61, 37), armed: true);
+            bool iusActed = gm.TryNPCSpecialAttackByTypeForAI(ius, iusTarget, SpecialAttackType.Trip);
+            Assert(iusActed && !events.Exists(e => e.StartsWith("aoo ", System.StringComparison.Ordinal))
+                && events.Contains("attack " + ius.Stats.CharacterName + " Unarmed strike"),
+                $"Improved Trip unarmed strike with Improved Unarmed Strike provokes nothing (events: {string.Join(" | ", events)})");
+
+            // A sling (ranged, cannot make a melee attack) with a dagger in the off hand: the dagger, as an off-hand
+            // attack, no AoO. Through the PC wrapper's shared resolver and aftermath.
+            events.Clear();
+            attacks.Clear();
+            sling = CreateImprovedTripper("TripFallbackSling", new Vector2Int(60, 40), ItemDatabase.CloneItem(ItemID.WeaponSling), ItemDatabase.CloneItem(ItemID.WeaponDagger));
+            slingTarget = CreateSturdyTripTarget("TripFallbackSlingTarget", new Vector2Int(61, 40), armed: true);
+            SpecialAttackResult slingTrip = sling.ExecuteSpecialAttack(SpecialAttackType.Trip, slingTarget, tripAttackBonusOverride: 11);
+            gm.HandleTripAftermath(sling, slingTarget, slingTrip, null);
+            Assert(slingTrip != null && slingTrip.Success && slingTrip.FollowUpAttack != null && slingTrip.FollowUpAttack.WeaponName == "Dagger"
+                && slingTrip.FollowUpAttack.IsOffHandAttack && slingTrip.FollowUpAttack.BreakdownBAB == 11
+                && !events.Exists(e => e.StartsWith("aoo ", System.StringComparison.Ordinal)),
+                $"Improved Trip with a sling, adjacent: the off-hand dagger attacks as an off-hand attack at the trip's bonus, no AoO (events: {string.Join(" | ", events)})");
+
+            // A sling with a heavy steel shield: the shield bash, which drops the shield's AC bonus without Improved
+            // Shield Bash (PHB p.125). The sling alone is a ranged-only loadout that cannot start a trip in this game,
+            // so the follow-up is resolved from a landed trip's record.
+            basher = CreateImprovedTripper("TripFallbackBasher", new Vector2Int(60, 49), ItemDatabase.CloneItem(ItemID.WeaponSling), ItemDatabase.CloneItem(ItemID.ShieldHeavySteel));
+            basherTarget = CreateSturdyTripTarget("TripFallbackBasherTarget", new Vector2Int(61, 49), armed: true);
+            int shieldBefore = basher.Stats.ShieldBonus;
+            CharacterController.ImprovedTripAttackSource bashSource = basher.SelectImprovedTripAttack(basherTarget, out ItemData bashWeapon, out _);
+            var bashRecord = new SpecialAttackResult { ManeuverName = "Trip", Success = true, ImprovedTripFollowUpPending = true, FollowUpAttackBonus = 11 };
+            basher.ResolveImprovedTripFollowUp(basherTarget, bashRecord);
+            Assert(bashSource == CharacterController.ImprovedTripAttackSource.OffHandWeapon && bashWeapon != null && bashWeapon.IsShield
+                && bashRecord.FollowUpAttack != null && bashRecord.FollowUpAttack.IsOffHandAttack
+                && shieldBefore > 0 && basher.Stats.ShieldBonus == 0 && basher.HasCondition(CombatConditionType.LostShieldAC),
+                $"Improved Trip with a sling and a shield: a shield bash as an off-hand attack, shield AC lost (PHB p.125; source {bashSource}, shield {shieldBefore} -> {basher.Stats.ShieldBonus})");
+
+            // An unarmed target without Improved Unarmed Strike is not armed: the unarmed strike provokes nothing.
+            events.Clear();
+            attacks.Clear();
+            bare = CreateImprovedTripper("TripFallbackBare", new Vector2Int(60, 43), CloneWeaponByStringId(ItemIDs.LONGSPEAR));
+            bareTarget = CreateSturdyTripTarget("TripFallbackBareTarget", new Vector2Int(61, 43), armed: false);
+            bool bareActed = gm.TryNPCSpecialAttackByTypeForAI(bare, bareTarget, SpecialAttackType.Trip);
+            Assert(bareActed && !bare.DoesUnarmedAttackProvoke(bareTarget) && !events.Exists(e => e.StartsWith("aoo ", System.StringComparison.Ordinal))
+                && events.Contains("attack " + bare.Stats.CharacterName + " Unarmed strike"),
+                $"Improved Trip unarmed strike against an unarmed target provokes nothing (PHB p.139; events: {string.Join(" | ", events)})");
+
+            // A main weapon that reaches is still the one used.
+            events.Clear();
+            attacks.Clear();
+            sword = CreateImprovedTripper("TripFallbackSword", new Vector2Int(60, 46), ItemDatabase.CloneItem(ItemID.WeaponLongsword), ItemDatabase.CloneItem(ItemID.WeaponDagger));
+            swordTarget = CreateSturdyTripTarget("TripFallbackSwordTarget", new Vector2Int(61, 46), armed: true);
+            bool swordActed = gm.TryNPCSpecialAttackByTypeForAI(sword, swordTarget, SpecialAttackType.Trip);
+            Assert(swordActed && events.Contains("attack " + sword.Stats.CharacterName + " Longsword")
+                && !events.Exists(e => e.StartsWith("aoo ", System.StringComparison.Ordinal)),
+                $"Improved Trip with a longsword in reach: the longsword, not the off-hand dagger (events: {string.Join(" | ", events)})");
+
+            // A teammate takes no AoO against the unarmed strike (ThreatSystem.GetThreateningEnemies skips teammates).
+            events.Clear();
+            attacks.Clear();
+            mate = CreateImprovedTripper("TripFallbackMate", new Vector2Int(60, 52), CloneWeaponByStringId(ItemIDs.LONGSPEAR));
+            mateTarget = CreateSturdyTripTarget("TripFallbackMateTarget", new Vector2Int(61, 52), armed: true);
+            mateTarget.SetTeam(mate.Team);
+            bool mateActed = gm.TryNPCSpecialAttackByTypeForAI(mate, mateTarget, SpecialAttackType.Trip);
+            Assert(mateActed && !events.Exists(e => e.StartsWith("aoo ", System.StringComparison.Ordinal))
+                && events.Contains("attack " + mate.Stats.CharacterName + " Unarmed strike"),
+                $"Improved Trip unarmed strike against a teammate: no AoO (events: {string.Join(" | ", events)})");
+
+            // PHB p.139 "armed" unarmed attacks: claws make the tripper's unarmed attack armed even while it holds a
+            // weapon; a target holding only a bow is armed when it has Improved Unarmed Strike, not otherwise.
+            clawed = CreateImprovedTripper("TripFallbackClawed", new Vector2Int(60, 55), CloneWeaponByStringId(ItemIDs.LONGSPEAR));
+            clawed.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2 });
+            clawedTarget = CreateSturdyTripTarget("TripFallbackClawedTarget", new Vector2Int(61, 55), armed: true);
+            archer = CreateWeakDefender("TripFallbackArcher");
+            archer.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponShortbow), EquipSlot.RightHand);
+            archer.GetComponent<InventoryComponent>().CharacterInventory.RecalculateStats();
+            monkArcher = CreateWeakDefender("TripFallbackMonkArcher");
+            monkArcher.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponShortbow), EquipSlot.RightHand);
+            monkArcher.GetComponent<InventoryComponent>().CharacterInventory.RecalculateStats();
+            monkArcher.Stats.Feats.Add("Improved Unarmed Strike");
+            CharacterController.ImprovedTripAttackSource clawSource = clawed.SelectImprovedTripAttack(clawedTarget, out _, out _);
+            Assert(clawSource == CharacterController.ImprovedTripAttackSource.UnarmedStrike
+                && !clawed.DoesUnarmedAttackProvoke(clawedTarget) && clawed.HasNaturalPhysicalWeapons(),
+                $"PHB p.139: a creature with claws holding a longspear makes an armed unarmed attack, which provokes nothing (source {clawSource})");
+            Assert(!archer.IsArmedAgainstUnarmedAttacks() && monkArcher.IsArmedAgainstUnarmedAttacks(),
+                "PHB p.139: a target holding only a bow is unarmed, but armed with Improved Unarmed Strike");
+
+            // A conscious tripper at 0 HP or below still makes the attack; an unconscious one does not.
+            diehard = CreateImprovedTripper("TripFallbackDiehard", new Vector2Int(60, 58), ItemDatabase.CloneItem(ItemID.WeaponLongsword));
+            diehard.Stats.Feats.Add("Diehard");
+            diehard.Stats.CurrentHP = -3;
+            dying = CreateImprovedTripper("TripFallbackDying", new Vector2Int(62, 58), ItemDatabase.CloneItem(ItemID.WeaponLongsword));
+            dying.Stats.CurrentHP = -3;
+            CharacterController dieTarget = swordTarget;
+            dieTarget.GridPosition = new Vector2Int(61, 58);
+            Assert(diehard.CurrentHPState == HPState.Disabled
+                && diehard.SelectImprovedTripAttack(dieTarget, out _, out _) == CharacterController.ImprovedTripAttackSource.MainWeapon,
+                $"A disabled (Diehard, -3 HP) tripper still makes the Improved Trip attack (state {diehard.CurrentHPState})");
+            Assert(dying.CurrentHPState == HPState.Dying
+                && dying.SelectImprovedTripAttack(dieTarget, out _, out string dyingNote) == CharacterController.ImprovedTripAttackSource.None
+                && dyingNote != null,
+                $"A dying tripper makes no Improved Trip attack (state {dying.CurrentHPState})");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Improved Trip weapon fallback check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            ScenarioHooks.AttackResolved = savedAttack;
+            ScenarioHooks.AoOResolved = savedAoO;
+            Cleanup(spear, spearTarget, ius, iusTarget, sling, slingTarget, basher, basherTarget, bare, bareTarget, sword, swordTarget,
+                mate, mateTarget, clawed, clawedTarget, archer, monkArcher, diehard, dying);
         }
     }
 

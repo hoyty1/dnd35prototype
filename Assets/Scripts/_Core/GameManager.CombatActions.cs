@@ -2151,7 +2151,15 @@ public partial class GameManager
         // with the NPC executor. A controllable defender's prompt holds the finish until it is answered.
         if (type == SpecialAttackType.Trip)
         {
-            HandleTripAftermath(attacker, target, result, () => FinalizeSpecialAttackResolution(attacker, target));
+            // The Improved Trip attack's reactions, or the target's AoO before an unarmed one (PHB p.139), can drop
+            // the tripper; its turn then ends instead of offering more actions.
+            HandleTripAftermath(attacker, target, result, () =>
+            {
+                if (IsSpecialAttackerDropped(attacker))
+                    FinalizeSpecialAttackAttackerDropped(attacker, "during the trip");
+                else
+                    FinalizeSpecialAttackResolution(attacker, target);
+            });
             return;
         }
 
@@ -2163,7 +2171,7 @@ public partial class GameManager
                     onComplete: attackerDown =>
                     {
                         if (attackerDown)
-                            FinalizeSpecialAttackAttackerDropped(attacker);
+                            FinalizeSpecialAttackAttackerDropped(attacker, "during the bull rush");
                         else
                             FinalizeSpecialAttackResolution(attacker, target);
                     });
@@ -2200,13 +2208,21 @@ public partial class GameManager
             StartCoroutine(AfterAttackDelay(attacker, 1.0f));
     }
 
+    /// <summary>True when <paramref name="attacker"/> can no longer act this turn: dead, unconscious or dying.</summary>
+    private static bool IsSpecialAttackerDropped(CharacterController attacker)
+    {
+        return attacker != null && attacker.Stats != null
+            && (attacker.IsDead || attacker.Stats.IsDead || attacker.IsUnconscious || !attacker.CanTakeTurnActions());
+    }
+
     /// <summary>
-    /// End of a PC special attack whose attacker an AoO dropped during the resolution (a bull rush
-    /// push or follow): same cleanup as <see cref="FinalizeSpecialAttackResolution"/>, then the turn
-    /// ends, as when movement AoOs drop a PC (ResolveAoOsAndMove). The resolver has already run the
-    /// victory and defeat checks.
+    /// End of a PC special attack whose attacker an AoO or a reaction dropped during the resolution (a bull
+    /// rush push or follow, a trip's Improved Trip attack): same cleanup as
+    /// <see cref="FinalizeSpecialAttackResolution"/>, then the turn ends, as when movement AoOs drop a PC
+    /// (ResolveAoOsAndMove). <paramref name="when"/> completes the log line ("during the bull rush"). The
+    /// resolver has already run the victory and defeat checks.
     /// </summary>
-    private void FinalizeSpecialAttackAttackerDropped(CharacterController attacker)
+    private void FinalizeSpecialAttackAttackerDropped(CharacterController attacker, string when)
     {
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
@@ -2217,7 +2233,7 @@ public partial class GameManager
             return;
 
         string name = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "The attacker";
-        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{name} is incapacitated during the bull rush."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("⛔", $"{name} is incapacitated {when}."));
         if (IsPlayerTurn)
             EndActivePCTurn();
     }

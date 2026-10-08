@@ -1508,10 +1508,11 @@ public partial class GameManager
     // the trip that replaces a step of an NPC attack or full attack), the free trip after a hit
     // (TryResolveFreeTripOnHit) and the free trip after an AoO hit (ThreatSystem.ExecuteAoO). The rules
     // live in CharacterController (CanTrip, CanCounterTrip, ResolveCounterTrip, the Improved Trip
-    // attack); this part makes and logs the follow-up attack after the trip's own log and melee
-    // reactions, and asks the defender whether it trips back: a controllable defender through a
-    // prompt, an AI-run one through AIService.ShouldCounterTrip. Every caller runs it after the trip's
-    // MeleeReactionService.TriggerReactions (ExecuteAoO after the AoO's own reactions).
+    // attack and its weapon choice); this part makes and logs the follow-up attack after the trip's own
+    // log and melee reactions (an unarmed one after the target's AoO, PHB p.139), and asks the defender
+    // whether it trips back, whatever its side: a controllable defender through a prompt, an AI-run one
+    // through AIService.ShouldCounterTrip (owner ruling 2026-10-08, CMB-136). Every caller runs it after
+    // the trip's MeleeReactionService.TriggerReactions (ExecuteAoO after the AoO's own reactions).
 
     private bool _counterTripPromptOpen;
     private CharacterController _counterTripPromptDefender;
@@ -1528,14 +1529,16 @@ public partial class GameManager
     /// <summary>
     /// Settles what follows a trip resolved by the shared resolver; callers run it after the trip's own log
     /// and melee reactions. A landed trip with Improved Trip gets its attack here (PHB p.96,
-    /// <see cref="CharacterController.ResolveImprovedTripFollowUp"/>, which re-checks that both sides are up,
-    /// the tripper can attack and the target is in reach), logged with its Concentration check, melee
-    /// reactions, death line and the victory or defeat check. A trip lost at the opposed check
+    /// <see cref="CharacterController.ResolveImprovedTripFollowUp"/>, which re-checks that both sides are up and
+    /// the tripper can attack, and picks the weapon: the main weapon, else the off-hand weapon, else an unarmed
+    /// strike, else none; owner ruling 2026-10-08, CMB-136), logged with its Concentration check, melee
+    /// reactions, death line and the victory or defeat check. An unarmed strike by a tripper without Improved
+    /// Unarmed Strike against an armed target provokes the target's AoO first (PHB p.139,
+    /// <see cref="ResolveImprovedTripUnarmedAoO"/>). A trip lost at the opposed check
     /// (<see cref="SpecialAttackResult.CounterTripAllowed"/>) lets the defender try to trip back (PHB p.158)
-    /// when it is an enemy of the tripper and still able (<see cref="CharacterController.CanCounterTrip"/>):
-    /// a controllable defender is asked through a prompt, an AI-run defender decides through
-    /// <see cref="AIService.ShouldCounterTrip"/>. A trip by a creature that is not the defender's enemy (an
-    /// ally, a neutral) gets no counter-trip offer, a limit awaiting the owner (CMB-136). <paramref name="onDone"/>
+    /// while it is still able (<see cref="CharacterController.CanCounterTrip"/>), whatever its side (owner ruling
+    /// 2026-10-08, CMB-136): a controllable defender is asked through a prompt, an AI-run defender decides through
+    /// <see cref="AIService.ShouldCounterTrip"/> (the default declines against an ally). <paramref name="onDone"/>
     /// runs once everything is settled: at once, or when the prompt is answered (until then
     /// <see cref="IsAwaitingCounterTripChoice"/> is true).
     /// </summary>
@@ -1546,6 +1549,7 @@ public partial class GameManager
             && CurrentPhase != TurnPhase.CombatOver;
         if (followUpPending)
         {
+            ResolveImprovedTripUnarmedAoO(attacker, target, result);
             attacker.ResolveImprovedTripFollowUp(target, result);
             if (result.FollowUpAttack != null)
                 ReportImprovedTripFollowUp(attacker, target, result);
@@ -1555,7 +1559,6 @@ public partial class GameManager
 
         if (result == null || !result.CounterTripAllowed || attacker == null || target == null
             || CurrentPhase == TurnPhase.CombatOver
-            || !TeamUtility.IsEnemy(target, attacker)
             || !target.CanCounterTrip(attacker, out _))
         {
             onDone?.Invoke();
@@ -1573,6 +1576,37 @@ public partial class GameManager
             : DND35.AI.AIProfile.DefaultShouldCounterTrip(target, attacker);
         ResolveCounterTripChoice(target, attacker, tripBack);
         onDone?.Invoke();
+    }
+
+    /// <summary>
+    /// PHB p.139: an unarmed attack provokes an attack of opportunity from the armed creature attacked, before the
+    /// attack. When the Improved Trip attack still pending on <paramref name="result"/> is such an unarmed strike
+    /// (<see cref="CharacterController.DoesImprovedTripAttackProvoke"/>: no Improved Unarmed Strike, an armed target)
+    /// and the target threatens the tripper and has an AoO left, the target makes it here, logged, with the casualty
+    /// checks. A target on the tripper's own team makes none, as no other AoO source lets a creature take one against
+    /// a teammate (ThreatSystem.GetThreateningEnemies). The follow-up then re-checks that the tripper can still attack.
+    /// </summary>
+    private void ResolveImprovedTripUnarmedAoO(CharacterController attacker, CharacterController target, SpecialAttackResult result)
+    {
+        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null
+            || attacker.Team == target.Team
+            || !attacker.DoesImprovedTripAttackProvoke(target, result)
+            || !ThreatSystem.CanMakeAoO(target)
+            || !CombatUtils.IsThreatening(target, attacker))
+            return;
+
+        CombatResult aoo = ThreatSystem.ExecuteAoO(target, attacker, trigger: "unarmed");
+        if (aoo == null)
+            return;
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔", $"Unarmed attack AoO (Improved Trip attack, PHB p.139): {aoo.GetDetailedSummary()}"));
+        if (aoo.Hit && aoo.TotalDamage > 0)
+            CheckConcentrationOnDamage(attacker, aoo.TotalDamage);
+        if (attacker.Stats.IsDead)
+            CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{attacker.Stats.CharacterName} is slain by {target.Stats.CharacterName}'s attack of opportunity!"));
+
+        SettleTripAftermathCasualties("ImprovedTrip.UnarmedAoO", attacker, target);
+        UpdateAllStatsUI();
     }
 
     private void ReportImprovedTripFollowUp(CharacterController attacker, CharacterController target, SpecialAttackResult result)
@@ -1648,6 +1682,10 @@ public partial class GameManager
         string wardNote = defender.HasActiveInvisibilityEffect || defender.Stats.SanctuaryActive
             ? "\n\nTripping back is an attack: it ends your invisibility or Sanctuary."
             : string.Empty;
+        // Any defender may trip back (owner ruling 2026-10-08, CMB-136), so the tripper may be on the defender's side.
+        string allyNote = TeamUtility.IsAlly(defender, tripper)
+            ? $"\n\n{tripperName} is on your side."
+            : string.Empty;
 
         CombatUI.ShowCombatLog(CombatLogHelper.Warning("", $"Waiting for {defenderName}'s decision: trip {tripperName} back?"));
         CombatUI.ShowConfirmationDialog(
@@ -1656,6 +1694,7 @@ public partial class GameManager
                 + $"{defenderName} may react at once and try to trip {tripperName}: a Strength check {CharacterStats.FormatMod(checkModifier)} "
                 + $"against {tripperName}'s Strength or Dexterity check {CharacterStats.FormatMod(resistModifier)}. "
                 + $"No touch attack and no attack of opportunity (PHB p.158).\n\nChance to trip: about {chance}%."
+                + allyNote
                 + wardNote,
             confirmLabel: "Trip Back",
             cancelLabel: "Decline",

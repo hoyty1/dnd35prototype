@@ -30,7 +30,7 @@ Entries per section:
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 2 | 20 | 15 | 37 | CORE-038 |
-| [Combat](issues/CMB.md) | CMB | 3 | 58 | 65 | 126 | CMB-156 |
+| [Combat](issues/CMB.md) | CMB | 3 | 58 | 65 | 126 | CMB-157 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 8 | 58 | 54 | 120 | SPL-122 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 9 | 26 | 38 | 73 | CHR-074 |

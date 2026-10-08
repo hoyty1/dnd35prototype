@@ -1397,11 +1397,30 @@ public class CharacterController : MonoBehaviour
         return defaultMode;
     }
 
+    /// <summary>
+    /// Damage mode and its attack penalty for an attack with <paramref name="weapon"/> (null: unarmed, or the innate
+    /// natural attacks of a natural-attack creature). One parameter only: UnarmedDamageModeTests reflects on it by
+    /// name (TST-006); <see cref="ResolveDamageModeAttackProfileCore"/> has the forced unarmed strike.
+    /// </summary>
     private DamageModeAttackProfile ResolveDamageModeAttackProfile(ItemData weapon)
+        => ResolveDamageModeAttackProfileCore(weapon, unarmedStrike: false);
+
+    /// <summary>
+    /// <see cref="ResolveDamageModeAttackProfile"/> with <paramref name="unarmedStrike"/>, which forces an unarmed
+    /// strike, also for a creature with natural attacks, and reads the selected mode without changing it: the
+    /// creature's chosen mode when it set one this round, else lethal with Improved Unarmed Strike or a gauntlet,
+    /// else nonlethal.
+    /// </summary>
+    private DamageModeAttackProfile ResolveDamageModeAttackProfileCore(ItemData weapon, bool unarmedStrike)
     {
-        bool selectedNonlethal = ResolveSelectedAttackDamageMode(weapon) == AttackDamageMode.Nonlethal;
-        bool isInnateNaturalAttack = ShouldUseInnateNaturalAttackProfile(weapon);
-        bool isUnarmedStrike = weapon == null && !isInnateNaturalAttack;
+        AttackDamageMode selectedMode = !unarmedStrike
+            ? ResolveSelectedAttackDamageMode(weapon)
+            : _attackDamageModeManuallySetThisRound
+                ? CurrentAttackDamageMode
+                : HasImprovedUnarmedStrikeForDamageMode() || HasGauntletEquipped() ? AttackDamageMode.Lethal : AttackDamageMode.Nonlethal;
+        bool selectedNonlethal = selectedMode == AttackDamageMode.Nonlethal;
+        bool isInnateNaturalAttack = !unarmedStrike && ShouldUseInnateNaturalAttackProfile(weapon);
+        bool isUnarmedStrike = unarmedStrike || (weapon == null && !isInnateNaturalAttack);
         bool weaponIsInherentlyNonlethal = weapon != null && weapon.DealsNonlethalDamage;
 
         var profile = new DamageModeAttackProfile
@@ -5459,6 +5478,9 @@ public class CharacterController : MonoBehaviour
     /// Uses weapon's DamageModifierType for correct STR bonus to damage.
     /// Integrates: Power Attack, Point Blank Shot, Weapon Focus, Weapon Specialization,
     /// Weapon Finesse, Combat Expertise, Improved Critical, Dodge.
+    /// With <paramref name="unarmedStrike"/> the attack is an unarmed strike whatever this creature holds (a punch,
+    /// kick or head butt, PHB p.139): unarmed damage and damage mode, natural reach; <paramref name="attackWeaponOverride"/>
+    /// is ignored. Used by the Improved Trip attack when no held weapon can attack (CMB-136).
     /// </summary>
     public CombatResult Attack(
         CharacterController target,
@@ -5469,7 +5491,8 @@ public class CharacterController : MonoBehaviour
         int? baseAttackBonusOverride = null,
         ItemData attackWeaponOverride = null,
         int additionalAttackModifier = 0,
-        bool isOffHandAttack = false)
+        bool isOffHandAttack = false,
+        bool unarmedStrike = false)
     {
         if (target == null || target.Stats == null || target.Stats.IsDead)
         {
@@ -5478,7 +5501,7 @@ public class CharacterController : MonoBehaviour
             {
                 Attacker = this,
                 Defender = target,
-                WeaponName = (attackWeaponOverride ?? GetEquippedMainWeapon()) != null
+                WeaponName = !unarmedStrike && (attackWeaponOverride ?? GetEquippedMainWeapon()) != null
                     ? (attackWeaponOverride ?? GetEquippedMainWeapon()).Name
                     : "Unarmed strike",
                 Hit = false,
@@ -5490,8 +5513,8 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        // Get equipped weapon for damage modifier and feat calculations
-        ItemData equippedWeapon = attackWeaponOverride ?? GetEquippedMainWeapon();
+        // Get equipped weapon for damage modifier and feat calculations (null: an unarmed strike)
+        ItemData equippedWeapon = unarmedStrike ? null : attackWeaponOverride ?? GetEquippedMainWeapon();
         if (!CanAttackWithWeapon(equippedWeapon, out string cannotAttackReason))
         {
             Debug.LogWarning($"[Combat] {Stats.CharacterName} cannot attack: {cannotAttackReason}");
@@ -5516,7 +5539,10 @@ public class CharacterController : MonoBehaviour
             && rangeInfo != null
             && !rangeInfo.IsMelee;
 
-        bool targetInRange = IsTargetInWeaponRange(target, equippedWeapon, useThrownRange);
+        // A null weapon means the main weapon to the reach helpers, so an unarmed strike checks its own reach.
+        bool targetInRange = unarmedStrike
+            ? IsTargetInUnarmedReach(target)
+            : IsTargetInWeaponRange(target, equippedWeapon, useThrownRange);
 
         if (!targetInRange)
         {
@@ -5551,7 +5577,9 @@ public class CharacterController : MonoBehaviour
         atkBonus.SequenceModifier = additionalAttackModifier;
         atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
         int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-        DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
+        DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfileCore(equippedWeapon, unarmedStrike);
+        if (unarmedStrike)
+            atkBonus.DamageModePenalty = damageModeProfile.AttackPenalty;
 
         if (atkBonus.AbilityName == "DEX(Finesse)")
             Debug.Log($"[Feats] {Stats.CharacterName}: Weapon Finesse active, using DEX {Stats.DEXMod} for attack");
@@ -5562,8 +5590,18 @@ public class CharacterController : MonoBehaviour
 
         int totalAtkMod = atkBonus.Total;
         int totalFeatDmgBonus = atkBonus.FeatDamageBonus;
-        ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel,
-            IsThrownWeaponAttack(equippedWeapon, rangeInfo));
+        int damageDice, damageCount, bonusDamage;
+        string attackLabel;
+        if (unarmedStrike)
+        {
+            (damageCount, damageDice, bonusDamage) = GetUnarmedDamage();
+            attackLabel = "Unarmed strike";
+        }
+        else
+        {
+            ResolveBaseAttackDamageProfile(equippedWeapon, out damageDice, out damageCount, out bonusDamage, out attackLabel,
+                IsThrownWeaponAttack(equippedWeapon, rangeInfo));
+        }
 
         // D&D 3.5e Magic Stone: when firing a sling with active Magic Stone charges,
         // override damage to 1d6+1; the +1 enhancement to attack is atkBonus.MagicStoneBonus (PHB p.251)
@@ -5576,7 +5614,7 @@ public class CharacterController : MonoBehaviour
         }
 
         NaturalAttackDefinition naturalAttackForOnHit = null;
-        if (ShouldUseInnateNaturalAttackProfile(equippedWeapon))
+        if (!unarmedStrike && ShouldUseInnateNaturalAttackProfile(equippedWeapon))
             naturalAttackForOnHit = Stats.GetPrimaryNaturalAttack();
 
         // Record HP before attack
@@ -11487,13 +11525,16 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Whether this creature, the defender of a trip that just failed at the opposed check, may try to trip
     /// the tripper back (PHB p.158). The rule part only; whether it wants to is the defender's choice (the PC
-    /// prompt or the AI, GameManager.HandleTripAftermath). Refused when either side is down; this creature
-    /// cannot act (an HP state that cannot act, 0 HP or below, a helpless condition, or a condition that
-    /// prevents attacks such as stunned or nauseated); it is grappling (PHB p.156 limits a grappler to grapple
-    /// actions); the tripper is already prone; the trip would be illegal from this side (<see cref="CanTrip"/>:
-    /// size, swarm, incorporeal); or a protection barrier keeps this summoned creature from touching the
-    /// tripper. A disabled creature (0 HP, or below with Diehard) does not react: the reaction is treated as a
-    /// strenuous action (PHB p.145), an interpretation awaiting the owner (CMB-136).
+    /// prompt or the AI, GameManager.HandleTripAftermath). Any defender may react, whatever its side: the
+    /// trip rule names no side, so an ally of the tripper (one that a confused or charmed creature tripped) is
+    /// asked too, and the decision layer chooses (owner ruling 2026-10-08, CMB-136). Refused when either side
+    /// is down; this creature is unconscious, dying, stable or otherwise unable to act (an HP state that cannot
+    /// act, a helpless condition, or a condition that prevents attacks such as stunned or nauseated); it is
+    /// grappling (PHB p.156 limits a grappler to grapple actions); the tripper is already prone; the trip would
+    /// be illegal from this side (<see cref="CanTrip"/>: size, swarm, incorporeal); or a protection barrier
+    /// keeps this summoned creature from touching the tripper. A conscious creature at 0 HP or below (disabled,
+    /// PHB p.145, or below 0 with Diehard) may trip back: the counter-trip is a reaction, not an action, so the
+    /// disabled limit on actions does not apply and it costs no hit point (owner ruling 2026-10-08, CMB-136).
     /// </summary>
     public bool CanCounterTrip(CharacterController tripper, out string reason)
     {
@@ -11510,7 +11551,9 @@ public class CharacterController : MonoBehaviour
             return false;
         }
 
-        if (Stats.CurrentHP <= 0 || !CanTakeTurnActions() || !CanAttack() || IsHelplessLikeConditionState())
+        // Unconscious, dying and stable creatures are out (IsUnconscious, CanTakeTurnActions); a disabled one
+        // (HPState.Disabled: 0 HP, or below 0 with Diehard) is conscious and may react.
+        if (IsUnconscious || !CanTakeTurnActions() || !CanAttack() || IsHelplessLikeConditionState())
         {
             reason = $"{Stats.CharacterName} cannot act";
             return false;
@@ -11567,8 +11610,9 @@ public class CharacterController : MonoBehaviour
             return result;
         }
 
-        if (tripper.Team != Team)
-            BreakInvisibility("attack action", tripper);
+        // Invisibility ends when the subject attacks any creature (PHB p.245), an ally included: since the owner
+        // ruling of 2026-10-08 (CMB-136) the tripper may be on this creature's side.
+        BreakInvisibility("attack action", tripper);
         CombatFlowService.BreakProtectiveWardsOnAttack(this);
 
         int atkRoll = DiceService.D20("Counter-trip check");
@@ -11650,15 +11694,195 @@ public class CharacterController : MonoBehaviour
                 : ProgressiveAttackPool.LastSubstituteNaturalAttackIndex;
     }
 
+    /// <summary>What the Improved Trip attack is made with (PHB p.96; owner ruling 2026-10-08, CMB-136).</summary>
+    public enum ImprovedTripAttackSource
+    {
+        None,
+        /// <summary>A creature fighting with its innate natural attacks: the natural attack the trip gave up.</summary>
+        NaturalSequence,
+        /// <summary>The main weapon.</summary>
+        MainWeapon,
+        /// <summary>The off-hand weapon (a left-hand weapon, a shield bash or a spiked gauntlet), when the main weapon cannot attack.</summary>
+        OffHandWeapon,
+        /// <summary>An unarmed strike: the attacker holds no weapon, or none it holds can attack the opponent.</summary>
+        UnarmedStrike
+    }
+
+    /// <summary>
+    /// Which attack Improved Trip's "melee attack against that opponent" (PHB p.96) is made with, for PCs and NPCs
+    /// alike (owner ruling 2026-10-08, CMB-136). Nothing while the opponent is down or this creature is down or cannot
+    /// attack (<paramref name="note"/> says why when it is this creature). A creature fighting with its innate natural
+    /// attacks uses the natural attack the trip gave up, in its natural reach. Otherwise the main weapon when it can
+    /// attack the opponent (a melee weapon that reaches it and can be used now); else another weapon this creature has
+    /// that reaches it: the off-hand weapon (<see cref="GetOffHandAttackWeapon"/>), then an unarmed strike in natural
+    /// reach. A natural attack beside a held weapon is not modelled (CMB-077) and the game has no armor spikes, so
+    /// those are never chosen. A worn spiked gauntlet is chosen only as the off-hand weapon, so not while this creature
+    /// two-hands its main weapon (<see cref="GetOffHandAttackWeapon"/> offers no off-hand weapon then); that case falls
+    /// to the unarmed strike. When nothing reaches, no attack is made. A conscious tripper at 0 HP or below (disabled,
+    /// or Diehard) still makes the attack: the feat grants it at once as part of the trip, as the counter-trip is
+    /// allowed to a disabled defender (<see cref="CanCounterTrip"/>). Read by
+    /// <see cref="ResolveImprovedTripFollowUp"/> and <see cref="DoesImprovedTripAttackProvoke"/>; spends nothing.
+    /// </summary>
+    public ImprovedTripAttackSource SelectImprovedTripAttack(CharacterController target, out ItemData weapon, out string note)
+    {
+        weapon = null;
+        note = null;
+        if (Stats == null || target == null || target.Stats == null || target.IsDead || target.Stats.IsDead)
+            return ImprovedTripAttackSource.None;
+
+        string selfName = Stats.CharacterName;
+        if (IsDead || Stats.IsDead || IsUnconscious || !CanTakeTurnActions() || !CanAttack())
+        {
+            note = $"Improved Trip: {selfName} cannot make the follow-up attack.";
+            return ImprovedTripAttackSource.None;
+        }
+
+        if (UsesInnateNaturalAttackSequence())
+        {
+            if (IsTargetInCurrentWeaponRange(target))
+                return ImprovedTripAttackSource.NaturalSequence;
+
+            note = $"Improved Trip: {target.Stats.CharacterName} is out of {selfName}'s melee reach, so no follow-up attack.";
+            return ImprovedTripAttackSource.None;
+        }
+
+        ItemData main = GetEquippedMainWeapon();
+        if (main != null)
+        {
+            if (CanMakeImprovedTripAttackWith(main, target))
+            {
+                weapon = main;
+                return ImprovedTripAttackSource.MainWeapon;
+            }
+
+            ItemData offHand = GetOffHandAttackWeapon();
+            if (offHand != null && offHand != main && CanMakeImprovedTripAttackWith(offHand, target))
+            {
+                weapon = offHand;
+                return ImprovedTripAttackSource.OffHandWeapon;
+            }
+        }
+
+        if (IsTargetInUnarmedReach(target) && CanAttackWithWeapon(null, out _))
+            return ImprovedTripAttackSource.UnarmedStrike;
+
+        note = $"Improved Trip: {selfName} has no weapon that can attack {target.Stats.CharacterName}, so no follow-up attack.";
+        return ImprovedTripAttackSource.None;
+    }
+
+    /// <summary>A held melee weapon that reaches <paramref name="target"/> and can be used now (loaded, legal while grappled).</summary>
+    private bool CanMakeImprovedTripAttackWith(ItemData weapon, CharacterController target)
+    {
+        return weapon != null
+            && weapon.WeaponCat == WeaponCategory.Melee
+            && IsTargetInWeaponRange(target, weapon, useThrownRange: false)
+            && CanAttackWithWeapon(weapon, out _);
+    }
+
+    /// <summary>
+    /// True when <paramref name="target"/> is within this creature's unarmed reach: its natural reach (PHB p.137;
+    /// at least 5 feet), its own square included. A held reach weapon does not change it.
+    /// </summary>
+    public bool IsTargetInUnarmedReach(CharacterController target)
+    {
+        if (target == null || target.Stats == null || Stats == null)
+            return false;
+
+        int distance = GetMinimumDistanceToTargetSquares(target, chebyshev: true);
+        return distance <= Mathf.Max(1, Stats.NaturalReachSquares);
+    }
+
+    /// <summary>
+    /// PHB p.139 (Unarmed Attacks): an unarmed attack by this creature provokes an attack of opportunity from
+    /// <paramref name="target"/>, the creature attacked, when this creature's unarmed attack is not "armed" and the
+    /// target is armed (<see cref="IsArmedAgainstUnarmedAttacks"/>). The attacker's unarmed attack is armed when it has
+    /// Improved Unarmed Strike (a monk has it) or claws, fangs or similar natural weapons
+    /// (<see cref="HasNaturalPhysicalWeapons"/>), whatever it holds. Only the rule part; whether the target can make
+    /// the AoO now (one left, it threatens this creature) is ThreatSystem's. Read for the Improved Trip attack
+    /// (<see cref="DoesImprovedTripAttackProvoke"/>); the other unarmed attack paths do not check it yet (CMB-135).
+    /// </summary>
+    public bool DoesUnarmedAttackProvoke(CharacterController target)
+    {
+        if (Stats == null || target == null || target.Stats == null)
+            return false;
+
+        if (FeatManager.HasImprovedUnarmedStrike(Stats) || HasNaturalPhysicalWeapons())
+            return false;
+
+        return target.IsArmedAgainstUnarmedAttacks();
+    }
+
+    /// <summary>
+    /// "Armed" in the PHB p.139 sense, for defense: this creature holds a melee weapon (a spiked gauntlet or a shield
+    /// bash counts), has Improved Unarmed Strike, has claws, fangs or similar natural weapons
+    /// (<see cref="HasNaturalPhysicalWeapons"/>), or holds the charge of a touch spell. An unarmed creature with none of
+    /// these, or one holding only ranged weapons, is not armed. Whether it can actually make an AoO (it threatens, has
+    /// one left) is ThreatSystem's.
+    /// </summary>
+    public bool IsArmedAgainstUnarmedAttacks()
+    {
+        if (Stats == null)
+            return false;
+
+        ItemData main = GetEquippedMainWeapon();
+        if (main != null && main.WeaponCat == WeaponCategory.Melee)
+            return true;
+
+        ItemData offHand = GetOffHandAttackWeapon();
+        if (offHand != null && offHand.WeaponCat == WeaponCategory.Melee)
+            return true;
+
+        if (FeatManager.HasImprovedUnarmedStrike(Stats) || HasNaturalPhysicalWeapons())
+            return true;
+
+        SpellcastingComponent spellcasting = Spellcasting;
+        return spellcasting != null && spellcasting.HasHeldTouchCharge;
+    }
+
+    /// <summary>
+    /// True when this creature has claws, fangs or similar natural physical weapons (PHB p.139): a natural attack that
+    /// is not an unarmed strike, whether or not it holds a weapon now.
+    /// </summary>
+    public bool HasNaturalPhysicalWeapons()
+    {
+        if (Stats == null || Stats.NaturalAttacks == null)
+            return false;
+
+        foreach (NaturalAttackDefinition natural in Stats.NaturalAttacks)
+        {
+            if (natural != null && !natural.IsUnarmedStrike)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when the Improved Trip attack <paramref name="result"/> still holds would be an unarmed strike that
+    /// provokes an attack of opportunity from <paramref name="target"/> (PHB p.139: the AoO comes before the
+    /// attack). GameManager.HandleTripAftermath asks it before <see cref="ResolveImprovedTripFollowUp"/> and runs
+    /// the target's AoO when ThreatSystem allows one.
+    /// </summary>
+    public bool DoesImprovedTripAttackProvoke(CharacterController target, SpecialAttackResult result)
+    {
+        if (result == null || !result.ImprovedTripFollowUpPending)
+            return false;
+
+        return SelectImprovedTripAttack(target, out _, out _) == ImprovedTripAttackSource.UnarmedStrike
+            && DoesUnarmedAttackProvoke(target);
+    }
+
     /// <summary>
     /// Improved Trip (PHB p.96), second half: makes the attack <see cref="PrepareImprovedTripFollowUp"/> recorded,
     /// once (the pending flag is cleared). Called by GameManager.HandleTripAftermath after the trip's own log and
-    /// melee reactions, so a tripper those reactions dropped makes no attack. A weapon or unarmed step is one
-    /// Attack with the main weapon at the recorded bonus and modifier; a natural step is the natural attack the
-    /// trip gave up, at its own bonus. After a free trip the attack that hit is made again: the same natural
-    /// attack, or a weapon attack at that hit's BAB. The attack spends no step of the attack sequence, provokes
-    /// nothing, and is made only while both sides are up, this creature can attack and the target is in melee
-    /// reach of the main weapon (no fallback weapon, CMB-136). The attack goes in
+    /// melee reactions (and after the target's AoO when the attack is an unarmed strike that provokes, PHB p.139), so
+    /// a tripper those dropped makes no attack. The weapon is <see cref="SelectImprovedTripAttack"/>'s choice (owner
+    /// ruling 2026-10-08, CMB-136): the main weapon when it can attack the tripped opponent, else the off-hand weapon
+    /// (made as an off-hand attack, so a shield bash drops the shield's AC bonus, PHB p.125), else an unarmed strike,
+    /// else none. A weapon or unarmed attack is one Attack at the recorded bonus (the bonus of
+    /// the attack the trip replaced) with that weapon's own modifiers; a natural step is the natural attack the trip
+    /// gave up, at its own bonus. After a free trip the attack that hit is made again: the same natural attack, or a
+    /// weapon attack at that hit's BAB. The attack spends no step of the attack sequence. The attack goes in
     /// <see cref="SpecialAttackResult.FollowUpAttack"/>, a reason it was not made in
     /// <see cref="SpecialAttackResult.FollowUpNote"/>.
     /// </summary>
@@ -11668,27 +11892,10 @@ public class CharacterController : MonoBehaviour
             return;
 
         result.ImprovedTripFollowUpPending = false;
-        if (Stats == null || target == null || target.Stats == null || target.IsDead || target.Stats.IsDead)
-            return;
-
-        string selfName = Stats.CharacterName;
-        if (IsDead || Stats.IsDead || Stats.CurrentHP <= 0 || !CanAttack())
+        ImprovedTripAttackSource source = SelectImprovedTripAttack(target, out ItemData weapon, out string note);
+        if (source == ImprovedTripAttackSource.None)
         {
-            result.FollowUpNote = $"Improved Trip: {selfName} cannot make the follow-up attack.";
-            return;
-        }
-
-        bool natural = UsesInnateNaturalAttackSequence();
-        ItemData weapon = GetEquippedMainWeapon();
-        if (!natural && weapon != null && weapon.WeaponCat == WeaponCategory.Ranged)
-        {
-            result.FollowUpNote = $"Improved Trip: {selfName} holds a ranged weapon and makes no melee follow-up attack.";
-            return;
-        }
-
-        if (!IsTargetInCurrentWeaponRange(target))
-        {
-            result.FollowUpNote = $"Improved Trip: {target.Stats.CharacterName} is out of {selfName}'s melee reach, so no follow-up attack.";
+            result.FollowUpNote = note;
             return;
         }
 
@@ -11701,7 +11908,7 @@ public class CharacterController : MonoBehaviour
 
         CombatResult attack = null;
         string label = null;
-        if (natural)
+        if (source == ImprovedTripAttackSource.NaturalSequence)
         {
             int naturalIndex = result.FollowUpNaturalAttackIndex;
             if (naturalIndex < 0)
@@ -11723,8 +11930,18 @@ public class CharacterController : MonoBehaviour
         {
             CombatResult trigger = result.FollowUpTrigger;
             int bab = result.FollowUpAttackBonus ?? (trigger != null ? trigger.BreakdownBAB : Stats.BaseAttackBonus);
-            attack = Attack(target, isFlanking, flankBonus, partnerName, null, bab, weapon);
-            label = $"{(weapon != null ? weapon.Name : "Unarmed strike")} (BAB {CharacterStats.FormatMod(bab)})";
+            bool unarmed = source == ImprovedTripAttackSource.UnarmedStrike;
+            // An off-hand weapon attacks as an off-hand attack: a shield bash loses the shield's AC bonus (PHB p.125)
+            // and the off hand's half Strength to damage (PHB p.113) follows the Attack path (CMB-008).
+            attack = Attack(target, isFlanking, flankBonus, partnerName, null, bab, unarmed ? null : weapon,
+                isOffHandAttack: source == ImprovedTripAttackSource.OffHandWeapon,
+                unarmedStrike: unarmed);
+            ItemData main = GetEquippedMainWeapon();
+            string why = source == ImprovedTripAttackSource.MainWeapon || main == null
+                ? string.Empty
+                : $"; {main.Name} cannot attack {target.Stats.CharacterName}";
+            string hand = source == ImprovedTripAttackSource.OffHandWeapon ? ", off hand" : string.Empty;
+            label = $"{(unarmed || weapon == null ? "Unarmed strike" : weapon.Name)} (BAB {CharacterStats.FormatMod(bab)}{hand}{why})";
         }
 
         if (attack == null)
