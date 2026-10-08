@@ -168,6 +168,10 @@ public class ActionButtonPanel : MonoBehaviour
         public int SequenceIndex;
         public string AttackName;
         public bool IsPrimary;
+        /// <summary>A natural attack already used this turn, offered again as Haste's extra attack (CMB-106).</summary>
+        public bool IsHasteExtra;
+        /// <summary>The attack bonus of this natural attack (CharacterStats.GetNaturalAttackBonus), shown in the chooser.</summary>
+        public int AttackBonus;
     }
 
     public void UpdateActionButtons(CharacterController pc)
@@ -314,6 +318,11 @@ public class ActionButtonPanel : MonoBehaviour
             ? new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
             : null;
 
+        // Haste's extra natural attack (PHB p.239; owner decision 2026-10-07, CMB-106): after the unused
+        // natural attacks, one option per used attack type, whose button makes the Haste attack with it.
+        var hasteOptions = new List<NaturalAttackButtonOption>();
+        var hasteAttackTypes = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
         int sequenceIndex = 0;
         for (int i = 0; i < validAttacks.Count; i++)
         {
@@ -326,7 +335,20 @@ public class ActionButtonPanel : MonoBehaviour
                 int currentSequenceIndex = sequenceIndex++;
                 bool isUsed = gm != null && gm.IsNaturalAttackSequenceIndexUsed(pc, currentSequenceIndex);
                 if (isUsed)
+                {
+                    if (gm.IsHasteExtraNaturalAttackOption(pc, currentSequenceIndex) && hasteAttackTypes.Add(attackName))
+                    {
+                        hasteOptions.Add(new NaturalAttackButtonOption
+                        {
+                            SequenceIndex = currentSequenceIndex,
+                            AttackName = attackName,
+                            IsPrimary = attack.IsPrimary,
+                            IsHasteExtra = true,
+                            AttackBonus = pc.Stats.GetNaturalAttackBonus(attack)
+                        });
+                    }
                     continue;
+                }
 
                 if (shouldGroupByAttackTypeAtTurnStart)
                 {
@@ -338,12 +360,42 @@ public class ActionButtonPanel : MonoBehaviour
                 {
                     SequenceIndex = currentSequenceIndex,
                     AttackName = attackName,
-                    IsPrimary = attack.IsPrimary
+                    IsPrimary = attack.IsPrimary,
+                    AttackBonus = pc.Stats.GetNaturalAttackBonus(attack)
                 });
             }
         }
 
+        options.AddRange(hasteOptions);
         return options;
+    }
+
+    /// <summary>
+    /// With more natural-attack options than the two attack buttons (three or more attack types, or
+    /// unused attacks plus the Haste re-offers, CMB-106), the second button opens a chooser with every
+    /// option after the first, so the player can pick any of them, Haste's extra attack included.
+    /// </summary>
+    private static bool UsesNaturalAttackChooser(ActionButtonContext context)
+        => context != null && context.NaturalAttackOptions != null && context.NaturalAttackOptions.Count > 2;
+
+    private static void OpenNaturalAttackChooser(GameManager gm, List<NaturalAttackButtonOption> options)
+    {
+        var sequenceIndices = new List<int>();
+        var attackNames = new List<string>();
+        var labels = new List<string>();
+        for (int i = 1; i < options.Count; i++)
+        {
+            NaturalAttackButtonOption option = options[i];
+            string role = option.IsPrimary ? "Primary" : "Secondary";
+            string bonus = CharacterStats.FormatMod(option.AttackBonus);
+            sequenceIndices.Add(option.SequenceIndex);
+            attackNames.Add(option.AttackName);
+            labels.Add(option.IsHasteExtra
+                ? $"{option.AttackName} (Haste, {role} {bonus})"
+                : $"{option.AttackName} ({role} {bonus})");
+        }
+
+        gm.ShowNaturalAttackOptionMenu(sequenceIndices, attackNames, labels);
     }
 
     private static string BuildNaturalAttackButtonLabel(NaturalAttackButtonOption option)
@@ -352,7 +404,9 @@ public class ActionButtonPanel : MonoBehaviour
             return "Attack: Natural attack";
 
         string role = option.IsPrimary ? "Primary" : "Secondary";
-        return $"Attack: {option.AttackName} ({role})";
+        return option.IsHasteExtra
+            ? $"Attack: {option.AttackName} (Haste, {role})"
+            : $"Attack: {option.AttackName} ({role})";
     }
 
     private void ConfigureAttackButtonListeners(ActionButtonContext context)
@@ -373,7 +427,12 @@ public class ActionButtonPanel : MonoBehaviour
             if (AttackThrownButton != null)
             {
                 AttackThrownButton.onClick.RemoveAllListeners();
-                if (context.NaturalAttackOptions.Count > 1)
+                if (UsesNaturalAttackChooser(context))
+                {
+                    List<NaturalAttackButtonOption> chooserOptions = context.NaturalAttackOptions;
+                    AttackThrownButton.onClick.AddListener(() => OpenNaturalAttackChooser(gm, chooserOptions));
+                }
+                else if (context.NaturalAttackOptions.Count > 1)
                 {
                     NaturalAttackButtonOption secondaryOption = context.NaturalAttackOptions[1];
                     AttackThrownButton.onClick.AddListener(() => gm.OnNaturalAttackButtonPressed(secondaryOption.SequenceIndex, secondaryOption.AttackName));
@@ -510,6 +569,8 @@ public class ActionButtonPanel : MonoBehaviour
         string thrownLabel;
         if (context.IsTurned)
             thrownLabel = showingSecondaryNaturalAttack ? "Attack (Turned: must flee)" : "Attack (Thrown - Turned)";
+        else if (context.UsingInnateNaturalAttacks && UsesNaturalAttackChooser(context))
+            thrownLabel = $"Attack: Other natural attack ({context.NaturalAttackOptions.Count - 1} choices)";
         else if (context.UsingInnateNaturalAttacks && context.NaturalAttackOptions != null && context.NaturalAttackOptions.Count > 1)
             thrownLabel = BuildNaturalAttackButtonLabel(context.NaturalAttackOptions[1]);
         else

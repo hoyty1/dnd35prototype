@@ -502,7 +502,7 @@ public class CombatFlowService : MonoBehaviour
     {
         if (attackType == GameManager.AttackType.Melee
             && ShouldUseNaturalAttackStep(attacker, attacker != null ? attacker.GetEquippedMainWeapon() : null)
-            && TryGetNaturalAttackAtSequenceIndex(attacker, attackIndex, out NaturalAttackDefinition naturalAttack))
+            && TryGetNaturalAttackAtSequenceIndex(attacker, attacker.ResolveNaturalAttackIndexForStep(attackIndex), out NaturalAttackDefinition naturalAttack))
         {
             return attacker.Stats.GetNaturalAttackBonus(naturalAttack);
         }
@@ -574,8 +574,13 @@ public class CombatFlowService : MonoBehaviour
 
         if (useNaturalFullAttackStep)
         {
-            // Next natural attack not already used this turn (natural-attack buttons mark theirs).
+            // Next natural attack not already used this turn (natural-attack buttons mark theirs). When
+            // all are used, Haste's extra natural attack if it is unused, with the default natural
+            // attack (the highest bonus; the natural-attack buttons let the player pick, CMB-106).
             int naturalAttackIndex = _gameManager.Combat_ResolveNextUnusedNaturalAttackIndex(attacker, _gameManager.Combat_GetTotalAttacksUsed());
+            bool hasteExtraStep = naturalAttackIndex < 0 && attacker.CanUseHasteExtraNaturalAttack();
+            if (hasteExtraStep)
+                naturalAttackIndex = attacker.GetDefaultHasteNaturalAttackIndex();
             if (naturalAttackIndex < 0)
             {
                 Debug.LogWarning($"[Attack][Sequence] {attacker.Stats.CharacterName} has no unused natural attack left; ending sequence.");
@@ -585,17 +590,19 @@ public class CombatFlowService : MonoBehaviour
             }
 
             // Shared step resolver (PC_NPC_PARITY plan step 6; the NPC melee sequence uses it too).
+            // The Haste step is the step after the natural attacks, made with the chosen natural attack.
             result = attacker.ResolveAttackSequenceStep(
                 target,
                 AttackStepKind.NaturalSequence,
-                naturalAttackIndex,
+                hasteExtraStep ? attacker.GetHasteExtraNaturalStepIndex() : naturalAttackIndex,
                 isFlanking,
                 flankBonus,
                 partnerName,
                 rangeInfo,
                 attackWeapon,
                 0,
-                out string naturalStepLabel);
+                out string naturalStepLabel,
+                hasteExtraStep ? naturalAttackIndex : -1);
 
             if (result == null)
             {
@@ -759,6 +766,20 @@ public class CombatFlowService : MonoBehaviour
         if (_gameManager == null || attacker == null || target == null)
             return;
 
+        // A natural-attack button that re-offered a used attack for Haste's extra attack (CMB-106):
+        // when that attack can no longer be made (Haste ended, or it was used meanwhile), refuse before
+        // anything is paid, rather than make the used natural attack a second time.
+        if (_gameManager.Combat_HasPendingNaturalAttackSelection()
+            && _gameManager.Combat_IsPendingNaturalAttackHasteExtra()
+            && !attacker.CanUseHasteExtraNaturalAttack())
+        {
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠",
+                $"{attacker.Stats.CharacterName} has no Haste attack left this turn."));
+            _gameManager.Combat_ClearPendingNaturalAttackSelection();
+            _gameManager.Combat_ShowActionChoices();
+            return;
+        }
+
         bool moveActionWasAvailableBeforeAttack = attacker.Actions != null && attacker.Actions.HasMoveAction;
         bool moveActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.MoveActionUsed;
         bool fullRoundActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.FullRoundActionUsed;
@@ -821,25 +842,30 @@ public class CombatFlowService : MonoBehaviour
         {
             int naturalAttackIndex = Mathf.Max(0, _gameManager.Combat_GetPendingNaturalAttackSequenceIndex());
             selectedNaturalAttackIndex = naturalAttackIndex;
-            FullAttackResult naturalStep = attacker.FullAttack(
+
+            // Haste's extra natural attack (CMB-106): the step after the natural attacks, made with the
+            // natural attack the player picked; the shared step resolver marks it used. An unusable
+            // Haste selection was refused at the top of this method.
+            bool hasteExtraStep = _gameManager.Combat_IsPendingNaturalAttackHasteExtra();
+            CombatResult naturalResult = attacker.ResolveAttackSequenceStep(
                 target,
+                AttackStepKind.NaturalSequence,
+                hasteExtraStep ? attacker.GetHasteExtraNaturalStepIndex() : naturalAttackIndex,
                 isFlanking,
                 flankBonus,
                 partnerName,
                 rangeInfo,
-                startAttackIndex: naturalAttackIndex,
-                maxAttacks: 1);
+                attackWeapon,
+                0,
+                out string naturalStepLabel,
+                hasteExtraStep ? naturalAttackIndex : -1);
 
-            if (naturalStep != null && naturalStep.Attacks != null && naturalStep.Attacks.Count > 0)
+            if (naturalResult != null)
             {
-                result = naturalStep.Attacks[0];
+                result = naturalResult;
                 string naturalLabel = _gameManager.Combat_GetPendingNaturalAttackLabel();
                 if (string.IsNullOrWhiteSpace(naturalLabel))
-                {
-                    naturalLabel = naturalStep.AttackLabels != null && naturalStep.AttackLabels.Count > 0
-                        ? naturalStep.AttackLabels[0]
-                        : "Natural attack";
-                }
+                    naturalLabel = !string.IsNullOrEmpty(naturalStepLabel) ? naturalStepLabel : "Natural attack";
 
                 naturalAttackModeLog = $"↻ Natural Attack ({naturalLabel})";
             }

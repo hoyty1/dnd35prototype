@@ -686,15 +686,115 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Attack steps this turn. A creature fighting with its innate natural attacks (no main weapon)
-    /// has one step per natural attack, whichever kind of step comes first, so natural attacks and
-    /// maneuvers that replace one share a single cap. Otherwise the Haste-aware iterative count.
+    /// has one step per natural attack, plus Haste's extra natural attack (CMB-106), whichever kind
+    /// of step comes first, so natural attacks and maneuvers that replace one share a single cap.
+    /// Otherwise the Haste-aware iterative count. Either way Haste adds exactly one step.
     /// </summary>
     public int GetMainHandAttackBudget(AttackStepKind kind)
     {
         if (kind == AttackStepKind.NaturalSequence || ShouldUseInnateNaturalAttackProfile(GetEquippedMainWeapon()))
-            return Mathf.Max(1, Stats != null ? Stats.GetTotalNaturalAttackCount() : 1);
+            return Mathf.Max(1, GetNaturalAttackStepBudget());
 
         return Mathf.Max(1, GetIterativeAttackCount());
+    }
+
+    // ----- Haste's extra attack with a natural weapon (PHB p.239; owner decision 2026-10-07, CMB-106) -----
+    // PHB p.239: on a full attack a hasted creature makes one extra attack at its full bonus. The owner
+    // ruled that this covers natural weapons: a hasted creature fighting with its innate natural attacks
+    // makes ONE extra attack with ONE of its natural weapons, at that natural attack's normal bonus
+    // (primary full, secondary -5 or -2 with Multiattack, MM p.312), and the attacker picks which one.
+    // It is one more step of the natural sequence, after the natural attacks (step index = the
+    // natural-attack count), so it needs the full attack like any second step (PHB p.143). A creature
+    // with a main weapon takes the iterative Haste step instead (CharacterCombatStats.GetIterativeAttackCount),
+    // never both. PCs pick the natural attack through the natural-attack buttons (a used attack is offered
+    // again while the Haste attack is unused); the AI picks with AIProfile.ChooseHasteNaturalAttackIndex.
+
+    /// <summary>True while Haste grants its extra attack (PHB p.239).</summary>
+    public bool HasHasteExtraAttack => HasActiveHasteEffect && ActiveHasteEffect.GrantsExtraAttack;
+
+    /// <summary>True when Haste's extra attack would be a natural attack: hasted, no main weapon, natural attacks (CMB-106).</summary>
+    public bool HasHasteExtraNaturalAttack()
+        => HasHasteExtraAttack && UsesInnateNaturalAttackSequence() && Stats != null && Stats.GetTotalNaturalAttackCount() > 0;
+
+    /// <summary>Natural-attack steps this turn: one per natural attack, plus one for Haste (CMB-106).</summary>
+    public int GetNaturalAttackStepBudget()
+    {
+        int naturalAttacks = Stats != null ? Stats.GetTotalNaturalAttackCount() : 0;
+        return naturalAttacks + (HasHasteExtraNaturalAttack() ? 1 : 0);
+    }
+
+    /// <summary>True when natural-sequence step <paramref name="stepIndex"/> is Haste's extra natural attack.</summary>
+    public bool IsHasteExtraNaturalStep(int stepIndex)
+        => HasHasteExtraNaturalAttack() && stepIndex >= Stats.GetTotalNaturalAttackCount();
+
+    /// <summary>Step index of Haste's extra natural attack: after the natural attacks.</summary>
+    public int GetHasteExtraNaturalStepIndex() => Stats != null ? Stats.GetTotalNaturalAttackCount() : 0;
+
+    /// <summary>Haste's extra natural attack is granted and not yet made (or given up for a maneuver) this turn.</summary>
+    public bool CanUseHasteExtraNaturalAttack()
+        => HasHasteExtraNaturalAttack() && !ProgressiveAttackPool.HasteExtraNaturalAttackUsed;
+
+    /// <summary>Record that Haste's extra natural attack was made or given up this turn.</summary>
+    public void MarkHasteExtraNaturalAttackUsed() => ProgressiveAttackPool.MarkHasteExtraNaturalAttackUsed();
+
+    /// <summary>
+    /// The natural attack Haste's extra attack uses when nobody chose one (the PC Attack and Full
+    /// Attack buttons, pounce, a maneuver given up in its place): the highest attack bonus, then the
+    /// higher average damage, then the first in the sequence. The AI's own choice (with riders) is
+    /// AIProfile.ChooseHasteNaturalAttackIndex. Returns a natural-sequence index, or -1 with none.
+    /// </summary>
+    public int GetDefaultHasteNaturalAttackIndex()
+    {
+        if (Stats == null)
+            return -1;
+
+        int count = Stats.GetTotalNaturalAttackCount();
+        int best = -1;
+        int bestBonus = int.MinValue;
+        float bestDamage = float.MinValue;
+        for (int i = 0; i < count; i++)
+        {
+            NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(i);
+            if (natural == null)
+                continue;
+
+            int bonus = Stats.GetNaturalAttackBonus(natural);
+            float damage = GetNaturalAttackAverageDamage(natural);
+            if (bonus > bestBonus || (bonus == bestBonus && damage > bestDamage))
+            {
+                best = i;
+                bestBonus = bonus;
+                bestDamage = damage;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>Average damage of one hit with this natural attack (scaled dice, its Strength share and flat bonus).</summary>
+    public float GetNaturalAttackAverageDamage(NaturalAttackDefinition natural)
+    {
+        if (Stats == null || natural == null)
+            return 0f;
+
+        Stats.GetScaledNaturalAttackDamage(natural, out int damageCount, out int damageDice);
+        return damageCount * (damageDice + 1) * 0.5f + Stats.GetNaturalAttackDamageBonus(natural) + natural.BonusDamage;
+    }
+
+    /// <summary>
+    /// The natural-sequence index a natural step resolves: the step itself for steps before the Haste
+    /// step; for the Haste step <paramref name="hasteNaturalAttackIndex"/> when it names a natural
+    /// attack, else <see cref="GetDefaultHasteNaturalAttackIndex"/>.
+    /// </summary>
+    public int ResolveNaturalAttackIndexForStep(int stepIndex, int hasteNaturalAttackIndex = -1)
+    {
+        if (!IsHasteExtraNaturalStep(stepIndex))
+            return stepIndex;
+
+        int count = Stats.GetTotalNaturalAttackCount();
+        return hasteNaturalAttackIndex >= 0 && hasteNaturalAttackIndex < count
+            ? hasteNaturalAttackIndex
+            : GetDefaultHasteNaturalAttackIndex();
     }
 
     /// <summary>
@@ -934,20 +1034,23 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// BAB of the natural attack at this place of the innate sequence, with its secondary-attack
     /// penalty (MM p.312; -2 with Multiattack): what a maneuver replacing that natural attack rolls at.
+    /// An index past the natural attacks is Haste's extra natural attack (CMB-106), at the bonus of the
+    /// natural attack it would use (<see cref="ResolveNaturalAttackIndexForStep"/>).
     /// </summary>
     public int GetNaturalAttackStepBAB(int naturalAttackIndex)
     {
         if (Stats == null)
             return 0;
 
-        NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex);
+        NaturalAttackDefinition natural = Stats.GetNaturalAttackAtSequenceIndex(ResolveNaturalAttackIndexForStep(naturalAttackIndex));
         return Stats.BaseAttackBonus + Stats.GetNaturalAttackSequencePenalty(natural);
     }
 
     /// <summary>
     /// BAB a maneuver rolls at when it replaces sequence step <paramref name="stepIndex"/>. For a
     /// natural-attack creature, <paramref name="naturalAttackIndex"/> names the natural attack given up;
-    /// a negative value means the natural attack at the step itself (the NPC sequence order).
+    /// a negative value means the natural attack at the step itself (the NPC sequence order), and at
+    /// the Haste step the default Haste natural attack (CMB-106).
     /// </summary>
     public int GetManeuverSubstituteBAB(int stepIndex, int naturalAttackIndex = -1)
     {
@@ -964,15 +1067,23 @@ public class CharacterController : MonoBehaviour
     /// pool counts steps, not which natural attack was given up: pass a non-negative index only from
     /// a caller that records the used natural attacks itself (the PC wrapper, through
     /// GameManager._usedNaturalAttackSequenceIndices). The NPC loop resolves natural attacks by the
-    /// step cursor, so it passes -1 and gives up the natural attack at the current step.
+    /// step cursor, so it passes -1 and gives up the natural attack at the current step; at the Haste
+    /// step (CMB-106) that is Haste's extra natural attack, which is then marked used. The PC wrapper
+    /// passes <paramref name="givesUpHasteExtraAttack"/> when the maneuver takes the place of Haste's
+    /// extra natural attack.
     /// </summary>
-    public bool TryCommitManeuverSubstituteStep(int naturalAttackIndex, out int maneuverBab, out int stepIndex, out string reason)
+    public bool TryCommitManeuverSubstituteStep(int naturalAttackIndex, out int maneuverBab, out int stepIndex, out string reason,
+        bool givesUpHasteExtraAttack = false)
     {
         maneuverBab = 0;
-        if (!TryCommitAttack(GetManeuverSubstituteStepKind(), out stepIndex, out reason))
+        AttackStepKind kind = GetManeuverSubstituteStepKind();
+        if (!TryCommitAttack(kind, out stepIndex, out reason))
             return false;
 
         maneuverBab = GetManeuverSubstituteBAB(stepIndex, naturalAttackIndex);
+        if (kind == AttackStepKind.NaturalSequence
+            && (givesUpHasteExtraAttack || (naturalAttackIndex < 0 && IsHasteExtraNaturalStep(stepIndex))))
+            MarkHasteExtraNaturalAttackUsed();
         return true;
     }
 
@@ -980,9 +1091,11 @@ public class CharacterController : MonoBehaviour
     /// Resolve one already-committed attack step of this creature's sequence (PHB p.143). Shared by
     /// the PC iterative flow and the NPC melee sequence; the attack modifier comes from
     /// BuildAttackBonus inside Attack/FullAttack. A natural step is the stepIndex-th natural attack
-    /// of the innate sequence; any other step is one Attack at that step's iterative BAB plus
-    /// <paramref name="babAdjustment"/> (the PC dual-wield main-hand penalty). Returns null when
-    /// nothing was resolved.
+    /// of the innate sequence; the step after the natural attacks is Haste's extra natural attack
+    /// (CMB-106), made with natural attack <paramref name="hasteNaturalAttackIndex"/> (the attacker's
+    /// choice; -1 for <see cref="GetDefaultHasteNaturalAttackIndex"/>) and marked used. Any other step
+    /// is one Attack at that step's iterative BAB plus <paramref name="babAdjustment"/> (the PC
+    /// dual-wield main-hand penalty). Returns null when nothing was resolved.
     /// </summary>
     public CombatResult ResolveAttackSequenceStep(
         CharacterController target,
@@ -994,7 +1107,8 @@ public class CharacterController : MonoBehaviour
         RangeInfo rangeInfo,
         ItemData weapon,
         int babAdjustment,
-        out string stepLabel)
+        out string stepLabel,
+        int hasteNaturalAttackIndex = -1)
     {
         stepLabel = null;
         if (target == null || target.Stats == null)
@@ -1002,10 +1116,14 @@ public class CharacterController : MonoBehaviour
 
         if (kind == AttackStepKind.NaturalSequence)
         {
+            bool hasteStep = IsHasteExtraNaturalStep(stepIndex);
             FullAttackResult naturalStep = FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo,
-                startAttackIndex: stepIndex, maxAttacks: 1);
+                startAttackIndex: stepIndex, maxAttacks: 1, hasteNaturalAttackIndex: hasteNaturalAttackIndex);
             if (naturalStep == null || naturalStep.Attacks == null || naturalStep.Attacks.Count == 0)
                 return null;
+
+            if (hasteStep)
+                MarkHasteExtraNaturalAttackUsed();
 
             stepLabel = naturalStep.AttackLabels != null && naturalStep.AttackLabels.Count > 0
                 ? naturalStep.AttackLabels[0]
@@ -5101,7 +5219,7 @@ public class CharacterController : MonoBehaviour
     {
         ItemData equippedWeapon = GetEquippedMainWeapon();
         if (ShouldUseInnateNaturalAttackProfile(equippedWeapon))
-            return Mathf.Max(0, Stats.GetTotalNaturalAttackCount());
+            return Mathf.Max(0, GetNaturalAttackStepBudget()); // with Haste's extra natural attack (CMB-106)
 
         int[] attackBonuses = Stats.GetIterativeAttackBonuses();
         int count = attackBonuses != null ? attackBonuses.Length : 0;
@@ -5130,8 +5248,13 @@ public class CharacterController : MonoBehaviour
     /// Rapid Shot: extra attack at highest BAB, -2 to all ranged attacks.
     /// Power Attack: penalty to melee attack, bonus to melee damage.
     /// Point Blank Shot: +1 atk/dmg for ranged within 30 ft.
+    /// Haste: one extra attack. With a weapon (or unarmed) at the highest BAB; for a creature fighting
+    /// with its natural attacks one extra natural attack after the others, with natural attack
+    /// <paramref name="hasteNaturalAttackIndex"/> (-1: <see cref="GetDefaultHasteNaturalAttackIndex"/>)
+    /// at that attack's normal bonus (PHB p.239; owner decision 2026-10-07, CMB-106).
     /// </summary>
-    public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null, int startAttackIndex = 0, int maxAttacks = int.MaxValue)
+    public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null, int startAttackIndex = 0, int maxAttacks = int.MaxValue,
+        int hasteNaturalAttackIndex = -1)
     {
         var result = new FullAttackResult();
         result.Type = FullAttackResult.AttackType.FullAttack;
@@ -5178,63 +5301,78 @@ public class CharacterController : MonoBehaviour
             if (startAttackIndex < 0)
                 startAttackIndex = 0;
 
-            int naturalAttackGlobalIndex = 0;
-            int naturalAttacksExecuted = 0;
+            // The natural sequence in order (each attack repeated by its Count), then Haste's extra
+            // natural attack with the chosen natural attack (CMB-106).
+            var naturalSteps = new List<(NaturalAttackDefinition attack, int repeat, bool haste)>();
             for (int naturalIndex = 0; naturalIndex < naturalAttacks.Count; naturalIndex++)
             {
-                NaturalAttackDefinition naturalAttack = naturalAttacks[naturalIndex];
-                int attackCount = Mathf.Max(1, naturalAttack.Count);
+                int attackCount = Mathf.Max(1, naturalAttacks[naturalIndex].Count);
                 for (int repeat = 0; repeat < attackCount; repeat++)
-                {
-                    if (naturalAttacksExecuted >= maxAttacks)
-                        break;
+                    naturalSteps.Add((naturalAttacks[naturalIndex], repeat, false));
+            }
 
-                    if (naturalAttackGlobalIndex++ < startAttackIndex)
-                        continue;
+            // Only while it is unused this turn: it is one attack per full attack, and the grapple
+            // routine (ResolveNaturalAttackRoutineWhileGrappling) leaves it out with maxAttacks.
+            if (CanUseHasteExtraNaturalAttack() && naturalSteps.Count > 0)
+            {
+                int hasteIndex = ResolveNaturalAttackIndexForStep(naturalSteps.Count, hasteNaturalAttackIndex);
+                if (hasteIndex >= 0 && hasteIndex < naturalSteps.Count)
+                    naturalSteps.Add((naturalSteps[hasteIndex].attack, naturalSteps[hasteIndex].repeat, true));
+            }
 
-                    if (target.Stats.IsDead)
-                        break;
-
-                    // Every natural attack is at full BAB; secondary attacks take -5, or -2 with Multiattack (MM p.312, p.304).
-                    AttackBonusBreakdown atkBonus = sequenceBonus;
-                    atkBonus.BaseAttackBonus = Stats.BaseAttackBonus;
-                    atkBonus.SequenceModifier = Stats.GetNaturalAttackSequencePenalty(naturalAttack);
-                    atkBonus.SequenceLabel = "secondary natural attack";
-                    atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
-                    int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
-
-                    int hpBeforeAtk = target.Stats.CurrentHP;
-                    bool useHalfStrength = !naturalAttack.IsPrimary;
-                    int baseStrengthFromDamageResolver = useHalfStrength ? Mathf.FloorToInt(Stats.STRMod * 0.5f) : Stats.STRMod;
-                    int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(naturalAttack) - baseStrengthFromDamageResolver;
-
-                    Stats.GetScaledNaturalAttackDamage(naturalAttack, out int naturalDamageCount, out int naturalDamageDice);
-
-                    CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
-                        naturalDamageDice, naturalDamageCount, naturalDamageBonus,
-                        atkBonus.CritThreatMin, atkBonus.CritMultiplier,
-                        equippedWeapon, useHalfStrength, totalFeatDmgBonus, aidAnotherTargetAcBonus,
-                        damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
-
-                    atkBonus.ApplyToResult(atk, rangeInfo);
-                    atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
-                    atk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
-                    atk.WeaponName = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural attack" : naturalAttack.Name;
-                    atk.BaseDamageDiceStr = $"{naturalDamageCount}d{naturalDamageDice}";
-                    atk.DefenderHPBefore = hpBeforeAtk;
-                    atk.DefenderHPAfter = target.Stats.CurrentHP;
-
-                    TryApplyNaturalAttackOnHitEffects(target, atk, naturalAttack);
-
-                    result.Attacks.Add(atk);
-                    string naturalLabel = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural" : naturalAttack.Name;
-                    string roleLabel = naturalAttack.IsPrimary ? "Primary" : "Secondary";
-                    result.AttackLabels.Add($"{naturalLabel} {repeat + 1} ({roleLabel} {CharacterStats.FormatMod(atkBonus.LabelBonus)})");
-                    naturalAttacksExecuted++;
-                }
-
-                if (naturalAttacksExecuted >= maxAttacks || target.Stats.IsDead)
+            int naturalAttacksExecuted = 0;
+            for (int stepIndex = startAttackIndex; stepIndex < naturalSteps.Count; stepIndex++)
+            {
+                if (naturalAttacksExecuted >= maxAttacks)
                     break;
+
+                if (target.Stats.IsDead)
+                    break;
+
+                NaturalAttackDefinition naturalAttack = naturalSteps[stepIndex].attack;
+                int repeat = naturalSteps[stepIndex].repeat;
+                bool isHasteExtraAttack = naturalSteps[stepIndex].haste;
+
+                // Every natural attack is at full BAB; secondary attacks take -5, or -2 with Multiattack (MM p.312, p.304).
+                AttackBonusBreakdown atkBonus = sequenceBonus;
+                atkBonus.BaseAttackBonus = Stats.BaseAttackBonus;
+                atkBonus.SequenceModifier = Stats.GetNaturalAttackSequencePenalty(naturalAttack);
+                atkBonus.SequenceLabel = "secondary natural attack";
+                atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
+                int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
+
+                int hpBeforeAtk = target.Stats.CurrentHP;
+                bool useHalfStrength = !naturalAttack.IsPrimary;
+                int baseStrengthFromDamageResolver = useHalfStrength ? Mathf.FloorToInt(Stats.STRMod * 0.5f) : Stats.STRMod;
+                int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(naturalAttack) - baseStrengthFromDamageResolver;
+
+                Stats.GetScaledNaturalAttackDamage(naturalAttack, out int naturalDamageCount, out int naturalDamageDice);
+
+                CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
+                    naturalDamageDice, naturalDamageCount, naturalDamageBonus,
+                    atkBonus.CritThreatMin, atkBonus.CritMultiplier,
+                    equippedWeapon, useHalfStrength, totalFeatDmgBonus, aidAnotherTargetAcBonus,
+                    damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
+
+                atkBonus.ApplyToResult(atk, rangeInfo);
+                atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
+                atk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
+                atk.WeaponName = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural attack" : naturalAttack.Name;
+                atk.BaseDamageDiceStr = $"{naturalDamageCount}d{naturalDamageDice}";
+                atk.DefenderHPBefore = hpBeforeAtk;
+                atk.DefenderHPAfter = target.Stats.CurrentHP;
+
+                TryApplyNaturalAttackOnHitEffects(target, atk, naturalAttack);
+                if (isHasteExtraAttack)
+                    MarkHasteExtraNaturalAttackUsed();
+
+                result.Attacks.Add(atk);
+                string naturalLabel = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural" : naturalAttack.Name;
+                string roleLabel = naturalAttack.IsPrimary ? "Primary" : "Secondary";
+                result.AttackLabels.Add(isHasteExtraAttack
+                    ? $"{naturalLabel} (Haste, {roleLabel} {CharacterStats.FormatMod(atkBonus.LabelBonus)})"
+                    : $"{naturalLabel} {repeat + 1} ({roleLabel} {CharacterStats.FormatMod(atkBonus.LabelBonus)})");
+                naturalAttacksExecuted++;
             }
 
             result.DefenderHPAfter = target.Stats.CurrentHP;
@@ -9975,6 +10113,8 @@ public class CharacterController : MonoBehaviour
         }
 
         int targetHpBefore = opponent.Stats.CurrentHP;
+        // The natural attacks only: Haste's extra natural attack (CMB-106) is one attack of a full
+        // attack, not part of every grapple attack action.
         FullAttackResult naturalRoutine = FullAttack(
             opponent,
             isFlanking: false,
@@ -9982,7 +10122,7 @@ public class CharacterController : MonoBehaviour
             flankingPartnerName: null,
             rangeInfo: null,
             startAttackIndex: 0,
-            maxAttacks: int.MaxValue);
+            maxAttacks: Stats.GetTotalNaturalAttackCount());
 
         int naturalAttackCount = naturalRoutine != null && naturalRoutine.Attacks != null ? naturalRoutine.Attacks.Count : 0;
         int naturalHitCount = 0;

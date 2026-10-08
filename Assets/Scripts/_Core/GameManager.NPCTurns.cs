@@ -587,11 +587,30 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// The natural attack an AI-run creature uses for Haste's extra attack (PHB p.239; owner decision
+    /// 2026-10-07, CMB-106): its profile's choice (AIProfile.ChooseHasteNaturalAttackIndex), or the
+    /// shared AI scoring (DND35.AI.NaturalAttackChoice) when it has no profile. A caller that runs the
+    /// turn with another profile passes it in <paramref name="profile"/>, so one profile makes every choice.
+    /// </summary>
+    internal int ChooseHasteNaturalAttackIndexForAI(CharacterController npc, CharacterController target, DND35.AI.AIProfile profile = null)
+    {
+        if (npc == null || !npc.HasHasteExtraNaturalAttack())
+            return -1;
+
+        DND35.AI.AIProfile chooser = profile != null ? profile : npc.aiProfile;
+        return chooser != null
+            ? chooser.ChooseHasteNaturalAttackIndex(npc, target)
+            : DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(npc, target);
+    }
+
+    /// <summary>
     /// NPC melee attack or full attack, one step at a time through the creature's own attack
     /// sequence (CMB-102, PHB p.143). The first step spends the standard action and a second turns
     /// the turn into a full attack (move action), so an NPC that moved, is slowed or can take only
-    /// one action gets one step, and Haste adds its step through the iterative count (weapon and
-    /// unarmed sequences only, CMB-106). Before each
+    /// one action gets one step, and Haste adds one step: an iterative step for a weapon or unarmed
+    /// sequence, or one extra natural attack after the natural attacks for a natural sequence, with
+    /// the natural attack the AI picks (ChooseHasteNaturalAttackIndexForAI; PHB p.239, owner decision
+    /// 2026-10-07, CMB-106). Before each
     /// step, weapon or natural, <paramref name="tryStepManeuver"/> may replace that attack with trip,
     /// disarm, sunder or grapple at that step's bonus: the iterative BAB, or the BAB of the natural
     /// attack it replaces (PHB p.141 Table 8-2 note 7, MM p.312; which types is
@@ -755,6 +774,11 @@ public partial class GameManager
                 treatAsThrownAttack: false);
             ProcessTurnUndeadMeleeFearBreak(npc, currentTarget, isMeleeFearBreakAttack);
 
+            // Haste's extra natural attack (CMB-106): the AI picks which natural attack it uses.
+            int hasteNaturalAttackIndex = stepKind == AttackStepKind.NaturalSequence && npc.IsHasteExtraNaturalStep(step)
+                ? ChooseHasteNaturalAttackIndexForAI(npc, currentTarget, profile)
+                : -1;
+
             // Weapon steps run through CharacterController.Attack, so its charm, fascination and
             // command-undead breaks apply to NPC full attacks too (CMB-090).
             CombatResult attack = npc.ResolveAttackSequenceStep(
@@ -767,7 +791,8 @@ public partial class GameManager
                 rangeInfo,
                 npc.GetEquippedMainWeapon(),
                 0,
-                out string label);
+                out string label,
+                hasteNaturalAttackIndex);
 
             if (attack == null)
                 break;

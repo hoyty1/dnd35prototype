@@ -295,6 +295,26 @@ namespace DND35.AI
         }
 
         /// <summary>
+        /// Which natural attack this creature uses for Haste's extra attack on a full attack (PHB p.239;
+        /// owner decision 2026-10-07, CMB-106): a natural-sequence index. Asked by the NPC melee
+        /// sequence and the NPC pounce. The default takes the best <see cref="ScoreHasteNaturalAttack"/>.
+        /// </summary>
+        public virtual int ChooseHasteNaturalAttackIndex(CharacterController self, CharacterController target)
+        {
+            return NaturalAttackChoice.ChooseBest(self, index => ScoreHasteNaturalAttack(self, target, index));
+        }
+
+        /// <summary>
+        /// Score of one natural attack as Haste's extra attack (higher is better). The default
+        /// (<see cref="NaturalAttackChoice.Score"/>) prefers a rider that matters against the target,
+        /// then the highest attack bonus, then the higher average damage.
+        /// </summary>
+        public virtual float ScoreHasteNaturalAttack(CharacterController self, CharacterController target, int naturalAttackIndex)
+        {
+            return NaturalAttackChoice.Score(self, target, naturalAttackIndex);
+        }
+
+        /// <summary>
         /// Placeholder for future overrun restrictions (size/path rules).
         /// </summary>
         protected virtual bool IsValidOverrunTarget(CharacterController target, CharacterController self)

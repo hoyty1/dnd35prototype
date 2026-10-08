@@ -85,6 +85,16 @@ public static class GrappleDamageRulesTests
         TestNaturalWeaponDisarmIsArmed();
         TestNaturalWeaponCreatureCannotSunder();
         TestNpcNaturalSequenceMakesOneSubstitute();
+        TestHasteAddsOneNaturalAttackStep();
+        TestHasteNaturalStepUsesChosenNaturalAttack();
+        TestHasteNaturalFullAttackAddsOneAttack();
+        TestHasteNaturalNotInGrappleRoutine();
+        TestHasteWeaponAndMixedAttackersGetOneHasteAttack();
+        TestHasteNaturalManeuverReplacesHasteStep();
+        TestAiHasteNaturalAttackChoice();
+        TestNpcHasteNaturalSequence();
+        TestPcHasteNaturalAttackOptions();
+        TestPcHasteNaturalButtonSelection();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
         TestBullRushImprovedFeatAddsPlus4();
         TestBullRushDefenderUsesStrengthAndDwarfStability();
@@ -1831,6 +1841,480 @@ public static class GrappleDamageRulesTests
             Cleanup(npc, target);
             if (profile != null)
                 Object.DestroyImmediate(profile);
+        }
+    }
+
+    // ── Haste's extra attack with natural weapons (PHB p.239; owner decision 2026-10-07, CMB-106) ──
+    // A hasted creature fighting with its natural attacks makes ONE extra attack, on a full attack,
+    // with ONE natural weapon of its choice at that weapon's normal bonus. It is one more step of the
+    // shared natural sequence (CharacterController.GetNaturalAttackStepBudget), after the natural
+    // attacks. A weapon user keeps the iterative Haste step, and nobody gets both.
+
+    private static CharacterController CreateHastedBiteClaws(string name, int bab)
+    {
+        var creature = CreateBiteClawsCreature(name, bab, false);
+        creature.ApplyHasteEffect(10, null);
+        return creature;
+    }
+
+    private static CharacterController CreateHasteTarget(string name)
+    {
+        var target = CreateWeakDefender(name);
+        target.GridPosition = new Vector2Int(1, 0);
+        target.Stats.AdjustMaxHP(500);
+        target.Stats.CurrentHP += 500;
+        return target;
+    }
+
+    private static int AttackModifier(CombatResult attack) => attack != null ? attack.TotalRoll - attack.DieRoll : int.MinValue;
+
+    private static void TestHasteAddsOneNaturalAttackStep()
+    {
+        var hasted = CreateHastedBiteClaws("HasteNaturalBudget", 4);
+        var plain = CreateBiteClawsCreature("HasteNaturalBudgetControl", 4, false);
+        try
+        {
+            Assert(hasted.HasHasteExtraNaturalAttack() && hasted.GetNaturalAttackStepBudget() == 4
+                && hasted.GetMainHandAttackBudget(AttackStepKind.NaturalSequence) == 4
+                && hasted.GetHasteExtraNaturalStepIndex() == 3
+                && hasted.IsHasteExtraNaturalStep(3) && !hasted.IsHasteExtraNaturalStep(2)
+                && !plain.HasHasteExtraNaturalAttack() && plain.GetNaturalAttackStepBudget() == 3 && !plain.IsHasteExtraNaturalStep(3),
+                "Haste adds one step to a bite/claw/claw natural sequence (4 steps, the 4th is the Haste one); without Haste 3 (CMB-106)");
+
+            bool all4 = true;
+            for (int i = 0; i < 4; i++)
+                all4 &= hasted.TryCommitAttack(AttackStepKind.NaturalSequence, out int step, out _) && step == i;
+            bool fifth = hasted.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out string reason);
+            Assert(all4 && !fifth && !string.IsNullOrEmpty(reason) && hasted.ProgressiveAttackPool.IsFullAttack,
+                "A hasted natural creature commits four natural steps on a full attack, and a fifth is refused");
+
+            hasted.StartNewTurn();
+            hasted.Actions.UseMoveAction();
+            bool first = hasted.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+            bool second = hasted.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+            Assert(first && !second && hasted.GetRemainingMainHandAttackSteps(AttackStepKind.NaturalSequence) == 0,
+                "A hasted natural creature that moved makes one attack: Haste's extra attack needs a full attack (PHB p.143, p.239)");
+        }
+        finally
+        {
+            Cleanup(hasted, plain);
+        }
+    }
+
+    private static void TestHasteNaturalStepUsesChosenNaturalAttack()
+    {
+        var bear = CreateHastedBiteClaws("HasteNaturalStepChoice", 4);
+        var target = CreateHasteTarget("HasteNaturalStepChoiceTarget");
+        try
+        {
+            CombatResult bite = bear.ResolveAttackSequenceStep(target, AttackStepKind.NaturalSequence, 0,
+                false, 0, null, null, null, 0, out _);
+            CombatResult claw = bear.ResolveAttackSequenceStep(target, AttackStepKind.NaturalSequence, 1,
+                false, 0, null, null, null, 0, out _);
+            Assert(bite != null && claw != null && bite.WeaponName == "Bite" && claw.WeaponName == "Claw"
+                && AttackModifier(bite) - AttackModifier(claw) == 5 && !bear.ProgressiveAttackPool.HasteExtraNaturalAttackUsed,
+                "Natural steps 0 and 1 are the bite and a claw, 5 apart (secondary -5, MM p.312); no Haste attack used yet");
+
+            CombatResult hasteClaw = bear.ResolveAttackSequenceStep(target, AttackStepKind.NaturalSequence, 3,
+                false, 0, null, null, null, 0, out string hasteClawLabel, 1);
+            Assert(hasteClaw != null && hasteClaw.WeaponName == "Claw" && AttackModifier(hasteClaw) == AttackModifier(claw)
+                && hasteClawLabel != null && hasteClawLabel.Contains("Haste") && bear.ProgressiveAttackPool.HasteExtraNaturalAttackUsed
+                && !bear.CanUseHasteExtraNaturalAttack(),
+                "The Haste step with the claw chosen is a claw at the claw's normal bonus, labelled Haste, and marks the Haste attack used");
+
+            bear.StartNewTurn();
+            CombatResult hasteDefault = bear.ResolveAttackSequenceStep(target, AttackStepKind.NaturalSequence, 3,
+                false, 0, null, null, null, 0, out _);
+            Assert(hasteDefault != null && hasteDefault.WeaponName == "Bite" && AttackModifier(hasteDefault) == AttackModifier(bite)
+                && bear.GetDefaultHasteNaturalAttackIndex() == 0,
+                "With no choice the Haste step uses the natural attack with the highest bonus (the bite) at its normal bonus");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Haste natural step check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(bear, target);
+        }
+    }
+
+    private static void TestHasteNaturalFullAttackAddsOneAttack()
+    {
+        var bear = CreateHastedBiteClaws("HasteNaturalFullAttack", 4);
+        var plain = CreateBiteClawsCreature("HasteNaturalFullAttackControl", 4, false);
+        var target = CreateHasteTarget("HasteNaturalFullAttackTarget");
+        try
+        {
+            int plannedBefore = bear.GetPlannedFullAttackCount();
+            FullAttackResult full = bear.FullAttack(target, false, 0, null);
+            bool hasteUsedAfterFull = bear.ProgressiveAttackPool.HasteExtraNaturalAttackUsed;
+            FullAttackResult sameTurn = bear.FullAttack(target, false, 0, null, hasteNaturalAttackIndex: 2);
+            bear.StartNewTurn();
+            FullAttackResult chosen = bear.FullAttack(target, false, 0, null, hasteNaturalAttackIndex: 2);
+            FullAttackResult control = plain.FullAttack(target, false, 0, null);
+            Assert(full.Attacks.Count == 4 && full.Attacks[3].WeaponName == "Bite" && full.AttackLabels[3].Contains("Haste")
+                && AttackModifier(full.Attacks[3]) == AttackModifier(full.Attacks[0])
+                && chosen.Attacks.Count == 4 && chosen.Attacks[3].WeaponName == "Claw"
+                && control.Attacks.Count == 3
+                && plannedBefore == 4 && plain.GetPlannedFullAttackCount() == 3,
+                "A hasted natural full attack (PC Full Attack button, pounce) is bite, claw, claw plus one Haste attack (the bite by default, or the chosen claw); unhasted 3");
+            Assert(hasteUsedAfterFull && sameTurn.Attacks.Count == 3 && !sameTurn.AttackLabels.Exists(l => l.Contains("Haste")),
+                "FullAttack marks the Haste natural attack used, so a second natural routine in the same turn has no Haste attack");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Haste natural full attack check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(bear, plain, target);
+        }
+    }
+
+    private static void TestHasteNaturalNotInGrappleRoutine()
+    {
+        // Each grapple attack action of a natural-weapon creature runs its natural routine
+        // (ResolveNaturalAttackRoutineWhileGrappling). Haste's extra natural attack is one attack of a full
+        // attack (PHB p.239), never part of each routine, and a used Haste attack is not made again.
+        MethodInfo routine = typeof(CharacterController).GetMethod("ResolveNaturalAttackRoutineWhileGrappling", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(routine != null, "CharacterController.ResolveNaturalAttackRoutineWhileGrappling is available for the Haste grapple test");
+        if (routine == null)
+            return;
+
+        var bear = CreateHastedBiteClaws("HasteNaturalGrappleRoutine", 4);
+        var target = CreateHasteTarget("HasteNaturalGrappleRoutineTarget");
+        try
+        {
+            var first = (SpecialAttackResult)routine.Invoke(bear, new object[] { target, "Attack" });
+            var second = (SpecialAttackResult)routine.Invoke(bear, new object[] { target, "Attack" });
+            Assert(first != null && second != null && first.Log.Contains("Natural attacks: 3 (") && second.Log.Contains("Natural attacks: 3 (")
+                && !first.Log.Contains("(Haste,") && !second.Log.Contains("(Haste,") && !bear.ProgressiveAttackPool.HasteExtraNaturalAttackUsed,
+                "A hasted bite/claw/claw creature makes 3 natural attacks per grapple routine, never the Haste attack (CMB-106)");
+
+            CombatResult hasteStep = bear.ResolveAttackSequenceStep(target, AttackStepKind.NaturalSequence, 3,
+                false, 0, null, null, null, 0, out _);
+            CombatResult hasteAgain = bear.ResolveAttackSequenceStep(target, AttackStepKind.NaturalSequence, 3,
+                false, 0, null, null, null, 0, out _);
+            FullAttackResult afterUsed = bear.FullAttack(target, false, 0, null);
+            Assert(hasteStep != null && hasteAgain == null && afterUsed.Attacks.Count == 3,
+                "Once the Haste natural attack is made, the Haste step resolves nothing and a natural routine has 3 attacks");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Haste natural grapple routine check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            Cleanup(bear, target);
+        }
+    }
+
+    private static void TestHasteWeaponAndMixedAttackersGetOneHasteAttack()
+    {
+        // Manufactured-weapon Haste keeps working, and a creature with natural attacks that fights with a
+        // weapon gets the iterative Haste step only, never a second Haste attack with a natural weapon.
+        var fighter = CreateIterativeAttacker("HasteWeaponFighter"); // BAB +11: +11/+6/+1
+        var mixed = CreateBiteClawsCreature("HasteMixedWeaponNatural", 6, false); // BAB +6: +6/+1
+        var target = CreateHasteTarget("HasteWeaponTarget");
+        try
+        {
+            fighter.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            mixed.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            int fighterBefore = fighter.GetIterativeAttackCount();
+            fighter.ApplyHasteEffect(10, null);
+            mixed.ApplyHasteEffect(10, null);
+
+            FullAttackResult fighterFull = fighter.FullAttack(target, false, 0, null);
+            Assert(fighterBefore == 3 && fighter.GetIterativeAttackCount() == 4 && fighter.GetMainHandAttackBudget(AttackStepKind.MainHand) == 4
+                && !fighter.HasHasteExtraNaturalAttack() && fighterFull.Attacks.Count == 4 && fighterFull.Attacks[3].BreakdownBAB == 11,
+                "Weapon Haste is unchanged: BAB +11 gets +11/+6/+1 plus one attack at +11 (PHB p.239)");
+
+            FullAttackResult mixedFull = mixed.FullAttack(target, false, 0, null);
+            Assert(mixed.GetEquippedMainWeapon() != null && !mixed.UsesInnateNaturalAttackSequence() && !mixed.HasHasteExtraNaturalAttack()
+                && mixed.GetMainHandAttackBudget(AttackStepKind.MainHand) == 3 && mixedFull.Attacks.Count == 3
+                && mixedFull.Attacks.TrueForAll(a => a.WeaponName != "Bite" && a.WeaponName != "Claw"),
+                "A hasted creature with natural attacks that fights with a weapon gets +6/+1 plus one Haste weapon attack, and no Haste natural attack");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Haste weapon and mixed attacker check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(fighter, mixed, target);
+        }
+    }
+
+    private static void TestHasteNaturalManeuverReplacesHasteStep()
+    {
+        // A trip may replace Haste's extra natural attack too (PHB p.141 Table 8-2 note 7), at the bonus
+        // of the natural attack it would use (the bite here), and that uses up the Haste attack.
+        var bear = CreateHastedBiteClaws("HasteNaturalTripStep", 4);
+        try
+        {
+            bool natural3 = true;
+            for (int i = 0; i < 3; i++)
+                natural3 &= bear.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+            bool trip = bear.TryCommitManeuverSubstituteStep(-1, out int tripBab, out int tripStep, out _);
+            bool again = bear.TryCommitManeuverSubstituteStep(-1, out _, out _, out _);
+            Assert(natural3 && trip && tripStep == 3 && tripBab == 4 && bear.ProgressiveAttackPool.HasteExtraNaturalAttackUsed && !again
+                && bear.GetNaturalAttackStepBAB(3) == 4,
+                "After bite, claw, claw a trip takes the Haste step at the bite's BAB +4, uses up the Haste attack, and nothing is left");
+        }
+        finally
+        {
+            Cleanup(bear);
+        }
+    }
+
+    private static void TestAiHasteNaturalAttackChoice()
+    {
+        var plain = CreateHastedBiteClaws("AiHasteChoicePlain", 4);
+        var grabber = CreateHastedBiteClaws("AiHasteChoiceGrab", 4);
+        var stinger = CreateIterativeAttacker("AiHasteChoiceSting");
+        var clawBite = CreateIterativeAttacker("AiHasteChoiceEqualBonus");
+        var living = CreateHasteTarget("AiHasteChoiceLiving");
+        var undead = CreateHasteTarget("AiHasteChoiceUndead");
+        DND35.AI.AIProfile profile = null;
+        try
+        {
+            undead.Stats.CreatureType = "Undead";
+            grabber.Stats.HasImprovedGrab = true;
+            grabber.Stats.ImprovedGrabTriggerAttackName = "Claw";
+
+            stinger.Stats.BaseAttackBonusOverride = 4;
+            stinger.Stats.NaturalAttacks.Clear();
+            stinger.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, IsPrimary = true });
+            stinger.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Sting", DamageDice = 4, DamageCount = 1, Count = 1, IsPrimary = false, PoisonOnHitId = "test_poison" });
+            stinger.ApplyHasteEffect(10, null);
+
+            clawBite.Stats.BaseAttackBonusOverride = 4;
+            clawBite.Stats.NaturalAttacks.Clear();
+            clawBite.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, IsPrimary = true });
+            clawBite.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, IsPrimary = true });
+            clawBite.ApplyHasteEffect(10, null);
+
+            Assert(DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(plain, living) == 0,
+                "AI Haste pick: no riders, the highest attack bonus wins (the primary bite over the secondary claws)");
+            Assert(DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(clawBite, living) == 2
+                && clawBite.GetDefaultHasteNaturalAttackIndex() == 2,
+                "AI Haste pick: at an equal bonus the higher expected damage wins (bite 1d8 over claw 1d4)");
+            Assert(DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(grabber, living) == 1
+                && grabber.GetDefaultHasteNaturalAttackIndex() == 0,
+                "AI Haste pick: the Improved Grab claw beats the higher-bonus bite; the rules default stays the bite");
+            Assert(DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(stinger, living) == 1
+                && DND35.AI.NaturalAttackChoice.ChooseHasteExtraAttackIndex(stinger, undead) == 0,
+                "AI Haste pick: a poison sting against a living target, the bite against an undead one (immune to poison)");
+
+            profile = ScriptableObject.CreateInstance<DND35.AI.AIProfile>();
+            Assert(profile.ChooseHasteNaturalAttackIndex(grabber, living) == 1
+                && profile.ScoreHasteNaturalAttack(grabber, living, 1) > profile.ScoreHasteNaturalAttack(grabber, living, 0),
+                "AIProfile.ChooseHasteNaturalAttackIndex and ScoreHasteNaturalAttack default to the shared scoring (the override points)");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"AI Haste natural choice check threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(plain, grabber, stinger, clawBite, living, undead);
+            if (profile != null)
+                Object.DestroyImmediate(profile);
+        }
+    }
+
+    private static void TestNpcHasteNaturalSequence()
+    {
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; NPC Haste natural sequence check needs Play mode");
+            return;
+        }
+
+        CharacterController bear = null, grabber = null, mixed = null, tripper = null;
+        CharacterController target = null;
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        try
+        {
+            target = CreateWeakDefender("NpcHasteNaturalTarget");
+            target.GridPosition = new Vector2Int(21, 14);
+            target.Stats.AdjustMaxHP(500);
+            target.Stats.CurrentHP += 500;
+
+            bear = CreateHastedBiteClaws("NpcHasteNatural", 4);
+            bear.IsControllable = false;
+            bear.GridPosition = new Vector2Int(20, 14);
+            FullAttackResult sequence = RunNpcMeleeSequence(gm, bear, target, null, out _);
+            Assert(sequence.Attacks.Count == 4 && sequence.Attacks[0].WeaponName == "Bite" && sequence.Attacks[3].WeaponName == "Bite"
+                && sequence.AttackLabels[3].Contains("Haste") && AttackModifier(sequence.Attacks[3]) == AttackModifier(sequence.Attacks[0])
+                && bear.ProgressiveAttackPool.MainHandStepsUsed == 4 && bear.ProgressiveAttackPool.HasteExtraNaturalAttackUsed,
+                "NPC natural sequence with Haste: bite, claw, claw, then the Haste bite at the bite's bonus (CMB-106)");
+
+            grabber = CreateHastedBiteClaws("NpcHasteNaturalGrabChoice", 4);
+            grabber.Stats.HasImprovedGrab = true;
+            grabber.Stats.ImprovedGrabTriggerAttackName = "Claw";
+            Assert(gm.ChooseHasteNaturalAttackIndexForAI(grabber, target) == 1 && gm.ChooseHasteNaturalAttackIndexForAI(target, bear) == -1,
+                "The NPC executor asks the AI scoring for the Haste natural attack (the grab claw); -1 for a creature without one");
+
+            mixed = CreateBiteClawsCreature("NpcHasteMixed", 4, false);
+            mixed.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            mixed.ApplyHasteEffect(10, null);
+            mixed.IsControllable = false;
+            mixed.GridPosition = new Vector2Int(22, 14);
+            FullAttackResult mixedSequence = RunNpcMeleeSequence(gm, mixed, target, null, out _);
+            Assert(mixedSequence.Attacks.Count == 2 && mixedSequence.Attacks.TrueForAll(a => a.WeaponName != "Bite" && a.WeaponName != "Claw")
+                && mixedSequence.Attacks[1].BreakdownBAB == 4,
+                "NPC with a weapon and natural attacks, hasted, BAB +4: one weapon attack plus the Haste weapon attack at +4, no natural attack");
+
+            // A trip replaces the Haste step: the evaluation is offered before every step and trips at the 4th.
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Trip touch attack" ? 1 : natural;
+            tripper = CreateHastedBiteClaws("NpcHasteNaturalTrip", 4);
+            tripper.Stats.Feats.Add("Improved Trip");
+            tripper.IsControllable = false;
+            tripper.GridPosition = new Vector2Int(21, 13);
+            int offers = 0;
+            FullAttackResult tripSequence = RunNpcMeleeSequence(gm, tripper, target,
+                (actor, stepTarget) => offers++ == 3 && gm.TryNPCSpecialAttackByTypeForAI(actor, stepTarget, SpecialAttackType.Trip),
+                out int maneuvers);
+            Assert(maneuvers == 1 && tripSequence.Attacks.Count == 3 && tripper.ProgressiveAttackPool.MainHandStepsUsed == 4
+                && tripper.ProgressiveAttackPool.HasteExtraNaturalAttackUsed,
+                "NPC natural sequence with Haste: a trip may take the Haste step after bite, claw, claw (3 attacks, 1 trip, 4 steps)");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"NPC Haste natural sequence check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            foreach (CharacterController c in new[] { bear, grabber, mixed, tripper, target })
+                if (c != null)
+                    Cleanup(c);
+        }
+    }
+
+    private static void TestPcHasteNaturalAttackOptions()
+    {
+        // PC side: the Attack and natural-attack buttons. Once every natural attack is used, a used one is
+        // offered again as Haste's extra attack; the Trip button can take the Haste step at the bite's bonus.
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; PC Haste natural options check needs Play mode");
+            return;
+        }
+
+        MethodInfo consumeTrip = typeof(GameManager).GetMethod("TryConsumeTripAttackAction", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(consumeTrip != null, "GameManager.TryConsumeTripAttackAction is available for the PC Haste natural test");
+        if (consumeTrip == null)
+            return;
+
+        var pc = CreateHastedBiteClaws("PcHasteNatural", 4);
+        ActivePcScope scope = null;
+        try
+        {
+            scope = ActivePcScope.Enter(gm, pc);
+            Assert(scope != null && gm.ActivePC == pc, "The hasted creature is the active PC (reflection on GameManager/TurnService fields)");
+            if (scope == null)
+                return;
+
+            Assert(gm.GetRemainingTripAttackActions(pc) == 4 && !gm.IsHasteExtraNaturalAttackOption(pc, 0),
+                "PC with Haste: 4 natural steps for the Trip button; no Haste option before the bite is used");
+
+            for (int i = 0; i < 3; i++)
+            {
+                pc.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+                gm.Combat_MarkNaturalAttackSequenceIndexUsed(i);
+            }
+
+            Assert(gm.CanUseNaturalAttackOption(pc) && gm.IsHasteExtraNaturalAttackOption(pc, 0) && gm.IsHasteExtraNaturalAttackOption(pc, 2)
+                && gm.GetRemainingTripAttackActions(pc) == 1 && gm.GetCurrentTripAttackBonus(pc) == 4,
+                "After bite, claw, claw the used natural attacks are offered again for the Haste attack; one trip left, at the bite's +4");
+
+            object[] args = { pc, 0, 0, null };
+            bool tripped = (bool)consumeTrip.Invoke(gm, args);
+            Assert(tripped && (int)args[1] == 4 && pc.ProgressiveAttackPool.HasteExtraNaturalAttackUsed
+                && !gm.CanUseNaturalAttackOption(pc) && !gm.IsHasteExtraNaturalAttackOption(pc, 0) && !gm.CanUseTripAttackOption(pc),
+                "A PC trip in place of the Haste attack rolls at +4 and uses it up; no natural attack or trip is left");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"PC Haste natural options check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            scope?.Dispose();
+            Cleanup(pc);
+        }
+    }
+
+    private static void TestPcHasteNaturalButtonSelection()
+    {
+        // The natural-attack button path (ActionButtonPanel -> GameManager.OnNaturalAttackButtonPressed):
+        // pressing a used natural attack while the Haste attack is unused selects Haste's extra attack with
+        // that weapon. If the Haste attack is gone by the time the target is clicked, PerformSingleAttack
+        // refuses before paying, instead of making the used natural attack again. The resolving click
+        // itself is covered by the rules/haste-natural-buttons-ui scenario (it starts the after-attack
+        // turn-flow coroutine, which a static test must not leave running).
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            Debug.Log("  [SKIP] GameManager.Instance is null; PC Haste natural button check needs Play mode");
+            return;
+        }
+
+        FieldInfo flowField = typeof(GameManager).GetField("_combatFlowService", BindingFlags.Instance | BindingFlags.NonPublic);
+        CombatFlowService flow = flowField != null ? flowField.GetValue(gm) as CombatFlowService : null;
+        Assert(flow != null, "GameManager._combatFlowService is available for the PC Haste natural button test");
+        if (flow == null)
+            return;
+
+        var pc = CreateHastedBiteClaws("PcHasteNaturalButton", 4);
+        var target = CreateHasteTarget("PcHasteNaturalButtonTarget");
+        ActivePcScope scope = null;
+        try
+        {
+            scope = ActivePcScope.Enter(gm, pc);
+            Assert(scope != null && gm.ActivePC == pc, "The hasted creature is the active PC for the button test");
+            if (scope == null)
+                return;
+
+            pc.TryCommitAttack(AttackStepKind.NaturalSequence, out _, out _);
+            gm.Combat_MarkNaturalAttackSequenceIndexUsed(0);
+
+            gm.OnNaturalAttackButtonPressed(0, "Bite");
+            Assert(gm.Combat_HasPendingNaturalAttackSelection() && gm.Combat_IsPendingNaturalAttackHasteExtra()
+                && gm.Combat_GetPendingNaturalAttackSequenceIndex() == 0,
+                "After the bite, pressing the bite again (claws still unused) selects Haste's extra attack with the bite");
+
+            gm.OnNaturalAttackButtonPressed(1, "Claw");
+            Assert(gm.Combat_HasPendingNaturalAttackSelection() && !gm.Combat_IsPendingNaturalAttackHasteExtra()
+                && gm.Combat_GetPendingNaturalAttackSequenceIndex() == 1,
+                "Pressing an unused claw selects that claw as an ordinary natural attack");
+
+            gm.OnNaturalAttackButtonPressed(0, "Bite");
+            pc.ClearHasteEffect();
+            int hpBefore = target.Stats.CurrentHP;
+            flow.PerformSingleAttack(pc, target, false, 0, null, null);
+            Assert(pc.ProgressiveAttackPool.MainHandStepsUsed == 1 && target.Stats.CurrentHP == hpBefore
+                && !gm.Combat_HasPendingNaturalAttackSelection() && !gm.IsNaturalAttackSequenceIndexUsed(pc, 1),
+                "A Haste selection that can no longer be made (Haste ended) is refused before paying; the bite is not made twice");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"PC Haste natural button check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            gm.Combat_ClearPendingNaturalAttackSelection();
+            scope?.Dispose();
+            Cleanup(pc, target);
         }
     }
 

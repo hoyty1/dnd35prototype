@@ -40,6 +40,7 @@ public partial class GameManager
     public bool Combat_HasPendingNaturalAttackSelection() => HasPendingNaturalAttackSelection();
     public int Combat_GetPendingNaturalAttackSequenceIndex() => _pendingNaturalAttackSequenceIndex;
     public string Combat_GetPendingNaturalAttackLabel() => _pendingNaturalAttackLabel;
+    public bool Combat_IsPendingNaturalAttackHasteExtra() => _pendingNaturalAttackIsHasteExtra;
     public void Combat_ClearPendingNaturalAttackSelection() => ClearPendingNaturalAttackSelection();
     public bool Combat_HasStartedAttackingThisTurn(CharacterController actor)
         => actor != null && actor.ProgressiveAttackPool.HasStartedAttacking;

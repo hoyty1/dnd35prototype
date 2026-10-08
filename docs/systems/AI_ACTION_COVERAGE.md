@@ -23,7 +23,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Single attack | Used | after moving | Yes | |
 | Full attack | Used | only if the NPC has not moved; adaptive retarget for some profiles; same attack modifier as a single attack (shared builder, CMB-043 fixed) | Yes | CMB-044 |
 | Two-weapon, off-hand, off-hand thrown | Never | no NPC dual-wield | Yes | AI-055 (off-hand math: CMB-008) |
-| Natural attacks | Auto | used only when no manufactured weapon is equipped; no choice between natural attacks | Yes (picks each natural attack) | CMB-077 |
+| Natural attacks | Auto | used only when no manufactured weapon is equipped; no choice between natural attacks, except Haste's extra natural attack (PHB p.239, owner decision 2026-10-07): `AIProfile.ChooseHasteNaturalAttackIndex` (default `AI/NaturalAttackChoice.cs`: a rider that matters against the target, then the highest bonus, then the higher average damage) | Yes (picks each natural attack, and with Haste a used one again through the natural-attack buttons) | CMB-077 |
 | Natural + weapon combination | Never | naturals only with no weapon | n/a | CMB-077 |
 | Ranged attack | Used | any routine with a ranged weapon equipped; kiter manages AoO risk | Yes | ITM-004 strips many bows |
 | Thrown weapons | Partial | only `WeaponCat == Ranged` items | Yes | CMB-019 |

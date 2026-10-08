@@ -13,7 +13,7 @@ namespace Tests.Scenarios
     {
         Move, Withdraw, FiveFootStep, StandUp, Crawl, DropProne,
         Attack, AttackAgain, FullAttack, Maneuver, GrappleAction, Cast, Charge,
-        AnswerAoO, Pass, EndTurn, Assert, Wait
+        AnswerAoO, Pass, EndTurn, Assert, Wait, NaturalAttack
     }
 
     /// <summary>An answer to the PC's AoO confirmation (the panel's three buttons).</summary>
@@ -39,6 +39,7 @@ namespace Tests.Scenarios
         public string AssertName { get; private set; }
         public Func<ScenarioContext, bool> Check { get; private set; }
         public int Frames { get; private set; }
+        public string NaturalAttackName { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
         public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "BreakPin" };
@@ -62,6 +63,14 @@ namespace Tests.Scenarios
         public static Step Attack(string target) => new Step(StepKind.Attack) { Target = target };
         /// <summary>Ui: the next Attack click of the iterative sequence. Scripted: as Attack (the sequence continues).</summary>
         public static Step AttackAgain(string target) => new Step(StepKind.AttackAgain) { Target = target };
+        /// <summary>
+        /// Ui only: one natural-attack button press for the natural attack named <paramref name="attackName"/>, then the
+        /// target square. Like the button (ActionButtonPanel.BuildNaturalAttackButtonOptions), it presses the first
+        /// unused attack of that name, or, when every one of that name is used and Haste's extra natural attack is
+        /// unused, that attack again as the Haste attack (CMB-106).
+        /// </summary>
+        public static Step NaturalAttack(string target, string attackName)
+            => new Step(StepKind.NaturalAttack) { Target = target, NaturalAttackName = attackName };
         /// <summary>A full attack; refused when the full round is no longer free.</summary>
         public static Step FullAttack(string target) => new Step(StepKind.FullAttack) { Target = target };
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
@@ -101,6 +110,8 @@ namespace Tests.Scenarios
                 case StepKind.AttackAgain:
                 case StepKind.FullAttack:
                     return Kind + "(" + Target + ")";
+                case StepKind.NaturalAttack:
+                    return "NaturalAttack(" + NaturalAttackName + "," + Target + ")";
                 case StepKind.Maneuver:
                     return "Maneuver(" + ManeuverType + "," + Target + (OffHand ? ",offhand" : "") + ")";
                 case StepKind.GrappleAction:
@@ -126,7 +137,7 @@ namespace Tests.Scenarios
         internal string Problem(Control control, ScenarioDef def)
         {
             bool needsTarget = Kind == StepKind.Attack || Kind == StepKind.AttackAgain || Kind == StepKind.FullAttack
-                || Kind == StepKind.Maneuver || Kind == StepKind.Cast || Kind == StepKind.Charge;
+                || Kind == StepKind.Maneuver || Kind == StepKind.Cast || Kind == StepKind.Charge || Kind == StepKind.NaturalAttack;
             if (needsTarget && (string.IsNullOrEmpty(Target) || def.Find(Target) == null))
                 return Describe() + ": target '" + Target + "' is not an actor";
             bool hasCell = Kind == StepKind.Move || Kind == StepKind.Withdraw || Kind == StepKind.FiveFootStep || Kind == StepKind.Crawl;
@@ -142,9 +153,11 @@ namespace Tests.Scenarios
                 return Describe() + ": no check";
             if (Kind == StepKind.Wait && Frames < 0)
                 return Describe() + ": negative frames";
+            if (Kind == StepKind.NaturalAttack && string.IsNullOrEmpty(NaturalAttackName))
+                return Describe() + ": no natural attack name";
             if (control != Control.Ui)
             {
-                if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || Kind == StepKind.GrappleAction)
+                if (Kind == StepKind.Crawl || Kind == StepKind.DropProne || Kind == StepKind.GrappleAction || Kind == StepKind.NaturalAttack)
                     return Describe() + " is Ui only (the NPC path has no executor for it)";
                 if (Kind == StepKind.Cast && Metamagic != null && Metamagic.HasAnyMetamagic)
                     return Describe() + ": the NPC cast path takes no metamagic";
@@ -682,6 +695,15 @@ namespace Tests.Scenarios
                     gm.OnFullAttackButtonPressed();
                     ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
                     break;
+                case StepKind.NaturalAttack:
+                {
+                    if (target == null) { _awaitNote = "no target"; break; }
+                    int sequenceIndex = FindNaturalAttackOption(gm, _actor, s.NaturalAttackName);
+                    if (sequenceIndex < 0) { _awaitNote = "no natural-attack option named " + s.NaturalAttackName; break; }
+                    gm.OnNaturalAttackButtonPressed(sequenceIndex, s.NaturalAttackName);
+                    ClickIf(gm, GameManager.PlayerSubPhase.SelectingAttackTarget, target.GridPosition);
+                    break;
+                }
                 case StepKind.Maneuver:
                     if (target == null) { _awaitNote = "no target"; break; }
                     if (!PressMenuButton(gm, s.ManeuverType, s.OffHand))
@@ -746,6 +768,30 @@ namespace Tests.Scenarios
                 return false;
             }
             return true;
+        }
+
+        /// <summary>
+        /// The sequence index a natural-attack button for <paramref name="attackName"/> carries, as
+        /// ActionButtonPanel.BuildNaturalAttackButtonOptions builds it: the first unused attack of that name, else the
+        /// first used one while it is offered again for Haste's extra attack (CMB-106); -1 when there is none.
+        /// </summary>
+        private static int FindNaturalAttackOption(GameManager gm, CharacterController actor, string attackName)
+        {
+            if (actor == null || actor.Stats == null)
+                return -1;
+            int count = actor.Stats.GetTotalNaturalAttackCount();
+            int hasteOption = -1;
+            for (int i = 0; i < count; i++)
+            {
+                NaturalAttackDefinition natural = actor.Stats.GetNaturalAttackAtSequenceIndex(i);
+                if (natural == null || !string.Equals(natural.Name != null ? natural.Name.Trim() : null, attackName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!gm.IsNaturalAttackSequenceIndexUsed(actor, i))
+                    return i;
+                if (hasteOption < 0 && gm.IsHasteExtraNaturalAttackOption(actor, i))
+                    hasteOption = i;
+            }
+            return hasteOption;
         }
 
         /// <summary>Clicks <paramref name="cell"/> when the button opened <paramref name="expected"/>; cancels back to the menu when the click chose nothing.</summary>

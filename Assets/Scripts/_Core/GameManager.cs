@@ -333,6 +333,7 @@ public partial class GameManager : MonoBehaviour
     private string _pendingSummonSwarmNpcId; // Selected swarm type for Summon Swarm placement
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
     private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
+    private bool _pendingNaturalAttackIsHasteExtra; // The selected natural attack is Haste's extra attack (CMB-106)
 
     // Scroll casting state — tracks scroll being cast through the targeting pipeline
     private ItemData _pendingScrollCastItem;      // The scroll item being consumed after spell resolves
@@ -1143,6 +1144,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSummonSwarmNpcId = null;
         _pendingNaturalAttackSequenceIndex = -1;
         _pendingNaturalAttackLabel = null;
+        _pendingNaturalAttackIsHasteExtra = false;
         CleanupScrollCastState();
         CleanupWandCastState();
         ResetPendingGreaseCastMode();
@@ -7603,16 +7605,18 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
-    private void SetPendingNaturalAttackSelection(int naturalAttackSequenceIndex, string naturalAttackLabel)
+    private void SetPendingNaturalAttackSelection(int naturalAttackSequenceIndex, string naturalAttackLabel, bool isHasteExtraAttack = false)
     {
         _pendingNaturalAttackSequenceIndex = Mathf.Max(0, naturalAttackSequenceIndex);
         _pendingNaturalAttackLabel = naturalAttackLabel;
+        _pendingNaturalAttackIsHasteExtra = isHasteExtraAttack;
     }
 
     private void ClearPendingNaturalAttackSelection()
     {
         _pendingNaturalAttackSequenceIndex = -1;
         _pendingNaturalAttackLabel = null;
+        _pendingNaturalAttackIsHasteExtra = false;
     }
 
     private bool HasPendingNaturalAttackSelection()
@@ -7660,7 +7664,13 @@ public partial class GameManager : MonoBehaviour
         }
 
         string resolvedLabel = string.IsNullOrWhiteSpace(naturalAttackLabel) ? "Natural attack" : naturalAttackLabel;
-        int resolvedSequenceIndex = ResolveNextAvailableNaturalAttackSequenceIndex(pc, naturalAttackSequenceIndex, resolvedLabel);
+
+        // A natural attack already used this turn is offered again for Haste's extra attack, at that
+        // attack's normal bonus (PHB p.239; owner decision 2026-10-07, CMB-106).
+        bool isHasteExtraAttack = IsHasteExtraNaturalAttackOption(pc, naturalAttackSequenceIndex);
+        int resolvedSequenceIndex = isHasteExtraAttack
+            ? naturalAttackSequenceIndex
+            : ResolveNextAvailableNaturalAttackSequenceIndex(pc, naturalAttackSequenceIndex, resolvedLabel);
         if (resolvedSequenceIndex < 0)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{pc.Stats.CharacterName} has no {resolvedLabel} attack remaining this turn."));
@@ -7671,13 +7681,47 @@ public partial class GameManager : MonoBehaviour
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
         EndAttackSequence();
-        SetPendingNaturalAttackSelection(resolvedSequenceIndex, resolvedLabel);
+        if (isHasteExtraAttack)
+            resolvedLabel += " (Haste)";
+        SetPendingNaturalAttackSelection(resolvedSequenceIndex, resolvedLabel, isHasteExtraAttack);
 
         _pendingAttackMode = PendingAttackMode.Single;
         _currentAttackType = AttackType.Melee;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
         ShowAttackTargets(pc);
         CombatUI?.SetTurnIndicator($"ATTACK ({resolvedLabel}): Click an enemy to attack!");
+    }
+
+    /// <summary>
+    /// Chooser for natural-attack options that do not fit on the two attack buttons (ActionButtonPanel):
+    /// every option is pressed as its own natural-attack button would be (OnNaturalAttackButtonPressed),
+    /// so a used attack offered again is Haste's extra attack with that weapon (PHB p.239; owner
+    /// decision 2026-10-07, CMB-106). Cancel returns to the action menu.
+    /// </summary>
+    public void ShowNaturalAttackOptionMenu(List<int> sequenceIndices, List<string> attackNames, List<string> optionLabels)
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || CombatUI == null || sequenceIndices == null || attackNames == null || optionLabels == null
+            || sequenceIndices.Count == 0 || sequenceIndices.Count != attackNames.Count || sequenceIndices.Count != optionLabels.Count)
+            return;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI.ShowSpecialStyleSelectionMenu(
+            menuName: "NaturalAttackMenu",
+            optionLabels: optionLabels,
+            optionEnabledStates: null,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= sequenceIndices.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+                OnNaturalAttackButtonPressed(sequenceIndices[selectedIndex], attackNames[selectedIndex]);
+            },
+            onCancel: ShowActionChoices);
     }
 
     public void OnThrownAttackButtonPressed()
@@ -8175,9 +8219,34 @@ public partial class GameManager : MonoBehaviour
     }
 
     private bool HasRemainingNaturalAttacks(CharacterController attacker)
+        => GetRemainingNaturalAttackCount(attacker) > 0;
+
+    /// <summary>
+    /// Natural attacks a PC has not used this turn, plus Haste's extra natural attack while it is
+    /// unused (CMB-106). The attack sequence (CanCommitAttack) still decides whether one can be paid.
+    /// </summary>
+    private int GetRemainingNaturalAttackCount(CharacterController attacker)
     {
         int totalNaturalAttacks = GetTotalNaturalAttackCount(attacker);
-        return totalNaturalAttacks > 0 && _usedNaturalAttackSequenceIndices.Count < totalNaturalAttacks;
+        if (totalNaturalAttacks <= 0)
+            return 0;
+
+        int remaining = Mathf.Max(0, totalNaturalAttacks - _usedNaturalAttackSequenceIndices.Count);
+        if (attacker.CanUseHasteExtraNaturalAttack())
+            remaining++;
+        return remaining;
+    }
+
+    /// <summary>
+    /// True when the active PC's natural attack at <paramref name="sequenceIndex"/> was used this turn
+    /// and Haste's extra natural attack is still unused, so that natural-attack button offers the
+    /// Haste attack with it (PHB p.239; owner decision 2026-10-07, CMB-106).
+    /// </summary>
+    public bool IsHasteExtraNaturalAttackOption(CharacterController actor, int sequenceIndex)
+    {
+        return IsNaturalAttackSequenceIndexUsed(actor, sequenceIndex)
+            && actor.CanUseHasteExtraNaturalAttack()
+            && sequenceIndex < GetTotalNaturalAttackCount(actor);
     }
 
     private static bool AreSameNaturalAttackName(string a, string b)
@@ -8435,7 +8504,7 @@ public partial class GameManager : MonoBehaviour
     private int GetAttackSequenceBaseAttackBonus(CharacterController attacker, AttackType attackType, int attackIndex)
     {
         if (UsesInnateNaturalAttackSequence(attacker, attackType, attacker != null ? attacker.GetEquippedMainWeapon() : null)
-            && TryGetNaturalAttackAtSequenceIndex(attacker, attackIndex, out NaturalAttackDefinition naturalAttack))
+            && TryGetNaturalAttackAtSequenceIndex(attacker, attacker.ResolveNaturalAttackIndexForStep(attackIndex), out NaturalAttackDefinition naturalAttack))
         {
             return attacker.Stats.GetNaturalAttackBonus(naturalAttack);
         }

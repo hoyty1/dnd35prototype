@@ -16,7 +16,7 @@ public enum AttackStepKind
 {
     /// <summary>An iterative weapon or unarmed swing, a maneuver that replaces one (trip, disarm, sunder, grapple), or a grapple action once grappling.</summary>
     MainHand,
-    /// <summary>The next natural attack of an innate natural-attack sequence, or a maneuver that replaces one (at that natural attack's BAB).</summary>
+    /// <summary>The next natural attack of an innate natural-attack sequence (with Haste, one extra natural attack, CMB-106), or a maneuver that replaces one (at that natural attack's BAB).</summary>
     NaturalSequence,
     /// <summary>An off-hand attack: counts toward commitment but does not move the main-hand cursor.</summary>
     OffHand
@@ -50,6 +50,14 @@ public sealed class AttackPool
     /// <summary>The action for the next attack is spent but that attack is not resolved yet.</summary>
     public bool PendingStepPaid { get; private set; }
 
+    /// <summary>
+    /// Haste's extra attack with a natural weapon (PHB p.239; owner decision 2026-10-07, CMB-106) was
+    /// made, or given up for a maneuver, this turn. Steps are counted in <see cref="MainHandStepsUsed"/>;
+    /// this flag says which natural step was the Haste one, for flows that pick natural attacks out of
+    /// order (the PC natural-attack buttons).
+    /// </summary>
+    public bool HasteExtraNaturalAttackUsed { get; private set; }
+
     public bool IsFullAttack => Mode == ProgressiveAttackMode.FullAttackCommitted;
     public bool HasStartedAttacking => Mode != ProgressiveAttackMode.None;
     public bool NextAttackNeedsMoveAction => Mode == ProgressiveAttackMode.StandardAttackCommitted && !PendingStepPaid;
@@ -61,6 +69,12 @@ public sealed class AttackPool
         MainHandStepsUsed = 0;
         MainHandBudget = 0;
         PendingStepPaid = false;
+        HasteExtraNaturalAttackUsed = false;
+    }
+
+    internal void MarkHasteExtraNaturalAttackUsed()
+    {
+        HasteExtraNaturalAttackUsed = true;
     }
 
     /// <summary>Fix this turn's main-hand budget; ignored once it is set. Minimum 1.</summary>

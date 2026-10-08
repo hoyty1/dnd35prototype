@@ -2029,8 +2029,10 @@ public partial class GameManager
             try
             {
                 ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
+                // A pounce is a full attack, so Haste adds one natural attack, the AI's pick (CMB-106).
                 pounceResult = npc.FullAttack(target, isFlankingCharge, flankingBonus,
-                    flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
+                    flankPartner != null ? flankPartner.Stats.CharacterName : null, null,
+                    hasteNaturalAttackIndex: ChooseHasteNaturalAttackIndexForAI(npc, target));
 
                 if (npc.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
                 {

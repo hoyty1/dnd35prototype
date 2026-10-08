@@ -27,11 +27,13 @@ namespace Tests.Scenarios
     /// p.141 Table 8-2 note (trip, disarm and grapple replace a melee attack).
     /// MM p.312 (primary natural attacks at full bonus, secondary at -5) and p.304 (Multiattack: -2) for the
     /// maneuvers that replace a natural attack (owner decision 2026-10-07).
+    /// PHB p.239 (Haste: one extra attack on a full attack) for the hasted natural-weapon creature: one extra
+    /// natural attack at that attack's normal bonus (owner decision 2026-10-07, CMB-106).
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 27;
+        public const int Count = 30;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -65,6 +67,10 @@ namespace Tests.Scenarios
             yield return S("maneuver-replaces-natural", () => ManeuverReplacesNatural(false));
             yield return S("maneuver-replaces-natural-multiattack", () => ManeuverReplacesNatural(true));
             yield return S("maneuver-replaces-natural-ui", ManeuverReplacesNaturalUi);
+            yield return S("haste-natural-extra", () => HasteNaturalExtra(false));
+            yield return S("haste-natural-extra-ui", () => HasteNaturalExtra(true));
+            yield return S("haste-natural-moved", HasteNaturalMoved);
+            yield return S("haste-natural-buttons-ui", HasteNaturalButtonsUi);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -878,6 +884,158 @@ namespace Tests.Scenarios
                     return m0 - m1 == 5 && m1 == m2
                         ? ExpectResult.Pass("touch mods " + m0 + ", " + m1 + ", " + m2, trips[0].Seq, trips[2].Seq)
                         : ExpectResult.Fail("touch mods " + m0 + ", " + m1 + ", " + m2, trips[0].Seq, trips[2].Seq);
+                })
+                .Build();
+        }
+
+        // ── Haste's extra attack with natural weapons (PHB p.239; owner decision 2026-10-07, CMB-106) ──
+
+        /// <summary>The bite/claw/claw beast without weapons, hasted (Haste's effect only: the extra attack, not the +1).</summary>
+        private static void HastedBeast(CharacterController c)
+        {
+            StripAllWeapons(c);
+            c.ApplyHasteEffect(10, null);
+        }
+
+        /// <summary>A target dummy with 200 more hit points, so four natural attacks never drop it.</summary>
+        private static void SturdyDummy(CharacterController c)
+        {
+            c.Stats.AdjustMaxHP(200);
+            c.Stats.CurrentHP += 200;
+        }
+
+        /// <summary>Round-1 attack modifiers of <paramref name="key"/> read bite, claw, claw, bite: one Haste attack at the bite's bonus.</summary>
+        private static ExpectResult BiteClawClawHasteBite(TraceView v, string key)
+        {
+            List<TraceEvent> attacks = v.Attacks(key, null, false, 1);
+            int[] m = attacks.Select(e => e.Int("mod")).ToArray();
+            string mods = "mods [" + string.Join(",", m) + "]";
+            int[] seqs = attacks.Select(e => e.Seq).ToArray();
+            if (m.Length != 4)
+                return ExpectResult.Fail(m.Length + " attacks, " + mods, seqs);
+            return m[0] - m[1] == 5 && m[1] == m[2] && m[3] == m[0]
+                ? ExpectResult.Pass(mods, seqs)
+                : ExpectResult.Fail(mods + ", expected bite, claw (-5), claw, bite", seqs);
+        }
+
+        private static ScenarioDef HasteNaturalExtra(bool ui)
+        {
+            string id = ui ? "rules/haste-natural-extra-ui" : "rules/haste-natural-extra";
+            string title = ui
+                ? "A hasted PC fighting with natural weapons: the iterative Attack path (OnAttackButtonPressed) makes bite, claw, claw and one Haste bite (PHB p.239, CMB-106)"
+                : "A hasted creature's natural full attack adds one natural attack at its normal bonus, the AI's pick (PHB p.239, CMB-106)";
+            string key = ui ? "hero" : "beast";
+            ScenarioBuilder b = Rules(id, title)
+                .Covers("CMB-106", "PHB p.239", "MM p.312", ui ? "PC_NPC_PARITY" : "AI")
+                .MaxRounds(1)
+                .Pc(key, ActorSource.Stats(() => NaturalBeast(ui ? "Hero" : "Beast", false)), 10, 10, ui ? Control.Ui : Control.Scripted)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Tweak(key, HastedBeast)
+                .Tweak("dummy", SturdyDummy)
+                .Initiative(key, "dummy")
+                .Turn("dummy", 0, Step.Pass());
+
+            if (ui)
+            {
+                // Each Attack click is one natural step (PerformIterativeSequenceAttack): bite, claw, claw, then
+                // with every natural attack used the Haste step with the default natural attack (the bite).
+                b.Turn(key, 1, Step.Attack("dummy"), Step.AttackAgain("dummy"), Step.AttackAgain("dummy"),
+                        Step.AttackAgain("dummy"), Step.AttackAgain("dummy"))
+                 .Expect("The hero's turn is a Ui turn", Expect.Controller(key, "ui"))
+                 .Expect("Four attack clicks are done; a fifth finds no attack left", Expect.All(
+                     Expect.StepStatus(key, 1, "Attack", 0, "done"),
+                     Expect.StepStatus(key, 1, "AttackAgain", 0, "done"),
+                     Expect.StepStatus(key, 1, "AttackAgain", 1, "done"),
+                     Expect.StepStatus(key, 1, "AttackAgain", 2, "done"),
+                     Expect.StepStatus(key, 1, "AttackAgain", 3, "refused", "dropped")));
+            }
+            else
+            {
+                // The NPC executor's whole sequence: the AI picks the bite for Haste (no riders, highest bonus).
+                b.Turn(key, 1, Step.Attack("dummy"))
+                 .Expect("The beast's turn is a scripted turn", Expect.Controller(key, "scripted"))
+                 .Expect("The attack step is done", Expect.StepStatus(key, 1, "Attack", 0, "done"));
+            }
+
+            return b.Expect("Bite, claw, claw, then one Haste attack at the bite's bonus (PHB p.239; MM p.312; CMB-106)",
+                    v => BiteClawClawHasteBite(v, key))
+                .Build();
+        }
+
+        private static ScenarioDef HasteNaturalButtonsUi()
+        {
+            // The natural-attack buttons a PC with natural attacks actually has (ActionButtonPanel ->
+            // OnNaturalAttackButtonPressed -> CombatFlowService.PerformSingleAttack). After the bite, pressing the
+            // bite again makes the Haste bite while both claws are still unused: the attacker picks the weapon and
+            // the moment. A third claw press finds nothing left.
+            const string key = "hero";
+            return Rules("rules/haste-natural-buttons-ui", "A hasted PC picks Haste's extra natural attack with the natural-attack buttons: bite, Haste bite, claw, claw (PHB p.239, CMB-106)")
+                .Covers("CMB-106", "PHB p.239", "MM p.312", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc(key, ActorSource.Stats(() => NaturalBeast("Hero", false)), 10, 10, Control.Ui)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Tweak(key, HastedBeast)
+                .Tweak("dummy", SturdyDummy)
+                .Initiative(key, "dummy")
+                .Turn("dummy", 0, Step.Pass())
+                .Turn(key, 1,
+                    Step.NaturalAttack("dummy", "Bite"),
+                    Step.NaturalAttack("dummy", "Bite"),
+                    Step.Assert("the second bite was the Haste attack; both claws are still unused", ctx =>
+                    {
+                        CharacterController hero = ctx.Get(key);
+                        return hero.ProgressiveAttackPool.HasteExtraNaturalAttackUsed
+                            && hero.ProgressiveAttackPool.MainHandStepsUsed == 2
+                            && !ctx.Gm.IsNaturalAttackSequenceIndexUsed(hero, 1)
+                            && !ctx.Gm.IsNaturalAttackSequenceIndexUsed(hero, 2);
+                    }),
+                    Step.NaturalAttack("dummy", "Claw"),
+                    Step.NaturalAttack("dummy", "Claw"),
+                    Step.NaturalAttack("dummy", "Claw"))
+                .Expect("The hero's turn is a Ui turn", Expect.Controller(key, "ui"))
+                .Expect("Four presses are done and the Haste bite came before the claws", Expect.All(
+                    Expect.StepStatus(key, 1, "NaturalAttack", 0, "done"),
+                    Expect.StepStatus(key, 1, "NaturalAttack", 1, "done"),
+                    Expect.StepStatus(key, 1, "NaturalAttack", 2, "done"),
+                    Expect.StepStatus(key, 1, "NaturalAttack", 3, "done"),
+                    Expect.AssertsPass()))
+                .Expect("A fifth press finds no natural attack left", Expect.StepStatus(key, 1, "NaturalAttack", 4, "refused", "dropped"))
+                .Expect("Bite, Haste bite at the bite's bonus, then claw, claw 5 lower (PHB p.239; MM p.312)", v =>
+                {
+                    List<TraceEvent> attacks = v.Attacks(key, null, false, 1);
+                    int[] m = attacks.Select(e => e.Int("mod")).ToArray();
+                    string mods = "mods [" + string.Join(",", m) + "]";
+                    int[] seqs = attacks.Select(e => e.Seq).ToArray();
+                    if (m.Length != 4)
+                        return ExpectResult.Fail(m.Length + " attacks, " + mods, seqs);
+                    return m[0] == m[1] && m[0] - m[2] == 5 && m[2] == m[3]
+                        ? ExpectResult.Pass(mods, seqs)
+                        : ExpectResult.Fail(mods + ", expected bite, bite, claw (-5), claw", seqs);
+                })
+                .Build();
+        }
+
+        private static ScenarioDef HasteNaturalMoved()
+        {
+            return Rules("rules/haste-natural-moved", "A hasted natural-weapon creature that moved makes one attack: Haste's extra attack needs a full attack (PHB p.143, p.239)")
+                .Covers("CMB-106", "PHB p.143", "PHB p.239")
+                .MaxRounds(1)
+                .Pc("beast", ActorSource.Stats(() => NaturalBeast("Beast", false)), 10, 11, Control.Scripted)
+                .Npc("dummy", "target_dummy", 11, 10, Control.Scripted)
+                .Tweak("beast", HastedBeast)
+                .Tweak("dummy", SturdyDummy)
+                .Initiative("beast", "dummy")
+                .Turn("dummy", 0, Step.Pass())
+                .Turn("beast", 1, Step.Move(10, 10), Step.Attack("dummy"))
+                .Expect("The move and the attack step are done", Expect.All(
+                    Expect.StepStatus("beast", 1, "Move", 0, "done"),
+                    Expect.StepStatus("beast", 1, "Attack", 0, "done")))
+                .Expect("One attack, the bite, after the move", v =>
+                {
+                    List<TraceEvent> attacks = v.Attacks("beast", null, false, 1);
+                    return attacks.Count == 1
+                        ? ExpectResult.Pass("1 attack, mod " + attacks[0].Int("mod"), attacks[0].Seq)
+                        : ExpectResult.Fail(attacks.Count + " attacks", attacks.Select(e => e.Seq).ToArray());
                 })
                 .Build();
         }

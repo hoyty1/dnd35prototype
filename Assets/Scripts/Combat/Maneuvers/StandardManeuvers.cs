@@ -284,14 +284,29 @@ public partial class GameManager
     private AttackStepKind GetManeuverStepKind(CharacterController attacker, bool iterativeOnly)
         => iterativeOnly ? AttackStepKind.MainHand : attacker.GetManeuverSubstituteStepKind();
 
-    /// <summary>The natural attack a PC maneuver gives up: the first one not used this turn, from the sequence cursor.</summary>
-    private int GetPcManeuverNaturalAttackIndex(CharacterController attacker)
+    /// <summary>
+    /// The natural attack a PC maneuver gives up: the first one not used this turn, from the sequence
+    /// cursor. When every natural attack is used, Haste's extra natural attack if it is unused
+    /// (<paramref name="givesUpHasteExtraAttack"/>), at the bonus of the default Haste natural attack
+    /// (the highest; CMB-106).
+    /// </summary>
+    private int GetPcManeuverNaturalAttackIndex(CharacterController attacker, out bool givesUpHasteExtraAttack)
     {
+        givesUpHasteExtraAttack = false;
         if (attacker == null || attacker != ActivePC || attacker.GetManeuverSubstituteStepKind() != AttackStepKind.NaturalSequence)
             return -1;
 
-        return ResolveNextAvailableNaturalAttackSequenceIndex(attacker, attacker.ProgressiveAttackPool.MainHandStepsUsed, null);
+        int index = ResolveNextAvailableNaturalAttackSequenceIndex(attacker, attacker.ProgressiveAttackPool.MainHandStepsUsed, null);
+        if (index < 0 && attacker.CanUseHasteExtraNaturalAttack())
+        {
+            givesUpHasteExtraAttack = true;
+            index = attacker.GetDefaultHasteNaturalAttackIndex();
+        }
+
+        return index;
     }
+
+    private int GetPcManeuverNaturalAttackIndex(CharacterController attacker) => GetPcManeuverNaturalAttackIndex(attacker, out _);
 
     private bool CanUseMainHandManeuverAttackOption(CharacterController attacker, string maneuverLabel, bool iterativeOnly = false)
     {
@@ -309,9 +324,9 @@ public partial class GameManager
         int remaining = attacker.GetRemainingMainHandAttackSteps(GetManeuverStepKind(attacker, iterativeOnly));
 
         // A PC's natural-attack buttons can use natural attacks out of order; never offer more
-        // substitutes than unused natural attacks.
+        // substitutes than unused natural attacks (plus Haste's extra natural attack while unused, CMB-106).
         if (!iterativeOnly && attacker == ActivePC && attacker.GetManeuverSubstituteStepKind() == AttackStepKind.NaturalSequence)
-            remaining = Mathf.Min(remaining, Mathf.Max(0, GetTotalNaturalAttackCount(attacker) - _usedNaturalAttackSequenceIndices.Count));
+            remaining = Mathf.Min(remaining, GetRemainingNaturalAttackCount(attacker));
 
         return remaining;
     }
@@ -356,7 +371,8 @@ public partial class GameManager
             return false;
         }
 
-        int naturalAttackIndex = kind == AttackStepKind.NaturalSequence ? GetPcManeuverNaturalAttackIndex(attacker) : -1;
+        bool givesUpHasteExtraAttack = false;
+        int naturalAttackIndex = kind == AttackStepKind.NaturalSequence ? GetPcManeuverNaturalAttackIndex(attacker, out givesUpHasteExtraAttack) : -1;
         bool committed;
         if (iterativeOnly)
         {
@@ -366,7 +382,7 @@ public partial class GameManager
         }
         else
         {
-            committed = attacker.TryCommitManeuverSubstituteStep(naturalAttackIndex, out attackBonusUsed, out _, out reason);
+            committed = attacker.TryCommitManeuverSubstituteStep(naturalAttackIndex, out attackBonusUsed, out _, out reason, givesUpHasteExtraAttack);
         }
 
         if (!committed)
@@ -379,7 +395,12 @@ public partial class GameManager
         if (kind == AttackStepKind.NaturalSequence)
         {
             // The natural attack given up is spent, so the Attack and natural-attack buttons skip it.
-            if (naturalAttackIndex >= 0)
+            // Haste's extra attack given up is marked by TryCommitManeuverSubstituteStep instead.
+            if (givesUpHasteExtraAttack)
+            {
+                Debug.Log($"[{maneuverLabel}][Flow] Replaces Haste's extra natural attack (at the {attacker.Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex)?.Name ?? "?"} bonus).");
+            }
+            else if (naturalAttackIndex >= 0)
             {
                 _usedNaturalAttackSequenceIndices.Add(naturalAttackIndex);
                 Debug.Log($"[{maneuverLabel}][Flow] Replaces natural attack #{naturalAttackIndex + 1} ({attacker.Stats.GetNaturalAttackAtSequenceIndex(naturalAttackIndex)?.Name ?? "?"}).");
