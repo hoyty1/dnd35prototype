@@ -37,17 +37,18 @@ public static partial class NPCDatabase
             BAB = 6,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
+                // MM p.194: 2 hooves +9 (1d8+4 plus 1d4 fire) and bite +4 (1d8+2): the flaming
+                // hooves are primary, the bite secondary and without fire.
                 new NaturalAttackDefinition
                 {
-                    Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1,
+                    Name = "Hoof", DamageDice = 8, DamageCount = 1, Count = 2,
                     BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true,
                     BonusElementalDamageDice = 4, BonusElementalDamageCount = 1, BonusElementalDamageType = DamageType.Fire
                 },
                 new NaturalAttackDefinition
                 {
-                    Name = "Hoof", DamageDice = 6, DamageCount = 1, Count = 2,
-                    BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false,
-                    BonusElementalDamageDice = 4, BonusElementalDamageCount = 1, BonusElementalDamageType = DamageType.Fire
+                    Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false
                 }
             },
             StenchAuraDC = 16,

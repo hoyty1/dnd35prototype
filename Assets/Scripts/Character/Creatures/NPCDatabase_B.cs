@@ -56,7 +56,7 @@ public static partial class NPCDatabase
             BaseSpeed = 6,
             BaseHitDieHP = 6,
             CreatureTags = new List<string> { "Animal", "MM35", "Burrow" },
-            Feats = new List<string> { "Agile", "Weapon Finesse", "Track" },
+            Feats = new List<string> { "Agile", "Track", "Multiattack" },
             HasScent = true,
             SpecialAbilities = new List<string> { "Low-light vision", "Scent", "Rage (as barbarian)", "Burrow 10 ft", "Skills: Balance +5, Escape Artist +9, Listen +3, Spot +3" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
@@ -382,7 +382,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
             },
             CreatureTags = new List<string> { "Outsider", "Chaotic", "Evil", "Extraplanar", "Tanarri", "Telepathy100", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Cleave", "Improved Initiative", "Multiattack" },
+            Feats = new List<string> { "Cleave", "Improved Initiative", "Multiattack", "Power Attack" },
             SpecialAbilities = new List<string> { "Protective Slime (Su): 1d8 acid to melee attackers/weapons", "Sneak Attack +2d6", "DR 10/cold iron or good", "SR 14", "Immune to electricity/poison", "Resist acid 10, cold 10, fire 10", "Darkness (Sp): at will", "Dispel Magic (Sp): at will", "See Invisibility (Sp): at will", "Greater Teleport (Sp): at will, self + 50 lb.", "Telepathy 100 ft.", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.35f, 0.25f, 0.3f, 1f),
@@ -653,7 +653,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
             },
             CreatureTags = new List<string> { "Outsider", "Chaotic", "Extraplanar", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Multiattack", "Power Attack", "Improved Bull Rush" },
+            Feats = new List<string> { "Dodge", "Mobility", "Multiattack" },
             SpecialAbilities = new List<string> { "Pounce (Ex): full attack on charge", "Chaos Phage (Su): claw hit, DC 18 Fort or infected; transforms to red slaad in 1d4 weeks", "Summon Slaad: 40% chance 1 blue slaad", "DR 5/lawful", "SR 19", "Fast Healing 5", "Resist acid 5, cold 5, electricity 5, fire 5", "Darkvision 60 ft.", "Telepathy 100 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.2f, 0.3f, 0.7f, 1f),
@@ -901,7 +901,7 @@ public static partial class NPCDatabase
                 }
             },
             CreatureTags = new List<string> { "MagicalBeast", "Burrowing", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Alertness", "Iron Will", "Track" },
+            Feats = new List<string> { "Alertness", "Iron Will", "Track", "Weapon Focus (bite)" },
             SpecialAbilities = new List<string> { "Leap (Ex): jump up to 10 ft. high, land on targets for 4d6+16 damage (Ref DC 22 to avoid)", "Tremorsense 60 ft.", "Darkvision 60 ft., Low-light vision", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Brute,
             SpriteColor = new Color(0.55f, 0.5f, 0.4f, 1f),

@@ -220,6 +220,8 @@ public static partial class NPCDatabase
             BaseSpeed = speed / 5,
             BaseHitDieHP = hp,
             CreatureTags = new List<string> { "Vermin", "MM35" },
+            // MM p.287: Tiny and Small get Weapon Finesse as a bonus feat; Medium and larger list no feats.
+            Feats = size <= SizeCategory.Small ? new List<string> { "Weapon Finesse" } : new List<string>(),
             HasImprovedGrab = true,
             ImprovedGrabTriggerAttackName = "Claw",
             SpecialAbilities = new List<string>
@@ -292,6 +294,8 @@ public static partial class NPCDatabase
             BaseSpeed = speed / 5,
             BaseHitDieHP = hp,
             CreatureTags = new List<string> { "Vermin", "MM35" },
+            // MM p.288: Tiny, Small and Medium get Weapon Finesse as a bonus feat; Large and larger list no feats.
+            Feats = size <= SizeCategory.Medium ? new List<string> { "Weapon Finesse" } : new List<string>(),
             SpecialAbilities = new List<string>
             {
                 $"Poison (Fort DC {poisonDc}; initial {poisonInitial}; secondary {poisonSecondary})",
@@ -332,6 +336,7 @@ public static partial class NPCDatabase
             BaseSpeed = 6,
             BaseHitDieHP = 6,
             CreatureTags = new List<string> { "Animal", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
             HasScent = true,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.45f, 0.72f, 0.34f, 1f),
@@ -415,7 +420,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
             },
             CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Weapon Finesse" },
+            Feats = new List<string>(),
             SpecialAbilities = new List<string> { "Stunning Shock (Su): 5 ft., 1d8 nonlethal + Ref DC 12 or stunned 1 round", "Lethal Shock (Su): 3+ lizards within 20 ft., 2d8 elec/lizard, Ref DC 12 half", "Electricity Sense: 100 ft. range", "Immune to electricity", "Darkvision 60 ft., Low-light vision" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.4f, 0.55f, 0.65f, 1f),

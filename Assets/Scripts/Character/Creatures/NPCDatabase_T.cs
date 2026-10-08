@@ -44,7 +44,7 @@ public static partial class NPCDatabase
             StenchAuraDC = 13,
             StenchAuraRange = 30,
             CreatureTags = new List<string> { "Humanoid", "Reptilian", "MM35" },
-            Feats = new List<string> { "Multiattack" },
+            Feats = new List<string> { "Multiattack", "Weapon Focus (javelin)" },
             SpecialAbilities = new List<string> { "Stench (DC 13 Fort, sickened 10 rounds, 30 ft.)", "Darkvision 90 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.42f, 0.55f, 0.35f, 1f),

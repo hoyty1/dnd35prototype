@@ -134,7 +134,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
             },
             CreatureTags = new List<string> { "Outsider", "Chaotic", "Extraplanar", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Multiattack", "Power Attack" },
+            Feats = new List<string> { "Multiattack" },
             SpecialAbilities = new List<string> { "Pounce (Ex): full attack on charge", "Stunning Croak (Su): 20 ft., Fort DC 16 or stunned 1 round, 1/hour", "Implant (Ex): claw hit may implant egg (no save)", "Summon Slaad: 40% chance 1 red slaad", "Fast Healing 5", "Resist acid 5, cold 5, electricity 5, fire 5", "Darkvision 60 ft.", "Telepathy 100 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.7f, 0.25f, 0.2f, 1f),
@@ -212,14 +212,15 @@ public static partial class NPCDatabase
             DamageReductionBypass = DamageBypassTag.Good, // DR 15/good and piercing
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
+                // MM p.211: 2 claws +8 (1d4+1) and bite +3 (1d6): the claws are primary, the bite secondary.
                 new NaturalAttackDefinition
                 {
-                    Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1,
+                    Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2,
                     BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true
                 },
                 new NaturalAttackDefinition
                 {
-                    Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2,
+                    Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1,
                     BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false
                 }
             },

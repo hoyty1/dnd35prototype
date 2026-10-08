@@ -22,6 +22,10 @@ namespace Tests.Scenarios
     ///   owner decision 2026-10-07, CMB-085).
     /// - barghest: Outsider 6 HD, Medium, STR 17, DEX 15, not stable (only its wolf form would be, and the game models
     ///   no wolf form; owner decision 2026-10-07, CMB-085).
+    /// - ethereal_filcher: Aberration 5 HD, Medium, not stable (a single leg, MM p.104; corrected 2026-10-08, CRE-045).
+    /// - green_slaad: Outsider 9 HD, Large, STR 19, BAB 9, claws primary and bite secondary, Multiattack (MM p.230;
+    ///   checked 2026-10-08, CRE-045). rakshasa: Outsider 7 HD, Medium, STR 12, BAB 7, claws primary and bite
+    ///   secondary, no Multiattack (MM p.211).
     /// Stats actors are Human fighters built with named arguments (CHR-032) and BAB set through
     /// BaseAttackBonusOverride (CHR-068); feat strings are the case-sensitive HasFeat names (CHR-030):
     /// "Improved Trip", "Improved Grapple", "Weapon Focus".
@@ -85,7 +89,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 71;
+        public const int Count = 74;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -153,6 +157,9 @@ namespace Tests.Scenarios
             yield return S("stability-trip", () => StabilityCheck("rules/stability-trip", "A four-legged formian taskmaster resists a trip with +4 stability (PHB p.158, CMB-085)", "formian_taskmaster", SpecialAttackType.Trip, true));
             yield return S("stability-bullrush", () => StabilityCheck("rules/stability-bullrush", "A four-legged formian taskmaster resists a bull rush with +4 stability (PHB p.154, CMB-085)", "formian_taskmaster", SpecialAttackType.BullRushAttack, true));
             yield return S("stability-trip-control", () => StabilityCheck("rules/stability-trip-control", "A barghest in its natural form (the only modelled form) gets no stability against a trip (PHB p.158, CMB-085)", "barghest", SpecialAttackType.Trip, false));
+            yield return S("stability-trip-filcher", () => StabilityCheck("rules/stability-trip-filcher", "An ethereal filcher on its single leg gets no stability against a trip (MM p.104, PHB p.158, CRE-045)", "ethereal_filcher", SpecialAttackType.Trip, false));
+            yield return S("mm-natural-sequence-multiattack", () => MmNaturalSequence("green_slaad", true, null));
+            yield return S("mm-natural-sequence-secondary", () => MmNaturalSequence("rakshasa", false, 8));
             yield return S("weapon-size-damage", WeaponSizeDamage);
             yield return S("combat-log-pool", CombatLogPool);
             yield return S("slot-reuse-traits", SlotReuseTraits);
@@ -860,6 +867,53 @@ namespace Tests.Scenarios
                     return followed || stayed
                         ? ExpectResult.Pass("pushed " + d + " (margin " + margin + "), attacker " + (followed ? "followed" : "stayed"), m.Seq)
                         : ExpectResult.Fail("fighter at " + f + " after a push of " + d, m.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// CRE-045 (MM p.312, p.304): a Monster Manual creature from the NPC database full-attacks a sturdy target dummy
+        /// through the NPC executor. Its two primary claws roll at BAB + STR + size and its secondary bite 2 lower with
+        /// Multiattack (green slaad, MM p.230) or 5 lower without (rakshasa, MM p.211). The order is the data's: claw,
+        /// claw, bite. The expected numbers come from the data's BAB and STR, so the green slaad case checks the order
+        /// and the gap only: its data Str 19 gives claws +12 and bite +10, not the MM's +14 and +12, until its Str is
+        /// corrected (CRE-045). <paramref name="mmPrimary"/>, when given, also pins the claw bonus to the MM value
+        /// (rakshasa: claws +8, bite +3).
+        /// </summary>
+        private static ScenarioDef MmNaturalSequence(string npcId, bool multiattack, int? mmPrimary)
+        {
+            string id = multiattack ? "rules/mm-natural-sequence-multiattack" : "rules/mm-natural-sequence-secondary";
+            string title = multiattack
+                ? "A green slaad's claws are primary and its bite secondary at -2 with Multiattack (MM p.230, p.304, CRE-045)"
+                : "A rakshasa's claws are primary and its bite secondary at -5 (MM p.211, p.312, CRE-045)";
+            return Rules(id, title)
+                .Covers("CRE-045", "MM p.312", multiattack ? "MM p.304" : "MM p.211")
+                .MaxRounds(1)
+                .Pc("dummy", ActorSource.Stats(() => FighterOfRace("Dummy", "Human")), 10, 10, Control.Scripted)
+                .Npc("beast", npcId, 11, 10, Control.Scripted)
+                .Tweak("dummy", SturdyDummy)
+                .Initiative("beast", "dummy")
+                .Turn("beast", 1, Step.Attack("dummy"))
+                .Turn("dummy", 0, Step.Pass())
+                .Expect("The attack step is done", Expect.StepStatus("beast", 1, "Attack", 0, "done"))
+                .Expect(multiattack ? "Claw, claw at BAB + STR + size, then the bite 2 lower (Multiattack)" : "Claw, claw at BAB + STR + size, then the bite 5 lower", v =>
+                {
+                    NPCDefinition def = NPCDatabase.Get(npcId);
+                    if (def == null) return ExpectResult.Fail("no NPC entry " + npcId);
+                    if (def.Feats.Contains("Multiattack") != multiattack)
+                        return ExpectResult.Fail(npcId + " Multiattack is " + def.Feats.Contains("Multiattack"));
+                    List<TraceEvent> attacks = v.Attacks("beast", "dummy", false, 1);
+                    int[] m = attacks.Select(e => e.Int("mod")).ToArray();
+                    int[] seqs = attacks.Select(e => e.Seq).ToArray();
+                    string mods = "mods [" + string.Join(",", m) + "]";
+                    int primary = def.BAB + Mathf.FloorToInt((def.STR - 10) / 2f) + def.SizeCategory.GetAttackAndAcModifier();
+                    int gap = multiattack ? 2 : 5;
+                    if (m.Length != 3) return ExpectResult.Fail(m.Length + " attacks, " + mods, seqs);
+                    if (mmPrimary.HasValue && primary != mmPrimary.Value)
+                        return ExpectResult.Fail(npcId + " data gives claws +" + primary + ", MM +" + mmPrimary.Value + "; " + mods, seqs);
+                    return m[0] == primary && m[1] == primary && m[2] == primary - gap
+                        ? ExpectResult.Pass(mods, seqs)
+                        : ExpectResult.Fail(mods + ", expected [" + primary + "," + primary + "," + (primary - gap) + "]", seqs);
                 })
                 .Build();
         }

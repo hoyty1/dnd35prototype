@@ -140,6 +140,7 @@ public static partial class NPCDatabase
                 immuneToSneakAttack = true
             },
             CreatureTags = new List<string> { "Elemental", "Air", "Extraplanar", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
             SpecialAbilities = new List<string> { "Elemental traits", "Air mastery", "Whirlwind (DC 11)", "Fly 100 ft. (perfect)", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.68f, 0.86f, 1f, 1f),
@@ -180,6 +181,7 @@ public static partial class NPCDatabase
             },
             DamageImmunities = new List<DamageType> { DamageType.Fire },
             CreatureTags = new List<string> { "Elemental", "Fire", "Extraplanar", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
             SpecialAbilities = new List<string> { "Elemental traits", "Burn (DC 11, 1d4 fire)", "Immunity to fire", "Vulnerability to cold (+50%)", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(1f, 0.55f, 0.22f, 1f),
@@ -217,6 +219,7 @@ public static partial class NPCDatabase
                 immuneToSneakAttack = true
             },
             CreatureTags = new List<string> { "Elemental", "Earth", "Extraplanar", "SummonBase" },
+            Feats = new List<string> { "Power Attack" },
             SpecialAbilities = new List<string> { "Elemental traits", "Earth mastery (+1 atk/dmg when grounded)", "Push (bull rush, no AoO)", "Earth glide", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.58f, 0.48f, 0.32f, 1f),
@@ -254,6 +257,7 @@ public static partial class NPCDatabase
                 immuneToSneakAttack = true
             },
             CreatureTags = new List<string> { "Elemental", "Water", "Extraplanar", "SummonBase" },
+            Feats = new List<string> { "Power Attack" },
             SpecialAbilities = new List<string> { "Elemental traits", "Water mastery (+1 atk/dmg in water)", "Drench (extinguish fires)", "Vortex (DC 13, 1d4 dmg)", "Swim 90 ft.", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.32f, 0.55f, 0.78f, 1f),
@@ -575,7 +579,7 @@ public static partial class NPCDatabase
         Register(new NPCDefinition
         {
             Id = "ethereal_filcher",
-            IsExceptionallyStable = true, // PHB p.154/157/158: stable by owner decision 2026-10-07, CMB-085 (three legs); the MM p.104 text describes a single leg, so the owner is asked to reconfirm
+            IsExceptionallyStable = false, // PHB p.154/157/158: not stable; MM p.104 balances it on a single leg (the 2026-10-07 "three legs" classification was wrong; owner informed 2026-10-08, CRE-045)
             Name = "Ethereal Filcher",
             ChallengeRating = "3",
             Level = 5,

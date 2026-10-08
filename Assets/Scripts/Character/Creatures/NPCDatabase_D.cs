@@ -239,6 +239,7 @@ public static partial class NPCDatabase
             BaseSpeed = 8, // 40 ft.
             BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
             HasScent = true,
             SpecialAbilities = new List<string> { "Attach (auto bite damage while latched)", "Blood drain (1d4 Con/round)", "Low-light vision", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
@@ -629,7 +630,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
             },
             CreatureTags = new List<string> { "Aberration", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Combat Casting", "Two-Weapon Fighting", "Weapon Focus (dagger)" },
+            Feats = new List<string> { "Combat Casting", "Two-Weapon Fighting", "Weapon Focus (bite)" },
             SpecialAbilities = new List<string> { "Spells: as 6th-level cleric or wizard (sorcerer)", "Poison (Ex): bite, DC 16 Fort, 1d6 Str/1d6 Str", "SR 17", "Spell-Like: Dancing Lights, Clairaudience/Clairvoyance, Darkness, Detect Good/Law/Magic, Dispel Magic, Faerie Fire, Levitate, Suggestion (1/day each)", "Darkvision 60 ft., Climb 15 ft." },
             EquipmentIds = new List<EquipmentSlotPair>
             {

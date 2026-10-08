@@ -150,6 +150,17 @@
       "notes": "CRE-046: a reused NPC or party controller keeps nothing of its earlier character; needs a scene GameManager"
     },
     {
+      "type": "Tests.Character.NpcFeatDataTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 60,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CRE-045: Multiattack only with three or more natural attacks (MM p.304) and the MM attack-math feats and primary/secondary flags the 2026-10-08 audit corrected, plus the blue slaad and giant maneuver feats; reads the NPC templates only"
+    },
+    {
       "type": "Tests.Character.MulticlassSaveCalculationTests",
       "needs": "either",
       "skip": "",

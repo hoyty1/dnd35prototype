@@ -95,7 +95,7 @@ public static partial class NPCDatabase
             BaseSpeed = 12, // 60 ft.
             BaseHitDieHP = 39, // 6d8+12
             CreatureTags = new List<string> { "Outsider", "Chaotic", "Evil", "Extraplanar", "MM35" },
-            Feats = new List<string> { "Alertness", "Improved Initiative", "Power Attack" },
+            Feats = new List<string> { "Alertness", "Improved Initiative" },
             SpecialAbilities = new List<string>
             {
                 "Howl (Will DC 12 or become affected with Wisdom damage; 1 round to take effect; repeated howls within 24 hrs auto-fail; each round exposed = 1 Wis damage)",
@@ -251,7 +251,7 @@ public static partial class NPCDatabase
             BAB = 1,
             NaturalAttacks = new List<NaturalAttackDefinition>(),
             CreatureTags = new List<string> { "Humanoid", "Halfling", "MM35" },
-            Feats = new List<string> { "Weapon Focus (light crossbow)" },
+            Feats = new List<string> { "Weapon Focus (longsword)" },
             SpecialAbilities = new List<string> { "+2 morale saves vs. fear", "+1 attack with thrown/slings", "+1 size bonus to AC/attack" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
@@ -349,8 +349,9 @@ public static partial class NPCDatabase
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
-                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
+                // MM p.54: 2 claws +13 (1d8+6) and bite +8 (2d8+3): the claws are primary, the bite secondary.
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
             },
             CreatureTags = new List<string> { "Outsider", "Evil", "Lawful", "Extraplanar", "Darkvision60", "MM35" },
             Feats = new List<string> { "Dodge", "Improved Initiative", "Lightning Reflexes", "Track" },

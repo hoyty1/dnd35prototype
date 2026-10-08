@@ -703,8 +703,8 @@ public static partial class NPCDatabase
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
-            STR = 10, DEX = 10, CON = 22, WIS = 13, INT = 4, CHA = 13,
-            NaturalArmorBonus = 9,
+            STR = 10, DEX = 13, CON = 22, WIS = 13, INT = 4, CHA = 13,
+            NaturalArmorBonus = 8, // MM p.126: AC 19 = 10 + 1 Dex + 8 natural
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Bludgeoning,
             BaseSpeed = 2, // 10 ft, swim 20 ft
@@ -794,7 +794,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 1, DamageCount = 1, Count = 6, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true }
             },
             CreatureTags = new List<string> { "Aberration", "Amorphous", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Lightning Reflexes" },
+            Feats = new List<string> { "Lightning Reflexes", "Weapon Finesse" },
             SpecialAbilities = new List<string> { 
                 "Gibbering (Su): 60 ft. spread, Will DC 13 or confused 1d2 rounds; sonic mind-affecting compulsion; 24-hr immunity on save", 
                 "Spittle (Ex): 30 ft. ranged touch, 1d4 acid; Fort DC 18 or blinded 1d4 rounds (every hit)", 
@@ -856,7 +856,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Gore", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 2, IsPrimary = true }
             },
             CreatureTags = new List<string> { "Magical Beast", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Alertness", "Iron Will", "Power Attack" },
+            Feats = new List<string> { "Alertness", "Iron Will" },
             SpecialAbilities = new List<string> { "Breath Weapon (Su): 60 ft. cone, Fort DC 19 or petrified (permanent)", "Trample (Ex): 1d8+7, Ref DC 19 to halve", "Scent", "Darkvision 60 ft., Low-light vision" },
             AIProfileArchetype = NPCAIProfileArchetype.Brute,
             SpriteColor = new Color(0.4f, 0.42f, 0.45f, 1f),
@@ -975,8 +975,9 @@ public static partial class NPCDatabase
             BAB = 9,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
-                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
+                // MM p.230: 2 claws +14 (1d6+6) and bite +12 (2d8+3): the claws are primary, the bite secondary (Multiattack).
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false }
             },
             CreatureTags = new List<string> { "Outsider", "Chaotic", "Extraplanar", "Shapechanger", "Darkvision60", "MM35" },
             Feats = new List<string> { "Combat Reflexes", "Multiattack", "Power Attack" },

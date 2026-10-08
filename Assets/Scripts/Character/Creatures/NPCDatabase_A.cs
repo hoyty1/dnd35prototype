@@ -164,7 +164,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Tail Slap", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 2, IsPrimary = false, BonusElementalDamageDice = 6, BonusElementalDamageCount = 1, BonusElementalDamageType = DamageType.Fire }
             },
             CreatureTags = new List<string> { "Outsider", "Fire", "Extraplanar", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Cleave", "Multiattack", "Power Attack" },
+            Feats = new List<string> { "Cleave", "Power Attack", "Improved Natural Attack (tail)" },
             SpecialAbilities = new List<string> { "Heat (Ex): +1d6 fire on all melee attacks", "Constrict (Ex): 2d6+1 + 1d6 fire", "DR 10/magic", "Immune to fire", "Vulnerable to cold (×1.5 damage)", "Darkvision 60 ft." },
             EquipmentIds = new List<EquipmentSlotPair>
             {

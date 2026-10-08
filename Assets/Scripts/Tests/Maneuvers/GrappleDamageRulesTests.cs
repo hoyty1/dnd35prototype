@@ -4081,7 +4081,7 @@ public static class GrappleDamageRulesTests
         string[] stable =
         {
             "chuul", "formian_worker", "formian_taskmaster",
-            "hydra_5head", "hydra_7head", "hydra_9head", "howler", "ethereal_filcher"
+            "hydra_5head", "hydra_7head", "hydra_9head", "howler"
         };
         foreach (string id in stable)
         {
@@ -4091,10 +4091,12 @@ public static class GrappleDamageRulesTests
 
         // Two legs plus arms, no legs, or aquatic with no footing. The barghests are stable only
         // in wolf form; the data is their natural goblin-wolf hybrid form and Change Shape is text only.
+        // The ethereal filcher balances on a single leg (MM p.104): the 2026-10-07 "three legs" classification
+        // was wrong and is corrected (owner informed 2026-10-08, CRE-045).
         string[] notStable =
         {
             "ape", "dire_ape", "monkey", "girallon", "arrowhawk_juvenile", "octopus", "owlbear",
-            "skeleton_owlbear", "zombie_owlbear", "barghest", "greater_barghest"
+            "skeleton_owlbear", "zombie_owlbear", "barghest", "greater_barghest", "ethereal_filcher"
         };
         foreach (string id in notStable)
         {

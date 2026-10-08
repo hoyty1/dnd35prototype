@@ -49,7 +49,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 32,
             IsIncorporeal = true,
             CreatureTags = new List<string> { "Undead", "Incorporeal", "MM35" },
-            Feats = new List<string> { "Alertness", "Blind-Fight", "Combat Reflexes", "Improved Initiative", "Improved Natural Attack" },
+            Feats = new List<string> { "Alertness", "Blind-Fight", "Combat Reflexes", "Improved Initiative" },
             SpecialAbilities = new List<string> { "Incorporeal", "Con drain (1d6)", "Energy drain (1 negative level)", "Create spawn", "Unnatural aura (60 ft.)", "Darkvision 60 ft.", "Daylight powerlessness", "Fly 60 ft. (good)" },
             AIProfileArchetype = NPCAIProfileArchetype.UndeadIncorporeal,
             SpriteColor = new Color(0.2f, 0.2f, 0.3f, 0.5f),

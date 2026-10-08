@@ -449,6 +449,7 @@ public static partial class NPCDatabase
             BaseSpeed = 4, // 20 ft., climb 20 ft., swim 20 ft.
             BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
             HasScent = true,
             SpecialAbilities = new List<string> { "Poison (Fort DC 11, 1d6 Con/1d6 Con)", "Scent" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,

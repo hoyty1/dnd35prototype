@@ -127,6 +127,7 @@ public static partial class NPCDatabase
             BaseSpeed = 5,
             BaseHitDieHP = 11,
             CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
             HasImprovedGrab = true,
             ImprovedGrabTriggerAttackName = "Tentacles",
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
@@ -241,7 +242,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false, HasDiseaseOnHit = true, DiseaseOnHitType = DiseaseType.FilthFever }
             },
             CreatureTags = new List<string> { "Aberration", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Alertness", "Toughness" },
+            Feats = new List<string> { "Alertness", "Toughness", "Weapon Focus (tentacle)" },
             SpecialAbilities = new List<string> { "Improved Grab", "Constrict 1d6+2", "Disease (Ex): filth fever, bite, DC 14 Fort", "Scent", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
             SpriteColor = new Color(0.45f, 0.4f, 0.3f, 1f),

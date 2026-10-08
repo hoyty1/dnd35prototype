@@ -117,7 +117,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Slam", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
             },
             CreatureTags = new List<string> { "Aberration", "Shapechanger", "Telepathy100", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Alertness", "Blind-Fight", "Combat Reflexes", "Improved Initiative", "Weapon Finesse" },
+            Feats = new List<string> { "Alertness", "Blind-Fight", "Combat Reflexes", "Improved Initiative" },
             SpecialAbilities = new List<string> { "Alternate Form (Su): at will, any Small–Large creature", "Amorphous (Ex): immune to poison, sleep, paralysis, polymorph, stunning, crits", "Resilient (Ex): +4 racial saves vs mind-affecting", "Tremorsense 60 ft.", "Scent", "Telepathy 100 ft.", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.55f, 0.55f, 0.6f, 1f),
@@ -170,7 +170,7 @@ public static partial class NPCDatabase
                 }
             },
             CreatureTags = new List<string> { "MagicalBeast", "Burrowing", "MM35" },
-            Feats = new List<string> { "Awesome Blow", "Cleave", "Great Cleave", "Improved Bull Rush", "Power Attack", "Weapon Focus (bite)" },
+            Feats = new List<string> { "Awesome Blow", "Cleave", "Great Cleave", "Improved Bull Rush", "Power Attack", "Weapon Focus (bite)", "Weapon Focus (sting)" },
             SpecialAbilities = new List<string> { "Improved Grab (bite)", "Swallow Whole: 2d8+12 crushing + 1d8 acid, AC 17 from inside, 25 HP to cut out", "Poison (Ex): sting, Fort DC 25, 1d6 Str/1d6 Str", "Tremorsense 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Brute,
             SpriteColor = new Color(0.5f, 0.2f, 0.55f, 1f),

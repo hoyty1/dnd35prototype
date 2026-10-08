@@ -138,7 +138,11 @@ public static partial class NPCDatabase
             DamageResistances = resistances ?? new List<DamageResistanceEntry>(),
             RegenerationAmount = 2, // Fast healing 2 (not true regen but close enough)
             CreatureTags = tags,
-            Feats = new List<string> { "Dodge", "Improved Initiative" },
+            // MM p.181-185: earth, ooze, salt and water mephits have Power Attack and Toughness;
+            // the air, dust, fire, ice, magma and steam mephits have Dodge and Improved Initiative.
+            Feats = id == "earth_mephit" || id == "ooze_mephit" || id == "salt_mephit" || id == "water_mephit"
+                ? new List<string> { "Power Attack", "Toughness" }
+                : new List<string> { "Dodge", "Improved Initiative" },
             SpecialAbilities = abilities,
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = spriteColor,
@@ -380,6 +384,7 @@ public static partial class NPCDatabase
             BaseSpeed = 8,
             BaseHitDieHP = 7,
             CreatureTags = new List<string> { "Vermin", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.56f, 0.44f, 0.3f, 1f),
             PanelColor = new Color(0.18f, 0.12f, 0.07f, 0.85f),
@@ -411,6 +416,7 @@ public static partial class NPCDatabase
             BaseSpeed = 8,
             BaseHitDieHP = 7,
             CreatureTags = new List<string> { "Vermin", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.51f, 0.4f, 0.29f, 1f),
             PanelColor = new Color(0.17f, 0.11f, 0.07f, 0.85f),
@@ -441,6 +447,7 @@ public static partial class NPCDatabase
             BaseSpeed = 8,
             BaseHitDieHP = 7,
             CreatureTags = new List<string> { "Vermin", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.3f, 0.3f, 0.3f, 1f),
             PanelColor = new Color(0.13f, 0.13f, 0.13f, 0.85f),

@@ -166,7 +166,8 @@ public static partial class NPCDatabase
             BaseSpeed = speed / 5,
             BaseHitDieHP = hp,
             CreatureTags = new List<string> { "Vermin", "MM35" },
-            Feats = new List<string> { "Weapon Finesse" },
+            // MM p.286: Tiny to Large get Weapon Finesse as a bonus feat; Huge and larger list no feats.
+            Feats = size <= SizeCategory.Large ? new List<string> { "Weapon Finesse" } : new List<string>(),
             SpecialAbilities = new List<string>
             {
                 $"Poison (Fort DC {poisonDc}; initial {poisonInitial}; secondary {poisonSecondary})",
@@ -418,7 +419,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Chain", DamageDice = 4, DamageCount = 2, Count = 4, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = true }
             },
             CreatureTags = new List<string> { "Outsider", "Evil", "Lawful", "Extraplanar", "Baatezu", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Alertness", "Improved Initiative", "Iron Will" },
+            Feats = new List<string> { "Alertness", "Improved Initiative", "Iron Will", "Weapon Focus (chain)" },
             SpecialAbilities = new List<string> { "Dancing Chains (Su): animate up to 4 chains within 20 ft.", "Unnerving Gaze (Su): 30 ft., Will DC 15 or sickened 1d3 rounds", "Regeneration 2 (silver or good weapons deal lethal)", "DR 5/silver or good", "SR 18", "Immune to fire", "Resist cold 10", "See in Darkness (Su)", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.4f, 0.35f, 0.35f, 1f),
@@ -622,21 +623,29 @@ public static partial class NPCDatabase
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
+                // MM p.34: bite +12 (2d6+4) and bite +12 (1d8+4) and gore +12 (1d8+4) and
+                // 2 claws +10 (1d6+2): the three heads are primary, the claws secondary (Multiattack).
                 new NaturalAttackDefinition
                 {
-                    Name = "Bite (lion)", DamageDice = 8, DamageCount = 2, Count = 1,
+                    Name = "Bite (lion)", DamageDice = 6, DamageCount = 2, Count = 1,
                     BonusDamageSource = DamageBonusSource.Strength,
                     Range = 1, IsPrimary = true
                 },
                 new NaturalAttackDefinition
                 {
-                    Name = "Bite (dragon)", DamageDice = 8, DamageCount = 2, Count = 1,
-                    BonusDamageSource = DamageBonusSource.StrengthHalf,
-                    Range = 1, IsPrimary = false
+                    Name = "Bite (dragon)", DamageDice = 8, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 1, IsPrimary = true
                 },
                 new NaturalAttackDefinition
                 {
                     Name = "Gore (goat)", DamageDice = 8, DamageCount = 1, Count = 1,
+                    BonusDamageSource = DamageBonusSource.Strength,
+                    Range = 1, IsPrimary = true
+                },
+                new NaturalAttackDefinition
+                {
+                    Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2,
                     BonusDamageSource = DamageBonusSource.StrengthHalf,
                     Range = 1, IsPrimary = false
                 }

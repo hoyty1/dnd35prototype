@@ -701,7 +701,9 @@ public static class LycanthropeFactory
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
             BaseHitDieHP = 5, // 1d8+1
-            Feats = new List<string> { "Power Attack", "Track" },
+            // MM p.175: the werewolf has Improved Initiative, Iron Will (template), Stealthy, Track and
+            // Weapon Focus (bite); the attack-math feats follow the MM (CRE-045), the rest is the custom build.
+            Feats = new List<string> { "Track", "Weapon Focus (bite)" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             ChallengeRating = "1"
@@ -765,7 +767,9 @@ public static class LycanthropeFactory
                 "Alertness", "Cleave", "Combat Reflexes",
                 "Improved Critical", "Improved Natural Armor",
                 "Power Attack", "Run", "Stealthy",
-                "Weapon Focus", "Weapon Specialization"
+                "Weapon Focus", "Weapon Specialization",
+                // MM p.176: also Improved Natural Attack (bite) and Weapon Focus (bite) (CRE-045).
+                "Improved Natural Attack (bite)", "Weapon Focus (bite)"
             },
             WeaponFocusChoice = "Bastard Sword",
             EquipmentIds = new List<EquipmentSlotPair>(),
@@ -943,8 +947,9 @@ public static class LycanthropeFactory
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
             BaseHitDieHP = 28, // 4d10+4
-            Feats = new List<string> { "Dodge", "Improved Natural Attack", "Power Attack", "Weapon Focus" },
-            WeaponFocusChoice = "Claw",
+            // MM p.174: the weretiger has Improved Natural Attack (bite, claw) and neither Power Attack nor
+            // Weapon Focus (CRE-045); its other feats are the custom build's.
+            Feats = new List<string> { "Dodge", "Improved Natural Attack (bite)", "Improved Natural Attack (claw)" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             ChallengeRating = "4"
@@ -998,7 +1003,8 @@ public static class LycanthropeFactory
             NaturalArmorBonus = 0,
             CreatureType = "Humanoid",
             BaseHitDieHP = 6, // 1d4+2
-            Feats = new List<string> { "Endurance" },
+            // MM p.171: the werebear has Multiattack and Power Attack from its bear Hit Dice (CRE-045).
+            Feats = new List<string> { "Endurance", "Multiattack", "Power Attack" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             ChallengeRating = "1/2"

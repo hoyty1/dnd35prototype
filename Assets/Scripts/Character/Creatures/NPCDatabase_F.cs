@@ -118,7 +118,7 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Tail Slap", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false, BonusElementalDamageDice = 6, BonusElementalDamageCount = 1, BonusElementalDamageType = DamageType.Fire }
             },
             CreatureTags = new List<string> { "Outsider", "Fire", "Extraplanar", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Multiattack" },
+            Feats = new List<string> { "Improved Natural Attack (tail)" },
             SpecialAbilities = new List<string> { "Heat (Ex): +1d6 fire on melee and constrict", "Constrict (Ex): 1d4 + 1d6 fire", "Immune to fire", "Vulnerable to cold (×1.5 damage)", "Darkvision 60 ft." },
             EquipmentIds = new List<EquipmentSlotPair>
             {
@@ -206,10 +206,12 @@ public static partial class NPCDatabase
             },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Sting", DamageDice = 4, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+                // MM p.109: sting +10 (2d4+4) and 2 claws +8 (1d6+2), with Multiattack.
+                new NaturalAttackDefinition { Name = "Sting", DamageDice = 4, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
             },
             CreatureTags = new List<string> { "Outsider", "Lawful", "HiveMind", "Darkvision60", "MM35" },
-            Feats = new List<string> { "Dodge", "Improved Initiative" },
+            Feats = new List<string> { "Dodge", "Improved Initiative", "Multiattack" },
             SpecialAbilities = new List<string> { "Dominate Monster (Su): DC 17 Will, range 30 ft., up to 6 targets", "Poison (Ex): sting, DC 15 Fort, 1d6 Str/1d6 Str", "Hive Mind (Ex): all formians within 50 mi. in contact", "Immune to poison/petrification", "Resist sonic 10, cold 10, fire 10", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
             SpriteColor = new Color(0.6f, 0.5f, 0.3f, 1f),
@@ -288,7 +290,7 @@ public static partial class NPCDatabase
             NaturalAttacks = new List<NaturalAttackDefinition>(),
             DamageImmunities = new List<DamageType> { DamageType.Cold },
             CreatureTags = new List<string> { "Giant", "Cold", "RockThrowing", "MM35" },
-            Feats = new List<string> { "Cleave", "Great Cleave", "Improved Sunder", "Power Attack", "Weapon Focus (greataxe)" },
+            Feats = new List<string> { "Cleave", "Great Cleave", "Improved Overrun", "Improved Sunder", "Power Attack" },
             SpecialAbilities = new List<string> { "Rock Throwing (Ex): 120 ft., 2d6+9", "Rock Catching (Ex): Ref DC 25", "Immunity to cold", "Vulnerability to fire (+50% damage)", "Low-light vision" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
@@ -330,7 +332,7 @@ public static partial class NPCDatabase
             NaturalAttacks = new List<NaturalAttackDefinition>(),
             DamageImmunities = new List<DamageType> { DamageType.Fire },
             CreatureTags = new List<string> { "Giant", "Fire", "RockThrowing", "MM35" },
-            Feats = new List<string> { "Cleave", "Great Cleave", "Improved Sunder", "Iron Will", "Power Attack", "Weapon Focus (greatsword)" },
+            Feats = new List<string> { "Cleave", "Great Cleave", "Improved Overrun", "Improved Sunder", "Iron Will", "Power Attack" },
             SpecialAbilities = new List<string> { "Rock Throwing (Ex): 120 ft., 2d6+10", "Rock Catching (Ex): Ref DC 25", "Immunity to fire", "Vulnerability to cold (+50% damage)", "Low-light vision" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
