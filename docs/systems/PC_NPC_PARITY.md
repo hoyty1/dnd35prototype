@@ -61,7 +61,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | Perception of unseen creatures | NPC only | CMB-094 |
 | HP, dying, death | Mostly shared | CORE-015, AI-053 |
 | Damage mitigation | Divergent by origin | SPL-004, AI-040 |
-| Stat derivation | Divergent by origin | CRE-004, CHR-071, CRE-038, CHR-070, CRE-041, CHR-067, CRE-056 |
+| Stat derivation | Divergent by origin | CRE-004, CRE-038, CHR-070, CRE-041, CHR-067, CRE-056 |
 | Equipment-derived stats | Shared | - |
 | Ammo, thrown weapons | Divergent | CMB-019, CMB-096 |
 | Equipment changes, pick up | Divergent / PC only | ITM-069, AI-054 |
@@ -71,14 +71,12 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 
 | ID | Mechanic | What differs | Favours | Impact | Evidence |
 |---|---|---|---|---|---|
-| CHR-071 (new) | Hit Dice | PC `Stats.HitDice` is frozen at creation level; HD-limited spells (Sleep, Color Spray, Daze, Cause Fear) and Bear's Endurance see creation HD. The mirror case: rules reading `Stats.Level` miscount templated undead and class-levelled monsters | NPC (mostly) | High | CharacterStats.cs:3366, 3566-3628; TeamUtility.cs:80 |
 | SPL-054 | Spell handlers | NPC path runs 17 of 51 handlers (Ghoul Touch, Sound Burst, Searing Light, Prayer...) | depends | High | GameManager.SpellCasting.cs:2129-2346 vs NPCTurns.cs:938-1006 |
 | AI-001 | Area spells, metamagic | NPCs cannot cast any Area spell or apply metamagic | PC | High | NPCTurns.cs:820, 835, 911 |
 | CRE-004 | BAB, base saves | NPCs use creature-type progression over all HD | depends | High | NPCSetup.cs:689-725 |
 | CHR-067 | Skills | NPC skill totals are 0 (not the ability modifier); `RollSkillCheck` returns an automatic fail | PC | High | CharacterStats.cs:5970-6029 |
 | SPL-004 | Damage mitigation | PC area spells and NPC breath/specials bypass `ApplyIncomingDamage` by different routes | depends | High | GameManager_Spells_Shared.cs:263; NPCTurns.cs:1548-1584 |
 | GRID-001 | Withdraw | PC withdraw single speed, first square provokes; AI withdraw correct | NPC | High | MovementService.cs:187-195 |
-| CHR-001 | Max HP | PCs get CON twice | PC | High | CharacterCreationData.cs:110; CharacterStats.cs:3444 |
 | CMB-100 (new) | Frightened, Charmed | Enforced only by AI controllers; a frightened or charmed PC acts freely | PC | Med | GameManager.cs:4086; AIService.cs:84-133 |
 | CMB-091 (new, melee fixed) | Ranged full attack | Melee steps of both sides use `ResolveAttackSequenceStep` (2026-10-07); NPC ranged attacks still use one `FullAttack`: PC Rapid Shot is inert, NPC crossbow fires every iterative from one load, ranged AoO and concentration counts differ | depends | Med | CombatFlowService.cs (`PerformIterativeSequenceAttack`); NPCTurns.cs (`NPCPerformAttack` ranged remainder) |
 | CMB-090 (new) | Charm, fascination, command undead breaks | Only `CharacterController.Attack` (now including NPC melee weapon steps) and the PC maneuver wrapper run them | depends | Med | CharacterController.cs:5252-5258; CombatActions.cs:1917 |
@@ -94,7 +92,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | CHR-070 (new) | Class choices | NPC clerics have no domains or spontaneous casting; NPC wizards cannot specialize or have familiars | PC | Med | NPCSetup.cs:681-988; SpellcastingComponent.cs:1048-1058 |
 | CRE-038 (new) | Racial traits | NPC members of PC races have no RaceData (sleep immunity, racial attack, familiarity; NPC dwarves get stability from `IsExceptionallyStable` since 2026-10-07) | PC | Med | NPCSetup.cs:700-715; SpellUtilities.cs:164 |
 | CRE-039 (new) | Monster specials | Breath, auras, spittle, engulf, acid spray, frightful presence only on the AI turn | NPC | Med | AIService.cs:170-192, 735, 780 |
-| CRE-041 (new) | NPC max HP | CON (and Toughness) re-added to MM hp totals | NPC | Med | CharacterStats.cs:3444-3445, 2145 |
+| CRE-041 (new) | NPC max HP | Toughness re-added to MM hp totals; class levels on a monster get a maximum first die (CON no longer re-added since CHR-001, 2026-10-08) | NPC | Med | CharacterStats.cs (TotalMaxHP), CreatureClassEngine.cs (CalculateClassHP) |
 | CRE-042 (new) | NPC monks | Fast movement double counted, unarmed strike as natural attacks, monk AC as natural armor | NPC | Med | NPCDatabase_M.cs:790-916 |
 | ITM-069 (new) | Equipment changes | Free for PCs via the sheet; only mindless undead NPCs can re-equip (free) | PC | Med | InventoryUI.cs:576-606; UndeadMindlessAIProfile.cs:93-126 |
 | CMB-075 | Turn-start order | Skipped NPC misses regeneration, Melf's, ChargePenalty expiry | depends | Med | GameManager.cs:3980-3991 vs NPCTurns.cs:46-49 |
@@ -139,12 +137,11 @@ Dropped after spot-check:
 ## 5. Unification plan
 
 Cheap first, all localized:
-1. **Data and one-liners.** These close CMB-099, SPL-118, CRE-040, CMB-018 and part of CHR-071 (CRE-002 and ITM-004 done 2026-10-08: the spawn copies the alignment, and `Inventory.EquipStartingLoadout` equips the MainHand, OffHand and Ranged aliases):
+1. **Data and one-liners.** These close CMB-099, SPL-118, CRE-040 and CMB-018 (CRE-002 and ITM-004 done 2026-10-08: the spawn copies the alignment, and `Inventory.EquipStartingLoadout` equips the MainHand, OffHand and Ranged aliases; CHR-071 done the same day, see step 11):
    - add a crit-immunity filter to `GetAdjacentHelplessEnemiesForCoupDeGrace` (CMB-099);
    - reorder the NPC counterspell before the invisibility break (SPL-118);
    - fix the acid spray numbers (CRE-040);
-   - compute flanking in the PC charge (CMB-018);
-   - update `HitDice` in `ApplyPendingLevelUp` (CHR-071, interim).
+   - compute flanking in the PC charge (CMB-018).
 2. **More cheap fixes.** These close CMB-095, AI-053, CHR-069 (recipients), SPL-119 and CHR-067 (partly):
    - set `SingleActionOnly` while Slowed (CMB-095);
    - delete the AI HP<=0 gates (AI-053);
@@ -159,7 +156,7 @@ Cheap first, all localized:
 8. **Movement: one step hook and one `CanStartMovement`.** The step hook (zones, Grease, cost) lives in `MoveAlongPath`; `CanStartMovement` is used by every mover; retire `FindSafePath`. Closes GRID-018, GRID-019, GRID-001 and GRID-013.
 9. **A shared cast core with a `SpellCastRequest`.** It carries caster, target or cells, metamagic, caster choices, target item, cast source and spontaneous conversion. It has one handler registry, shared pre-cast legality (components, grapple, sphere, wards) and post-cast concentration registration. Then split area, summon and held-charge execution into cores with PC and AI wrappers. Closes SPL-054, SPL-112, SPL-113, SPL-114, SPL-116, SPL-115, SPL-117, SPL-017, AI-001, SPL-091 and the item-cast half of AI-009.
 10. **The action catalog with shared executors** (docs/systems/tactics/README.md, section 1). Every PC-only and AI-only action becomes a catalog entry with one actor-agnostic executor. The PC action panel and the AI both call it. Closes AI-054, AI-009, CMB-074, ITM-069, ITM-070, CRE-039, AI-040, AI-041, AI-057, CMB-100 (menu restriction) and the class abilities.
-11. **One creature factory and derived stats.** HD = racial HD + class levels; per-HD BAB, saves and HP; RaceData for NPCs; class-choice fields; skill ranks; proficiency from class and type data (done for weapons and armor on 2026-10-08, CHR-072: `CreatureProficiency.ApplyFromDefinition` and the class tables in `CharacterStats`). Use it for PCs, NPCs, summons and items. Closes CRE-004, CHR-071, CRE-038, CHR-070, CRE-041, CHR-001, CHR-067, CRE-042, CRE-005, ITM-010 (NPC baking) and CRE-016.
+11. **One creature factory and derived stats.** HD = racial HD + class levels; per-HD BAB, saves and HP; RaceData for NPCs; class-choice fields; skill ranks; proficiency from class and type data (done for weapons and armor on 2026-10-08, CHR-072: `CreatureProficiency.ApplyFromDefinition` and the class tables in `CharacterStats`). Use it for PCs, NPCs, summons and items. Closes CRE-004, CRE-038, CHR-070, CRE-041, CHR-067, CRE-042, CRE-005, ITM-010 (NPC baking) and CRE-016. Done 2026-10-08 (CHR-001, CHR-002, CHR-071): class BAB, hit die and per-die HP (die + CON, minimum 1) come from one place, `Character/Classes/ClassProgression.cs` over the `ClassRegistry` definitions, used by PCs (`CharacterStats`, `LevelUpCalculator`, `CharacterCreationData`) and NPC class levels (`CreatureClassEngine`), and a spawned creature's max HP is its definition total with CON counted once (`ClassProgression.CreatureMaxHitPoints`; Toughness is still added again, CRE-041); `CharacterStats.GetHitDice()` is the total HD (a creature's definition total, else racial HD plus applied class levels, kept in step on every level-up) and every HD-gated rule reads it.
 12. **Shared `SaveService` and `DealDamage`, and one `EvaluateCombatEnd`.** `SaveService` covers situational bonuses, Luck, natural 1/20 and Evasion. `DealDamage` wraps `ApplyIncomingDamage`, concentration and the end check. `EvaluateCombatEnd` applies a per-Team predicate. Closes SPL-018, SPL-090, SPL-004, AI-006 and CORE-030. Done 2026-10-08: `EvaluateCombatEnd` (`_Core/GameManager.CombatEnd.cs`) with the predicate `CombatEndRules.IsOutOfFight` (dead, dying or unconscious is out, regeneration or not; unconscious includes stable, nonlethal knockout, the Unconscious condition, asleep and petrified, which counts as unconscious by PHB p.311 and DMG p.301; disabled is in, at 0 HP or with Diehard at negative HP; owner definition 2026-10-07), called from every attack, spell, maneuver and AoO site that checked before (PC and NPC attack sites alike whenever the target is out, of either team), NPC casts, the PC menu, both turn starts and every turn boundary, and read by the scenario harness (`GameManager.GetCombatEndSides`); a side that had members in this combat and has none left is out too; defeat opens a defeat screen with a New Party exit. Two choices are pending the owner (CORE-038): a tie (both sides out at once) is a defeat, and a creature under the other side's control still counts for its own team. Ability scores of 0 are not detected yet (CHR-074). That closed CORE-011, CORE-034, CORE-037, CORE-001 and the combat-end part of CORE-014; `DealDamage` and `SaveService` are still open.
 
 After step 12, `IsControllable` should only choose between UI input and AI choice; no rule should read it.

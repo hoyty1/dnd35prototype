@@ -24,19 +24,8 @@ public static class CreatureClassEngine
     /// </summary>
     public static int CalculateClassBAB(int babAtLevel3, int classLevels)
     {
-        if (classLevels <= 0) return 0;
-
-        switch (babAtLevel3)
-        {
-            case 3: // Full BAB: +1 per level
-                return classLevels;
-            case 2: // Medium BAB: +3/4 per level
-                return classLevels * 3 / 4;
-            case 1: // Poor BAB: +1/2 per level
-                return classLevels / 2;
-            default:
-                return classLevels * babAtLevel3 / 3;
-        }
+        // The one BAB formula every character with class levels uses (CHR-002).
+        return ClassProgression.BaseAttackBonusForProgression(babAtLevel3, classLevels);
     }
 
     /// <summary>
@@ -115,22 +104,20 @@ public static class CreatureClassEngine
 
     /// <summary>
     /// Calculate average hit points for class levels.
-    /// First level: max hit die
-    /// Subsequent levels: (hitDie + 1) / 2 + CON mod per level
+    /// First level: max hit die; subsequent levels: (hitDie + 1) / 2. Each die adds the CON modifier with a minimum
+    /// of 1 hit point per die (PHB p.9, p.23, p.59; ClassProgression.HitPointsForHitDie, CHR-001).
     /// </summary>
     public static int CalculateClassHP(int hitDie, int conModifier, int classLevels)
     {
         if (classLevels <= 0) return 0;
 
-        // First level: full hit die + CON
-        int hp = hitDie + conModifier;
-        // Subsequent levels: average roll + CON
+        int hp = ClassProgression.HitPointsForHitDie(hitDie, conModifier);
         if (classLevels > 1)
         {
             int avgRoll = (hitDie + 1) / 2;
-            hp += (avgRoll + conModifier) * (classLevels - 1);
+            hp += ClassProgression.HitPointsForHitDie(avgRoll, conModifier) * (classLevels - 1);
         }
-        return Mathf.Max(classLevels, hp); // At least 1 HP per level
+        return hp;
     }
 
     /// <summary>
@@ -141,7 +128,9 @@ public static class CreatureClassEngine
     {
         if (def == null || classDef == null || levels <= 0) return;
 
-        int conMod = (def.CON - 10) / 2;
+        // The ability modifier (rounds down), not a truncating (CON - 10) / 2; 0 without a CON score, including the
+        // CON 0 that some undead data uses (ClassProgression.HitPointConstitutionModifier).
+        int conMod = ClassProgression.HitPointConstitutionModifier(def.CON);
 
         // Increase HD
         int oldHD = def.HitDice;

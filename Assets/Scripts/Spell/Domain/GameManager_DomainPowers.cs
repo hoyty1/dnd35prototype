@@ -677,12 +677,12 @@ public partial class GameManager
         sb.AppendLine($"   Rebuke Pool: 2d6({turnDamageRoll}) + level {clericLevel} + CHA {CharacterStats.FormatMod(cleric.Stats.CHAMod)} = {turnPoolHd} total HD");
 
         // Apply rebuke to plants (by HD, lowest first)
-        plants.Sort((a, b) => a.Stats.HitDice.CompareTo(b.Stats.HitDice));
+        plants.Sort((a, b) => a.Stats.GetHitDice().CompareTo(b.Stats.GetHitDice()));
         int hdUsed = 0;
         int rebuked = 0;
         foreach (var plant in plants)
         {
-            int plantHD = plant.Stats.HitDice;
+            int plantHD = plant.Stats.GetHitDice();
             if (plantHD > maxHD)
             {
                 sb.AppendLine($"   {plant.Stats.CharacterName} ({plantHD} HD) is too powerful to rebuke.");
@@ -834,12 +834,12 @@ public partial class GameManager
         sb.AppendLine($"   {actionVerbCap} Pool: 2d6({turnDamageRoll}) + level {clericLevel} + CHA {CharacterStats.FormatMod(cleric.Stats.CHAMod)} = {turnPoolHd} total HD");
 
         // Apply turning/rebuking to elementals (by HD, lowest first)
-        elementals.Sort((a, b) => a.Stats.HitDice.CompareTo(b.Stats.HitDice));
+        elementals.Sort((a, b) => a.Stats.GetHitDice().CompareTo(b.Stats.GetHitDice()));
         int hdUsed = 0;
         int affected = 0;
         foreach (var elemental in elementals)
         {
-            int elemHD = elemental.Stats.HitDice;
+            int elemHD = elemental.Stats.GetHitDice();
             if (elemHD > maxHD)
             {
                 sb.AppendLine($"   {elemental.Stats.CharacterName} ({elemHD} HD) is too powerful to {actionVerb}.");

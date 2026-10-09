@@ -346,7 +346,7 @@ public partial class GameManager
 
         // Calculate buff duration: 10 min/HD of slain creature
         // 10 minutes = 100 rounds; per HD of the killed creature
-        int targetHD = Mathf.Max(1, target.Stats.Level);
+        int targetHD = target.Stats.GetHitDice();
         int buffRounds = targetHD * 100; // 10 min * 10 rounds/min * HD
 
         // Caster gains 1d8 temporary HP

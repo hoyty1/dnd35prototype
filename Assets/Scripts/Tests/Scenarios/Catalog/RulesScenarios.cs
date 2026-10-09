@@ -100,11 +100,19 @@ namespace Tests.Scenarios
     /// creature is out when it is dead, dying or unconscious, a regenerating one too, and a petrified creature counts as
     /// unconscious (PHB p.311, DMG p.301); a disabled creature (0 HP, PHB p.145) is still in; a side is out when every
     /// active member of its team is out, allies and summons included.
+    /// Class progression (CHR-001, CHR-002, CHR-071; checked 2026-10-08): PHB p.22 Table 3-1 (BAB good = level,
+    /// average = 3/4, poor = 1/2) and the class tables (bard d6 and 3/4 BAB p.27-28, ranger d8 and full BAB p.46-47);
+    /// p.9, p.23 and p.59 (each Hit Die adds its roll plus the CON modifier, minimum 1; maximum at 1st level); p.309 (HD =
+    /// character level for a character, total HD for a creature); p.217 (Daze: one humanoid of 4 HD or less). MM owlbear
+    /// skeleton 5 HD (p.226: racial HD kept) and bugbear zombie 6 HD (p.267: racial HD doubled). Data checked
+    /// 2026-10-08: neutral_mage_test (Wizard 3, Daze prepared x4), skeleton_owlbear, zombie_bugbear; Quick Start bard
+    /// (Half-Elf, CON 12) and ranger (Human, CON 12, no Toughness); ogre (MM p.199: 4d8+11 = 29), ghoul (MM p.119: 2d12 = 13,
+    /// stored as CON 0) and orc_warrior (CON 12) for the NPC hit point checks.
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 102;
+        public const int Count = 103;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -213,6 +221,7 @@ namespace Tests.Scenarios
             yield return S("ring-deflection", RingDeflection);
             yield return S("npc-proficiency", NpcProficiency);
             yield return S("npc-spawn-alignment-gear", NpcSpawnAlignmentGear);
+            yield return S("class-progression", ClassProgressionHpBabHd);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -4644,6 +4653,159 @@ namespace Tests.Scenarios
             return got == mod
                 ? ExpectResult.Pass(used + ", mod " + got + babNote, seqs)
                 : ExpectResult.Fail(used + ", mod " + got + ", expected " + mod + babNote, seqs);
+        }
+
+        // ── Class progression: hit points, BAB and Hit Dice (CHR-001, CHR-002, CHR-071) ──
+
+        /// <summary>A Human bard built at 1st level (max d6 + CON 12) and raised by the real level-up path.</summary>
+        private static CharacterStats LevelledBard(string name, int finalLevel)
+        {
+            var s = new CharacterStats(
+                name: name, level: 1, characterClass: "Bard",
+                str: 10, dex: 12, con: 12, wis: 10, intelligence: 10, cha: 14,
+                bab: 0, armorBonus: 0, shieldBonus: 0,
+                damageDice: 6, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 6, raceName: "Human");
+            s.PendingLevelUps = finalLevel - 1;
+            s.EnsureMulticlassDataInitialized();
+            for (int i = 1; i < finalLevel; i++)
+                s.ApplyPendingLevelUp("Bard");
+            return s;
+        }
+
+        /// <summary>The note-recording comparison for the class-progression asserts.</summary>
+        private static bool ProgressionCheck(ScenarioContext ctx, string what, int got, int want)
+        {
+            if (got == want)
+                return true;
+            ctx.Note("class-progression mismatch: " + what + ": got " + got + ", expected " + want);
+            return false;
+        }
+
+        /// <summary>
+        /// Every character with class levels uses the class definitions and the PHB hit point rule, and its Hit Dice follow
+        /// its level-ups. Quick Start bard and ranger (level 3 through the real creation path): HP max die at 1st level and
+        /// average after, CON once per die (bard 7 + 5 + 5 = 17, ranger 9 + 6 + 6 = 21), BAB +2 and +3 (CHR-001, CHR-002).
+        /// Two Human bards built at 1st level and raised to 5 and 4 through ApplyPendingLevelUp: HD 5 and 4, BAB +3,
+        /// every new die a d6 with CON +1 and a minimum of 1. A scripted Wizard 3 then casts Daze (4 HD or less) at both:
+        /// the HD 5 bard is refused before the slot is spent, the HD 4 bard is a legal target (CHR-071). Templated undead
+        /// count their template's HD, not their Level (owlbear skeleton 5; bugbear zombie 6, an XFail while the spawn
+        /// applies the zombie template twice, CRE-001). NPC max HP counts CON once (CreatureHitPointChecks).
+        /// </summary>
+        private static ScenarioDef ClassProgressionHpBabHd()
+        {
+            return Rules("rules/class-progression", "Class HP, BAB and Hit Dice follow the class tables and every level-up (PHB p.9, p.22-23, p.59, p.309; CHR-001, CHR-002, CHR-071)")
+                .Covers("CHR-001", "CHR-002", "CHR-071", "PHB p.9", "PHB p.22", "PHB p.23", "PHB p.59", "PHB p.309", "PHB p.217", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("bard", ActorSource.QuickStart("Bard"), 3, 4, Control.Idle)
+                .Pc("ranger", ActorSource.QuickStart("Ranger"), 3, 6, Control.Idle)
+                .Pc("hero5", ActorSource.Stats(() => LevelledBard("Bard Five", 5)), 12, 10, Control.Scripted)
+                .Pc("hero4", ActorSource.Stats(() => LevelledBard("Bard Four", 4)), 12, 12, Control.Scripted)
+                .Npc("mage", "neutral_mage_test", 10, 11, Control.Scripted)
+                .Npc("skeleton", "skeleton_owlbear", 16, 4, Control.Idle)
+                .Npc("zombie", "zombie_bugbear", 16, 16, Control.Idle)
+                .Npc("ogre", "ogre", 6, 14, Control.Idle)
+                .Npc("ghoul", "ghoul", 3, 16, Control.Idle)
+                .Initiative("hero5", "hero4", "mage", "bard", "ranger", "skeleton", "zombie", "ogre", "ghoul")
+                .Turn("hero5", 1, Step.Assert("Levelled bards: HD, BAB and hit points follow every level-up; undead count template HD", ctx =>
+                {
+                    bool ok = true;
+                    foreach (var pair in new[] { new KeyValuePair<string, int>("hero5", 5), new KeyValuePair<string, int>("hero4", 4) })
+                    {
+                        CharacterStats s = ctx.Get(pair.Key).Stats;
+                        int level = pair.Value;
+                        ok &= ProgressionCheck(ctx, pair.Key + " level", s.Level, level);
+                        ok &= ProgressionCheck(ctx, pair.Key + " GetHitDice", s.GetHitDice(), level);
+                        ok &= ProgressionCheck(ctx, pair.Key + " TeamUtility.GetHitDice", TeamUtility.GetHitDice(ctx.Get(pair.Key)), level);
+                        ok &= ProgressionCheck(ctx, pair.Key + " BAB (bard 3/4, PHB p.27)", s.BaseAttackBonus, level * 3 / 4);
+                        ok &= ProgressionCheck(ctx, pair.Key + " level-up records", s.HitPointGainsByClassLevel.Count, level - 1);
+                        int gained = 0;
+                        foreach (ClassHitPointEntry e in s.HitPointGainsByClassLevel)
+                        {
+                            ok &= ProgressionCheck(ctx, pair.Key + " level-up hit die", e.HitDie, 6);
+                            ok &= ProgressionCheck(ctx, pair.Key + " level-up gain = max(1, die + CON)", e.TotalGain, Mathf.Max(1, e.Roll + 1));
+                            ok &= ProgressionCheck(ctx, pair.Key + " die in range", e.Roll >= 1 && e.Roll <= 6 ? 1 : 0, 1);
+                            gained += e.TotalGain;
+                        }
+                        ok &= ProgressionCheck(ctx, pair.Key + " max HP = 7 at 1st level + gains", s.MaxHP, 7 + gained);
+                    }
+                    ok &= ProgressionCheck(ctx, "owlbear skeleton HD (MM p.226)", TeamUtility.GetHitDice(ctx.Get("skeleton")), 5);
+                    ok &= CreatureHitPointChecks(ctx);
+                    // Recorded for the CRE-001 XFail below: the spawn applies the zombie template a second time.
+                    ctx.Note("class-progression zombie-hd=" + TeamUtility.GetHitDice(ctx.Get("zombie")));
+                    return ok;
+                }))
+                .Turn("hero4", 1, Step.Pass())
+                .Turn("mage", 1, Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "hero5"), Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "hero4"))
+                .Expect("Every progression check holds", Expect.AssertsPass())
+                .Expect("Quick Start bard 3: BAB +2, HP 17 (d6, CON +1 once per die; PHB p.23, p.27)", v =>
+                    ActorIs(v, "bard", 3, 2, 17))
+                .Expect("Quick Start ranger 3: BAB +3, HP 21 (d8, CON +1 once per die; PHB p.23, p.46-47)", v =>
+                    ActorIs(v, "ranger", 3, 3, 21))
+                .Expect("Daze on the HD 5 bard is refused (4 HD or less, PHB p.217); on the HD 4 bard it is cast", Expect.All(
+                    Expect.StepStatus("mage", 1, "Cast", 0, "refused"),
+                    Expect.StepStatus("mage", 1, "Cast", 1, "done")))
+                .ExpectXFail("CRE-001", "The bugbear zombie has 6 HD, its 3 racial HD doubled once (MM p.267)", v =>
+                {
+                    const string prefix = "class-progression zombie-hd=";
+                    TraceEvent note = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(prefix, StringComparison.Ordinal));
+                    if (note == null) return ExpectResult.Inconclusive("no zombie HD note");
+                    int hd = int.Parse(note.Str("text").Substring(prefix.Length));
+                    return hd == 6 ? ExpectResult.Pass("6 HD", note.Seq) : ExpectResult.Fail(hd + " HD (the template applied again at spawn)", note.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// NPC max HP counts CON once (CHR-001, CRE-041): an MM total is final (ogre 4d8+11 = 29, MM p.199; Toughness is
+        /// still added on top by TotalMaxHP, the rest of CRE-041), a CON 0 undead adds nothing (ghoul 2d12 = 13, MM p.119;
+        /// it still spawns dead, CRE-044), and an orc warrior given barbarian 2 through CreatureClassEngine spawns with its
+        /// definition total, racial HP plus max(1, die + CON) per class die, without CON again per level.
+        /// </summary>
+        private static bool CreatureHitPointChecks(ScenarioContext ctx)
+        {
+            bool ok = ProgressionCheck(ctx, "ogre MaxHP = MM total 29", ctx.Get("ogre").Stats.MaxHP, 29);
+            ok &= ProgressionCheck(ctx, "ghoul (CON 0) MaxHP = MM total 13", ctx.Get("ghoul").Stats.MaxHP, 13);
+
+            NPCDefinition template = NPCDatabase.Get("orc_warrior");
+            if (template == null)
+            {
+                ctx.Note("class-progression mismatch: orc_warrior missing");
+                return false;
+            }
+            NPCDefinition def = template.Clone();
+            int racialHp = def.BaseHitDieHP;
+            int conMod = ClassProgression.HitPointConstitutionModifier(def.CON);
+            CreatureClassEngine.ApplyClassToDefinition(def, ClassRegistry.GetClass("Barbarian"), 2);
+            ok &= ProgressionCheck(ctx, "orc warrior + barbarian 2 definition HP", def.BaseHitDieHP,
+                racialHp + CreatureClassEngine.CalculateClassHP(12, conMod, 2));
+
+            var go = new GameObject("ClassProgressionScenario_orc_barbarian");
+            CharacterController cc = go.AddComponent<CharacterController>();
+            try
+            {
+                ctx.Gm.InitializeNPCFromDefinition(cc, def, new Vector2Int(-60, -60), null, null);
+                ok &= ProgressionCheck(ctx, "orc warrior + barbarian 2 spawned MaxHP (CON once)", cc.Stats.MaxHP, def.BaseHitDieHP);
+                ok &= ProgressionCheck(ctx, "orc warrior + barbarian 2 Hit Dice", cc.Stats.GetHitDice(), 3);
+            }
+            finally
+            {
+                if (ctx.Gm != null && ctx.Gm.Grid != null)
+                    ctx.Gm.Grid.ClearCreatureOccupancy(cc);
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+            return ok;
+        }
+
+        /// <summary>Passes when the traced actor has the level, BAB and max HP given.</summary>
+        private static ExpectResult ActorIs(TraceView v, string key, int level, int bab, int maxHp)
+        {
+            TraceEvent a = v.Of("actor").FirstOrDefault(e => e.Str("key") == key);
+            if (a == null) return ExpectResult.Fail("no actor event for " + key);
+            string got = "level " + a.Int("level") + ", BAB " + a.Int("bab") + ", max HP " + a.Int("maxHp");
+            return a.Int("level") == level && a.Int("bab") == bab && a.Int("maxHp") == maxHp
+                ? ExpectResult.Pass(got, a.Seq)
+                : ExpectResult.Fail(got + "; expected level " + level + ", BAB " + bab + ", max HP " + maxHp, a.Seq);
         }
 
         private static Vector2Int? ActorPos(TraceView v, string key)

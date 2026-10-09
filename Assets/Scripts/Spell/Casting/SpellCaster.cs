@@ -285,7 +285,7 @@ public static class SpellCaster
                 return result;
             }
 
-            int hitDice = Mathf.Max(1, targetStats.HitDice > 0 ? targetStats.HitDice : targetStats.Level);
+            int hitDice = targetStats.GetHitDice();
             if (hitDice > 6)
             {
                 result.Success = false;

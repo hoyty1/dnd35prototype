@@ -694,9 +694,10 @@ public partial class GameManager
 
         int computedBab = ProgressionCalculator.CalculateBAB(babProgression, hitDice);
         int resolvedBab = def.BaseAttackBonusOverride ?? computedBab;
-        int computedBaseHitDieHp = def.BaseHitDieHP > 0
-            ? def.BaseHitDieHP
-            : ProgressionCalculator.CalculateAverageHpFromHitDice(creatureProgression.HitDie, hitDice);
+        // The definition total is final (MM total, CON included, plus template and class-level HP); without one, the
+        // type's average die plus CON per Hit Die. The constructor's own CON term is replaced below (CHR-001, CRE-041).
+        int creatureMaxHp = ClassProgression.CreatureMaxHitPoints(def.BaseHitDieHP, creatureProgression.HitDie, hitDice, def.CON);
+        int computedBaseHitDieHp = creatureMaxHp;
 
         CharacterStats stats = new CharacterStats(
             name: def.Name,
@@ -714,6 +715,10 @@ public partial class GameManager
             atkRange: 1,
             baseHitDieHP: computedBaseHitDieHp
         );
+
+        // MaxHP is the creature total; the constructor added CON per Level on top of it, so set it back (CHR-001).
+        stats.AdjustMaxHP(creatureMaxHp - stats.MaxHP);
+        stats.CurrentHP = stats.MaxHP;
 
         stats.SetNaturalAttacks(def.NaturalAttacks);
 

@@ -95,6 +95,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Character.ClassProgressionTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 178,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CHR-001, CHR-002, CHR-071: class hit die and BAB from ClassRegistry for every PHB and DMG class, CON once per Hit Die with a minimum of 1 (constructor, creation, level-up), Quick Start presets at 3rd level, Hit Dice after level-ups and for creatures, CON 0 as no score and creature max HP from the definition total (CRE-041, CRE-044); level-ups in GameSettings Average mode (restored afterwards)"
+    },
+    {
       "type": "Tests.Character.DeityAlignmentRestrictionTests",
       "needs": "either",
       "skip": "",

@@ -402,8 +402,8 @@ public partial class GameManager
             int byDist = distA.CompareTo(distB);
             if (byDist != 0) return byDist;
 
-            int hdA = a != null && a.Stats != null ? a.Stats.Level : int.MaxValue;
-            int hdB = b != null && b.Stats != null ? b.Stats.Level : int.MaxValue;
+            int hdA = a != null && a.Stats != null ? a.Stats.GetHitDice() : int.MaxValue;
+            int hdB = b != null && b.Stats != null ? b.Stats.GetHitDice() : int.MaxValue;
             int byHd = hdA.CompareTo(hdB);
             if (byHd != 0) return byHd;
 
@@ -488,7 +488,7 @@ public partial class GameManager
             if (undead == null || undead.Stats == null || undead.Stats.IsDead)
                 continue;
 
-            int undeadHd = Mathf.Max(1, undead.Stats.Level);
+            int undeadHd = undead.Stats.GetHitDice();
             if (undeadHd > maxAffectedHd)
                 continue;
 
@@ -536,7 +536,7 @@ public partial class GameManager
             if (undead == null || undead.Stats == null || undead.Stats.IsDead)
                 continue;
 
-            int undeadHd = Mathf.Max(1, undead.Stats.Level);
+            int undeadHd = undead.Stats.GetHitDice();
             if (undeadHd > maxAffectedHd)
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {undead.Stats.CharacterName} ({undeadHd} HD) is too powerful to be turned."));
         }

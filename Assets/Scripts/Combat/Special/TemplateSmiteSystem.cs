@@ -189,7 +189,7 @@ public partial class GameManager
 
         // Smite attack bonus uses Charisma modifier "if any" (minimum 0, never a penalty).
         int attackBonus = Mathf.Max(0, attacker.Stats.CHAMod);
-        int hitDice = Mathf.Max(1, attacker.Stats.HitDice > 0 ? attacker.Stats.HitDice : attacker.Stats.Level);
+        int hitDice = attacker.Stats.GetHitDice();
         int damageBonus = hitDice;
 
         attacker.Stats.MoraleAttackBonus += attackBonus;

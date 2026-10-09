@@ -1437,9 +1437,9 @@ public class CharacterStats
         STR += bonus;
         CON += bonus;
 
-        // HP gain from CON increase: bonus/2 = CON mod increase, × level
+        // HP gain from CON increase: bonus/2 = CON mod increase, per Hit Die (PHB p.9; CHR-071)
         int conModIncrease = bonus / 2;
-        int hpGain = Level * conModIncrease;
+        int hpGain = GetHitDice() * conModIncrease;
         MaxHP += hpGain;
         CurrentHP += hpGain;
 
@@ -1469,7 +1469,7 @@ public class CharacterStats
 
         // Remove HP from CON decrease
         int conModDecrease = bonus / 2;
-        int hpLoss = Level * conModDecrease;
+        int hpLoss = GetHitDice() * conModDecrease;
         MaxHP -= hpLoss;
         if (CurrentHP > MaxHP) CurrentHP = MaxHP;
         if (CurrentHP < -10) CurrentHP = -10;
@@ -1644,7 +1644,7 @@ public class CharacterStats
 
     public bool EnforceNegativeLevelDeathThreshold()
     {
-        int hitDiceForDeath = Mathf.Max(1, HitDice > 0 ? HitDice : Level);
+        int hitDiceForDeath = GetHitDice();
         if (NegativeLevelCount < hitDiceForDeath)
             return false;
 
@@ -1854,37 +1854,42 @@ public class CharacterStats
 
     private int GetEffectiveProgressionLevel()
     {
-        return Mathf.Max(1, HitDice > 0 ? HitDice : Level);
+        return GetHitDice();
+    }
+
+    /// <summary>
+    /// Total Hit Dice (PHB p.309: character level for a character, total HD for a creature; CHR-071). A creature
+    /// built from a definition keeps its definition's total in <see cref="HitDice"/>; a character with class levels
+    /// keeps <see cref="HitDice"/> equal to its racial HD plus its applied class levels (the constructor and
+    /// <see cref="ApplyPendingLevelUp"/> maintain it; PHB races have no racial HD). Pending level-ups do not count.
+    /// Use this, not <see cref="Level"/>, for every HD-gated rule; Level stays for XP, feats and skill caps.
+    /// </summary>
+    public int GetHitDice()
+    {
+        if (HitDice > 0)
+            return HitDice;
+
+        int classLevels = GetAppliedClassLevelTotal();
+        return Mathf.Max(1, classLevels > 0 ? classLevels : Level);
+    }
+
+    /// <summary>Sum of the applied class levels (no pending level-ups), without normalising the list.</summary>
+    private int GetAppliedClassLevelTotal()
+    {
+        if (ClassLevels == null)
+            return 0;
+
+        int total = 0;
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry entry = ClassLevels[i];
+            if (entry != null && !string.IsNullOrWhiteSpace(entry.ClassName) && entry.Level > 0)
+                total += entry.Level;
+        }
+        return total;
     }
 
     // ========== CLASS-BASED SAVE BONUSES (D&D 3.5) ==========
-
-    private static int CalculateClassBaseAttackBonus(string className, int classLevel)
-    {
-        int safeLevel = Mathf.Max(1, classLevel);
-        switch (className)
-        {
-            case "Fighter":
-            case "Barbarian":
-            case "Paladin":
-            case "Ranger":
-                return safeLevel;
-
-            case "Cleric":
-            case "Druid":
-            case "Monk":
-            case "Rogue":
-                return (safeLevel * 3) / 4;
-
-            case "Wizard":
-            case "Sorcerer":
-            case "Bard":
-                return safeLevel / 2;
-
-            default:
-                return safeLevel;
-        }
-    }
 
     private static int CalculateClassSaveProgression(bool isGoodSave, int classLevel)
     {
@@ -2236,7 +2241,7 @@ public class CharacterStats
     /// <summary>HP bonus from feats (Toughness).</summary>
     public int FeatHPBonus => FeatManager.GetTotalHPBonus(this);
 
-    /// <summary>Bonus HP from wondrous item CON enhancement (e.g., Amulet of Health). = delta_CON_mod × level.</summary>
+    /// <summary>Bonus HP from wondrous item CON enhancement (e.g., Amulet of Health). = delta_CON_mod × Hit Dice (CHR-071).</summary>
     public int WondrousCONBonusHP
     {
         get
@@ -2245,7 +2250,7 @@ public class CharacterStats
             int baseCONMod = GetAbilityModifier(GetEffectiveAbilityScore(AbilityType.CON)); // without enhancement
             int enhancedCONMod = GetAbilityModifier(GetEffectiveAbilityScore(AbilityType.CON) + WondrousEnhancementCON);
             int delta = enhancedCONMod - baseCONMod;
-            return delta * Level;
+            return delta * GetHitDice();
         }
     }
 
@@ -2293,7 +2298,10 @@ public class CharacterStats
     /// <summary>Broad body-material composition used for spell/item interactions.</summary>
     public MaterialComposition MaterialComposition = MaterialComposition.Organic;
 
-    /// <summary>Monster HD used for creature-type progression math. Defaults to character level.</summary>
+    /// <summary>
+    /// Total Hit Dice: a creature's definition total, or a character's racial HD plus applied class levels (kept in
+    /// step on every level-up, CHR-071). Read it through <see cref="GetHitDice"/>.
+    /// </summary>
     public int HitDice;
 
     /// <summary>
@@ -2577,10 +2585,10 @@ public class CharacterStats
             case AbilityType.CON:
                 InherentCON = newValue;
                 CON += delta;
-                // CON increase grants retroactive HP (2 HP per level per +1 CON mod)
+                // CON increase grants retroactive HP (1 HP per Hit Die per +1 CON mod; PHB p.9, CHR-071)
                 int oldMod = GetAbilityModifier(CON - delta);
                 int newMod = GetAbilityModifier(CON);
-                int hpGain = (newMod - oldMod) * Level;
+                int hpGain = (newMod - oldMod) * GetHitDice();
                 if (hpGain > 0) { MaxHP += hpGain; CurrentHP += hpGain; }
                 break;
             case AbilityType.INT: InherentINT = newValue; INT += delta; break;
@@ -2620,7 +2628,8 @@ public class CharacterStats
                 if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
                     continue;
 
-                totalBab += CalculateClassBaseAttackBonus(classLevel.ClassName, classLevel.Level);
+                // From the class definition (PHB Table 3-1; CHR-002), the same numbers CreatureClassEngine uses.
+                totalBab += ClassProgression.GetClassBaseAttackBonus(classLevel.ClassName, Mathf.Max(1, classLevel.Level));
             }
 
             return Mathf.Max(0, totalBab);
@@ -3624,12 +3633,11 @@ public class CharacterStats
         MaxCarryWeightLbs = GetHeavyLoadForStrength(STR);
         CurrentEncumbrance = EncumbranceLevel.Light;
 
-        // Calculate MaxHP: base + CON mod × level (minimum 1 HP per level)
-        // Uses final CON (with racial modifier applied)
-        int conModPerLevel = Mathf.Max(1, GetModifier(CON));
-        MaxHP = baseHitDieHP + (conModPerLevel * level);
-        // Ensure at least baseHitDieHP if CON mod is negative
-        if (MaxHP < 1) MaxHP = 1;
+        // MaxHP: the CON-free hit-die total plus the CON modifier once per Hit Die, negative too and 0 without a CON
+        // score (NO_SCORE or the CON 0 some undead data uses), minimum 1 HP per die (PHB p.9, p.23, p.59; CHR-001).
+        // Uses final CON (racial modifier applied). A creature spawned from an NPCDefinition has its MaxHP replaced by
+        // the definition total afterwards (GameManager.InitializeNPCFromDefinition, ClassProgression.CreatureMaxHitPoints).
+        MaxHP = ClassProgression.ApplyConstitution(baseHitDieHP, Mathf.Max(1, level), ClassProgression.HitPointConstitutionModifier(CON));
         CurrentHP = MaxHP;
 
         EnsureMulticlassDataInitialized();
@@ -3759,6 +3767,9 @@ public class CharacterStats
             ? (!string.IsNullOrWhiteSpace(CharacterClass) ? CharacterClass : ClassLevels[0].ClassName)
             : className;
 
+        // Racial HD (none for PHB races) are whatever HitDice holds beyond the applied class levels (CHR-071).
+        int racialHitDice = Mathf.Max(0, HitDice - GetAppliedClassLevelTotal());
+
         ClassLevelEntry classEntry = ClassLevels.FirstOrDefault(c => c != null && string.Equals(c.ClassName, selectedClass, StringComparison.OrdinalIgnoreCase));
         if (classEntry == null)
         {
@@ -3775,10 +3786,13 @@ public class CharacterStats
         InvalidateClassLevelCache();
         CharacterClass = selectedClass;
         PendingLevelUps = Mathf.Max(0, PendingLevelUps - 1);
+        // Every level-up adds a Hit Die, so HD-gated rules (Sleep, Color Spray, Daze, Bear's Endurance) see it.
+        HitDice = racialHitDice + GetAppliedClassLevelTotal();
 
         int oldMaxHp = MaxHP;
-        int hitDieSize = GetClassHitDieSize(selectedClass);
-        int hpGain = CalculateHPGainForSingleLevel(hitDieSize, CONMod);
+        // The class definition's hit die (PHB ch.3; CHR-002): Rogue and Bard d6, Ranger d8.
+        int hitDieSize = ClassProgression.GetHitDie(selectedClass);
+        int hpGain = CalculateHPGainForSingleLevel(hitDieSize, CONMod, out int hitDieResult);
 
         MaxHP += hpGain;
         CurrentHP = Mathf.Min(TotalMaxHP, CurrentHP + hpGain);
@@ -3793,7 +3807,7 @@ public class CharacterStats
             ClassName = selectedClass,
             CharacterLevel = Mathf.Max(1, Level - PendingLevelUps),
             HitDie = hitDieSize,
-            Roll = Mathf.Max(1, hpGain - CONMod),
+            Roll = hitDieResult,
             ConstitutionBonus = CONMod,
             TotalGain = hpGain
         });
@@ -3862,91 +3876,36 @@ public class CharacterStats
         return 1;
     }
 
-    private int CalculateHPGainForSingleLevel(int hitDieSize, int conMod)
+    /// <summary>
+    /// Hit points for one new Hit Die: the die result (rolled, average or maximum by GameSettings.hpCalculationMode)
+    /// plus the CON modifier, minimum 1 (PHB p.9, p.23, p.59; ClassProgression.HitPointsForHitDie).
+    /// </summary>
+    private int CalculateHPGainForSingleLevel(int hitDieSize, int conMod, out int dieResult)
     {
         HPCalculationMode mode = GameSettings.Instance != null
             ? GameSettings.Instance.hpCalculationMode
             : HPCalculationMode.Roll;
 
-        int hpGain;
         switch (mode)
         {
             case HPCalculationMode.Roll:
-            {
-                int roll = UnityEngine.Random.Range(1, hitDieSize + 1);
-                hpGain = roll + conMod;
-                Debug.Log($"[HP] Mode=Roll | Rolled {roll} on d{hitDieSize} + {conMod} CON = {hpGain} HP");
+                dieResult = UnityEngine.Random.Range(1, hitDieSize + 1);
                 break;
-            }
-
             case HPCalculationMode.Average:
-            {
-                int average = GetAverageHitPointsForHitDie(hitDieSize);
-                hpGain = average + conMod;
-                Debug.Log($"[HP] Mode=Average | {average} (d{hitDieSize} average) + {conMod} CON = {hpGain} HP");
+                dieResult = ClassProgression.AverageHitDieResult(hitDieSize);
                 break;
-            }
-
             case HPCalculationMode.Maximum:
-                hpGain = hitDieSize + conMod;
-                Debug.Log($"[HP] Mode=Maximum | {hitDieSize} (d{hitDieSize} max) + {conMod} CON = {hpGain} HP");
+                dieResult = hitDieSize;
                 break;
-
             default:
-            {
-                int fallbackRoll = UnityEngine.Random.Range(1, hitDieSize + 1);
-                hpGain = fallbackRoll + conMod;
-                Debug.LogWarning($"[HP] Unknown HP mode {mode}; fallback roll {fallbackRoll} + {conMod} = {hpGain}");
+                dieResult = UnityEngine.Random.Range(1, hitDieSize + 1);
+                Debug.LogWarning($"[HP] Unknown HP mode {mode}; rolling instead.");
                 break;
-            }
         }
 
-        if (hpGain < 1)
-        {
-            Debug.LogWarning($"[HP] HP gain was {hpGain}; enforcing minimum 1 HP per level.");
-            hpGain = 1;
-        }
-
+        int hpGain = ClassProgression.HitPointsForHitDie(dieResult, conMod);
+        Debug.Log($"[HP] Mode={mode} | {dieResult} on d{hitDieSize} + {conMod} CON = {hpGain} HP (minimum 1)");
         return hpGain;
-    }
-
-    private int GetAverageHitPointsForHitDie(int hitDie)
-    {
-        switch (hitDie)
-        {
-            case 4: return 3;  // 2.5 -> 3
-            case 6: return 4;  // 3.5 -> 4
-            case 8: return 5;  // 4.5 -> 5
-            case 10: return 6; // 5.5 -> 6
-            case 12: return 7; // 6.5 -> 7
-            default:
-                Debug.LogWarning($"[HP] Unknown hit die d{hitDie}; using fallback average formula.");
-                return Mathf.CeilToInt(hitDie / 2f + 0.5f);
-        }
-    }
-
-    private int GetClassHitDieSize(string className)
-    {
-        switch (className)
-        {
-            case "Barbarian": return 12;
-            case "Fighter":
-            case "Paladin":
-            case "Ranger": return 10;
-            case "Cleric":
-            case "Druid":
-            case "Monk":
-            case "Rogue":
-            case "Bard": return 8;
-            case "Wizard":
-            case "Sorcerer": return 4;
-            default: return 8;
-        }
-    }
-
-    private int GetClassHitDieSizeForLevelUp()
-    {
-        return GetClassHitDieSize(CharacterClass);
     }
 
     private bool IsValidNaturalAttack(NaturalAttackDefinition attack)

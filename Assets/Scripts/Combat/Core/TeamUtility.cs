@@ -69,15 +69,15 @@ public static class TeamUtility
     }
 
     /// <summary>
-    /// Get the effective hit dice of a target creature.
-    /// Returns the greater of HitDice and Level, with a minimum of 1.
+    /// Get the hit dice of a target creature: <see cref="CharacterStats.GetHitDice"/> (a creature's total HD, a
+    /// character's racial HD plus applied class levels; PHB p.309, CHR-071), minimum 1.
     /// Used for HD-pool spells (Sleep, Color Spray, Hypnotism) and
     /// HD-limited targeting (Daze ≤ 4 HD, Cause Fear ≤ 5 HD, etc.).
     /// </summary>
     public static int GetHitDice(CharacterController target)
     {
         if (target?.Stats == null) return 0;
-        return Mathf.Max(1, target.Stats.HitDice > 0 ? target.Stats.HitDice : target.Stats.Level);
+        return target.Stats.GetHitDice();
     }
 
     // ════════════════════════════════════════════════════════════

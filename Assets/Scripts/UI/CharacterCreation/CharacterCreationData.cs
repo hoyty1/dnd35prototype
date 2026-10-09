@@ -79,7 +79,13 @@ public class CharacterCreationData
 
     // Derived values (computed during review)
     public int FinalSTR, FinalDEX, FinalCON, FinalINT, FinalWIS, FinalCHA;
+    /// <summary>Hit points at creation: CON once per Hit Die, minimum 1 per die (PHB p.9, p.23; CHR-001).</summary>
     public int HP;
+    /// <summary>
+    /// The value to pass as the CharacterStats constructor's baseHitDieHP: <see cref="HP"/> without the CON
+    /// modifier per Hit Die, which the constructor adds back, so the built character has exactly <see cref="HP"/>.
+    /// </summary>
+    public int BaseHitDieHP;
     public int AC;
     public int AttackBonus;
     public int BAB;
@@ -98,44 +104,18 @@ public class CharacterCreationData
 
         int safeLevel = Mathf.Max(1, CharacterLevel);
 
-        // Look up class definition from registry
-        ClassRegistry.Init();
-        ICharacterClass classDef = ClassRegistry.GetClass(ClassName);
-        HitDie = classDef != null ? classDef.HitDie : 6;
-        BAB = CalculateClassBab(ClassName, safeLevel);
+        // Hit die and BAB from the class definition (CHR-002), as CharacterStats and CreatureClassEngine use them.
+        HitDie = ClassProgression.GetHitDie(ClassName);
+        BAB = ClassProgression.GetClassBaseAttackBonus(ClassName, safeLevel);
 
-        // HP: Max at level 1, average thereafter
+        // HP: maximum die at 1st level, average die after that (the Quick Start shortcut), each die plus the CON
+        // modifier with a minimum of 1 (PHB p.9, p.23; CHR-001: CON is counted once).
         int conMod = CharacterStats.GetModifier(FinalCON);
-        int baseHP = HitDie + Mathf.Max(0, safeLevel - 1) * (HitDie / 2 + 1);
-        HP = baseHP + conMod * safeLevel;
-        if (HP < 1) HP = 1;
+        HP = ClassProgression.CreationHitPoints(HitDie, conMod, safeLevel);
+        BaseHitDieHP = HP - conMod * safeLevel;
 
         // Speed from race
         BaseSpeed = Race != null ? Race.BaseSpeedSquares : 6;
-    }
-
-    private static int CalculateClassBab(string className, int level)
-    {
-        int safeLevel = Mathf.Max(1, level);
-        switch (className)
-        {
-            case "Fighter":
-            case "Barbarian":
-            case "Paladin":
-            case "Ranger":
-                return safeLevel;
-            case "Cleric":
-            case "Druid":
-            case "Monk":
-            case "Rogue":
-                return (safeLevel * 3) / 4;
-            case "Wizard":
-            case "Sorcerer":
-            case "Bard":
-                return safeLevel / 2;
-            default:
-                return safeLevel;
-        }
     }
 
     /// <summary>Get a formatted stat line with racial mods shown.</summary>

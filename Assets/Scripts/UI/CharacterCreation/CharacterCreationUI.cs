@@ -1444,7 +1444,7 @@ public class CharacterCreationUI : MonoBehaviour
             armorBonus: 0, shieldBonus: 0,
             damageDice: 8, damageCount: 1, bonusDamage: 0,
             baseSpeed: data.BaseSpeed, atkRange: 1,
-            baseHitDieHP: data.HP,
+            baseHitDieHP: data.BaseHitDieHP,
             raceName: data.RaceName
         );
 
@@ -1506,7 +1506,7 @@ public class CharacterCreationUI : MonoBehaviour
             armorBonus: 0, shieldBonus: 0,
             damageDice: 8, damageCount: 1, bonusDamage: 0,
             baseSpeed: data.BaseSpeed, atkRange: 1,
-            baseHitDieHP: data.HP,
+            baseHitDieHP: data.BaseHitDieHP,
             raceName: data.RaceName
         );
 

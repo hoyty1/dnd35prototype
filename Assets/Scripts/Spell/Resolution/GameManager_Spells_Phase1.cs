@@ -252,8 +252,8 @@ public partial class GameManager
             var sortedTargets = new List<CharacterController>(targets);
             sortedTargets.Sort((a, b) =>
             {
-                int hdA = a != null && a.Stats != null ? a.Stats.Level : 999;
-                int hdB = b != null && b.Stats != null ? b.Stats.Level : 999;
+                int hdA = a != null && a.Stats != null ? a.Stats.GetHitDice() : 999;
+                int hdB = b != null && b.Stats != null ? b.Stats.GetHitDice() : 999;
                 return hdA.CompareTo(hdB);
             });
 
@@ -263,7 +263,7 @@ public partial class GameManager
                 if (target == null || target.Stats == null || target.Stats.IsDead) continue;
                 if (remainingHd <= 0) break;
 
-                int targetHd = Mathf.Max(1, target.Stats.Level);
+                int targetHd = target.Stats.GetHitDice();
                 sb.AppendLine($"  --- {target.Stats.CharacterName} ({targetHd} HD) ---");
 
                 if (targetHd > remainingHd)

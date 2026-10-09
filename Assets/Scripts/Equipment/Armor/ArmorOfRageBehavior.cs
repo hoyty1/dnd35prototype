@@ -129,8 +129,8 @@ public class ArmorOfRageBehavior : SpecificItemBehavior
         stats.STR += BonusRageEnhancement;
         stats.CON += BonusRageEnhancement;
 
-        // Additional HP from CON increase: +1 HP per level (from +2 CON → +1 CON mod)
-        int hpGain = stats.Level * 1;
+        // Additional HP from CON increase: +1 HP per Hit Die (from +2 CON → +1 CON mod; CHR-071)
+        int hpGain = stats.GetHitDice();
         stats.AdjustMaxHP(hpGain);
         stats.CurrentHP += hpGain;
 
@@ -145,7 +145,7 @@ public class ArmorOfRageBehavior : SpecificItemBehavior
         stats.STR -= BonusRageEnhancement;
         stats.CON -= BonusRageEnhancement;
 
-        int hpLoss = stats.Level * 1;
+        int hpLoss = stats.GetHitDice();
         stats.AdjustMaxHP(-hpLoss);
         if (stats.CurrentHP > stats.TotalMaxHP) stats.CurrentHP = stats.TotalMaxHP;
         if (stats.CurrentHP < -10) stats.CurrentHP = -10;

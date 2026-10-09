@@ -9,7 +9,7 @@ using UnityEngine;
 /// </summary>
 public static class ClassRegistry
 {
-    private static Dictionary<string, ICharacterClass> _classes = new Dictionary<string, ICharacterClass>();
+    private static Dictionary<string, ICharacterClass> _classes = new Dictionary<string, ICharacterClass>(System.StringComparer.OrdinalIgnoreCase);
     private static List<ICharacterClass> _classList = new List<ICharacterClass>();
     private static bool _initialized = false;
 
@@ -70,10 +70,21 @@ public static class ClassRegistry
     public static ICharacterClass GetClass(string className)
     {
         Init();
-        if (_classes.TryGetValue(className, out ICharacterClass classDef))
+        if (className != null && _classes.TryGetValue(className, out ICharacterClass classDef))
             return classDef;
         Debug.LogWarning($"[ClassRegistry] Class not found: {className}");
         return null;
+    }
+
+    /// <summary>
+    /// Look up a class definition without logging a warning when the name is not registered (stand-in class
+    /// names on creatures, an empty name). Lookups ignore case.
+    /// </summary>
+    public static bool TryGetClass(string className, out ICharacterClass classDef)
+    {
+        Init();
+        classDef = null;
+        return !string.IsNullOrWhiteSpace(className) && _classes.TryGetValue(className, out classDef);
     }
 
     /// <summary>

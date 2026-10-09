@@ -7220,7 +7220,7 @@ public partial class GameManager
                 return null;
 
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-            int targetHD = target.Stats.HitDice > 0 ? target.Stats.HitDice : target.Stats.Level;
+            int targetHD = target.Stats.GetHitDice();
 
             // Create the attribute enhancement effect data
             AttributeEnhancementEffectData enhancementEffect = AttributeEnhancementEffectData.Create(
@@ -7814,7 +7814,7 @@ public partial class GameManager
                 break;
             case "CON":
                 target.Stats.CON += bonus;
-                int hpBonus = (bonus / 2) * target.Stats.Level;
+                int hpBonus = (bonus / 2) * target.Stats.GetHitDice(); // per Hit Die (CHR-071)
                 target.Stats.CurrentHP += hpBonus;
                 target.Stats.BonusMaxHP += hpBonus;
                 break;

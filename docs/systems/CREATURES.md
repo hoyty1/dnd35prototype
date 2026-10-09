@@ -81,7 +81,7 @@ For the step-by-step recipe and its pitfalls, follow "Add a monster or NPC" and 
 | Field group | Fields | Notes |
 |---|---|---|
 | Identity | `Id`, `Name`, `ChallengeRating` (string), `CreatureType`, `SizeCategory`, `CharacterAlignment` | CR null removes it from random generation and XP. Alignment is copied at spawn; unset on 212 entries (CRE-056) |
-| Hit dice and HP | `HitDice`, `BaseHitDieHP`, `Level`, `CharacterClass` | HitDice drives BAB and saves through the creature-type progression. HP double-counts CON (see the recipe pitfalls) |
+| Hit dice and HP | `HitDice`, `BaseHitDieHP`, `Level`, `CharacterClass` | HitDice drives BAB and saves through the creature-type progression and is the creature's HD for every HD-gated rule (`CharacterStats.GetHitDice`, CHR-071); `Level` is not. `BaseHitDieHP` is the MM total (CON included) and is the spawned creature's `MaxHP` (`ClassProgression.CreatureMaxHitPoints`, CHR-001); Toughness is still added again (CRE-041) |
 | Progression overrides | `BABOverride`, `BaseAttackBonusOverride`, `Fortitude/Reflex/WillSaveOverride` | `NPCDefinition.BAB` is never read at spawn (CRE-004) |
 | Attacks | `NaturalAttacks` (NaturalAttackDefinition: dice, `IsPrimary`, `PoisonOnHitId`, `HasDiseaseOnHit`, `ParalysisOnHitDC`, `PetrificationOnHitDC`, `EnergyDrainOnHit`, `AbilityDrainType/Amount`, `HasBloodDrain`, `BonusElementalDamage*`, `PhysicalDamageTypes`: bludgeoning, piercing and slashing flags, by default from the attack's name per MM p.312, read by sunder; CMB-138 lists the names without a type), `EquipmentIds` | On-hit riders are resolved in `CharacterController.TryApplyNaturalAttackOnHitEffects`. `IsPrimary` follows the MM full-attack line (secondary attacks -5, -2 with Multiattack, half STR to damage; MM p.312) |
 | Feats | `Feats` (bare names; parameter feats in the MM's 'Name (param)' form), `WeaponFocusChoice` | Copied into `CharacterStats.Feats` at spawn. Checked against the MM on 2026-10-08 for the attack-math feats (Multiattack, Weapon Finesse, Power Attack, Weapon Focus, Improved Natural Attack) and the primary/secondary flags; `Tests.Character.NpcFeatDataTests` keeps Multiattack to definitions with three or more natural attacks (MM p.304). The other feats are not audited yet, and parameter feats do nothing (CRE-045, CHR-008) |
@@ -348,7 +348,7 @@ Ordered by impact on "fights play like 3.5e".
    - Stench and grapple blood drain (CRE-031).
    - `BonusElementalDamage*`.
    - Swarm damage dice and poison (CRE-007, CRE-014); swarm AoOs and targeted-spell immunity (CMB-123, SPL-121).
-   - Allips and wraiths spawn dead (CRE-044).
+   - Undead and constructs stored with CON 0 (allip, wraith, ghoul and 12 more) spawn dead (CRE-044).
    - Destroy undead and constructs at 0 HP instead of making them disabled, dying or stable (CRE-051, MM p.307, p.317).
    - Engulf (CMB-024).
    - Terrain manipulation, which needs movement cost first (CRE-013).

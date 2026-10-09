@@ -159,7 +159,7 @@ public class AlignmentDetectionEffectData
             if (!CreatureMatchesDetection(creature, Type))
                 continue;
 
-            int hd = Mathf.Max(1, creature.Stats.Level);
+            int hd = creature.Stats.GetHitDice();
             DetectedCreatures.Add(new DetectedCreatureInfo
             {
                 Creature = creature,

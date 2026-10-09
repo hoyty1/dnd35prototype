@@ -1947,7 +1947,7 @@ public partial class GameManager : MonoBehaviour
                 bonusDamage: 0,
                 baseSpeed: data.BaseSpeed,
                 atkRange: 1,
-                baseHitDieHP: data.HP,
+                baseHitDieHP: data.BaseHitDieHP,
                 raceName: data.RaceName
             );
 

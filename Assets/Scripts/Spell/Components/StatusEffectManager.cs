@@ -827,8 +827,8 @@ public class StatusEffectManager : MonoBehaviour
                 // using Hit Dice (not Level). Skip generic HP calc for attribute enhancement spells.
                 if (sourceSpellId == null || !AttributeEnhancementEffectData.IsAttributeEnhancementSpell(sourceSpellId))
                 {
-                    // CON changes affect HP: +1 HP per level per +2 CON
-                    int hpChange = (_stats.Level * (bonus / 2));
+                    // CON changes affect HP: +1 HP per Hit Die per +2 CON (CHR-071)
+                    int hpChange = (_stats.GetHitDice() * (bonus / 2));
                     if (bonus > 0)
                         _stats.BonusMaxHP += hpChange;
                     else

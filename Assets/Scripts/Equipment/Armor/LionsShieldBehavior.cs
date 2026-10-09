@@ -240,6 +240,7 @@ public class LionsShieldBehavior : SpecificItemBehavior
         // the essential subset here. Missing: feat application, template processing,
         // swarm traits, spell resistance — acceptable for a summoned animal.
         int hitDice = Mathf.Max(1, def.HitDice > 0 ? def.HitDice : def.Level);
+        // The definition total is final (CON included); the constructor's CON term is undone below (CHR-001).
         int baseHp = def.BaseHitDieHP > 0 ? def.BaseHitDieHP : hitDice * 5;
         int resolvedBab = def.BAB > 0 ? def.BAB : (hitDice * 3 / 4);
 
@@ -260,6 +261,8 @@ public class LionsShieldBehavior : SpecificItemBehavior
             baseHitDieHP: baseHp
         );
 
+        stats.AdjustMaxHP(baseHp - stats.MaxHP);
+        stats.CurrentHP = stats.MaxHP;
         stats.SetNaturalAttacks(def.NaturalAttacks);
         stats.HitDice = hitDice;
         stats.NaturalArmorBonus = def.NaturalArmorBonus;

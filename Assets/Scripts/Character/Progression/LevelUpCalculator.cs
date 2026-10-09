@@ -164,60 +164,17 @@ public static class LevelUpCalculator
 
     private static int EstimateBabGain(string className, int newClassLevel)
     {
+        // From the class definition (CHR-002), as CharacterStats.BaseAttackBonus sums it.
         int oldClassLevel = Mathf.Max(0, newClassLevel - 1);
-        int oldBab = CalculateClassBab(className, oldClassLevel);
-        int newBab = CalculateClassBab(className, newClassLevel);
+        int oldBab = ClassProgression.GetClassBaseAttackBonus(className, oldClassLevel);
+        int newBab = ClassProgression.GetClassBaseAttackBonus(className, newClassLevel);
         return Mathf.Max(0, newBab - oldBab);
-    }
-
-    private static int CalculateClassBab(string className, int classLevel)
-    {
-        int safeLevel = Mathf.Max(0, classLevel);
-        switch (className)
-        {
-            case "Fighter":
-            case "Barbarian":
-            case "Paladin":
-            case "Ranger":
-                return safeLevel;
-            case "Cleric":
-            case "Druid":
-            case "Monk":
-            case "Rogue":
-                return (safeLevel * 3) / 4;
-            case "Wizard":
-            case "Sorcerer":
-            case "Bard":
-                return safeLevel / 2;
-            default:
-                return safeLevel;
-        }
     }
 
     private static int EstimateHpGain(string className, int conMod)
     {
-        int hitDie = GetHitDieSize(className);
-        int average = Mathf.CeilToInt(hitDie / 2f + 0.5f);
-        return Mathf.Max(1, average + conMod);
-    }
-
-    private static int GetHitDieSize(string className)
-    {
-        switch (className)
-        {
-            case "Barbarian": return 12;
-            case "Fighter":
-            case "Paladin":
-            case "Ranger": return 10;
-            case "Bard":
-            case "Cleric":
-            case "Druid":
-            case "Monk":
-            case "Rogue": return 8;
-            case "Sorcerer":
-            case "Wizard": return 4;
-            default: return 8;
-        }
+        int hitDie = ClassProgression.GetHitDie(className);
+        return ClassProgression.HitPointsForHitDie(ClassProgression.AverageHitDieResult(hitDie), conMod);
     }
 
     private static bool NeedsFeatAtLevel(int level)

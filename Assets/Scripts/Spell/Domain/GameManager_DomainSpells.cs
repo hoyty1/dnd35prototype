@@ -147,7 +147,7 @@ public partial class GameManager
 
         foreach (var target in animalTargets)
         {
-            int targetHD = Mathf.Max(1, target.Stats.Level);
+            int targetHD = target.Stats.GetHitDice();
             if (hdSpent + targetHD > hdBudget)
             {
                 sb.AppendLine($"  {target.Stats.CharacterName} ({targetHD} HD) — skipped (insufficient HD budget remaining: {hdBudget - hdSpent})");
@@ -534,7 +534,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int maxHD = casterLevel * 2; // 2 HD per caster level
-        int targetHD = Mathf.Max(1, target.Stats.Level);
+        int targetHD = target.Stats.GetHitDice();
 
         if (targetHD > maxHD)
         {

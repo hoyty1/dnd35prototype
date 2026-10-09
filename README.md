@@ -23,7 +23,7 @@ What follows comes from reading the code. Most of it has not been re-checked in 
 |---|---|
 | Fighter, Rogue, Barbarian, Cleric, Wizard, Sorcerer | Playable. Rage, sneak attack, evasion, Turn Undead, cleric domains (22) and spontaneous cure/inflict work. Known gap: the Destruction domain smite adds no damage. |
 | Monk | Playable, but features do not scale: d6 unarmed damage at every level, +10 ft fast movement from level 1, and exactly two flurry attacks. |
-| Bard | Spontaneous casting works. Of 9 bardic music abilities, only Inspire Courage can be started. BAB uses the 1/2 progression instead of 3/4 (`CharacterStats.CalculateClassBaseAttackBonus`). |
+| Bard | Spontaneous casting works. Of 9 bardic music abilities, only Inspire Courage can be started. BAB (3/4) and hit die (d6) come from the class definition (CHR-002, fixed 2026-10-08). |
 | Druid | Prepared casting works, up to 2nd-level spells. As with clerics, creation has no spell step; spells are prepared in the pre-combat hub. Wild shape and the animal companion are data only. |
 | Ranger, Paladin | Spell slots are shown, but there is no preparation or casting. Favored enemy, companion, Smite Evil, Lay on Hands and Divine Grace have no effect in play. |
 | Adept, Aristocrat, Commoner, Expert, Warrior | Registered for NPCs. PCs cannot take them (filtered in `CharacterCreationUI` and `LevelUpUI`). Adepts cannot cast. |

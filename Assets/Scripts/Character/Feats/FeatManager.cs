@@ -870,7 +870,7 @@ public static class FeatManager
         summonStats.BaseSTR += 4;
         summonStats.BaseCON += 4;
         // Recalculate HP for CON increase: +2 HP per hit die (from +4 CON = +2 mod)
-        int conHPBonus = 2 * Mathf.Max(1, summonStats.HitDice);
+        int conHPBonus = 2 * summonStats.GetHitDice();
         summonStats.AdjustMaxHP(conHPBonus);
         summonStats.CurrentHP += conHPBonus;
         Debug.Log($"[AugmentSummoning] {summonStats.CharacterName} gains +4 STR (now {summonStats.BaseSTR}), +4 CON (now {summonStats.BaseCON}), +{conHPBonus} HP");

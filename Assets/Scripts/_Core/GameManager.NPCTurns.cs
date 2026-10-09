@@ -203,7 +203,8 @@ public partial class GameManager
 
         // Smite uses Charisma modifier "if any"; clamp to 0 so low CHA never creates a penalty.
         int attackBonus = Mathf.Max(0, summon.Stats.CHAMod + 2);
-        int damageBonus = Mathf.Max(1, summon.Stats.Level + 2);
+        // HD, not Level, as TemplateSmiteSystem reads them (CHR-071); the +2 and the attack bonus are AI-056.
+        int damageBonus = Mathf.Max(1, summon.Stats.GetHitDice() + 2);
 
         summon.Stats.MoraleAttackBonus += attackBonus;
         summon.Stats.MoraleDamageBonus += damageBonus;
@@ -2100,7 +2101,7 @@ public partial class GameManager
                 continue;
 
             string targetName = target.Stats.CharacterName;
-            int targetHD = target.Stats.Level > 0 ? target.Stats.Level : 1;
+            int targetHD = target.Stats.GetHitDice();
 
             // Will save
             int roll = DiceRoller.D20();
