@@ -65,7 +65,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Lay on Hands, Wild Shape, Favored Enemy and other data-only class features | Never | | No | CHR-020, CHR-053 |
 | Single-target damage/debuff/control spell | Used | kiter, dragon, healer | Yes | AI-046 |
 | Area spells, metamagic | Never | refused at cast | Yes | AI-001; 11.8.2 |
-| Heal, buff | Partial | adjacent or self only; no cure for an undead or construct ally, no cure on an unhurt caster | Yes | AI-047; 11.8.6 |
+| Heal, buff | Partial | adjacent or self only; no cure for an undead or construct ally, no cure on an unhurt caster; when its one spell pick fails a Healer paces 4 squares from an enemy instead of reaching the hurt ally or attacking | Yes | AI-047, AI-063; 11.8.6 |
 | Inflict to heal an undead ally, cure to hurt an undead enemy | Never | the AI only avoids the wrong use (SPL-005) | Yes | AI-062; 11.8.6 |
 | Spontaneous cure/inflict conversion | Never | PC cast path only (GameManager.SpellCasting.cs:193) | Yes | 11.8.6 |
 | Hold the charge, discharge a held touch spell | Never | NPC touch spells resolve at once against an adjacent target | Yes | |

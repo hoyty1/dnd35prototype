@@ -343,7 +343,7 @@ Sticky target via `SwarmAI.ResolveTarget`. Moves directly onto the target's squa
 
 ### 5.6 Healer branch (197-257)
 
-`HealerAIProfile.DetermineActionPriority`: any ally (including itself, `Team ==`, AI-016) below 70% HP → Healing (≤25% → CriticalHealing); else castable spells and every ally ≥75% → Buffing; else castable → OffensiveSpell; else PhysicalAttack (`DetermineCombatMode`: kiter if AC < 16 or the ranged bonus is at least 2 higher than melee; melee if the melee bonus is at least 2 higher; otherwise melee only at AC ≥ 18. Melee then means DefensiveMelee or AggressiveMelee by behaviour). Heal and buff attempts call `TryExecuteSpellcastAction`; failure or OffensiveSpell → `ExecuteRangedKiterTurn`. The healer never moves to deliver a touch heal and can heal itself instead (AI-047). No database NPC uses this profile; only DMG Cleric spawns do, and those have no spells (ENC-021).
+`HealerAIProfile.DetermineActionPriority`: any ally (including itself, `Team ==`, AI-016) below 70% HP → Healing (≤25% → CriticalHealing); else castable spells and every ally ≥75% → Buffing; else castable → OffensiveSpell; else PhysicalAttack (`DetermineCombatMode`: kiter if AC < 16 or the ranged bonus is at least 2 higher than melee; melee if the melee bonus is at least 2 higher; otherwise melee only at AC ≥ 18. Melee then means DefensiveMelee or AggressiveMelee by behaviour). Heal and buff attempts call `TryExecuteSpellcastAction`; failure or OffensiveSpell → `ExecuteRangedKiterTurn`. The healer never moves to deliver a touch heal or buff and can buff itself instead (AI-047); since SPL-005 it casts no cure when nobody within the spell's range is hurt. `TryExecuteSpellcastAction` tries only the one spell `SelectSpell` picks, so when that pick has no target (a hurt ally beyond touch range) or is refused (Bless, an area spell, AI-001), the kiter fallback moves the healer to its preferred range of 4 squares (`HealingRangeSquares`) from an enemy and ends the turn; it attacks only once no prepared slot is left (AI-063; in the batch 7 soak, docs/TESTING.md 3.5, the AI-run cleric moved on 387 of its 414 turns, 298 of them Healing turns with the hurt ally out of reach). No database NPC uses this profile. In play only DMG Cleric spawns get it (`DungeonEncounterSpawner`), and those have no spells (ENC-021), so they take the PhysicalAttack branch. With spells it is reached by the scenario harness, which gives it to AI-run party clerics and druids (`Tests/Scenarios/AiProfileForClass.cs`), and by Cleric and Adept definitions built by `QuickSpawnSystem` through `NPCTemplateAIConfigurator.GetProfileArchetypeForClass` (called only by tests).
 
 ### 5.7 `GameManager.AI_SummonedCreature` (NPCTurns.cs:79)
 
@@ -516,7 +516,7 @@ Scale problems (school ×10 dominating, overlapping pre-buff bonuses): AI-022. T
 ### 7.4 Spell targeting (`AISpellcastingStrategist.SelectBestSpellTarget`, 226)
 
 - Self spells: the caster.
-- Ally spells (Healing, non-Area Buff, SingleAlly): `SelectBestAllyTarget` scores allies in range (healing by missing HP, frontliner bonus; buff skipped if already active); returns the **caster** if no ally is in range. Touch range means adjacent only, so a healer often heals itself (AI-047).
+- Ally spells (Healing, non-Area Buff, SingleAlly): `SelectBestAllyTarget` scores allies in range (healing by missing HP, frontliner bonus; buff skipped if already active); returns no target for a healing spell when no ally in range is hurt (an unhurt ally, an undead and a construct score negative infinity, SPL-005), and the **caster** for a buff when no ally is in range. Touch range means adjacent only, so a healer often buffs itself (AI-047).
 - Enemy spells: Mirror Image target in range wins; else `ScoreEnemyTarget` (wounded, casters, save exploit, resistance, kill bonus, SR). The SR chance is computed as `(CL + 1 - SR)/20` instead of `(21 + CL - SR)/20` (PHB ch.10, Spell Resistance), so moderately resistant targets look unbeatable (AI-046). A `CanSee` check (miss chance below 50%, not line of sight, GRID-009) applies only to SingleEnemy spells. No Sanctuary (AI-005), creature-type, HD or immunity filtering. Falls back to the passed target, which in the Healer branch is a wounded ally (AI-047).
 - Team checks use raw `Team` comparisons (AI-016).
 
@@ -653,7 +653,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | AI-045 | The kiter's approach branch ends the turn with the standard action unused |
 | CMB-077 | Natural attacks are used only when no weapon is equipped (no weapon plus secondary naturals) |
 | AI-046 | The strategist's SR chance `(CL+1-SR)/20` is 20 points too low |
-| AI-047 | The healer heals itself when no ally is adjacent, never moves to touch, and can aim an offensive spell at its wounded ally |
+| AI-047 | The healer buffs itself when no ally is adjacent, never moves to touch (Med since the batch 7 soak: 298 of the AI-run cleric's 414 turns had a hurt ally out of touch range), and can aim an offensive spell at its wounded ally |
 | AI-048 | The domain spell term rewards any spell on any domain list |
 | SPL-091 | NPC Summon, Escape and the Divination and Utility casts without an `ApplySpellBuff` branch spend the slot with no effect (Dispel Magic, Break Enchantment and Remove Fear work since SPL-037) |
 | SPL-092 | NPC casts ignore Silence |
@@ -673,6 +673,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | CMB-121 | A creature cannot join a grapple in progress; the refused attempt still uses the attack, and the chooser offers it again every round (103 refused attempts in the 50-fight soak) |
 | AI-059 | The AI tries targeted spells against swarms, which are immune (trips are refused by `CanTrip` since CMB-079); with no area spells (AI-001) an AI-run party cannot hurt a swarm (seen in the soak) |
 | AI-060 | The per-turn maneuver stopgap (no maneuver after one succeeds, no retry of a failed type against the same target; owner decision 2026-10-07) is to be replaced by weighted personality scoring ([design](../designs/enemy_ai_knowledge_and_personalities.md) section 7, Increment 1) |
+| AI-063 | When its one spell pick fails (a hurt ally out of touch range, AI-047, or a refused or targetless buff), a Healer moves to 4 squares from an enemy every turn and never attacks while it holds a spell (seen in the batch 7 soak: the AI-run cleric moved on 387 of 414 turns) |
 
 ## 11. Extension points
 
