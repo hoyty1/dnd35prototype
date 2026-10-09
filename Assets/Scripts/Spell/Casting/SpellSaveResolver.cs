@@ -184,16 +184,18 @@ public static class SpellSaveResolver
     // ════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Roll a saving throw for a target against a spell DC.
+    /// Roll a saving throw for a target against a spell DC, with the shared save modifier (SaveRules, CHR-018).
     /// </summary>
     /// <param name="target">The character making the save.</param>
     /// <param name="type">Fort, Reflex, or Will.</param>
     /// <param name="dc">The spell DC to meet or exceed.</param>
+    /// <param name="context">What the save is against (usually SaveContext.ForSpell(spell, caster)); null gives only
+    /// the bonuses that apply to every save.</param>
     /// <returns>A SaveResult with all roll details.</returns>
-    public static SaveResult RollSave(CharacterController target, SaveType type, int dc)
+    public static SaveResult RollSave(CharacterController target, SaveType type, int dc, SaveContext context = null)
     {
         int roll = DiceRoller.D20();
-        int modifier = GetSaveModifier(target, type);
+        int modifier = SaveRules.Modifier(target != null ? target.Stats : null, type, context);
         int total = roll + modifier;
 
         return new SaveResult
@@ -210,10 +212,10 @@ public static class SpellSaveResolver
     /// <summary>
     /// Roll a saving throw using CharacterStats directly (for cases where CharacterController is unavailable).
     /// </summary>
-    public static SaveResult RollSave(CharacterStats stats, SaveType type, int dc)
+    public static SaveResult RollSave(CharacterStats stats, SaveType type, int dc, SaveContext context = null)
     {
         int roll = DiceRoller.D20();
-        int modifier = GetSaveModifier(stats, type);
+        int modifier = SaveRules.Modifier(stats, type, context);
         int total = roll + modifier;
 
         return new SaveResult
@@ -281,7 +283,7 @@ public static class SpellSaveResolver
     public static SpellDefenseResult ResolveSpellDefenses(
         CharacterController caster, CharacterController target,
         int casterLevel, SaveType saveType, int saveDC,
-        bool spellAllowsSR = true)
+        bool spellAllowsSR = true, SaveContext context = null)
     {
         var result = new SpellDefenseResult();
 
@@ -300,7 +302,7 @@ public static class SpellSaveResolver
         // Save (only if SR didn't block)
         if (!result.BlockedBySR)
         {
-            result.Save = RollSave(target, saveType, saveDC);
+            result.Save = RollSave(target, saveType, saveDC, context ?? SaveContext.ForSpell(null, caster != null ? caster.Stats : null));
         }
 
         return result;
@@ -370,27 +372,5 @@ public static class SpellSaveResolver
     //  Internal Helpers
     // ════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Get the appropriate save modifier for a CharacterController.
-    /// </summary>
-    private static int GetSaveModifier(CharacterController target, SaveType type)
-    {
-        if (target?.Stats == null) return 0;
-        return GetSaveModifier(target.Stats, type);
-    }
-
-    /// <summary>
-    /// Get the appropriate save modifier from CharacterStats.
-    /// </summary>
-    private static int GetSaveModifier(CharacterStats stats, SaveType type)
-    {
-        if (stats == null) return 0;
-        return type switch
-        {
-            SaveType.Fortitude => stats.FortitudeSave,
-            SaveType.Reflex => stats.ReflexSave,
-            SaveType.Will => stats.WillSave,
-            _ => 0
-        };
-    }
+    // The save modifier is SaveRules.Modifier (CHR-018): one computation for every save roll.
 }

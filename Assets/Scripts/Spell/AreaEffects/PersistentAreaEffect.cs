@@ -664,6 +664,17 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     }
 
     /// <summary>
+    /// <paramref name="character"/>'s save modifier against this effect's spell (SaveRules, CHR-018): every bonus that
+    /// applies to all saves plus those against the spell (racial, Still Mind, morale against fear, ...).
+    /// </summary>
+    protected int SpellSaveModifier(CharacterController character, SavingThrowType save)
+    {
+        if (character == null || character.Stats == null)
+            return 0;
+        return SaveRules.Modifier(character.Stats, save, SaveContext.ForSpellId(SpellId, Caster != null ? Caster.Stats : null));
+    }
+
+    /// <summary>
     /// Deals this effect's spell damage of one type to <paramref name="character"/> through the shared path
     /// (<see cref="GameManager.DealDamage"/>: immunity and resistance apply, damage reduction does not, MM p.307; then
     /// the concentration and death checks; SPL-004). <paramref name="savedForHalf"/>: a successful Reflex save for half.

@@ -61,7 +61,7 @@ public class FireballAreaEffect : PersistentAreaEffect
             damage += DiceRoller.D6(); // 1d6
 
         int roll = DiceRoller.D20();
-        int reflexSave = character.Stats.ReflexSave;
+        int reflexSave = SpellSaveModifier(character, SavingThrowType.Reflex);
         int total = roll + reflexSave;
 
         bool saveSucceeded = total >= SaveDC;

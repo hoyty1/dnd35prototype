@@ -121,7 +121,7 @@ public partial class GameManager
                 else
                 {
                     // Unwilling target — Fort save to negate
-                    var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
+                    var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                     CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Fort Save ({target.Stats.CharacterName}): d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}"));
 
                     if (saveResult.Saved)

@@ -121,7 +121,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 110;
+        public const int Count = 111;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -233,6 +233,7 @@ namespace Tests.Scenarios
             yield return S("class-progression", ClassProgressionHpBabHd);
             yield return S("creature-progression", CreatureProgression);
             yield return S("spell-save-dc", SpellSaveDc);
+            yield return S("save-bonuses", SaveBonuses);
             yield return S("spell-durations", SpellDurations);
             yield return S("spell-damage-mitigation", SpellDamageMitigation);
             yield return S("spell-dice-undead", SpellDiceUndead);
@@ -5060,6 +5061,152 @@ namespace Tests.Scenarios
                     return ExpectResult.Pass(string.Join(", ", got));
                 })
                 .Build();
+        }
+
+        // ── Save bonuses (CHR-018) ──────────────────────────────────────
+
+        private const string SaveBonusNotePrefix = "save-bonus expect ";
+
+        /// <summary>
+        /// CHR-018: the one save modifier (CharacterStats.GetSaveTotal and SaveRules) applies every save bonus source on
+        /// the real cast path. Four Stats party actors each make a Will save against Daze (Sor/Wiz/Brd 0, Enchantment
+        /// (Compulsion), Will negates, PHB p.217) cast by its own neutral_mage_test (Wizard 3) through the NPC cast
+        /// executor (SpellCaster.Cast, the resolver the PC and NPC single-target pipelines share): a human paladin 3 with
+        /// CHA 16 (Divine Grace +3 on all saves, PHB p.44), a halfling fighter 4 (+1 racial on all saves, PHB p.20), an elf
+        /// fighter 4 (+2 racial against enchantment spells or effects, PHB p.16) and a dwarf fighter 4 (+2 racial against
+        /// spells, PHB p.15). Before CHR-018 none of these was added. The paladin's Assert step records each expected Will
+        /// modifier from its parts (WIS modifier + base save + the one bonus), independently of SaveRules, after checking
+        /// that no other save bonus is on the actor; then it exposes the dwarf to Medium Spider Venom through
+        /// CharacterController.ApplyPoison, whose initial Fortitude save must carry the dwarf's +2 against poison. The same
+        /// step checks the paladin's Aura of Courage (PHB p.44) through the live combatant list: the halfling, 2 squares
+        /// (10 ft) from her, has +4 morale against fear (not +4 plus its own +2: morale bonuses do not stack, PHB p.171),
+        /// the elf, 4 squares away, has nothing extra, and the paladin, immune to fear, is not frightened by
+        /// GameManager.ApplyCondition. The last Expect matches each Daze log ("Target: NAME" ... "Roll: d20 + MOD") and the
+        /// poison save line against the notes.
+        /// </summary>
+        private static ScenarioDef SaveBonuses()
+        {
+            string[] keys = { "paladin", "halfling", "elf", "dwarf" };
+            return Rules("rules/save-bonuses", "Divine Grace, Aura of Courage and racial save bonuses reach the spell, poison and fear saves (PHB p.44, p.15-20; CHR-018)")
+                .Covers("CHR-018", "PHB p.44", "PHB p.15", "PHB p.16", "PHB p.20", "PHB p.217", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("paladin", ActorSource.Stats(() => SaveBonusActor("Saving Paladin", "Paladin", 3, "Human", 16)), 5, 8, Control.Scripted)
+                .Pc("halfling", ActorSource.Stats(() => SaveBonusActor("Saving Halfling", "Fighter", 4, "Halfling", 10)), 5, 10, Control.Idle)
+                .Pc("elf", ActorSource.Stats(() => SaveBonusActor("Saving Elf", "Fighter", 4, "Elf", 10)), 5, 12, Control.Idle)
+                .Pc("dwarf", ActorSource.Stats(() => SaveBonusActor("Saving Dwarf", "Fighter", 4, "Dwarf", 10)), 5, 14, Control.Idle)
+                .Npc("mage1", "neutral_mage_test", 9, 8, Control.Scripted)
+                .Npc("mage2", "neutral_mage_test", 9, 10, Control.Scripted)
+                .Npc("mage3", "neutral_mage_test", 9, 12, Control.Scripted)
+                .Npc("mage4", "neutral_mage_test", 9, 14, Control.Scripted)
+                .Initiative("paladin", "mage1", "mage2", "mage3", "mage4", "halfling", "elf", "dwarf")
+                .Turn("paladin", 1, Step.Assert("Each actor's Will modifier is its WIS + base save + its one bonus, the dwarf's poison save carries +2, and the Aura of Courage works", ctx =>
+                {
+                    var bonus = new Dictionary<string, int> { { "paladin", 3 }, { "halfling", 1 }, { "elf", 2 }, { "dwarf", 2 } };
+                    bool ok = true;
+                    foreach (string key in keys)
+                    {
+                        CharacterStats s = ctx.Get(key).Stats;
+                        int others = s.EffectiveResistanceSaveBonus + s.EffectiveCompetenceSaveBonus + s.EquipmentLuckSaveBonus
+                            + s.MoraleSaveBonus + s.FeatWillBonus + s.ConditionWillModifier;
+                        if (others != 0)
+                        {
+                            ctx.Note("save-bonus mismatch: " + key + " carries other save bonuses (" + others + ")");
+                            ok = false;
+                        }
+                        ctx.Note(SaveBonusNotePrefix + "Daze|" + s.CharacterName + "=" + (s.WISMod + s.ClassWillSave + bonus[key]));
+                    }
+                    // Aura of Courage (PHB p.44): +4 morale against fear within 10 ft, the best morale bonus only.
+                    CharacterStats halfling = ctx.Get("halfling").Stats;
+                    int halflingFear = SaveRules.Modifier(halfling, SavingThrowType.Will, SaveContext.Fear);
+                    int halflingWant = halfling.WISMod + halfling.ClassWillSave + 1 + 4;
+                    if (halflingFear != halflingWant)
+                    {
+                        ctx.Note("save-bonus mismatch: halfling 10 ft from the paladin has Will " + halflingFear + " against fear, expected " + halflingWant);
+                        ok = false;
+                    }
+                    CharacterStats elf = ctx.Get("elf").Stats;
+                    int elfFear = SaveRules.Modifier(elf, SavingThrowType.Will, SaveContext.Fear);
+                    if (elfFear != elf.WISMod + elf.ClassWillSave)
+                    {
+                        ctx.Note("save-bonus mismatch: elf 20 ft from the paladin has Will " + elfFear + " against fear, expected no bonus");
+                        ok = false;
+                    }
+                    CharacterController paladin = ctx.Get("paladin");
+                    GameManager.Instance.ApplyCondition(paladin, CombatConditionType.Frightened, 3, ctx.Get("mage1"));
+                    if (GameManager.Instance.HasCondition(paladin, CombatConditionType.Frightened))
+                    {
+                        ctx.Note("save-bonus mismatch: the paladin 3 was frightened despite Aura of Courage");
+                        ok = false;
+                    }
+                    ctx.Note("save-bonus aura: halfling fear Will " + CharacterStats.FormatMod(halflingFear) + ", elf " + CharacterStats.FormatMod(elfFear) + ", paladin frightened " + GameManager.Instance.HasCondition(paladin, CombatConditionType.Frightened));
+
+                    CharacterController dwarf = ctx.Get("dwarf");
+                    ctx.Note(SaveBonusNotePrefix + "Poison|" + dwarf.Stats.CharacterName + "=" + (dwarf.Stats.CONMod + dwarf.Stats.ClassFortSave + 2));
+                    dwarf.ApplyPoison("medium_spider_poison");
+                    return ok;
+                }))
+                .Turn("mage1", 1, Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "paladin"))
+                .Turn("mage2", 1, Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "halfling"))
+                .Turn("mage3", 1, Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "elf"))
+                .Turn("mage4", 1, Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "dwarf"))
+                .Expect("Every save-bonus check holds", Expect.AssertsPass())
+                .Expect("All four Daze casts ran", Expect.All(
+                    Expect.StepStatus("mage1", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("mage2", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("mage3", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("mage4", 1, "Cast", 0, "done")))
+                .Expect("Each logged save uses the expected modifier: Divine Grace +3, halfling +1, elf +2 against enchantment, dwarf +2 against spells and poison", v =>
+                {
+                    List<TraceEvent> notes = v.Of("note").Where(e => (e.Str("text") ?? "").StartsWith(SaveBonusNotePrefix, StringComparison.Ordinal)).ToList();
+                    if (notes.Count != 5)
+                        return ExpectResult.Inconclusive(notes.Count + " expected modifiers recorded, not 5");
+                    var poisonSave = new System.Text.RegularExpressions.Regex(@"Initial save: d20\(\d+\) \+ (-?\d+) = ");
+                    var got = new List<string>();
+                    foreach (TraceEvent note in notes)
+                    {
+                        string body = note.Str("text").Substring(SaveBonusNotePrefix.Length);
+                        int bar = body.IndexOf('|');
+                        int eq = body.LastIndexOf('=');
+                        string what = body.Substring(0, bar);
+                        string name = body.Substring(bar + 1, eq - bar - 1);
+                        int expected = int.Parse(body.Substring(eq + 1));
+                        System.Text.RegularExpressions.Regex r;
+                        TraceEvent log;
+                        if (what == "Daze")
+                        {
+                            r = new System.Text.RegularExpressions.Regex("Target: " + System.Text.RegularExpressions.Regex.Escape(name) + @"[\s\S]*?Roll: \d+ \+ (-?\d+) = ");
+                            log = v.Of("log").FirstOrDefault(e => r.IsMatch(e.Str("text") ?? ""));
+                        }
+                        else
+                        {
+                            // The exposure and the save are separate log lines: the first save line after the exposure.
+                            r = poisonSave;
+                            TraceEvent exposure = v.Of("log").FirstOrDefault(e => (e.Str("text") ?? "").Contains(name + " is exposed to Medium Spider Venom"));
+                            log = exposure == null ? null : v.Of("log").FirstOrDefault(e => e.Seq >= exposure.Seq && poisonSave.IsMatch(e.Str("text") ?? ""));
+                        }
+                        if (log == null)
+                            return ExpectResult.Inconclusive("no " + what + " save logged for " + name);
+                        int mod = int.Parse(r.Match(log.Str("text")).Groups[1].Value);
+                        if (mod != expected)
+                            return ExpectResult.Fail(name + " " + what + " save modifier " + mod + ", expected " + expected, log.Seq, note.Seq);
+                        got.Add(name + " " + what + " " + CharacterStats.FormatMod(mod));
+                    }
+                    return ExpectResult.Pass(string.Join(", ", got));
+                })
+                .Build();
+        }
+
+        /// <summary>A save-bonus scenario actor: WIS 10, CHA as given, no feats; BAB through BaseAttackBonusOverride.</summary>
+        private static CharacterStats SaveBonusActor(string name, string cls, int level, string race, int cha)
+        {
+            var s = new CharacterStats(
+                name: name, level: level, characterClass: cls,
+                str: 14, dex: 12, con: 14, wis: 10, intelligence: 10, cha: cha,
+                bab: level, armorBonus: 0, shieldBonus: 0,
+                damageDice: 8, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 8 * level, raceName: race);
+            s.BaseAttackBonusOverride = level;
+            return s;
         }
 
         /// <summary>

@@ -76,14 +76,19 @@ public class RaceData
     /// </summary>
     public int StabilityBonus;
 
-    // ========== RACIAL SAVING THROW BONUSES (for future) ==========
-    /// <summary>Bonus on saves vs poison (Dwarf = +2).</summary>
+    // ========== RACIAL SAVING THROW BONUSES ==========
+    // Read by CharacterStats.RacialAllSavesBonus (every save) and SaveRules.SituationalBonus (the rest), CHR-018.
+
+    /// <summary>Racial bonus on all saving throws (Halfling = +1, PHB p.20).</summary>
+    public int SaveBonusAllSaves;
+
+    /// <summary>Racial bonus on saves vs poison (Dwarf = +2, PHB p.15).</summary>
     public int SaveVsPoison;
 
-    /// <summary>Bonus on saves vs spells/spell-like effects (Dwarf = +2).</summary>
+    /// <summary>Racial bonus on saves vs spells and spell-like effects (Dwarf = +2, PHB p.15).</summary>
     public int SaveVsSpells;
 
-    /// <summary>Bonus on saves vs enchantment (Elf = +2).</summary>
+    /// <summary>Racial bonus on saves vs enchantment spells or effects (Elf and Half-Elf = +2, PHB p.16, p.18).</summary>
     public int SaveVsEnchantment;
 
     // ========== RACIAL SKILL BONUSES (for future) ==========
@@ -94,10 +99,10 @@ public class RaceData
     public Dictionary<string, int> RacialSkillBonuses = new Dictionary<string, int>();
 
     // ========== RACIAL SAVING THROW BONUSES (additional) ==========
-    /// <summary>Bonus on saves vs illusions (Gnome = +2).</summary>
+    /// <summary>Racial bonus on saves vs illusions (Gnome = +2, PHB p.17).</summary>
     public int SaveVsIllusion;
 
-    /// <summary>Bonus on saves vs fear (Halfling = +2).</summary>
+    /// <summary>Morale bonus on saves vs fear (Halfling = +2, PHB p.20); it stacks with the racial bonus on all saves.</summary>
     public int SaveVsFear;
 
     // ========== RACIAL THROWN/SLING BONUS ==========

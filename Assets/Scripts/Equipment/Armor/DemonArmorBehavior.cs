@@ -100,7 +100,8 @@ public class DemonArmorBehavior : SpecificItemBehavior
         Log($"Claw attack: {damage} damage to {target.Stats.CharacterName}");
 
         // Contagion effect: Fort save DC 14
-        var save = SavingThrowResolver.ResolveFortitudeSave(target.Stats, ContagionDC, "Demon Armor contagion");
+        var save = SavingThrowResolver.ResolveFortitudeSave(target.Stats, ContagionDC, "Demon Armor contagion",
+            SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.CONTAGION));
         if (!save.Succeeded)
         {
             // Apply sickened as contagion proxy (disease effect)

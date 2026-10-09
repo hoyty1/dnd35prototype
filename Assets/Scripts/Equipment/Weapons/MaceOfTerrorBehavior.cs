@@ -49,7 +49,8 @@ public class MaceOfTerrorBehavior : SpecificItemBehavior
             return true; // Use is expended regardless
         }
 
-        var save = SavingThrowResolver.ResolveWillSave(target.Stats, FearDC, "Mace of Terror");
+        var save = SavingThrowResolver.ResolveWillSave(target.Stats, FearDC, "Mace of Terror",
+            SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.FEAR));
 
         if (!save.Succeeded)
         {

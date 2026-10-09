@@ -148,7 +148,7 @@ public partial class GameManager
         int spellDC = GetSpellSaveDC(caster, spell);
         int targetHD = TeamUtility.GetHitDice(target);
         int saveDC = spellDC - targetHD + casterLevel;
-        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDC);
+        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDC, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
         bool saveSuccess = saveResult.Saved;
         Debug.Log($"[Dismissal] DC {saveDC} = spell DC {spellDC} - {targetHD} HD + CL {casterLevel}");
 

@@ -616,7 +616,7 @@ public partial class GameManager
 
             int saveDC = GetHighestGreaseSaveDCAtCell(currentCell);
             int roll = DiceRoller.D20();
-            int reflex = mover.Stats.ReflexSave;
+            int reflex = SaveRules.Modifier(mover.Stats, SavingThrowType.Reflex, SaveContext.ForSpellId(SpellNames.GREASE)); // CHR-018
             int total = roll + reflex;
             bool success = total >= saveDC;
 
@@ -666,13 +666,14 @@ public partial class GameManager
 
         int saveDC = GetSpellSaveDC(caster, _pendingSpell);
         int roll = DiceRoller.D20();
-        int total = roll + target.Stats.ReflexSave;
+        int greaseReflexMod = SaveRules.Modifier(target.Stats, SavingThrowType.Reflex, SaveContext.ForSpell(_pendingSpell, caster.Stats)); // CHR-018
+        int total = roll + greaseReflexMod;
         bool saveSucceeded = total >= saveDC;
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════");
         sb.AppendLine($"✨ {caster.Stats.CharacterName} casts Grease on {target.Stats.CharacterName}'s {targetItem.Name}!");
-        sb.AppendLine($"Reflex save: d20({roll}) + {target.Stats.ReflexSave} = {total} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
+        sb.AppendLine($"Reflex save: d20({roll}) + {greaseReflexMod} = {total} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
         if (_isGreaseTestEncounter)
             sb.AppendLine("[TEST] Greased-object validation: failed save should force immediate weapon drop.");
 
@@ -770,7 +771,7 @@ public partial class GameManager
             if (TryFindGreasedItemHolder(effect.Item, out CharacterController holder, out EquipSlot slot))
             {
                 int roll = DiceRoller.D20();
-                int reflex = holder.Stats != null ? holder.Stats.ReflexSave : 0;
+                int reflex = SaveRules.Modifier(holder.Stats, SavingThrowType.Reflex, SaveContext.ForSpellId(SpellNames.GREASE)); // CHR-018
                 int total = roll + reflex;
                 bool saveSucceeded = total >= effect.SaveDC;
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("🛢", $"Greased item check: {holder.Stats.CharacterName} d20({roll}) + {reflex} = {total} vs DC {effect.SaveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}."));
@@ -822,7 +823,7 @@ public partial class GameManager
             return true;
 
         int roll = DiceRoller.D20();
-        int reflex = actor.Stats.ReflexSave;
+        int reflex = SaveRules.Modifier(actor.Stats, SavingThrowType.Reflex, SaveContext.ForSpellId(SpellNames.GREASE)); // CHR-018
         int total = roll + reflex;
         bool saveSucceeded = total >= effect.SaveDC;
 

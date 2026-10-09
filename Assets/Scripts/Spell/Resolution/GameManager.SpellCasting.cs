@@ -4895,7 +4895,7 @@ public partial class GameManager
             }
 
             int saveRoll = DiceService.D20("Hypnotism Will save");
-            int saveTotal = saveRoll + target.Stats.WillSave + saveContextModifier;
+            int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)) + saveContextModifier; // CHR-018
             bool saved = saveTotal >= saveDc;
             if (saved)
             {
@@ -5037,7 +5037,7 @@ public partial class GameManager
             }
 
             int saveRoll = DiceService.D20("Sleep Will save");
-            int saveTotal = saveRoll + target.Stats.WillSave + SpellCaster.LullabySleepSavePenalty(target, _pendingSpell); // Lullaby -2 (PHB p.249)
+            int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)) + SpellCaster.LullabySleepSavePenalty(target, _pendingSpell); // Lullaby -2 (PHB p.249); CHR-018
             if (saveTotal >= saveDc)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
@@ -5148,7 +5148,7 @@ public partial class GameManager
 
             // Will save
             int saveRoll = DiceService.D20("Color Spray Will save");
-            int saveTotal = saveRoll + target.Stats.WillSave + SpellCaster.LullabySleepSavePenalty(target, _pendingSpell); // Lullaby -2 vs Deep Slumber (PHB p.249)
+            int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)) + SpellCaster.LullabySleepSavePenalty(target, _pendingSpell); // Lullaby -2 vs Deep Slumber (PHB p.249); CHR-018
             if (saveTotal >= saveDc)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
@@ -5224,7 +5224,7 @@ public partial class GameManager
             }
 
             int saveRoll = DiceService.D20("Dazing Touch Will save");
-            int saveTotal = saveRoll + target.Stats.WillSave;
+            int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)); // CHR-018
             if (saveTotal >= saveDc)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
@@ -5739,7 +5739,9 @@ public partial class GameManager
             if (distance > ghoulEffect.StenchRadiusSquares) continue;
 
             // Fort save vs sickened
-            int fortSave = DiceService.D20("Ghoul Touch Fort save") + (creature.Stats != null ? creature.Stats.FortitudeSave : 0);
+            // The stench is a poison effect of the spell (PHB p.235): spell and poison bonuses apply (SaveRules, CHR-018).
+            int fortSave = DiceService.D20("Ghoul Touch Fort save")
+                + SaveRules.Modifier(creature.Stats, SavingThrowType.Fortitude, new SaveContext(spell: true, poison: true, label: "Ghoul Touch stench"));
             bool saved = fortSave >= spellDC;
 
             if (saved)
@@ -5966,7 +5968,8 @@ public partial class GameManager
 
             // Will save
             int saveRoll = DiceService.D20("Fear Will save");
-            int saveTotal = saveRoll + target.Stats.WillSave;
+            int fearWillMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(_pendingSpell, caster != null ? caster.Stats : null)); // CHR-018
+            int saveTotal = saveRoll + fearWillMod;
             bool saveSuccess = saveTotal >= saveDc;
 
             if (saveSuccess)
@@ -5989,7 +5992,7 @@ public partial class GameManager
                 }
 
                 shakenCount++;
-                logBuilder.AppendLine($"  • {targetName}: Will d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} ≥ DC {saveDc} — Shaken for 1 round.");
+                logBuilder.AppendLine($"  • {targetName}: Will d20({saveRoll}) + {fearWillMod} = {saveTotal} ≥ DC {saveDc} — Shaken for 1 round.");
             }
             else
             {
@@ -6039,7 +6042,7 @@ public partial class GameManager
                 target.ApplyScareEffect(scareData);
 
                 panickedCount++;
-                logBuilder.AppendLine($"  • {targetName}: Will d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} < DC {saveDc} — PANICKED for {panickedRounds} rounds!");
+                logBuilder.AppendLine($"  • {targetName}: Will d20({saveRoll}) + {fearWillMod} = {saveTotal} < DC {saveDc} — PANICKED for {panickedRounds} rounds!");
             }
         }
 

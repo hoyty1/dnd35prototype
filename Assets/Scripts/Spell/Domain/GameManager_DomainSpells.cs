@@ -156,7 +156,7 @@ public partial class GameManager
 
             // Will save
             int willRoll = DiceRoller.D20();
-            int willMod = target.Stats.WillSave;
+            int willMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null)); // CHR-018
             int willTotal = willRoll + willMod;
             bool savePassed = willTotal >= saveDc;
 
@@ -238,7 +238,7 @@ public partial class GameManager
 
             // Will save
             int willRoll = DiceRoller.D20();
-            int willMod = target.Stats.WillSave;
+            int willMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null)); // CHR-018
             int willTotal = willRoll + willMod;
             bool savePassed = willTotal >= saveDc;
 

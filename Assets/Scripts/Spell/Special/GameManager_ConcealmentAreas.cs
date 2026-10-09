@@ -354,7 +354,8 @@ public partial class GameManager
 
                 bool blinded = false;
                 int saveRoll = DiceRoller.D20();
-                int saveTotal = saveRoll + target.Stats.WillSave;
+                int glitterWillMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.ForSpell(spell, caster.Stats)); // CHR-018
+                int saveTotal = saveRoll + glitterWillMod;
                 if (saveTotal < saveDc)
                 {
                     blinded = true;
@@ -381,8 +382,8 @@ public partial class GameManager
                 affectedCount++;
 
                 string blindText = blinded
-                    ? $"FAILED Will d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} vs DC {saveDc} → BLINDED"
-                    : $"Will d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} vs DC {saveDc} → not blinded";
+                    ? $"FAILED Will d20({saveRoll}) + {glitterWillMod} = {saveTotal} vs DC {saveDc} → BLINDED"
+                    : $"Will d20({saveRoll}) + {glitterWillMod} = {saveTotal} vs DC {saveDc} → not blinded";
 
                 sb.AppendLine($"  • {target.Stats.CharacterName}: outlined in golden dust; {blindText}.");
 

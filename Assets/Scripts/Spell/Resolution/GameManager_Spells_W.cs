@@ -381,7 +381,7 @@ public partial class GameManager
     private bool RollWallOfIceReflexSave(CharacterController creature, int dc, out int roll, out int total)
     {
         roll = DiceRoller.D20();
-        int reflexMod = creature.Stats.ReflexSave;
+        int reflexMod = SaveRules.Modifier(creature.Stats, SavingThrowType.Reflex, SaveContext.ForSpellId(SpellNames.WALL_OF_ICE)); // CHR-018
         total = roll + reflexMod;
         bool success = total >= dc;
 
@@ -521,7 +521,7 @@ public partial class GameManager
 
             if (success)
             {
-                saveLog.AppendLine($"🛡 {name} attempts Reflex save (DC {saveDC}): d20({roll}) + {aiCreature.Stats.ReflexSave} = {total} — SUCCESS!");
+                saveLog.AppendLine($"🛡 {name} attempts Reflex save (DC {saveDC}): d20({roll}) + {total - roll} = {total} — SUCCESS!");
                 saveLog.AppendLine($"  💥 {name} disrupts the Wall of Ice by moving into the wall's space!");
                 aiDisruptor = aiCreature;
                 aiDisruptorTargetCell = FindClosestWallCell(aiCreature, aoeCells);
@@ -529,7 +529,7 @@ public partial class GameManager
             }
             else
             {
-                saveLog.AppendLine($"🛡 {name} attempts Reflex save (DC {saveDC}): d20({roll}) + {aiCreature.Stats.ReflexSave} = {total} — FAILURE!");
+                saveLog.AppendLine($"🛡 {name} attempts Reflex save (DC {saveDC}): d20({roll}) + {total - roll} = {total} — FAILURE!");
                 saveLog.AppendLine($"  {name} fails to disrupt the wall.");
             }
         }
@@ -622,7 +622,7 @@ public partial class GameManager
 
                     if (success)
                     {
-                        accumulatedLog.AppendLine($"🛡 {pcName} attempts Reflex save (DC {saveDC}): d20({roll}) + {pc.Stats.ReflexSave} = {total} — SUCCESS!");
+                        accumulatedLog.AppendLine($"🛡 {pcName} attempts Reflex save (DC {saveDC}): d20({roll}) + {total - roll} = {total} — SUCCESS!");
                         accumulatedLog.AppendLine($"  💥 {pcName} disrupts the Wall of Ice by moving into the wall's space!");
 
                         Vector2Int targetCell = FindClosestWallCell(pc, aoeCells);
@@ -635,7 +635,7 @@ public partial class GameManager
                     }
                     else
                     {
-                        accumulatedLog.AppendLine($"🛡 {pcName} attempts Reflex save (DC {saveDC}): d20({roll}) + {pc.Stats.ReflexSave} = {total} — FAILURE!");
+                        accumulatedLog.AppendLine($"🛡 {pcName} attempts Reflex save (DC {saveDC}): d20({roll}) + {total - roll} = {total} — FAILURE!");
                         accumulatedLog.AppendLine($"  {pcName} fails to disrupt the wall.");
                     }
                 }
@@ -920,7 +920,8 @@ public partial class GameManager
             }
 
             // Reflex save for additional creatures
-            int reflexSave = DiceRoller.D20() + creature.Stats.ReflexSave;
+            int reflexSave = DiceRoller.D20() + SaveRules.Modifier(creature.Stats, SavingThrowType.Reflex,
+                SaveContext.ForSpellId(SpellNames.RESILIENT_SPHERE, caster != null ? caster.Stats : null)); // CHR-018
             if (reflexSave >= saveDC)
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔮", $"{creature.Stats.CharacterName} dodges the forming Resilient Sphere (Reflex {reflexSave} vs DC {saveDC}) — sphere fails!"));

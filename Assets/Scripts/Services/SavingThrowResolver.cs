@@ -60,27 +60,16 @@ public static class SavingThrowResolver
     // ========================================================================
 
     /// <summary>
-    /// Get the total saving throw modifier for a specific save type.
-    /// Combines base save, ability modifier, feat bonuses, and condition modifiers.
+    /// The total saving throw modifier for a save type: the shared save modifier (SaveRules.Modifier, CHR-018), with the
+    /// bonuses that apply against <paramref name="context"/> (null: only those on every save).
     /// </summary>
     /// <param name="stats">Character's stats.</param>
     /// <param name="saveType">The type of saving throw.</param>
+    /// <param name="context">What the save is against.</param>
     /// <returns>Total save modifier.</returns>
-    public static int GetSaveModifier(CharacterStats stats, SaveType saveType)
+    public static int GetSaveModifier(CharacterStats stats, SaveType saveType, SaveContext context = null)
     {
-        if (stats == null) return 0;
-
-        switch (saveType)
-        {
-            case SaveType.Fortitude:
-                return stats.FortitudeSave;
-            case SaveType.Reflex:
-                return stats.ReflexSave;
-            case SaveType.Will:
-                return stats.WillSave;
-            default:
-                return 0;
-        }
+        return SaveRules.Modifier(stats, saveType, context);
     }
 
     /// <summary>
@@ -111,21 +100,22 @@ public static class SavingThrowResolver
     /// <param name="saveType">The type of saving throw.</param>
     /// <param name="dc">The difficulty class to beat.</param>
     /// <param name="effectName">Name of the effect being saved against (for logging).</param>
+    /// <param name="context">What the save is against, for the bonuses that apply only to some effects (SaveRules).</param>
     /// <returns>Complete save result with roll, modifier, total, and success.</returns>
-    public static SaveResult ResolveSave(CharacterStats stats, SaveType saveType, int dc, string effectName = null)
+    public static SaveResult ResolveSave(CharacterStats stats, SaveType saveType, int dc, string effectName = null, SaveContext context = null)
     {
         string characterName = stats?.CharacterName ?? "Unknown";
         string saveTypeName = GetSaveTypeName(saveType);
-        string context = $"{characterName} {saveTypeName} save vs {effectName ?? "effect"}";
+        string diceContext = $"{characterName} {saveTypeName} save vs {effectName ?? "effect"}";
 
-        int roll = DiceService.D20(context);
+        int roll = DiceService.D20(diceContext);
         // Apply Luck domain reroll if armed
         if (stats != null)
         {
             roll = stats.ApplyLuckReroll(roll, $"{saveTypeName} saving throw");
             GameManager.Instance?.LogLuckRerollIfTriggered(stats);
         }
-        int modifier = GetSaveModifier(stats, saveType);
+        int modifier = GetSaveModifier(stats, saveType, context);
         int total = roll + modifier;
         bool succeeded = total >= dc;
 
@@ -152,9 +142,9 @@ public static class SavingThrowResolver
     /// <param name="dc">The difficulty class to beat.</param>
     /// <param name="effectName">Name of the effect (for logging).</param>
     /// <returns>Complete save result.</returns>
-    public static SaveResult ResolveFortitudeSave(CharacterStats stats, int dc, string effectName = null)
+    public static SaveResult ResolveFortitudeSave(CharacterStats stats, int dc, string effectName = null, SaveContext context = null)
     {
-        return ResolveSave(stats, SaveType.Fortitude, dc, effectName);
+        return ResolveSave(stats, SaveType.Fortitude, dc, effectName, context);
     }
 
     /// <summary>
@@ -164,9 +154,9 @@ public static class SavingThrowResolver
     /// <param name="dc">The difficulty class to beat.</param>
     /// <param name="effectName">Name of the effect (for logging).</param>
     /// <returns>Complete save result.</returns>
-    public static SaveResult ResolveReflexSave(CharacterStats stats, int dc, string effectName = null)
+    public static SaveResult ResolveReflexSave(CharacterStats stats, int dc, string effectName = null, SaveContext context = null)
     {
-        return ResolveSave(stats, SaveType.Reflex, dc, effectName);
+        return ResolveSave(stats, SaveType.Reflex, dc, effectName, context);
     }
 
     /// <summary>
@@ -176,9 +166,9 @@ public static class SavingThrowResolver
     /// <param name="dc">The difficulty class to beat.</param>
     /// <param name="effectName">Name of the effect (for logging).</param>
     /// <returns>Complete save result.</returns>
-    public static SaveResult ResolveWillSave(CharacterStats stats, int dc, string effectName = null)
+    public static SaveResult ResolveWillSave(CharacterStats stats, int dc, string effectName = null, SaveContext context = null)
     {
-        return ResolveSave(stats, SaveType.Will, dc, effectName);
+        return ResolveSave(stats, SaveType.Will, dc, effectName, context);
     }
 
     // ========================================================================
@@ -199,7 +189,7 @@ public static class SavingThrowResolver
         string effectLabel = isSecondary
             ? $"{poisonName} (secondary)"
             : $"{poisonName} (initial)";
-        return ResolveFortitudeSave(stats, dc, effectLabel);
+        return ResolveFortitudeSave(stats, dc, effectLabel, SaveContext.Poison(poisonName));
     }
 
     /// <summary>
@@ -256,10 +246,10 @@ public static class SavingThrowResolver
     /// <param name="saveType">The type of saving throw.</param>
     /// <param name="dc">The difficulty class to beat.</param>
     /// <returns>True if the save succeeded.</returns>
-    public static bool QuickSave(CharacterStats stats, SaveType saveType, int dc)
+    public static bool QuickSave(CharacterStats stats, SaveType saveType, int dc, SaveContext context = null)
     {
         int roll = DiceService.D20();
-        int modifier = GetSaveModifier(stats, saveType);
+        int modifier = GetSaveModifier(stats, saveType, context);
         return (roll + modifier) >= dc;
     }
 

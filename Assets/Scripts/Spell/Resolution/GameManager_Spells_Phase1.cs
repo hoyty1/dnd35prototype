@@ -73,7 +73,7 @@ public partial class GameManager
                     damage += DiceRoller.D6();
 
                 // Reflex save + Evasion + Blink
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc);
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                 if (saveResult.Saved)
                     damage = Mathf.Max(0, damage / 2);
                 damage = SpellSaveResolver.ApplyBlinkHalving(damage, target, sb);
@@ -166,7 +166,7 @@ public partial class GameManager
                 int damage = baseDmg;
 
                 // Reflex save + Evasion + Blink
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc);
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Reflex, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                 if (saveResult.Saved)
                     damage = Mathf.Max(0, damage / 2);
                 damage = SpellSaveResolver.ApplyBlinkHalving(damage, target, sb);
@@ -274,7 +274,7 @@ public partial class GameManager
                 srResult.AppendToLog(sb);
                 if (!srResult.Overcame) { sb.AppendLine(); continue; }
 
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                 saveResult.AppendToLog(sb, "SAVED (negated)", "FAILED");
 
                 if (saveResult.Saved)
@@ -354,7 +354,7 @@ public partial class GameManager
                 srResult.AppendToLog(sb);
                 if (!srResult.Overcame) { sb.AppendLine(); continue; }
 
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                 saveResult.AppendToLog(sb, "SAVED (negated)", "FAILED");
                 if (saveResult.Saved) { sb.AppendLine(); continue; }
 
@@ -441,7 +441,7 @@ public partial class GameManager
                 srResult.AppendToLog(sb);
                 if (!srResult.Overcame) { sb.AppendLine(); continue; }
 
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                 saveResult.AppendToLog(sb, "SAVED (negated)", "FAILED");
                 if (saveResult.Saved) { sb.AppendLine(); continue; }
 
@@ -530,7 +530,7 @@ public partial class GameManager
                 srResult.AppendToLog(sb);
                 if (!srResult.Overcame) { sb.AppendLine(); continue; }
 
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                 saveResult.AppendToLog(sb, "SAVED (negated)", "FAILED");
 
                 if (!saveResult.Saved)
@@ -627,7 +627,7 @@ public partial class GameManager
                 }
 
                 // Fort save vs nausea
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                 saveResult.AppendToLog(sb, "SAVED", "NAUSEATED");
 
                 if (!saveResult.Saved)

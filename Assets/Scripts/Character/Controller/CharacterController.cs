@@ -4545,10 +4545,11 @@ public class CharacterController : MonoBehaviour
 
         int dc = Mathf.Max(0, poison.FortitudeDC + dcModifier);
         int roll = DiceService.D20("Poison initial Fort save");
-        int total = roll + Stats.FortitudeSave;
+        int fortMod = SaveRules.Modifier(Stats, SavingThrowType.Fortitude, SaveContext.Poison(poison.Id ?? poison.Name)); // CHR-018
+        int total = roll + fortMod;
 
         LogAbilityScoreMessage($"☠ {Stats.CharacterName} is exposed to {poison.Name} ({poison.Type}, Fort DC {dc}).");
-        LogAbilityScoreMessage($"   Initial save: d20({roll}) + {Stats.FortitudeSave} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
+        LogAbilityScoreMessage($"   Initial save: d20({roll}) + {fortMod} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
 
         ActivePoison activePoison = new ActivePoison(poison)
         {
@@ -4581,10 +4582,11 @@ public class CharacterController : MonoBehaviour
 
         int dc = poison.PoisonData.FortitudeDC;
         int roll = DiceService.D20("Poison secondary Fort save");
-        int total = roll + Stats.FortitudeSave;
+        int fortMod = SaveRules.Modifier(Stats, SavingThrowType.Fortitude, SaveContext.Poison(poison.PoisonData.Id ?? poison.PoisonData.Name)); // CHR-018
+        int total = roll + fortMod;
 
         LogAbilityScoreMessage($"☣ {Stats.CharacterName} makes secondary save vs {poison.PoisonData.Name} (DC {dc}).");
-        LogAbilityScoreMessage($"   Secondary save: d20({roll}) + {Stats.FortitudeSave} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
+        LogAbilityScoreMessage($"   Secondary save: d20({roll}) + {fortMod} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
 
         poison.SecondarySaveSucceeded = total >= dc;
         if (!poison.SecondarySaveSucceeded)

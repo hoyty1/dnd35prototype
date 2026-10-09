@@ -142,7 +142,7 @@ public static partial class SpellDatabase
                     AoEFilter = AoETargetFilter.AlliesOnly,
                     EffectType = SpellEffectType.Buff,
                     BuffAttackBonus = 1,
-                    BuffSaveBonus = 1, // vs fear, simplified to all saves
+                    BuffSaveBonus = 1, // against fear only (StatusEffectManager.SaveBonusKind, CHR-018)
                     BuffDurationRounds = 30, // Legacy: 30 rounds at CL3
                     BuffType = "morale",
                     BuffBonusType = BonusType.Morale,

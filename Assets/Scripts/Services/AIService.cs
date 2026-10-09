@@ -1809,7 +1809,8 @@ public class AIService : MonoBehaviour
             return false;
 
         int dc = candidate.Stats.SanctuaryDC;
-        var saveResult = SavingThrowResolver.ResolveWillSave(npc.Stats, dc, "Sanctuary");
+        var saveResult = SavingThrowResolver.ResolveWillSave(npc.Stats, dc, "Sanctuary",
+            SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.SANCTUARY));
         string npcName = npc.Stats != null ? npc.Stats.CharacterName : "NPC";
         string candName = candidate.Stats.CharacterName;
 
@@ -1857,7 +1858,8 @@ public class AIService : MonoBehaviour
 
         // Intelligent undead: Will save to see through
         int dc = candidate.Stats.HideFromUndeadDC;
-        var saveResult = SavingThrowResolver.ResolveWillSave(npc.Stats, dc, "Hide from Undead");
+        var saveResult = SavingThrowResolver.ResolveWillSave(npc.Stats, dc, "Hide from Undead",
+            SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.HIDE_FROM_UNDEAD));
 
         if (saveResult.Succeeded)
         {
@@ -3574,7 +3576,9 @@ public class AIService : MonoBehaviour
             }
 
             // Roll saving throw
-            SaveResult saveResult = SpellSaveResolver.RollSave(candidate, saveType, aura.SaveDC);
+            // A fear aura is a fear effect for the bonuses that apply against fear (SaveRules, CHR-018).
+            bool fearAura = conditionType == CombatConditionType.Frightened;
+            SaveResult saveResult = SpellSaveResolver.RollSave(candidate, saveType, aura.SaveDC, fearAura ? SaveContext.Fear : SaveContext.None);
 
             if (saveResult.Saved)
             {

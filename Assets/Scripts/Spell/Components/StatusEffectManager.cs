@@ -192,6 +192,11 @@ public class StatusEffectManager : MonoBehaviour
             effect.AppliedSaveBonus = 0;
         }
 
+        // Remove Fear's +4 is a morale bonus on saves against fear only (PHB p.271): SaveRules adds it for a fear save
+        // (CharacterStats.RemoveFearMoraleBonus), so it must not also reach every save through the pool (CHR-018).
+        if (string.Equals(spell.SpellId, SpellNames.REMOVE_FEAR, System.StringComparison.Ordinal))
+            effect.AppliedSaveBonus = 0;
+
         // Concealment / miss chance metadata (non-stacking; highest applies at attack time).
         // Keep spell-specific handling explicit to avoid accidental false positives from BuffType aliases.
         if (spell.SpellId == SpellNames.BLUR || spell.SpellId == SpellNames.OBSCURING_MIST || spell.SpellId == SpellNames.FOG_CLOUD || spell.SpellId == SpellNames.DARKNESS)
@@ -571,9 +576,17 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedDamageBonus != 0)
             _stats.MoraleDamageBonus += effect.AppliedDamageBonus;
 
-        // Save bonus
+        // Save bonus: a resistance or competence bonus (Resistance, Shield Other, Guidance) is kept as the highest of its
+        // type so it does not stack with a cloak, ring or ioun stone of the same type (CharacterStats.GetSaveTotal), and
+        // Bless's and Aid's morale bonus applies only against fear (SaveRules; CHR-018); every other spell save bonus
+        // or penalty goes to the untyped pool (SPL-026).
         if (effect.AppliedSaveBonus != 0)
-            _stats.MoraleSaveBonus += effect.AppliedSaveBonus;
+        {
+            if (IsTypedSaveBonus(effect))
+                RecomputeTypedSpellSaveBonuses(effect, null);
+            else
+                _stats.MoraleSaveBonus += effect.AppliedSaveBonus;
+        }
 
         // Spell AC bonus (Mage Armor)
         if (effect.AppliedACBonus != 0)
@@ -656,6 +669,65 @@ public class StatusEffectManager : MonoBehaviour
         _stats.DeflectionBonus = highest;
     }
 
+    private const int SaveBonusPool = 0, SaveBonusResistance = 1, SaveBonusCompetence = 2, SaveBonusFearMorale = 3;
+
+    /// <summary>
+    /// Which kind of save bonus <paramref name="effect"/> gives (a positive one): resistance (a resistance-typed spell
+    /// such as Resistance, and the save part of Shield Other and Shield of Law, whose AC part is a deflection bonus,
+    /// PHB p.278), competence (Guidance), morale against fear only (Bless, PHB p.205; Aid, PHB p.196), or the untyped
+    /// pool (everything else, SPL-026).
+    /// </summary>
+    private static int SaveBonusKind(ActiveSpellEffect effect)
+    {
+        if (effect == null || effect.AppliedSaveBonus <= 0)
+            return SaveBonusPool;
+        string id = effect.Spell != null ? effect.Spell.SpellId : null;
+        if (string.Equals(id, SpellNames.BLESS, System.StringComparison.Ordinal)
+            || string.Equals(id, SpellNames.AID, System.StringComparison.Ordinal))
+            return SaveBonusFearMorale;
+        if (effect.BonusTypeEnum == BonusType.Resistance
+            || string.Equals(id, SpellNames.SHIELD_OTHER, System.StringComparison.Ordinal)
+            || string.Equals(id, SpellNames.SHIELD_OF_LAW, System.StringComparison.Ordinal))
+            return SaveBonusResistance;
+        if (effect.BonusTypeEnum == BonusType.Competence)
+            return SaveBonusCompetence;
+        return SaveBonusPool;
+    }
+
+    /// <summary>True when <paramref name="effect"/>'s save bonus is kept apart from the untyped pool (<see cref="SaveBonusKind"/>).</summary>
+    private static bool IsTypedSaveBonus(ActiveSpellEffect effect) => SaveBonusKind(effect) != SaveBonusPool;
+
+    /// <summary>
+    /// Set CharacterStats.ResistanceSaveBonusFromSpells, CompetenceSaveBonusFromSpells and FearMoraleSaveBonusFromSpells
+    /// to the highest save bonus of each kind among the applied spell effects (PHB p.171: same-type bonuses do not stack;
+    /// CHR-018). Arguments as for <see cref="RecomputeSpellDeflection"/>. Items of the same types are combined at read
+    /// time (CharacterStats.EffectiveResistanceSaveBonus, EffectiveCompetenceSaveBonus); the fear morale bonus is added
+    /// by SaveRules for a save against fear.
+    /// </summary>
+    private void RecomputeTypedSpellSaveBonuses(ActiveSpellEffect adding, ActiveSpellEffect removing)
+    {
+        int resistance = 0, competence = 0, fearMorale = 0;
+        void Take(ActiveSpellEffect e)
+        {
+            switch (SaveBonusKind(e))
+            {
+                case SaveBonusResistance: resistance = Mathf.Max(resistance, e.AppliedSaveBonus); break;
+                case SaveBonusCompetence: competence = Mathf.Max(competence, e.AppliedSaveBonus); break;
+                case SaveBonusFearMorale: fearMorale = Mathf.Max(fearMorale, e.AppliedSaveBonus); break;
+            }
+        }
+        if (adding != null)
+            Take(adding);
+        foreach (var active in ActiveEffects)
+        {
+            if (active == null || active == removing || active == adding || !active.IsApplied) continue;
+            Take(active);
+        }
+        _stats.ResistanceSaveBonusFromSpells = resistance;
+        _stats.CompetenceSaveBonusFromSpells = competence;
+        _stats.FearMoraleSaveBonusFromSpells = fearMorale;
+    }
+
     /// <summary>
     /// Set CharacterStats.SpellNaturalArmorEnhancementBonus to the highest natural armor enhancement among the applied
     /// spell effects (Barkskin, PHB p.203; same-type bonuses do not stack, PHB p.171). Arguments as for
@@ -684,7 +756,12 @@ public class StatusEffectManager : MonoBehaviour
             _stats.MoraleDamageBonus -= effect.AppliedDamageBonus;
 
         if (effect.AppliedSaveBonus != 0)
-            _stats.MoraleSaveBonus -= effect.AppliedSaveBonus;
+        {
+            if (IsTypedSaveBonus(effect))
+                RecomputeTypedSpellSaveBonuses(null, effect);
+            else
+                _stats.MoraleSaveBonus -= effect.AppliedSaveBonus;
+        }
 
         if (effect.AppliedACBonus != 0)
         {

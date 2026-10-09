@@ -249,6 +249,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Character.SaveBonusRulesTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 104,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CHR-018: the shared save modifier (CharacterStats.GetSaveTotal, SaveRules) and its bonus sources, Aura of Courage and fear immunity; bare stats, an Inventory without a GameObject, a StatusEffectManager and CharacterControllers on plain GameObjects. 104/104 in edit and Play mode on 2026-10-09."
+    },
+    {
       "type": "Tests.Classes.NPCTemplateSystemTests",
       "needs": "either",
       "skip": "",

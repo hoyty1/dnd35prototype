@@ -1031,31 +1031,24 @@ public static class SpellCaster
         if (stats == null || spell == null)
             return 0;
 
-        int baseSave;
-        switch (saveType)
+        // The shared save modifier (SaveRules, CHR-018): every bonus that applies to all saves plus those that apply
+        // against this spell (racial, Still Mind, Indomitable Will, morale against fear, Resist Nature's Lure). The save
+        // name is matched case-insensitively ("Fort", "Fortitude", ...); an unknown name gives +0 as before.
+        if (!SaveRules.TryParse(saveType, out SavingThrowType save))
+            return 0;
+        SaveContext context = SaveContext.ForSpell(spell, casterController != null ? casterController.Stats : null);
+        int baseSave = stats.GetSaveTotal(save);
+        int characterSituational = SaveRules.SituationalBonus(stats, save, context, out string characterSources);
+        if (characterSituational != 0)
         {
-            case "Reflex":
-                baseSave = stats.ReflexSave;
-                break;
-            case "Will":
-                baseSave = stats.WillSave;
-                break;
-            case "Fortitude":
-                baseSave = stats.FortitudeSave;
-                break;
-            default:
-                baseSave = 0;
-                break;
+            baseSave += characterSituational;
+            situationalSaveBonus = characterSituational;
+            situationalSaveSource = characterSources;
         }
-
-        bool isEnchantment = !string.IsNullOrWhiteSpace(spell.School)
-            && spell.School.Trim().Equals("Enchantment", System.StringComparison.OrdinalIgnoreCase);
-
-        if (saveType == "Will" && isEnchantment && stats.StillMindBonus > 0)
-            baseSave += stats.StillMindBonus;
+        bool isWill = save == SavingThrowType.Will;
 
         // D&D 3.5e Charm Person: +5 bonus on save if threatened/attacked by caster side.
-        if (saveType == "Will"
+        if (isWill
             && string.Equals(spell.SpellId, SpellNames.CHARM_PERSON, System.StringComparison.Ordinal)
             && IsBeingThreatenedBy(targetController, casterController))
         {
@@ -1082,34 +1075,18 @@ public static class SpellCaster
                 System.StringComparison.OrdinalIgnoreCase);
             if (differentCreatureType)
             {
-                situationalSaveBonus = 4;
-                situationalSaveSource = "Different creature type (+4)";
-                baseSave += situationalSaveBonus;
+                situationalSaveBonus += 4;
+                situationalSaveSource = string.IsNullOrEmpty(situationalSaveSource)
+                    ? "Different creature type (+4)"
+                    : situationalSaveSource + ", Different creature type (+4)";
+                baseSave += 4;
             }
         }
 
-        // D&D 3.5e Remove Fear (PHB p.271): +4 morale bonus on saves against fear effects.
-        // Applies to Will saves against spells with the [Fear] descriptor or that cause
-        // Frightened/Shaken/Panicked conditions.
-        if (stats.RemoveFearMoraleBonus > 0 && saveType == "Will" && IsFearSpell(spell))
-        {
-            int fearBonus = stats.RemoveFearMoraleBonus;
-            baseSave += fearBonus;
-            // Combine with any existing situational bonus
-            if (situationalSaveBonus == 0)
-            {
-                situationalSaveBonus = fearBonus;
-                situationalSaveSource = $"Remove Fear (+{fearBonus} vs fear)";
-            }
-            else
-            {
-                situationalSaveBonus += fearBonus;
-                situationalSaveSource += $", Remove Fear (+{fearBonus} vs fear)";
-            }
-        }
+        // Remove Fear's +4 morale bonus against fear (PHB p.271) is part of SaveRules.SituationalBonus above.
 
         // Lullaby (PHB p.249): -2 on Will saves against sleep effects while it lasts.
-        int lullabyPenalty = saveType == "Will" ? LullabySleepSavePenalty(targetController, spell) : 0;
+        int lullabyPenalty = isWill ? LullabySleepSavePenalty(targetController, spell) : 0;
         if (lullabyPenalty != 0)
         {
             baseSave += lullabyPenalty;
@@ -1187,36 +1164,29 @@ public static class SpellCaster
     }
 
     /// <summary>
-    /// Returns true if the spell has the [Fear] descriptor or produces fear conditions
-    /// (Frightened, Shaken, Panicked). D&D 3.5e PHB fear-descriptor spells include
-    /// Cause Fear, Scare, Fear, Doom, Phantasmal Killer, etc.
-    /// Used to determine if Remove Fear's +4 morale bonus applies.
+    /// True for a fear effect (the [Fear] descriptor, PHB p.174), used by SaveContext.ForSpell for the morale bonuses against
+    /// fear (halfling, Remove Fear, Aura of Courage; CHR-018): the [Fear] descriptor in data or in the description, or
+    /// one of the PHB [Fear] spells of the levels in scope (Bane, Cause Fear, Doom, Fear, Phantasmal Killer, Scare). A
+    /// spell that only suppresses or protects against fear (Calm Emotions, Remove Fear) is not a fear effect.
     /// </summary>
-    private static bool IsFearSpell(SpellData spell)
+    internal static bool IsFearSpell(SpellData spell)
     {
         if (spell == null)
             return false;
 
+        if (spell.HasDescriptor(SpellDescriptor.Fear))
+            return true;
+
         string id = spell.SpellId;
-        if (string.IsNullOrEmpty(id))
-            return false;
-
-        // Known fear-descriptor spells from PHB/SRD
+        if (string.Equals(id, SpellNames.BANE, System.StringComparison.Ordinal)) return true;
         if (string.Equals(id, SpellNames.CAUSE_FEAR, System.StringComparison.Ordinal)) return true;
-        if (string.Equals(id, SpellNames.SCARE, System.StringComparison.Ordinal)) return true;
-        if (string.Equals(id, SpellNames.FEAR, System.StringComparison.Ordinal)) return true;
         if (string.Equals(id, SpellNames.DOOM, System.StringComparison.Ordinal)) return true;
+        if (string.Equals(id, SpellNames.FEAR, System.StringComparison.Ordinal)) return true;
         if (string.Equals(id, SpellNames.PHANTASMAL_KILLER, System.StringComparison.Ordinal)) return true;
+        if (string.Equals(id, SpellNames.SCARE, System.StringComparison.Ordinal)) return true;
 
-        // Fallback: check description for fear-related keywords
-        if (!string.IsNullOrWhiteSpace(spell.Description))
-        {
-            string desc = spell.Description.ToLowerInvariant();
-            if (desc.Contains("frightened") || desc.Contains("shaken") || desc.Contains("panicked")
-                || desc.Contains("fear") || desc.Contains("[fear]"))
-                return true;
-        }
-
-        return false;
+        // The descriptor as written in the description ("Necromancy [Fear, Mind-Affecting]").
+        return !string.IsNullOrWhiteSpace(spell.Description)
+            && spell.Description.IndexOf("[Fear", System.StringComparison.OrdinalIgnoreCase) >= 0;
     }
 }

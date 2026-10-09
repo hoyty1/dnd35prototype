@@ -20,7 +20,8 @@ public class SleepArrowBehavior : SpecificItemBehavior
     {
         if (target == null || target.Stats == null) return;
 
-        var save = SavingThrowResolver.ResolveWillSave(target.Stats, SleepDC, "Sleep Arrow");
+        var save = SavingThrowResolver.ResolveWillSave(target.Stats, SleepDC, "Sleep Arrow",
+            SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.SLEEP));
 
         if (!save.Succeeded)
         {

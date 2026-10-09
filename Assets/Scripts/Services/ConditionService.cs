@@ -419,7 +419,7 @@ public class ConditionService : MonoBehaviour
                 continue;
 
             int roll = DiceRoller.D20();
-            int saveMod = GetSaveModifierForType(actor.Stats, escapeData.SaveType);
+            int saveMod = GetSaveModifierForType(actor.Stats, escapeData.SaveType, escapeData.SourceSpellId);
             int total = roll + saveMod;
             bool success = total >= escapeData.SaveDC;
 
@@ -438,21 +438,19 @@ public class ConditionService : MonoBehaviour
         }
     }
 
-    private static int GetSaveModifierForType(CharacterStats stats, string saveType)
+    /// <summary>
+    /// The shared save modifier (SaveRules, CHR-018) for an escape save; against the condition's source spell when it
+    /// has one. An unrecognized save name counts as Will, as before.
+    /// </summary>
+    private static int GetSaveModifierForType(CharacterStats stats, string saveType, string sourceSpellId)
     {
         if (stats == null)
             return 0;
 
-        switch (saveType)
-        {
-            case "Fortitude":
-                return stats.FortitudeSave;
-            case "Reflex":
-                return stats.ReflexSave;
-            case "Will":
-            default:
-                return stats.WillSave;
-        }
+        if (!SaveRules.TryParse(saveType, out SavingThrowType save))
+            save = SavingThrowType.Will;
+        SaveContext context = string.IsNullOrEmpty(sourceSpellId) ? SaveContext.None : SaveContext.ForSpellId(sourceSpellId);
+        return SaveRules.Modifier(stats, save, context);
     }
 
     private static int FindBestMetadataMatchIndex(List<ActiveCondition> previousConditions, List<bool> consumed, StatusEffect effect)

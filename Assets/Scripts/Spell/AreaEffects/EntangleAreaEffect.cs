@@ -38,7 +38,7 @@ public class EntangleAreaEffect : PersistentAreaEffect
             return;
 
         int roll = DiceRoller.D20();
-        int reflexMod = character.Stats.ReflexSave;
+        int reflexMod = SpellSaveModifier(character, SavingThrowType.Reflex);
         int total = roll + reflexMod;
         bool saved = total >= SaveDC;
 
@@ -79,7 +79,7 @@ public class EntangleAreaEffect : PersistentAreaEffect
         {
             // Re-check entanglement for creatures still in area but not entangled
             int roll = DiceRoller.D20();
-            int reflexMod = character.Stats.ReflexSave;
+            int reflexMod = SpellSaveModifier(character, SavingThrowType.Reflex);
             int total = roll + reflexMod;
             bool saved = total >= SaveDC;
 

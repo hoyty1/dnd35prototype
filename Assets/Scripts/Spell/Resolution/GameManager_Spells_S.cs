@@ -175,7 +175,7 @@ public partial class GameManager
         // Will save
         if (spell.AllowsSavingThrow)
         {
-            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  Will Save: d20({saveResult.Roll}) + {saveResult.Modifier} = {saveResult.Total} vs DC {saveDc} → {(saveResult.Saved ? "SAVED" : "FAILED")}"));
 
             if (saveResult.Saved)
@@ -304,7 +304,7 @@ public partial class GameManager
                     damage += DiceRoller.D6();
 
                 // Fortitude save
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                 bool savePassed = saveResult.Saved;
 
                 bool deafened = false;
@@ -463,7 +463,7 @@ public partial class GameManager
         // Sound Burst damage is handled by normal spell damage resolution.
         // Here we check for the stun: Fort save or stunned for 1 round.
         int saveDC = GetSpellSaveDC(caster, spell);
-        var fortResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC);
+        var fortResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
 
         Debug.Log($"[SoundBurst] Fort save: {target.Stats.CharacterName} rolled {fortResult.Total} vs DC {saveDC}");
 

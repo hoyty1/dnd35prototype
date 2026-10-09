@@ -235,13 +235,9 @@ public class CreatureTrapSystem : MonoBehaviour
         }
 
         // ── Saving throw ──
-        int saveBonus = 0;
-        switch (saveType)
-        {
-            case "Will": saveBonus = target.Stats.WillSave; break;
-            case "Reflex": saveBonus = target.Stats.ReflexSave; break;
-            case "Fort": saveBonus = target.Stats.FortitudeSave; break;
-        }
+        // The shared save modifier (SaveRules, CHR-018). A trapping item's effect passes no context: no situational
+        // character bonus is applied to it (SPL-018 lists it). An unknown save name gives +0 as before.
+        int saveBonus = SaveRules.Modifier(target.Stats, saveType, SaveContext.None);
 
         int saveRoll = DiceRoller.D20();
         int saveTotal = saveRoll + saveBonus;
@@ -612,7 +608,7 @@ public class CreatureTrapSystem : MonoBehaviour
 
             // Will save
             int saveRoll = DiceRoller.D20();
-            int saveTotal = saveRoll + character.Stats.WillSave;
+            int saveTotal = saveRoll + SaveRules.Modifier(character.Stats, SavingThrowType.Will, SaveContext.None); // SaveRules, CHR-018
 
             if (saveRoll != 20 && (saveRoll == 1 || saveTotal < saveDC))
             {

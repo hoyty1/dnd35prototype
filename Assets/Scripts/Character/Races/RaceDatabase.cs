@@ -126,7 +126,7 @@ public static class RaceDatabase
             // Combat: Stability +4 on checks to resist bull rush/trip
             StabilityBonus = 4,
 
-            // Saving throws (for future implementation)
+            // Saving throws (CharacterStats.RacialAllSavesBonus, SaveRules)
             SaveVsPoison = 2,
             SaveVsSpells = 2,
             SaveVsEnchantment = 0,
@@ -197,7 +197,7 @@ public static class RaceDatabase
             // Combat
             StabilityBonus = 0,
 
-            // Saving throws (for future implementation)
+            // Saving throws (CharacterStats.RacialAllSavesBonus, SaveRules)
             SaveVsPoison = 0,
             SaveVsSpells = 0,
             SaveVsEnchantment = 2,  // +2 vs enchantment spells and effects
@@ -480,7 +480,8 @@ public static class RaceDatabase
             SaveVsSpells = 0,
             SaveVsEnchantment = 0,
             SaveVsIllusion = 0,
-            SaveVsFear = 2,  // +2 racial bonus on saving throws against fear (morale bonus)
+            SaveVsFear = 2,  // +2 morale bonus on saving throws against fear (PHB p.20)
+            SaveBonusAllSaves = 1,  // +1 racial bonus on all saving throws (PHB p.20)
 
             // Special traits
             Stonecunning = false,

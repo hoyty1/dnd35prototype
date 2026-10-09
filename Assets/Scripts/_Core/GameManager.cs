@@ -3293,8 +3293,13 @@ public partial class GameManager : MonoBehaviour
         if (data != null)
             disturbanceDc = Mathf.Max(1, data.DisturbanceSaveDC);
 
+        // A save against the fascinating effect (usually an enchantment such as Hypnotism): the shared modifier with
+        // that spell's context, so the elf's +2 and Still Mind apply (SaveRules, CHR-018).
+        SaveContext fascinationContext = data != null && !string.IsNullOrEmpty(data.SourceSpellId)
+            ? SaveContext.ForSpellId(data.SourceSpellId, source != null ? source.Stats : null)
+            : SaveContext.None;
         int saveRoll = DiceService.D20("Disturbance Will save");
-        int saveTotal = saveRoll + target.Stats.WillSave;
+        int saveTotal = saveRoll + SaveRules.Modifier(target.Stats, SavingThrowType.Will, fascinationContext);
         bool saveSucceeded = saveTotal >= disturbanceDc;
 
         if (saveSucceeded)

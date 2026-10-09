@@ -751,7 +751,7 @@ public class CharacterStats
     /// <summary>Trackless Step at level 3 (PHB p.36): leaves no trail in natural surroundings.</summary>
     public bool HasTracklessStep => IsDruid && DruidClass.HasTracklessStep(GetClassLevel("Druid"));
 
-    /// <summary>Resist Nature's Lure at level 4 (PHB p.36): +4 save vs fey/plant spell-like abilities.</summary>
+    /// <summary>Resist Nature's Lure at level 4 (PHB p.36): +4 on saves against the spell-like abilities of fey (SaveRules).</summary>
     public bool HasResistNaturesLure => IsDruid && DruidClass.HasResistNaturesLure(GetClassLevel("Druid"));
 
     /// <summary>Resist Nature's Lure save bonus (+4, PHB p.36).</summary>
@@ -808,12 +808,37 @@ public class CharacterStats
     public LayOnHandsData PaladinLayOnHands;
 
     /// <summary>
-    /// Divine Grace (L2): Add CHA modifier (if positive) as bonus to all saving throws.
+    /// Divine Grace (L2, PHB p.44): CHA modifier (if positive) as a bonus on all saving throws; part of GetSaveTotal.
     /// </summary>
     public int DivineGraceBonus => (IsPaladin && GetClassLevel("Paladin") >= 2) ? Mathf.Max(0, CHAMod) : 0;
 
-    /// <summary>Aura of Courage (L3): Immune to fear, allies within 10ft get +4 vs fear.</summary>
+    /// <summary>
+    /// Aura of Courage (L3, PHB p.44): the paladin is immune to fear (<see cref="IsImmuneToFear"/>), and each ally within
+    /// 10 ft gets +4 morale on saves against fear while she is conscious (SaveRules.AuraOfCourageBonus, CHR-018).
+    /// </summary>
     public bool HasAuraOfCourage => IsPaladin && GetClassLevel("Paladin") >= 3;
+
+    /// <summary>
+    /// Immune to fear, magical or otherwise: a paladin of level 3+ (Aura of Courage, PHB p.44). The fear conditions
+    /// (shaken, frightened, panicked) are then not applied (<see cref="BlocksFearCondition"/>), whatever their source.
+    /// Undead and constructs are kept out of fear spells separately (SpellUtilities.IsLivingCreatureForFear).
+    /// </summary>
+    public bool IsImmuneToFear => HasAuraOfCourage;
+
+    /// <summary>
+    /// True when <paramref name="type"/> is a fear condition (shaken, frightened, panicked; DMG p.300-301) and this
+    /// character is immune to fear. Checked where a condition is applied (CharacterStats.ApplyCondition,
+    /// ConditionManager.ApplyCondition), so every fear source, PC or NPC, is covered.
+    /// </summary>
+    public bool BlocksFearCondition(CombatConditionType type)
+    {
+        if (!IsImmuneToFear)
+            return false;
+        CombatConditionType normalized = ConditionRules.Normalize(type);
+        return normalized == CombatConditionType.Shaken
+            || normalized == CombatConditionType.Frightened
+            || normalized == CombatConditionType.Panicked;
+    }
 
     /// <summary>Divine Health (L3): Immune to all diseases.</summary>
     public bool HasDivineHealth => IsPaladin && GetClassLevel("Paladin") >= 3;
@@ -888,6 +913,27 @@ public class CharacterStats
                     return true;
             }
 
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// True when one of this character's classes casts arcane spells (wizard, sorcerer, bard;
+    /// ClassAssociationRules.IsArcaneCasterClass), including a creature's innate sorcerer casting. Gates the Robe of the
+    /// Archmagi (DMG p.265).
+    /// </summary>
+    public bool HasArcaneSpellcasterClass
+    {
+        get
+        {
+            EnsureMulticlassDataInitialized();
+            for (int i = 0; i < ClassLevels.Count; i++)
+            {
+                ClassLevelEntry entry = ClassLevels[i];
+                if (entry != null && entry.Level > 0 && !string.IsNullOrWhiteSpace(entry.ClassName)
+                    && ClassAssociationRules.IsArcaneCasterClass(entry.ClassName.Trim()))
+                    return true;
+            }
             return false;
         }
     }
@@ -992,7 +1038,7 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Still Mind: +2 bonus on saving throws against enchantment spells and effects.
+    /// Still Mind (PHB p.41): +2 bonus on saving throws against enchantment spells and effects (SaveRules).
     /// Gained at Monk level 3.
     /// </summary>
     public int StillMindBonus => (IsMonk && GetClassLevel("Monk") >= 3) ? 2 : 0;
@@ -1352,6 +1398,13 @@ public class CharacterStats
     public int TrapSenseBonus => (IsBarbarian && GetClassLevel("Barbarian") >= 3) ? 1 + (GetClassLevel("Barbarian") - 3) / 3 : 0;
 
     /// <summary>
+    /// Trap sense bonus on Reflex saves against traps from every class that has it: barbarian 3 (PHB p.26) and rogue 3
+    /// (PHB p.51), +1 per three levels of each; bonuses from several classes stack. Read by SaveRules for a trap save.
+    /// </summary>
+    public int TrapSenseSaveBonus => TrapSenseBonus
+        + ((IsRogue && GetClassLevel("Rogue") >= 3) ? GetClassLevel("Rogue") / 3 : 0);
+
+    /// <summary>
     /// Returns the current rage tier based on Barbarian level (D&D 3.5e PHB p.25-26).
     /// 0 = Normal Rage (L1-10): +4 STR/CON, +2 Will, -2 AC
     /// 1 = Greater Rage (L11-19): +6 STR/CON, +3 Will, -2 AC
@@ -1408,7 +1461,7 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Indomitable Will (PHB p.26): +4 bonus on Will saves vs enchantment while raging.
+    /// Indomitable Will (PHB p.26): +4 bonus on Will saves vs enchantment spells while raging (SaveRules).
     /// Available at Barbarian L14+.
     /// </summary>
     public int IndomitableWillBonus => (IsBarbarian && GetClassLevel("Barbarian") >= 14 && IsRaging) ? 4 : 0;
@@ -1499,6 +1552,12 @@ public class CharacterStats
     /// </summary>
     public void ApplyCondition(CombatConditionType type, int rounds, string sourceName)
     {
+        if (BlocksFearCondition(type))
+        {
+            Debug.Log($"[Fear] {CharacterName} is immune to fear (Aura of Courage): {type} from {sourceName} not applied");
+            return;
+        }
+
         CombatConditionType normalized = ConditionRules.Normalize(type);
 
         // D&D 3.5: if something would make a fatigued creature fatigued again, it becomes exhausted.
@@ -1952,19 +2011,72 @@ public class CharacterStats
         + GetTotalClassSaveBonus(SavingThrowType.Will);
 
     /// <summary>
-    /// Effective resistance bonus to all saves = max(Ring of Resistance, Cloak of Resistance).
-    /// D&D 3.5e: resistance bonuses do NOT stack; use highest from any source.
+    /// Resistance bonus on all saves: the best of a Ring of Resistance, a Cloak of Resistance (or other worn
+    /// resistance item), a Robe of the Archmagi and a resistance-typed spell such as Resistance (PHB p.272). Resistance
+    /// bonuses do not stack (PHB p.171), so only the highest applies. Protection from alignment adds its own resistance
+    /// bonus only beyond this one (AlignmentProtectionRules.ResistanceSaveIncrease).
     /// </summary>
-    public int EffectiveResistanceSaveBonus => Mathf.Max(RingResistanceSaveBonus, WondrousSaveAllBonus);
+    public int EffectiveResistanceSaveBonus => Mathf.Max(Mathf.Max(RingResistanceSaveBonus, WondrousSaveAllBonus),
+        Mathf.Max(Mathf.Max(WondrousResistanceSaveBonusItem, ArchmagiResistanceSaveBonus), ResistanceSaveBonusFromSpells));
 
-    /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus + resistance (best of ring/wondrous) + condition modifiers.</summary>
-    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + LuckSaveBonus + WondrousLuckSaveBonus + EffectiveResistanceSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
+    /// <summary>
+    /// A worn Robe of the Archmagi's resistance bonus on saves (+4, DMG p.265), which works only for an arcane
+    /// spellcaster: checked here when the save is read, so gaining or losing an arcane class level counts at once.
+    /// </summary>
+    public int ArchmagiResistanceSaveBonus => WondrousArchmagiResistanceSaveBonus > 0 && HasArcaneSpellcasterClass
+        ? WondrousArchmagiResistanceSaveBonus
+        : 0;
 
-    /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus + resistance (best of ring/wondrous) + condition modifiers.</summary>
-    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + LuckSaveBonus + WondrousLuckSaveBonus + EffectiveResistanceSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
+    /// <summary>
+    /// Competence bonus on all saves: the better of a Pale Green Prism ioun stone (+1, DMG p.260) and a competence-typed
+    /// spell such as Guidance (PHB p.238). Competence bonuses do not stack (PHB p.171).
+    /// </summary>
+    public int EffectiveCompetenceSaveBonus => Mathf.Max(WondrousCompetenceSaveBonus, CompetenceSaveBonusFromSpells);
 
-    /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus + resistance (best of ring/wondrous) + condition modifiers.</summary>
-    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + LuckSaveBonus + WondrousLuckSaveBonus + EffectiveResistanceSaveBonus + ConditionWillModifier;
+    /// <summary>
+    /// Luck bonus on all saves from equipment: a luck blade (LuckSaveBonus), a Stone of Good Luck (DMG p.267) and a Robe
+    /// of Stars (DMG p.265). Luck bonuses stack by the owner's house rule (Assets/Scripts/Spell/BonusType.cs); each item
+    /// kind counts once (its field keeps the best of that kind). Luck-typed spells add through MoraleSaveBonus (SPL-026).
+    /// </summary>
+    public int EquipmentLuckSaveBonus => LuckSaveBonus + WondrousLuckSaveBonus + WondrousRobeLuckSaveBonus;
+
+    /// <summary>The racial bonus on every save (halfling +1, PHB p.20; RaceData.SaveBonusAllSaves). 0 without a race.</summary>
+    public int RacialAllSavesBonus => Race != null ? Mathf.Max(0, Race.SaveBonusAllSaves) : 0;
+
+    /// <summary>
+    /// The save modifier against an effect that has no special bonus (CHR-018, PHB p.177-178): ability modifier, base
+    /// save (racial Hit Dice and class levels), feats (Great Fortitude, Lightning Reflexes, Iron Will), Divine Grace
+    /// (paladin 2, CHA bonus, PHB p.44), the racial bonus on all saves, the resistance, competence and equipment luck
+    /// bonuses above, the pool of spell save bonuses (<see cref="MoraleSaveBonus"/>, SPL-026), the barbarian's rage
+    /// (morale, Will only, PHB p.25), a familiar's bonus and condition modifiers. Bonuses that apply only against some
+    /// effects (racial against poison or enchantment, Still Mind, morale against fear, ...) are added by
+    /// <see cref="SaveRules.Modifier(CharacterStats, SavingThrowType, SaveContext)"/>, which every save roll uses.
+    /// </summary>
+    public int GetSaveTotal(SavingThrowType save)
+    {
+        int shared = DivineGraceBonus + RacialAllSavesBonus + MoraleSaveBonus + EquipmentLuckSaveBonus
+            + EffectiveResistanceSaveBonus + EffectiveCompetenceSaveBonus;
+        switch (save)
+        {
+            case SavingThrowType.Fortitude:
+                return CONMod + ClassFortSave + FeatFortitudeBonus + shared + ConditionFortitudeModifier
+                    + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
+            case SavingThrowType.Reflex:
+                return DEXMod + ClassRefSave + FeatReflexBonus + shared + ConditionReflexModifier
+                    + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
+            default:
+                return WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + shared + ConditionWillModifier;
+        }
+    }
+
+    /// <summary>Fortitude save against an effect with no special bonus (<see cref="GetSaveTotal"/>).</summary>
+    public int FortitudeSave => GetSaveTotal(SavingThrowType.Fortitude);
+
+    /// <summary>Reflex save against an effect with no special bonus (<see cref="GetSaveTotal"/>).</summary>
+    public int ReflexSave => GetSaveTotal(SavingThrowType.Reflex);
+
+    /// <summary>Will save against an effect with no special bonus (<see cref="GetSaveTotal"/>).</summary>
+    public int WillSave => GetSaveTotal(SavingThrowType.Will);
 
     // ========== FEATS (D&D 3.5) ==========
     /// <summary>Set of feats this character has.</summary>
@@ -1986,7 +2098,7 @@ public class CharacterStats
         EnsureMulticlassDataInitialized();
 
         if (!string.IsNullOrWhiteSpace(className))
-            return Mathf.Max(0, GetClassLevel(className) - NegativeLevelCount);
+            return WithItemCasterLevelBonus(Mathf.Max(0, GetClassLevel(className) - NegativeLevelCount));
 
         int best = 0;
         for (int i = 0; i < ClassLevels.Count; i++)
@@ -2002,7 +2114,17 @@ public class CharacterStats
             best = Mathf.Max(best, Mathf.Max(0, entry.Level - NegativeLevelCount));
         }
 
-        return best;
+        return WithItemCasterLevelBonus(best);
+    }
+
+    /// <summary>
+    /// Adds the caster level bonus of worn items (an Orange Prism ioun stone, +1 caster level, DMG p.260;
+    /// <see cref="WondrousCasterLevelBonus"/>, CHR-018) to a caster level above 0. It raises the level the caster's
+    /// spells work at, not the spells per day, which come from class level.
+    /// </summary>
+    private int WithItemCasterLevelBonus(int casterLevel)
+    {
+        return casterLevel > 0 ? casterLevel + Mathf.Max(0, WondrousCasterLevelBonus) : casterLevel;
     }
 
     /// <summary>
@@ -3053,6 +3175,25 @@ public class CharacterStats
     /// <summary>Luck bonus to saving throws from items toggled on equip (Luck Blade).</summary>
     public int LuckSaveBonus;
 
+    /// <summary>
+    /// The highest resistance-typed spell save bonus on this character (Resistance, PHB p.272), kept by
+    /// StatusEffectManager outside <see cref="MoraleSaveBonus"/> so that it does not stack with a cloak or ring of
+    /// resistance (<see cref="EffectiveResistanceSaveBonus"/>, CHR-018).
+    /// </summary>
+    public int ResistanceSaveBonusFromSpells;
+
+    /// <summary>
+    /// The highest competence-typed spell save bonus on this character (Guidance, PHB p.238), kept by StatusEffectManager
+    /// outside <see cref="MoraleSaveBonus"/> so that it does not stack with a Pale Green Prism (<see cref="EffectiveCompetenceSaveBonus"/>).
+    /// </summary>
+    public int CompetenceSaveBonusFromSpells;
+
+    /// <summary>
+    /// The highest spell morale bonus on saves against fear only (Bless, PHB p.205; Aid, PHB p.196), kept by
+    /// StatusEffectManager outside <see cref="MoraleSaveBonus"/>; SaveRules adds it for a save against fear (CHR-018).
+    /// </summary>
+    public int FearMoraleSaveBonusFromSpells;
+
     // ── Sanctuary ──
     /// <summary>True if the Sanctuary spell is active on this character. Enemies must make a Will save to attack.</summary>
     [NonSerialized] public bool SanctuaryActive;
@@ -3154,6 +3295,9 @@ public class CharacterStats
     /// <summary>Luck bonus to all saves from a worn wondrous item (Stone of Good Luck +1, DMG p.267). Rebuilt by
     /// Inventory.ApplyAllWondrousItemBonuses; kept out of the resistance bonus so it stacks with cloaks and wards.</summary>
     public int WondrousLuckSaveBonus;
+    /// <summary>Luck bonus to all saves from a worn Robe of Stars (+1, DMG p.265). Rebuilt by
+    /// Inventory.ApplyAllWondrousItemBonuses; stacks with the Stone of Good Luck (luck stacks, house rule; CHR-018).</summary>
+    public int WondrousRobeLuckSaveBonus;
     /// <summary>Enhancement bonus to base land speed from Boots of Striding (+10 ft). Highest wins.</summary>
     public int WondrousSpeedBonus;
     /// <summary>Displacement miss chance from Cloak of Displacement (20=minor, 50=major). Highest wins. Does not stack with concealment; uses best.</summary>
@@ -3225,11 +3369,14 @@ public class CharacterStats
     // ── Wondrous Item Phase 9/10 Bonuses ──
     /// <summary>Insight bonus to AC from wondrous items (Dusty Rose Prism: +1). Highest wins.</summary>
     public int WondrousInsightACBonus;
-    /// <summary>Competence bonus to all saves from wondrous items (Pale Green Prism: +1). Highest wins.</summary>
+    /// <summary>Competence bonus to all saves from wondrous items (Pale Green Prism: +1, DMG p.260). Highest wins (EffectiveCompetenceSaveBonus).</summary>
     public int WondrousCompetenceSaveBonus;
-    /// <summary>Resistance bonus to all saves from wondrous items (Robe of Archmagi: +4). Highest wins with CloakOfResistance.</summary>
+    /// <summary>Resistance bonus to all saves from wondrous items other than the Robe of the Archmagi. Highest wins (EffectiveResistanceSaveBonus).</summary>
     public int WondrousResistanceSaveBonusItem;
-    /// <summary>Caster level bonus from wondrous items (Orange Prism: +1). Stacks.</summary>
+    /// <summary>Resistance bonus to all saves from a worn Robe of the Archmagi (+4, DMG p.265), before its arcane-caster
+    /// gate (<see cref="ArchmagiResistanceSaveBonus"/>). Rebuilt by Inventory.ApplyAllWondrousItemBonuses.</summary>
+    public int WondrousArchmagiResistanceSaveBonus;
+    /// <summary>Caster level bonus from wondrous items (Orange Prism: +1, DMG p.260), added by GetCasterLevel. Stacks.</summary>
     public int WondrousCasterLevelBonus;
     /// <summary>HP regeneration per hour from wondrous items (Pearly White Spindle: 1).</summary>
     public int WondrousRegenPerHour;
@@ -3245,7 +3392,7 @@ public class CharacterStats
     public bool WondrousSeeInvisible;
     /// <summary>Wondrous item prevents flanking.</summary>
     public bool WondrousPreventsFlanking;
-    /// <summary>Luck bonus to Fort saves vs poison from wondrous items.</summary>
+    /// <summary>Luck bonus on Fortitude saves against spider poison (Cloak of Arachnida +2, DMG p.253), added by SaveRules for such a save.</summary>
     public int WondrousLuckFortSaveBonus;
 
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
@@ -4190,6 +4337,8 @@ public class CharacterStats
         if (Immunities != null && Immunities.immuneToPoison)
             return true;
         if (WondrousPoisonImmunity)
+            return true;
+        if (HasVenomImmunity) // druid 9 (PHB p.37)
             return true;
 
         string creatureType = string.IsNullOrWhiteSpace(CreatureType)

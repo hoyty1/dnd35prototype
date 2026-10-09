@@ -33,14 +33,14 @@ Entries per section:
 | [Combat](issues/CMB.md) | CMB | 1 | 57 | 71 | 129 | CMB-163 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 3 | 61 | 61 | 125 | SPL-132 |
-| [Characters, feats and classes](issues/CHR.md) | CHR | 5 | 27 | 41 | 73 | CHR-078 |
+| [Characters, feats and classes](issues/CHR.md) | CHR | 4 | 27 | 41 | 72 | CHR-078 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 3 | 29 | 26 | 58 | CRE-062 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
-| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 2 | 33 | 36 | 71 | ITM-075 |
+| [Items, store, crafting and treasure](issues/ITM.md) | ITM | 2 | 33 | 38 | 73 | ITM-077 |
 | [AI](issues/AI.md) | AI | 1 | 22 | 39 | 62 | AI-064 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 26 | 33 | TST-037 |
-| **All** | | 16 | 286 | 388 | 690 | |
+| **All** | | 15 | 286 | 390 | 691 | |
 
 ## Top issues
 
@@ -49,7 +49,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
 | [CMB-004](issues/CMB.md) | High | Combat | Critical hits multiply only weapon dice; coup de grace multiplies sneak attack | Yes |
-| [CHR-018](issues/CHR.md) | High | Characters, feats and classes | Divine Grace and other save bonuses are computed but never applied | Yes |
 | [CHR-019](issues/CHR.md) | High | Characters, feats and classes | Most racial traits are display-only | Yes |
 | [SPL-123](issues/SPL.md) | High | Spells and metamagic | The NPC cast executor refuses every spell of a spontaneous caster, so AI-run spellcasting dragons, sorcerers and bards cast nothing | Yes |
 | [CRE-056](issues/CRE.md) | High | Creatures, templates and summoning | 212 of 389 NPC definitions (all dragons, animals and vermin, goblin, gnoll, bugbear) set no alignment, so smite and Protection from Evil ignore them | Yes |

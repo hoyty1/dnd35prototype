@@ -2061,9 +2061,9 @@ public partial class GameManager
             string targetName = target.Stats.CharacterName;
             int targetHD = target.Stats.GetHitDice();
 
-            // Will save
+            // Will save against a fear effect (SaveRules: morale against fear, CHR-018)
             int roll = DiceRoller.D20();
-            int willMod = target.Stats.WillSave;
+            int willMod = SaveRules.Modifier(target.Stats, SavingThrowType.Will, SaveContext.Fear);
             int total = roll + willMod;
 
             if (total >= fp.SaveDC)

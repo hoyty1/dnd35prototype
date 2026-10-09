@@ -47,7 +47,8 @@ public class JavelinOfLightningBehavior : SpecificItemBehavior
 
         if (target != null && target.Stats != null)
         {
-            var save = SavingThrowResolver.ResolveReflexSave(target.Stats, BoltDC, "Javelin of Lightning");
+            var save = SavingThrowResolver.ResolveReflexSave(target.Stats, BoltDC, "Javelin of Lightning",
+                SaveContext.ForSpellId(DND35e.Identifiers.SpellNames.LIGHTNING_BOLT));
 
             if (save.Succeeded)
             {

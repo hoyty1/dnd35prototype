@@ -35,7 +35,7 @@ public class GreaseAreaEffect : PersistentAreaEffect
             return;
 
         int roll = DiceRoller.D20();
-        int reflex = character.Stats.ReflexSave;
+        int reflex = SpellSaveModifier(character, SavingThrowType.Reflex);
         int total = roll + reflex;
         bool success = total >= SaveDC;
 

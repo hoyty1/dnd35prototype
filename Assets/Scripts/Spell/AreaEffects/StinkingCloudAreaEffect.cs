@@ -185,7 +185,7 @@ public class StinkingCloudAreaEffect : PersistentAreaEffect
             return;
 
         int roll = DiceRoller.D20();
-        int fortBonus = creature.Stats.FortitudeSave;
+        int fortBonus = SpellSaveModifier(creature, SavingThrowType.Fortitude);
         int total = roll + fortBonus;
 
         if (total >= SaveDC)

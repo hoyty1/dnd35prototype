@@ -1113,6 +1113,7 @@ public class Inventory
         OwnerStats.WondrousBracersArmorBonus = 0;
         OwnerStats.WondrousSaveAllBonus = 0;
         OwnerStats.WondrousLuckSaveBonus = 0;
+        OwnerStats.WondrousRobeLuckSaveBonus = 0;
         OwnerStats.WondrousSpeedBonus = 0;
 
         // Reset wondrous movement modes
@@ -1146,6 +1147,7 @@ public class Inventory
         OwnerStats.WondrousInsightACBonus = 0;
         OwnerStats.WondrousCompetenceSaveBonus = 0;
         OwnerStats.WondrousResistanceSaveBonusItem = 0;
+        OwnerStats.WondrousArchmagiResistanceSaveBonus = 0;
         OwnerStats.WondrousCasterLevelBonus = 0;
         OwnerStats.WondrousRegenPerHour = 0;
         OwnerStats.WondrousGrantedSR = 0;
@@ -1355,10 +1357,22 @@ public class Inventory
         if (item.WondrousCompetenceSaveBonus > 0)
             OwnerStats.WondrousCompetenceSaveBonus = Mathf.Max(OwnerStats.WondrousCompetenceSaveBonus, item.WondrousCompetenceSaveBonus);
 
-        // --- Resistance Save Bonus from specific items (Robe of Archmagi, Scarab, etc.) ---
-        // Resistance bonuses don't stack; highest wins vs WondrousSaveAllBonus (Cloak of Resistance)
+        // --- Resistance Save Bonus from specific items (Robe of the Archmagi) ---
+        // Resistance bonuses don't stack; CharacterStats.EffectiveResistanceSaveBonus takes the highest of this, the
+        // cloak or ring and a Resistance spell. The robe's powers work only for an arcane spellcaster (DMG p.265): its
+        // bonus is kept apart and gated when read (CharacterStats.ArchmagiResistanceSaveBonus), so a level gained in an
+        // arcane class counts at once.
         if (item.WondrousResistanceSaveBonus > 0)
-            OwnerStats.WondrousResistanceSaveBonusItem = Mathf.Max(OwnerStats.WondrousResistanceSaveBonusItem, item.WondrousResistanceSaveBonus);
+        {
+            if (IsArcaneOnlyRobe(item))
+                OwnerStats.WondrousArchmagiResistanceSaveBonus = Mathf.Max(OwnerStats.WondrousArchmagiResistanceSaveBonus, item.WondrousResistanceSaveBonus);
+            else
+                OwnerStats.WondrousResistanceSaveBonusItem = Mathf.Max(OwnerStats.WondrousResistanceSaveBonusItem, item.WondrousResistanceSaveBonus);
+        }
+
+        // --- Luck Save Bonus from a Robe of Stars (+1 luck bonus on all saves, DMG p.265) ---
+        if (item.WondrousRobeStarsLuckSaveBonus > 0)
+            OwnerStats.WondrousRobeLuckSaveBonus = Mathf.Max(OwnerStats.WondrousRobeLuckSaveBonus, item.WondrousRobeStarsLuckSaveBonus);
 
         // --- Caster Level Bonus (Orange Prism — stacks from multiple sources) ---
         if (item.WondrousCasterLevelBonus > 0)
@@ -1391,6 +1405,14 @@ public class Inventory
         // --- Luck Bonus to Fortitude Saves (Stone of Good Luck already handled; this is specific fort) ---
         if (item.WondrousLuckFortSaveBonus > 0)
             OwnerStats.WondrousLuckFortSaveBonus = Mathf.Max(OwnerStats.WondrousLuckFortSaveBonus, item.WondrousLuckFortSaveBonus);
+    }
+
+    /// <summary>True for a Robe of the Archmagi, whose powers need an arcane spellcaster (DMG p.265).</summary>
+    private static bool IsArcaneOnlyRobe(ItemData item)
+    {
+        // The three alignment variants share the base id as prefix (WondrousItemNames.ROBE_OF_THE_ARCHMAGI_GOOD, ...).
+        return item != null && !string.IsNullOrEmpty(item.Id)
+            && item.Id.StartsWith(DND35e.Identifiers.WondrousItemNames.ROBE_OF_THE_ARCHMAGI, System.StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Get numeric rank for flight maneuverability comparison (higher = better).</summary>

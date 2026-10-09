@@ -141,7 +141,7 @@ public partial class GameManager
 
         // Fort save at the spell's DC (Clr 4, Drd 3; SpellSaveDCRules, SPL-001, SPL-031)
         int saveDC = GetSpellSaveDC(caster, spell);
-        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC);
+        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
         bool saveSuccess = saveResult.Saved;
 
         if (saveSuccess)
@@ -237,7 +237,8 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("😱", $"{targetName} fails to disbelieve the phantasm!"));
         CombatUI?.ShowCombatLog(CombatLogHelper.Failure("", $"   Must make Fortitude save DC {saveDc} or die from fear!"));
 
-        SavingThrowResolver.SaveResult fortSave = SavingThrowResolver.ResolveFortitudeSave(target.Stats, saveDc, "Phantasmal Killer (Fort)");
+        SavingThrowResolver.SaveResult fortSave = SavingThrowResolver.ResolveFortitudeSave(target.Stats, saveDc, "Phantasmal Killer (Fort)",
+            SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
 
         string fortRollStr = $"d20({fortSave.Roll}) + {fortSave.Modifier} = {fortSave.Total} vs DC {saveDc}";
 

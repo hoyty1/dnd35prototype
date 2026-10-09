@@ -70,9 +70,10 @@ public class GustOfWindEffect
             }
 
             int saveRoll = DiceRoller.D20();
-            int saveTotal = saveRoll + target.Stats.FortitudeSave;
+            int fortMod = SaveRules.Modifier(target.Stats, SavingThrowType.Fortitude, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null)); // CHR-018
+            int saveTotal = saveRoll + fortMod;
             bool saveSucceeded = saveTotal >= saveDC;
-            log.AppendLine($"    Fortitude save: d20({saveRoll}) + {target.Stats.FortitudeSave} = {saveTotal} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
+            log.AppendLine($"    Fortitude save: d20({saveRoll}) + {fortMod} = {saveTotal} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
 
             if (saveSucceeded)
             {

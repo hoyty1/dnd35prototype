@@ -47,7 +47,7 @@ public class SpikeStoneAreaEffect : PersistentAreaEffect
 
             // Reflex save for half
             int reflexRoll = DiceRoller.D20();
-            int reflexTotal = reflexRoll + character.Stats.ReflexSave;
+            int reflexTotal = reflexRoll + SpellSaveModifier(character, SavingThrowType.Reflex);
             bool saved = reflexTotal >= ReflexDC;
             int actualDamage = saved ? Mathf.Max(1, damage / 2) : damage;
 

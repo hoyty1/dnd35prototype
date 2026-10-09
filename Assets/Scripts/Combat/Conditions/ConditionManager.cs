@@ -52,6 +52,13 @@ public class ConditionManager : MonoBehaviour
         if (_stats.ActiveConditions == null)
             _stats.ActiveConditions = new List<StatusEffect>();
 
+        // Immune to fear (Aura of Courage, PHB p.44): no shaken, frightened or panicked from any source (CHR-018).
+        if (_stats.BlocksFearCondition(type))
+        {
+            Debug.Log($"[Fear] {_stats.CharacterName} is immune to fear (Aura of Courage): {type} from {sourceName} not applied");
+            return;
+        }
+
         CombatConditionType normalized = ConditionRules.Normalize(type);
         ConditionDefinition def = ConditionRules.GetDefinition(normalized);
 

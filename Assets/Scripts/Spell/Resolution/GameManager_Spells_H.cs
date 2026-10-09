@@ -190,7 +190,7 @@ public partial class GameManager
             bool savePassed = false;
             if (isIntelligent)
             {
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
                 savePassed = saveResult.Saved;
                 saveResult.AppendToLog(sb, "SAVED (negated)", "FAILED");
             }

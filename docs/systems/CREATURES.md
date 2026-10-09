@@ -305,7 +305,7 @@ These test vectors pass against the current CRCalculator with creature type "Gia
 NPCs with PHB class levels share `CharacterStats` with PCs: human_monk_3/5/7, human_paladin and human_paladin_3/5/7, human_cleric, orc_berserker, the lich, the barbarian, rogue, ranger and cleric test NPCs (test_barbarian_gust, neutral_bandit_test, ranged_test_archer_*, evil_acolyte_test, ...), and DMG-table "Race Class N" spawns, where `CreatureClassEngine.ApplyClassToDefinition` sets `CharacterClass` and `Level`. The constructor creates one `ClassLevelEntry(CharacterClass, Level)` and runs the class's `InitFeats`, so `IsMonk`, `GetClassLevel("Rogue")` and similar checks see the NPC as a member of the class. BAB and base saves come from the class tables (plus any racial HD), as for a PC (CRE-004, 2026-10-08). Whether a feature works on an NPC depends on what reads it:
 
 - **Apply automatically** (formula features read in shared resolution):
-  - Monk AC bonus (`MonkACBonus`, in the AC total) and Still Mind (only in `SpellCaster`'s save modifier, CHR-018). Monk features use fixed low-level values (CHR-003).
+  - Monk AC bonus (`MonkACBonus`, in the AC total) and Still Mind (`SaveRules`, on every save against an enchantment, CHR-018). Paladin Divine Grace (in every save total, `CharacterStats.GetSaveTotal`, CHR-018). Monk features use fixed low-level values (CHR-003).
   - Fast movement for monks and barbarians (`EffectiveSpeedFeet`).
   - Evasion for monk 2+, rogue 2+ and ranger 9+ (`SpellSaveResolver`).
   - Sneak attack on a rogue's hit while flanking or against a target denied Dex. No creature is ever flat-footed at combat start (CMB-028).
@@ -313,7 +313,7 @@ NPCs with PHB class levels share `CharacterStats` with PCs: human_monk_3/5/7, hu
   - Spellcasting, but only when the definition lists `KnownSpellIds` or `PreparedSpellSlotIds`. human_cleric and the paladins list none and cast nothing. The lich lists spells but prepares none (see [What enemy AI can and cannot use today](#what-enemy-ai-can-and-cannot-use-today)).
 - **Never apply:**
   - Features activated through PC-only executors: Rage and Flurry of Blows (PC buttons, CHR-003), Turn Undead (a PC menu flow, AI-054), domain powers (CHR-023) and Bardic Music (CHR-026). Stunning Fist cannot be armed by anyone (CMB-022). See the [action coverage matrix](AI.md#9-action-coverage-matrix).
-  - Data-only features: Smite Evil, Lay on Hands, Aura of Courage, Divine Health, Favored Enemy and Wild Shape (CHR-020). Divine Grace is added to no save (CHR-018).
+  - Data-only features: Smite Evil, Lay on Hands, Divine Health, Favored Enemy and Wild Shape (CHR-020). Aura of Courage works since CHR-018 (`SaveRules.AuraOfCourageBonus`, `CharacterStats.IsImmuneToFear`).
   - The paladin NPCs' `SpecialAbilities` strings ("Smite Evil 1/day", "Divine Grace", "Aura of Courage") are display text only.
 
 ### NPCs by level (DMG Chapter 4 style)

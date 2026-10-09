@@ -1316,7 +1316,12 @@ public static class WondrousItemFactory
 
     // --- ROBES ---
 
-    /// <summary>Robe of the Archmagi (+5 AC, SR 18, +4 saves, +2 CL). DMG p.266. Alignment variants.</summary>
+    /// <summary>
+    /// Robe of the Archmagi (+5 AC, SR 18, +4 resistance on saves, +2 on caster level checks to overcome spell
+    /// resistance), DMG p.265, for an arcane spellcaster only. Alignment variants. Only the resistance bonus and the
+    /// armor bonus are modelled; the +2 is a bonus on SR checks, not caster level, so it is not stored as
+    /// WondrousCasterLevelBonus (ITM-075).
+    /// </summary>
     public static ItemData CreateRobeOfTheArchmagi(string alignment)
     {
         string suffix = alignment.ToLower();
@@ -1324,7 +1329,7 @@ public static class WondrousItemFactory
         string alignLabel = suffix == "good" ? "White" : suffix == "evil" ? "Black" : "Gray";
         var item = CreateBaseWondrous(id,
             $"Robe of the Archmagi ({alignLabel})",
-            $"This {alignLabel.ToLower()} robe grants +5 armor bonus to AC, Spell Resistance 18, +4 resistance bonus to all saves, and +2 caster level for arcane spells. Worn by wrong alignment: -4 AC, -2 saves, -2 caster level.",
+            $"This {alignLabel.ToLower()} robe grants an arcane spellcaster a +5 armor bonus to AC, Spell Resistance 18, a +4 resistance bonus on all saves, and a +2 enhancement bonus on caster level checks to overcome spell resistance.",
             EquipSlot.Torso, 75000, 14, 1f, TorsoIcon, TorsoColor);
         item.WondrousItemType = "armor";
         item.WondrousActivationType = WondrousItemActivation.CONTINUOUS;
@@ -1332,7 +1337,6 @@ public static class WondrousItemFactory
         item.WondrousACBonusType = "armor";
         item.WondrousGrantsSR = 18;
         item.WondrousResistanceSaveBonus = 4;
-        item.WondrousCasterLevelBonus = 2;
         item.WondrousRequiredAlignment = suffix;
         item.WondrousWrongAlignmentACPenalty = 4;
         item.WondrousWrongAlignmentSavePenalty = 2;
