@@ -32,15 +32,15 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-039 |
 | [Combat](issues/CMB.md) | CMB | 3 | 58 | 65 | 126 | CMB-157 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 8 | 57 | 55 | 120 | SPL-124 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 6 | 57 | 56 | 119 | SPL-124 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 5 | 28 | 41 | 74 | CHR-078 |
-| [Creatures, templates and summoning](issues/CRE.md) | CRE | 3 | 29 | 23 | 55 | CRE-059 |
+| [Creatures, templates and summoning](issues/CRE.md) | CRE | 3 | 29 | 24 | 56 | CRE-060 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 2 | 33 | 36 | 71 | ITM-075 |
 | [AI](issues/AI.md) | AI | 1 | 19 | 40 | 60 | AI-062 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 25 | 32 | TST-036 |
-| **All** | | 23 | 281 | 373 | 677 | |
+| **All** | | 21 | 281 | 375 | 677 | |
 
 ## Top issues
 
@@ -53,8 +53,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at the round boundary (GameManager.OnNewRound -> ConditionService.OnRoundEnd), so 1-round conditions can cost the target nothing | Yes |
 | [CHR-018](issues/CHR.md) | High | Characters, feats and classes | Divine Grace and other save bonuses are computed but never applied | Yes |
 | [CHR-019](issues/CHR.md) | High | Characters, feats and classes | Most racial traits are display-only | Yes |
-| [SPL-002](issues/SPL.md) | High | Spells and metamagic | 54 spells that set only BuffDurationRounds get a 0-round duration | Yes |
-| [SPL-003](issues/SPL.md) | High | Spells and metamagic | Silence, Death Knell and Align Weapon never expire | Yes |
 | [SPL-004](issues/SPL.md) | High | Spells and metamagic | Custom spell damage bypasses energy resistance, immunity and DR | Yes |
 | [SPL-005](issues/SPL.md) | High | Spells and metamagic | Generic spell dice do not scale with caster level; Cure/Inflict ignore undead | Yes |
 | [SPL-037](issues/SPL.md) | High | Spells and metamagic | Spell-specific branches at the end of ApplySpellBuff never run | Yes |

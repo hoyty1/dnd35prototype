@@ -1327,13 +1327,8 @@ public class SpellSelectionUI : MonoBehaviour
         if (spell.AllowsSavingThrow)
             detail += $"Save: {spell.SavingThrowType}{(spell.SaveHalves ? " (half)" : " (negates)")}\n";
 
-        if (spell.BuffDurationRounds != 0)
-        {
-            string durStr = spell.BuffDurationRounds < 0 ? "Hours/level" :
-                            spell.BuffDurationRounds == 1 ? "1 round" :
-                            $"{spell.BuffDurationRounds} rounds";
-            detail += $"Duration: {durStr}\n";
-        }
+        if (spell.DurationType != DurationType.Instantaneous)
+            detail += $"Duration: {SpellDurationRules.Describe(spell)}\n"; // the PHB duration (SPL-002)
 
         if (spell.AreaRadius > 0)
             detail += $"Area: {spell.AreaRadius} sq radius\n";

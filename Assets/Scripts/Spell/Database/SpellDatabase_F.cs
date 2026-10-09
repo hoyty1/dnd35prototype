@@ -41,6 +41,9 @@ public static partial class SpellDatabase
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 1,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.229: until landing or 1 round/level
                     ActionType = SpellActionType.Free, // Immediate action
                     ProvokesAoO = false,
                     IsPlaceholder = true,
@@ -58,6 +61,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.229: 1 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -177,7 +183,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Fortitude",
-                    BuffDurationRounds = -1,
+                    DurationType = DurationType.Instantaneous, // PHB p.232: instantaneous; the target stays petrified until restored (handler)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -221,7 +227,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Fortitude",
-                    BuffDurationRounds = 10,
+                    DurationType = DurationType.Instantaneous, // PHB p.232: instantaneous; the dazzled condition lasts 1 minute (handler)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -237,6 +243,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.294: 1 hour/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -467,6 +476,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Minutes,
                     DurationValue = 10, // 10 min/level
+                    DurationScalesWithLevel = true, // per level (SPL-002: the flag was missing)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

@@ -937,6 +937,8 @@ public partial class GameManager : MonoBehaviour
 
             StatusEffectManager statusMgr = pc.StatusEffectManager;
             statusMgr?.RemoveAllEffects();
+            // Death Knell, Silence and Align Weapon flags with no tracked effect left (SPL-003).
+            EffectService.ClearAllClericSpell2Flags(stats);
 
             SpellcastingComponent spellComp = pc.Spellcasting;
             if (spellComp != null)

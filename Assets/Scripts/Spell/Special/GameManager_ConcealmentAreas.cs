@@ -53,7 +53,7 @@ public partial class GameManager
         // Handle Sleet Storm
         if (isSleetStorm)
         {
-            int sleetDuration = Mathf.Max(1, casterLevel); // 1 round/level
+            int sleetDuration = SpellCastingHelper.CalculateDuration(spell, casterLevel); // PHB p.280: 1 round/level (SPL-002)
             Vector3 sleetCenter = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
             CreateSleetStormArea(sleetCenter, sleetDuration, casterLevel, caster);
 
@@ -86,7 +86,7 @@ public partial class GameManager
         // Handle Stinking Cloud
         if (isStinkingCloud)
         {
-            int cloudDuration = Mathf.Max(1, casterLevel); // 1 round/level
+            int cloudDuration = SpellCastingHelper.CalculateDuration(spell, casterLevel); // PHB p.284: 1 round/level (SPL-002)
             int saveDc = GetSpellSaveDC(caster, spell);
             Vector3 cloudCenter = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
             CreateStinkingCloudArea(cloudCenter, cloudDuration, casterLevel, saveDc, caster);

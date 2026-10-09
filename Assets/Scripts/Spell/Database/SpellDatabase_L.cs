@@ -72,6 +72,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true, // PHB p.247: 10 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -107,6 +110,10 @@ public static partial class SpellDatabase
                     SavingThrowType = "Will",
                     SpellResistanceApplies = true,
                     BuffDurationRounds = 10,
+                    DurationType = DurationType.Concentration,
+                    DurationValue = 1,
+                    DurationText = "Concentration + 1 round/level (D)", // PHB p.249; the extra rounds after concentration are not modelled
+                    DurationScalesWithLevel = true, // PHB p.249: concentration + 1 round/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -146,6 +153,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.249: 1 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,

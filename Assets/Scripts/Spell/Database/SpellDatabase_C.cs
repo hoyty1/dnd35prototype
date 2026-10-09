@@ -124,6 +124,10 @@ public static partial class SpellDatabase
                     SavingThrowType = "Will",
                     SpellResistanceApplies = true,
                     BuffDurationRounds = 2,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationText = "1d4 rounds or 1 round", // PHB p.208
+                    DurationScalesWithLevel = false, // PHB p.208: 1d4 rounds, or 1 round on a successful save; the handler rolls the 1d4
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -214,6 +218,9 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     BuffDurationRounds = 1,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false, // PHB p.211: 1 round
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -262,6 +269,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true, // PHB p.211: 10 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -288,6 +298,9 @@ public static partial class SpellDatabase
                     AreaRadius = 4,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1, // 2 hr/level, effectively unlimited in combat
+                    DurationType = DurationType.Hours,
+                    DurationValue = 2,
+                    DurationScalesWithLevel = true, // PHB p.212: 2 hours/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
@@ -307,6 +320,9 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     BuffDurationRounds = 4,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.212: 1 round/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

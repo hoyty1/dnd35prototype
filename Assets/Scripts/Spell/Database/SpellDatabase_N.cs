@@ -21,6 +21,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Days,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.257: 1 day/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -50,6 +53,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Minutes,
                     DurationValue = 10, // 10 min/level (immunity portion)
+                    DurationScalesWithLevel = true, // per level (SPL-002: the flag was missing)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

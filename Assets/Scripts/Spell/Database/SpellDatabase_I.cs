@@ -144,7 +144,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 50, // 1 min/level at CL5 = 50 rounds
-                    DurationType = DurationType.MinutesPerLevel,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.245: 1 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

@@ -56,23 +56,26 @@ public partial class GameManager
         int newTotal = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, "Enervation");
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        // Duration = CL hours. In combat: 1 hour = 600 rounds (10 rounds/min × 60 min)
-        int durationRounds = casterLevel * 600;
+        // PHB p.226: the negative levels last a number of hours equal to the caster level, maximum 15 hours. The shared
+        // duration rule at a caster level capped at 15 gives that (and Extend still doubles it).
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, Mathf.Min(casterLevel, 15));
 
         // Track the effect for duration/expiry via StatusEffectManager
         if (target.StatusEffectManager != null)
         {
             string cName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Enervation";
-            target.StatusEffectManager.AddEffect(spell, cName, casterLevel);
+            ActiveSpellEffect enervationEffect = target.StatusEffectManager.AddEffect(spell, cName, casterLevel);
+            if (enervationEffect != null)
+                enervationEffect.RemainingRounds = durationRounds;
         }
 
         result.BuffApplied = true;
-        result.BuffDescription = $"Debuff: {negativeLevels} negative level(s) for {casterLevel} hour(s).";
+        result.BuffDescription = $"Debuff: {negativeLevels} negative level(s) for {SpellDurationRules.DescribeRounds(durationRounds)}.";
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
         CombatUI?.ShowCombatLog(CombatLogHelper.Color($"💀 {target.Stats.CharacterName} gains {negativeLevels} negative level{(negativeLevels > 1 ? "s" : "")} from Enervation!", "9933CC"));
         CombatUI?.ShowCombatLog(CombatLogHelper.Color("   Each negative level: -1 attack/saves/skills, -5 HP, -1 effective level", "AA77CC"));
-        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"   Duration: {casterLevel} hour{(casterLevel > 1 ? "s" : "")} ({durationRounds} rounds)", "AA77CC"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Color($"   Duration: {SpellDurationRules.DescribeRounds(durationRounds)} ({durationRounds} rounds)", "AA77CC"));
 
         // Check if target dies from negative levels (HD reduced to 0)
         if (NegativeLevelSystem.IsDeadFromNegativeLevels(target))

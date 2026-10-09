@@ -112,7 +112,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 105;
+        public const int Count = 106;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -224,6 +224,7 @@ namespace Tests.Scenarios
             yield return S("class-progression", ClassProgressionHpBabHd);
             yield return S("creature-progression", CreatureProgression);
             yield return S("spell-save-dc", SpellSaveDc);
+            yield return S("spell-durations", SpellDurations);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -5045,6 +5046,146 @@ namespace Tests.Scenarios
                     return ExpectResult.Pass(string.Join(", ", got));
                 })
                 .Build();
+        }
+
+        /// <summary>
+        /// SPL-002 and SPL-003: spell durations on both cast paths. The Quick Start cleric (Cleric 3, a Ui actor, so the PC
+        /// pipeline; Silence prepared in its two non-domain 2nd-level slots) casts Silence (PHB p.279; Will negates) at a goblin
+        /// in round 1 and again in round 2, while the first is still on: the Silence handler sets the target's flag and a
+        /// tracked effect for 1 round/level (the code's long-standing duration, believed to be the SRD's but not verified; PHB
+        /// p.279 prints 1 min./level, an owner question in SPL-003), and the recast keeps the longer duration (the same spell
+        /// does not stack) with the flag still on. The goblin gets a -30 save tweak so its Will save fails on every seed.
+        /// evil_acolyte_test (Cleric 3; its prepared slots spawn empty, since its Daze is not a cleric spell, so Guidance is put
+        /// into an empty orison slot) casts Guidance (PHB p.238: 1 minute) at the goblin beside it through the NPC cast
+        /// executor: a generic tracked effect. Before SPL-002 Guidance set only the legacy rounds field and its effect started
+        /// at 0 rounds and ended at the first round tick; before SPL-003 nothing ever ended the Silence flag, and the first
+        /// version of the fix let a recast clear the flag it had just set. A scripted fighter's Assert step checks both every
+        /// round: Guidance has 10 - (round - 1) rounds left, and Silence is on, flag and tracked effect together, for its
+        /// duration from the round-2 recast and off after. The Silence flag and handler run on the PC pipeline only (SPL-054).
+        /// </summary>
+        private static ScenarioDef SpellDurations()
+        {
+            var def = Rules("rules/spell-durations", "Spells last their PHB duration on the PC and NPC cast paths, and Silence ends (PHB p.176; SPL-002, SPL-003)")
+                .Covers("SPL-002", "SPL-003", "PHB p.176", "PHB p.238", "PHB p.279", "PC_NPC_PARITY")
+                .MaxRounds(SpellDurationMaxRounds)
+                .Pc("cleric", ActorSource.QuickStart("Cleric"), 5, 10, Control.Ui)
+                .Pc("fighter", ActorSource.QuickStart("Fighter"), 5, 12, Control.Scripted)
+                .Npc("acolyte", "evil_acolyte_test", 12, 10, Control.Scripted)
+                .Npc("gob2", "goblin", 13, 10, Control.Idle)
+                .Npc("gob", "goblin", 14, 12, Control.Idle)
+                .Tweak("cleric", c => PrepareTwice(c, 2, DND35e.Identifiers.SpellNames.SILENCE))
+                .Tweak("acolyte", c => ReplacePrepared(c, null, DND35e.Identifiers.SpellNames.GUIDANCE))
+                .Tweak("gob", c => c.Stats.MoraleSaveBonus = -30)
+                .Initiative("cleric", "acolyte", "fighter", "gob2", "gob")
+                .Turn("cleric", 1, Step.Cast(DND35e.Identifiers.SpellNames.SILENCE, "gob"))
+                .Turn("acolyte", 1, Step.Cast(DND35e.Identifiers.SpellNames.GUIDANCE, "gob2"))
+                .Turn("cleric", SpellDurationRecastRound, Step.Cast(DND35e.Identifiers.SpellNames.SILENCE, "gob"));
+            for (int round = 1; round <= SpellDurationMaxRounds; round++)
+            {
+                int r = round;
+                def = def.Turn("fighter", r, Step.Assert("Round " + r + ": Guidance and Silence have the rounds their durations give", ctx => SpellDurationCheck(ctx, r)));
+            }
+
+            return def
+                .Expect("All three casts ran", Expect.All(
+                    Expect.StepStatus("cleric", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("acolyte", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("cleric", SpellDurationRecastRound, "Cast", 0, "done")))
+                .Expect("Every round's duration check holds (Guidance 1 minute through the NPC executor, PHB p.238; Silence 1 round/level through the PC pipeline, recast included)", Expect.AssertsPass())
+                .Expect("A Silence recast while the first lasts keeps the flag on (SPL-003)", v =>
+                {
+                    TraceEvent recast = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(SpellDurationNotePrefix + "silence recast", StringComparison.Ordinal));
+                    return recast != null ? ExpectResult.Pass(recast.Str("text")) : ExpectResult.Fail("no note says the recast Silence is on");
+                })
+                .Expect("Silence ends after 1 round/level from the recast: the flag and the tracked effect both go (SPL-003)", v =>
+                {
+                    TraceEvent ended = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(SpellDurationNotePrefix + "silence ended", StringComparison.Ordinal));
+                    return ended != null ? ExpectResult.Pass(ended.Str("text")) : ExpectResult.Fail("no note says Silence ended");
+                })
+                .Build();
+        }
+
+        private const int SpellDurationMaxRounds = 5;
+        private const int SpellDurationRecastRound = 2;
+        private const string SpellDurationNotePrefix = "spell-duration ";
+
+        /// <summary>Prepares <paramref name="spellId"/> in the first two non-domain slots of <paramref name="level"/>.</summary>
+        private static void PrepareTwice(CharacterController c, int level, string spellId)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                return;
+            int placed = 0;
+            foreach (SpellSlot slot in sc.SpellSlots)
+            {
+                if (placed >= 2)
+                    return;
+                if (slot != null && slot.Level == level && !slot.IsDomainSlot)
+                {
+                    slot.PreparedSpell = SpellDatabase.GetSpell(spellId).Clone();
+                    placed++;
+                }
+            }
+        }
+
+        /// <summary>Puts a clone of <paramref name="newId"/> into the first prepared slot that holds <paramref name="oldId"/> (null: the first empty slot of the spell's level).</summary>
+        private static void ReplacePrepared(CharacterController c, string oldId, string newId)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                return;
+            foreach (SpellSlot slot in sc.SpellSlots)
+                if (slot != null && (oldId == null
+                        ? slot.PreparedSpell == null && slot.Level == SpellDatabase.GetSpell(newId).SpellLevel
+                        : slot.PreparedSpell != null && slot.PreparedSpell.SpellId == oldId))
+                {
+                    slot.PreparedSpell = SpellDatabase.GetSpell(newId).Clone();
+                    return;
+                }
+        }
+
+        /// <summary>The fighter's Assert step of <see cref="SpellDurations"/> in round <paramref name="round"/>.</summary>
+        private static bool SpellDurationCheck(ScenarioContext ctx, int round)
+        {
+            bool ok = true;
+
+            // Guidance through the NPC executor: cast in round 1, ticked at the start of every later round.
+            StatusEffectManager gob2Effects = ctx.Get("gob2").StatusEffectManager;
+            int guidanceLeft = gob2Effects != null && gob2Effects.HasEffect(DND35e.Identifiers.SpellNames.GUIDANCE)
+                ? gob2Effects.GetRemainingRounds(DND35e.Identifiers.SpellNames.GUIDANCE) : 0;
+            int guidanceExpected = SpellDurationRules.RoundsPerMinute - (round - 1);
+            ctx.Note(SpellDurationNotePrefix + "round " + round + " guidance " + guidanceLeft + " (expected " + guidanceExpected + ")");
+            if (guidanceLeft != guidanceExpected)
+                ok = false;
+
+            // Silence through the PC pipeline's handler: cast in round 1, recast in round 2 (the goblin's Will save always fails).
+            CharacterController cleric = ctx.Get("cleric");
+            CharacterController gob = ctx.Get("gob");
+            SpellData silence = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.SILENCE);
+            int silenceRounds = SpellCastingHelper.CalculateDuration(silence, SpellDurationRules.CasterLevelFor(cleric, silence));
+            bool flag = gob.Stats.SilenceActive;
+            bool tracked = gob.StatusEffectManager != null && gob.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.SILENCE);
+            int trackedLeft = tracked ? gob.StatusEffectManager.GetRemainingRounds(DND35e.Identifiers.SpellNames.SILENCE) : 0;
+
+            int lastCastRound = round >= SpellDurationRecastRound ? SpellDurationRecastRound : 1;
+            bool expectedOn = round - lastCastRound < silenceRounds;
+            ctx.Note(SpellDurationNotePrefix + "round " + round + " silence flag " + flag + " tracked " + tracked + " rounds left "
+                + trackedLeft + " / flag " + gob.Stats.SilenceRoundsRemaining + " (duration " + silenceRounds + ", expected " + (expectedOn ? "on" : "off") + ")");
+            if (flag != expectedOn || tracked != expectedOn)
+                ok = false;
+
+            if (round == SpellDurationRecastRound)
+            {
+                bool fresh = flag && tracked && trackedLeft == silenceRounds && gob.Stats.SilenceRoundsRemaining == silenceRounds;
+                if (fresh)
+                    ctx.Note(SpellDurationNotePrefix + "silence recast in round " + round + ": flag and tracked effect on, " + silenceRounds + " rounds");
+                else
+                    ok = false;
+            }
+
+            if (!expectedOn && !flag && !tracked)
+                ctx.Note(SpellDurationNotePrefix + "silence ended by round " + round + ", " + silenceRounds + " rounds after the recast");
+            return ok;
         }
 
         /// <summary>

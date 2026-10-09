@@ -121,64 +121,11 @@ public class ActiveSpellEffect
     }
 
     /// <summary>
-    /// Calculate the duration in rounds based on spell duration type and caster level.
-    /// D&D 3.5e conversions:
-    ///   Rounds: use DurationValue directly
-    ///   Minutes: DurationValue × 10 rounds (× casterLevel if DurationScalesWithLevel)
-    ///   Hours: DurationValue × 600 rounds (× casterLevel if DurationScalesWithLevel)
-    ///   Instantaneous: 0 (no tracking needed)
-    ///   Permanent: -1 (until dispelled)
-    ///   Concentration: -2 (special handling)
+    /// The spell's duration in rounds at this caster level: <see cref="SpellDurationRules.Rounds"/>, the one duration
+    /// computation (SPL-002). 0 = instantaneous, -1 = permanent, -2 = concentration.
     /// </summary>
     public static int CalculateDurationRounds(SpellData spell, int casterLevel)
-    {
-        if (spell == null) return 0;
-
-        int baseValue = spell.DurationValue;
-        int level = Mathf.Max(1, casterLevel);
-
-        switch (spell.DurationType)
-        {
-            case DurationType.Instantaneous:
-                return 0;
-
-            case DurationType.Rounds:
-                if (spell.DurationScalesWithLevel)
-                    return baseValue * level;
-                return baseValue;
-
-            case DurationType.Minutes:
-                // 1 minute = 10 rounds
-                int minuteRounds = baseValue * 10;
-                if (spell.DurationScalesWithLevel)
-                    return minuteRounds * level;
-                return minuteRounds;
-
-            case DurationType.Hours:
-                // 1 hour = 600 rounds
-                int hourRounds = baseValue * 600;
-                if (spell.DurationScalesWithLevel)
-                    return hourRounds * level;
-                return hourRounds;
-
-            case DurationType.Days:
-                // 1 day = 14400 rounds (24h × 60min × 10 rounds/min)
-                int dayRounds = baseValue * 14400;
-                if (spell.DurationScalesWithLevel)
-                    return dayRounds * level;
-                return dayRounds;
-
-            case DurationType.Permanent:
-                return -1; // Until dispelled
-
-            case DurationType.Concentration:
-                return -2; // Special: lasts while concentrating
-
-            default:
-                // Fallback: use BuffDurationRounds if set
-                return spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 0;
-        }
-    }
+        => SpellDurationRules.Rounds(spell, casterLevel);
 
     /// <summary>
     /// Tick this effect by 1 round. Returns true if the effect has expired.
@@ -322,7 +269,7 @@ public enum DurationType
     /// <summary>Duration measured in days (1 day = 14400 rounds).</summary>
     Days,
 
-    /// <summary>Duration measured in minutes per caster level.</summary>
+    /// <summary>Duration measured in minutes per caster level (DurationValue minutes per level, 1 when unset).</summary>
     MinutesPerLevel,
 
     /// <summary>Effect lasts while the caster maintains concentration.</summary>

@@ -21,6 +21,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Days,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.235: 1 day/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -40,6 +43,9 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     BuffDurationRounds = 3,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.235: 1 round/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -79,6 +85,10 @@ public static partial class SpellDatabase
                     SavingThrowType = "Fortitude",
                     SpellResistanceApplies = true,
                     BuffDurationRounds = 5, // Placeholder — actual duration is 1d6+2 rolled at cast time
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 2,
+                    DurationText = "1d6+2 rounds", // PHB p.235
+                    DurationScalesWithLevel = false, // PHB p.235: 1d6+2 rounds; GhoulTouchEffectData rolls the 1d6 and the handler sets the tracked effect to the roll
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
@@ -213,6 +223,9 @@ public static partial class SpellDatabase
                     BuffAttackBonus = 1,
                     BuffSaveBonus = 1,
                     BuffDurationRounds = 10,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false, // PHB p.238: 1 minute or until discharged
                     BuffType = "competence",
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
@@ -237,6 +250,9 @@ public static partial class SpellDatabase
                     SavingThrowType = "Fortitude",
                     SpellResistanceApplies = true,
                     BuffDurationRounds = 1,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false, // PHB p.238: 1 round
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -328,6 +344,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Minutes,
                     DurationValue = 1, // 1 min/level
+                    DurationScalesWithLevel = true, // per level (SPL-002: the flag was missing)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,

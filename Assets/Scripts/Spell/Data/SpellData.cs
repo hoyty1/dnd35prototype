@@ -372,7 +372,13 @@ public class SpellData
 
     // ========== BUFF/DEBUFF ==========
     public int BuffACBonus;             // AC bonus (Mage Armor = +4)
-    public int BuffDurationRounds;      // Duration in rounds (0 = instantaneous, -1 = hours/level) [LEGACY - prefer DurationType system]
+    /// <summary>
+    /// LEGACY rounds count (0 = none, -1 = hours/level). It sets no duration: DurationType, DurationValue and
+    /// DurationScalesWithLevel do, through SpellDurationRules (SPL-002); registration turns a spell that sets only this field
+    /// into a real duration and warns. Still read by the Extend Spell offer test (SPL-095), Extend's legacy doubling,
+    /// SpellcastingComponent.ApplyBuff (the ActiveBuffs countdown) and AISpellcastingStrategist's long-duration pre-buff check.
+    /// </summary>
+    public int BuffDurationRounds;
     public string BuffType;             // LEGACY: "armor", SpellNames.SHIELD, "morale", etc. — use BuffBonusType enum instead
 
     /// <summary>
@@ -404,6 +410,12 @@ public class SpellData
     public bool DurationScalesWithLevel;
     /// <summary>Whether the caster can dismiss the spell early as a standard action.</summary>
     public bool IsDismissible;
+    /// <summary>
+    /// The PHB duration line, for display only, when the unit fields above cannot write it: a rolled duration ("1d6+2
+    /// rounds"), a compound one ("Concentration + 1 round/level") or a capped one. Null otherwise; it never changes the
+    /// rounds a spell lasts (<see cref="SpellDurationRules.Rounds"/>).
+    /// </summary>
+    public string DurationText;
 
     // ========== HEALING ==========
     public int HealDice;                // Sides of healing die
@@ -586,24 +598,10 @@ public class SpellData
         else if (AoEShapeType == AoEShape.Line)
             aoeStr = $" | AoE: {AoESizeSquares * 5}-ft line";
 
-        // Duration info
-        string durStr = "";
-        if (DurationType != DurationType.Instantaneous && DurationValue > 0)
-        {
-            string unit = DurationType == DurationType.Rounds ? "rd" :
-                          DurationType == DurationType.Minutes ? "min" :
-                          DurationType == DurationType.Hours ? "hr" : "";
-            durStr = $" | Dur: {DurationValue}{unit}";
-            if (DurationScalesWithLevel) durStr += "/lvl";
-        }
-        else if (DurationType == DurationType.Permanent)
-        {
-            durStr = " | Dur: Permanent";
-        }
-        else if (DurationType == DurationType.Concentration)
-        {
-            durStr = " | Dur: Concentration";
-        }
+        // Duration info: the PHB line (SpellDurationRules.Describe); nothing shown for an instantaneous spell.
+        string durStr = DurationType == DurationType.Instantaneous && string.IsNullOrEmpty(DurationText)
+            ? ""
+            : $" | Dur: {SpellDurationRules.Describe(this)}";
 
         string placeholderStr = IsPlaceholder ? " <color=#FF8800>[PLACEHOLDER]</color>" : "";
         return $"[{levelStr}] {Name} ({School}){placeholderStr}\n{effectStr} | Range: {rangeStr}{aoeStr}{durStr}";

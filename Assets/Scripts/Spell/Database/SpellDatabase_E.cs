@@ -49,6 +49,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 24,
+                    DurationScalesWithLevel = false, // PHB p.226: 24 hours
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -133,6 +136,9 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false, // PHB p.227: 1 hour or less
                     ActionType = SpellActionType.FullRound,
                     ProvokesAoO = true,
                     IsPlaceholder = true,

@@ -270,8 +270,11 @@ public static class EffectService
     // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Tick 2nd-level cleric spell durations for a single character.
-    /// Handles Death Knell, Silence, and Align Weapon expiration.
+    /// Tick the flags of the 2nd-level cleric spells Death Knell, Silence and Align Weapon (SPL-003). Each handler also
+    /// adds a tracked effect to the StatusEffectManager; that effect owns the duration, and removing it (expiry, dispel,
+    /// rest) clears the flag through <see cref="ClearClericSpell2Flags"/>. Here the flag's counter only follows the tracked
+    /// effect; a flag with no tracked effect counts down on its own and expires at 0, so a flag can never outlive its
+    /// spell. Called once per round after the StatusEffectManager tick.
     /// </summary>
     /// <param name="character">The character whose durations to tick.</param>
     /// <param name="logCallback">Optional combat log callback.</param>
@@ -280,58 +283,222 @@ public static class EffectService
     {
         if (character?.Stats == null) return;
 
-        // ── Death Knell tick ──
-        if (character.Stats.DeathKnellActive)
-        {
-            if (character.Stats.DeathKnellRoundsRemaining > 0)
-            {
-                character.Stats.DeathKnellRoundsRemaining--;
-                if (character.Stats.DeathKnellRoundsRemaining <= 0)
-                {
-                    character.Stats.STR -= character.Stats.DeathKnellStrBonus;
-                    character.Stats.DeathKnellActive = false;
-                    character.Stats.DeathKnellStrBonus = 0;
-                    character.Stats.DeathKnellCLBonus = 0;
+        CharacterStats stats = character.Stats;
+        StatusEffectManager statusMgr = character.StatusEffectManager;
 
-                    logCallback?.Invoke(CombatLogHelper.ConditionFaded(
-                        "☠", character.Stats.CharacterName, "Death Knell buff"));
-                    Debug.Log($"[DeathKnell] Buff expired on {character.Stats.CharacterName}");
-                }
-            }
+        if (stats.DeathKnellActive && TickUntrackedFlag(statusMgr, SpellNames.DEATH_KNELL, ref stats.DeathKnellRoundsRemaining))
+        {
+            ClearClericSpell2Flags(stats, SpellNames.DEATH_KNELL, reverseDeathKnellStr: true);
+            logCallback?.Invoke(CombatLogHelper.ConditionFaded("☠", stats.CharacterName, "Death Knell buff"));
+            Debug.Log($"[DeathKnell] Buff expired on {stats.CharacterName}");
         }
 
-        // ── Silence tick ──
-        if (character.Stats.SilenceActive)
+        if (stats.SilenceActive && TickUntrackedFlag(statusMgr, SpellNames.SILENCE, ref stats.SilenceRoundsRemaining))
         {
-            if (character.Stats.SilenceRoundsRemaining > 0)
-            {
-                character.Stats.SilenceRoundsRemaining--;
-                if (character.Stats.SilenceRoundsRemaining <= 0)
-                {
-                    character.Stats.SilenceActive = false;
-                    logCallback?.Invoke(CombatLogHelper.ConditionFaded(
-                        "🔇", character.Stats.CharacterName, "Silence"));
-                    Debug.Log($"[Silence] Expired on {character.Stats.CharacterName}");
-                }
-            }
+            ClearClericSpell2Flags(stats, SpellNames.SILENCE, reverseDeathKnellStr: false);
+            logCallback?.Invoke(CombatLogHelper.ConditionFaded("🔇", stats.CharacterName, "Silence"));
+            Debug.Log($"[Silence] Expired on {stats.CharacterName}");
         }
 
-        // ── Align Weapon tick ──
-        if (character.Stats.AlignWeaponActive)
+        if (stats.AlignWeaponActive && TickUntrackedFlag(statusMgr, SpellNames.ALIGN_WEAPON, ref stats.AlignWeaponRoundsRemaining))
         {
-            if (character.Stats.AlignWeaponRoundsRemaining > 0)
+            ClearClericSpell2Flags(stats, SpellNames.ALIGN_WEAPON, reverseDeathKnellStr: false);
+            logCallback?.Invoke(CombatLogHelper.ConditionFaded("⚔", stats.CharacterName, "Align Weapon"));
+            Debug.Log($"[AlignWeapon] Expired on {stats.CharacterName}");
+        }
+    }
+
+    /// <summary>
+    /// One round for a spell flag. While the spell's tracked effect exists the counter mirrors its remaining rounds and the
+    /// flag stays (the effect's removal clears it). Without one the counter counts down; returns true when the flag expires.
+    /// </summary>
+    private static bool TickUntrackedFlag(StatusEffectManager statusMgr, string spellId, ref int roundsRemaining)
+    {
+        ActiveSpellEffect tracked = FindTrackedEffect(statusMgr, spellId);
+        if (tracked != null)
+        {
+            if (tracked.RemainingRounds > 0)
+                roundsRemaining = tracked.RemainingRounds;
+            return false;
+        }
+
+        if (roundsRemaining > 0)
+            roundsRemaining--;
+        return roundsRemaining <= 0;
+    }
+
+    /// <summary>The tracked effect of this spell on a character, or null.</summary>
+    public static ActiveSpellEffect FindTrackedEffect(StatusEffectManager statusMgr, string spellId)
+    {
+        if (statusMgr == null || statusMgr.ActiveEffects == null)
+            return null;
+        for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect effect = statusMgr.ActiveEffects[i];
+            if (effect != null && effect.Spell != null && string.Equals(effect.Spell.SpellId, spellId, StringComparison.Ordinal))
+                return effect;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// End the flags one of Death Knell, Silence or Align Weapon set on this character (SPL-003). Death Knell's +2 STR is
+    /// taken back only when <paramref name="reverseDeathKnellStr"/> is true: its tracked effect carries the bonus as an
+    /// applied stat and reverses it itself when removed, so only a flag with no tracked effect reverses it here.
+    /// </summary>
+    public static void ClearClericSpell2Flags(CharacterStats stats, string spellId, bool reverseDeathKnellStr)
+    {
+        if (stats == null || string.IsNullOrEmpty(spellId))
+            return;
+
+        if (string.Equals(spellId, SpellNames.DEATH_KNELL, StringComparison.Ordinal))
+        {
+            if (stats.DeathKnellActive && reverseDeathKnellStr)
+                stats.STR -= stats.DeathKnellStrBonus;
+            stats.DeathKnellActive = false;
+            stats.DeathKnellStrBonus = 0;
+            stats.DeathKnellCLBonus = 0;
+            stats.DeathKnellRoundsRemaining = 0;
+        }
+        else if (string.Equals(spellId, SpellNames.SILENCE, StringComparison.Ordinal))
+        {
+            stats.SilenceActive = false;
+            stats.SilenceRoundsRemaining = 0;
+        }
+        else if (string.Equals(spellId, SpellNames.ALIGN_WEAPON, StringComparison.Ordinal))
+        {
+            stats.AlignWeaponActive = false;
+            stats.AlignWeaponAlignment = null;
+            stats.AlignWeaponRoundsRemaining = 0;
+        }
+    }
+
+    /// <summary>
+    /// End every Death Knell, Silence and Align Weapon flag left on a character, for the rest after combat (SPL-003). Call
+    /// it after the StatusEffectManager's effects were removed: a flag still set then has no tracked effect, so Death
+    /// Knell's STR is reversed here.
+    /// </summary>
+    public static void ClearAllClericSpell2Flags(CharacterStats stats)
+    {
+        if (stats == null)
+            return;
+        ClearClericSpell2Flags(stats, SpellNames.DEATH_KNELL, reverseDeathKnellStr: true);
+        ClearClericSpell2Flags(stats, SpellNames.SILENCE, reverseDeathKnellStr: false);
+        ClearClericSpell2Flags(stats, SpellNames.ALIGN_WEAPON, reverseDeathKnellStr: false);
+    }
+
+    /// <summary>
+    /// Apply Silence's flag and tracked effect to a creature (PHB p.279; SPL-003). The tracked effect goes in first: the
+    /// same spell does not stack, so when the creature is already silenced the longer duration wins
+    /// (<see cref="StatusEffectManager.AddEffect"/>), and replacing the old effect (which clears its flag) happens before the
+    /// flag is set again. Returns the rounds the silence now lasts.
+    /// </summary>
+    public static int ApplySilence(CharacterController target, SpellData spell, string casterName, int casterLevel, int durationRounds)
+    {
+        if (target == null || target.Stats == null || spell == null)
+            return 0;
+
+        int rounds = AddOrKeepTrackedEffect(target.StatusEffectManager, spell, casterName, casterLevel, durationRounds, out _);
+        target.Stats.SilenceActive = true;
+        target.Stats.SilenceRoundsRemaining = rounds;
+        return rounds;
+    }
+
+    /// <summary>
+    /// Apply Align Weapon's flag and tracked effect (PHB p.197; SPL-003), in the same order as <see cref="ApplySilence"/>.
+    /// A recast that does not outlast the active spell leaves the active spell, and its alignment, in place. Returns the
+    /// rounds the spell now lasts.
+    /// </summary>
+    public static int ApplyAlignWeapon(CharacterController target, SpellData spell, string casterName, int casterLevel, int durationRounds, string alignment)
+    {
+        if (target == null || target.Stats == null || spell == null)
+            return 0;
+
+        string previousAlignment = target.Stats.AlignWeaponActive ? target.Stats.AlignWeaponAlignment : null;
+        int rounds = AddOrKeepTrackedEffect(target.StatusEffectManager, spell, casterName, casterLevel, durationRounds, out bool newCastApplies);
+        target.Stats.AlignWeaponActive = true;
+        target.Stats.AlignWeaponAlignment = newCastApplies || string.IsNullOrEmpty(previousAlignment) ? alignment : previousAlignment;
+        target.Stats.AlignWeaponRoundsRemaining = rounds;
+        return rounds;
+    }
+
+    /// <summary>
+    /// Add a spell's tracked effect lasting <paramref name="durationRounds"/>, or keep the active one when it lasts as long or
+    /// longer (the same spell does not stack). Returns the rounds the spell now lasts; <paramref name="newCastApplies"/> is
+    /// false when the active effect was kept.
+    /// </summary>
+    private static int AddOrKeepTrackedEffect(StatusEffectManager statusMgr, SpellData spell, string casterName, int casterLevel,
+        int durationRounds, out bool newCastApplies)
+    {
+        newCastApplies = true;
+        if (statusMgr == null)
+            return durationRounds;
+
+        ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, casterLevel);
+        if (effect != null)
+        {
+            effect.RemainingRounds = durationRounds;
+            return durationRounds;
+        }
+
+        ActiveSpellEffect existing = FindTrackedEffect(statusMgr, spell.SpellId);
+        if (existing == null)
+            return durationRounds;
+
+        newCastApplies = false;
+        return existing.RemainingRounds > 0 ? existing.RemainingRounds : durationRounds;
+    }
+
+    /// <summary>
+    /// Apply Death Knell's benefit to its caster (PHB p.217; SPL-003): temporary hit points, a +2 enhancement bonus to
+    /// Strength and +1 caster level for <paramref name="buffRounds"/>. The tracked effect carries the Strength bonus and takes
+    /// it back when it ends. A second Death Knell while the first lasts adds no more Strength (the same spell's enhancement
+    /// bonus does not stack): it keeps the longer duration and the higher temporary hit points. Returns true when the bonus
+    /// was newly applied, false when an active one was refreshed.
+    /// </summary>
+    public static bool ApplyDeathKnellBonus(CharacterController caster, SpellData spell, int casterLevel, int buffRounds, int tempHP)
+    {
+        if (caster == null || caster.Stats == null)
+            return false;
+
+        CharacterStats stats = caster.Stats;
+        StatusEffectManager statusMgr = caster.StatusEffectManager;
+        stats.TempHP = Mathf.Max(stats.TempHP, tempHP); // temporary hit points do not stack: keep the higher
+
+        if (stats.DeathKnellActive)
+        {
+            ActiveSpellEffect active = FindTrackedEffect(statusMgr, SpellNames.DEATH_KNELL);
+            if (active != null)
             {
-                character.Stats.AlignWeaponRoundsRemaining--;
-                if (character.Stats.AlignWeaponRoundsRemaining <= 0)
-                {
-                    character.Stats.AlignWeaponActive = false;
-                    character.Stats.AlignWeaponAlignment = null;
-                    logCallback?.Invoke(CombatLogHelper.ConditionFaded(
-                        "⚔", character.Stats.CharacterName, "Align Weapon"));
-                    Debug.Log($"[AlignWeapon] Expired on {character.Stats.CharacterName}");
-                }
+                active.RemainingRounds = Mathf.Max(active.RemainingRounds, buffRounds);
+                active.AppliedTempHP = Mathf.Max(active.AppliedTempHP, tempHP);
+                stats.DeathKnellRoundsRemaining = active.RemainingRounds;
+            }
+            else
+            {
+                stats.DeathKnellRoundsRemaining = Mathf.Max(stats.DeathKnellRoundsRemaining, buffRounds);
+            }
+            return false;
+        }
+
+        stats.DeathKnellActive = true;
+        stats.DeathKnellStrBonus = 2;
+        stats.DeathKnellCLBonus = 1;
+        stats.DeathKnellRoundsRemaining = buffRounds;
+        stats.STR += 2;
+
+        if (statusMgr != null && spell != null)
+        {
+            ActiveSpellEffect effect = statusMgr.AddEffect(spell, stats.CharacterName, casterLevel);
+            if (effect != null)
+            {
+                effect.RemainingRounds = buffRounds;
+                effect.AppliedStatName = "STR";
+                effect.AppliedStatBonus = 2;
+                effect.AppliedTempHP = tempHP;
             }
         }
+        return true;
     }
 
     /// <summary>

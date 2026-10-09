@@ -762,6 +762,10 @@ public partial class GameManager
 
             List<CharacterController> spawnedCreatures = new List<CharacterController>(creatureCount);
             Vector2Int primaryCell = targetCell.Coords;
+            // PHB p.285: summon monster lasts 1 round/level, from the cast's caster level (Extend doubles it) (SPL-002).
+            int? summonDurationRounds = SpellDurationRules.IsTimed(_pendingSpell)
+                ? SpellCastingHelper.CalculateDuration(_pendingSpell, SpellDurationRules.CasterLevelFor(caster, _pendingSpell))
+                : (int?)null;
             int summonRangeSquares = Mathf.Max(1, _pendingSpell.GetRangeSquaresForCasterLevel(caster != null && caster.Stats != null ? caster.Stats.Level : 0));
 
             for (int i = 0; i < creatureCount; i++)
@@ -794,7 +798,7 @@ public partial class GameManager
                     CombatUI?.ShowCombatLog(CombatLogHelper.Buff("", "Not enough open slots; stacking extra summons on the primary tile."));
 
                 InsertIntoInitiative(summonCC, caster);
-                RegisterActiveSummon(summonCC, caster, _pendingSpell.SpellId);
+                RegisterActiveSummon(summonCC, caster, _pendingSpell.SpellId, durationRoundsOverride: summonDurationRounds);
                 spawnedCreatures.Add(summonCC);
 
                 string summonIndexLabel = creatureCount > 1 ? $" {i + 1}" : string.Empty;
@@ -5685,7 +5689,10 @@ public partial class GameManager
             targetStatusMgr.Init(target.Stats);
         }
 
-        targetStatusMgr.AddEffect(spell, casterName, caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1);
+        // PHB p.235: 1d6+2 rounds; the tracked effect lasts as long as the paralysis just rolled.
+        ActiveSpellEffect ghoulTracked = targetStatusMgr.AddEffect(spell, casterName, caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1);
+        if (ghoulTracked != null)
+            ghoulTracked.RemainingRounds = Mathf.Max(1, ghoulEffect.ParalysisDurationRounds);
 
         if (result != null)
         {
@@ -6334,7 +6341,8 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.FLARE)
         {
-            int dazzledRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 10);
+            // PHB p.232: Flare is instantaneous; the dazzled condition it causes lasts 1 minute.
+            int dazzledRounds = SpellDurationRules.RoundsPerMinute;
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
             target.ApplyCondition(CombatConditionType.Dazzled, dazzledRounds, sourceName);
             CombatUI?.ShowCombatLog(CombatLogHelper.Buff("✨", $"{target.Stats.CharacterName} is dazzled (-1 attack, Spot, and Search) for {dazzledRounds} round(s)!"));
@@ -6433,7 +6441,8 @@ public partial class GameManager
 
         if (spell != null && spell.SpellId == SpellNames.CONFUSION)
         {
-            int confusionRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
+            // PHB p.212: 1 round/level (SPL-002; the legacy field had fixed it at 4 rounds).
+            int confusionRounds = Mathf.Max(1, SpellDurationRules.Rounds(spell, SpellDurationRules.CasterLevelFor(caster, spell)));
             string sourceName = spell.Name;
 
             if (_conditionService != null)
@@ -6552,7 +6561,8 @@ public partial class GameManager
         if (spell != null && spell.SpellId == SpellNames.FLESH_TO_STONE)
         {
             string sourceName = spell.Name;
-            int rounds = spell.BuffDurationRounds;
+            // PHB p.232: instantaneous; the petrification lasts until Stone to Flesh (a permanent condition).
+            int rounds = SpellDurationRules.PermanentRounds;
             if (_conditionService != null)
             {
                 _conditionService.ApplyCondition(
@@ -7571,7 +7581,8 @@ public partial class GameManager
             // character GameObjects, so the manager must always point at the current stats instance.
             statusMgr.Init(target.Stats);
 
-            int casterLevel = caster.Stats != null ? caster.Stats.Level : 1;
+            // The duration's caster level is the cast's caster level, not the character level (SPL-002, SPL-017).
+            int casterLevel = SpellDurationRules.CasterLevelFor(caster, spell);
             var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
 
             if (effect != null)
@@ -8050,7 +8061,8 @@ public partial class GameManager
 
         TickCharacterItemSpellDurations(character);
 
-        // Tick custom cleric spell duration counters (level 3 + level 4)
+        // Tick custom cleric spell duration counters (level 2, SPL-003; level 3 + level 4)
+        TickClericSpell2Durations(character);
         TickClericSpell3Durations(character);
         TickClericSpell4Durations(character);
     }
@@ -8673,10 +8685,15 @@ public partial class GameManager
             return true;
         }
 
-        // If the new spell is a concentration spell, the old one ends automatically
-        // (handled in BeginConcentration). No check needed, casting proceeds.
+        // If the new spell is a concentration spell, the old one ends: no check needed, casting proceeds.
+        // It ends here, not only in BeginConcentration, because some concentration spells (Lullaby, Mage Hand) resolve
+        // without a tracked effect and never reach BeginConcentration; without this the caster would keep both going.
         if (newSpell.DurationType == DurationType.Concentration)
         {
+            string switchLog = concMgr.EndConcentration();
+            if (!string.IsNullOrEmpty(switchLog))
+                CombatUI?.ShowCombatLog(CombatLogHelper.Color(switchLog, CombatLogHelper.ColorOrange));
+            UpdateAllStatsUI();
             return true;
         }
 

@@ -246,6 +246,9 @@ public static partial class SpellDatabase
                     RangeSquares = 22,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.241: 1 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -329,6 +332,7 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     DurationType = DurationType.Rounds,
                     DurationValue = 0, // resolved at runtime (2d4 rounds)
+                    DurationText = "2d4 rounds (D)", // PHB p.242
                     DurationScalesWithLevel = false,
                     IsPlaceholder = false
                 });

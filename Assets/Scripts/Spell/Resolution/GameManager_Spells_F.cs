@@ -30,7 +30,7 @@ public partial class GameManager
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel * 100; // 10 min/level = 100 rounds/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 
         target.Stats.FreedomOfMovementActive = true;
         target.Stats.FreedomOfMovementRoundsRemaining = durationRounds;

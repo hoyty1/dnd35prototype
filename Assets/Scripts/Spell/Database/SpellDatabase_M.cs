@@ -44,6 +44,9 @@ public static partial class SpellDatabase
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Concentration,
+                    DurationValue = 0,
+                    DurationScalesWithLevel = false, // PHB p.249: concentration
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -380,6 +383,9 @@ public static partial class SpellDatabase
                     RangeSquares = 22,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 10,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true, // PHB p.253: 10 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -433,6 +439,9 @@ public static partial class SpellDatabase
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 2,
+                    DurationScalesWithLevel = true, // PHB p.256: 2 hours/level
                     ActionType = SpellActionType.FullRound,
                     ProvokesAoO = true,
                     IsPlaceholder = true,

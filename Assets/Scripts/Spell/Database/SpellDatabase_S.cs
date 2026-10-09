@@ -245,6 +245,9 @@ public static partial class SpellDatabase
                     BuffDeflectionBonus = 1,
                     BuffSaveBonus = 1,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.278: 1 hour/level
                     BuffType = SpellNames.SHIELD_OTHER,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
@@ -282,6 +285,9 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will", // If targeted on a creature
                     BuffDurationRounds = 3,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // the code's long-standing 1 round/level (believed to be the SRD's; not verified); PHB p.279 prints 1 min./level; owner question SPL-003
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -651,6 +657,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true, // PHB p.283: 10 min./level
                     BuffType = SpellNames.SPIDER_CLIMB,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
@@ -672,6 +681,9 @@ public static partial class SpellDatabase
                     DamageType = "force",
                     AutoHit = false, // Uses caster's BAB + WIS mod for attack
                     BuffDurationRounds = 3,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.283: 1 round/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = false // Does not provoke
                 });
@@ -701,6 +713,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.284: 1 hour/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -718,6 +733,9 @@ public static partial class SpellDatabase
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 3,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.285: 1 round/level
                     ActionType = SpellActionType.FullRound,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -735,6 +753,9 @@ public static partial class SpellDatabase
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 3,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.286: 1 round/level
                     ActionType = SpellActionType.FullRound,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -1190,6 +1211,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Minutes,
                     DurationValue = 10, // 10 min/level
+                    DurationScalesWithLevel = true, // per level (SPL-002: the flag was missing)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

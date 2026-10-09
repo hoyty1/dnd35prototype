@@ -1184,6 +1184,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Magic.SpellDurationRulesTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 151,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "SPL-002 and SPL-003: SpellDurationRules for every duration unit, per level and fixed (PHB p.176, p.138), MinutesPerLevel, the legacy BuffDurationRounds normalization and no registered spell needing it, the PHB duration of the 54 formerly legacy-only spells and 8 more with wrong data, Extend doubling a fixed spell (PHB p.91), tracked effects that survive the first round tick (Aid, Doom, Resistance), and Silence, Align Weapon and Death Knell flags ending with their tracked effect or on their own (Death Knell STR taken back once), recasts of Silence and Align Weapon that keep the flag on and a second Death Knell that adds no STR, Describe writing the PHB duration line (DurationText), plus the Shield Other link ending with its spell"
+    },
+    {
       "type": "Tests.Magic.SpellSaveDCRulesTests",
       "needs": "either",
       "skip": "",

@@ -313,6 +313,15 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SHIELD_OF_FAITH, System.StringComparison.Ordinal) && _stats != null)
             _stats.ShieldOfFaithDeflectionBonus = 0;
 
+        // SPL-003: Death Knell, Silence and Align Weapon flags end with their tracked effect (expiry, dispel or rest).
+        // Death Knell's +2 STR is an applied stat of the effect, so ReverseStatModifications above already took it back.
+        if (effect.Spell != null && _stats != null)
+            EffectService.ClearClericSpell2Flags(_stats, effect.Spell.SpellId, reverseDeathKnellStr: false);
+
+        // Shield Other (PHB p.278, 1 hour/level): the damage-sharing link ends with the spell on the protected subject.
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SHIELD_OTHER, System.StringComparison.Ordinal) && _stats != null)
+            ClearShieldOtherLink(_stats);
+
         // Also remove from SpellcastingComponent's ActiveBuffs for backward compat
         if (_spellComp != null && effect.Spell != null)
         {
@@ -320,6 +329,24 @@ public class StatusEffectManager : MonoBehaviour
         }
 
         Debug.Log($"[StatusEffect] {_stats.CharacterName}: {effect.Spell?.Name ?? "Unknown"} effect removed");
+    }
+
+    /// <summary>Ends the Shield Other link that protects this subject, on both sides of the link.</summary>
+    private static void ClearShieldOtherLink(CharacterStats protectedStats)
+    {
+        if (protectedStats == null || !protectedStats.ShieldOtherProtectedActive)
+            return;
+
+        CharacterController protector = protectedStats.ShieldOtherProtector;
+        if (protector != null && protector.Stats != null && protector.Stats.ShieldOtherProtected != null
+            && protector.Stats.ShieldOtherProtected.Stats == protectedStats)
+        {
+            protector.Stats.ShieldOtherProtectorActive = false;
+            protector.Stats.ShieldOtherProtected = null;
+        }
+
+        protectedStats.ShieldOtherProtectedActive = false;
+        protectedStats.ShieldOtherProtector = null;
     }
 
     /// <summary>

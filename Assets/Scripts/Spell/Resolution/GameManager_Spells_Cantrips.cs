@@ -41,7 +41,7 @@ public partial class GameManager
         sb.AppendLine($"👻 {casterName} casts Ghost Sound!");
         sb.AppendLine($"  School: Illusion (Figment) | Level: 0 (Cantrip)");
         sb.AppendLine($"  Illusory sounds echo through the area — footsteps, voices, rattling chains...");
-        sb.AppendLine($"  Will disbelief (if interacted with). Duration: {spell.BuffDurationRounds} rounds.");
+        sb.AppendLine($"  Will disbelief (if interacted with). Duration: {SpellDurationRules.DescribeRounds(SpellDurationRules.Rounds(spell, SpellDurationRules.CasterLevelFor(caster, spell)))}.");
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
         Debug.Log($"[Cantrip] Ghost Sound cast by {casterName}");
@@ -108,7 +108,7 @@ public partial class GameManager
         sb.AppendLine($"💬 {casterName} casts Message!");
         sb.AppendLine($"  School: Transmutation | Level: 0 (Cantrip)");
         sb.AppendLine($"  Whispered messages can now be delivered across the battlefield.");
-        sb.AppendLine($"  Duration: {spell.BuffDurationRounds} rounds. Targets can whisper back.");
+        sb.AppendLine($"  Duration: {SpellDurationRules.DescribeRounds(SpellDurationRules.Rounds(spell, SpellDurationRules.CasterLevelFor(caster, spell)))}. Targets can whisper back.");
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
         Debug.Log($"[Cantrip] Message cast by {casterName}");
@@ -282,7 +282,7 @@ public partial class GameManager
         sb.AppendLine($"🎵 {casterName} casts Lullaby on {targetName}!");
         sb.AppendLine($"  School: Enchantment (Compulsion) | Level: 0 (Cantrip)");
         sb.AppendLine($"  {targetName} feels drowsy... –5 on Listen checks, –2 on Will saves vs sleep.");
-        sb.AppendLine($"  Duration: {spell.BuffDurationRounds} rounds.");
+        sb.AppendLine($"  Duration: {SpellDurationRules.DescribeRounds(SpellDurationRules.Rounds(spell, SpellDurationRules.CasterLevelFor(caster, spell)))}.");
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
         Debug.Log($"[Cantrip] Lullaby cast by {casterName} on {targetName}");

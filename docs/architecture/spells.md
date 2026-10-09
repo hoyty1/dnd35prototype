@@ -32,7 +32,7 @@ A spell is a data record plus GameManager code. `SpellDatabase` declares each sp
 | Effect | `EffectType` (12 values), `DamageDice` (die sides), `DamageCount`, `BonusDamage`, `DamageType`, `AutoHit`, `MissileCount`, `HealDice`/`HealCount`/`BonusHealing` | fixed numbers; they do not scale with caster level. Exception: for `AutoHit` spells with `MissileCount > 0` (Magic Missile), `SpellCaster.Cast` computes the missile count from `GetCasterLevel()` |
 | Save and SR | `AllowsSavingThrow`, `SavingThrowType` (the strings "Reflex"/"Will"/"Fortitude"), `SaveHalves`, `SaveDC`, `SpellResistanceApplies` | `SaveDC > 0` overrides the DC rule (`SpellSaveDCRules`) on every path; scroll and wand casts set it. Ghoul Touch's stench reads the template's DC rule, not the cast's clone. SR is opt-in: true on 91 of 292 spells |
 | Tracked buff | `Buff*` (AC, attack, damage, save, stat, skill, shield, deflection, temp HP, speed, DR, resistance, immunity), `BuffBonusType`, legacy `BuffType` string | read by `StatusEffectManager.AddEffect` |
-| Duration | `DurationType`, `DurationValue`, `DurationScalesWithLevel`, legacy `BuffDurationRounds` | see Durations |
+| Duration | `DurationType`, `DurationValue`, `DurationScalesWithLevel`; `DurationText` (display only, for rolled or compound PHB lines); legacy `BuffDurationRounds` sets no duration (normalized at registration; still read by the Extend offer test and legacy doubling, `SpellcastingComponent.ApplyBuff`'s `ActiveBuffs` countdown and the AI's long-duration pre-buff check) | see Durations |
 | Casting | `ActionType`, `ProvokesAoO`, `HasVerbalComponent`, `HasSomaticComponent`, `HasMaterialComponent`, `HasDivineFocus` | |
 | Flags | `Descriptors` (`SpellDescriptor` flags), `IsMindAffecting` (separate bool), `BlockedByProtectionFromAlignment`, `IsPlaceholder`, `PlaceholderReason` | only the bool is read for mind-affecting immunity; `BlockedByProtectionFromAlignment` (not `IsMindAffecting`) drives the protection-from-alignment block in `SpellCaster` |
 | Metamagic | `BaseSpellLevel`, `EffectiveSpellLevel`, `AppliedMetamagics`, `MetamagicDataRef`, `Clone()` | `Clone()` deep-copies `AvailableFor`/`AppliedMetamagics` and nulls `MetamagicDataRef` |
@@ -167,9 +167,9 @@ Known deviations, one line each (tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md
 
 ## Durations and ticking
 
-`DurationType` (`Spell/StatusEffects/ActiveSpellEffect.cs`) is Instantaneous (enum value 0), Rounds, Minutes (x10 rounds), Hours (x600), Permanent, Days (x14,400), MinutesPerLevel or Concentration. `ActiveSpellEffect.CalculateDurationRounds(spell, cl)` returns the sentinels 0 (Instantaneous), -1 (Permanent) and -2 (Concentration). `Tick()` skips negative values and expires at 0. `SpellCastingHelper.CalculateDuration` wraps it in `Max(1, ...)`, which turns every sentinel into 1 round (Calm Emotions, a Concentration spell, lasts 1 round this way). Call `CalculateDurationRounds` when you need the sentinels. Several handlers overwrite `effect.RemainingRounds` after `AddEffect` with their own value.
+`DurationType` (`Spell/StatusEffects/ActiveSpellEffect.cs`) is Instantaneous (enum value 0), Rounds, Minutes (x10 rounds), Hours (x600), Permanent, Days (x14,400), MinutesPerLevel (minutes per caster level) or Concentration; `DurationValue` and `DurationScalesWithLevel` give the number and whether it is per caster level. The one duration rule is `SpellDurationRules.Rounds(spell, cl)` (`Spell/Casting/SpellDurationRules.cs`, SPL-002); `ActiveSpellEffect.CalculateDurationRounds` delegates to it and it returns the sentinels 0 (Instantaneous), -1 (Permanent) and -2 (Concentration). `SpellDurationRules.CasterLevelFor(caster, spell)` is the caster level a duration uses (the cast's caster level, or the creature's level when it has no casting class); the generic `ApplySpellBuff` branch uses it. `Tick()` skips negative values and expires at 0. `SpellCastingHelper.CalculateDuration` wraps it in `Max(1, ...)`, which turns every sentinel into 1 round (Calm Emotions, a Concentration spell, lasts 1 round this way). Call `CalculateDurationRounds` when you need the sentinels. Several handlers overwrite `effect.RemainingRounds` after `AddEffect` with their own value.
 
-Legacy trap: 54 spells set only `BuffDurationRounds` and no `DurationType`, so they default to Instantaneous, get `RemainingRounds = 0` in `StatusEffectManager`, and probably expire on the first tick (not verified in Play mode). The `default:` branch that falls back to `BuffDurationRounds` is reached only by `MinutesPerLevel`, which has no case (Invisibility Purge).
+Every registered spell sets its PHB duration in the three fields (checked against the PHB for the 54 spells that once set only the legacy `BuffDurationRounds`, and for 8 with wrong values, by `Tests.Magic.SpellDurationRulesTests`). `BuffDurationRounds` sets no duration: `SpellDatabase.Register` turns a spell that sets only that field into fixed rounds (or 1 hour/level for -1), logs a warning and lists it in `SpellDatabase.LegacyDurationSpellIds`, which the suite requires to be empty. Before 2026-10-09 such spells defaulted to Instantaneous and their effects ended at the first tick (SPL-002). Most handlers with their own state take their rounds from `SpellCastingHelper.CalculateDuration(spell, cl)`, so an extended clone lasts longer; random durations (Cause Fear 1d4, Ghoul Touch 1d6+2) are rolled by the handler, and Ghoul Touch sets its tracked effect to the roll. `SpellDurationRules.Describe` writes the PHB line for the spell selection screen and `SpellData.GetShortDescription`, using `DurationText` when set. The handlers that still compute their own rounds are listed in SPL-038 (the Bull's Strength family, False Life, Scare, Spectral Hand, Rainbow Pattern, Summon Swarm, Death Knell).
 
 **Tick order.** Everything ticks at the global round boundary, not on the caster's turn, so a 1-round effect cast late in initiative expires before the caster acts again.
 
@@ -183,7 +183,7 @@ TurnService.OnNewRound -> GameManager.OnNewRound (_Core/GameManager.cs:3806)
       sync if-chain: copy RemainingRounds into CharacterController *EffectData objects
       EffectService.TickResistEnergyEffects / TickProtectionFromEnergyEffects / TickDebuffEffects
       TickCharacterItemSpellDurations
-      TickClericSpell3Durations, TickClericSpell4Durations   (TickClericSpell2Durations has no caller)
+      TickClericSpell2Durations, TickClericSpell3Durations, TickClericSpell4Durations
     TickAllAlignmentDetectionDurations
   _conditionService.OnRoundEnd      (conditions; see Combat & grid)
   TickSummonDurations
@@ -204,10 +204,9 @@ Turn start: StartPCTurn -> HandleFlamingSphereTurnStart, ApplyMelfsAcidArrowTurn
 | Every round while active | the sync if-chain in `TickCharacterSpellDurations` |
 | Dispel | `DispelMagicService.HandleDispelSpecialCleanup` (`Services/DispelMagicService.cs:295`) |
 | End of combat | `GameManager.RestorePartyAfterCombat` (per-PC `Clear*Effect` calls, `Stats.Active*Effect = null`) and `GameManager.OnCombatEnded`, which an ordinary victory does not reach (see [the runtime loop](../ARCHITECTURE.md#what-the-game-is-and-the-runtime-loop)) (`EffectService.ClearAll`, `ClearAllActiveGreaseEffects`, `ClearAllMirrorImageEffects`, `CurseTracker.ClearAll`) |
-| Counter-based flags | `EffectService.TickClericSpell2/3/4Durations`, the only code that clears those flags |
+| Counter-based flags | `EffectService.TickClericSpell3/4Durations`, the only code that clears those flags. The level-2 flags (Silence, Death Knell, Align Weapon) end with their tracked effect in `StatusEffectManager.RemoveEffect` (`EffectService.ClearClericSpell2Flags`); `TickClericSpell2Durations` counts down only a flag with no tracked effect, and `RestorePartyAfterCombat` clears what is left (`ClearAllClericSpell2Flags`). The Shield Other link also ends in `RemoveEffect` (SPL-003) |
 
 Known deviations, one line each (tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)):
-- `TickClericSpell2Durations` has no callers, so the Silence, Death Knell (+STR) and Align Weapon flags never expire, and `RestorePartyAfterCombat` does not reset them.
 - Silence sets `Stats.SilenceActive`, but the only check that reads it is `SpellcastingComponent.CanCastSpell`, which the combat spell menu and the cast pipelines do not call. Silence therefore probably does not stop casting in combat (inferred from code, not verified in Play mode).
 - `ProcessSpiritualWeaponTurnStart` has no callers, so Spiritual Weapon attacks only once.
 - `ProcessHeatMetalTick` (`Spell/Domain/GameManager_DomainSpells.cs:407`) has no callers, so Heat Metal never deals its per-round damage. This was found while writing this section and is not in the verified issue list; add it to [KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
@@ -253,7 +252,7 @@ What each feat actually changes:
 | Feat | Applied in | Effect in code |
 |---|---|---|
 | Enlarge | `SpellCaster.ApplyMetamagicToSpellData` (on the clone) | doubles `RangeSquares` and `RangeIncreaseSquares`, which category spells ignore, so range does not change for the 249 category spells. Since 0dd8e76 it also doubles `AoESizeSquares` and `AreaRadius` (a rules deviation, not a labelled house rule: RAW Enlarge changes range only; Enlarge + Widen quadruples; tracked as [SPL-010](../issues/SPL.md)) |
-| Extend | same | doubles `DurationValue` and `BuffDurationRounds` unless Instantaneous, Permanent or Concentration. Handlers that hard-code durations ignore it. Offered only when `BuffDurationRounds != 0` |
+| Extend | same | doubles `DurationValue` and `BuffDurationRounds` unless Instantaneous, Permanent or Concentration. Handlers that read the clone's duration through `SpellDurationRules` follow it; those that still hard-code durations (listed in SPL-038) ignore it. Offered only when `BuffDurationRounds != 0` (SPL-095) |
 | Widen | same | doubles `AreaRadius` and `AoESizeSquares`; persistent zones are unaffected |
 | Quicken | same, plus the action spend in `PerformSpellCast` / `TryConsumePendingSpellCast` | `ActionType = Free`; one per round |
 | Silent, Still | same | clear `HasVerbalComponent` / `HasSomaticComponent`; ASF is still rolled |

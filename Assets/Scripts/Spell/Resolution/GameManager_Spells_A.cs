@@ -37,7 +37,7 @@ public partial class GameManager
             return true;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 
         // Determine alignment to apply
         // For simplicity, use "good" as default. Caster's alignment determines options:
@@ -45,21 +45,12 @@ public partial class GameManager
         // AI casters: pick "good" for good-aligned, "evil" for evil-aligned, etc.
         string alignment = DetermineAlignWeaponAlignment(caster);
 
-        target.Stats.AlignWeaponActive = true;
-        target.Stats.AlignWeaponAlignment = alignment;
-        target.Stats.AlignWeaponRoundsRemaining = durationRounds;
+        // Flag and tracked effect together; a recast keeps the longer duration (SPL-003).
+        int alignedRounds = EffectService.ApplyAlignWeapon(target, spell, caster.Stats.CharacterName, casterLevel, durationRounds, alignment);
+        string appliedAlignment = target.Stats.AlignWeaponAlignment;
 
-        // Track via StatusEffectManager
-        var statusMgr = target.StatusEffectManager;
-        if (statusMgr != null)
-        {
-            var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
-            if (effect != null)
-                effect.RemainingRounds = durationRounds;
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔✨", $"Align Weapon! {target.Stats.CharacterName}'s weapon is now {alignment}-aligned for {durationRounds} rounds ({casterLevel} minutes). Bypasses DR/{alignment}."));
-        Debug.Log($"[AlignWeapon] {target.Stats.CharacterName}'s weapon aligned as '{alignment}' for {durationRounds} rounds");
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("⚔✨", $"Align Weapon! {target.Stats.CharacterName}'s weapon is now {appliedAlignment}-aligned for {SpellDurationRules.DescribeRounds(alignedRounds)}. Bypasses DR/{appliedAlignment}."));
+        Debug.Log($"[AlignWeapon] {target.Stats.CharacterName}'s weapon aligned as '{appliedAlignment}' for {alignedRounds} rounds (this cast {durationRounds})");
 
         return true;
     }

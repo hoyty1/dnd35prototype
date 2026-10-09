@@ -167,7 +167,7 @@ public partial class GameManager
         target = caster;
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel * 100; // 10 min/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
         int radiusFeet = casterLevel * 10; // 10 ft/level
 
         target.Stats.RepelVerminActive = true;

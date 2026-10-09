@@ -162,7 +162,7 @@ public partial class GameManager
             return true;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
         string casterName = caster.Stats.CharacterName ?? "Unknown";
 
         // Create Greater Invisibility effect data — key difference: BreaksOnAttack = false

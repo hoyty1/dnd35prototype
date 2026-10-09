@@ -114,6 +114,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true, // PHB p.268: 10 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -182,6 +185,9 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     BuffSaveBonus = 4, // +4 morale vs fear
                     BuffDurationRounds = 100, // 10 minutes = 100 rounds
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = false, // PHB p.271: 10 minutes
                     BuffType = "morale_fear",
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
@@ -289,6 +295,9 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     BuffSaveBonus = 1,
                     BuffDurationRounds = 10, // 1 minute
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false, // PHB p.272: 1 minute
                     BuffType = "resistance",
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
@@ -305,6 +314,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.273: 1 hour/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -506,6 +518,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Minutes,
                     DurationValue = 10, // 10 min/level
+                    DurationScalesWithLevel = true, // per level (SPL-002: the flag was missing)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

@@ -21,6 +21,9 @@ public static partial class SpellDatabase
                     RangeSquares = 2,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false, // PHB p.264: 1 hour
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

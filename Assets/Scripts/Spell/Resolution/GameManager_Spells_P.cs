@@ -37,7 +37,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel; // 1 round/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
         int radiusSquares = 8; // 40 ft = 8 squares
 
         List<CharacterController> allChars = GetAllCharacters();

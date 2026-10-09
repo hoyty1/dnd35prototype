@@ -39,7 +39,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 
         // Create the area effect centered on the caster
         Vector3 centerWorldPos = caster.transform.position;

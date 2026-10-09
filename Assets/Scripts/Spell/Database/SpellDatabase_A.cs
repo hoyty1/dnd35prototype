@@ -90,6 +90,9 @@ public static partial class SpellDatabase
                     BuffSaveBonus = 1,
                     BuffTempHP = 5, // ~average of 1d8
                     BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.196: 1 min./level
                     BuffType = "morale",
                     BuffBonusType = BonusType.Morale,
                     BonusTypeExplicitlySet = true,
@@ -108,6 +111,9 @@ public static partial class SpellDatabase
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 2,
+                    DurationScalesWithLevel = true, // PHB p.197: 2 hours/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -132,6 +138,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 10, // 1 min/level, scaled at cast time
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.197: 1 min./level
                     BuffType = SpellNames.ALIGN_WEAPON,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
@@ -201,6 +210,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Permanent,
+                    DurationValue = 0,
+                    DurationScalesWithLevel = false, // PHB p.200: permanent
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,

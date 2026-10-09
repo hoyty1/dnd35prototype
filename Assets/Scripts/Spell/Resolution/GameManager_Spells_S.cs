@@ -104,7 +104,7 @@ public partial class GameManager
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel * 100; // 10 min/level = 100 rounds/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 
         // Default immune spell — in full implementation, player would choose
         string immuneSpellId = SpellNames.MAGIC_MISSILE;
@@ -401,7 +401,9 @@ public partial class GameManager
     //  SILENCE — PHB p.279
     //  Illusion (Glamer). Cleric 2 / Bard 2. V, S.
     //  Range: Long. Area: 20-ft-radius emanation centered on a creature/object/point.
-    //  Duration: 1 round/level (D). Saving Throw: Will negates (creature-targeted) or None (area).
+    //  Duration: the code's long-standing 1 round/level (D) (believed to be the SRD's; not verified); PHB p.279
+    //  prints 1 min./level; owner question SPL-003.
+    //  Saving Throw: Will negates (creature-targeted) or None (area).
     //  Spell Resistance: Yes.
     //  Negates all sound in the area. Creatures in the area cannot cast
     //  spells with verbal components. Counters/dispels sound-based effects.
@@ -424,22 +426,13 @@ public partial class GameManager
         }
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 
-        target.Stats.SilenceActive = true;
-        target.Stats.SilenceRoundsRemaining = durationRounds;
+        // Flag and tracked effect together; a recast keeps the longer duration (SPL-003).
+        int silencedRounds = EffectService.ApplySilence(target, spell, caster.Stats.CharacterName, casterLevel, durationRounds);
 
-        // Track via StatusEffectManager
-        var statusMgr = target.StatusEffectManager;
-        if (statusMgr != null)
-        {
-            var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
-            if (effect != null)
-                effect.RemainingRounds = durationRounds;
-        }
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.StatusEnd($"🔇 Silence! {target.Stats.CharacterName} is silenced for {durationRounds} round(s)! Cannot cast spells with verbal components."));
-        Debug.Log($"[Silence] Applied to {target.Stats.CharacterName} for {durationRounds} rounds (CL {casterLevel})");
+        CombatUI?.ShowCombatLog(CombatLogHelper.StatusEnd($"🔇 Silence! {target.Stats.CharacterName} is silenced for {SpellDurationRules.DescribeRounds(silencedRounds)}! Cannot cast spells with verbal components."));
+        Debug.Log($"[Silence] Applied to {target.Stats.CharacterName} for {silencedRounds} rounds (CL {casterLevel}, this cast {durationRounds})");
 
         return true;
     }
@@ -509,7 +502,7 @@ public partial class GameManager
     //  SPIRITUAL WEAPON — PHB p.283
     //  Evocation [Force]. Cleric 2. V, S, DF.
     //  Range: Medium (100 ft + 10 ft/level). Effect: Magic weapon of force.
-    //  Duration: 1 round/level (D, max 10 rounds).
+    //  Duration: 1 round/level (D); no cap (the 10-round cap was not in the PHB, SPL-002).
     //  Saving Throw: None. Spell Resistance: Yes.
     //  Weapon attacks designated foe each round using caster's BAB + WIS mod.
     //  Deals 1d8 + 1/3 caster levels (max +5) force damage.
@@ -530,7 +523,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = Mathf.Min(casterLevel, 10); // Max 10 rounds at CL 10+
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // PHB p.283: 1 round/level, no cap (SPL-002)
 
         // Set up the spiritual weapon tracking on the caster
         caster.Stats.SpiritualWeaponActive = true;
@@ -701,7 +694,9 @@ public partial class GameManager
         if (!result.Success)
             return true; // Spell was cast but failed (shouldn't happen for harmless)
 
-        // Clear any existing Shield Other on the target
+        // Clear any existing Shield Other on the target. Its tracked effect goes first: removing it ends the old link
+        // (SPL-003), so the generic buff step that follows cannot end the new one when it replaces that effect.
+        target.StatusEffectManager?.RemoveEffectsBySpellId(SpellNames.SHIELD_OTHER);
         ClearShieldOtherLink(target);
         // Clear any existing protection the caster is providing to someone else
         ClearShieldOtherProtectorLink(caster);

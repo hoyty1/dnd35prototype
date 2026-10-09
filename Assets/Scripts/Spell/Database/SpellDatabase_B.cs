@@ -26,6 +26,9 @@ public static partial class SpellDatabase
                     BuffAttackBonus = -1,
                     BuffSaveBonus = -1,
                     BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.203: 1 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -295,6 +298,9 @@ public static partial class SpellDatabase
                     HasVerbalComponent = true,
                     HasSomaticComponent = false,
                     BuffDurationRounds = -1, // Permanent
+                    DurationType = DurationType.Permanent,
+                    DurationValue = 0,
+                    DurationScalesWithLevel = false, // PHB p.206: permanent
                     IsDismissible = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true

@@ -29,12 +29,17 @@ public static partial class SpellDatabase
     private static Dictionary<string, SpellData> _spells;
     private static Dictionary<string, string> _spellAliases;
     private static bool _initialized;
+    private static readonly List<string> _legacyDurationSpellIds = new List<string>();
+
+    /// <summary>Spells registration had to give a duration because they set only the legacy BuffDurationRounds (SPL-002); empty when every spell sets its own.</summary>
+    public static IReadOnlyList<string> LegacyDurationSpellIds => _legacyDurationSpellIds;
 
     public static void Init()
     {
         if (_initialized) return;
         _initialized = true;
         _spells = new Dictionary<string, SpellData>();
+        _legacyDurationSpellIds.Clear();
         _spellAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
 
@@ -94,6 +99,15 @@ public static partial class SpellDatabase
         }
 
         spell.EnsureAvailabilityFromLegacyClassList();
+
+        // SPL-002: a spell that sets only the legacy BuffDurationRounds would keep the Instantaneous default and get a
+        // 0-round effect. Every registered spell now sets its PHB duration; this catches a new one that does not.
+        if (SpellDurationRules.NormalizeLegacyDuration(spell))
+        {
+            _legacyDurationSpellIds.Add(spell.SpellId);
+            Debug.LogWarning($"[SpellDatabase] {spell.SpellId} sets only the legacy BuffDurationRounds; treated as {SpellDurationRules.Describe(spell)}. Set DurationType, DurationValue and DurationScalesWithLevel.");
+        }
+
         _spells[spell.SpellId] = spell;
     }
 

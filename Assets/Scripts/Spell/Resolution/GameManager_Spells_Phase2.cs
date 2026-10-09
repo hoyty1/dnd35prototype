@@ -579,14 +579,14 @@ public partial class GameManager
         if (caster == null || target == null || spell == null) return null;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel * 10; // 1 min/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
         string casterName = caster.Stats.CharacterName;
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
         sb.AppendLine($"👁 {casterName} casts True Seeing!");
         sb.AppendLine($"  School: Divination | Level: 5 | Touch");
-        sb.AppendLine($"  Duration: {durationRounds} rounds ({casterLevel} min)");
+        sb.AppendLine($"  Duration: {durationRounds} rounds ({SpellDurationRules.DescribeRounds(durationRounds)})");
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
         // Apply via StatusEffectManager
@@ -789,7 +789,7 @@ public partial class GameManager
         sb.AppendLine($"  School: Transmutation | Level: 2 | Self");
         sb.AppendLine($"  +2 size bonus to STR, +10 Disguise check bonus");
         int dur = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
-        sb.AppendLine($"  Duration: {dur} rounds ({casterLevel * 10} min)");
+        sb.AppendLine($"  Duration: {dur} rounds ({SpellDurationRules.DescribeRounds(dur)})");
 
         if (effect != null)
             sb.AppendLine($"  ✦ {target.Stats.CharacterName}: +2 size STR, altered form");

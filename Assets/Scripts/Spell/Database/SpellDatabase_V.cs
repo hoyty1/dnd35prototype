@@ -72,6 +72,9 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.298: 1 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -90,6 +93,9 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     BuffTempHP = 1,
                     BuffDurationRounds = 10,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false, // PHB p.298: 1 minute
                     BuffType = "temp_hp",
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true

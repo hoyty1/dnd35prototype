@@ -526,7 +526,7 @@ public partial class GameManager
 
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
         int radiusSquares = Mathf.Max(1, casterLevel); // 5 ft/level = 1 square/level
 
         // Set caster state

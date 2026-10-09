@@ -69,6 +69,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.216: 1 hour/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -152,6 +155,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true, // PHB p.217: 10 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -169,6 +175,9 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.217: 1 hour/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -197,6 +206,9 @@ public static partial class SpellDatabase
                     AreaRadius = 4,
                     EffectType = SpellEffectType.Debuff,
                     BuffDurationRounds = -1, // 2 hr/level, effectively unlimited in combat
+                    DurationType = DurationType.Hours,
+                    DurationValue = 2,
+                    DurationScalesWithLevel = true, // PHB p.218: 2 hours/level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     HasVerbalComponent = true,
@@ -358,6 +370,10 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 30,
+                    DurationType = DurationType.Concentration,
+                    DurationValue = 1,
+                    DurationText = "Concentration, up to 1 min./level (D)", // PHB p.220
+                    DurationScalesWithLevel = true, // PHB p.220: concentration, up to 1 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -528,6 +544,9 @@ public static partial class SpellDatabase
                     BuffAttackBonus = -2,
                     BuffSaveBonus = -2,
                     BuffDurationRounds = 30,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true, // PHB p.225: 1 min./level
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -820,6 +839,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Minutes,
                     DurationValue = 1, // 1 min/level
+                    DurationScalesWithLevel = true, // per level (SPL-002: the flag was missing)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -871,6 +891,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Rounds,
                     DurationValue = 1, // 1 round/level
+                    DurationScalesWithLevel = true, // per level (SPL-002: the flag was missing)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

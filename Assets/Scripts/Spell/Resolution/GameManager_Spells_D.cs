@@ -30,7 +30,7 @@ public partial class GameManager
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         string targetName = target.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel * 10; // 1 min/level = 10 rounds/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 
         target.Stats.DeathWardActive = true;
         target.Stats.DeathWardRoundsRemaining = durationRounds;
@@ -69,7 +69,7 @@ public partial class GameManager
         target = caster;
         string casterName = caster.Stats.CharacterName ?? "Unknown";
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = casterLevel; // 1 round/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
 
         // +6 enhancement to STR
         int strBonus = 6;
@@ -353,33 +353,13 @@ public partial class GameManager
         int targetHD = target.Stats.GetHitDice();
         int buffRounds = targetHD * 100; // 10 min * 10 rounds/min * HD
 
-        // Caster gains 1d8 temporary HP
+        // Caster gains 1d8 temporary HP, +2 enhancement to STR and +1 caster level. A second Death Knell while the first
+        // lasts refreshes it and adds no more STR (the same spell's enhancement bonus does not stack; SPL-003).
         int tempHP = DiceService.D8("Death Knell temp HP 1d8");
-        caster.Stats.TempHP = Mathf.Max(caster.Stats.TempHP, tempHP); // Don't stack, use higher
-
-        // Caster gains +2 enhancement bonus to STR
-        caster.Stats.DeathKnellActive = true;
-        caster.Stats.DeathKnellStrBonus = 2;
-        caster.Stats.DeathKnellCLBonus = 1;
-        caster.Stats.DeathKnellRoundsRemaining = buffRounds;
-
-        // Apply the STR bonus
-        caster.Stats.STR += 2;
-
-        // Track via StatusEffectManager for display/cleanup
-        var statusMgr = caster.StatusEffectManager;
-        if (statusMgr != null)
-        {
-            int cl = caster.Stats.GetDomainBoostedCasterLevel(spell);
-            var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, cl);
-            if (effect != null)
-            {
-                effect.RemainingRounds = buffRounds;
-                effect.AppliedStatName = "STR";
-                effect.AppliedStatBonus = 2;
-                effect.AppliedTempHP = tempHP;
-            }
-        }
+        int cl = caster.Stats.GetDomainBoostedCasterLevel(spell);
+        bool newlyApplied = EffectService.ApplyDeathKnellBonus(caster, spell, cl, buffRounds, tempHP);
+        if (!newlyApplied)
+            Debug.Log($"[DeathKnell] {caster.Stats.CharacterName} already has Death Knell: duration and temp HP refreshed, no extra STR");
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Color($"☠ Death Knell! {caster.Stats.CharacterName} kills {target.Stats.CharacterName} and gains {tempHP} temp HP, +2 STR, +1 caster level for {buffRounds} rounds ({targetHD * 10} minutes)!", "CC33FF"));
         Debug.Log($"[DeathKnell] {caster.Stats.CharacterName} gains {tempHP} temp HP, +2 STR, +1 CL for {buffRounds} rounds");
@@ -749,7 +729,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = Mathf.Max(1, casterLevel); // 1 round/level
+        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel); // SpellDurationRules (SPL-002)
         int tentacleGrappleMod = casterLevel + 8; // CL + Str mod (4) + Large size (4)
 
         Vector3 centerWorldPos = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
