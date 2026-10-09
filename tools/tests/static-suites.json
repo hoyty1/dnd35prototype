@@ -77,11 +77,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 0,
+      "passed": 93,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "Bonus stacking by the rules as written (owner directive 2026-10-09): BonusStacking, BonusLedger, StatusEffectManager and the CharacterStats totals; bare stats and a StatusEffectManager on a plain GameObject. Added 2026-10-09; not run yet (the Unity MCP was unavailable), so passed is 0 until the first run."
+      "notes": "Bonus stacking by the rules as written (owner directive 2026-10-09): BonusStacking, BonusLedger, StatusEffectManager and the CharacterStats totals; bare stats and a StatusEffectManager on a plain GameObject. Added 2026-10-09; 93/93 in its first run, the batch 8 Play pass 20261009T205254Z-play."
     },
     {
       "type": "Tests.Character.CharacterTagSystemTests",
@@ -633,7 +633,7 @@
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CMB-004, CMB-064 (2026-10-09; owner ruling 2026-10-08: RAW): a confirmed critical rolls the weapon dice and every static modifier the multiplier number of times (PHB p.134, p.140), sneak attack is added once, a creature immune to critical hits (including elementals and plants, MM p.308, p.313) takes normal damage and no sneak attack (MM p.317, PHB p.50) while a confirmed threat still applies burst dice (DMG p.222), swarms too (MM p.316), and a coup de grace multiplies the weapon damage but not sneak attack, adds bane, energy dice and Fortification like any critical, and is refused against helpless crit-immune targets (PHB p.153). Forces the d20s and weapon dice through ScenarioHooks.RollFilter. Play only (CharacterController.Init). Assertions counted from the source (42); not yet confirmed by a run (the Unity MCP failed on 2026-10-09)."
+      "notes": "CMB-004, CMB-064 (2026-10-09; owner ruling 2026-10-08: RAW): a confirmed critical rolls the weapon dice and every static modifier the multiplier number of times (PHB p.134, p.140), sneak attack is added once, a creature immune to critical hits (including elementals and plants, MM p.308, p.313) takes normal damage and no sneak attack (MM p.317, PHB p.50) while a confirmed threat still applies burst dice (DMG p.222), swarms too (MM p.316), and a coup de grace multiplies the weapon damage but not sneak attack, adds bane, energy dice and Fortification like any critical, and is refused against helpless crit-immune targets (PHB p.153). Forces the d20s and weapon dice through ScenarioHooks.RollFilter. Play only (CharacterController.Init). Assertions counted from the source (42), confirmed 42/42 by the batch 8 Play pass 20261009T205254Z-play."
     },
     {
       "type": "Tests.Combat.DamageModifierTests",
@@ -736,7 +736,7 @@
           "issue": "TST-030"
         }
       ],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). passed 26 since 2026-10-09 (the enhancement-stacking test checks that both effects stay and the weaker applies again, PHB p.172), counted from the source, not yet confirmed by a run."
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). passed 26 since 2026-10-09 (the enhancement-stacking test checks that both effects stay and the weaker applies again, PHB p.172), counted from the source, confirmed 26 passed and the TST-030 failure by the batch 8 Play pass 20261009T205254Z-play."
     },
     {
       "type": "Tests.Combat.FalseLifeRulesTests",
@@ -1148,7 +1148,7 @@
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CMB-006 (with CMB-034, SPL-032): TurnService reports every initiative count once per round (a dead creature's too) before the turn and sets TurnDurations.CurrentAnchor; conditions (ConditionManager and the CharacterStats fallback) and StatusEffectManager spell effects tick only at their anchor's count, unanchored ones and ones whose anchor left the initiative order at the round boundary; re-application keeps the later end, for conditions and spell recasts (AddEffect with a duration, Death Knell); Stunning Fist on an attack of opportunity is timed from the monk (PHB p.101); Obscuring Mist concealment and Entangle tick at the round boundary; a creature removed from the initiative order hands its durations to a neighbouring count; the PHB p.138 1-round example through TurnService and ConditionService in both initiative orders. Added 2026-10-09; the counts are the suite's 40 assertions counted from the source, not yet confirmed by a run (the Unity MCP was unreachable; not verified in Play mode)"
+      "notes": "CMB-006 (with CMB-034, SPL-032): TurnService reports every initiative count once per round (a dead creature's too) before the turn and sets TurnDurations.CurrentAnchor; conditions (ConditionManager and the CharacterStats fallback) and StatusEffectManager spell effects tick only at their anchor's count, unanchored ones and ones whose anchor left the initiative order at the round boundary; re-application keeps the later end, for conditions and spell recasts (AddEffect with a duration, Death Knell); Stunning Fist on an attack of opportunity is timed from the monk (PHB p.101); Obscuring Mist concealment and Entangle tick at the round boundary; a creature removed from the initiative order hands its durations to a neighbouring count; the PHB p.138 1-round example through TurnService and ConditionService in both initiative orders. Added 2026-10-09; the counts are the suite's 40 assertions counted from the source; 40/40 since the CHR-018 Play pass, again in batch 8 (20261009T205254Z-play)"
     },
     {
       "type": "Tests.Combat.UnarmedDamageModeTests",
