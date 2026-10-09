@@ -500,11 +500,12 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            RaceName = "Elf", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.ChaoticGood,
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
-            STR = 13, DEX = 15, CON = 10, WIS = 9, INT = 10, CHA = 8,
+            STR = 13, DEX = 13, CON = 10, WIS = 9, INT = 10, CHA = 8, // MM p.102 statblock (racial adjustments included)
             NaturalArmorBonus = 0,
             BaseSpeed = 6, // 30 ft
             BaseHitDieHP = 4,

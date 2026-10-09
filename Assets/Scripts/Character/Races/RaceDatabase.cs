@@ -29,6 +29,11 @@ public static class RaceDatabase
         RegisterHalfling();
         RegisterHuman();
 
+        // Monster Manual subraces, for NPCs only (CRE-038, CHR-019).
+        RegisterDrow();
+        RegisterDuergar();
+        RegisterSvirfneblin();
+
         RebuildRaceSizeLookup();
     }
 
@@ -41,11 +46,15 @@ public static class RaceDatabase
         return _races.ContainsKey(key) ? _races[key] : null;
     }
 
-    /// <summary>Get all available race names.</summary>
+    /// <summary>Get all player race names (keys), without the Monster Manual subraces.</summary>
     public static List<string> GetAllRaceNames()
     {
         Init();
-        return new List<string>(_races.Keys);
+        var names = new List<string>();
+        foreach (KeyValuePair<string, RaceData> kvp in _races)
+            if (kvp.Value != null && !kvp.Value.IsMonsterSubrace)
+                names.Add(kvp.Key);
+        return names;
     }
 
     /// <summary>
@@ -80,7 +89,7 @@ public static class RaceDatabase
 
         foreach (RaceData race in _races.Values)
         {
-            if (race == null || string.IsNullOrWhiteSpace(race.RaceName))
+            if (race == null || string.IsNullOrWhiteSpace(race.RaceName) || race.IsMonsterSubrace)
                 continue;
 
             SizeCategory size = race.RaceSize.ToSizeCategory();
@@ -150,13 +159,13 @@ public static class RaceDatabase
                 { "Goblinoid", 1 }
             },
 
-            // Racial AC bonuses: +4 dodge vs giants (for future)
+            // Racial AC bonuses: +4 dodge vs giants (RacialTraitRules.KindDodgeACBonusAgainst)
             RacialACBonuses = new Dictionary<string, int>
             {
                 { "Giant", 4 }
             },
 
-            // Racial skill bonuses (for future)
+            // Racial skill bonuses: conditional on stone or metal, so they name no skill and stay display-only
             RacialSkillBonuses = new Dictionary<string, int>
             {
                 { "Appraise_Stone", 2 },  // Stonecunning-related
@@ -275,6 +284,7 @@ public static class RaceDatabase
             SaveVsEnchantment = 0,
             SaveVsIllusion = 2,  // +2 racial bonus on saves vs illusions
             SaveVsFear = 0,
+            IllusionSpellDCBonus = 1,  // +1 to the DC of the gnome's illusion spells (PHB p.17)
 
             // Special traits
             Stonecunning = false,
@@ -552,8 +562,8 @@ public static class RaceDatabase
             AutoSearchSecretDoors = false,
 
             // Human special traits
-            ExtraFeatAtFirstLevel = true,       // Extra feat at 1st level (for future feat system)
-            ExtraSkillPointsPerLevel = 1,       // +1 skill point per level (+4 at 1st, for future skill system)
+            ExtraFeatAtFirstLevel = true,       // Extra feat at 1st level (FeatDefinitions.GetsRacialBonusFeat, character creation)
+            ExtraSkillPointsPerLevel = 1,       // +1 skill point per level, +4 at 1st (InitializeSkills, LevelUpCalculator)
             FavoredClass = "Any",               // Favored class: Any
 
             WeaponFamiliarity = new List<string>(),
@@ -566,5 +576,75 @@ public static class RaceDatabase
         };
 
         _races["human"] = human;
+    }
+
+    // ========== MONSTER MANUAL SUBRACES (NPCs only) ==========
+    // Each is "in addition to" its base race's traits "except where noted" (MM p.92, p.103, p.132), so it starts from a
+    // clone of the PHB race. Ability adjustments are kept for display only: an NPC's scores come from its MM entry and
+    // RaceData never changes them (RacialTraitRules.AttachNpcRace).
+
+    /// <summary>Drow (MM p.103): darkvision 120 ft. instead of low-light vision; +2 racial bonus on Will saves against
+    /// spells and spell-like abilities; proficiency with the hand crossbow, rapier and short sword instead of the elf's
+    /// weapons. Spell resistance, spell-like abilities and light blindness come from the NPC entry.</summary>
+    private static void RegisterDrow()
+    {
+        RaceData drow = _races["elf"].Clone();
+        drow.RaceName = "Drow";
+        drow.IsMonsterSubrace = true;
+        drow.CountsAsRace = "Elf";
+        drow.INTModifier = +2;
+        drow.CHAModifier = +2;
+        drow.Vision = RaceData.VisionType.Darkvision;
+        drow.DarkvisionRange = 120;
+        drow.WillSaveVsSpells = 2;
+        drow.RacialWeaponProficiencies = new List<string> { "hand_crossbow", ItemIDs.RAPIER, ItemIDs.SHORT_SWORD };
+        drow.FavoredClass = "Wizard"; // male; cleric for a female drow
+        _races["drow"] = drow;
+    }
+
+    /// <summary>Duergar (MM p.92): darkvision 120 ft.; immunity to paralysis, phantasms and poison (the NPC entry's
+    /// immunities), which replaces the +2 against poison; +4 Move Silently, +1 Listen and Spot; no weapon familiarity
+    /// with the dwarven waraxe and urgrosh (MM p.92). The other dwarf traits stay: stability, +2 against spells, +1
+    /// attack against orcs and goblinoids, +4 dodge against giants.</summary>
+    private static void RegisterDuergar()
+    {
+        RaceData duergar = _races["dwarf"].Clone();
+        duergar.RaceName = "Duergar";
+        duergar.IsMonsterSubrace = true;
+        duergar.CountsAsRace = "Dwarf";
+        duergar.CHAModifier = -4;
+        duergar.DarkvisionRange = 120;
+        duergar.SaveVsPoison = 0;
+        duergar.WeaponFamiliarity = new List<string>();
+        duergar.RacialSkillBonuses["Move Silently"] = 4;
+        duergar.RacialSkillBonuses["Listen"] = 1;
+        duergar.RacialSkillBonuses["Spot"] = 1;
+        _races["duergar"] = duergar;
+    }
+
+    /// <summary>Svirfneblin (MM p.132): darkvision 120 ft. (and low-light vision); +2 racial bonus on all saves instead of
+    /// +2 against illusions; +4 dodge bonus to AC against all creatures instead of against giants; +2 Hide. The +1 attack
+    /// against kobolds and goblinoids and the +1 DC of illusion spells stay. Spell resistance, nondetection and the
+    /// spell-like abilities come from the NPC entry.</summary>
+    private static void RegisterSvirfneblin()
+    {
+        RaceData svirf = _races["gnome"].Clone();
+        svirf.RaceName = "Svirfneblin";
+        svirf.IsMonsterSubrace = true;
+        svirf.CountsAsRace = "Gnome";
+        svirf.STRModifier = -2;
+        svirf.DEXModifier = +2;
+        svirf.CONModifier = 0;
+        svirf.WISModifier = +2;
+        svirf.CHAModifier = -4;
+        svirf.Vision = RaceData.VisionType.Darkvision;
+        svirf.DarkvisionRange = 120;
+        svirf.SaveBonusAllSaves = 2;
+        svirf.SaveVsIllusion = 0;
+        svirf.RacialACBonuses = new Dictionary<string, int>();
+        svirf.DodgeACBonusAllCreatures = 4;
+        svirf.RacialSkillBonuses["Hide"] = 2; // +4 underground; the grid has no underground flag
+        svirf.FavoredClass = "Rogue";
+        _races["svirfneblin"] = svirf;
     }
 }

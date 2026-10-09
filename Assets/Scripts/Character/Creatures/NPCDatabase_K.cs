@@ -80,7 +80,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 4,
             BAB = 1,
             NaturalAttacks = new List<NaturalAttackDefinition>(),
-            CreatureTags = new List<string> { "Humanoid", "Reptilian", "MM35" },
+            CreatureTags = new List<string> { "Humanoid", "Reptilian", "Kobold", "MM35" }, // Kobold: the gnome's +1 attack (PHB p.17)
             Feats = new List<string> { "Alertness" },
             SpecialAbilities = new List<string> { "Darkvision 60 ft.", "Light Sensitivity: dazzled in bright sunlight", "Natural Armor +1" },
             EquipmentIds = new List<EquipmentSlotPair>

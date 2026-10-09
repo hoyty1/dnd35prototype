@@ -313,9 +313,9 @@ public partial class GameManager
 
         // Ranged touch attack
         int attackRoll = DiceRoller.D20();
-        int attackMod = CombatCalculationService.RangedTouchAttackBonus(caster.Stats);
+        int attackMod = CombatCalculationService.RangedTouchAttackBonus(caster.Stats) + RacialTraitRules.AttackBonusAgainst(caster.Stats, target.Stats);
         int attackTotal = attackRoll + attackMod;
-        int targetTouchAC = target.Stats.TouchArmorClass;
+        int targetTouchAC = target.Stats.TouchArmorClass + RacialTraitRules.KindDodgeACBonusAgainst(target.Stats, caster.Stats); // CHR-019
         bool hit = CombatCalculationService.IsHit(attackRoll, attackTotal, targetTouchAC);
 
         string casterName = caster.Stats.CharacterName;

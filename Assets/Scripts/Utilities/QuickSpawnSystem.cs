@@ -93,6 +93,8 @@ public static class QuickSpawnSystem
             Level = template.Level,
             CharacterClass = template.ClassName,
             CreatureType = "Humanoid",
+            // The DMG template's race: its racial traits apply, its scores already include the adjustments (CHR-019).
+            RaceName = template.Race,
             HitDice = template.Level,
             STR = template.Strength,
             DEX = template.Dexterity,

@@ -5461,7 +5461,9 @@ public class CharacterController : MonoBehaviour
             AbilityName = feats.AbilityName,
             SizeModifier = Stats.SizeModifier,
             FlankingBonus = isFlanking ? flankingBonus : 0,
-            RacialBonus = target != null && target.Stats != null ? Stats.GetRacialAttackBonus(target.Stats) : 0,
+            // Racial: +1 against a kind (dwarf vs orcs and goblinoids, gnome vs kobolds and goblinoids) and the halfling's
+            // +1 with thrown weapons and slings (PHB p.15, p.17, p.20; CHR-019).
+            RacialBonus = RacialTraitRules.AttackBonus(Stats, target != null ? target.Stats : null, weapon, isRanged),
             RangePenalty = hasRangeInfo && rangeInfo.IsInRange ? rangeInfo.Penalty : 0,
             MountedRangedPenalty = hasRangeInfo && MountSystem.IsMounted(this) ? MountedCombatSystem.GetMountedRangedPenalty(this) : 0,
             Feats = feats,
@@ -6661,6 +6663,9 @@ public class CharacterController : MonoBehaviour
         if (target.IsFightingDefensively)
             targetAC += CombatCalculationService.FightingDefensivelyACBonus; // Dodge bonus
 
+        // Racial dodge bonus against this attacker's kind: dwarf and gnome +4 against giants (PHB p.15, p.17; CHR-019).
+        targetAC += RacialTraitRules.KindDodgeACBonusAgainst(target.Stats, attacker != null ? attacker.Stats : null);
+
         // Mounted AC bonus: +1 vs opponents on foot (higher ground, PHB p.157)
         int mountedACBonus = MountSystem.GetMountedACBonus(target, attacker);
         if (mountedACBonus > 0)
@@ -7349,6 +7354,35 @@ public class CharacterController : MonoBehaviour
         else if (!string.IsNullOrEmpty(feintNote))
         {
             result.FeintWindowNote = feintNote;
+        }
+
+        // Racial dodge bonuses (CHR-019): the +4 against giants is in GetSituationalTargetArmorClass and the svirfneblin's
+        // +4 against all creatures in ArmorClass. A dodge bonus goes with the Dexterity bonus to AC (PHB p.15, p.136):
+        // when this attack alone denies the target its Dexterity bonus (an attacker it cannot see, a feint, a grapple or
+        // pin), both go too. A condition that denies Dexterity (flat-footed, stunned...) already left them out.
+        if (target != null && target.Stats != null)
+        {
+            int racialDodge = RacialTraitRules.DodgeACBonusAgainst(target.Stats, Stats);
+            if (racialDodge > 0)
+            {
+                bool grappledByAnother = target.HasCondition(CombatConditionType.Grappled)
+                    && !(target.TryGetGrappleState(out CharacterController dodgeGrappleOpponent, out _, out _, out _) && dodgeGrappleOpponent == this);
+                bool attackDeniesDex = denyTargetDexFromInvisibility || blinkDenyDex || feintWindowConsumed
+                    || target.HasCondition(CombatConditionType.Pinned) || grappledByAnother;
+                string dodgeNote;
+                if (attackDeniesDex)
+                {
+                    targetAC -= racialDodge;
+                    dodgeNote = $"Racial dodge +{racialDodge} AC lost with the DEX bonus.";
+                }
+                else
+                {
+                    dodgeNote = $"Racial dodge: +{racialDodge} AC against {(Stats != null ? Stats.CharacterName : name)}.";
+                }
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? dodgeNote
+                    : $"{result.SpecialAttackNote} {dodgeNote}";
+            }
         }
 
         // Step 1: Roll to hit
@@ -12193,9 +12227,10 @@ public class CharacterController : MonoBehaviour
         if (!freeTripAfterHit)
         {
             int touchRoll = DiceService.D20("Trip touch attack");
-            int touchModifier = GetManeuverMeleeTouchAttackModifier(attackBonusOverride);
+            // Racial attack bonus against the target's kind and its racial dodge against giants apply (CHR-019).
+            int touchModifier = GetManeuverMeleeTouchAttackModifier(attackBonusOverride) + RacialTraitRules.AttackBonusAgainst(Stats, target.Stats);
             int touchTotal = touchRoll + touchModifier;
-            int touchAC = target.Stats.TouchArmorClass;
+            int touchAC = target.Stats.TouchArmorClass + RacialTraitRules.KindDodgeACBonusAgainst(target.Stats, Stats);
             bool touchHit = IsManeuverTouchAttackHit(touchRoll, touchTotal, touchAC);
             touchLine = $"Touch attack: d20 {touchRoll} {CharacterStats.FormatMod(touchModifier)} = {touchTotal} vs touch AC {touchAC}"
                 + (touchRoll >= 20 ? " (natural 20)" : touchRoll <= 1 ? " (natural 1)" : string.Empty)
@@ -12495,9 +12530,12 @@ public class CharacterController : MonoBehaviour
         int touchStr = Stats.STRMod;
         int touchSize = Stats.SizeModifier;
         int touchCondition = Stats.ConditionAttackPenalty;
-        int touchTotal = touchRoll + GetManeuverMeleeTouchAttackModifier(attackBab);
+        // The touch attack is an attack roll: racial bonuses against the target's kind apply, and so does the target's
+        // racial dodge against giants (PHB p.15, p.17; CHR-019).
+        int touchRacial = RacialTraitRules.AttackBonusAgainst(Stats, target.Stats);
+        int touchTotal = touchRoll + GetManeuverMeleeTouchAttackModifier(attackBab) + touchRacial;
         // Full touch AC (deflection, dodge, conditions...) and natural 20/1 (CMB-014).
-        int touchAC = target.Stats.TouchArmorClass;
+        int touchAC = target.Stats.TouchArmorClass + RacialTraitRules.KindDodgeACBonusAgainst(target.Stats, Stats);
         bool touchHit = IsManeuverTouchAttackHit(touchRoll, touchTotal, touchAC);
 
         var touchBuilder = new StringBuilder();
@@ -12508,6 +12546,8 @@ public class CharacterController : MonoBehaviour
         touchBuilder.AppendLine($"  Size modifier: {touchSize:+0;-#;+0}");
         if (touchCondition != 0)
             touchBuilder.AppendLine($"  Condition modifiers: {touchCondition:+0;-#;+0}");
+        if (touchRacial != 0)
+            touchBuilder.AppendLine($"  Racial: {touchRacial:+0;-#;+0}");
         touchBuilder.AppendLine($"  Total: {touchTotal}");
         touchBuilder.AppendLine($"  Target touch AC: {touchAC}");
         if (touchRoll >= 20)
@@ -12799,6 +12839,10 @@ public class CharacterController : MonoBehaviour
         ItemData defenderWeapon = targetItem.IsWeapon && !targetItem.IsShield ? targetItem : target.GetEquippedMainWeapon();
         int defenderHandednessBonus = GetSunderHandednessModifier(defenderWeapon);
         int defenderSizeBonus = GetLargerCombatantSizeBonus(target, this);
+        // Both rolls are opposed attack rolls (PHB p.158), so each side's racial attack bonus against the other's kind
+        // applies (PHB p.15, p.17; CHR-019).
+        int racialBonus = RacialTraitRules.AttackBonusAgainst(Stats, target.Stats);
+        int defenderRacialBonus = RacialTraitRules.AttackBonusAgainst(target.Stats, Stats);
 
         int attackTotal = attackRoll
             + attackBab
@@ -12807,7 +12851,8 @@ public class CharacterController : MonoBehaviour
             + Stats.ConditionAttackPenalty
             + improvedSunderBonus
             + handednessBonus
-            + sizeBonus;
+            + sizeBonus
+            + racialBonus;
 
         int defenseTotal = defenseRoll
             + target.Stats.BaseAttackBonus
@@ -12815,7 +12860,8 @@ public class CharacterController : MonoBehaviour
             + target.Stats.SizeModifier
             + target.Stats.ConditionAttackPenalty
             + defenderHandednessBonus
-            + defenderSizeBonus;
+            + defenderSizeBonus
+            + defenderRacialBonus;
 
         var logLines = new List<string>();
         string handLabel = usedOffHand ? "Off-Hand" : "Main Hand";
@@ -12830,12 +12876,14 @@ public class CharacterController : MonoBehaviour
             + (improvedSunderBonus != 0 ? $" + Improved Sunder {CharacterStats.FormatMod(improvedSunderBonus)}" : string.Empty)
             + (handednessBonus != 0 ? $" + handedness {CharacterStats.FormatMod(handednessBonus)}" : string.Empty)
             + (sizeBonus != 0 ? $" + larger size {CharacterStats.FormatMod(sizeBonus)}" : string.Empty)
+            + (racialBonus != 0 ? $" + racial {CharacterStats.FormatMod(racialBonus)}" : string.Empty)
             + (attackerDualWieldPenaltyForLog != 0 ? $" [includes dual-wield penalty {CharacterStats.FormatMod(attackerDualWieldPenaltyForLog)} in BAB]" : string.Empty)
             + $" = {attackTotal}");
         logLines.Add($"Defender check: d20 {defenseRoll} + BAB {CharacterStats.FormatMod(target.Stats.BaseAttackBonus)} + STR {CharacterStats.FormatMod(target.Stats.STRMod)} + size {CharacterStats.FormatMod(target.Stats.SizeModifier)}"
             + (target.Stats.ConditionAttackPenalty != 0 ? $" + condition {CharacterStats.FormatMod(target.Stats.ConditionAttackPenalty)}" : string.Empty)
             + (defenderHandednessBonus != 0 ? $" + handedness {CharacterStats.FormatMod(defenderHandednessBonus)}" : string.Empty)
             + (defenderSizeBonus != 0 ? $" + larger size {CharacterStats.FormatMod(defenderSizeBonus)}" : string.Empty)
+            + (defenderRacialBonus != 0 ? $" + racial {CharacterStats.FormatMod(defenderRacialBonus)}" : string.Empty)
             + $" = {defenseTotal}");
 
         if (attackTotal < defenseTotal)
@@ -13507,10 +13555,15 @@ public class CharacterController : MonoBehaviour
         int attackerBaseAttackBonusRaw = attacker.Stats.BaseAttackBonus;
         int attackerIterativeAdjustment = attackerBaseAttackBonusUsed - attackerBaseAttackBonusRaw - attackerDualWieldPenaltyForLog;
 
+        // Both rolls are opposed attack rolls (PHB p.155), so each side's racial attack bonus against the other's kind
+        // applies (dwarf +1 against orcs and goblinoids, gnome +1 against kobolds and goblinoids; PHB p.15, p.17; CHR-019).
+        int atkRacialMod = RacialTraitRules.AttackBonusAgainst(attacker.Stats, defender.Stats);
+        int defRacialMod = RacialTraitRules.AttackBonusAgainst(defender.Stats, attacker.Stats);
+
         int atkTotal = atkRoll + attackerBaseAttackBonusUsed + attacker.Stats.STRMod + attacker.Stats.SizeModifier + attacker.Stats.ConditionAttackPenalty
-                       + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod;
+                       + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod + atkRacialMod;
         int defTotal = defRoll + defender.Stats.BaseAttackBonus + defender.Stats.STRMod + defender.Stats.SizeModifier + defender.Stats.ConditionAttackPenalty
-                       + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod + defenderSpecialResistBonus;
+                       + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod + defenderSpecialResistBonus + defRacialMod;
 
         string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : attackerUsesNaturalWeapon ? "Natural weapon" : "Unarmed Strike";
         string defenderHeldLabel = defenderHeldItem != null ? defenderHeldItem.Name : $"Held Item ({defenderHeldSlot})";
@@ -13528,6 +13581,7 @@ public class CharacterController : MonoBehaviour
             sizeDifferenceModifier: atkSizeDiffMod,
             nonMeleePenalty: 0,
             improvedDisarmModifier: atkImprovedDisarmMod,
+            racialModifier: atkRacialMod,
             specialModifier: 0,
             specialModifierLabel: string.Empty,
             heldItemLabel: attackerHeldLabel,
@@ -13546,6 +13600,7 @@ public class CharacterController : MonoBehaviour
             sizeDifferenceModifier: defSizeDiffMod,
             nonMeleePenalty: defNonMeleeHeldItemPenalty,
             improvedDisarmModifier: defImprovedDisarmMod,
+            racialModifier: defRacialMod,
             specialModifier: defenderSpecialResistBonus,
             specialModifierLabel: lockedGauntletReason,
             heldItemLabel: defenderHeldLabel,
@@ -13575,6 +13630,7 @@ public class CharacterController : MonoBehaviour
         int sizeDifferenceModifier,
         int nonMeleePenalty,
         int improvedDisarmModifier,
+        int racialModifier,
         int specialModifier,
         string specialModifierLabel,
         string heldItemLabel,
@@ -13602,13 +13658,15 @@ public class CharacterController : MonoBehaviour
             sb.AppendLine($"  Size Difference: {FormatSignedDisarmModifier(sizeDifferenceModifier)}");
         if (improvedDisarmModifier != 0)
             sb.AppendLine($"  Improved Disarm: {FormatSignedDisarmModifier(improvedDisarmModifier)}");
+        if (racialModifier != 0)
+            sb.AppendLine($"  Racial: {FormatSignedDisarmModifier(racialModifier)}");
         if (specialModifier != 0)
         {
             string specialLabel = string.IsNullOrWhiteSpace(specialModifierLabel) ? "Special" : specialModifierLabel;
             sb.AppendLine($"  {specialLabel}: {FormatSignedDisarmModifier(specialModifier)}");
         }
 
-        sb.AppendLine($"  Total: {BuildDisarmEquation(d20Roll, baseAttackBonus, iterativeAdjustment, dualWieldPenalty, strengthModifier, sizeModifier, conditionModifier, weaponModifier, nonMeleePenalty, sizeDifferenceModifier, improvedDisarmModifier, specialModifier)} = {total}");
+        sb.AppendLine($"  Total: {BuildDisarmEquation(d20Roll, baseAttackBonus, iterativeAdjustment, dualWieldPenalty, strengthModifier, sizeModifier, conditionModifier, weaponModifier, nonMeleePenalty, sizeDifferenceModifier, improvedDisarmModifier, racialModifier, specialModifier)} = {total}");
         return sb.ToString().TrimEnd();
     }
 

@@ -64,6 +64,8 @@ public static class SkeletonTemplate
         // ── Type → Undead ──
         skel.CreatureType = "Undead";
         skel.MaterialComposition = MaterialComposition.Bone;
+        // A skeleton loses the base creature's racial traits (MM p.226; CHR-019).
+        skel.RaceName = null;
 
         // ── Alignment: always neutral evil (MM p.226; CRE-002) ──
         skel.CharacterAlignment = Alignment.NeutralEvil;

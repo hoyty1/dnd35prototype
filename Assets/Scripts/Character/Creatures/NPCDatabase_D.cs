@@ -661,11 +661,12 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            RaceName = "Drow", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.NeutralEvil,
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
-            STR = 13, DEX = 15, CON = 10, WIS = 9, INT = 14, CHA = 12,
+            STR = 13, DEX = 13, CON = 10, WIS = 9, INT = 12, CHA = 10, // MM p.102 drow warrior statblock (racial adjustments included)
             NaturalArmorBonus = 0,
             SpellResistance = 12,
             BaseSpeed = 6,
@@ -700,6 +701,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            RaceName = "Duergar", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.LawfulEvil,
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,
@@ -739,6 +741,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            RaceName = "Dwarf", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.LawfulGood,
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,

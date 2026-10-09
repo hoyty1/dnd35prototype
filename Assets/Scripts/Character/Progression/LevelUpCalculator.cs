@@ -79,6 +79,8 @@ public static class LevelUpCalculator
 
         int baseSkillPointsPerLevel = Mathf.Max(1, ClassSkillDefinitions.GetBaseSkillPointsPerLevel(selected) + stats.INTMod);
         int newSkillPoints = projectedClassLevel <= 1 ? baseSkillPointsPerLevel * 4 : baseSkillPointsPerLevel;
+        // A human's extra skill point at each level after the 1st (PHB p.13; CHR-019).
+        newSkillPoints += stats.RacialExtraSkillPoints(Mathf.Max(2, data.NewLevel));
         int pooledSkillPoints = stats.GetClassSkillPointPool(selected);
         data.SkillPointsNew = newSkillPoints;
         data.SkillPointsFromClassPool = pooledSkillPoints;

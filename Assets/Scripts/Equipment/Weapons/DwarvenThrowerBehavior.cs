@@ -35,7 +35,7 @@ public class DwarvenThrowerBehavior : SpecificItemBehavior
 
         // Check race restriction
         string race = character.Stats.RaceName ?? "";
-        if (!race.Equals("Dwarf", System.StringComparison.OrdinalIgnoreCase))
+        if (!RacialTraitRules.IsOfKind(character.Stats, "Dwarf"))
         {
             Log($"WARNING: {character.Stats.CharacterName} ({race}) equips Dwarven Thrower — no special abilities for non-dwarves");
             GameManager.Instance?.CombatUI?.ShowCombatLog(CombatLogHelper.Damage("⚠", $"{character.Stats.CharacterName} is not a dwarf — Dwarven Thrower functions as a normal warhammer."));
@@ -142,8 +142,8 @@ public class DwarvenThrowerBehavior : SpecificItemBehavior
     private bool IsDwarfWielder()
     {
         if (Wielder == null || Wielder.Stats == null) return false;
-        string race = Wielder.Stats.RaceName ?? "";
-        return race.Equals("Dwarf", System.StringComparison.OrdinalIgnoreCase);
+        // A dwarf by race or by the race it counts as (a duergar, MM p.92) or by its creature tags (CHR-019).
+        return RacialTraitRules.IsOfKind(Wielder.Stats, "Dwarf");
     }
 
     private bool IsTargetAdjacent(CharacterController target)

@@ -738,6 +738,9 @@ public partial class GameManager
         stats.SourceNpcDefinitionId = def.Id;
         stats.ChallengeRating = def.ChallengeRating;
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Humanoid" : def.CreatureType;
+        // The racial traits of an NPC of a PC race or an MM subrace, without re-applying its ability adjustments,
+        // size or speed (CRE-038, CHR-019).
+        RacialTraitRules.AttachNpcRace(stats, def);
         // The MM entry's alignment (after any template, which may set it), so smite, aligned weapons, Protection from
         // Evil and the alignment spells see the creature (CRE-002). A summon or a test preset may override it after.
         stats.CharacterAlignment = def.CharacterAlignment;

@@ -53,6 +53,8 @@ public static class ZombieTemplate
 
         // ── Type → Undead ──
         zombie.CreatureType = "Undead";
+        // A zombie loses the base creature's racial traits (MM p.266; CHR-019).
+        zombie.RaceName = null;
         zombie.MaterialComposition = MaterialComposition.Organic; // still has flesh, unlike skeleton
 
         // ── Alignment: always neutral evil (MM p.266; CRE-002) ──

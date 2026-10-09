@@ -240,11 +240,12 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            RaceName = "Halfling", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = true,
-            STR = 11, DEX = 17, CON = 12, WIS = 9, INT = 10, CHA = 8,
+            STR = 11, DEX = 13, CON = 12, WIS = 9, INT = 10, CHA = 8, // MM p.149 statblock (racial adjustments included)
             NaturalArmorBonus = 0,
             BaseSpeed = 4, // 20 ft
             BaseHitDieHP = 5,
@@ -576,6 +577,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            RaceName = "Half-Orc", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.ChaoticNeutral,
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,
@@ -617,6 +619,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,
@@ -658,6 +661,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Commoner",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,

@@ -633,11 +633,12 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            RaceName = "Svirfneblin", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = true,
-            STR = 11, DEX = 17, CON = 12, WIS = 11, INT = 10, CHA = 4,
+            STR = 11, DEX = 13, CON = 12, WIS = 11, INT = 10, CHA = 4, // MM p.132 statblock (racial adjustments included)
             NaturalArmorBonus = 0,
             SpellResistance = 12,
             BaseSpeed = 4,

@@ -164,18 +164,25 @@ public partial class GameManager
     private CharacterStats BuildMirrorImageCloneStats(CharacterController caster, int cloneIndex)
     {
         CharacterStats source = caster.Stats;
-        string raceName = !string.IsNullOrWhiteSpace(source.RaceName) ? source.RaceName : null;
+        // The clone takes the caster's scores with the racial adjustments already in them and no race in the constructor,
+        // so nothing is added twice: a PC's base scores are before its racial adjustments, an NPC's (built from its MM
+        // entry, SourceNpcDefinitionId set) already include them (RacialTraitRules.AttachNpcRace, CHR-019). The race,
+        // speed and size are then copied from the caster.
+        RaceData race = source.Race;
+        bool raceInBaseScores = race == null || !string.IsNullOrEmpty(source.SourceNpcDefinitionId);
+        int Score(int baseScore, int current, int racialModifier)
+            => baseScore != 0 ? baseScore + (raceInBaseScores ? 0 : racialModifier) : Mathf.Max(1, current);
 
         CharacterStats stats = new CharacterStats(
             name: source.CharacterName,
             level: Mathf.Max(1, source.Level),
             characterClass: string.IsNullOrWhiteSpace(source.CharacterClass) ? "Wizard" : source.CharacterClass,
-            str: source.BaseSTR != 0 ? source.BaseSTR : Mathf.Max(1, source.STR),
-            dex: source.BaseDEX != 0 ? source.BaseDEX : Mathf.Max(1, source.DEX),
-            con: source.BaseCON != 0 ? source.BaseCON : Mathf.Max(1, source.CON),
-            wis: source.BaseWIS != 0 ? source.BaseWIS : Mathf.Max(1, source.WIS),
-            intelligence: source.BaseINT != 0 ? source.BaseINT : Mathf.Max(1, source.INT),
-            cha: source.BaseCHA != 0 ? source.BaseCHA : Mathf.Max(1, source.CHA),
+            str: Score(source.BaseSTR, source.STR, race != null ? race.STRModifier : 0),
+            dex: Score(source.BaseDEX, source.DEX, race != null ? race.DEXModifier : 0),
+            con: Score(source.BaseCON, source.CON, race != null ? race.CONModifier : 0),
+            wis: Score(source.BaseWIS, source.WIS, race != null ? race.WISModifier : 0),
+            intelligence: Score(source.BaseINT, source.INT, race != null ? race.INTModifier : 0),
+            cha: Score(source.BaseCHA, source.CHA, race != null ? race.CHAModifier : 0),
             bab: Mathf.Max(0, source.BaseAttackBonus),
             armorBonus: Mathf.Max(0, source.ArmorBonus),
             shieldBonus: Mathf.Max(0, source.ShieldBonus),
@@ -185,8 +192,10 @@ public partial class GameManager
             baseSpeed: Mathf.Max(1, source.BaseSpeed),
             atkRange: Mathf.Max(1, source.AttackRange),
             baseHitDieHP: 1,
-            raceName: raceName);
+            raceName: null);
 
+        stats.Race = race;
+        stats.SetBaseSizeCategory(source.BaseSizeCategory);
         stats.CharacterAlignment = source.CharacterAlignment;
         stats.MaterialComposition = source.MaterialComposition;
         stats.CreatureType = source.CreatureType;

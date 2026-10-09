@@ -67,9 +67,13 @@ public class RaceData
 
     /// <summary>
     /// Racial dodge bonus to AC against specific creature types (e.g., Dwarf +4 vs giants).
-    /// Key = creature type tag, Value = bonus.
+    /// Key = creature kind (see <see cref="RacialTraitRules.IsOfKind"/>), Value = bonus.
+    /// Read by <see cref="RacialTraitRules.KindDodgeACBonusAgainst"/> (CHR-019).
     /// </summary>
     public Dictionary<string, int> RacialACBonuses = new Dictionary<string, int>();
+
+    /// <summary>Racial dodge bonus to AC against every creature (svirfneblin +4, MM p.132; CHR-019).</summary>
+    public int DodgeACBonusAllCreatures;
 
     /// <summary>
     /// Stability bonus on checks to resist bull rush/trip (Dwarf = +4).
@@ -91,10 +95,15 @@ public class RaceData
     /// <summary>Racial bonus on saves vs enchantment spells or effects (Elf and Half-Elf = +2, PHB p.16, p.18).</summary>
     public int SaveVsEnchantment;
 
-    // ========== RACIAL SKILL BONUSES (for future) ==========
+    /// <summary>Racial bonus on Will saves vs spells and spell-like abilities only (drow +2, MM p.103).</summary>
+    public int WillSaveVsSpells;
+
+    // ========== RACIAL SKILL BONUSES ==========
     /// <summary>
-    /// Racial skill bonuses. Key = skill name, Value = bonus.
-    /// E.g., Elf: Listen +2, Search +2, Spot +2
+    /// Racial skill bonuses. Key = skill name, Value = bonus. E.g., Elf: Listen +2, Search +2, Spot +2.
+    /// A key that names a skill is added by <see cref="CharacterStats.GetSkillBonus"/> (CHR-019); the conditional keys
+    /// with an underscore (dwarf Search_Stone, Appraise_Stone, Craft_Stone, Craft_Metal; gnome Craft_Alchemy) name no
+    /// skill and stay display-only.
     /// </summary>
     public Dictionary<string, int> RacialSkillBonuses = new Dictionary<string, int>();
 
@@ -106,8 +115,23 @@ public class RaceData
     public int SaveVsFear;
 
     // ========== RACIAL THROWN/SLING BONUS ==========
-    /// <summary>Racial bonus on attack rolls with thrown weapons and slings (Halfling = +1).</summary>
+    /// <summary>
+    /// Racial bonus on attack rolls with thrown weapons and slings (Halfling = +1, PHB p.20). Read by
+    /// <see cref="RacialTraitRules.AttackBonus"/> for a ranged attack with a sling or a thrown weapon (CHR-019).
+    /// </summary>
     public int ThrownAndSlingAttackBonus;
+
+    /// <summary>
+    /// +1 to the save DC of the race's illusion spells (gnome, PHB p.17; svirfneblin, MM p.132). Read by
+    /// <c>SpellSaveDCRules</c> (SPL-001, CHR-019).
+    /// </summary>
+    public int IllusionSpellDCBonus;
+
+    /// <summary>
+    /// A Monster Manual subrace (drow, duergar, svirfneblin) given to NPCs only: it is not offered at character creation
+    /// and not listed among the forms of Disguise Self or Alter Self (<see cref="RaceDatabase.GetRaceNamesBySizeCategory"/>).
+    /// </summary>
+    public bool IsMonsterSubrace;
 
     // ========== SPECIAL TRAITS ==========
     /// <summary>Immune to sleep effects (Elf).</summary>
@@ -125,7 +149,11 @@ public class RaceData
     /// <summary>Extra skill points per level (Human = 1 extra per level, 4 extra at 1st).</summary>
     public int ExtraSkillPointsPerLevel;
 
-    /// <summary>Counts as another race for prerequisites (e.g., Half-Elf counts as Elf).</summary>
+    /// <summary>
+    /// Counts as another race (Half-Elf as Elf, Half-Orc as Orc: "for all effects related to race", PHB p.18, p.19; an
+    /// MM subrace as its base race). Read by <see cref="RacialTraitRules.IsOfKind"/>, so a dwarf's +1 against orcs
+    /// applies to a half-orc (PHB p.15).
+    /// </summary>
     public string CountsAsRace;
 
     /// <summary>Favored class: "Any" for Human, specific class for others (for future).</summary>
@@ -254,6 +282,11 @@ public class RaceData
                 lines.Add($"+{kvp.Value} attack vs {kvp.Key}");
         }
 
+        foreach (var kvp in RacialACBonuses)
+            lines.Add($"+{kvp.Value} dodge AC vs {kvp.Key}");
+        if (DodgeACBonusAllCreatures > 0)
+            lines.Add($"+{DodgeACBonusAllCreatures} dodge AC vs all creatures");
+
         if (ThrownAndSlingAttackBonus > 0)
             lines.Add($"+{ThrownAndSlingAttackBonus} attack with thrown weapons and slings");
 
@@ -277,33 +310,17 @@ public class RaceData
     }
 
     /// <summary>
-    /// Get racial attack bonus against a target with specified creature tags.
+    /// Creates a deep copy (for an MM subrace built on a PHB race; never mutate the registered instances).
     /// </summary>
-    public int GetRacialAttackBonus(List<string> targetCreatureTags)
+    public RaceData Clone()
     {
-        if (targetCreatureTags == null) return 0;
-        int bonus = 0;
-        foreach (var tag in targetCreatureTags)
-        {
-            if (RacialAttackBonuses.ContainsKey(tag))
-                bonus += RacialAttackBonuses[tag];
-        }
-        return bonus;
-    }
-
-    /// <summary>
-    /// Get racial AC dodge bonus against a target with specified creature tags.
-    /// </summary>
-    public int GetRacialACBonus(List<string> targetCreatureTags)
-    {
-        if (targetCreatureTags == null) return 0;
-        int bonus = 0;
-        foreach (var tag in targetCreatureTags)
-        {
-            if (RacialACBonuses.ContainsKey(tag))
-                bonus += RacialACBonuses[tag];
-        }
-        return bonus;
+        var c = (RaceData)MemberwiseClone();
+        c.RacialWeaponProficiencies = new List<string>(RacialWeaponProficiencies ?? new List<string>());
+        c.WeaponFamiliarity = new List<string>(WeaponFamiliarity ?? new List<string>());
+        c.RacialAttackBonuses = new Dictionary<string, int>(RacialAttackBonuses ?? new Dictionary<string, int>());
+        c.RacialACBonuses = new Dictionary<string, int>(RacialACBonuses ?? new Dictionary<string, int>());
+        c.RacialSkillBonuses = new Dictionary<string, int>(RacialSkillBonuses ?? new Dictionary<string, int>());
+        return c;
     }
 }
 

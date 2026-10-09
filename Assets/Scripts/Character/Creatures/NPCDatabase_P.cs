@@ -199,6 +199,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Paladin",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.LawfulGood,
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
@@ -252,6 +253,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Paladin",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.LawfulGood,
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
@@ -307,6 +309,7 @@ public static partial class NPCDatabase
             Level = 7,
             CharacterClass = "Paladin",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.LawfulGood,
             HitDice = 7,
             SizeCategory = SizeCategory.Medium,

@@ -38,7 +38,7 @@ public struct SpellSaveDCBreakdown
 
         string text = $"DC {Total} = 10 + {SpellLevel} (level) + {AbilityModifier} ({Ability})";
         if (SpellFocusBonus != 0) text += $" + {SpellFocusBonus} (Spell Focus)";
-        if (RacialBonus != 0) text += $" + {RacialBonus} (gnome illusion)";
+        if (RacialBonus != 0) text += $" + {RacialBonus} (racial illusion)";
         if (!string.IsNullOrEmpty(CastingClass)) text += $" [{CastingClass}]";
         return text;
     }
@@ -351,12 +351,14 @@ public static class SpellSaveDCRules
         return best;
     }
 
-    /// <summary>PHB p.17: a gnome adds +1 to the DC of its illusion spells.</summary>
+    /// <summary>
+    /// PHB p.17: a gnome adds +1 to the DC of its illusion spells (a svirfneblin too, MM p.132), PC or NPC (CRE-038):
+    /// <see cref="RaceData.IllusionSpellDCBonus"/>.
+    /// </summary>
     private static int GetRacialDCBonus(CharacterStats caster, SpellData spell)
     {
-        if (caster == null || caster.Race == null || spell == null)
+        if (caster == null || caster.Race == null || spell == null || caster.Race.IllusionSpellDCBonus <= 0)
             return 0;
-        bool gnome = string.Equals((caster.Race.RaceName ?? string.Empty).Trim(), "Gnome", StringComparison.OrdinalIgnoreCase);
-        return gnome && SpellSchoolUtils.Parse(spell.School) == SpellSchool.Illusion ? 1 : 0;
+        return SpellSchoolUtils.Parse(spell.School) == SpellSchool.Illusion ? caster.Race.IllusionSpellDCBonus : 0;
     }
 }

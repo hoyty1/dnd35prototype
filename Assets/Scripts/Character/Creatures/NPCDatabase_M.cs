@@ -797,6 +797,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Monk",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.LawfulNeutral,
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
@@ -856,6 +857,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Monk",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.LawfulNeutral,
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
@@ -916,6 +918,7 @@ public static partial class NPCDatabase
             Level = 7,
             CharacterClass = "Monk",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             CharacterAlignment = Alignment.LawfulNeutral,
             HitDice = 7,
             SizeCategory = SizeCategory.Medium,

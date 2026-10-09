@@ -167,7 +167,8 @@ public static class SaveRules
     /// <see cref="SaveContext.None"/> context). <paramref name="sources"/> names each one for logs (empty when none).
     /// <list type="bullet">
     /// <item>Racial (PHB p.15-20): dwarf +2 against poison and against spells and spell-like effects, elf and half-elf
-    /// +2 against enchantments, gnome +2 against illusions. The ones that apply are added together: PHB p.171 names
+    /// +2 against enchantments, gnome +2 against illusions; drow +2 on Will saves against spells and spell-like abilities
+    /// (MM p.103). NPCs of these races have them too (CRE-038). The ones that apply are added together: PHB p.171 names
     /// racial bonuses among the bonuses of one type that do stack, so a dwarf gets +4 against the Poison spell (spell
     /// and poison). DMG p.21 states only the general rule (same-type bonuses do not stack, except dodge and some
     /// circumstance bonuses); which book governs is an open owner question (CHR-019).</item>
@@ -202,6 +203,8 @@ public static class SaveRules
             if (context.IsSpell) racial += Mathf.Max(0, race.SaveVsSpells);
             if (context.IsEnchantment) racial += Mathf.Max(0, race.SaveVsEnchantment);
             if (context.IsIllusion) racial += Mathf.Max(0, race.SaveVsIllusion);
+            // Drow: +2 on Will saves only against spells and spell-like abilities (MM p.103).
+            if (context.IsSpell && save == SavingThrowType.Will) racial += Mathf.Max(0, race.WillSaveVsSpells);
             if (racial > 0)
                 Add(ref total, parts, racial, "racial (" + race.RaceName + ")");
         }

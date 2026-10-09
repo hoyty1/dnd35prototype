@@ -2922,7 +2922,8 @@ public class SpellcastingComponent : MonoBehaviour
             dexToAC = target.MaxDexBonus;
 
         return 10 + dexToAC + target.SizeModifier + target.EffectiveDeflectionBonus
-               + target.FeatACBonus + target.MonkACBonus + target.RageACPenalty + target.SpellRageACPenalty;
+               + target.FeatACBonus + target.MonkACBonus + target.RageACPenalty + target.SpellRageACPenalty
+               + target.RacialDodgeACBonus; // svirfneblin +4 dodge against all creatures (CHR-019)
     }
 
     /// <summary>

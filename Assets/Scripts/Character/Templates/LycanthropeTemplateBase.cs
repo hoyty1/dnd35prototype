@@ -73,6 +73,7 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
 
         // Type and properties
         target.CreatureType = source.CreatureType;
+        target.RaceName = source.RaceName;
         target.NaturalArmorBonus = source.NaturalArmorBonus;
         target.SizeCategory = source.SizeCategory;
         target.BaseSpeed = source.BaseSpeed;

@@ -611,6 +611,14 @@ public class NPCDefinition
     public bool GainsSmiteEvil;
     public bool GainsSmiteGood;
 
+    /// <summary>
+    /// The creature's race when it is a member of a PHB race or an MM subrace ("Dwarf", "Elf", "Halfling", "Half-Orc",
+    /// "Human", "Drow", "Duergar", "Svirfneblin"; RaceDatabase names). The NPC gets that RaceData for its racial traits
+    /// (RacialTraitRules.AttachNpcRace; CRE-038, CHR-019) while it is a humanoid; its ability scores, size and speed stay
+    /// the entry's. Null for every other creature.
+    /// </summary>
+    public string RaceName;
+
     // Tags and feats
     public List<string> CreatureTags = new List<string>();
     public List<string> Feats = new List<string>();
@@ -807,6 +815,7 @@ public class NPCDefinition
         clone.CanMakeAttacksOfOpportunity = CanMakeAttacksOfOpportunity;
         clone.RegenerationAmount = RegenerationAmount;
         clone.RegenerationSuppressedBy = RegenerationSuppressedBy;
+        clone.RaceName = RaceName;
         clone.CreatureTags = CreatureTags != null
             ? new List<string>(CreatureTags)
             : new List<string>();

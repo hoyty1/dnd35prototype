@@ -238,6 +238,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Character.RacialTraitRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 171,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CHR-019, CRE-038: racial combat traits through RacialTraitRules and the shared formulas (attack against kinds, halfling thrown and sling, dodge against giants, svirfneblin dodge and its loss when flat-footed, duergar without waraxe familiarity, NPC races, undead templates dropping the race, racial saves of NPCs, illusion DC, racial skills, human skill points); bare stats and CharacterControllers on plain GameObjects, so Play mode only (Init needs the SpriteRenderer that Awake adds). 171/171 in Play mode on 2026-10-09."
+    },
+    {
       "type": "Tests.Character.RandomEncounterSystemTests",
       "needs": "either",
       "skip": "",

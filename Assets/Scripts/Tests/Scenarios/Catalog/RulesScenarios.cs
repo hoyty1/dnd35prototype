@@ -121,7 +121,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 111;
+        public const int Count = 112;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -240,6 +240,7 @@ namespace Tests.Scenarios
             yield return S("spell-buff-dispatch", SpellBuffDispatch);
             yield return S("weapon-damage-modifier", WeaponDamageModifier);
             yield return S("condition-duration-turn-relative", ConditionDurationTurnRelative);
+            yield return S("racial-traits", RacialTraits);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -6019,6 +6020,157 @@ namespace Tests.Scenarios
         }
 
         private const string WeaponDamageNotePrefix = "cmb003 ";
+
+        // ── Racial traits (CHR-019, CRE-038) ────────────────────────────
+
+        private const string RacialAcNotePrefix = "chr019 ac ";
+
+        /// <summary>
+        /// CHR-019 and CRE-038: the combat racial traits on the PC and NPC paths. Two clusters, no flanking for the attacks
+        /// whose modifiers are compared. A dwarf PC fighter (Stats, Scripted) attacks a goblin in round 1 and a human warrior
+        /// in round 2: the round-1 modifier is exactly 1 higher (+1 against goblinoids, PHB p.15). An ogre (giant type,
+        /// MM p.199) and a goblin each attack the dwarf in round 1, after the dwarf has acted: the AC the ogre rolls against
+        /// is the dwarf's AC + 4 (dodge against giants), the goblin's is the plain AC. The NPC dwarf_warrior, now a Dwarf
+        /// (CRE-038), attacks a half-orc PC in round 1 and a PC stand-in of the giant type (CreatureType "Giant") in round 2:
+        /// +1 against the half-orc (orc blood, PHB p.19); the giant stand-in and the half-orc each attack it once it has
+        /// acted, and only the giant faces AC + 4. Each attacker notes its target's AC in an Assert step right before the
+        /// attack. The dwarf's round-1 Assert also checks the spawned NPC races: dwarf_warrior is a Dwarf with its MM DEX 11
+        /// and 20 ft. speed, elf_warrior is immune to sleep, halfling_warrior has +1 on all saves. Targets get +200 HP
+        /// (SturdyDummy) so every planned attack happens. Before the fix NPCs had no race, the dodge against giants was
+        /// display-only and the half-orc did not count as an orc.
+        /// </summary>
+        private static ScenarioDef RacialTraits()
+        {
+            return Rules("rules/racial-traits", "Dwarf +1 attack against goblinoids and half-orcs and +4 dodge against giants, PC and NPC; NPCs of PC races carry their racial traits (PHB p.15-20, CHR-019, CRE-038)")
+                .Covers("CHR-019", "CRE-038", "PHB p.15", "PHB p.16", "PHB p.19", "PHB p.20", "MM p.199", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("dwarf", ActorSource.Stats(() => RacialFighter("Dwarf Fighter", "Dwarf", null)), 5, 5, Control.Scripted)
+                .Pc("halforc", ActorSource.Stats(() => RacialFighter("Half-Orc Fighter", "Half-Orc", null)), 15, 14, Control.Scripted)
+                .Pc("giantpc", ActorSource.Stats(() => RacialFighter("Giant Stand-in", "Human", "Giant")), 14, 15, Control.Scripted)
+                .Npc("goblin", "goblin", 6, 5, Control.Scripted)
+                .Npc("human", "human_warrior", 5, 4, Control.Idle)
+                .Npc("ogre", "ogre", 3, 6, Control.Scripted)
+                .Npc("dwarfnpc", "dwarf_warrior", 14, 14, Control.Scripted)
+                .Npc("elfnpc", "elf_warrior", 18, 1, Control.Idle)
+                .Npc("halfnpc", "halfling_warrior", 18, 3, Control.Idle)
+                .Tweak("dwarf", c => { StripOffHand(c); SturdyDummy(c); })
+                .Tweak("halforc", c => { StripOffHand(c); SturdyDummy(c); })
+                .Tweak("giantpc", c => { StripOffHand(c); SturdyDummy(c); })
+                .Tweak("goblin", SturdyDummy)
+                .Tweak("human", SturdyDummy)
+                .Tweak("dwarfnpc", SturdyDummy)
+                .Initiative("dwarf", "dwarfnpc", "goblin", "human", "ogre", "halforc", "giantpc", "elfnpc", "halfnpc")
+                .Turn("dwarf", 1, Step.Assert("The spawned NPCs carry their races without changed scores (CRE-038)", CheckSpawnedNpcRaces), Step.Attack("goblin"))
+                .Turn("dwarf", 2, Step.Attack("human"))
+                .Turn("dwarfnpc", 1, Step.Attack("halforc"))
+                .Turn("dwarfnpc", 2, Step.Attack("giantpc"))
+                .Turn("goblin", 1, NoteTargetAc("goblin", "dwarf"), Step.Attack("dwarf"))
+                .Turn("ogre", 1, NoteTargetAc("ogre", "dwarf"), Step.Attack("dwarf"))
+                .Turn("halforc", 1, NoteTargetAc("halforc", "dwarfnpc"), Step.Attack("dwarfnpc"))
+                .Turn("giantpc", 1, NoteTargetAc("giantpc", "dwarfnpc"), Step.Attack("dwarfnpc"))
+                .Turn("goblin", 0, Step.Pass())
+                .Turn("ogre", 0, Step.Pass())
+                .Turn("halforc", 0, Step.Pass())
+                .Turn("giantpc", 0, Step.Pass())
+                .Expect("Every setup check holds", Expect.AssertsPass())
+                .Expect("Dwarf PC: +1 attack against the goblin over the human warrior (PHB p.15)", v => RacialAttackDelta(v, "dwarf", "goblin", "human", 1))
+                .Expect("NPC dwarf_warrior: +1 attack against the half-orc PC over the giant stand-in (PHB p.15, p.19; CRE-038)", v => RacialAttackDelta(v, "dwarfnpc", "halforc", "giantpc", 1))
+                .Expect("The ogre rolls against the dwarf PC's AC + 4, the goblin against its plain AC (PHB p.15)", v => AllPass(
+                    RacialAcDelta(v, "ogre", "dwarf", 4), RacialAcDelta(v, "goblin", "dwarf", 0)))
+                .Expect("The giant stand-in rolls against the NPC dwarf's AC + 4, the half-orc against its plain AC (CRE-038)", v => AllPass(
+                    RacialAcDelta(v, "giantpc", "dwarfnpc", 4), RacialAcDelta(v, "halforc", "dwarfnpc", 0)))
+                .Build();
+        }
+
+        /// <summary>A racial-trait scenario fighter 4: the <see cref="Fighter"/> scores with <paramref name="race"/>; a creature type when given.</summary>
+        private static CharacterStats RacialFighter(string name, string race, string creatureType)
+        {
+            var s = new CharacterStats(
+                name: name, level: 4, characterClass: "Fighter",
+                str: 16, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 10,
+                bab: 4, armorBonus: 0, shieldBonus: 0,
+                damageDice: 8, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 32, raceName: race);
+            s.BaseAttackBonusOverride = 4;
+            if (!string.IsNullOrEmpty(creatureType))
+                s.CreatureType = creatureType;
+            return s;
+        }
+
+        private static Step NoteTargetAc(string attacker, string target)
+            => Step.Assert("Note " + target + "'s AC before " + attacker + " attacks", ctx =>
+            {
+                CharacterController t = ctx.Get(target);
+                ctx.Note(RacialAcNotePrefix + attacker + " " + target + " " + t.Stats.ArmorClass);
+                return true;
+            });
+
+        private static bool CheckSpawnedNpcRaces(ScenarioContext ctx)
+        {
+            bool ok = true;
+            CharacterStats dwarf = ctx.Get("dwarfnpc").Stats;
+            if (dwarf.Race == null || dwarf.Race.RaceName != "Dwarf" || dwarf.DEX != 11 || dwarf.CON != 14 || dwarf.EffectiveSpeedFeet != 20)
+            {
+                ctx.Note("racial mismatch: dwarf_warrior race " + (dwarf.Race != null ? dwarf.Race.RaceName : "null") + ", DEX " + dwarf.DEX + ", CON " + dwarf.CON + ", speed " + dwarf.EffectiveSpeedFeet);
+                ok = false;
+            }
+            CharacterController elf = ctx.Get("elfnpc");
+            if (!SpellUtilities.IsImmuneToSleepEffects(elf))
+            {
+                ctx.Note("racial mismatch: elf_warrior is not immune to sleep");
+                ok = false;
+            }
+            CharacterStats halfling = ctx.Get("halfnpc").Stats;
+            if (halfling.RacialAllSavesBonus != 1)
+            {
+                ctx.Note("racial mismatch: halfling_warrior racial save bonus " + halfling.RacialAllSavesBonus);
+                ok = false;
+            }
+            CharacterStats halfOrc = ctx.Get("halforc").Stats;
+            if (!RacialTraitRules.IsOfKind(halfOrc, "Orc") || RacialTraitRules.IsOfKind(ctx.Get("giantpc").Stats, "Orc"))
+            {
+                ctx.Note("racial mismatch: orc kind of the half-orc or the giant stand-in");
+                ok = false;
+            }
+            ctx.Note("racial npcs: dwarf_warrior " + (dwarf.Race != null ? dwarf.Race.RaceName : "null") + " DEX " + dwarf.DEX + " speed " + dwarf.EffectiveSpeedFeet
+                + ", elf sleep immune " + SpellUtilities.IsImmuneToSleepEffects(elf) + ", halfling all saves +" + halfling.RacialAllSavesBonus);
+            return ok;
+        }
+
+        /// <summary>The first round-1 attack of <paramref name="by"/> on <paramref name="kindTarget"/> has a modifier exactly <paramref name="delta"/> above its first round-2 attack on <paramref name="plainTarget"/>.</summary>
+        private static ExpectResult RacialAttackDelta(TraceView v, string by, string kindTarget, string plainTarget, int delta)
+        {
+            List<TraceEvent> a = v.Attacks(by, kindTarget, false, 1);
+            List<TraceEvent> b = v.Attacks(by, plainTarget, false, 2);
+            if (a.Count == 0 || b.Count == 0)
+                return ExpectResult.Inconclusive(by + ": " + a.Count + " round-1 attacks on " + kindTarget + ", " + b.Count + " round-2 attacks on " + plainTarget);
+            int got = a[0].Int("mod") - b[0].Int("mod");
+            string detail = by + " mod " + CharacterStats.FormatMod(a[0].Int("mod")) + " vs " + kindTarget + ", " + CharacterStats.FormatMod(b[0].Int("mod")) + " vs " + plainTarget;
+            return got == delta ? ExpectResult.Pass(detail, a[0].Seq, b[0].Seq) : ExpectResult.Fail(detail + ", expected a difference of " + delta, a[0].Seq, b[0].Seq);
+        }
+
+        /// <summary><paramref name="by"/>'s first round-1 attack on <paramref name="target"/> is rolled against the noted AC + <paramref name="delta"/>.</summary>
+        private static ExpectResult RacialAcDelta(TraceView v, string by, string target, int delta)
+        {
+            TraceEvent note = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(RacialAcNotePrefix + by + " " + target + " ", StringComparison.Ordinal));
+            List<TraceEvent> attacks = v.Attacks(by, target, false, 1);
+            if (note == null || attacks.Count == 0)
+                return ExpectResult.Inconclusive(by + " -> " + target + ": " + (note == null ? "no AC note" : "no attack"));
+            string text = note.Str("text");
+            int noted = int.Parse(text.Substring(text.LastIndexOf(' ') + 1));
+            int ac = attacks[0].Int("ac");
+            string detail = by + " vs " + target + ": AC " + noted + ", rolled against " + ac;
+            return ac == noted + delta ? ExpectResult.Pass(detail, note.Seq, attacks[0].Seq) : ExpectResult.Fail(detail + ", expected " + (noted + delta), note.Seq, attacks[0].Seq);
+        }
+
+        /// <summary>The first result that is not a pass, else one pass joining the details.</summary>
+        private static ExpectResult AllPass(params ExpectResult[] results)
+        {
+            foreach (ExpectResult r in results)
+                if (!r.IsPass)
+                    return r;
+            return ExpectResult.Pass(string.Join("; ", results.Select(r => r.Detail)));
+        }
 
         // ── Turn-relative durations (CMB-006) ───────────────────────────
 

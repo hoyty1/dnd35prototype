@@ -3557,7 +3557,7 @@ public class CharacterStats
             // Natural armor enhancement: an amulet and Barkskin do not stack (PHB p.171, p.203); the higher applies.
             return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + NaturalArmorEnhancementBonus + SizeModifier
                    + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + EffectiveDeflectionBonus + ConditionACPenalty
-                   + HasteACBonus + SlowACPenalty + WondrousInsightACBonus;
+                   + HasteACBonus + SlowACPenalty + WondrousInsightACBonus + RacialDodgeACBonus;
         }
     }
 
@@ -3575,7 +3575,7 @@ public class CharacterStats
 
             return 10 + dexToAC + SizeModifier
                    + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + EffectiveDeflectionBonus + ConditionACPenalty
-                   + HasteACBonus + SlowACPenalty;
+                   + HasteACBonus + SlowACPenalty + RacialDodgeACBonus;
         }
     }
 
@@ -3633,7 +3633,9 @@ public class CharacterStats
             if (MovementBlockedByCondition) return 0;
             if (CurrentEncumbrance == EncumbranceLevel.Overloaded) return 0;
 
-            int baseFeet = (Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5)
+            // BaseSpeed is the race's speed for a PC (set by the constructor) and the MM entry's speed for an NPC, whose
+            // RaceData is attached without changing its speed (CRE-038).
+            int baseFeet = BaseSpeed * 5
                            + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5
                            + Mathf.Max(0, LandSpeedEnhancementBonusFeet)
                            + Mathf.Max(0, WondrousSpeedBonus);
@@ -5539,12 +5541,39 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Get racial attack bonus against a specific target's creature tags.
+    /// The racial attack bonus against <paramref name="target"/>'s kind (dwarf +1 against orcs and goblinoids, gnome +1
+    /// against kobolds and goblinoids; <see cref="RacialTraitRules.AttackBonusAgainst"/>, CHR-019).
     /// </summary>
-    public int GetRacialAttackBonus(CharacterStats target)
+    public int GetRacialAttackBonus(CharacterStats target) => RacialTraitRules.AttackBonusAgainst(this, target);
+
+    /// <summary>
+    /// The racial dodge bonus to AC against every creature (svirfneblin +4, MM p.132), lost with the Dexterity bonus to AC
+    /// (PHB p.136). The dodge bonus against one kind of attacker (dwarf and gnome against giants) is applied per attack by
+    /// <see cref="RacialTraitRules.KindDodgeACBonusAgainst"/> (CHR-019).
+    /// </summary>
+    public int RacialDodgeACBonus => Race != null && Race.DodgeACBonusAllCreatures > 0 && !DeniedDexToAcByCondition
+        ? Race.DodgeACBonusAllCreatures
+        : 0;
+
+    /// <summary>
+    /// The racial bonus on <paramref name="skillName"/> (elf +2 Listen, Search and Spot, PHB p.16; halfling +2 Climb, Jump,
+    /// Listen and Move Silently, p.20; and so on), plus the size modifier on Hide (PHB p.76: Small +4, Large -4). The
+    /// conditional racial bonuses (stone, metal, alchemy) name no skill and add nothing (CHR-019).
+    /// </summary>
+    public int GetRacialSkillModifier(string skillName)
     {
-        if (Race == null || target == null || target.CreatureTags == null) return 0;
-        return Race.GetRacialAttackBonus(target.CreatureTags);
+        if (string.IsNullOrWhiteSpace(skillName))
+            return 0;
+        int modifier = 0;
+        if (Race != null && Race.RacialSkillBonuses != null)
+        {
+            foreach (KeyValuePair<string, int> kvp in Race.RacialSkillBonuses)
+                if (string.Equals(kvp.Key, skillName, System.StringComparison.OrdinalIgnoreCase))
+                    modifier += kvp.Value;
+        }
+        if (string.Equals(skillName, "Hide", System.StringComparison.OrdinalIgnoreCase))
+            modifier += SizeHideModifier;
+        return modifier;
     }
 
     /// <summary>
@@ -6097,6 +6126,7 @@ public class CharacterStats
             for (int classLevelIndex = 1; classLevelIndex <= classLevel.Level; classLevelIndex++)
             {
                 int points = (runningCharacterLevel == 0) ? perLevelBase * 4 : perLevelBase;
+                points += RacialExtraSkillPoints(runningCharacterLevel + 1);
                 totalSkillPoints += points;
                 runningCharacterLevel++;
             }
@@ -6106,6 +6136,16 @@ public class CharacterStats
         AvailableSkillPoints = TotalSkillPoints;
 
         Debug.Log($"[Skills] {CharacterName} ({ClassSummary}): {TotalSkillPoints} skill points (INT mod {INTMod})");
+    }
+
+    /// <summary>
+    /// The race's extra skill points at character level <paramref name="characterLevel"/>: a human gets 4 at 1st level
+    /// and 1 at each later level (PHB p.13; <see cref="RaceData.ExtraSkillPointsPerLevel"/>, CHR-019).
+    /// </summary>
+    public int RacialExtraSkillPoints(int characterLevel)
+    {
+        int perLevel = Race != null ? Mathf.Max(0, Race.ExtraSkillPointsPerLevel) : 0;
+        return characterLevel <= 1 ? perLevel * 4 : perLevel;
     }
 
     public void RefreshSkillClassFlags()
@@ -6347,7 +6387,8 @@ public class CharacterStats
         int spellModifier = GetSpellSkillModifier(skillName);
         int familiarModifier = GetFamiliarSkillModifier(skillName);
         int wondrousBonus = GetWondrousSkillModifier(skillName);
-        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier + familiarModifier + wondrousBonus;
+        int racialModifier = GetRacialSkillModifier(skillName);
+        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier + familiarModifier + wondrousBonus + racialModifier;
     }
 
     /// <summary>
@@ -6424,14 +6465,16 @@ public class CharacterStats
         int conditionModifier = GetConditionSkillModifier(skillName);
         int spellModifier = GetSpellSkillModifier(skillName);
         int wondrousBonus = GetWondrousSkillModifier(skillName);
-        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier + spellModifier + wondrousBonus;
+        int racialModifier = GetRacialSkillModifier(skillName);
+        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier + spellModifier + wondrousBonus + racialModifier;
 
         string featStr = featBonus > 0 ? $" + {featBonus}(feat)" : "";
         string acpStr = acpPenalty < 0 ? $" {acpPenalty}(ACP)" : "";
         string conditionStr = conditionModifier != 0 ? $" {conditionModifier}(condition)" : "";
         string spellStr = spellModifier != 0 ? $" + {spellModifier}(spell)" : "";
         string wondrousStr = wondrousBonus != 0 ? $" + {wondrousBonus}(wondrous)" : "";
-        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr}{spellStr}{wondrousStr} = {total}");
+        string racialStr = racialModifier != 0 ? $" {FormatMod(racialModifier)}(racial/size)" : "";
+        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr}{spellStr}{wondrousStr}{racialStr} = {total}");
 
         return total;
     }

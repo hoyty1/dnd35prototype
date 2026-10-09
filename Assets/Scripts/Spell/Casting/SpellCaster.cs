@@ -150,7 +150,9 @@ public static class SpellCaster
             bool isRanged = spell.IsRangedTouchSpell();
             result.IsRangedTouch = isRanged;
 
-            int atkBonus = CombatCalculationService.TouchAttackBonus(casterStats, isRanged);
+            // A touch attack is an attack roll: the racial bonus against the target's kind applies (PHB p.15, p.17; CHR-019).
+            int atkBonus = CombatCalculationService.TouchAttackBonus(casterStats, isRanged)
+                + RacialTraitRules.AttackBonusAgainst(casterStats, targetStats);
 
             int situationalSpellAttackBonus = 0;
             string situationalSpellAttackSource = string.Empty;
@@ -169,7 +171,8 @@ public static class SpellCaster
             }
 
             int touchAC = SpellcastingComponent.GetTouchAC(targetStats)
-                + ((targetController != null && targetController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyACBonus : 0);
+                + ((targetController != null && targetController.IsFightingDefensively) ? CombatCalculationService.FightingDefensivelyACBonus : 0)
+                + RacialTraitRules.KindDodgeACBonusAgainst(targetStats, casterStats); // dwarf and gnome vs giants (CHR-019)
 
             // The ward's deflection does not stack with the target's own deflection: only the excess applies.
             int protectionDeflection = AlignmentProtectionRules.DeflectionAcIncrease(protection, targetStats);

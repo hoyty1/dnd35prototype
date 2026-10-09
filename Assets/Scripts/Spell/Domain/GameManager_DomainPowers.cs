@@ -300,9 +300,9 @@ public partial class GameManager
 
         // Melee touch attack
         int attackRoll = DiceRoller.D20();
-        int attackMod = CombatCalculationService.MeleeTouchAttackBonus(cleric.Stats);
+        int attackMod = CombatCalculationService.MeleeTouchAttackBonus(cleric.Stats) + RacialTraitRules.AttackBonusAgainst(cleric.Stats, target.Stats);
         int attackTotal = attackRoll + attackMod;
-        int targetTouchAC = target.Stats.TouchArmorClass;
+        int targetTouchAC = target.Stats.TouchArmorClass + RacialTraitRules.KindDodgeACBonusAgainst(target.Stats, cleric.Stats); // CHR-019
         bool hit = CombatCalculationService.IsHit(attackRoll, attackTotal, targetTouchAC);
 
         var sb = new StringBuilder();

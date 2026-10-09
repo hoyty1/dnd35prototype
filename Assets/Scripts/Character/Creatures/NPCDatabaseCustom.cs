@@ -876,6 +876,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Paladin",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             STR = 16, DEX = 10, CON = 14, WIS = 12, INT = 10, CHA = 14,
@@ -906,6 +907,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Cleric",
             CreatureType = "Humanoid",
+            RaceName = "Human", // racial traits (CRE-038, CHR-019)
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             STR = 12, DEX = 10, CON = 14, WIS = 17, INT = 10, CHA = 12,
