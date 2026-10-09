@@ -18,8 +18,8 @@ namespace Tests.Scenarios
     /// - target_dummy: Commoner 1, Medium, base hit-die HP 50, natural armor -4, no feats, no weapon.
     /// - wolf: Animal 2, Medium, STR 13, BAB 1, HasTripAttack (MM p.283), Weapon Focus and Track.
     /// - goblin: the 1-HD MM goblin of the smoke scenarios.
-    /// - orc_warrior (checked 2026-10-08 for CHR-072): Warrior 1, Medium, STR 17, scale mail and greataxe; it spawns with BAB +0
-    ///   (CRE-004) and the goblin with its +1 BAB override.
+    /// - orc_warrior (checked 2026-10-08 for CHR-072): Warrior 1, Medium, STR 17, scale mail and greataxe; since CRE-004
+    ///   (2026-10-08) it spawns with the warrior's BAB +1 (MM p.203), and the goblin with BAB +1 too.
     /// - formian_taskmaster: Outsider 6 HD, Medium, STR 17, DEX 16, IsExceptionallyStable (four legs, MM p.108-110;
     ///   owner decision 2026-10-07, CMB-085).
     /// - barghest: Outsider 6 HD, Medium, STR 17, DEX 15, not stable (only its wolf form would be, and the game models
@@ -112,7 +112,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 103;
+        public const int Count = 104;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -222,6 +222,7 @@ namespace Tests.Scenarios
             yield return S("npc-proficiency", NpcProficiency);
             yield return S("npc-spawn-alignment-gear", NpcSpawnAlignmentGear);
             yield return S("class-progression", ClassProgressionHpBabHd);
+            yield return S("creature-progression", CreatureProgression);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -4490,8 +4491,8 @@ namespace Tests.Scenarios
         /// or the armor and shield check penalties: the trace modifiers are the MM's, goblin morningstar +2 (BAB +1,
         /// Small +1, MM p.133; leather armor and a light wooden shield) and the orc's +4 (BAB +1, STR +3). The MM orc
         /// (p.203) attacks with a falchion at +4 in studded leather; orc_warrior's greataxe and scale mail are database
-        /// gear, a martial weapon with the same +4 at the same STR and BAB. The spawned orc's BAB is +0 (CRE-004), so its
-        /// expected modifier is +3. Both are fractional-CR creatures, so their gear is never upgraded to masterwork at spawn. The
+        /// gear, a martial weapon with the same +4 at the same STR and BAB. Both spawn with the MM's BAB +1 (a warrior level,
+        /// CRE-004, fixed 2026-10-08; before, the orc spawned at +0 and this check allowed for it). Both are fractional-CR creatures, so their gear is never upgraded to masterwork at spawn. The
         /// two stand side by side east of the dummy, so neither flanks it. Before the fix the goblin was at -3 and the
         /// orc at -5 (-4 for the weapon plus the light shield's or scale mail's check penalty).
         /// </summary>
@@ -4630,17 +4631,17 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// Passes when <paramref name="key"/> made one round-1 attack on the dummy with <paramref name="weapon"/> at the
-        /// MM modifier <paramref name="mmMod"/>, shifted by the spawned BAB's difference from the MM's
-        /// <paramref name="mmBab"/> (CRE-004: the orc warrior's warrior level follows the humanoid's 3/4 progression, BAB
-        /// +0 at 1 HD; the goblin's data overrides its BAB to +1).
+        /// Passes when <paramref name="key"/> spawned with the MM's BAB <paramref name="mmBab"/> (CRE-004) and made one
+        /// round-1 attack on the dummy with <paramref name="weapon"/> at the MM modifier <paramref name="mmMod"/>.
         /// </summary>
         private static ExpectResult SingleWeaponAttackMod(TraceView v, string key, string weapon, int mmMod, int mmBab)
         {
             int bab = ActorInt(v, key, "bab");
             if (bab == int.MinValue)
                 return ExpectResult.Fail("no actor event for " + key);
-            int mod = mmMod - mmBab + bab;
+            if (bab != mmBab)
+                return ExpectResult.Fail(key + " spawned with BAB " + bab + ", MM " + mmBab + " (CRE-004)");
+            int mod = mmMod;
             List<TraceEvent> attacks = v.Attacks(key, "dummy", false, 1);
             int[] seqs = attacks.Select(e => e.Seq).ToArray();
             if (attacks.Count != 1)
@@ -4649,10 +4650,9 @@ namespace Tests.Scenarios
             if (used.IndexOf(weapon, StringComparison.OrdinalIgnoreCase) < 0)
                 return ExpectResult.Fail("weapon " + used, seqs);
             int got = attacks[0].Int("mod");
-            string babNote = bab == mmBab ? "" : " (spawned BAB " + bab + ", MM " + mmBab + ", CRE-004)";
             return got == mod
-                ? ExpectResult.Pass(used + ", mod " + got + babNote, seqs)
-                : ExpectResult.Fail(used + ", mod " + got + ", expected " + mod + babNote, seqs);
+                ? ExpectResult.Pass(used + ", mod " + got + ", BAB " + bab, seqs)
+                : ExpectResult.Fail(used + ", mod " + got + ", expected " + mod + ", BAB " + bab, seqs);
         }
 
         // ── Class progression: hit points, BAB and Hit Dice (CHR-001, CHR-002, CHR-071) ──
@@ -4760,7 +4760,8 @@ namespace Tests.Scenarios
         /// NPC max HP counts CON once (CHR-001, CRE-041): an MM total is final (ogre 4d8+11 = 29, MM p.199; Toughness is
         /// still added on top by TotalMaxHP, the rest of CRE-041), a CON 0 undead adds nothing (ghoul 2d12 = 13, MM p.119;
         /// it still spawns dead, CRE-044), and an orc warrior given barbarian 2 through CreatureClassEngine spawns with its
-        /// definition total, racial HP plus max(1, die + CON) per class die, without CON again per level.
+        /// definition total, max(1, die + CON) per barbarian die (the orc's Hit Die is exchanged for the class, MM p.290,
+        /// CRE-004), without CON again per level.
         /// </summary>
         private static bool CreatureHitPointChecks(ScenarioContext ctx)
         {
@@ -4774,19 +4775,19 @@ namespace Tests.Scenarios
                 return false;
             }
             NPCDefinition def = template.Clone();
-            int racialHp = def.BaseHitDieHP;
             int conMod = ClassProgression.HitPointConstitutionModifier(def.CON);
             CreatureClassEngine.ApplyClassToDefinition(def, ClassRegistry.GetClass("Barbarian"), 2);
-            ok &= ProgressionCheck(ctx, "orc warrior + barbarian 2 definition HP", def.BaseHitDieHP,
-                racialHp + CreatureClassEngine.CalculateClassHP(12, conMod, 2));
+            ok &= ProgressionCheck(ctx, "orc barbarian 2 definition HP (the orc's Hit Die exchanged, MM p.290)", def.BaseHitDieHP,
+                CreatureClassEngine.CalculateClassHP(12, conMod, 2));
 
             var go = new GameObject("ClassProgressionScenario_orc_barbarian");
             CharacterController cc = go.AddComponent<CharacterController>();
             try
             {
                 ctx.Gm.InitializeNPCFromDefinition(cc, def, new Vector2Int(-60, -60), null, null);
-                ok &= ProgressionCheck(ctx, "orc warrior + barbarian 2 spawned MaxHP (CON once)", cc.Stats.MaxHP, def.BaseHitDieHP);
-                ok &= ProgressionCheck(ctx, "orc warrior + barbarian 2 Hit Dice", cc.Stats.GetHitDice(), 3);
+                ok &= ProgressionCheck(ctx, "orc barbarian 2 spawned MaxHP (CON once)", cc.Stats.MaxHP, def.BaseHitDieHP);
+                ok &= ProgressionCheck(ctx, "orc barbarian 2 Hit Dice (MM p.290)", cc.Stats.GetHitDice(), 2);
+                ok &= ProgressionCheck(ctx, "orc barbarian 2 BAB (PHB p.25)", cc.Stats.BaseAttackBonus, 2);
             }
             finally
             {
@@ -4794,6 +4795,158 @@ namespace Tests.Scenarios
                     ctx.Gm.Grid.ClearCreatureOccupancy(cc);
                 UnityEngine.Object.DestroyImmediate(go);
             }
+            return ok;
+        }
+
+        // ── Creature BAB and base saves: racial HD plus class levels (CRE-004) ──
+
+        /// <summary>
+        /// A creature's BAB and base saves are its racial Hit Dice by its type's progressions plus its class levels by the
+        /// class tables (MM p.290, PHB p.59, the same CharacterStats sum a PC uses; CRE-004). Database NPCs spawned by the
+        /// game: the orc warrior's Hit Die is a warrior level (MM p.310: BAB +1, Fort +2) and it attacks the dummy at the
+        /// MM's +4 (MM p.203; greataxe stand-in for the falchion, as in rules/npc-proficiency); the gnoll (2 humanoid HD,
+        /// good Fort: BAB +1, Fort +3, MM p.130), bugbear (3 HD, good Ref: BAB +2, Ref +3, MM p.29) and ogre (4 giant HD
+        /// behind its Warrior stand-in: BAB +3, Fort +4, MM p.199) use their racial HD; the human paladin 5 uses the
+        /// paladin table (BAB +5, Fort +4, PHB p.43). In the dummy's turn, DMG-table-style class levels are applied with
+        /// CreatureClassEngine and spawned through InitializeNPCFromDefinition off the grid: a goblin adept 1 replaces the
+        /// goblin's Hit Die (MM p.290: BAB +0, Will +2, DMG p.108), a hobgoblin warrior 3 has 3 HD (BAB +3), and an ogre
+        /// barbarian 4 with the MM's ability scores matches its MM p.199 stat block (8 HD, BAB +7, Fort +12, Ref +2,
+        /// Will +2); a human given rogue 4 has the same BAB and base saves as a PC rogue 4 (PHB p.50). Before the fix
+        /// every spawn used the type's progression over all HD: orc BAB +0 and Fort +0, gnoll Fort +0, bugbear Ref +1,
+        /// paladin BAB +3 and Fort +1, ogre barbarian 4 BAB +6 and Fort +5.
+        /// </summary>
+        private static ScenarioDef CreatureProgression()
+        {
+            return Rules("rules/creature-progression", "Spawned creatures add racial-HD and class BAB and saves (MM p.290, p.310; PHB p.59; CRE-004)")
+                .Covers("CRE-004", "MM p.290", "MM p.310", "MM p.199", "MM p.203", "MM p.130", "MM p.29", "MM p.117", "MM p.250", "MM p.63", "PHB p.59", "PHB p.43", "DMG p.108", "DMG p.97", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("dummy", ActorSource.Stats(() => FighterOfRace("Dummy", "Human")), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Scripted)
+                .Npc("gnoll", "gnoll", 16, 4, Control.Idle)
+                .Npc("bugbear", "bugbear", 16, 7, Control.Idle)
+                .Npc("ogre", "ogre", 4, 15, Control.Idle)
+                .Npc("paladin", "human_paladin", 16, 16, Control.Idle)
+                .Tweak("dummy", SturdyDummy)
+                .Initiative("orc", "dummy", "gnoll", "bugbear", "ogre", "paladin")
+                .Turn("orc", 1, Step.Attack("dummy"))
+                .Turn("dummy", 1, Step.Assert("Class levels applied to MM creatures give the MM and class-table BAB and saves", CreatureProgressionChecks))
+                .Expect("Every class-level check holds", Expect.AssertsPass())
+                .Expect("Orc warrior: 1 HD, all warrior: BAB +1, base Fort +2, Ref +0, Will +0 (MM p.203, p.310)", v => ActorProgression(v, "orc", 1, 0, 1, 2, 0, 0))
+                .Expect("The orc's greataxe attack is the MM's +4 at BAB +1 (MM p.203)", v => SingleWeaponAttackMod(v, "orc", "greataxe", 4, 1))
+                .Expect("Gnoll: 2 racial HD, good Fort: BAB +1, base Fort +3, Ref +0, Will +0 (MM p.130)", v => ActorProgression(v, "gnoll", 2, 2, 1, 3, 0, 0))
+                .Expect("Bugbear: 3 racial HD, good Ref: BAB +2, base Fort +1, Ref +3, Will +1 (MM p.29)", v => ActorProgression(v, "bugbear", 3, 3, 2, 1, 3, 1))
+                .Expect("Ogre: 4 giant HD: BAB +3, base Fort +4, Ref +1, Will +1 (MM p.199)", v => ActorProgression(v, "ogre", 4, 4, 3, 4, 1, 1))
+                .Expect("Human paladin 5: BAB +5, base Fort +4, Ref +1, Will +1 (PHB p.43)", v => ActorProgression(v, "paladin", 5, 0, 5, 4, 1, 1))
+                .Build();
+        }
+
+        /// <summary>Passes when the traced actor has the Hit Dice, racial Hit Dice, BAB and base saves given.</summary>
+        private static ExpectResult ActorProgression(TraceView v, string key, int hd, int racialHd, int bab, int fort, int reflex, int will)
+        {
+            TraceEvent a = v.Of("actor").FirstOrDefault(e => e.Str("key") == key);
+            if (a == null) return ExpectResult.Fail("no actor event for " + key);
+            string got = "HD " + a.Int("hd") + " (racial " + a.Int("racialHd") + "), BAB " + a.Int("bab")
+                + ", base F/R/W " + a.Int("baseFort") + "/" + a.Int("baseRef") + "/" + a.Int("baseWill");
+            return a.Int("hd") == hd && a.Int("racialHd") == racialHd && a.Int("bab") == bab
+                   && a.Int("baseFort") == fort && a.Int("baseRef") == reflex && a.Int("baseWill") == will
+                ? ExpectResult.Pass(got, a.Seq)
+                : ExpectResult.Fail(got + "; expected HD " + hd + " (racial " + racialHd + "), BAB " + bab + ", base F/R/W " + fort + "/" + reflex + "/" + will, a.Seq);
+        }
+
+        /// <summary>Spawns <paramref name="def"/> off the grid through the game's spawn and checks HD, BAB and base and total saves.</summary>
+        private static bool SpawnedProgressionCheck(ScenarioContext ctx, NPCDefinition def, string what, int hd, int bab,
+            int fort, int reflex, int will, int? totalFort = null, int? totalRef = null, int? totalWill = null)
+        {
+            var go = new GameObject("CreatureProgressionScenario_" + what.Replace(' ', '_'));
+            CharacterController cc = go.AddComponent<CharacterController>();
+            try
+            {
+                ctx.Gm.InitializeNPCFromDefinition(cc, def, new Vector2Int(-60, -60), null, null);
+                CharacterStats s = cc.Stats;
+                bool ok = ProgressionCheck(ctx, what + " HD", s.GetHitDice(), hd);
+                ok &= ProgressionCheck(ctx, what + " BAB", s.BaseAttackBonus, bab);
+                ok &= ProgressionCheck(ctx, what + " base Fort", s.ClassFortSave, fort);
+                ok &= ProgressionCheck(ctx, what + " base Ref", s.ClassRefSave, reflex);
+                ok &= ProgressionCheck(ctx, what + " base Will", s.ClassWillSave, will);
+                if (totalFort.HasValue)
+                {
+                    ok &= ProgressionCheck(ctx, what + " Fort", s.FortitudeSave, totalFort.Value);
+                    ok &= ProgressionCheck(ctx, what + " Ref", s.ReflexSave, totalRef.Value);
+                    ok &= ProgressionCheck(ctx, what + " Will", s.WillSave, totalWill.Value);
+                }
+                return ok;
+            }
+            finally
+            {
+                if (ctx.Gm != null && ctx.Gm.Grid != null)
+                    ctx.Gm.Grid.ClearCreatureOccupancy(cc);
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>A clone of <paramref name="npcId"/> given <paramref name="levels"/> levels of a class (the DMG-table spawn path).</summary>
+        private static NPCDefinition WithClass(ScenarioContext ctx, string npcId, string className, int levels)
+        {
+            NPCDefinition template = NPCDatabase.Get(npcId);
+            if (template == null)
+            {
+                ctx.Note("class-progression mismatch: " + npcId + " missing");
+                return null;
+            }
+            NPCDefinition def = template.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(def, ClassRegistry.GetClass(className), levels);
+            return def;
+        }
+
+        private static bool CreatureProgressionChecks(ScenarioContext ctx)
+        {
+            bool ok = true;
+            NPCDefinition adept = WithClass(ctx, "goblin", "Adept", 1);
+            ok &= adept != null && SpawnedProgressionCheck(ctx, adept, "goblin adept 1", 1, 0, 0, 0, 2, 1, 1, 1);
+
+            NPCDefinition warrior = WithClass(ctx, "hobgoblin_warrior", "Warrior", 3);
+            ok &= warrior != null && SpawnedProgressionCheck(ctx, warrior, "hobgoblin warrior 3", 3, 3, 3, 1, 1);
+
+            NPCDefinition barbarian = WithClass(ctx, "ogre", "Barbarian", 4);
+            if (barbarian != null)
+            {
+                // The MM ogre barbarian's ability scores (MM p.199), so its printed saves can be compared.
+                barbarian.STR = 26; barbarian.DEX = 11; barbarian.CON = 18; barbarian.INT = 8; barbarian.WIS = 10; barbarian.CHA = 4;
+            }
+            ok &= barbarian != null && SpawnedProgressionCheck(ctx, barbarian, "ogre barbarian 4", 8, 7, 8, 2, 2, 12, 2, 2);
+
+            NPCDefinition rogue = WithClass(ctx, "human_warrior", "Rogue", 4);
+            ok &= rogue != null && SpawnedProgressionCheck(ctx, rogue, "human rogue 4 (PC rogue 4: BAB +3, +1/+4/+1)", 4, 3, 1, 4, 1);
+
+            // The MM ghost and vampire samples are human fighter 5s under the template (MM p.117, p.250); the DMG row
+            // "vampire, 5th-level human fighter" (DMG p.97, CR 7) names that sample and adds no levels.
+            NPCDefinition vampire = NPCDatabase.Get("vampire");
+            NPCDefinition ghost = NPCDatabase.Get("ghost");
+            ok &= vampire != null && SpawnedProgressionCheck(ctx, vampire.Clone(), "vampire fighter 5 (MM p.250)", 5, 5, 4, 1, 1);
+            ok &= ghost != null && SpawnedProgressionCheck(ctx, ghost.Clone(), "ghost fighter 5 (MM p.117)", 5, 5, 4, 1, 1);
+            if (vampire != null)
+            {
+                NPCDefinition row = vampire.Clone();
+                ok &= ProgressionCheck(ctx, "DMG row vampire, 5th-level fighter: levels added",
+                    CreatureClassEngine.ApplyEncounterClassLevel(row, ClassRegistry.GetClass("Fighter"), 5), 0);
+                ok &= SpawnedProgressionCheck(ctx, row, "DMG row vampire, 5th-level fighter", 5, 5, 4, 1, 1);
+            }
+
+            // Dire animals: good Will beside the animal's good Fort and Ref (MM p.63-65), on the spawn and on the
+            // Lion's Shield summon's own stats builder.
+            NPCDefinition wolf = NPCDatabase.Get("dire_wolf");
+            ok &= wolf != null && SpawnedProgressionCheck(ctx, wolf.Clone(), "dire wolf (MM p.65)", 6, 4, 5, 5, 5, 8, 7, 6);
+            NPCDefinition lion = NPCDatabase.Get("dire_lion");
+            if (lion != null)
+            {
+                CharacterStats summon = LionsShieldBehavior.BuildSummonStats(lion.Clone());
+                ok &= ProgressionCheck(ctx, "Lion's Shield dire lion BAB (MM p.63)", summon.BaseAttackBonus, 6);
+                ok &= ProgressionCheck(ctx, "Lion's Shield dire lion base Will (good)", summon.ClassWillSave, 6);
+                ok &= ProgressionCheck(ctx, "Lion's Shield dire lion Will (MM p.63)", summon.WillSave, 7);
+            }
+
+            ok &= ProgressionCheck(ctx, "goblin template still 1 HD", NPCDatabase.Get("goblin").HitDice, 1);
+            ok &= ProgressionCheck(ctx, "ogre template still 4 HD", NPCDatabase.Get("ogre").HitDice, 4);
             return ok;
         }
 

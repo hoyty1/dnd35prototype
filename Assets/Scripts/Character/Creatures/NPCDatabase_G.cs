@@ -302,6 +302,9 @@ public static partial class NPCDatabase
             EntryArmorCategory = ArmorCategory.Light, // leather armor and heavy steel shield (MM p.130), not carried
             HitDice = 2,
             BABOverride = BABProgression.Medium,
+            // A humanoid's good save varies (MM p.310); this one has good Fortitude, not the usual Reflex (gnoll: Fort +4 at CON 13, MM p.130; CRE-004).
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
             STR = 15, DEX = 10, CON = 13, WIS = 11, INT = 8, CHA = 8,
@@ -334,7 +337,6 @@ public static partial class NPCDatabase
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
             HitDice = 1,
-            BaseAttackBonusOverride = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,
             STR = 11, DEX = 13, CON = 12, WIS = 9, INT = 10, CHA = 6,
@@ -1164,7 +1166,6 @@ public static partial class NPCDatabase
             CreatureType = "Humanoid",
             CharacterAlignment = Alignment.NeutralEvil,
             HitDice = 1,
-            BaseAttackBonusOverride = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,
             STR = 11, DEX = 13, CON = 12, WIS = 9, INT = 10, CHA = 6,
@@ -1240,7 +1241,7 @@ public static partial class NPCDatabase
     }
 
     /// <summary>
-    /// Ghost (CR 7) — Medium undead (incorporeal). Template applied to 5th-level human warrior.
+    /// Ghost (CR 7) — Medium undead (incorporeal). Template applied to a 5th-level human fighter.
     /// MM 3.5e p.117. Incorporeal touch with manifestation and frightful moan.
     /// </summary>
     private static void RegisterGhost()
@@ -1250,8 +1251,10 @@ public static partial class NPCDatabase
             Id = "ghost",
             Name = "Ghost",
             ChallengeRating = "7",
+            // MM p.117 sample: a 5th-level human fighter with the template, 5d12 HD (32 hp), BAB +5 and base saves
+            // +4/+1/+1 from the fighter levels (CRE-004).
             Level = 5,
-            CharacterClass = "Warrior",
+            CharacterClass = "Fighter",
             CreatureType = "Undead",
             CharacterAlignment = Alignment.ChaoticEvil,
             HitDice = 5,
@@ -1261,7 +1264,7 @@ public static partial class NPCDatabase
             NaturalArmorBonus = 0,
             BaseSpeed = 6, // Fly 30 ft (perfect)
             BaseHitDieHP = 32,
-            BAB = 2,
+            BAB = 5,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
                 new NaturalAttackDefinition

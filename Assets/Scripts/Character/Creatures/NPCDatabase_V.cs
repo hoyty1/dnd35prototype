@@ -242,11 +242,13 @@ public static partial class NPCDatabase
             Id = "vampire",
             Name = "Vampire",
             ChallengeRating = "7",
-            Level = 7,
+            // MM p.250 sample: a 5th-level human fighter with the template, 5d12 HD (32 hp), BAB +5 and base saves
+            // +4/+1/+1 from the fighter levels (CRE-004). Ability scores, spells and Improved Grab still differ (CRE-030, CRE-047).
+            Level = 5,
             CharacterClass = "Fighter",
             CreatureType = "Undead",
             CharacterAlignment = Alignment.ChaoticEvil,
-            HitDice = 7,
+            HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
             STR = 22, DEX = 18, CON = 0, WIS = 16, INT = 17, CHA = 20,
@@ -259,7 +261,7 @@ public static partial class NPCDatabase
                 new DamageResistanceEntry { Type = DamageType.Electricity, Amount = 10 }
             },
             BaseSpeed = 6,
-            BaseHitDieHP = 45,
+            BaseHitDieHP = 32, // 5d12 (MM p.250)
             BAB = 5,
             HasImprovedGrab = true,
             ImprovedGrabTriggerAttackName = "Slam",

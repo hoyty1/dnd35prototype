@@ -121,6 +121,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,
@@ -161,6 +162,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             HitDice = 4,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -193,6 +195,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -227,6 +230,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -778,6 +782,7 @@ public static partial class NPCDatabase
             Level = 7,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 7,
             SizeCategory = SizeCategory.Large,
@@ -861,6 +866,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 5,
             SizeCategory = SizeCategory.Large,
@@ -903,6 +909,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 5,
             SizeCategory = SizeCategory.Large,

@@ -165,9 +165,8 @@ public static class NpcProficiencyTests
     /// <summary>
     /// Checks a spawned creature's main weapon: proficient, no armor penalty, and the MM attack bonus. The weapon must
     /// come from the spawn itself, also when the definition lists it under EquipSlot.MainHand (the ogre's greatclub;
-    /// ITM-004, fixed 2026-10-08: before, DirectEquip dropped it and the test equipped it by hand). The spawned BAB can
-    /// differ from the MM's (CRE-004: a warrior level on a 1-HD humanoid follows the humanoid's 3/4 progression, +0 at
-    /// 1 HD), so the expected bonus is the MM's minus the MM BAB plus the spawned BAB. A masterwork weapon the spawn may
+    /// ITM-004, fixed 2026-10-08: before, DirectEquip dropped it and the test equipped it by hand). The spawned BAB must
+    /// be the MM's (CRE-004, fixed 2026-10-08: a warrior level on a 1-HD humanoid is +1, MM p.310). A masterwork weapon the spawn may
     /// roll by CR is not part of BuildAttackBonus, so it does not change the expected figure.
     /// Likewise a parenthesised NPC feat such as "Weapon Focus (greatclub)" does nothing (CHR-008), so the MM's feat
     /// term <paramref name="mmFeatAttack"/> is replaced by the feat term the game computed. What is left is exactly the
@@ -197,9 +196,11 @@ public static class NpcProficiencyTests
             Assert(b.ArmorNonProficiencyPenalty == 0, npcId + ": no armor or shield non-proficiency penalty",
                 "got " + b.ArmorNonProficiencyPenalty);
             int spawnedBab = cc.Stats.BaseAttackBonus;
+            Assert(spawnedBab == mmBab, npcId + " spawns with the MM's BAB " + CharacterStats.FormatMod(mmBab) + " (CRE-004)",
+                "got " + CharacterStats.FormatMod(spawnedBab));
             int gameFeat = b.Feats.TotalFeatAttackModifier;
             int expected = mmAttackBonus - mmBab + spawnedBab - mmFeatAttack + gameFeat;
-            string babNote = spawnedBab == mmBab ? "" : $", spawned BAB {CharacterStats.FormatMod(spawnedBab)} vs MM {CharacterStats.FormatMod(mmBab)} (CRE-004)";
+            string babNote = "";
             if (gameFeat != mmFeatAttack)
                 babNote += $", feat term {CharacterStats.FormatMod(gameFeat)} vs MM {CharacterStats.FormatMod(mmFeatAttack)} (CHR-008)";
             Assert(b.Total == expected,

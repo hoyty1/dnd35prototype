@@ -1852,11 +1852,6 @@ public class CharacterStats
     /// </summary>
     public int RageWillBonus => IsRaging ? (2 + RageTier) : 0;
 
-    private int GetEffectiveProgressionLevel()
-    {
-        return GetHitDice();
-    }
-
     /// <summary>
     /// Total Hit Dice (PHB p.309: character level for a character, total HD for a creature; CHR-071). A creature
     /// built from a definition keeps its definition's total in <see cref="HitDice"/>; a character with class levels
@@ -1889,66 +1884,66 @@ public class CharacterStats
         return total;
     }
 
-    // ========== CLASS-BASED SAVE BONUSES (D&D 3.5) ==========
+    // ========== BASE SAVES (D&D 3.5) ==========
+    // Racial Hit Dice (creature type progression, MM Table 4-1) plus every real class level (PHB Table 3-1), the same
+    // sum for PCs and NPCs (MM p.290, PHB p.59; CRE-004). A PC has no racial Hit Dice, so only its classes count.
 
-    private static int CalculateClassSaveProgression(bool isGoodSave, int classLevel)
+    /// <summary>
+    /// The class of a <see cref="ClassLevels"/> entry that exists only so the creature casts spells as that class
+    /// (MM: a dragon "casts spells as a sorcerer" of a level set by its age; GameManager.InitializeNPCFromDefinition
+    /// injects the entry). It is a caster level, not class levels: no BAB, saves or Hit Dice (CRE-004). Null for
+    /// everyone else.
+    /// </summary>
+    public string InnateSpellcastingClass;
+
+    /// <summary>
+    /// True when <paramref name="entry"/> is not a real class level for BAB and base saves: the class that only stands
+    /// in for racial Hit Dice (<see cref="RacialHitDiceStandInClass"/>, CRE-024; those levels count as
+    /// <see cref="RacialHitDice"/> with the creature type's progressions) or the <see cref="InnateSpellcastingClass"/>.
+    /// </summary>
+    private bool IsRacialHitDiceStandInEntry(ClassLevelEntry entry)
     {
-        int safeLevel = Mathf.Max(1, classLevel);
-        return isGoodSave ? (2 + safeLevel / 2) : (safeLevel / 3);
+        if (entry == null)
+            return false;
+        if (!string.IsNullOrEmpty(RacialHitDiceStandInClass)
+            && string.Equals(entry.ClassName, RacialHitDiceStandInClass, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return !string.IsNullOrEmpty(InnateSpellcastingClass)
+            && string.Equals(entry.ClassName, InnateSpellcastingClass, StringComparison.OrdinalIgnoreCase);
     }
 
-    private int GetTotalClassSaveBonus(Func<ICharacterClass, bool> isGoodSaveSelector)
+    /// <summary>Sum of the base <paramref name="save"/> of every real class level (PHB p.59; ClassProgression).</summary>
+    private int GetTotalClassSaveBonus(SavingThrowType save)
     {
         EnsureMulticlassDataInitialized();
-        ClassRegistry.Init();
 
         int total = 0;
         for (int i = 0; i < ClassLevels.Count; i++)
         {
             ClassLevelEntry classLevel = ClassLevels[i];
-            if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+            if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName) || IsRacialHitDiceStandInEntry(classLevel))
                 continue;
 
-            ICharacterClass classDef = ClassRegistry.GetClass(classLevel.ClassName);
-            bool isGoodSave = classDef != null && isGoodSaveSelector(classDef);
-            total += CalculateClassSaveProgression(isGoodSave, classLevel.Level);
+            total += ClassProgression.GetClassBaseSave(classLevel.ClassName, Mathf.Max(1, classLevel.Level), save);
         }
 
         return total;
     }
 
-    public int ClassFortSave
-    {
-        get
-        {
-            if (UseCreatureTypeProgression)
-                return ProgressionCalculator.CalculateSave(CreatureFortitudeProgression, GetEffectiveProgressionLevel());
+    /// <summary>Base Fortitude save: racial Hit Dice (creature type, or the entry's override) plus class levels.</summary>
+    public int ClassFortSave =>
+        ProgressionCalculator.CalculateRacialSave(CreatureFortitudeProgression, RacialHitDice)
+        + GetTotalClassSaveBonus(SavingThrowType.Fortitude);
 
-            return GetTotalClassSaveBonus(classDef => classDef.GoodFortitude);
-        }
-    }
+    /// <summary>Base Reflex save: racial Hit Dice (creature type, or the entry's override) plus class levels.</summary>
+    public int ClassRefSave =>
+        ProgressionCalculator.CalculateRacialSave(CreatureReflexProgression, RacialHitDice)
+        + GetTotalClassSaveBonus(SavingThrowType.Reflex);
 
-    public int ClassRefSave
-    {
-        get
-        {
-            if (UseCreatureTypeProgression)
-                return ProgressionCalculator.CalculateSave(CreatureReflexProgression, GetEffectiveProgressionLevel());
-
-            return GetTotalClassSaveBonus(classDef => classDef.GoodReflex);
-        }
-    }
-
-    public int ClassWillSave
-    {
-        get
-        {
-            if (UseCreatureTypeProgression)
-                return ProgressionCalculator.CalculateSave(CreatureWillProgression, GetEffectiveProgressionLevel());
-
-            return GetTotalClassSaveBonus(classDef => classDef.GoodWill);
-        }
-    }
+    /// <summary>Base Will save: racial Hit Dice (creature type, or the entry's override) plus class levels.</summary>
+    public int ClassWillSave =>
+        ProgressionCalculator.CalculateRacialSave(CreatureWillProgression, RacialHitDice)
+        + GetTotalClassSaveBonus(SavingThrowType.Will);
 
     /// <summary>
     /// Effective resistance bonus to all saves = max(Ring of Resistance, Cloak of Resistance).
@@ -2305,11 +2300,15 @@ public class CharacterStats
     public int HitDice;
 
     /// <summary>
-    /// When true, this character's BAB and base saves use creature-type progression rules
-    /// instead of class progression (used by NPC monsters).
+    /// Racial Hit Dice: the part of <see cref="HitDice"/> that follows the creature type's progressions
+    /// (<see cref="CreatureBABProgression"/> and the three save progressions, MM Table 4-1) rather than a class. 0 for a
+    /// PC (PHB races have none) and for a creature whose Hit Dice are all class levels (a 1-HD humanoid, MM p.310). Set
+    /// at spawn from <see cref="NPCDefinition.ResolveRacialHitDice"/>. BAB and base saves add this part and every real
+    /// class level (MM p.290; CRE-004).
     /// </summary>
-    public bool UseCreatureTypeProgression;
+    public int RacialHitDice;
 
+    /// <summary>BAB progression of the racial Hit Dice (creature type, or the entry's <c>BABOverride</c>).</summary>
     public BABProgression CreatureBABProgression = BABProgression.Medium;
     public SaveProgression CreatureFortitudeProgression = SaveProgression.Poor;
     public SaveProgression CreatureReflexProgression = SaveProgression.Poor;
@@ -2613,19 +2612,18 @@ public class CharacterStats
             if (BaseAttackBonusOverride.HasValue)
                 return BaseAttackBonusOverride.Value;
 
-            if (UseCreatureTypeProgression)
-                return ProgressionCalculator.CalculateBAB(CreatureBABProgression, GetEffectiveProgressionLevel());
-
             EnsureMulticlassDataInitialized();
 
-            if (ClassLevels == null || ClassLevels.Count == 0)
+            if ((ClassLevels == null || ClassLevels.Count == 0) && RacialHitDice <= 0)
                 return _baseAttackBonus;
 
-            int totalBab = 0;
+            // Racial Hit Dice by the creature type (MM Table 4-1) plus every real class level (PHB Table 3-1): the same
+            // sum for PCs and NPCs (MM p.290, PHB p.59; CRE-004). A stand-in class for racial HD is not a class level.
+            int totalBab = ProgressionCalculator.CalculateRacialBAB(CreatureBABProgression, RacialHitDice);
             for (int i = 0; i < ClassLevels.Count; i++)
             {
                 ClassLevelEntry classLevel = ClassLevels[i];
-                if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName) || IsRacialHitDiceStandInEntry(classLevel))
                     continue;
 
                 // From the class definition (PHB Table 3-1; CHR-002), the same numbers CreatureClassEngine uses.

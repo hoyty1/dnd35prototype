@@ -356,6 +356,7 @@ public static partial class NPCDatabase
             Level = 8,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             HitDice = 8,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,

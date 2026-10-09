@@ -32,6 +32,9 @@ public static partial class NPCDatabase
             EntryWeaponIds = new List<string> { "club", "javelin" }, // MM p.246: club and javelin; no armor
             HitDice = 2,
             BABOverride = BABProgression.Medium,
+            // A humanoid's good save varies (MM p.310); this one has good Fortitude, not the usual Reflex (troglodyte: Fort +5 at CON 14, MM p.246; CRE-004).
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
             STR = 12, DEX = 10, CON = 14, WIS = 10, INT = 8, CHA = 10,

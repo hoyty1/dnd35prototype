@@ -44,10 +44,9 @@ public static class CreatureProficiency
         if (stats == null || def == null)
             return;
 
-        bool standIn = def.ResolveClassLevelsAreRacialHitDice();
-        stats.RacialHitDiceStandInClass = standIn
-            ? (string.IsNullOrWhiteSpace(def.CharacterClass) ? "Fighter" : def.CharacterClass)
-            : null;
+        // Also set by CreatureTypeProgressionDatabase.ApplyToStats; the same value, so the order of the two calls is free.
+        stats.RacialHitDiceStandInClass = def.ResolveRacialHitDiceStandInClass();
+        bool standIn = stats.RacialHitDiceStandInClass != null;
 
         if (!CreatureTypeProgressionDatabase.TryParseCreatureType(def.CreatureType, out CreatureTypeId type))
             type = CreatureTypeId.Humanoid;

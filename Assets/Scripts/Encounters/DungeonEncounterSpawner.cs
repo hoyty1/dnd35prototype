@@ -165,7 +165,8 @@ public static class DungeonEncounterSpawner
             ICharacterClass classDef = ClassRegistry.GetClass(entry.TemplateClass);
             if (classDef != null)
             {
-                CreatureClassEngine.ApplyClassToDefinition(def, classDef, entry.TemplateLevel);
+                // The row names the class level, which a class-level sample base (ghost, vampire) already has.
+                CreatureClassEngine.ApplyEncounterClassLevel(def, classDef, entry.TemplateLevel);
 
                 // Update display name to reflect class
                 def.Name = $"{baseDef.Name} {entry.TemplateClass} {entry.TemplateLevel}";

@@ -236,9 +236,37 @@ public class LionsShieldBehavior : SpecificItemBehavior
         summonObj.transform.position = gm.Grid.GetWorldPosition(summonPos);
 
         // ── Initialize with core stats via public Init() ──
-        // Full InitializeNPCFromDefinition is private on GameManager; we replicate
-        // the essential subset here. Missing: feat application, template processing,
-        // swarm traits, spell resistance — acceptable for a summoned animal.
+        CharacterStats stats = BuildSummonStats(def);
+
+        controller.Init(stats, summonPos, null, null);
+        controller.SetTeam(Wielder.Team);
+
+        // Add to game tracking
+        gm.NPCs.Add(controller);
+
+        // Register with summoning service for duration tracking + auto-despawn
+        gm.Summoning.RegisterSummonedCreature(
+            controller,
+            Wielder,
+            SummonDurationRounds,
+            $"LionsShieldGreater_{_summonNpcId}"
+        );
+
+        string displayName = npcDef.Name;
+        logNotes.Add($"{ShieldName}: summoned a {displayName} ally for {SummonDurationRounds} rounds! ({_summonsRemaining}/{MaxSummonsPerDay} summons left)");
+        Log($"Summoned {displayName} at ({summonPos.x},{summonPos.y}) for {SummonDurationRounds} rounds");
+
+        return true;
+    }
+
+    /// <summary>
+    /// The summoned creature's stats, built from <paramref name="def"/> (already cloned and renamed). This replicates
+    /// the essential subset of GameManager.InitializeNPCFromDefinition; missing: feat application, template processing,
+    /// swarm traits, DR, ER, SR and immunities (CRE-005). BAB and base saves use the shared
+    /// <see cref="CreatureTypeProgressionDatabase.ApplyToStats"/> (CRE-004). Public so tests check this exact path.
+    /// </summary>
+    public static CharacterStats BuildSummonStats(NPCDefinition def)
+    {
         int hitDice = Mathf.Max(1, def.HitDice > 0 ? def.HitDice : def.Level);
         // The definition total is final (CON included); the constructor's CON term is undone below (CHR-001).
         int baseHp = def.BaseHitDieHP > 0 ? def.BaseHitDieHP : hitDice * 5;
@@ -265,6 +293,10 @@ public class LionsShieldBehavior : SpecificItemBehavior
         stats.CurrentHP = stats.MaxHP;
         stats.SetNaturalAttacks(def.NaturalAttacks);
         stats.HitDice = hitDice;
+        // Racial HD by the creature type, as every spawn from a definition (CRE-004): the dire lion's 8 animal HD give
+        // BAB +6 and base saves +6/+6/+6 (MM p.63: the animal's good Fortitude and Reflex, and the dire animals' good
+        // Will), not 8 Warrior levels.
+        CreatureTypeProgressionDatabase.ApplyToStats(stats, def);
         stats.NaturalArmorBonus = def.NaturalArmorBonus;
         stats.SetBaseSizeCategory(def.SizeCategory);
         stats.IsTallCreature = def.IsTallCreature;
@@ -286,25 +318,7 @@ public class LionsShieldBehavior : SpecificItemBehavior
         foreach (string tag in def.CreatureTags)
             stats.CreatureTags.Add(tag);
 
-        controller.Init(stats, summonPos, null, null);
-        controller.SetTeam(Wielder.Team);
-
-        // Add to game tracking
-        gm.NPCs.Add(controller);
-
-        // Register with summoning service for duration tracking + auto-despawn
-        gm.Summoning.RegisterSummonedCreature(
-            controller,
-            Wielder,
-            SummonDurationRounds,
-            $"LionsShieldGreater_{_summonNpcId}"
-        );
-
-        string displayName = npcDef.Name;
-        logNotes.Add($"{ShieldName}: summoned a {displayName} ally for {SummonDurationRounds} rounds! ({_summonsRemaining}/{MaxSummonsPerDay} summons left)");
-        Log($"Summoned {displayName} at ({summonPos.x},{summonPos.y}) for {SummonDurationRounds} rounds");
-
-        return true;
+        return stats;
     }
 
     /// <summary>

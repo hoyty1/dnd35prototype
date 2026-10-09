@@ -684,16 +684,14 @@ public partial class GameManager
     {
         ResetCharacterSlotForSpawn(npc);
 
-        int hitDice = Mathf.Max(1, def.HitDice > 0 ? def.HitDice : def.Level);
+        int hitDice = def.ResolveTotalHitDice();
         CreatureTypeProgression creatureProgression = CreatureTypeProgressionDatabase.GetFromString(def.CreatureType);
 
-        BABProgression babProgression = def.BABOverride ?? creatureProgression.BAB;
-        SaveProgression fortitudeProgression = def.FortitudeSaveOverride ?? creatureProgression.Fortitude;
-        SaveProgression reflexProgression = def.ReflexSaveOverride ?? creatureProgression.Reflex;
-        SaveProgression willProgression = def.WillSaveOverride ?? creatureProgression.Will;
-
-        int computedBab = ProgressionCalculator.CalculateBAB(babProgression, hitDice);
-        int resolvedBab = def.BaseAttackBonusOverride ?? computedBab;
+        // Only the constructor's fallback. BAB and base saves are set below by CreatureTypeProgressionDatabase.ApplyToStats:
+        // racial Hit Dice by the creature type's progressions (or the entry's overrides) plus the real class levels by
+        // the class tables, summed by the same CharacterStats formulas a PC uses (MM p.290, PHB p.59; CRE-004).
+        int resolvedBab = def.BaseAttackBonusOverride
+            ?? ProgressionCalculator.CalculateRacialBAB(def.BABOverride ?? creatureProgression.BAB, def.ResolveRacialHitDice());
         // The definition total is final (MM total, CON included, plus template and class-level HP); without one, the
         // type's average die plus CON per Hit Die. The constructor's own CON term is replaced below (CHR-001, CRE-041).
         int creatureMaxHp = ClassProgression.CreatureMaxHitPoints(def.BaseHitDieHP, creatureProgression.HitDie, hitDice, def.CON);
@@ -723,12 +721,7 @@ public partial class GameManager
         stats.SetNaturalAttacks(def.NaturalAttacks);
 
         stats.HitDice = hitDice;
-        stats.UseCreatureTypeProgression = true;
-        stats.CreatureBABProgression = babProgression;
-        stats.BaseAttackBonusOverride = def.BaseAttackBonusOverride;
-        stats.CreatureFortitudeProgression = fortitudeProgression;
-        stats.CreatureReflexProgression = reflexProgression;
-        stats.CreatureWillProgression = willProgression;
+        CreatureTypeProgressionDatabase.ApplyToStats(stats, def);
 
         foreach (string tag in def.CreatureTags)
             stats.CreatureTags.Add(tag);
@@ -963,6 +956,8 @@ public partial class GameManager
 
             // Add Sorcerer class level so IsSpellcaster returns true
             stats.ClassLevels.Add(new ClassLevelEntry("Sorcerer", sorcererCL));
+            // A caster level only: the dragon's BAB and saves stay those of its dragon Hit Dice (CRE-004).
+            stats.InnateSpellcastingClass = "Sorcerer";
             stats.EnsureMulticlassDataInitialized();
 
             Debug.Log($"[GameManager] Dragon {def.Name}: Injected Sorcerer CL {sorcererCL} for innate spellcasting ({def.KnownSpellIds.Count} spells known)");
@@ -1006,7 +1001,7 @@ public partial class GameManager
 
         Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq " +
-                  $"Type={stats.CreatureType} HD={stats.HitDice} BABProg={stats.CreatureBABProgression} " +
+                  $"Type={stats.CreatureType} HD={stats.HitDice} RacialHD={stats.RacialHitDice} BABProg={stats.CreatureBABProgression} BAB={CharacterStats.FormatMod(stats.BaseAttackBonus)} " +
                   $"Saves(F/R/W)={stats.ClassFortSave}/{stats.ClassRefSave}/{stats.ClassWillSave}");
     }
 

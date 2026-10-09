@@ -205,8 +205,11 @@ namespace Tests.Scenarios
     /// </summary>
     internal sealed class ScenarioTrace
     {
-        /// <summary>2: the cast event; 3: the attack event's weapon damage dice (dice, baseRoll).</summary>
-        public const string HarnessVersion = "3";
+        /// <summary>
+        /// 2: the cast event; 3: the attack event's weapon damage dice (dice, baseRoll); 4: the actor event's Hit Dice,
+        /// racial Hit Dice and base saves (hd, racialHd, baseFort, baseRef, baseWill; CRE-004).
+        /// </summary>
+        public const string HarnessVersion = "4";
 
         private readonly ScenarioJob _job;
         private readonly GameManager _gm;
@@ -351,6 +354,11 @@ namespace Tests.Scenarios
                 .Set("ac", s.ArmorClass)
                 .Set("touch", s.TouchArmorClass)
                 .Set("bab", s.BaseAttackBonus)
+                .Set("hd", s.GetHitDice())
+                .Set("racialHd", s.RacialHitDice)
+                .Set("baseFort", s.ClassFortSave)
+                .Set("baseRef", s.ClassRefSave)
+                .Set("baseWill", s.ClassWillSave)
                 .Set("pos", c.GridPosition)
                 .Set("size", s.CurrentSizeCategory)
                 .Set("speed", s.EffectiveSpeedFeet)

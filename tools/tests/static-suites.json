@@ -99,11 +99,22 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 178,
+      "passed": 179,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CHR-001, CHR-002, CHR-071: class hit die and BAB from ClassRegistry for every PHB and DMG class, CON once per Hit Die with a minimum of 1 (constructor, creation, level-up), Quick Start presets at 3rd level, Hit Dice after level-ups and for creatures, CON 0 as no score and creature max HP from the definition total (CRE-041, CRE-044); level-ups in GameSettings Average mode (restored afterwards)"
+      "notes": "CHR-001, CHR-002, CHR-071: class hit die and BAB from ClassRegistry for every PHB and DMG class, CON once per Hit Die with a minimum of 1 (constructor, creation, level-up), Quick Start presets at 3rd level, Hit Dice after level-ups and for creatures, CON 0 as no score and creature max HP from the definition total (CRE-041, CRE-044), an orc barbarian 2 that exchanges the orc Hit Die (MM p.290, CRE-004) and an ogre barbarian 1; level-ups in GameSettings Average mode (restored afterwards)"
+    },
+    {
+      "type": "Tests.Character.CreatureProgressionTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 119,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CRE-004: BAB and base saves = racial HD by the creature type (MM Table 4-1) plus real class levels by the class tables (MM p.290, PHB p.59), against MM stat blocks (orc, goblin, hobgoblin, kobold, gnoll, bugbear, lizardfolk, troglodyte, ogre, ogre barbarian 4) and CreatureClassEngine class levels (1-HD humanoid Hit Die exchange, same-class merge); a dragon's injected sorcerer caster level adds no BAB or saves; the Lion's Shield dire lion through CreatureTypeProgressionDatabase.ApplyToStats; spawns through InitializeNPCFromDefinition, so needs a scene GameManager"
     },
     {
       "type": "Tests.Character.DeityAlignmentRestrictionTests",
@@ -165,11 +176,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 65,
+      "passed": 69,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CHR-072: NPC class (DMG p.108-109) and creature-type (MM p.305-317) weapon and armor proficiency through the PC checks; spawns through InitializeNPCFromDefinition, so needs a scene GameManager; the main weapon must come from the spawn, MainHand entries included (ITM-004); allows for the spawned BAB (CRE-004); a missing item id fails a check"
+      "notes": "CHR-072: NPC class (DMG p.108-109) and creature-type (MM p.305-317) weapon and armor proficiency through the PC checks; spawns through InitializeNPCFromDefinition, so needs a scene GameManager; the main weapon must come from the spawn, MainHand entries included (ITM-004); requires the MM's BAB for every checked weapon (CRE-004); a missing item id fails a check"
     },
     {
       "type": "Tests.Character.NpcAlignmentGearTests",

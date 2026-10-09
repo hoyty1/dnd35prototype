@@ -60,6 +60,39 @@ public static class ClassProgression
         }
     }
 
+    /// <summary>
+    /// Base save from <paramref name="classLevels"/> levels of one class (PHB Table 3-1, p.22): good 2 + level/2, poor
+    /// level/3, 0 without levels. A multiclass character adds the values of its classes (PHB p.59), and a creature adds
+    /// them to the base saves of its racial Hit Dice (MM p.290; CRE-004).
+    /// </summary>
+    public static int BaseSaveForProgression(bool goodSave, int classLevels)
+    {
+        if (classLevels <= 0) return 0;
+        return goodSave ? 2 + classLevels / 2 : classLevels / 3;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="className"/> has a good <paramref name="save"/> (PHB ch.3 class tables, DMG p.107-110 NPC
+    /// classes). False for a class name with no registered definition.
+    /// </summary>
+    public static bool IsGoodSave(string className, SavingThrowType save)
+    {
+        ICharacterClass classDef = GetDefinition(className);
+        if (classDef == null) return false;
+        switch (save)
+        {
+            case SavingThrowType.Fortitude: return classDef.GoodFortitude;
+            case SavingThrowType.Reflex: return classDef.GoodReflex;
+            default: return classDef.GoodWill;
+        }
+    }
+
+    /// <summary>Base <paramref name="save"/> from <paramref name="classLevel"/> levels of one class (CRE-004).</summary>
+    public static int GetClassBaseSave(string className, int classLevel, SavingThrowType save)
+    {
+        return BaseSaveForProgression(IsGoodSave(className, save), classLevel);
+    }
+
     /// <summary>Hit points one Hit Die gives: the die result plus the CON modifier, minimum 1 (PHB p.9, p.23, p.59).</summary>
     public static int HitPointsForHitDie(int dieResult, int conModifier)
     {

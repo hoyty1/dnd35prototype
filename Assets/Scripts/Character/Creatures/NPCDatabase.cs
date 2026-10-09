@@ -674,9 +674,10 @@ public class NPCDefinition
 
     /// <summary>
     /// True when <see cref="CharacterClass"/> only stands in for racial Hit Dice (CRE-024), so it grants no class
-    /// proficiency; false when the levels are real class levels. Null derives it: an empty class, or a Warrior class on
-    /// a creature that is not a humanoid, is a stand-in. Humanoids with more than 1 racial Hit Die (gnoll, bugbear,
-    /// lizardfolk, troglodyte; MM p.310) set it to true, since a 1-HD humanoid's level is a real warrior level.
+    /// proficiency, BAB or saves; false when the levels are real class levels. Null derives it: an empty class, a class
+    /// name with no registered definition (noble_djinni's "Outsider"), or a Warrior class on a creature that is not a
+    /// humanoid, is a stand-in. Humanoids with more than 1 racial Hit Die (gnoll, bugbear, lizardfolk, troglodyte;
+    /// MM p.310) set it to true, since a 1-HD humanoid's level is a real warrior level.
     /// <see cref="CreatureClassEngine.ApplyClassToDefinition"/> sets it to false.
     /// </summary>
     public bool? ClassLevelsAreRacialHitDice;
@@ -688,10 +689,45 @@ public class NPCDefinition
             return ClassLevelsAreRacialHitDice.Value;
         if (string.IsNullOrWhiteSpace(CharacterClass))
             return true;
+        if (!ClassRegistry.TryGetClass(CharacterClass, out _))
+            return true;
         if (!string.Equals(CharacterClass, "Warrior", System.StringComparison.OrdinalIgnoreCase))
             return false;
         return !(CreatureTypeProgressionDatabase.TryParseCreatureType(CreatureType, out CreatureTypeId type)
                  && type == CreatureTypeId.Humanoid);
+    }
+
+    /// <summary>
+    /// The class name that only stands in for racial Hit Dice (<see cref="ResolveClassLevelsAreRacialHitDice"/>): the
+    /// definition's class, or "Fighter" for an empty one (the CharacterStats fallback class); null when the levels are
+    /// real. CharacterStats.RacialHitDiceStandInClass takes this value, so the stand-in grants no BAB, saves or proficiency.
+    /// </summary>
+    public string ResolveRacialHitDiceStandInClass()
+    {
+        if (!ResolveClassLevelsAreRacialHitDice())
+            return null;
+        return string.IsNullOrWhiteSpace(CharacterClass) ? "Fighter" : CharacterClass;
+    }
+
+    /// <summary>Total Hit Dice of the creature: <see cref="HitDice"/>, else <see cref="Level"/>, at least 1.</summary>
+    public int ResolveTotalHitDice()
+    {
+        return System.Math.Max(1, HitDice > 0 ? HitDice : Level);
+    }
+
+    /// <summary>
+    /// Racial Hit Dice: the Hit Dice that follow the creature type's progressions (MM Table 4-1, p.290) rather than a
+    /// class. All of them when the class only stands in for racial HD (<see cref="ResolveClassLevelsAreRacialHitDice"/>);
+    /// otherwise the total less the real class levels (<see cref="Level"/> of <see cref="CharacterClass"/>), so 0 for a
+    /// 1-HD humanoid or a classed human (MM p.310) and the monster's own HD for a monster given class levels by
+    /// <see cref="CreatureClassEngine.ApplyClassToDefinition"/> (CRE-004).
+    /// </summary>
+    public int ResolveRacialHitDice()
+    {
+        int total = ResolveTotalHitDice();
+        if (ResolveClassLevelsAreRacialHitDice())
+            return total;
+        return System.Math.Max(0, total - System.Math.Max(0, Level));
     }
 
     // Team/control flags

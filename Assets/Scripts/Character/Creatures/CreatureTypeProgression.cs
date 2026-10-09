@@ -86,7 +86,9 @@ public static class CreatureTypeProgressionDatabase
         [CreatureTypeId.Elemental] = new CreatureTypeProgression(CreatureTypeId.Elemental, 8, BABProgression.Medium, SaveProgression.Poor, SaveProgression.Poor, SaveProgression.Poor),
         [CreatureTypeId.Fey] = new CreatureTypeProgression(CreatureTypeId.Fey, 6, BABProgression.Poor, SaveProgression.Poor, SaveProgression.Good, SaveProgression.Good),
         [CreatureTypeId.Giant] = new CreatureTypeProgression(CreatureTypeId.Giant, 8, BABProgression.Medium, SaveProgression.Good, SaveProgression.Poor, SaveProgression.Poor),
-        [CreatureTypeId.Humanoid] = new CreatureTypeProgression(CreatureTypeId.Humanoid, 8, BABProgression.Medium, SaveProgression.Poor, SaveProgression.Poor, SaveProgression.Poor),
+        // Humanoid racial HD: good Reflex "usually; a humanoid's good save varies" (MM p.310); an entry with another good
+        // save overrides it (gnoll and troglodyte: Fortitude). Only humanoids with more than 1 HD have racial HD at all.
+        [CreatureTypeId.Humanoid] = new CreatureTypeProgression(CreatureTypeId.Humanoid, 8, BABProgression.Medium, SaveProgression.Poor, SaveProgression.Good, SaveProgression.Poor),
         [CreatureTypeId.MagicalBeast] = new CreatureTypeProgression(CreatureTypeId.MagicalBeast, 10, BABProgression.Good, SaveProgression.Good, SaveProgression.Good, SaveProgression.Poor),
         [CreatureTypeId.MonstrousHumanoid] = new CreatureTypeProgression(CreatureTypeId.MonstrousHumanoid, 8, BABProgression.Good, SaveProgression.Poor, SaveProgression.Good, SaveProgression.Good),
         [CreatureTypeId.Ooze] = new CreatureTypeProgression(CreatureTypeId.Ooze, 10, BABProgression.Medium, SaveProgression.Poor, SaveProgression.Poor, SaveProgression.Poor),
@@ -135,6 +137,30 @@ public static class CreatureTypeProgressionDatabase
         return _data[CreatureTypeId.Humanoid];
     }
 
+    /// <summary>
+    /// Sets the racial Hit Dice and their progressions of a creature built from <paramref name="def"/>: the definition's
+    /// racial HD (<see cref="NPCDefinition.ResolveRacialHitDice"/>), the creature type's BAB and save progressions or the
+    /// definition's overrides of them, its fixed <see cref="NPCDefinition.BaseAttackBonusOverride"/>, and the class that
+    /// only stands in for those racial HD (<see cref="CharacterStats.RacialHitDiceStandInClass"/>), so the stand-in's
+    /// levels are not counted a second time as class levels. CharacterStats then adds the real class levels (CRE-004).
+    /// Every path that builds a creature from a definition calls this (GameManager.InitializeNPCFromDefinition,
+    /// LionsShieldBehavior.BuildSummonStats).
+    /// </summary>
+    public static void ApplyToStats(CharacterStats stats, NPCDefinition def)
+    {
+        if (stats == null || def == null)
+            return;
+
+        CreatureTypeProgression progression = GetFromString(def.CreatureType);
+        stats.RacialHitDice = def.ResolveRacialHitDice();
+        stats.RacialHitDiceStandInClass = def.ResolveRacialHitDiceStandInClass();
+        stats.CreatureBABProgression = def.BABOverride ?? progression.BAB;
+        stats.CreatureFortitudeProgression = def.FortitudeSaveOverride ?? progression.Fortitude;
+        stats.CreatureReflexProgression = def.ReflexSaveOverride ?? progression.Reflex;
+        stats.CreatureWillProgression = def.WillSaveOverride ?? progression.Will;
+        stats.BaseAttackBonusOverride = def.BaseAttackBonusOverride;
+    }
+
     public static bool TryParseCreatureType(string raw, out CreatureTypeId type)
     {
         string key = string.IsNullOrWhiteSpace(raw)
@@ -174,6 +200,25 @@ public static class ProgressionCalculator
             case SaveProgression.Poor: return safeLevel / 3;
             default: return safeLevel / 3;
         }
+    }
+
+    /// <summary>
+    /// Base attack bonus from <paramref name="racialHitDice"/> racial Hit Dice of a creature type (MM Table 4-1, p.290):
+    /// 0 without racial Hit Dice, so a creature whose Hit Dice are all class levels (a 1-HD humanoid, MM p.310, or a
+    /// PC) gets nothing here. Class levels add their own BAB on top (MM p.290, PHB p.59; CRE-004).
+    /// </summary>
+    public static int CalculateRacialBAB(BABProgression progression, int racialHitDice)
+    {
+        return racialHitDice <= 0 ? 0 : CalculateBAB(progression, racialHitDice);
+    }
+
+    /// <summary>
+    /// Base save from <paramref name="racialHitDice"/> racial Hit Dice of a creature type (MM Table 4-1, p.290): good
+    /// 2 + HD/2, poor HD/3, and 0 without racial Hit Dice. Class levels add their own base saves on top (CRE-004).
+    /// </summary>
+    public static int CalculateRacialSave(SaveProgression progression, int racialHitDice)
+    {
+        return racialHitDice <= 0 ? 0 : CalculateSave(progression, racialHitDice);
     }
 
     public static int CalculateAverageHpFromHitDice(int hitDie, int hitDiceCount)

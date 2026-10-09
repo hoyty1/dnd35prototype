@@ -153,7 +153,8 @@ public static class ClassProgressionTests
         Assert(ClassProgression.CreatureMaxHitPoints(0, 8, 3, 1) == 3, "No total, CON 1: at least 1 per Hit Die", $"got {ClassProgression.CreatureMaxHitPoints(0, 8, 3, 1)}");
         Assert(ClassProgression.CreatureMaxHitPoints(0, 12, 2, CharacterStats.NO_SCORE) == 12, "No total, no CON: 2 x 6 = 12", $"got {ClassProgression.CreatureMaxHitPoints(0, 12, 2, CharacterStats.NO_SCORE)}");
 
-        // A class-levelled monster: racial total plus max(1, die + CON) per class die, CON counted once.
+        // A 1-HD humanoid given class levels exchanges its Hit Die for them (MM p.290; CRE-004): max(1, die + CON) per
+        // class die, CON counted once, and the orc's own 1d8 gone.
         NPCDefinition orc = NPCDatabase.Get("orc_warrior");
         if (orc == null)
         {
@@ -161,13 +162,25 @@ public static class ClassProgressionTests
             return;
         }
         NPCDefinition barbarianOrc = orc.Clone();
-        int racialTotal = barbarianOrc.BaseHitDieHP;
+        int templateTotal = barbarianOrc.BaseHitDieHP;
         int conMod = ClassProgression.HitPointConstitutionModifier(barbarianOrc.CON);
         CreatureClassEngine.ApplyClassToDefinition(barbarianOrc, ClassRegistry.GetClass("Barbarian"), 2);
-        int expected = racialTotal + ClassProgression.HitPointsForHitDie(12, conMod) + ClassProgression.HitPointsForHitDie(6, conMod);
+        int expected = ClassProgression.HitPointsForHitDie(12, conMod) + ClassProgression.HitPointsForHitDie(6, conMod);
         int got = ClassProgression.CreatureMaxHitPoints(barbarianOrc.BaseHitDieHP, 8, barbarianOrc.HitDice, barbarianOrc.CON);
-        Assert(got == expected, $"Orc + barbarian 2: {racialTotal} + (12 + {conMod}) + (6 + {conMod}) = {expected}", $"got {got}");
-        Assert(orc.BaseHitDieHP == racialTotal, "The orc template is not changed by the clone", $"template {orc.BaseHitDieHP}");
+        Assert(got == expected && barbarianOrc.HitDice == 2, $"Orc barbarian 2: 2 HD, (12 + {conMod}) + (6 + {conMod}) = {expected}", $"got {got}, HD {barbarianOrc.HitDice}");
+        Assert(orc.BaseHitDieHP == templateTotal && orc.HitDice == 1, "The orc template is not changed by the clone", $"template {orc.BaseHitDieHP}");
+
+        // A monster with racial HD keeps them and adds the class (MM p.290): ogre 29 + barbarian 1 (12 + CON 2).
+        // The hit points are current behaviour, not RAW (CRE-041): the barbarian die is maximized although the ogre's
+        // racial HD came first; RAW gives an average die. Update this check when CRE-041 is fixed.
+        NPCDefinition ogre = NPCDatabase.Get("ogre");
+        if (ogre != null)
+        {
+            NPCDefinition barbarianOgre = ogre.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(barbarianOgre, ClassRegistry.GetClass("Barbarian"), 1);
+            Assert(barbarianOgre.HitDice == 5 && barbarianOgre.BaseHitDieHP == 29 + ClassProgression.HitPointsForHitDie(12, 2),
+                "Ogre barbarian 1: 5 HD (4d8 + 1d12, MM p.290), 29 + 14 hit points (current behaviour, CRE-041: max first class die; RAW is an average die)", $"HD {barbarianOgre.HitDice}, HP {barbarianOgre.BaseHitDieHP}");
+        }
     }
 
     private static CharacterCreationData CreationData(string cls, string race, int con, int level)
