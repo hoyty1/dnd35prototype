@@ -30,17 +30,17 @@ Entries per section:
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-039 |
-| [Combat](issues/CMB.md) | CMB | 3 | 58 | 66 | 127 | CMB-158 |
+| [Combat](issues/CMB.md) | CMB | 2 | 57 | 71 | 130 | CMB-163 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
 | [Spells and metamagic](issues/SPL.md) | SPL | 3 | 61 | 61 | 125 | SPL-132 |
-| [Characters, feats and classes](issues/CHR.md) | CHR | 5 | 28 | 41 | 74 | CHR-078 |
-| [Creatures, templates and summoning](issues/CRE.md) | CRE | 3 | 29 | 25 | 57 | CRE-061 |
+| [Characters, feats and classes](issues/CHR.md) | CHR | 5 | 27 | 41 | 73 | CHR-078 |
+| [Creatures, templates and summoning](issues/CRE.md) | CRE | 3 | 29 | 26 | 58 | CRE-062 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 2 | 33 | 36 | 71 | ITM-075 |
 | [AI](issues/AI.md) | AI | 1 | 22 | 39 | 62 | AI-064 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 26 | 33 | TST-037 |
-| **All** | | 18 | 288 | 382 | 688 | |
+| **All** | | 17 | 286 | 388 | 691 | |
 
 ## Top issues
 
@@ -48,7 +48,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
-| [CMB-003](issues/CMB.md) | High | Combat | Morale and situational damage bonuses never reach weapon damage | Yes |
 | [CMB-004](issues/CMB.md) | High | Combat | Critical hits multiply only weapon dice; coup de grace multiplies sneak attack | Yes |
 | [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at the round boundary (GameManager.OnNewRound -> ConditionService.OnRoundEnd), so 1-round conditions can cost the target nothing | Yes |
 | [CHR-018](issues/CHR.md) | High | Characters, feats and classes | Divine Grace and other save bonuses are computed but never applied | Yes |

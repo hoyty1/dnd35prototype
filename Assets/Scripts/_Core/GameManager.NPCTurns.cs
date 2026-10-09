@@ -206,22 +206,13 @@ public partial class GameManager
         // HD, not Level, as TemplateSmiteSystem reads them (CHR-071); the +2 and the attack bonus are AI-056.
         int damageBonus = Mathf.Max(1, summon.Stats.GetHitDice() + 2);
 
-        summon.Stats.MoraleAttackBonus += attackBonus;
-        summon.Stats.MoraleDamageBonus += damageBonus;
-
-        CombatResult result;
-        try
-        {
-            CharacterController flankPartner;
-            bool isFlanking = CombatUtils.IsAttackerFlanking(summon, target, GetAllCharacters(), out flankPartner);
-            int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-            result = summon.Attack(target, isFlanking, flankBonus, flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
-        }
-        finally
-        {
-            summon.Stats.MoraleAttackBonus -= attackBonus;
-            summon.Stats.MoraleDamageBonus -= damageBonus;
-        }
+        // The smite's bonuses apply to this one attack (per-attack terms of the shared attack and damage modifiers,
+        // CMB-003), not to the morale fields.
+        CharacterController flankPartner;
+        bool isFlanking = CombatUtils.IsAttackerFlanking(summon, target, GetAllCharacters(), out flankPartner);
+        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+        CombatResult result = summon.Attack(target, isFlanking, flankBonus, flankPartner != null ? flankPartner.Stats.CharacterName : null, null,
+            situationalAttackBonus: attackBonus, situationalDamageBonus: damageBonus, situationalLabel: "Smite");
 
         summon.CommitStandardAction();
         summonData.SmiteUsed = true;

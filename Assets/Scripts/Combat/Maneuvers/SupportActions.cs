@@ -10,6 +10,9 @@ public class SupportActions : BaseCombatManeuver
 
 public partial class GameManager
 {
+    /// <summary>The charge's +2 on its attack roll (PHB p.154).</summary>
+    private const int ChargeAttackBonus = 2;
+
     public enum AidType
     {
         Defense,
@@ -1700,18 +1703,10 @@ public partial class GameManager
             }
             else
             {
-                // Apply +2 charge attack bonus to this attack only.
-                charger.Stats.MoraleAttackBonus += 2;
-                CombatResult result;
-                try
-                {
-                    ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
-                    result = charger.Attack(target, false, 0, null, null);
-                }
-                finally
-                {
-                    charger.Stats.MoraleAttackBonus -= 2;
-                }
+                // The charge's +2 on this attack only (PHB p.154), as a per-attack term rather than a morale bonus (CMB-003).
+                ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
+                CombatResult result = charger.Attack(target, false, 0, null, null,
+                    situationalAttackBonus: ChargeAttackBonus, situationalLabel: "Charge");
 
                 if (result != null)
                 {
@@ -2105,18 +2100,11 @@ public partial class GameManager
         }
         else
         {
-            npc.Stats.MoraleAttackBonus += 2;
-            CombatResult result;
-            try
-            {
-                ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
-                result = npc.Attack(target, isFlankingCharge, flankingBonus,
-                    flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
-            }
-            finally
-            {
-                npc.Stats.MoraleAttackBonus -= 2;
-            }
+            // The charge's +2 on this attack only (PHB p.154), as a per-attack term rather than a morale bonus (CMB-003).
+            ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
+            CombatResult result = npc.Attack(target, isFlankingCharge, flankingBonus,
+                flankPartner != null ? flankPartner.Stats.CharacterName : null, null,
+                situationalAttackBonus: ChargeAttackBonus, situationalLabel: "Charge");
 
             if (result != null)
             {

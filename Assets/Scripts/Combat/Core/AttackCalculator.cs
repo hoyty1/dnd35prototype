@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // ============================================================================
@@ -10,7 +11,7 @@ using UnityEngine;
 /// natural), DualWieldAttack and FlurryOfBlows so all of them add the same terms.
 /// Terms resolved inside PerformSingleAttackWithCrit (weapon enhancement or masterwork,
 /// True Strike, invisible attacker, helpless or blinded target, bane, Destruction smite)
-/// are not part of this struct.
+/// are not part of this struct. The damage roll's terms are <see cref="WeaponDamageBreakdown"/> (CMB-003).
 /// </summary>
 public struct AttackBonusBreakdown
 {
@@ -43,10 +44,11 @@ public struct AttackBonusBreakdown
     public int AidAnotherBonus;
     public int DamageModePenalty;
     public int SolidFogPenalty;
-    public int SolidFogDamagePenalty;
     public int WondrousBowAttackBonus;
-    public int WondrousBowDamageBonus;
     public int MagicStoneBonus;
+    /// <summary>A bonus for this one attack only, such as a template smite's attack bonus; listed under <see cref="SituationalLabel"/>.</summary>
+    public int SituationalBonus;
+    public string SituationalLabel;
     /// <summary>Weapon threat range after Improved Critical.</summary>
     public int CritThreatMin;
     public int CritMultiplier;
@@ -57,13 +59,11 @@ public struct AttackBonusBreakdown
         + RangePenalty + MountedRangedPenalty + Feats.TotalFeatAttackModifier
         + PronePenalty + FightingDefensivelyPenalty + ShootingIntoMeleePenalty
         + WeaponNonProficiencyPenalty + ArmorNonProficiencyPenalty + MoraleBonus + ConditionModifier
-        + AidAnotherBonus + DamageModePenalty + SolidFogPenalty + WondrousBowAttackBonus + MagicStoneBonus;
+        + AidAnotherBonus + DamageModePenalty + SolidFogPenalty + WondrousBowAttackBonus + MagicStoneBonus
+        + SituationalBonus;
 
     /// <summary>BAB step + ability + size + sequence penalty: the figure shown in attack labels such as "Attack 2 (+6)".</summary>
     public int LabelBonus => BaseAttackBonus + SequenceModifier + AbilityMod + SizeModifier;
-
-    /// <summary>Flat damage from feats, Solid Fog and Bracers of Archery.</summary>
-    public int FeatDamageBonus => Feats.TotalFeatDamageBonus + SolidFogDamagePenalty + WondrousBowDamageBonus;
 
     /// <summary>
     /// Copies the terms onto a CombatResult so its attack breakdown lists exactly what was added.
@@ -82,11 +82,9 @@ public struct AttackBonusBreakdown
         result.SizeAttackBonus = SizeModifier;
         result.RacialAttackBonus = RacialBonus;
         result.PowerAttackValue = Feats.PowerAttackPenalty != 0 ? -Feats.PowerAttackPenalty : 0;
-        result.PowerAttackDamageBonus = Feats.PowerAttackDamageBonus;
         result.RapidShotActive = Feats.RapidShotActive;
         result.PointBlankShotActive = Feats.PointBlankShotActive;
         result.WeaponFocusBonus = Feats.WeaponFocusBonus;
-        result.WeaponSpecBonus = Feats.WeaponSpecDamageBonus;
         result.CombatExpertisePenalty = Feats.CombatExpertisePenalty;
         result.FightingDefensivelyAttackPenalty = FightingDefensivelyPenalty;
         result.ShootingIntoMeleePenalty = ShootingIntoMeleePenalty;
@@ -94,7 +92,8 @@ public struct AttackBonusBreakdown
         result.AidAnotherAttackBonus = AidAnotherBonus;
         result.WeaponNonProficiencyPenalty = WeaponNonProficiencyPenalty;
         result.ArmorNonProficiencyPenalty = ArmorNonProficiencyPenalty;
-        result.FeatDamageBonus = FeatDamageBonus;
+        // The damage terms (Power Attack, Weapon Specialization, ...) are set by PerformSingleAttackWithCrit from
+        // the attack's WeaponDamageBreakdown (CMB-003).
 
         if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
         {
@@ -113,6 +112,129 @@ public struct AttackBonusBreakdown
         result.AddAttackBuffDebuffModifier("Solid Fog", SolidFogPenalty);
         result.AddAttackBuffDebuffModifier("Bracers of Archery", WondrousBowAttackBonus);
         result.AddAttackBuffDebuffModifier("Magic Stone", MagicStoneBonus);
+        if (SituationalBonus != 0)
+            result.AddAttackBuffDebuffModifier(string.IsNullOrWhiteSpace(SituationalLabel) ? "situational" : SituationalLabel, SituationalBonus);
+    }
+}
+
+// ============================================================================
+// Per-hit weapon damage modifier shared by every weapon damage roll (CMB-003)
+// ============================================================================
+
+/// <summary>
+/// Every static term of one weapon, natural or unarmed damage roll, built by
+/// CharacterController.BuildWeaponDamageBonus and added by PerformSingleAttackWithCrit (every weapon
+/// attack path: Attack, FullAttack, DualWieldAttack, FlurryOfBlows, rake, the grapple weapon attacks),
+/// coup de grace, sunder and grapple damage, so they all add the same terms (CMB-003; the attack
+/// roll's counterpart is <see cref="AttackBonusBreakdown"/>, CMB-043). The weapon dice and the extra
+/// dice that are never multiplied (sneak attack, energy, alignment and bane riders, specific-item
+/// effects) stay with the caller. On a confirmed critical hit these terms are added once, not
+/// multiplied (CMB-004, an open owner question; RAW PHB p.134 multiplies them). Mount attacks and the
+/// Confused self-attack still roll their own damage without it (CMB-162).
+/// Rules applied: PHB p.134 (Strength to melee, thrown and sling damage; 1/2 in the off hand,
+/// 1-1/2 two-handed, a penalty never multiplied, CMB-161; a bow takes only a penalty, a composite bow its
+/// rating), PHB p.41 (full Strength in a flurry), MM p.312 (a natural attack's Strength share),
+/// PHB p.98 (Power Attack, Point Blank Shot), p.102 (Weapon Specialization), p.29 (Inspire Courage),
+/// p.264 (Prayer), p.224 (Divine Favor), p.250 (Magic Fang), p.186 (Destruction domain smite, melee
+/// only), DMG p.224 (bane: +2 enhancement against its foe), DMG p.301 (Sickened: -2 weapon damage),
+/// DMG p.250 (Bracers of Archery), PHB p.281 (Solid Fog), DMG p.283 (alchemical silver -1).
+/// Spell bonuses of every type land in MoraleBonus (SPL-026).
+/// </summary>
+public struct WeaponDamageBreakdown
+{
+    /// <summary>Strength share (or none) by the weapon's hand rule or the natural attack's (MM p.312).</summary>
+    public int StrengthBonus;
+    /// <summary>"STR", "1.5× STR", "0.5× STR", "composite +2", "no STR modifier", ... (CharacterStats.GetDamageModifierDescription).</summary>
+    public string StrengthLabel;
+    /// <summary>The weapon adds no Strength or Power Attack to damage (torch, ItemData.NoStrengthToDamage).</summary>
+    public bool StrengthSuppressed;
+    /// <summary>The attack profile's own flat damage (ItemData.BonusDamage, Magic Stone's +1, a sunder's natural bonus).</summary>
+    public int WeaponBonus;
+    public string WeaponBonusLabel;
+    /// <summary>The weapon's enhancement bonus to damage (ItemData.GetEnhancementDamageBonus).</summary>
+    public int EnhancementBonus;
+    /// <summary>A bane weapon's +2 effective enhancement against its designated foe (DMG p.224); set by PerformSingleAttackWithCrit, which knows the target.</summary>
+    public int BaneBonus;
+    /// <summary>Special material modifier (alchemical silver -1; ItemData.MaterialDamageModifier).</summary>
+    public int MaterialModifier;
+    public int PowerAttackBonus;
+    public int PointBlankShotBonus;
+    public int WeaponSpecializationBonus;
+    /// <summary>
+    /// CharacterStats.MoraleDamageBonus: Inspire Courage, Prayer, Divine Favor, Magic Fang and other spell buffs. Every
+    /// spell bonus type is pooled there (SPL-026), so the term is labelled by its sources ("Divine Favor"), not as morale.
+    /// </summary>
+    public int MoraleBonus;
+    public string MoraleLabel;
+    /// <summary>Conditions that change weapon damage rolls (Sickened -2; CharacterStats.ConditionWeaponDamageModifier).</summary>
+    public int ConditionModifier;
+    public string ConditionLabel;
+    /// <summary>Solid Fog's melee damage penalty.</summary>
+    public int SolidFogPenalty;
+    /// <summary>Bracers of Archery competence bonus, bows only.</summary>
+    public int BracersOfArcheryBonus;
+    /// <summary>Destruction domain smite (cleric level); set by PerformSingleAttackWithCrit for the smiting attack only.</summary>
+    public int DestructionSmiteBonus;
+    /// <summary>A bonus for this one attack only, such as a template smite's damage; listed under <see cref="SituationalLabel"/>.</summary>
+    public int SituationalBonus;
+    public string SituationalLabel;
+    /// <summary>The attack is a ranged attack (the path's own reading, not the weapon's range increment): no Solid Fog penalty, no Destruction smite (PHB p.186: a melee attack).</summary>
+    public bool IsRangedAttack;
+
+    /// <summary>Power Attack, Point Blank Shot and Weapon Specialization.</summary>
+    public int FeatBonus => PowerAttackBonus + PointBlankShotBonus + WeaponSpecializationBonus;
+
+    /// <summary>The whole static modifier added to the damage roll.</summary>
+    public int Total =>
+        StrengthBonus + WeaponBonus + EnhancementBonus + BaneBonus + MaterialModifier + FeatBonus + MoraleBonus
+        + ConditionModifier + SolidFogPenalty + BracersOfArcheryBonus + DestructionSmiteBonus + SituationalBonus;
+
+    /// <summary>
+    /// The non-zero terms in a fixed order, labelled for the combat log; their values add up to <see cref="Total"/>
+    /// (minus the Strength term when <paramref name="includeStrength"/> is false). A suppressed Strength term is
+    /// listed as "no STR modifier" with value 0.
+    /// </summary>
+    public List<AttackModifierBreakdownEntry> GetTerms(bool includeStrength = true)
+    {
+        var terms = new List<AttackModifierBreakdownEntry>();
+        if (includeStrength)
+        {
+            if (StrengthBonus != 0)
+                terms.Add(new AttackModifierBreakdownEntry(string.IsNullOrWhiteSpace(StrengthLabel) ? "STR" : StrengthLabel, StrengthBonus));
+            else if (StrengthSuppressed)
+                terms.Add(new AttackModifierBreakdownEntry("no STR modifier", 0));
+        }
+        AddTerm(terms, string.IsNullOrWhiteSpace(WeaponBonusLabel) ? "weapon" : WeaponBonusLabel, WeaponBonus);
+        AddTerm(terms, "enhancement", EnhancementBonus);
+        AddTerm(terms, "bane", BaneBonus);
+        AddTerm(terms, "material", MaterialModifier);
+        AddTerm(terms, "Power Attack", PowerAttackBonus);
+        AddTerm(terms, "Point Blank Shot", PointBlankShotBonus);
+        AddTerm(terms, "Weapon Specialization", WeaponSpecializationBonus);
+        AddTerm(terms, string.IsNullOrWhiteSpace(MoraleLabel) ? "spell and morale bonuses" : MoraleLabel, MoraleBonus);
+        AddTerm(terms, string.IsNullOrWhiteSpace(ConditionLabel) ? "conditions" : ConditionLabel, ConditionModifier);
+        AddTerm(terms, "Solid Fog", SolidFogPenalty);
+        AddTerm(terms, "Bracers of Archery", BracersOfArcheryBonus);
+        AddTerm(terms, "Destruction smite", DestructionSmiteBonus);
+        AddTerm(terms, string.IsNullOrWhiteSpace(SituationalLabel) ? "situational" : SituationalLabel, SituationalBonus);
+        return terms;
+    }
+
+    /// <summary>One line for logs, e.g. "STR +3, enhancement +1, Inspire Courage +1 = +5".</summary>
+    public string Describe()
+    {
+        List<AttackModifierBreakdownEntry> terms = GetTerms();
+        var parts = new List<string>(terms.Count);
+        for (int i = 0; i < terms.Count; i++)
+            parts.Add(terms[i].Label + " " + CharacterStats.FormatMod(terms[i].Value));
+        string sum = CharacterStats.FormatMod(Total);
+        return parts.Count == 0 ? sum : string.Join(", ", parts) + " = " + sum;
+    }
+
+    private static void AddTerm(List<AttackModifierBreakdownEntry> terms, string label, int value)
+    {
+        if (value != 0)
+            terms.Add(new AttackModifierBreakdownEntry(label, value));
     }
 }
 

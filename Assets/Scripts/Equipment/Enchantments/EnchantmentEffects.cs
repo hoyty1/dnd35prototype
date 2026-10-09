@@ -47,6 +47,25 @@ public static class EnchantmentEffects
         return bonus;
     }
 
+    /// <summary>
+    /// The bane enhancement against a matching foe (+2, DMG p.224): the weapon's effective enhancement bonus is +2
+    /// better, so it adds to the damage roll too. Read by CharacterController.PerformSingleAttackWithCrit into the
+    /// shared weapon damage modifier (WeaponDamageBreakdown.BaneBonus, CMB-003).
+    /// </summary>
+    public static int GetBaneEnhancementBonus(ItemData weapon, string targetCreatureType)
+    {
+        if (weapon == null || !weapon.IsEnchanted) return 0;
+
+        int bonus = 0;
+        for (int i = 0; i < weapon.Enchantment.Abilities.Count; i++)
+        {
+            var stats = EnchantmentProperties.Get(weapon.Enchantment.Abilities[i]);
+            if (stats != null && stats.IsBane && IsBaneMatch(weapon.Enchantment.BaneCreatureType, targetCreatureType))
+                bonus += stats.BaneEnhancementBonus;
+        }
+        return bonus;
+    }
+
     // ========================================================================
     // WEAPON DAMAGE - ELEMENTAL
     // ========================================================================

@@ -1545,7 +1545,8 @@ public class CharacterController : MonoBehaviour
             if (naturalAttack != null)
             {
                 Stats.GetScaledNaturalAttackDamage(naturalAttack, out damageCount, out damageDice);
-                bonusDamage = Stats.GetNaturalAttackDamageBonus(naturalAttack) - Stats.STRMod;
+                // Its Strength share comes from BuildWeaponDamageBonus with the natural attack (MM p.312, CMB-003).
+                bonusDamage = 0;
                 // Same fallback as FullAttack: only a data name can be a Trip (Ex) trigger (CMB-125).
                 attackLabel = string.IsNullOrWhiteSpace(naturalAttack.Name)
                     ? "Natural attack"
@@ -5465,7 +5466,6 @@ public class CharacterController : MonoBehaviour
             AidAnotherBonus = 0,
             DamageModePenalty = ResolveDamageModeAttackProfile(weapon).AttackPenalty,
             SolidFogPenalty = isMelee ? Stats.SolidFogMeleeAttackPenalty : 0,
-            SolidFogDamagePenalty = isMelee ? Stats.SolidFogMeleeDamagePenalty : 0,
             MagicStoneBonus = GetMagicStoneAttackBonus(weapon, isRanged),
             CritThreatMin = feats.CritThreatMin,
             CritMultiplier = critMultiplier
@@ -5477,9 +5477,177 @@ public class CharacterController : MonoBehaviour
         // Bracers of Archery: competence bonus with bows only (arrows; DMG p.250).
         bool isBow = isRanged && weapon != null && weapon.RequiresAmmoType == AmmunitionType.Arrow;
         b.WondrousBowAttackBonus = isBow ? Stats.WondrousBowAttackBonus : 0;
-        b.WondrousBowDamageBonus = isBow ? Stats.WondrousBowDamageBonus : 0;
 
         return b;
+    }
+
+    /// <summary>
+    /// The one place a weapon damage roll's static modifier is assembled (CMB-003; the attack roll's is
+    /// <see cref="BuildAttackBonus"/>). Every weapon attack path passes the result to PerformSingleAttackWithCrit, and
+    /// coup de grace, sunder and grapple damage add its <see cref="WeaponDamageBreakdown.Total"/>, so all of them add
+    /// the same terms: the Strength share (PHB p.134: 1/2 in the off hand, 1-1/2 two-handed, a penalty never
+    /// multiplied, a composite bow's rating; a natural attack's own share, MM p.312), the profile's flat damage,
+    /// weapon enhancement and material, the feat terms in <paramref name="feats"/> (Power Attack, Point Blank Shot,
+    /// Weapon Specialization; pass default when the path has no feat terms), CharacterStats.MoraleDamageBonus
+    /// (Inspire Courage, Prayer, Divine Favor, Magic Fang and other spell buffs, SPL-026), condition modifiers
+    /// (Sickened -2, DMG p.301), Solid Fog's melee penalty, Bracers of Archery with a bow, and an optional
+    /// per-attack situational term (a template smite, a charge). The Destruction smite (melee only) and a bane
+    /// weapon's +2 against its foe (DMG p.224) are added by PerformSingleAttackWithCrit, which also uses up the
+    /// smite. Weapon damage dice already follow the wielder's size (GetScaledWeaponDamageDice, CMB-119),
+    /// so size adds no flat term.
+    /// </summary>
+    /// <param name="weapon">The weapon (null: an unarmed strike or a natural attack).</param>
+    /// <param name="isOffHand">An off-hand attack: half the Strength bonus (PHB p.134).</param>
+    /// <param name="weaponBonusDamage">The attack profile's flat damage (ItemData.BonusDamage, Magic Stone's +1).</param>
+    /// <param name="naturalAttack">A natural attack: its Strength share replaces the weapon rule (MM p.312).</param>
+    public WeaponDamageBreakdown BuildWeaponDamageBonus(ItemData weapon, bool isRanged, bool isOffHand,
+        AttackCalculator.FeatModifiers feats, int weaponBonusDamage = 0, string weaponBonusLabel = null,
+        NaturalAttackDefinition naturalAttack = null, int situationalBonus = 0, string situationalLabel = null)
+    {
+        var d = new WeaponDamageBreakdown
+        {
+            WeaponBonus = weaponBonusDamage,
+            WeaponBonusLabel = weaponBonusLabel,
+            PowerAttackBonus = feats.PowerAttackDamageBonus,
+            PointBlankShotBonus = feats.PointBlankShotDamageBonus,
+            WeaponSpecializationBonus = feats.WeaponSpecDamageBonus,
+            SituationalBonus = situationalBonus,
+            SituationalLabel = situationalLabel,
+            IsRangedAttack = isRanged
+        };
+        if (Stats == null)
+            return d;
+
+        if (naturalAttack != null)
+        {
+            d.StrengthBonus = Stats.GetNaturalAttackDamageBonus(naturalAttack);
+            d.StrengthLabel = DescribeNaturalAttackStrength(naturalAttack.BonusDamageSource);
+        }
+        else if (WeaponDisablesStrengthDamageBonuses(weapon))
+        {
+            d.StrengthSuppressed = true;
+            d.StrengthLabel = "no STR modifier";
+        }
+        else
+        {
+            d.StrengthBonus = Stats.GetWeaponDamageModifier(weapon, isOffHand);
+            d.StrengthLabel = Stats.GetDamageModifierDescription(weapon, isOffHand);
+        }
+
+        if (weapon != null)
+        {
+            d.EnhancementBonus = weapon.GetEnhancementDamageBonus();
+            d.MaterialModifier = weapon.MaterialDamageModifier;
+        }
+
+        d.MoraleBonus = Stats.MoraleDamageBonus;
+        d.MoraleLabel = d.MoraleBonus != 0 ? DescribeMoraleDamageSources() : null;
+        d.ConditionModifier = Stats.ConditionWeaponDamageModifier;
+        d.ConditionLabel = d.ConditionModifier != 0 ? DescribeConditionDamageSources() : null;
+        d.SolidFogPenalty = isRanged ? 0 : Stats.SolidFogMeleeDamagePenalty;
+        bool isBow = isRanged && weapon != null && weapon.RequiresAmmoType == AmmunitionType.Arrow;
+        d.BracersOfArcheryBonus = isBow ? Stats.WondrousBowDamageBonus : 0;
+        return d;
+    }
+
+    private static string DescribeNaturalAttackStrength(DamageBonusSource source)
+    {
+        switch (source)
+        {
+            case DamageBonusSource.StrengthOneAndHalf: return "1.5× STR";
+            case DamageBonusSource.StrengthHalf: return "0.5× STR";
+            case DamageBonusSource.None: return "no STR modifier";
+            default: return "STR";
+        }
+    }
+
+    /// <summary>
+    /// Feat terms for a damage roll whose attack side has no Power Attack penalty (no attack roll, or a hand-built one):
+    /// only Weapon Specialization with <paramref name="weapon"/> (null: unarmed strike), which adds to every damage roll
+    /// with the chosen weapon (PHB p.102). Power Attack and Point Blank Shot stay off.
+    /// </summary>
+    private AttackCalculator.FeatModifiers DamageOnlyFeatModifiers(ItemData weapon)
+    {
+        return new AttackCalculator.FeatModifiers
+        {
+            WeaponSpecDamageBonus = Stats != null ? AttackCalculator.GetWeaponSpecBonus(Stats, weapon) : 0
+        };
+    }
+
+    /// <summary>
+    /// True when <paramref name="weaponOverride"/> is the weapon this creature holds in its off hand rather than its main
+    /// weapon (CharacterEquipment.GetOffHandAttackWeapon), so an attack with it adds half the Strength bonus (PHB p.134; CMB-008).
+    /// </summary>
+    private bool IsOffHandWeaponOverride(ItemData weaponOverride, bool unarmedStrike)
+    {
+        if (unarmedStrike || weaponOverride == null)
+            return false;
+        return weaponOverride != GetEquippedMainWeapon() && weaponOverride == GetOffHandAttackWeapon();
+    }
+
+    /// <summary>"Inspire Courage, Prayer": the sources of CharacterStats.MoraleDamageBonus for the combat log.</summary>
+    private string DescribeMoraleDamageSources()
+    {
+        var names = new List<string>();
+        int named = 0;
+        StatusEffectManager effects = StatusEffectManager;
+        if (effects != null && effects.ActiveEffects != null)
+        {
+            for (int i = 0; i < effects.ActiveEffects.Count; i++)
+            {
+                ActiveSpellEffect effect = effects.ActiveEffects[i];
+                if (effect == null || effect.AppliedDamageBonus == 0)
+                    continue;
+                string spellName = effect.Spell != null && !string.IsNullOrWhiteSpace(effect.Spell.Name) ? effect.Spell.Name : "spell";
+                if (!names.Contains(spellName))
+                    names.Add(spellName);
+                named += effect.AppliedDamageBonus;
+            }
+        }
+        if (Stats.HasInspireCourageBonus && Stats.AppliedInspireCourageValue != 0)
+        {
+            names.Add("Inspire Courage");
+            named += Stats.AppliedInspireCourageValue;
+        }
+        if (names.Count > 0 && named != Stats.MoraleDamageBonus)
+            names.Add("other");
+        // Named by source, not as "morale": every spell bonus type is pooled in MoraleDamageBonus (SPL-026), so
+        // Divine Favor and Prayer (luck) and Magic Fang (enhancement) land here too.
+        return names.Count == 0 ? "spell and morale bonuses" : string.Join(", ", names);
+    }
+
+    /// <summary>"conditions (Sickened)": the conditions behind CharacterStats.ConditionWeaponDamageModifier.</summary>
+    private string DescribeConditionDamageSources()
+    {
+        var names = new List<string>();
+        if (Stats.ActiveConditions != null)
+        {
+            for (int i = 0; i < Stats.ActiveConditions.Count; i++)
+            {
+                ConditionDefinition def = ConditionRules.GetDefinition(Stats.ActiveConditions[i].Type);
+                if (def == null || def.WeaponDamageModifier == 0)
+                    continue;
+                string label = !string.IsNullOrWhiteSpace(def.DisplayName) ? def.DisplayName : Stats.ActiveConditions[i].Type.ToString();
+                if (!names.Contains(label))
+                    names.Add(label);
+            }
+        }
+        return names.Count == 0 ? "conditions" : string.Join(", ", names);
+    }
+
+    /// <summary>Copies a hit's damage terms onto its result for the combat log and the scenario trace (CMB-003).</summary>
+    private static void RecordWeaponDamageBreakdown(CombatResult result, WeaponDamageBreakdown damage)
+    {
+        if (result == null)
+            return;
+        result.WeaponDamageBonus = damage;
+        result.HasWeaponDamageBonus = true;
+        result.DamageModifier = damage.StrengthBonus;
+        result.DamageModifierDesc = damage.StrengthLabel;
+        result.WeaponEnhancementDamageBonus = damage.EnhancementBonus;
+        result.PowerAttackDamageBonus = damage.PowerAttackBonus;
+        result.WeaponSpecBonus = damage.WeaponSpecializationBonus;
+        result.FeatDamageBonus = damage.FeatBonus;
     }
 
     /// <summary>
@@ -5491,6 +5659,9 @@ public class CharacterController : MonoBehaviour
     /// With <paramref name="unarmedStrike"/> the attack is an unarmed strike whatever this creature holds (a punch,
     /// kick or head butt, PHB p.139): unarmed damage and damage mode, natural reach; <paramref name="attackWeaponOverride"/>
     /// is ignored. Used by the Improved Trip attack when no held weapon can attack (CMB-136).
+    /// <paramref name="isOffHandAttack"/> adds half the Strength bonus to damage (PHB p.134; CMB-008).
+    /// <paramref name="situationalAttackBonus"/> and <paramref name="situationalDamageBonus"/> apply to this attack only
+    /// and are listed under <paramref name="situationalLabel"/> (a template smite; CMB-003).
     /// </summary>
     public CombatResult Attack(
         CharacterController target,
@@ -5502,7 +5673,10 @@ public class CharacterController : MonoBehaviour
         ItemData attackWeaponOverride = null,
         int additionalAttackModifier = 0,
         bool isOffHandAttack = false,
-        bool unarmedStrike = false)
+        bool unarmedStrike = false,
+        int situationalAttackBonus = 0,
+        int situationalDamageBonus = 0,
+        string situationalLabel = null)
     {
         if (target == null || target.Stats == null || target.Stats.IsDead)
         {
@@ -5585,6 +5759,8 @@ public class CharacterController : MonoBehaviour
             IsWeaponTwoHanded(equippedWeapon));
         // Caller-supplied penalty (two-weapon off-hand, Manyshot, Mobility AoO); shown as the dual-wield entry below.
         atkBonus.SequenceModifier = additionalAttackModifier;
+        atkBonus.SituationalBonus = situationalAttackBonus;
+        atkBonus.SituationalLabel = situationalLabel;
         atkBonus.AidAnotherBonus = ConsumeAidAnotherAttackBonus(target);
         int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfileCore(equippedWeapon, unarmedStrike);
@@ -5599,7 +5775,6 @@ public class CharacterController : MonoBehaviour
             Debug.Log($"[Combat] {Stats.CharacterName} mounted ranged penalty: {atkBonus.MountedRangedPenalty}");
 
         int totalAtkMod = atkBonus.Total;
-        int totalFeatDmgBonus = atkBonus.FeatDamageBonus;
         int damageDice, damageCount, bonusDamage;
         string attackLabel;
         if (unarmedStrike)
@@ -5627,12 +5802,20 @@ public class CharacterController : MonoBehaviour
         if (!unarmedStrike && ShouldUseInnateNaturalAttackProfile(equippedWeapon))
             naturalAttackForOnHit = Stats.GetPrimaryNaturalAttack();
 
+        // Shared damage modifier (CMB-003): half Strength in the off hand (CMB-008), the natural attack's own share.
+        // A weapon override that is the off-hand weapon (an AoO with the off-hand melee weapon while the main hand holds
+        // a ranged one, a weapon thrown from the off hand) deals off-hand damage even when the caller does not say so:
+        // PHB p.134 halves the Strength bonus of any weapon in the off hand.
+        bool offHandForDamage = isOffHandAttack || IsOffHandWeaponOverride(attackWeaponOverride, unarmedStrike);
+        WeaponDamageBreakdown damageBonus = BuildWeaponDamageBonus(equippedWeapon, isRanged, offHandForDamage, atkBonus.Feats,
+            bonusDamage, magicStoneUsed ? "Magic Stone" : null, naturalAttackForOnHit, situationalDamageBonus, situationalLabel);
+
         // Record HP before attack
         int hpBefore = target.Stats.CurrentHP;
 
         var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-            damageDice, damageCount, bonusDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
-            equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus,
+            damageDice, damageCount, damageBonus, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
+            equippedWeapon, aidAnotherTargetAcBonus,
             damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
         int baseAttackWithoutAid = totalAtkMod - atkBonus.AidAnotherBonus;
@@ -5780,7 +5963,6 @@ public class CharacterController : MonoBehaviour
         AttackBonusBreakdown sequenceBonus = BuildAttackBonus(target, equippedWeapon, isRanged, rangeInfo,
             isFlanking, flankingBonus, Stats.BaseAttackBonus, IsWeaponTwoHanded(equippedWeapon), RapidShotEnabled);
         bool rapidShotActive = sequenceBonus.Feats.RapidShotActive;
-        int totalFeatDmgBonus = sequenceBonus.FeatDamageBonus;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel,
             IsThrownWeaponAttack(equippedWeapon, rangeInfo));
@@ -5834,16 +6016,16 @@ public class CharacterController : MonoBehaviour
                 int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
 
                 int hpBeforeAtk = target.Stats.CurrentHP;
-                bool useHalfStrength = !naturalAttack.IsPrimary;
-                int baseStrengthFromDamageResolver = useHalfStrength ? Mathf.FloorToInt(Stats.STRMod * 0.5f) : Stats.STRMod;
-                int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(naturalAttack) - baseStrengthFromDamageResolver;
+                // The natural attack's own Strength share (MM p.312: half for a secondary attack) and the shared terms (CMB-003).
+                WeaponDamageBreakdown naturalDamage = BuildWeaponDamageBonus(equippedWeapon, isRanged: false, isOffHand: false,
+                    atkBonus.Feats, naturalAttack: naturalAttack);
 
                 Stats.GetScaledNaturalAttackDamage(naturalAttack, out int naturalDamageCount, out int naturalDamageDice);
 
                 CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
-                    naturalDamageDice, naturalDamageCount, naturalDamageBonus,
+                    naturalDamageDice, naturalDamageCount, naturalDamage,
                     atkBonus.CritThreatMin, atkBonus.CritMultiplier,
-                    equippedWeapon, useHalfStrength, totalFeatDmgBonus, aidAnotherTargetAcBonus,
+                    equippedWeapon, aidAnotherTargetAcBonus,
                     damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
                 atkBonus.ApplyToResult(atk, rangeInfo);
@@ -5878,7 +6060,7 @@ public class CharacterController : MonoBehaviour
         // === Debug Logging ===
         Debug.Log($"[FullAttack] {Stats.CharacterName}: FullAttack() called");
         Debug.Log($"[FullAttack] Weapon: {(equippedWeapon != null ? equippedWeapon.Name : "(unarmed)")}, Ranged: {isRanged}, ability: {sequenceBonus.AbilityName} {CharacterStats.FormatMod(sequenceBonus.AbilityMod)}, morale: {CharacterStats.FormatMod(sequenceBonus.MoraleBonus)}");
-        Debug.Log($"[FullAttack] Feats: WF={sequenceBonus.Feats.WeaponFocusBonus}, WS={sequenceBonus.Feats.WeaponSpecDamageBonus}, PA={sequenceBonus.Feats.PowerAttackDamageBonus}, CE={sequenceBonus.Feats.CombatExpertisePenalty}");
+        Debug.Log($"[FullAttack] Feats: WF={sequenceBonus.Feats.WeaponFocusBonus}, WS={sequenceBonus.Feats.WeaponSpecDamageBonus}, PA={sequenceBonus.Feats.PowerAttackDamageBonus}, CE={sequenceBonus.Feats.CombatExpertisePenalty}, morale damage={CharacterStats.FormatMod(Stats.MoraleDamageBonus)}");
         if (rapidShotActive) Debug.Log($"[FullAttack] Rapid Shot active: -2 penalty, +1 extra attack");
 
         // Build the list of BAB steps, inserting the Rapid Shot extra attack
@@ -5945,9 +6127,11 @@ public class CharacterController : MonoBehaviour
                 atkBonusDamage = 1;
             }
 
+            WeaponDamageBreakdown stepDamage = BuildWeaponDamageBonus(equippedWeapon, isRanged, isOffHand: false, atkBonus.Feats,
+                atkBonusDamage, fullAtkMagicStoneUsed ? "Magic Stone" : null);
             CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
-                atkDamageDice, atkDamageCount, atkBonusDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
-                equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus,
+                atkDamageDice, atkDamageCount, stepDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
+                equippedWeapon, aidAnotherTargetAcBonus,
                 damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
             // D&D 3.5e Magic Stone: decrement charges after each full attack hit
@@ -6157,7 +6341,6 @@ public class CharacterController : MonoBehaviour
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
         int solidFogAtkPenalty = Stats.SolidFogMeleeAttackPenalty; // rake is always melee
-        int solidFogDmgPenalty = Stats.SolidFogMeleeDamagePenalty;
 
         for (int i = 0; i < attackCount; i++)
         {
@@ -6171,10 +6354,10 @@ public class CharacterController : MonoBehaviour
 
             Stats.GetScaledNaturalAttackDamage(rakeAttack, out int damageCount, out int damageDice);
 
-            // Rake damage still uses 0.5× STR by rule, so keep off-hand strength handling for damage resolution.
-            const bool useHalfStrengthForRakeDamage = true;
-            int baseStrengthFromDamageResolver = Mathf.FloorToInt(Stats.STRMod * 0.5f);
-            int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(rakeAttack) - baseStrengthFromDamageResolver + solidFogDmgPenalty;
+            // The rake's own Strength share (its data, MM p.314) plus the shared damage terms (CMB-003). No feat terms:
+            // the rake's attack modifier is still built by hand (CMB-087).
+            WeaponDamageBreakdown rakeDamage = BuildWeaponDamageBonus(null, isRanged: false, isOffHand: false,
+                default(AttackCalculator.FeatModifiers), naturalAttack: rakeAttack);
 
             CombatResult atk = PerformSingleAttackWithCrit(
                 target,
@@ -6184,12 +6367,10 @@ public class CharacterController : MonoBehaviour
                 flankingPartnerName,
                 damageDice,
                 damageCount,
-                naturalDamageBonus,
+                rakeDamage,
                 critThreatMin,
                 critMult,
                 null,
-                isOffHand: useHalfStrengthForRakeDamage,
-                featDamageBonus: 0,
                 situationalTargetAcBonus: 0,
                 dealNonlethalDamage: false,
                 damageModeAttackPenalty: 0,
@@ -6264,14 +6445,15 @@ public class CharacterController : MonoBehaviour
             int mainAidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
             string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
-            int totalMainFeatDmg = mainBonus.FeatDamageBonus;
+            WeaponDamageBreakdown mainDamage = BuildWeaponDamageBonus(mainWeapon, IsRangedWeaponAttack(mainWeapon, rangeInfo),
+                isOffHand: false, mainBonus.Feats, mainWeapon.BonusDamage);
 
             GetScaledWeaponDamageDice(mainWeapon, out int mainDamageCount, out int mainDamageDice, IsThrownWeaponAttack(mainWeapon, rangeInfo));
 
             int hpBeforeMain = target.Stats.CurrentHP;
             CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
-                mainDamageDice, mainDamageCount, mainWeapon.BonusDamage, mainBonus.CritThreatMin, mainBonus.CritMultiplier,
-                mainWeapon, false, totalMainFeatDmg, mainAidAnotherTargetAcBonus,
+                mainDamageDice, mainDamageCount, mainDamage, mainBonus.CritThreatMin, mainBonus.CritMultiplier,
+                mainWeapon, mainAidAnotherTargetAcBonus,
                 mainDamageModeProfile.DealNonlethalDamage, mainDamageModeProfile.AttackPenalty, mainDamageModeProfile.PenaltySource);
 
             mainBonus.ApplyToResult(mainAtk, rangeInfo);
@@ -6316,14 +6498,15 @@ public class CharacterController : MonoBehaviour
                     ? $"Attack 2 - Off Hand (Shield Bash: {offWeapon.Name})"
                     : $"Attack 2 - Off Hand ({offWeapon.Name})";
 
-            int totalOffFeatDmg = offBonus.FeatDamageBonus;
+            WeaponDamageBreakdown offDamage = BuildWeaponDamageBonus(offWeapon, IsRangedWeaponAttack(offWeapon, rangeInfo),
+                isOffHand: true, offBonus.Feats, offWeapon.BonusDamage);
 
             GetScaledWeaponDamageDice(offWeapon, out int offDamageCount, out int offDamageDice, IsThrownWeaponAttack(offWeapon, rangeInfo));
 
             int hpBeforeOff = target.Stats.CurrentHP;
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
-                offDamageDice, offDamageCount, offWeapon.BonusDamage, offBonus.CritThreatMin, offBonus.CritMultiplier,
-                offWeapon, true, totalOffFeatDmg, offAidAnotherTargetAcBonus,
+                offDamageDice, offDamageCount, offDamage, offBonus.CritThreatMin, offBonus.CritMultiplier,
+                offWeapon, offAidAnotherTargetAcBonus,
                 offDamageModeProfile.DealNonlethalDamage, offDamageModeProfile.AttackPenalty, offDamageModeProfile.PenaltySource);
 
             offBonus.ApplyToResult(offAtk, rangeInfo);
@@ -6854,16 +7037,16 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     private CombatResult PerformSingleAttackWithCrit(CharacterController target, int totalAtkMod,
         bool isFlanking, int flankingBonus, string flankingPartnerName,
-        int damageDice, int damageCount, int bonusDamage,
+        int damageDice, int damageCount, WeaponDamageBreakdown damageBonus,
         int critThreatMin, int critMultiplier,
-        ItemData weapon, bool isOffHand, int featDamageBonus = 0, int situationalTargetAcBonus = 0,
+        ItemData weapon, int situationalTargetAcBonus = 0,
         bool dealNonlethalDamage = false, int damageModeAttackPenalty = 0, string damageModePenaltySource = "")
     {
         CombatResult result = PerformSingleAttackWithCritCore(target, totalAtkMod,
             isFlanking, flankingBonus, flankingPartnerName,
-            damageDice, damageCount, bonusDamage,
+            damageDice, damageCount, damageBonus,
             critThreatMin, critMultiplier,
-            weapon, isOffHand, featDamageBonus, situationalTargetAcBonus,
+            weapon, situationalTargetAcBonus,
             dealNonlethalDamage, damageModeAttackPenalty, damageModePenaltySource);
         ScenarioHooks.AttackResolved?.Invoke(this, result);
         return result;
@@ -6871,19 +7054,19 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Perform a single attack with full D&D 3.5 critical hit mechanics.
-    /// Uses the weapon's DamageModifierType to determine STR bonus to damage.
     /// Step 1: Roll d20. Check if in threat range.
     /// Step 2: If threat, roll confirmation vs same AC with same bonus.
-    /// Step 3: If confirmed, multiply weapon dice (not static bonuses or sneak attack).
+    /// Step 3: Roll the weapon dice (multiplied on a confirmed critical) and add <paramref name="damageBonus"/>'s
+    /// total once (CMB-004: RAW PHB p.134 multiplies the static bonuses too; an open owner question), then the extra
+    /// dice that are never multiplied (sneak attack, enchantment riders).
     /// </summary>
-    /// <param name="weapon">The weapon being used (null = unarmed)</param>
-    /// <param name="isOffHand">True if this is an off-hand attack (overrides to 0.5× STR)</param>
-    /// <param name="featDamageBonus">Extra flat damage from feats (Power Attack, Point Blank Shot)</param>
+    /// <param name="weapon">The weapon being used (null = unarmed or natural)</param>
+    /// <param name="damageBonus">Every static damage term, from <see cref="BuildWeaponDamageBonus"/> (CMB-003).</param>
     private CombatResult PerformSingleAttackWithCritCore(CharacterController target, int totalAtkMod,
         bool isFlanking, int flankingBonus, string flankingPartnerName,
-        int damageDice, int damageCount, int bonusDamage,
+        int damageDice, int damageCount, WeaponDamageBreakdown damageBonus,
         int critThreatMin, int critMultiplier,
-        ItemData weapon, bool isOffHand, int featDamageBonus = 0, int situationalTargetAcBonus = 0,
+        ItemData weapon, int situationalTargetAcBonus = 0,
         bool dealNonlethalDamage = false, int damageModeAttackPenalty = 0, string damageModePenaltySource = "")
     {
         var result = new CombatResult();
@@ -6904,20 +7087,9 @@ public class CharacterController : MonoBehaviour
         result.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
         result.WeaponName = weapon != null ? weapon.Name : "Unarmed strike";
 
-        bool suppressStrengthToDamage = WeaponDisablesStrengthDamageBonuses(weapon);
-
-        // Calculate the damage modifier based on weapon's DamageModifierType
-        int damageModifier = Stats.GetWeaponDamageModifier(weapon, isOffHand);
-        string damageModDesc = Stats.GetDamageModifierDescription(weapon, isOffHand);
+        bool suppressStrengthToDamage = damageBonus.StrengthSuppressed;
         if (suppressStrengthToDamage)
-        {
-            damageModifier = 0;
-            damageModDesc = "no STR modifier";
             result.SpecialAttackNote = "Weapon rule: Strength modifier is not added to damage.";
-        }
-
-        result.DamageModifier = damageModifier;
-        result.DamageModifierDesc = damageModDesc;
 
         bool isRangedAttack = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
 
@@ -6930,13 +7102,9 @@ public class CharacterController : MonoBehaviour
         int helplessMeleeAttackBonus = targetIsHelplessLike ? 4 : 0;
 
         int weaponEnhancementAttackBonus = weapon != null ? weapon.GetEnhancementAttackBonus() : 0;
-        int weaponEnhancementDamageBonus = weapon != null ? weapon.GetEnhancementDamageBonus() : 0;
         // D&D 3.5e PHB p.126: Masterwork weapons grant +1 attack (does not stack with magic enhancement).
         int masterworkAttackBonus = weapon != null ? weapon.MasterworkAttackBonus : 0;
-        // D&D 3.5e PHB p.284: Alchemical silver weapons take -1 damage penalty.
-        int materialDamageModifier = weapon != null ? weapon.MaterialDamageModifier : 0;
         result.WeaponEnhancementAttackBonus = weaponEnhancementAttackBonus + masterworkAttackBonus;
-        result.WeaponEnhancementDamageBonus = weaponEnhancementDamageBonus;
 
         int blindedTargetAttackBonus = target != null && target.HasCondition(CombatConditionType.Blinded) ? 2 : 0;
 
@@ -6966,8 +7134,12 @@ public class CharacterController : MonoBehaviour
             deniedDexFromBlink = GetDexBonusAppliedToArmorClass(target);
         }
 
-        // Destruction Domain Smite: +4 attack on next melee attack
-        int destructionSmiteAttackBonus = GameManager.GetDestructionSmiteAttackBonus(this);
+        // Destruction Domain Smite: +4 attack and +cleric level damage on the smiting attack (PHB p.186). Both are read
+        // here, before the attack roll consumes the smite (CHR-005, CMB-003).
+        // The smite is a melee attack, so a ranged attack neither gains it nor uses it up.
+        bool destructionSmiteEligible = !damageBonus.IsRangedAttack;
+        int destructionSmiteAttackBonus = destructionSmiteEligible ? GameManager.GetDestructionSmiteAttackBonus(this) : 0;
+        damageBonus.DestructionSmiteBonus = destructionSmiteEligible ? GameManager.GetDestructionSmiteDamageBonus(this) : 0;
 
         // Enchantment attack bonus (e.g., Bane +2 vs matching creature type)
         int enchantmentAttackBonus = 0;
@@ -6975,7 +7147,11 @@ public class CharacterController : MonoBehaviour
         {
             string targetCreatureType = target.Stats.CreatureType ?? "";
             enchantmentAttackBonus = EnchantmentEffects.GetEnchantmentAttackBonus(weapon, targetCreatureType);
+            // Bane: against its foe the weapon's effective enhancement bonus is +2 better, on damage as well as on the
+            // attack roll (DMG p.224); the extra 2d6 is rolled with the other enchantment riders.
+            damageBonus.BaneBonus = EnchantmentEffects.GetBaneEnhancementBonus(weapon, targetCreatureType);
         }
+        RecordWeaponDamageBreakdown(result, damageBonus);
 
         // D&D 3.5 DMG: Brilliant Energy weapons cannot harm undead, constructs, or objects.
         // The weapon passes harmlessly through them. Return an automatic miss.
@@ -7456,42 +7632,37 @@ public class CharacterController : MonoBehaviour
                 }
             }
 
-            // Step 3: Roll weapon damage (feat bonus added as flat bonus, not multiplied on crit)
+            // Step 3: Roll weapon damage. The static modifier is built once for every attack path (CMB-003,
+            // BuildWeaponDamageBonus) and added once, also on a critical hit, where only the weapon dice are
+            // multiplied (CMB-004, an open owner question; RAW PHB p.134 multiplies the static bonuses too).
+            int staticDamage = damageBonus.Total;
             int rawWeaponDamage;
             int baseDmgRoll;
             if (critConfirmed)
             {
-                // Critical damage: multiply weapon dice, add static bonuses (STR + bonus) once
                 int totalCritDice = damageCount * critMultiplier;
                 baseDmgRoll = Stats.RollBaseDamage(damageDice, totalCritDice);
-                rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage;
-                rawWeaponDamage += featDamageBonus; // Feat bonus added after crit multiplication
-                rawWeaponDamage += weaponEnhancementDamageBonus;
-                if (suppressStrengthToDamage && weaponEnhancementDamageBonus > 0 && critMultiplier > 1)
-                {
-                    // Torch-style weapons: critical hit doubles fixed weapon damage package,
-                    // including enhancement contribution for the weapon's base damage.
-                    rawWeaponDamage += weaponEnhancementDamageBonus * (critMultiplier - 1);
-                }
-
-                int critStatic = damageModifier + bonusDamage + weaponEnhancementDamageBonus
-                    + ((suppressStrengthToDamage && weaponEnhancementDamageBonus > 0 && critMultiplier > 1)
-                        ? weaponEnhancementDamageBonus * (critMultiplier - 1)
-                        : 0);
-                result.CritDamageDice = $"{totalCritDice}d{damageDice}+{critStatic}";
+                // Torch-style weapons (no Strength to damage): a critical hit multiplies the fixed weapon damage
+                // package, including the enhancement on the weapon's base damage.
+                int torchCritExtra = suppressStrengthToDamage && damageBonus.EnhancementBonus > 0 && critMultiplier > 1
+                    ? damageBonus.EnhancementBonus * (critMultiplier - 1)
+                    : 0;
+                result.TorchCritEnhancementExtra = torchCritExtra;
+                rawWeaponDamage = baseDmgRoll + staticDamage + torchCritExtra;
+                result.CritDamageDice = $"{totalCritDice}d{damageDice}";
             }
             else
             {
-                // Normal damage - roll weapon dice separately for breakdown
                 baseDmgRoll = Stats.RollBaseDamage(damageDice, damageCount);
-                int destructionSmiteDmgBonus = GameManager.GetDestructionSmiteDamageBonus(this);
-                rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage + featDamageBonus + weaponEnhancementDamageBonus + destructionSmiteDmgBonus;
+                rawWeaponDamage = baseDmgRoll + staticDamage;
             }
-            // D&D 3.5e PHB p.284: Alchemical silver weapons take -1 penalty to damage rolls.
-            rawWeaponDamage += materialDamageModifier;
             rawWeaponDamage = CombatCalculationService.ClampMinimumDamage(rawWeaponDamage); // Weapon hit always deals at least 1 before mitigation
             result.Damage = rawWeaponDamage;
             result.BaseDamageRoll = baseDmgRoll;
+            Debug.Log($"[Damage] {Stats.CharacterName} -> {(target != null && target.Stats != null ? target.Stats.CharacterName : "?")}: "
+                + $"{(critConfirmed ? result.CritDamageDice + " (critical x" + critMultiplier + ", dice only)" : damageCount + "d" + damageDice)}"
+                + $"({baseDmgRoll}) + [{damageBonus.Describe()}]{(result.TorchCritEnhancementExtra != 0 ? " + torch critical " + result.TorchCritEnhancementExtra : string.Empty)}"
+                + $" = {rawWeaponDamage} weapon damage{(rawWeaponDamage != baseDmgRoll + staticDamage + result.TorchCritEnhancementExtra ? " (minimum 1)" : string.Empty)}");
 
             // Sneak attack: applies if attacker is Rogue and target is either flanked
             // or denied DEX to AC (feint, flat-footed, stunned, etc.).
@@ -7686,12 +7857,13 @@ public class CharacterController : MonoBehaviour
                     // Negate critical: revert to normal damage
                     if (critConfirmed)
                     {
-                        // Recalculate as non-crit damage
-                        int normalDmg = Stats.RollBaseDamage(damageDice, damageCount)
-                                      + damageModifier + bonusDamage + featDamageBonus
-                                      + weaponEnhancementDamageBonus + materialDamageModifier;
+                        // Recalculate as non-crit damage: the weapon dice once plus the same static modifier.
+                        int normalRoll = Stats.RollBaseDamage(damageDice, damageCount);
+                        int normalDmg = normalRoll + staticDamage;
                         normalDmg = Mathf.Max(1, normalDmg);
                         rawWeaponDamage = normalDmg;
+                        result.BaseDamageRoll = normalRoll;
+                        result.TorchCritEnhancementExtra = 0;
                         result.CritConfirmed = false;
                         result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
                             ? $"Fortification ({fortPercent}%): crit negated"
@@ -9939,7 +10111,12 @@ public class CharacterController : MonoBehaviour
                 var unarmed = GetUnarmedDamage();
                 int damageDiceCount = Mathf.Max(1, unarmed.damageCount);
                 int damageDiceSides = Mathf.Max(2, unarmed.damageDice);
-                int bonusDamage = Stats.STRMod + unarmed.bonusDamage;
+                // Unarmed strike damage (PHB p.156) with the shared damage modifier (CMB-003): unarmed strike damage
+                // counts as weapon damage for bonuses on weapon damage rolls (PHB p.121), so morale, Sickened and Weapon
+                // Specialization in unarmed strike (PHB p.102) apply. No attack roll is made, so no Power Attack.
+                WeaponDamageBreakdown grappleDamageBonus = BuildWeaponDamageBonus(null, isRanged: false, isOffHand: false,
+                    DamageOnlyFeatModifiers(null), unarmed.bonusDamage);
+                int bonusDamage = grappleDamageBonus.Total;
                 var damageRolls = new List<int>();
 
                 if (success)
@@ -9987,7 +10164,7 @@ public class CharacterController : MonoBehaviour
 
                 string resultLine = BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total, success);
                 string outcomeLine = success
-                    ? $"Damage: {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} = {rawDamage} {damageTypeLabel} ({opponent.Stats.CharacterName} takes {finalDamageDealt})."
+                    ? $"Damage: {damageDiceCount}d{damageDiceSides} + [{grappleDamageBonus.Describe()}] = {rawDamage} {damageTypeLabel} ({opponent.Stats.CharacterName} takes {finalDamageDealt})."
                     : $"{Stats.CharacterName} fails to damage {opponent.Stats.CharacterName}.";
 
                 if (success && damageRolls.Count > 0)
@@ -10447,7 +10624,10 @@ public class CharacterController : MonoBehaviour
             GetScaledWeaponDamageDice(opponentWeapon, out int scaledOpponentDamageCount, out int scaledOpponentDamageDice);
             int damageDice = Mathf.Max(1, scaledOpponentDamageDice); // a 1-point step (DMG p.28) rolls 1d1, CMB-133
             int damageCount = Mathf.Max(1, scaledOpponentDamageCount);
-            int bonusDamage = opponentWeapon.BonusDamage;
+            // Shared damage terms (CMB-003) with Weapon Specialization (a damage-only feat, PHB p.102); no Power Attack
+            // while the attack modifier is built by hand and takes no Power Attack penalty (CMB-087).
+            WeaponDamageBreakdown weaponDamage = BuildWeaponDamageBonus(opponentWeapon, isRanged: false, isOffHand: false,
+                DamageOnlyFeatModifiers(opponentWeapon), opponentWeapon.BonusDamage);
             int critThreatMin = opponentWeapon.CritThreatMin > 0 ? opponentWeapon.CritThreatMin : 20;
             int critMultiplier = opponentWeapon.CritMultiplier > 0 ? opponentWeapon.CritMultiplier : 2;
 
@@ -10460,12 +10640,10 @@ public class CharacterController : MonoBehaviour
                 flankingPartnerName: null,
                 damageDice,
                 damageCount,
-                bonusDamage,
+                weaponDamage,
                 critThreatMin,
                 critMultiplier,
                 opponentWeapon,
-                isOffHand: false,
-                featDamageBonus: 0,
                 situationalTargetAcBonus: 0,
                 dealNonlethalDamage: false,
                 damageModeAttackPenalty: 0,
@@ -10691,7 +10869,8 @@ public class CharacterController : MonoBehaviour
             var unarmed = GetUnarmedDamage();
             damageDice = Mathf.Max(2, unarmed.damageDice);
             damageCount = Mathf.Max(1, unarmed.damageCount);
-            bonusDamage = Stats.STRMod + unarmed.bonusDamage;
+            // Strength comes from the shared damage modifier once (it was added here and again by the attack core, CMB-003).
+            bonusDamage = unarmed.bonusDamage;
             critThreatMin = 20;
             critMultiplier = 2;
         }
@@ -10705,6 +10884,11 @@ public class CharacterController : MonoBehaviour
             critMultiplier = weapon.CritMultiplier > 0 ? weapon.CritMultiplier : 2;
         }
 
+        // Shared damage terms (CMB-003) with Weapon Specialization (a damage-only feat, PHB p.102); no Power Attack
+        // while the attack modifier is built by hand and takes no Power Attack penalty (CMB-087).
+        WeaponDamageBreakdown grappleDamage = BuildWeaponDamageBonus(weapon, isRanged: false, isOffHand: false,
+            DamageOnlyFeatModifiers(weapon), bonusDamage);
+
         int hpBefore = opponent.Stats.CurrentHP;
         CombatResult attackResult = PerformSingleAttackWithCrit(
             opponent,
@@ -10714,12 +10898,10 @@ public class CharacterController : MonoBehaviour
             flankingPartnerName: null,
             damageDice,
             damageCount,
-            bonusDamage,
+            grappleDamage,
             critThreatMin,
             critMultiplier,
             weapon,
-            isOffHand: false,
-            featDamageBonus: 0,
             situationalTargetAcBonus: 0,
             dealNonlethalDamage: damageMode.DealNonlethalDamage,
             damageModeAttackPenalty: damageMode.AttackPenalty,
@@ -12666,8 +12848,11 @@ public class CharacterController : MonoBehaviour
 
         int damageDiceSides;
         int damageDiceCount;
-        int damageAbility;
-        int damageBonus;
+        WeaponDamageBreakdown sunderDamage;
+        // The shared damage modifier (CMB-003): the sunder is a melee attack with this weapon or natural attack, so its
+        // damage roll adds the same terms (Strength share, enhancement, Weapon Specialization, morale, conditions). No
+        // Power Attack: the sunder's opposed roll above does not take its penalty or the other attack-side feat terms
+        // (CMB-159).
         if (sunderNatural != null)
         {
             // The natural attack's own damage: its dice scaled for size and its Strength share (half for a
@@ -12675,24 +12860,25 @@ public class CharacterController : MonoBehaviour
             Stats.GetScaledNaturalAttackDamage(sunderNatural, out damageDiceCount, out damageDiceSides);
             damageDiceSides = Mathf.Max(1, damageDiceSides);
             damageDiceCount = Mathf.Max(1, damageDiceCount);
-            damageAbility = Stats.GetNaturalAttackDamageBonus(sunderNatural);
-            damageBonus = sunderNatural.BonusDamage;
+            // NaturalAttackDefinition.BonusDamage is not a damage term on any attack path (CRE-061).
+            sunderDamage = BuildWeaponDamageBonus(null, isRanged: false, isOffHand: false,
+                default(AttackCalculator.FeatModifiers), naturalAttack: sunderNatural);
         }
         else
         {
             GetScaledWeaponDamageDice(attackerWeapon, out damageDiceCount, out damageDiceSides);
             damageDiceSides = Mathf.Max(1, damageDiceSides);
             damageDiceCount = Mathf.Max(1, damageDiceCount);
-            damageAbility = Stats.GetWeaponDamageModifier(attackerWeapon, usedOffHand);
-            damageBonus = attackerWeapon.BonusDamage;
+            sunderDamage = BuildWeaponDamageBonus(attackerWeapon, isRanged: false, usedOffHand, DamageOnlyFeatModifiers(attackerWeapon),
+                attackerWeapon.BonusDamage);
         }
 
         int damageRoll = Stats.RollBaseDamage(damageDiceSides, damageDiceCount);
-        int rawDamage = Mathf.Max(1, damageRoll + damageAbility + damageBonus);
+        int rawDamage = Mathf.Max(1, damageRoll + sunderDamage.Total);
 
         targetItem.ApplySunderDamage(rawDamage, out int effectiveDamage, out int hpBefore, out int hpAfter);
 
-        logLines.Add($"Damage: {damageDiceCount}d{damageDiceSides} ({damageRoll}) + ability {CharacterStats.FormatMod(damageAbility)} + weapon {CharacterStats.FormatMod(damageBonus)} = {rawDamage}");
+        logLines.Add($"Damage: {damageDiceCount}d{damageDiceSides} ({damageRoll}) + [{sunderDamage.Describe()}] = {rawDamage}");
         logLines.Add($"Object durability: hardness {targetItem.Hardness} reduces damage to {effectiveDamage}. HP {hpBefore} -> {hpAfter}/{targetItem.MaxHitPoints}");
 
         if (targetItem.IsDestroyed)
@@ -13121,9 +13307,17 @@ public class CharacterController : MonoBehaviour
         ItemData weapon = GetEquippedMainWeapon();
         ResolveBaseAttackDamageProfile(weapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
-        int damageModifier = Stats.GetWeaponDamageModifier(weapon, isOffHand: false);
+        // The shared damage modifier (CMB-003): the same terms as a melee attack with this weapon or natural attack
+        // (Strength share, enhancement, Weapon Specialization, morale, conditions). Power Attack trades an attack roll
+        // penalty for damage (PHB p.98) and a coup de grace makes no attack roll, so it is left out until the owner
+        // rules (CMB-160).
+        NaturalAttackDefinition cdgNatural = ShouldUseInnateNaturalAttackProfile(weapon) ? Stats.GetPrimaryNaturalAttack() : null;
+        AttackCalculator.FeatModifiers cdgFeats = cdgNatural != null ? default(AttackCalculator.FeatModifiers) : DamageOnlyFeatModifiers(weapon);
+        WeaponDamageBreakdown cdgDamage = BuildWeaponDamageBonus(weapon, isRanged: false, isOffHand: false, cdgFeats,
+            bonusDamage, naturalAttack: cdgNatural);
+        int damageModifier = cdgDamage.Total;
         int baseDamageRoll = Stats.RollBaseDamage(damageDice, damageCount);
-        int baseDamage = Mathf.Max(1, baseDamageRoll + damageModifier + bonusDamage);
+        int baseDamage = Mathf.Max(1, baseDamageRoll + damageModifier);
 
         int sneakDamage = 0;
         bool sneakApplied = false;
@@ -13208,7 +13402,7 @@ public class CharacterController : MonoBehaviour
             DamageDealt = finalDamage,
             TargetKilled = targetKilled,
             Log = $"{Stats.CharacterName} performs Coup de Grace on helpless {target.Stats.CharacterName} with {damageSource}: "
-                + $"({damageCount}d{damageDice}={baseDamageRoll} + mod {CharacterStats.FormatMod(damageModifier + bonusDamage)}{sneakSegment}) ×{critMultiplier} = {rawCriticalDamage}; "
+                + $"({damageCount}d{damageDice}={baseDamageRoll} + [{cdgDamage.Describe()}]{sneakSegment}) ×{critMultiplier} = {rawCriticalDamage}; "
                 + $"mitigated to {finalDamage} ({hpBefore} → {target.Stats.CurrentHP}). "
                 + (string.IsNullOrEmpty(mitigationSummary) ? string.Empty : mitigationSummary + " ")
                 + saveLine + " " + deathLine
@@ -13777,7 +13971,14 @@ public class CharacterController : MonoBehaviour
         flurryBonus.SequenceModifier = flurryPenalty;
         flurryBonus.SequenceLabel = "Flurry of Blows";
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
-        int flurryFeatDmgBonus = flurryBonus.FeatDamageBonus;
+        WeaponDamageBreakdown flurryDamage = BuildWeaponDamageBonus(equippedWeapon, isRanged: false, isOffHand: false,
+            flurryBonus.Feats, bonusDamage);
+        // A flurry adds the full Strength modifier, not 1-1/2 or 1/2 times it, even with a weapon in both hands (PHB p.41).
+        if (!flurryDamage.StrengthSuppressed && flurryDamage.StrengthBonus != Stats.STRMod)
+        {
+            flurryDamage.StrengthBonus = Stats.STRMod;
+            flurryDamage.StrengthLabel = "STR (flurry)";
+        }
 
         Debug.Log($"[Monk] {Stats.CharacterName}: Flurry of Blows! {flurryBonuses.Length} attacks at " +
                   $"{CharacterStats.FormatMod(flurryBonus.LabelBonus)} each (total modifier {CharacterStats.FormatMod(flurryBonus.Total)})");
@@ -13798,8 +13999,8 @@ public class CharacterController : MonoBehaviour
             int hpBefore = target.Stats.CurrentHP;
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkBonus.Total, isFlanking, flankingBonus, flankingPartnerName,
-                damageDice, damageCount, bonusDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
-                equippedWeapon, false, flurryFeatDmgBonus, aidAnotherTargetAcBonus,
+                damageDice, damageCount, flurryDamage, atkBonus.CritThreatMin, atkBonus.CritMultiplier,
+                equippedWeapon, aidAnotherTargetAcBonus,
                 damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
             atkBonus.ApplyToResult(atk, null);

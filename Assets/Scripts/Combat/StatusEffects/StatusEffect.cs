@@ -34,6 +34,8 @@ public sealed class ConditionDefinition
     public int InitiativeModifier;
     public int SkillCheckModifier;
     public int AbilityCheckModifier;
+    /// <summary>Modifier on weapon damage rolls (Sickened -2, DMG p.301); read through CharacterStats.ConditionWeaponDamageModifier (CMB-003).</summary>
+    public int WeaponDamageModifier;
 
     // Movement model.
     public bool PreventsMovement;
@@ -72,6 +74,7 @@ public sealed class ConditionDefinition
             InitiativeModifier = InitiativeModifier,
             SkillCheckModifier = SkillCheckModifier,
             AbilityCheckModifier = AbilityCheckModifier,
+            WeaponDamageModifier = WeaponDamageModifier,
             PreventsMovement = PreventsMovement,
             MovementMultiplier = MovementMultiplier,
             PreventsAoO = PreventsAoO,
@@ -602,9 +605,10 @@ public static class ConditionRules
             Type = CombatConditionType.Sickened,
             DisplayName = "Sickened",
             ShortLabel = "SI",
-            Description = "-2 attack, saves, checks, and damage-equivalent pressure.",
+            Description = "-2 attack, weapon damage, saves and skill checks.",
             StackingRule = ConditionStackingRule.Refresh,
             AttackModifier = -2,
+            WeaponDamageModifier = -2, // DMG p.301 (CMB-003)
             FortitudeModifier = -2,
             ReflexModifier = -2,
             WillModifier = -2,

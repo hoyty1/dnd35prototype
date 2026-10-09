@@ -2531,7 +2531,11 @@ public static class GrappleDamageRulesTests
             bear.TryCommitManeuverSubstituteStep(-1, out int claw2Bab, out _, out _);
             SpecialAttackResult hit = bear.ExecuteSpecialAttack(SpecialAttackType.Sunder, defender, sunderAttackBonusOverride: claw2Bab);
             int halfStr = Mathf.FloorToInt(bear.Stats.STRMod * 0.5f);
-            Assert(hit.Success && hit.Log.Contains("Damage: 1d4") && hit.Log.Contains("ability " + CharacterStats.FormatMod(halfStr)),
+            // The shared damage modifier lists the Strength share as "0.5× STR +N" (WeaponDamageBreakdown.Describe, CMB-003).
+            bool halfStrListed = halfStr != 0
+                ? hit.Log.Contains("0.5× STR " + CharacterStats.FormatMod(halfStr))
+                : !hit.Log.Contains("STR");
+            Assert(hit.Success && hit.Log.Contains("Damage: 1d4") && halfStrListed,
                 $"A natural sunder deals the natural attack's damage (claw 1d4, half STR {CharacterStats.FormatMod(halfStr)})");
             ScenarioHooks.RollFilter = savedFilter;
 

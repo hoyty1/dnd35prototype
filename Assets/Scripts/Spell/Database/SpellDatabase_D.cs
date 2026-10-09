@@ -510,7 +510,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.DIVINE_FAVOR,
                     Name = "Divine Favor",
-                    Description = "+1 luck bonus on attack and damage rolls (per 3 CL, max +3). Duration 1 minute. PHB p.224",
+                    Description = "+1 luck bonus on attack and weapon damage rolls per 3 caster levels (min +1, max +6). Duration 1 minute. PHB p.224",
                     SpellLevel = 1, School = "Evocation",
                     ClassList = new[] { "Cleric" },
                     TargetType = SpellTargetType.Self,

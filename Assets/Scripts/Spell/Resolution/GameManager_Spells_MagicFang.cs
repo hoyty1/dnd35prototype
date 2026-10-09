@@ -36,8 +36,8 @@ public partial class GameManager
     //  AppliedDamageBonus through StatusEffectManager.AddEffect, which
     //  adds them on cast and takes them back when the spell ends. Like
     //  every spell bonus they land in the Morale* fields, so they reach
-    //  every attack of the subject, not only one natural weapon, and the
-    //  damage bonus is not read for weapon damage (SPL-026, CMB-003).
+    //  the attack and damage roll of every attack of the subject, not
+    //  only one natural weapon (SPL-026).
     //  Before SPL-037 this handler added a second +1 that was never
     //  removed; it adds nothing of its own now.
     // ================================================================

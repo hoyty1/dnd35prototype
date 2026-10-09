@@ -192,24 +192,15 @@ public partial class GameManager
         int hitDice = attacker.Stats.GetHitDice();
         int damageBonus = hitDice;
 
-        attacker.Stats.MoraleAttackBonus += attackBonus;
-        attacker.Stats.MoraleDamageBonus += damageBonus;
-
-        CombatResult result;
+        // The smite's bonuses apply to this one attack (per-attack terms of the shared attack and damage modifiers,
+        // CMB-003), not to the morale fields.
         RangeInfo rangeInfo = _combatFlowService != null ? _combatFlowService.CalculateRangeInfo(attacker, target) : null;
-        try
-        {
-            List<CharacterController> allCombatants = GetAllCharacters();
-            bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
-            int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-            string partnerName = flankPartner != null && flankPartner.Stats != null ? flankPartner.Stats.CharacterName : string.Empty;
-            result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        }
-        finally
-        {
-            attacker.Stats.MoraleAttackBonus -= attackBonus;
-            attacker.Stats.MoraleDamageBonus -= damageBonus;
-        }
+        List<CharacterController> allCombatants = GetAllCharacters();
+        bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
+        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+        string partnerName = flankPartner != null && flankPartner.Stats != null ? flankPartner.Stats.CharacterName : string.Empty;
+        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo,
+            situationalAttackBonus: attackBonus, situationalDamageBonus: damageBonus, situationalLabel: "Smite");
 
         attacker.Stats.TemplateSmiteUsed = true;
 

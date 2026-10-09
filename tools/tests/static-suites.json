@@ -1118,6 +1118,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Combat.WeaponDamageModifierTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 34,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CMB-003, CMB-008, CHR-005 (2026-10-09): the shared weapon damage modifier, including the off-hand weapon as an Attack override, the Destruction smite on melee attacks only, bane +2 on damage (DMG p.224), full Strength in a flurry (PHB p.41) and Divine Favor's caster-level scaling (PHB p.224). Play only (CharacterController.Init, TST-009). 34/34 in a fresh Play session with the baseline seed on 2026-10-09."
+    },
+    {
       "type": "Tests.Encounters.EncounterSpawnPlacementTests",
       "needs": "either",
       "skip": "",

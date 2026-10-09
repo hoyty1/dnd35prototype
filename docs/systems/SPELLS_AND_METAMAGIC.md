@@ -269,7 +269,7 @@ Data: `Character/Religion/DomainDatabase.cs` (22 PHB domains, `DomainData` with 
 | Animal | Calm Animals / Hold Animal | Speak with Animals 1/day; Knowledge (nature) class skill | not implemented |
 | Chaos | Protection from Law / Shatter | chaos spells at +1 CL | works for spells tagged Chaotic; the Magic Circle tags use wrong IDs (SPL-035) |
 | Death | Cause Fear / Death Knell | death touch 1/day | unreachable: `ActivateDomainPowerByName` only sets `_pendingDomainPower`, and `ResolveDomainPowerOnTarget` has no caller; because the use is never spent, a cleric with Death listed first can never use the other domain's power (CHR-060) |
-| Destruction | Inflict Light Wounds / Shatter | smite: +4 attack, +cleric level damage, 1/day | +4 attack works; the damage bonus is never added (CHR-005); ranged attacks also qualify |
+| Destruction | Inflict Light Wounds / Shatter | smite: +4 attack, +cleric level damage, 1/day | +4 attack and +cleric level damage (CHR-005 fixed 2026-10-09, not verified in Play mode); melee attacks only, so a ranged attack neither gains nor uses it (PHB p.186, 2026-10-09) |
 | Earth | Magic Stone / Soften Earth and Stone | turn air, rebuke earth | wrong, as Air |
 | Evil | Protection from Good / Desecrate (Desecrate unreachable, SPL-042) | evil spells at +1 CL | works |
 | Fire | Burning Hands / Produce Flame | turn water, rebuke fire | wrong, as Air |

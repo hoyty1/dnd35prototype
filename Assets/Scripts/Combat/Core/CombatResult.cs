@@ -154,7 +154,17 @@ public class CombatResult
 
     public int BaseDamageRoll;
     public string BaseDamageDiceStr;
+    /// <summary>Power Attack, Point Blank Shot and Weapon Specialization damage (part of <see cref="WeaponDamageBonus"/>).</summary>
     public int FeatDamageBonus;
+
+    /// <summary>
+    /// Every static term this hit's damage roll added, from CharacterController.BuildWeaponDamageBonus (CMB-003); valid
+    /// when <see cref="HasWeaponDamageBonus"/>. On a confirmed critical it is added once (CMB-004).
+    /// </summary>
+    public WeaponDamageBreakdown WeaponDamageBonus;
+    public bool HasWeaponDamageBonus;
+    /// <summary>A torch-style weapon's critical: its enhancement multiplied with the fixed damage package (0 otherwise).</summary>
+    public int TorchCritEnhancementExtra;
 
     public string DamageTypeSummary = "";
     public int RawTotalDamage;
@@ -257,17 +267,35 @@ public class CombatResult
         DamageRollBreakdown.OtherBonuses.Clear();
         DamageRollBreakdown.OtherBonus = 0;
 
-        if (PointBlankShotActive)
-            DamageRollBreakdown.OtherBonuses.Add(new AttackModifierBreakdownEntry("Point Blank Shot", 1));
-        if (WeaponSpecBonus > 0)
-            DamageRollBreakdown.OtherBonuses.Add(new AttackModifierBreakdownEntry("Weapon Spec", WeaponSpecBonus));
+        int known;
+        if (HasWeaponDamageBonus)
+        {
+            // The shared damage terms (CMB-003): Strength, enhancement and Power Attack have their own slots above.
+            List<AttackModifierBreakdownEntry> terms = WeaponDamageBonus.GetTerms(includeStrength: false);
+            for (int i = 0; i < terms.Count; i++)
+            {
+                if (terms[i].Label == "enhancement" || terms[i].Label == "Power Attack")
+                    continue;
+                DamageRollBreakdown.OtherBonuses.Add(terms[i]);
+            }
+            if (TorchCritEnhancementExtra != 0)
+                DamageRollBreakdown.OtherBonuses.Add(new AttackModifierBreakdownEntry("torch critical", TorchCritEnhancementExtra));
+            known = BaseDamageRoll + WeaponDamageBonus.Total + TorchCritEnhancementExtra + SneakAttackDamage;
+        }
+        else
+        {
+            if (PointBlankShotActive)
+                DamageRollBreakdown.OtherBonuses.Add(new AttackModifierBreakdownEntry("Point Blank Shot", 1));
+            if (WeaponSpecBonus > 0)
+                DamageRollBreakdown.OtherBonuses.Add(new AttackModifierBreakdownEntry("Weapon Spec", WeaponSpecBonus));
+            known = BaseDamageRoll + DamageModifier + WeaponEnhancementDamageBonus + PowerAttackDamageBonus + SneakAttackDamage;
+            if (PointBlankShotActive)
+                known += 1;
+            if (WeaponSpecBonus > 0)
+                known += WeaponSpecBonus;
+        }
 
         int subtotalRaw = RawTotalDamage > 0 ? RawTotalDamage : (Damage + SneakAttackDamage);
-        int known = BaseDamageRoll + DamageModifier + WeaponEnhancementDamageBonus + PowerAttackDamageBonus + SneakAttackDamage;
-        if (PointBlankShotActive)
-            known += 1;
-        if (WeaponSpecBonus > 0)
-            known += WeaponSpecBonus;
 
         int remainingOtherBonus = subtotalRaw - known;
         if (remainingOtherBonus != 0)
@@ -330,9 +358,12 @@ public class CombatResult
     {
         RebuildBreakdownsFromComputedValues();
 
+        // A confirmed critical's roll is already of the multiplied dice (CritDamageDice); the terms after it are added
+        // once (CMB-004).
+        string diceShown = CritConfirmed && !string.IsNullOrWhiteSpace(CritDamageDice) ? CritDamageDice : DamageRollBreakdown.BaseDice;
         var pieces = new List<string>
         {
-            $"{DamageRollBreakdown.BaseDice}({DamageRollBreakdown.BaseRoll})"
+            $"{diceShown}({DamageRollBreakdown.BaseRoll})"
         };
 
         bool showZeroAbilityLine = DamageRollBreakdown.AbilityModifier == 0
@@ -362,7 +393,7 @@ public class CombatResult
         string coreExpression = string.Join(" ", pieces).Trim();
 
         if (CritConfirmed)
-            return $"CRITICAL! {DamageRollBreakdown.SourceName}: [{coreExpression}] ×{DamageRollBreakdown.CriticalMultiplier}{sneakSuffix} = {shownDamage} damage";
+            return $"CRITICAL ×{DamageRollBreakdown.CriticalMultiplier} (weapon dice)! {DamageRollBreakdown.SourceName}: {coreExpression}{sneakSuffix} = {shownDamage} damage";
 
         return $"{DamageRollBreakdown.SourceName}: {coreExpression}{sneakSuffix} = {shownDamage} damage";
     }
@@ -520,21 +551,7 @@ public class CombatResult
             sb.AppendLine($"    <b><color=#FFF29A>{BuildCompactDamageFormula()}</color></b>");
             string diceStr = !string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?";
 
-            if (CritConfirmed)
-                sb.AppendLine($"    {CritDamageDice} = {Damage - FeatDamageBonus} (weapon + mods)");
-            else
-            {
-                sb.AppendLine($"    {diceStr} = {BaseDamageRoll}");
-                if (DamageModifier != 0)
-                    sb.AppendLine($"    {FormatModLine(DamageModifier, string.IsNullOrEmpty(DamageModifierDesc) ? abilityName : DamageModifierDesc)}");
-                else if (!string.IsNullOrWhiteSpace(DamageModifierDesc) && DamageModifierDesc.IndexOf("no STR", StringComparison.OrdinalIgnoreCase) >= 0)
-                    sb.AppendLine("    + 0 (no STR modifier)");
-            }
-
-            if (PowerAttackDamageBonus > 0) sb.AppendLine($"    {FormatModLine(PowerAttackDamageBonus, "Power Attack")}");
-            if (PointBlankShotActive) sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
-            if (WeaponSpecBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponSpecBonus, "Weapon Spec")}");
-            if (WeaponEnhancementDamageBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponEnhancementDamageBonus, "weapon enhancement")}");
+            AppendDamageTermLines(sb, "    ", diceStr, abilityName);
 
             if (SneakAttackApplied)
             {
@@ -629,18 +646,8 @@ public class CombatResult
         {
             sb.AppendLine();
             sb.AppendLine($"    <b><color=#FFF29A>{BuildCompactDamageFormula()}</color></b>");
-            if (CritConfirmed)
-                sb.AppendLine($"    Damage: {CritDamageDice} = {Damage - FeatDamageBonus} (crit)");
-            else
-            {
-                sb.AppendLine($"    Damage: {(!string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?")} = {BaseDamageRoll}");
-                if (DamageModifier != 0)
-                    sb.AppendLine($"      {FormatModLine(DamageModifier, string.IsNullOrEmpty(DamageModifierDesc) ? "ability" : DamageModifierDesc)}");
-                else if (!string.IsNullOrWhiteSpace(DamageModifierDesc) && DamageModifierDesc.IndexOf("no STR", StringComparison.OrdinalIgnoreCase) >= 0)
-                    sb.AppendLine("      + 0 (no STR modifier)");
-            }
-            if (WeaponEnhancementDamageBonus > 0)
-                sb.AppendLine($"      {FormatModLine(WeaponEnhancementDamageBonus, "weapon enhancement")}");
+            sb.AppendLine("    Damage:");
+            AppendDamageTermLines(sb, "      ", !string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?", "ability");
 
             if (SneakAttackApplied)
             {
@@ -655,6 +662,40 @@ public class CombatResult
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// The weapon dice line and one line per static damage term (CMB-003), so the listed lines add up to the weapon
+    /// damage before riders. A confirmed critical shows its multiplied dice; the terms are added once (CMB-004).
+    /// </summary>
+    private void AppendDamageTermLines(StringBuilder sb, string indent, string diceStr, string abilityName)
+    {
+        if (CritConfirmed)
+            sb.AppendLine($"{indent}{(string.IsNullOrWhiteSpace(CritDamageDice) ? diceStr : CritDamageDice)} = {BaseDamageRoll} (critical ×{(CritMultiplier > 1 ? CritMultiplier : 2)}: weapon dice only)");
+        else
+            sb.AppendLine($"{indent}{diceStr} = {BaseDamageRoll}");
+
+        if (HasWeaponDamageBonus)
+        {
+            List<AttackModifierBreakdownEntry> terms = WeaponDamageBonus.GetTerms();
+            for (int i = 0; i < terms.Count; i++)
+                sb.AppendLine($"{indent}{FormatModLine(terms[i].Value, terms[i].Label)}");
+            if (TorchCritEnhancementExtra != 0)
+                sb.AppendLine($"{indent}{FormatModLine(TorchCritEnhancementExtra, "torch critical")}");
+            int weaponTotal = BaseDamageRoll + WeaponDamageBonus.Total + TorchCritEnhancementExtra;
+            if (weaponTotal != Damage)
+                sb.AppendLine($"{indent}= {Damage} weapon damage ({(weaponTotal < 1 ? "minimum 1" : "other effects")})");
+            return;
+        }
+
+        if (DamageModifier != 0)
+            sb.AppendLine($"{indent}{FormatModLine(DamageModifier, string.IsNullOrEmpty(DamageModifierDesc) ? abilityName : DamageModifierDesc)}");
+        else if (!string.IsNullOrWhiteSpace(DamageModifierDesc) && DamageModifierDesc.IndexOf("no STR", StringComparison.OrdinalIgnoreCase) >= 0)
+            sb.AppendLine($"{indent}+ 0 (no STR modifier)");
+        if (PowerAttackDamageBonus > 0) sb.AppendLine($"{indent}{FormatModLine(PowerAttackDamageBonus, "Power Attack")}");
+        if (PointBlankShotActive) sb.AppendLine($"{indent}{FormatModLine(1, "Point Blank Shot")}");
+        if (WeaponSpecBonus > 0) sb.AppendLine($"{indent}{FormatModLine(WeaponSpecBonus, "Weapon Spec")}");
+        if (WeaponEnhancementDamageBonus > 0) sb.AppendLine($"{indent}{FormatModLine(WeaponEnhancementDamageBonus, "weapon enhancement")}");
     }
 
     private static string FormatModLine(int value, string label)

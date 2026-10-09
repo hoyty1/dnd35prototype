@@ -55,7 +55,7 @@ Where to look first:
 
 | Concern | Start at |
 |---|---|
-| Attack math | `CharacterController.Attack`/`FullAttack`/`DualWieldAttack`/`FlurryOfBlows` (modifier from `BuildAttackBonus`) -> `PerformSingleAttackWithCrit`; `CombatFlowService.PerformPlayerAttack`; `GameManager.NPCPerformAttack` |
+| Attack math | `CharacterController.Attack`/`FullAttack`/`DualWieldAttack`/`FlurryOfBlows` (modifier from `BuildAttackBonus`, damage modifier from `BuildWeaponDamageBonus`) -> `PerformSingleAttackWithCrit`; `CombatFlowService.PerformPlayerAttack`; `GameManager.NPCPerformAttack` |
 | Damage | `CharacterStats.ApplyIncomingDamage` -> `TakeDamage`; non-weapon damage `GameManager.DealDamage` (`_Core/GameManager.Damage.cs`); `Combat/Core/DamageModel.cs` (`DamagePackets`) |
 | Conditions | `GameManager.ApplyCondition`, `ConditionService`, `ConditionManager`, `ConditionRules` |
 | Maneuvers, grapple | `CombatUI.ShowSpecialAttackMenu` -> `GameManager.OnSpecialAttackSelected` -> `GameManager.ExecuteSpecialAttack` (`GameManager.CombatActions.cs`); partials in `Combat/Maneuvers/*.cs`; `CharacterController.ExecuteSpecialAttack` -> `Resolve*` |
@@ -84,7 +84,7 @@ Where to look first:
 - A method missing from `GameManager.cs` is in another partial. Grep before adding a duplicate.
 - A new single-target spell handler goes in the PC chain, its `anyPriorHandled`/`anyClericHandled` flags, and `TryNPCPerformSpellCast` (SPL-054).
 - In `ApplySpellBuff`, the generic `StatusEffectManager` branch is last and returns for every spell: a special case goes above it, and a spell that is not Buff/Debuff/Control/Illusion/Wall also needs an entry in `SpellEffectRouting` (a Healing or Damage one also `HealingResolvedByHandler`/`DamageResolvedByHandler`).
-- Weapon attack-roll terms go in `CharacterController.BuildAttackBonus` (CMB-043); rake and grapple weapon attacks still sum their own (CMB-087); spell bonuses all land in `Morale*` (SPL-026).
+- Weapon attack-roll terms go in `CharacterController.BuildAttackBonus` (CMB-043), weapon damage terms in `BuildWeaponDamageBonus` (CMB-003); rake and grapple weapon attacks still sum their own attack modifier (CMB-087); spell bonuses all land in `Morale*` (SPL-026).
 - A new `CharacterStats` bonus field needs a writer and a reader in every formula (`docs/architecture/characters-and-creatures.md`).
 - `TakeDamage`/`CurrentHP -=` skip immunity, resistance and DR; deal non-weapon damage with `GameManager.DealDamage(target, raw, DamagePackets.Spell/Supernatural/CreatureAttack(...))` (mitigation, concentration, death; SPL-004), then `GameManager.EvaluateCombatEnd` (one check for both sides) once the effect has resolved.
 - `GameManager.Awake` runs before scene references are assigned (CORE-009); unassigned `CombatUI` fields fail silently (UI-013).

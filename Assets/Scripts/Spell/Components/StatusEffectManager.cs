@@ -125,6 +125,15 @@ public class StatusEffectManager : MonoBehaviour
         // Store the stat modifications that will be applied
         effect.AppliedAttackBonus = spell.BuffAttackBonus;
         effect.AppliedDamageBonus = spell.BuffDamageBonus;
+        // Divine Favor: +1 per three caster levels on attack and weapon damage rolls, at least +1 (PHB p.224). The owner's
+        // PHB prints the maximum as +6 (the SRD says +3); the two differ only from caster level 12. Set here so every
+        // path that adds the effect (a cast, a scroll, a wand) grants the same bonus.
+        if (string.Equals(spell.SpellId, SpellNames.DIVINE_FAVOR, System.StringComparison.Ordinal))
+        {
+            int favor = Mathf.Clamp(casterLevel / 3, 1, 6);
+            effect.AppliedAttackBonus = favor;
+            effect.AppliedDamageBonus = favor;
+        }
         effect.AppliedSaveBonus = spell.BuffSaveBonus;
         effect.AppliedACBonus = spell.BuffACBonus;
         effect.AppliedShieldBonus = spell.BuffShieldBonus;

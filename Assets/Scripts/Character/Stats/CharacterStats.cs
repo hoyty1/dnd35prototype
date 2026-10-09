@@ -1295,6 +1295,9 @@ public class CharacterStats
     /// <summary>Aggregate ability-check modifier from active conditions.</summary>
     public int ConditionAbilityCheckModifier => SumConditionValue(d => d.AbilityCheckModifier);
 
+    /// <summary>Aggregate weapon damage roll modifier from active conditions (Sickened -2, DMG p.301; CMB-003).</summary>
+    public int ConditionWeaponDamageModifier => SumConditionValue(d => d.WeaponDamageModifier);
+
     /// <summary>Movement blocked if any active condition prevents movement.</summary>
     public bool MovementBlockedByCondition => ActiveConditions.Any(c => ConditionRules.GetDefinition(c.Type).PreventsMovement);
 

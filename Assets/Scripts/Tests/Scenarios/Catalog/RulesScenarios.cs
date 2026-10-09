@@ -108,11 +108,16 @@ namespace Tests.Scenarios
     /// 2026-10-08: neutral_mage_test (Wizard 3, Daze prepared x4), skeleton_owlbear, zombie_bugbear; Quick Start bard
     /// (Half-Elf, CON 12) and ranger (Human, CON 12, no Toughness); ogre (MM p.199: 4d8+11 = 29), ghoul (MM p.119: 2d12 = 13,
     /// stored as CON 0) and orc_warrior (CON 12) for the NPC hit point checks.
+    /// Weapon damage modifier (CMB-003; checked 2026-10-09): PHB p.134 (Strength x1 one-handed, 1-1/2 two-handed,
+    /// rounded down), p.98 (Power Attack), p.29 (Inspire Courage: morale bonus on weapon damage), p.224 (Divine Favor),
+    /// p.250 (Magic Fang), DMG p.301 (Sickened: -2 on weapon damage rolls), MM p.283 (wolf bite 1d6+1: STR 13, 1-1/2 x
+    /// +1). Data: orc_warrior STR 17 with a greataxe (two-handed, no enhancement), wolf_pack_hunter (alias wolf) STR 13
+    /// with one bite of 1-1/2 x STR.
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 108;
+        public const int Count = 109;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -228,6 +233,7 @@ namespace Tests.Scenarios
             yield return S("spell-damage-mitigation", SpellDamageMitigation);
             yield return S("spell-dice-undead", SpellDiceUndead);
             yield return S("spell-buff-dispatch", SpellBuffDispatch);
+            yield return S("weapon-damage-modifier", WeaponDamageModifier);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -5806,6 +5812,148 @@ namespace Tests.Scenarios
             ctx.Gm.Harness_ApplySpellBuff(wizard, brute, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.TELEKINESIS).Clone(), landed);
             ctx.Note(SpellBuffNotePrefix + "telekinesis brute " + from + " -> " + brute.GridPosition + " (expected " + want + ")");
             return brute.GridPosition == want && wizard.GridPosition == new Vector2Int(5, 12);
+        }
+
+        // ── Weapon damage modifier (CMB-003) ──
+
+        /// <summary>
+        /// CMB-003: the weapon damage modifier is built once (CharacterController.BuildWeaponDamageBonus) for every attack
+        /// path, so morale and situational terms reach weapon damage on the PC and NPC paths alike. Each round:
+        /// "inspired" (a Stats fighter, STR 16, longsword, NPC attack path) gets Inspire Courage +1 (PHB p.29) and attacks
+        /// a dummy: +3 STR +1 morale = +4. "favored" (a Ui fighter with Power Attack, the PC Attack button) gets Divine
+        /// Favor (PHB p.224, +1 at CL 1-5) and Power Attack 2 one-handed (PHB p.98): +3 +2 +1 = +6. The orc warrior (STR 17,
+        /// greataxe two-handed: 1-1/2 x +3 = +4, PHB p.134) is Sickened (-2 weapon damage, DMG p.301): +2. The wolf (STR 13,
+        /// its one bite at 1-1/2 x +1 = +1, MM p.283) has Magic Fang (+1, PHB p.250): +2. For every hit the trace's dmgMod
+        /// must be that total, its terms must name the sources, and the weapon damage must be the dice roll plus dmgMod
+        /// (added once on a critical, CMB-004) and equal the damage dealt (no DR or riders here). Before the fix the morale
+        /// and condition terms were never added (Inspire Courage, Divine Favor and Magic Fang dealt nothing extra).
+        /// </summary>
+        private static ScenarioDef WeaponDamageModifier()
+        {
+            return Rules("rules/weapon-damage-modifier", "Morale, Power Attack, two-handed Strength, Sickened and Magic Fang reach weapon damage on the PC and NPC paths (PHB p.29, p.98, p.134; DMG p.301; CMB-003)")
+                .Covers("CMB-003", "PHB p.29", "PHB p.98", "PHB p.134", "PHB p.224", "PHB p.250", "DMG p.301", "MM p.283", "MM p.312", "PC_NPC_PARITY")
+                .MaxRounds(3)
+                .Pc("inspired", ActorSource.Stats(() => Fighter("Inspired", 3)), 3, 3, Control.Scripted)
+                .Pc("favored", ActorSource.Stats(() => Fighter("Favored", 3, "Power Attack")), 3, 8, Control.Ui)
+                .Pc("p1", ActorSource.Stats(() => Fighter("Target1", 3)), 13, 3, Control.Scripted)
+                .Pc("p2", ActorSource.Stats(() => Fighter("Target2", 3)), 13, 8, Control.Scripted)
+                .Npc("d1", "target_dummy", 4, 3, Control.Idle)
+                .Npc("d2", "target_dummy", 4, 8, Control.Idle)
+                .Npc("orc", "orc_warrior", 12, 3, Control.Scripted)
+                .Npc("wolf", "wolf", 12, 8, Control.Scripted)
+                .Tweak("inspired", StripOffHand)
+                .Tweak("favored", StripOffHand)
+                .Tweak("p1", UnarmoredSturdyDummy)
+                .Tweak("p2", UnarmoredSturdyDummy)
+                .Tweak("d1", SturdyDummy)
+                .Tweak("d2", SturdyDummy)
+                .Initiative("inspired", "favored", "orc", "wolf", "p1", "p2", "d1", "d2")
+                .Turn("inspired", 0, Step.Assert("Inspire Courage +1 on the inspired fighter with a plain longsword", InspireFighter), Step.Attack("d1"))
+                .Turn("favored", 0, Step.Assert("Divine Favor and Power Attack 2 on the favored fighter", FavorFighter), Step.Attack("d2"))
+                .Turn("orc", 0, Step.Assert("The orc warrior is sickened and holds its greataxe", SickenOrc), Step.Attack("p1"))
+                .Turn("wolf", 0, Step.Assert("Magic Fang on the wolf", FangWolf), Step.Attack("p2"))
+                .Turn("p1", 0, Step.Pass())
+                .Turn("p2", 0, Step.Pass())
+                .Expect("Every setup check holds", Expect.AssertsPass())
+                .Expect("NPC path: longsword STR +3 and Inspire Courage +1 = +4 on every hit (PHB p.29, p.134)",
+                    WeaponDamageTerms("inspired", 4, "STR:3", "Inspire Courage:1"))
+                .Expect("PC Attack button: STR +3, Power Attack +2, Divine Favor +1 = +6 on every hit (PHB p.98, p.224)",
+                    WeaponDamageTerms("favored", 6, "STR:3", "Power Attack:2", "Divine Favor:1"))
+                .Expect("NPC orc: greataxe 1-1/2 x STR +4 and Sickened -2 = +2 on every hit (PHB p.134, DMG p.301)",
+                    WeaponDamageTerms("orc", 2, "1.5× STR:4", "Sickened:-2"))
+                .Expect("NPC wolf: bite 1-1/2 x STR +1 and Magic Fang +1 = +2 on every hit (MM p.283, PHB p.250)",
+                    WeaponDamageTerms("wolf", 2, "1.5× STR:1", "Magic Fang:1"))
+                .Build();
+        }
+
+        private const string WeaponDamageNotePrefix = "cmb003 ";
+
+        /// <summary><see cref="SturdyDummy"/> without armor or an off-hand item, so the attacks against it mostly hit.</summary>
+        private static void UnarmoredSturdyDummy(CharacterController c)
+        {
+            SturdyDummy(c);
+            InventoryComponent inv = c.GetComponent<InventoryComponent>();
+            if (inv == null || inv.CharacterInventory == null)
+                return;
+            inv.CharacterInventory.LeftHandSlot = null;
+            inv.CharacterInventory.HandsSlot = null;
+            inv.CharacterInventory.ArmorRobeSlot = null;
+            inv.CharacterInventory.RecalculateStats();
+        }
+
+        /// <summary>Notes the main weapon of <paramref name="key"/>; true when it is <paramref name="weaponName"/> with no enhancement.</summary>
+        private static bool PlainWeapon(ScenarioContext ctx, string key, string weaponName)
+        {
+            ItemData w = ctx.Get(key).GetEquippedMainWeapon();
+            ctx.Note(WeaponDamageNotePrefix + key + " weapon " + (w != null ? w.Name + " enhancement " + w.GetEnhancementDamageBonus() : "none"));
+            return w != null && w.Name == weaponName && w.GetEnhancementDamageBonus() == 0 && w.MaterialDamageModifier == 0;
+        }
+
+        private static bool InspireFighter(ScenarioContext ctx)
+        {
+            CharacterController c = ctx.Get("inspired");
+            c.Stats.ApplyInspireCourage(1);
+            ctx.Note(WeaponDamageNotePrefix + "inspired morale damage " + c.Stats.MoraleDamageBonus);
+            return PlainWeapon(ctx, "inspired", "Longsword") && c.Stats.HasInspireCourageBonus && c.Stats.MoraleDamageBonus == 1;
+        }
+
+        private static bool FavorFighter(ScenarioContext ctx)
+        {
+            CharacterController c = ctx.Get("favored");
+            if (c.StatusEffectManager == null || !c.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.DIVINE_FAVOR))
+                ctx.Gm.Harness_ApplySpellBuff(c, c, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.DIVINE_FAVOR).Clone());
+            c.SetPowerAttack(2);
+            ctx.Note(WeaponDamageNotePrefix + "favored morale damage " + c.Stats.MoraleDamageBonus + ", Power Attack " + c.PowerAttackValue);
+            return PlainWeapon(ctx, "favored", "Longsword") && c.Stats.MoraleDamageBonus == 1 && c.PowerAttackValue == 2;
+        }
+
+        private static bool SickenOrc(ScenarioContext ctx)
+        {
+            CharacterController c = ctx.Get("orc");
+            c.ApplyCondition(CombatConditionType.Sickened, 10, "Scenario");
+            ctx.Note(WeaponDamageNotePrefix + "orc STR " + c.Stats.STR + ", condition damage " + c.Stats.ConditionWeaponDamageModifier);
+            return PlainWeapon(ctx, "orc", "Greataxe") && c.Stats.STR == 17 && c.Stats.ConditionWeaponDamageModifier == -2;
+        }
+
+        private static bool FangWolf(ScenarioContext ctx)
+        {
+            CharacterController c = ctx.Get("wolf");
+            if (c.StatusEffectManager == null || !c.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.MAGIC_FANG))
+                ctx.Gm.Harness_ApplySpellBuff(c, c, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.MAGIC_FANG).Clone());
+            ctx.Note(WeaponDamageNotePrefix + "wolf STR " + c.Stats.STR + ", morale damage " + c.Stats.MoraleDamageBonus);
+            return c.Stats.STR == 13 && c.Stats.MoraleDamageBonus == 1;
+        }
+
+        /// <summary>
+        /// Every hit by <paramref name="attacker"/> traces dmgMod <paramref name="wantMod"/> with each term in
+        /// <paramref name="wantTerms"/> ("label:value"), weapon damage = max(1, dice roll + dmgMod) (a torch's critical
+        /// aside, none here), and damage dealt = weapon damage. Inconclusive when it never hit.
+        /// </summary>
+        private static Func<TraceView, ExpectResult> WeaponDamageTerms(string attacker, int wantMod, params string[] wantTerms)
+        {
+            return v =>
+            {
+                List<TraceEvent> hits = v.Attacks(attacker).Where(e => e.Bool("hit")).ToList();
+                if (hits.Count == 0)
+                    return ExpectResult.Inconclusive(attacker + " never hit");
+                foreach (TraceEvent h in hits)
+                {
+                    int mod = h.Int("dmgMod", int.MinValue);
+                    string terms = h.Str("dmgTerms") ?? string.Empty;
+                    List<string> listed = terms.Split(new[] { "; " }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                    int weaponDmg = h.Int("weaponDmg");
+                    int want = Mathf.Max(1, h.Int("baseRoll") + mod);
+                    string got = "dmgMod " + mod + " [" + terms + "], roll " + h.Int("baseRoll") + ", weapon damage " + weaponDmg + ", dealt " + h.Int("dmg");
+                    if (mod != wantMod)
+                        return ExpectResult.Fail(got + "; expected dmgMod " + wantMod, h.Seq);
+                    string missing = wantTerms.FirstOrDefault(t => !listed.Contains(t));
+                    if (missing != null)
+                        return ExpectResult.Fail(got + "; missing term " + missing, h.Seq);
+                    if (weaponDmg != want || h.Int("dmg") != weaponDmg)
+                        return ExpectResult.Fail(got + "; expected weapon damage and damage dealt " + want, h.Seq);
+                }
+                return ExpectResult.Pass(hits.Count + " hit(s), each dice + " + wantMod, hits[0].Seq);
+            };
         }
 
         private static Dictionary<string, int> HpOf(ScenarioContext ctx, params string[] keys)

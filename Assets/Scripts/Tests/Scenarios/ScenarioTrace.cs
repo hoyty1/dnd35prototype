@@ -207,9 +207,10 @@ namespace Tests.Scenarios
     {
         /// <summary>
         /// 2: the cast event; 3: the attack event's weapon damage dice (dice, baseRoll); 4: the actor event's Hit Dice,
-        /// racial Hit Dice and base saves (hd, racialHd, baseFort, baseRef, baseWill; CRE-004).
+        /// racial Hit Dice and base saves (hd, racialHd, baseFort, baseRef, baseWill; CRE-004); 5: the attack event's
+        /// static damage modifier and its terms (dmgMod, dmgTerms, weaponDmg; CMB-003).
         /// </summary>
-        public const string HarnessVersion = "4";
+        public const string HarnessVersion = "5";
 
         private readonly ScenarioJob _job;
         private readonly GameManager _gm;
@@ -598,12 +599,25 @@ namespace Tests.Scenarios
                 .Set("weapon", r.WeaponName)
                 .Set("dice", r.BaseDamageDiceStr)
                 .Set("baseRoll", r.Hit ? r.BaseDamageRoll : 0)
+                .Set("dmgMod", r.HasWeaponDamageBonus ? r.WeaponDamageBonus.Total : 0)
+                .Set("dmgTerms", r.HasWeaponDamageBonus ? DamageTerms(r) : string.Empty)
+                .Set("weaponDmg", r.Hit ? r.Damage : 0)
                 .Set("conceal", r.MissedDueToConcealment)
                 .Set("barrier", r.ProtectionSummonedBarrierBlocked)
                 .Set("deflected", IsDeflected(r))
                 .Set("attackerDown", ScenarioChecks.IsDown(attacker));
             _attackByResult[r] = ev;
             _job.Checks.OnAttack(attacker, ev);
+        }
+
+        /// <summary>The attack's static damage terms as "label:value" joined by "; " (CMB-003), e.g. "STR:3; Prayer:1".</summary>
+        private static string DamageTerms(CombatResult r)
+        {
+            List<AttackModifierBreakdownEntry> terms = r.WeaponDamageBonus.GetTerms();
+            var parts = new List<string>(terms.Count);
+            for (int i = 0; i < terms.Count; i++)
+                parts.Add(terms[i].Label + ":" + terms[i].Value);
+            return string.Join("; ", parts);
         }
 
         /// <summary>
