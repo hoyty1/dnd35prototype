@@ -1184,6 +1184,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Magic.SpellSaveDCRulesTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 74,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "SPL-001: SpellSaveDCRules for every class's key ability and class spell level (PHB p.177, DMG p.108), multiclass casting class (the class of the slot actually spent, through a real SpellcastingComponent), Spell Focus and Greater Spell Focus with descriptor school strings (PHB p.94, p.100), Heighten (PHB p.95), gnome illusion +1 (PHB p.17), pre-baked DCs, spell-like abilities (MM p.315), magic-item DCs for scrolls, wands and a staff without a wielder at the level on the item's arcane or divine list (DMG p.214), and the same DC from SpellUtilities and SpellCaster.Cast"
+    },
+    {
       "type": "Tests.Magic.SummonMonster3CreaturesTests",
       "needs": "either",
       "skip": "",

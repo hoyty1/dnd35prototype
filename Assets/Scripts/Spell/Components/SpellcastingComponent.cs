@@ -2070,7 +2070,37 @@ public class SpellcastingComponent : MonoBehaviour
         return GetUniqueAvailableSpells(level);
     }
 
-    private string GetPreferredCastingClassForSpell(SpellData spell)
+    /// <summary>The spell id of the most recent cast this component spent a slot (or cast a cantrip) for (SPL-001).</summary>
+    public string LastCastSpellId { get; private set; }
+
+    /// <summary>The casting class of that slot, or of the spontaneous caster; empty when unknown (SPL-001).</summary>
+    public string LastCastClassName { get; private set; }
+
+    private void RecordCastClass(string spellId, string className)
+    {
+        LastCastSpellId = spellId ?? string.Empty;
+        LastCastClassName = className ?? string.Empty;
+    }
+
+    /// <summary>
+    /// The class whose spell level and key ability set <paramref name="spell"/>'s save DC (PHB p.177): the class of
+    /// the slot this caster last spent on that spell (the slot is already used by the time a cast resolves its DC),
+    /// else the class of an unused prepared slot that holds it, else empty (the rule then uses the class lists).
+    /// </summary>
+    public string GetCastingClassForSpellDC(SpellData spell)
+    {
+        if (spell == null)
+            return string.Empty;
+        if (!string.IsNullOrWhiteSpace(LastCastClassName) && string.Equals(LastCastSpellId, spell.SpellId, System.StringComparison.Ordinal))
+            return LastCastClassName;
+        return GetPreferredCastingClassForSpell(spell);
+    }
+
+    /// <summary>
+    /// The casting class of an unused prepared slot that holds <paramref name="spell"/>, or empty when none does
+    /// (spontaneous casters, or the slot is already spent).
+    /// </summary>
+    public string GetPreferredCastingClassForSpell(SpellData spell)
     {
         if (spell == null)
             return string.Empty;
@@ -2124,6 +2154,7 @@ public class SpellcastingComponent : MonoBehaviour
             }
 
             // Cantrips are unlimited for spontaneous casters too
+            RecordCastClass(spell.SpellId, SpontaneousData.CasterClassName);
             if (spell.SpellLevel == 0)
             {
                 Debug.Log($"[Spellcasting] {Stats.CharacterName} cast cantrip {spell.Name} (spontaneous, unlimited)");
@@ -2145,17 +2176,19 @@ public class SpellcastingComponent : MonoBehaviour
         // Cantrips are unlimited — just check if prepared, don't consume
         if (spell.SpellLevel == 0)
         {
-            bool isPrepared = SpellSlots.Any(s =>
+            var cantripSlot = SpellSlots.FirstOrDefault(s =>
                 s.PreparedSpell != null &&
                 s.PreparedSpell.SpellId == spell.SpellId &&
                 !s.DisabledByNegativeLevel &&
                 (string.IsNullOrWhiteSpace(preferredClass) || string.Equals(s.CasterClassName, preferredClass, System.StringComparison.OrdinalIgnoreCase)));
 
-            if (!isPrepared)
+            if (cantripSlot == null)
             {
                 Debug.LogWarning($"[Spellcasting] {spell.Name} is not prepared!");
                 return false;
             }
+
+            RecordCastClass(spell.SpellId, cantripSlot.CasterClassName);
 
             Debug.Log($"[Spellcasting] {Stats.CharacterName} cast cantrip {spell.Name} ({preferredClass}) (unlimited, no slot consumed)");
             return true;
@@ -2174,6 +2207,7 @@ public class SpellcastingComponent : MonoBehaviour
         }
 
         slot.Cast();
+        RecordCastClass(spell.SpellId, slot.CasterClassName);
         SyncSlotsRemainingFromSpellSlots();
         SyncPreparedSpellsFromSlots();
 
@@ -2260,6 +2294,7 @@ public class SpellcastingComponent : MonoBehaviour
         SpellData spontSpell2 = GetSpontaneousSpell(spellLevel);
         string replacedSpell = slot.PreparedSpell?.Name ?? "empty";
         slot.Cast();
+        RecordCastClass(spontSpell2?.SpellId, slot.CasterClassName);
         SyncSlotsRemainingFromSpellSlots();
         SyncPreparedSpellsFromSlots();
 
@@ -2309,6 +2344,7 @@ public class SpellcastingComponent : MonoBehaviour
         SpellData spontSpell2 = GetSpontaneousSpell(spellLevel);
         string replacedSpell = slot.PreparedSpell?.Name ?? "empty";
         slot.Cast();
+        RecordCastClass(spontSpell2?.SpellId, slot.CasterClassName);
         SyncSlotsRemainingFromSpellSlots();
         SyncPreparedSpellsFromSlots();
 
@@ -2398,6 +2434,7 @@ public class SpellcastingComponent : MonoBehaviour
         }
 
         slot.Cast();
+        RecordCastClass(spell.SpellId, slot.CasterClassName);
         SyncSlotsRemainingFromSpellSlots();
         SyncPreparedSpellsFromSlots();
 
@@ -2846,21 +2883,13 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Get the spell save DC for this caster.
-    /// DC = 10 + spell level + casting ability modifier.
-    /// Wizard uses INT, Cleric uses WIS.
+    /// Get the spell save DC for this caster through the shared rule (<see cref="SpellSaveDCRules"/>, SPL-001),
+    /// with the casting class from <see cref="GetCastingClassForSpellDC"/>.
     /// </summary>
     public int GetSpellDC(SpellData spell)
     {
-        // If the spell carries a pre-baked DC (e.g. scroll), use it directly
-        if (spell.SaveDC > 0)
-            return spell.SaveDC;
-
-        string castingClass = GetPreferredCastingClassForSpell(spell);
-        int castingMod = string.Equals(castingClass, "Wizard", System.StringComparison.OrdinalIgnoreCase)
-            ? Stats.INTMod
-            : Stats.WISMod;
-        return 10 + spell.SpellLevel + castingMod;
+        string castingClass = GetCastingClassForSpellDC(spell);
+        return SpellSaveDCRules.Compute(Stats, spell, null, string.IsNullOrWhiteSpace(castingClass) ? null : castingClass);
     }
 
     /// <summary>

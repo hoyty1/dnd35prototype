@@ -214,8 +214,9 @@ All MonoBehaviour services live on the GameManager GameObject and are created in
 | DiceService | Services/DiceService.cs | static | Dice with an optional context label and logging. | live |
 | TeamUtility | Combat/Core/TeamUtility.cs | static | `IsEnemy`/`IsAlly`: Player vs Enemy only; Neutral is neither; no alive check. | live |
 | CombatLogHelper | Combat/Logging/CombatLogHelper.cs | static | Builds rich-text combat-log strings (colour constants without `#`). | live |
-| CombatCalculationService | Combat/Utilities/CombatCalculationService.cs | static | Small combat formulas (touch attack, damage clamp, crit range, save DC). | live |
-| SpellUtilities | Spell/Casting/SpellUtilities.cs | static | Save DC, casting ability modifier, immunity checks. | live |
+| CombatCalculationService | Combat/Utilities/CombatCalculationService.cs | static | Small combat formulas (touch attack, damage clamp, crit range; the bare 10 + level + modifier, tests only). | live |
+| SpellSaveDCRules | Spell/Casting/SpellSaveDCRules.cs | static | The one spell save DC rule (SPL-001): casting class, class spell level, key ability, Heighten, Spell Focus, gnome illusion; spell-like ability (MM p.315) and magic-item (DMG p.214) variants. | live |
+| SpellUtilities | Spell/Casting/SpellUtilities.cs | static | Save DC and casting ability modifier (delegate to SpellSaveDCRules), immunity checks. | live |
 | SpellCastingHelper | Spell/Casting/SpellCastingHelper.cs | static | Effective CL, duration, dice-count helpers. | live (SR and damage helpers have no callers) |
 | EffectService | Spell/Effects/EffectService.cs | static, stateful | Emanations (static list), daily effects, effect ticking. | live. Expired emanations are removed one by one, but the bulk `ClearAll` is called only from `GameManager.OnCombatEnded`; see [the runtime loop](#what-the-game-is-and-the-runtime-loop). |
 | DiceRoller | Utilities/DiceRoller.cs | static | `D4`..`D100`, `Roll(count, sides)`. | live |

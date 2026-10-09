@@ -327,7 +327,7 @@ public class StaffSpellSelectionPanel : MonoBehaviour
         }
         else
         {
-            statusStr = $"Level {entry.SpellLevel} | CL {(_staffDef != null ? _staffDef.CasterLevel : 0)} | DC {StaffValidator.CalculateStaffSaveDC(entry.SpellLevel)}";
+            statusStr = $"Level {entry.SpellLevel} | CL {(_staffDef != null ? _staffDef.CasterLevel : 0)} | DC {StaffValidator.CalculateStaffSaveDC(_wielder, entry)}";
             statusColor = new Color(0.55f, 0.55f, 0.65f);
         }
 

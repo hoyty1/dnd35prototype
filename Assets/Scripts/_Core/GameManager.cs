@@ -5503,8 +5503,11 @@ public partial class GameManager : MonoBehaviour
             : Mathf.Max(1, item.ConsumableMinimumCasterLevel);
         SpellData consumableSpell = BuildConsumableSpellVariant(baseSpell, item);
 
-        // Use stored DC from scroll (unified ScrollData or legacy metamagic fields)
+        // Use stored DC from scroll (unified ScrollData or legacy metamagic fields); a scroll without one uses the
+        // magic-item DC (DMG p.214; SpellSaveDCRules.ForMagicItem, ITM-008), never the reader's own DC.
         int scrollDC = item.Scroll?.SaveDC ?? (item.HasScrollMetamagic ? item.ScrollSavedDC : 0);
+        if (item.IsScroll && scrollDC <= 0)
+            scrollDC = SpellSaveDCRules.ForMagicItem(item.ScrollSpellLevel > 0 ? item.ScrollSpellLevel : baseSpell.SpellLevel);
         if (item.IsScroll && scrollDC > 0)
         {
             consumableSpell.SaveDC = scrollDC;
@@ -5770,18 +5773,18 @@ public partial class GameManager : MonoBehaviour
             SpellCaster.ApplyMetamagicToSpellData(spellClone, scrollMetamagic);
         }
 
-        // Override the spell's save DC with the scroll's stored DC
+        // Override the spell's save DC with the scroll's stored DC; without one, the magic-item DC of the scroll's
+        // spell level (DMG p.214; SpellSaveDCRules.ForMagicItem, ITM-008), never the reader's own DC.
         // D&D 3.5e: Only Heighten metamagic increases DC; other metamagic does NOT.
         int scrollSaveDC = sd?.SaveDC ?? scrollItem.ScrollSavedDC;
         if (scrollSaveDC > 0)
             spellClone.SaveDC = scrollSaveDC;
-        else if (mmFeats != null && mmFeats.Count > 0)
+        else
         {
-            // Fallback: compute DC using base level + heighten only
-            int dcLevel = spellClone.SpellLevel;
+            int dcLevel = scrollItem.ScrollSpellLevel > 0 ? scrollItem.ScrollSpellLevel : spellClone.SpellLevel;
             if (scrollMetamagic != null && scrollMetamagic.HeightenToLevel > dcLevel)
                 dcLevel = scrollMetamagic.HeightenToLevel;
-            spellClone.SaveDC = 10 + dcLevel;
+            spellClone.SaveDC = SpellSaveDCRules.ForMagicItem(dcLevel);
         }
 
         int scrollCasterLevel = sd?.CasterLevel ?? Mathf.Max(1, scrollItem.ConsumableMinimumCasterLevel);

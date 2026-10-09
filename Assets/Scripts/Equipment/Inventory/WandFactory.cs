@@ -123,17 +123,12 @@ public static class WandFactory
     }
 
     /// <summary>
-    /// D&D 3.5e DMG: Wand save DC = 10 + spell level + minimum ability modifier for that spell level.
-    /// The minimum ability score to cast a spell of level N is 10 + N, giving a modifier of N/2 (rounded down).
-    /// So DC = 10 + SL + (10+SL - 10)/2 = 10 + SL + SL/2. But by convention: DC = 10 + spell level.
-    /// Actually the DMG states: "The DC for a save is 10 + spell level + the minimum ability modifier
-    /// needed to cast that spell." Min ability = 10+SL, modifier = floor((10+SL-10)/2) = floor(SL/2).
-    /// So DC = 10 + SL + floor(SL/2).
+    /// Wand save DC: the magic-item rule, 10 + spell level + the modifier of the minimum ability score needed to cast
+    /// that level (DMG p.214; <see cref="SpellSaveDCRules.ForMagicItem"/>, SPL-001).
     /// </summary>
     public static int CalculateWandSaveDC(int spellLevel)
     {
-        int minAbilityMod = spellLevel / 2; // floor(SL/2) — min ability is 10+SL, mod = (10+SL-10)/2
-        return 10 + spellLevel + minAbilityMod;
+        return SpellSaveDCRules.ForMagicItem(spellLevel);
     }
 
     /// <summary>

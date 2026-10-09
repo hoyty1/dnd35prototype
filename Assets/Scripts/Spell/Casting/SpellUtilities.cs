@@ -28,46 +28,24 @@ public static class SpellUtilities
     // ════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Calculate the save DC for a spell: 10 + spell level + casting ability modifier.
-    /// PHB p.171: "Saving Throw and Spell DCs"
+    /// The save DC of <paramref name="spell"/> cast by <paramref name="caster"/>. Delegates to the one DC rule,
+    /// <see cref="SpellSaveDCRules"/> (PHB p.177, SPL-001): a pre-baked DC (scroll, wand, imbued spell) is kept;
+    /// otherwise 10 + the casting class's level for the spell (heightened level with Heighten Spell) + that class's key
+    /// ability modifier + Spell Focus + the gnome illusion bonus.
     /// </summary>
-    /// <param name="caster">The spellcaster.</param>
-    /// <param name="spell">The spell being cast.</param>
-    /// <returns>The spell save DC, minimum 10.</returns>
-    public static int GetSpellSaveDC(CharacterController caster, SpellData spell)
+    public static int GetSpellSaveDC(CharacterController caster, SpellData spell, MetamagicData metamagic = null)
     {
-        if (spell == null) return 10;
+        return SpellSaveDCRules.Compute(caster, spell, metamagic);
+    }
 
-        // If the spell carries a pre-baked DC (e.g. scroll, imbued spell), use it directly
-        if (spell.SaveDC > 0) return spell.SaveDC;
-
-        if (caster == null || caster.Stats == null)
-            return 10;
-
-        int castingMod = GetCastingAbilityModifier(caster.Stats);
-        return 10 + spell.SpellLevel + castingMod;
+    /// <summary>As <see cref="GetSpellSaveDC(CharacterController, SpellData, MetamagicData)"/>, from stats alone.</summary>
+    public static int GetSpellSaveDC(CharacterStats stats, SpellData spell, MetamagicData metamagic = null)
+    {
+        return SpellSaveDCRules.Compute(stats, spell, metamagic);
     }
 
     /// <summary>
-    /// Calculate the save DC using CharacterStats directly (for cases without a controller).
-    /// </summary>
-    public static int GetSpellSaveDC(CharacterStats stats, SpellData spell)
-    {
-        if (spell == null) return 10;
-
-        // If the spell carries a pre-baked DC (e.g. scroll), use it directly
-        if (spell.SaveDC > 0) return spell.SaveDC;
-
-        if (stats == null)
-            return 10;
-
-        int castingMod = GetCastingAbilityModifier(stats);
-        return 10 + spell.SpellLevel + castingMod;
-    }
-
-    /// <summary>
-    /// Calculate the save DC given a spell level and explicit casting modifier.
-    /// Useful when the modifier is already known or overridden.
+    /// The bare arithmetic 10 + spell level + modifier. Spell casts use <see cref="SpellSaveDCRules"/> instead.
     /// </summary>
     public static int GetSpellSaveDC(int spellLevel, int castingAbilityModifier)
     {
@@ -79,55 +57,23 @@ public static class SpellUtilities
     // ════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Determine the spellcasting ability modifier for a character based on their class.
-    /// PHB p.8/p.43: Wizard=INT, Cleric/Druid/Ranger/Paladin=WIS, Sorcerer/Bard=CHA.
-    /// Paladin uses WIS for spell DCs (CHA governs Smite/Turn/Lay on Hands only).
-    /// Falls back to WIS for unrecognized classes, or highest of INT/WIS/CHA for no class.
+    /// The key spellcasting ability modifier of the character's casting class (PHB p.177: Wizard INT, Sorcerer and
+    /// Bard CHA, Cleric, Druid, Paladin and Ranger WIS; DMG p.108: Adept WIS). A multiclass caster uses the highest
+    /// casting class; without a casting class, the best of INT, WIS and CHA. Delegates to
+    /// <see cref="SpellSaveDCRules.GetKeyAbilityModifier(CharacterStats, SpellData)"/>.
     /// </summary>
-    /// <param name="stats">The character's stats.</param>
-    /// <returns>The relevant ability modifier for spell DCs and casting.</returns>
-    public static int GetCastingAbilityModifier(CharacterStats stats)
+    public static int GetCastingAbilityModifier(CharacterStats stats, SpellData spell = null)
     {
         if (stats == null) return 0;
-
-        // INT-based casters
-        if (stats.IsWizard)
-            return stats.INTMod;
-
-        // WIS-based casters (Paladin uses WIS for spell DCs — PHB p.43;
-        // CHA is for Smite Evil, Turn Undead, Lay on Hands, NOT spell DCs)
-        if (stats.IsCleric || stats.IsDruid || stats.IsRanger || stats.IsPaladin)
-            return stats.WISMod;
-
-        // CHA-based casters
-        if (stats.IsSorcerer || stats.IsBard)
-            return stats.CHAMod;
-
-        // NPC classes: Adept uses WIS
-        if (stats.IsAdept)
-            return stats.WISMod;
-
-        // Fallback: check class name string for edge cases
-        string className = (stats.CharacterClass ?? string.Empty).Trim();
-        if (string.Equals(className, "Druid", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(className, "Ranger", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(className, "Paladin", StringComparison.OrdinalIgnoreCase))
-            return stats.WISMod;
-
-        if (string.Equals(className, "Sorcerer", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(className, "Bard", StringComparison.OrdinalIgnoreCase))
-            return stats.CHAMod;
-
-        // Unknown class: use highest modifier (reasonable for monsters/custom NPCs)
-        return Mathf.Max(stats.INTMod, Mathf.Max(stats.WISMod, stats.CHAMod));
+        return SpellSaveDCRules.GetKeyAbilityModifier(stats, spell);
     }
 
     /// <summary>
     /// Shortcut: get casting ability modifier from a CharacterController.
     /// </summary>
-    public static int GetCastingAbilityModifier(CharacterController caster)
+    public static int GetCastingAbilityModifier(CharacterController caster, SpellData spell = null)
     {
-        return GetCastingAbilityModifier(caster?.Stats);
+        return GetCastingAbilityModifier(caster?.Stats, spell);
     }
 
     // ════════════════════════════════════════════════════════════

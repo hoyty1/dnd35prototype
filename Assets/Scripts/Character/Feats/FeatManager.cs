@@ -445,7 +445,9 @@ public static class FeatManager
 
     /// <summary>
     /// Returns the total Spell Focus DC bonus for a given spell school.
-    /// Spell Focus = +1, Greater Spell Focus = +1 (stacking to +2 total).
+    /// Spell Focus = +1, Greater Spell Focus = +1 (stacking to +2 total; PHB p.94, p.100).
+    /// Schools are compared by <see cref="SpellSchoolUtils.Parse"/>, so a school string with a subschool or
+    /// descriptor ("Evocation [Fire]") still matches its school (part of SPL-009).
     /// </summary>
     public static int GetSpellFocusDCBonus(CharacterStats stats, string spellSchool)
     {
@@ -453,15 +455,23 @@ public static class FeatManager
             return 0;
 
         int bonus = 0;
-        if (stats.HasFeat("Spell Focus") &&
-            string.Equals(stats.SpellFocusSchool, spellSchool, System.StringComparison.OrdinalIgnoreCase))
+        if (stats.HasFeat("Spell Focus") && SameSpellSchool(stats.SpellFocusSchool, spellSchool))
             bonus += 1;
 
-        if (stats.HasFeat("Greater Spell Focus") &&
-            string.Equals(stats.GreaterSpellFocusSchool, spellSchool, System.StringComparison.OrdinalIgnoreCase))
+        if (stats.HasFeat("Greater Spell Focus") && SameSpellSchool(stats.GreaterSpellFocusSchool, spellSchool))
             bonus += 1;
 
         return bonus;
+    }
+
+    private static bool SameSpellSchool(string chosenSchool, string spellSchool)
+    {
+        if (string.IsNullOrWhiteSpace(chosenSchool) || string.IsNullOrWhiteSpace(spellSchool))
+            return false;
+        SpellSchool chosen = SpellSchoolUtils.Parse(chosenSchool);
+        if (chosen != SpellSchool.None)
+            return chosen == SpellSchoolUtils.Parse(spellSchool);
+        return string.Equals(chosenSchool.Trim(), spellSchool.Trim(), System.StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

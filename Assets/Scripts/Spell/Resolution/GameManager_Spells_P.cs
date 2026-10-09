@@ -139,8 +139,8 @@ public partial class GameManager
             return true;
         }
 
-        // Fort save: DC = 10 + spell level (4) + WIS mod
-        int saveDC = CombatCalculationService.SpellSaveDC(4, caster.Stats.WISMod);
+        // Fort save at the spell's DC (Clr 4, Drd 3; SpellSaveDCRules, SPL-001, SPL-031)
+        int saveDC = GetSpellSaveDC(caster, spell);
         var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC);
         bool saveSuccess = saveResult.Saved;
 

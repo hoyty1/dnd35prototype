@@ -33,7 +33,7 @@ public partial class GameManager
         string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Caster";
         int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
         int maxTargets = casterLevel; // One creature per caster level
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Buff("📏", $"{casterName} casts {spellName}!"));
 

@@ -257,12 +257,14 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Delegates to <see cref="SpellUtilities.GetSpellSaveDC(CharacterController, SpellData)"/>.
-    /// Kept as an instance method so existing call-sites compile unchanged.
+    /// The save DC of a spell resolved by a GameManager handler, through the one DC rule
+    /// (<see cref="SpellSaveDCRules"/>, SPL-001). When <paramref name="spell"/> is the pending PC cast, its metamagic
+    /// (<c>_pendingMetamagic</c>) is passed so a heightened spell uses the heightened level (PHB p.95).
     /// </summary>
     private int GetSpellSaveDC(CharacterController caster, SpellData spell)
     {
-        return SpellUtilities.GetSpellSaveDC(caster, spell);
+        MetamagicData metamagic = spell != null && ReferenceEquals(spell, _pendingSpell) ? _pendingMetamagic : null;
+        return SpellSaveDCRules.Compute(caster, spell, metamagic);
     }
 
     private int GetGreaseDurationRounds(CharacterController caster)

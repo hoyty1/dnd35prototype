@@ -148,7 +148,7 @@ public partial class GameManager
             return null;
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"🐌 {casterName} casts Slow on {target.Stats.CharacterName}!"));
@@ -256,7 +256,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -468,7 +468,7 @@ public partial class GameManager
 
         // Sound Burst damage is handled by normal spell damage resolution.
         // Here we check for the stun: Fort save or stunned for 1 round.
-        int saveDC = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, GetSpellSaveAbilityModifier(caster, spell));
+        int saveDC = GetSpellSaveDC(caster, spell);
         var fortResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDC);
 
         Debug.Log($"[SoundBurst] Fort save: {target.Stats.CharacterName} rolled {fortResult.Total} vs DC {saveDC}");

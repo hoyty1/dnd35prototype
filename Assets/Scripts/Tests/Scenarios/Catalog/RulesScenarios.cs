@@ -112,7 +112,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 104;
+        public const int Count = 105;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -223,6 +223,7 @@ namespace Tests.Scenarios
             yield return S("npc-spawn-alignment-gear", NpcSpawnAlignmentGear);
             yield return S("class-progression", ClassProgressionHpBabHd);
             yield return S("creature-progression", CreatureProgression);
+            yield return S("spell-save-dc", SpellSaveDc);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -4948,6 +4949,230 @@ namespace Tests.Scenarios
             ok &= ProgressionCheck(ctx, "goblin template still 1 HD", NPCDatabase.Get("goblin").HitDice, 1);
             ok &= ProgressionCheck(ctx, "ogre template still 4 HD", NPCDatabase.Get("ogre").HitDice, 4);
             return ok;
+        }
+
+        // ── Spell save DCs (SPL-001) ────────────────────────────────────
+
+        private const string SpellDcNotePrefix = "spell-dc expect ";
+
+        /// <summary>
+        /// SPL-001: one save DC rule (SpellSaveDCRules) for every cast path. PHB p.177: DC = 10 + the spell's level for
+        /// the casting class + INT for a wizard, CHA for a sorcerer or bard, WIS for a cleric; PHB p.100: Spell Focus +1
+        /// for its school. Two real casts, whose combat log prints the DC ("... vs DC N"): the Quick Start wizard (Elara,
+        /// INT 17; a Ui actor, so the PC pipeline, with Charm Person prepared in place of Enlarge Person) casts Charm Person
+        /// (Sor/Wiz/Brd 1, Enchantment, Will negates, PHB p.209) at a goblin, and neutral_mage_test (Wizard 3, INT 16,
+        /// WIS 14) casts Daze (Sor/Wiz/Brd 0, PHB p.217) at the Quick Start cleric through the NPC cast executor. The
+        /// Quick Start sorcerer (Kael, CHA 17, WIS 13; given Spell Focus (Enchantment), since character creation never
+        /// sets the school, CHR-021, and Charm Person in place of Mage Armor) and bard (Lyric, CHA 16, WIS 10) cannot cast
+        /// on the NPC executor (SPL-123: SpellcastingComponent.CanCast ignores a spontaneous caster's known spells; an
+        /// XFail below), and the Ui driver casts only from prepared slots, so the Assert step resolves their Charm Person,
+        /// and the evil_acolyte_test cleric's (Cleric 3, WIS 16, INT 12, CHA 13) Hold Person (Clr 2, Sor/Wiz 3, Will
+        /// negates), through SpellCaster.Cast, the resolver the PC and NPC single-target pipelines share. Before SPL-001
+        /// SpellCaster.Cast used WIS for every non-wizard: Kael's DC was 13 and Lyric's 11; now 15 (10 + 1 + CHA 3 +
+        /// Spell Focus 1) and 14. The Assert step also checks the handler DC helper (GameManager.GetSpellSaveDC, used by
+        /// every GameManager spell handler): with the wizard's Hold Person as the pending cast and Heighten to 5th as the
+        /// pending metamagic it gives 10 + 5 + INT (PHB p.95), and a spell that is not the pending cast keeps level 3.
+        /// </summary>
+        private static ScenarioDef SpellSaveDc()
+        {
+            return Rules("rules/spell-save-dc", "Spell save DCs use the casting class's key ability and Spell Focus on every cast path (PHB p.177, p.100; SPL-001)")
+                .Covers("SPL-001", "SPL-123", "PHB p.177", "PHB p.100", "PHB p.209", "PHB p.217", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("sorc", ActorSource.QuickStart("Sorcerer"), 6, 10, Control.Scripted)
+                .Pc("bard", ActorSource.QuickStart("Bard"), 6, 12, Control.Idle)
+                .Pc("wizard", ActorSource.QuickStart("Wizard"), 5, 11, Control.Ui)
+                .Pc("cleric", ActorSource.QuickStart("Cleric"), 4, 13, Control.Idle)
+                .Npc("mage", "neutral_mage_test", 9, 11, Control.Scripted)
+                .Npc("acolyte", "evil_acolyte_test", 9, 13, Control.Idle)
+                .Npc("gob1", "goblin", 8, 10, Control.Idle)
+                .Npc("gob2", "goblin", 8, 12, Control.Idle)
+                .Tweak("sorc", c =>
+                {
+                    c.Stats.SpellFocusSchool = "Enchantment";
+                    SpontaneousCastingData known = c.Spellcasting != null ? c.Spellcasting.SpontaneousData : null;
+                    if (known != null && known.SpellsKnownByLevel[1] != null)
+                    {
+                        known.SpellsKnownByLevel[1].Remove(DND35e.Identifiers.SpellNames.MAGE_ARMOR);
+                        known.LearnSpell(DND35e.Identifiers.SpellNames.CHARM_PERSON, 1);
+                    }
+                })
+                .Tweak("wizard", c =>
+                {
+                    SpellcastingComponent sc = c.Spellcasting;
+                    if (sc == null || sc.SpellSlots == null)
+                        return;
+                    foreach (SpellSlot slot in sc.SpellSlots)
+                        if (slot != null && slot.PreparedSpell != null && slot.PreparedSpell.SpellId == DND35e.Identifiers.SpellNames.ENLARGE_PERSON)
+                        {
+                            slot.PreparedSpell = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.CHARM_PERSON).Clone();
+                            break;
+                        }
+                })
+                .Initiative("sorc", "wizard", "mage", "bard", "cleric", "acolyte", "gob1", "gob2")
+                .Turn("sorc", 1,
+                    Step.Assert("Each class's DC uses its key ability and level (PHB p.177) and Spell Focus (PHB p.100)", SpellDcChecks),
+                    Step.Cast(DND35e.Identifiers.SpellNames.CHARM_PERSON, "gob1"))
+                .Turn("wizard", 1, Step.Cast(DND35e.Identifiers.SpellNames.CHARM_PERSON, "gob2"))
+                .Turn("mage", 1, Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "cleric"))
+                .Expect("Every DC check holds", Expect.AssertsPass())
+                .Expect("The PC wizard's Charm Person and the NPC wizard's Daze ran", Expect.All(
+                    Expect.StepStatus("wizard", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("mage", 1, "Cast", 0, "done")))
+                .ExpectXFail("SPL-123", "The Quick Start sorcerer casts a known spell through the NPC cast executor", Expect.StepStatus("sorc", 1, "Cast", 0, "done"))
+                .Expect("Each logged save rolls against the caster's own DC: 10 + class level + INT for both wizards (PHB p.177)", v =>
+                {
+                    List<TraceEvent> notes = v.Of("note").Where(e => (e.Str("text") ?? "").StartsWith(SpellDcNotePrefix, StringComparison.Ordinal)).ToList();
+                    if (notes.Count == 0)
+                        return ExpectResult.Inconclusive("no expected DC was recorded");
+                    var got = new List<string>();
+                    foreach (TraceEvent note in notes)
+                    {
+                        string body = note.Str("text").Substring(SpellDcNotePrefix.Length);
+                        int eq = body.LastIndexOf('=');
+                        int bar = body.IndexOf('|');
+                        string name = body.Substring(0, bar);
+                        string spellName = body.Substring(bar + 1, eq - bar - 1);
+                        int expected = int.Parse(body.Substring(eq + 1));
+                        var r = new System.Text.RegularExpressions.Regex(System.Text.RegularExpressions.Regex.Escape(name + " casts " + spellName + "!") + @"[\s\S]*?vs DC (\d+)");
+                        TraceEvent log = v.Of("log").FirstOrDefault(e => r.IsMatch(e.Str("text") ?? ""));
+                        if (log == null)
+                            return ExpectResult.Inconclusive("no " + spellName + " save logged for " + name);
+                        int dc = int.Parse(r.Match(log.Str("text")).Groups[1].Value);
+                        if (dc != expected)
+                            return ExpectResult.Fail(name + " DC " + dc + ", expected " + expected, log.Seq, note.Seq);
+                        got.Add(name + " " + dc);
+                    }
+                    return ExpectResult.Pass(string.Join(", ", got));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// The Assert step of <see cref="SpellSaveDc"/>: the key ability SpellSaveDCRules picks for each live caster; the
+        /// sorcerer's, bard's and acolyte's DCs through SpellCaster.Cast; and a note with each real caster's expected DC
+        /// ("name|spell=DC") for the log expectation.
+        /// </summary>
+        private static bool SpellDcChecks(ScenarioContext ctx)
+        {
+            SpellData daze = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.DAZE);
+            SpellData charm = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.CHARM_PERSON);
+            SpellData hold = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.HOLD_PERSON);
+            if (daze == null || charm == null || hold == null)
+            {
+                ctx.Note("spell-dc mismatch: Daze, Charm Person or Hold Person missing");
+                return false;
+            }
+
+            bool ok = true;
+            // Key ability and class spell level: arcane casters with Daze (Sor/Wiz/Brd 0), divine casters with
+            // Hold Person at its cleric level (PHB p.177: "the spell level applicable to your class").
+            var keyAbility = new[]
+            {
+                ("sorc", daze, "CHA", "Sorcerer"), ("bard", daze, "CHA", "Bard"), ("wizard", daze, "INT", "Wizard"),
+                ("cleric", hold, "WIS", "Cleric"), ("mage", daze, "INT", "Wizard"), ("acolyte", hold, "WIS", "Cleric"),
+            };
+            foreach (var row in keyAbility)
+            {
+                SpellSaveDCBreakdown dc = SpellSaveDCRules.Explain(ctx.Get(row.Item1), row.Item2);
+                int level = row.Item2.GetSpellLevelFor(row.Item4);
+                if (dc.Ability != row.Item3 || dc.SpellLevel != level)
+                {
+                    ctx.Note("spell-dc mismatch: " + row.Item1 + " " + row.Item2.Name + " key ability " + dc.Ability + " level " + dc.SpellLevel
+                        + ", expected " + row.Item3 + " level " + level);
+                    ok = false;
+                }
+            }
+
+            // Through the shared single-target resolver: caster, spell, target, key ability modifier, casting class.
+            var resolved = new[]
+            {
+                ("sorc", charm, "gob1", ctx.Get("sorc").Stats.CHAMod, "Sorcerer"),
+                ("bard", charm, "gob2", ctx.Get("bard").Stats.CHAMod, "Bard"),
+                ("acolyte", hold, "bard", ctx.Get("acolyte").Stats.WISMod, "Cleric"),
+            };
+            foreach (var row in resolved)
+            {
+                CharacterController caster = ctx.Get(row.Item1);
+                CharacterController target = ctx.Get(row.Item3);
+                CharacterStats s = caster.Stats;
+                int focus = FeatManager.GetSpellFocusDCBonus(s, row.Item2.School);
+                int expected = 10 + row.Item2.GetSpellLevelFor(row.Item5) + row.Item4 + focus;
+                SpellResult result = SpellCaster.Cast(row.Item2.Clone(), s, target.Stats, null, false, false, caster, target);
+                int got = result != null && result.RequiredSave ? result.SaveDC : -1;
+                ctx.Note("spell-dc " + row.Item1 + " " + s.CharacterName + " " + row.Item2.Name + " DC " + got + " (expected " + expected
+                    + "; the pre-SPL-001 WIS formula gives " + (10 + row.Item2.SpellLevel + s.WISMod + focus) + ")");
+                if (got != expected)
+                    ok = false;
+            }
+
+            ok &= HandlerHeightenCheck(ctx, hold);
+
+            // The real casts: notes the log expectation reads.
+            var real = new[] { ("wizard", charm), ("mage", daze) };
+            foreach (var row in real)
+            {
+                CharacterStats s = ctx.Get(row.Item1).Stats;
+                int expected = 10 + row.Item2.SpellLevel + s.INTMod + FeatManager.GetSpellFocusDCBonus(s, row.Item2.School);
+                int rule = SpellSaveDCRules.Compute(ctx.Get(row.Item1), row.Item2);
+                if (rule != expected)
+                {
+                    ctx.Note("spell-dc mismatch: " + row.Item1 + " SpellSaveDCRules " + rule + ", expected " + expected);
+                    ok = false;
+                }
+                ctx.Note(SpellDcNotePrefix + s.CharacterName + "|" + row.Item2.Name + "=" + expected);
+            }
+            return ok;
+        }
+
+        /// <summary>
+        /// The handler DC helper (private GameManager.GetSpellSaveDC, called by every GameManager spell handler) adds the
+        /// pending cast's Heighten (PHB p.95) for the pending spell only. Sets and restores _pendingSpell and
+        /// _pendingMetamagic by reflection.
+        /// </summary>
+        private static bool HandlerHeightenCheck(ScenarioContext ctx, SpellData hold)
+        {
+            GameManager gm = GameManager.Instance;
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            System.Reflection.FieldInfo spellField = typeof(GameManager).GetField("_pendingSpell", flags);
+            System.Reflection.FieldInfo mmField = typeof(GameManager).GetField("_pendingMetamagic", flags);
+            System.Reflection.MethodInfo helper = typeof(GameManager).GetMethod("GetSpellSaveDC", flags, null,
+                new[] { typeof(CharacterController), typeof(SpellData) }, null);
+            if (gm == null || spellField == null || mmField == null || helper == null)
+            {
+                ctx.Note("spell-dc mismatch: GameManager, _pendingSpell, _pendingMetamagic or GetSpellSaveDC not found");
+                return false;
+            }
+
+            CharacterController wizard = ctx.Get("wizard");
+            CharacterStats s = wizard.Stats;
+            int focus = FeatManager.GetSpellFocusDCBonus(s, hold.School);
+            SpellData pending = hold.Clone();
+            SpellData other = hold.Clone();
+            var heighten = new MetamagicData();
+            heighten.Toggle(MetamagicFeatId.HeightenSpell);
+            heighten.HeightenToLevel = 5;
+
+            object oldSpell = spellField.GetValue(gm);
+            object oldMm = mmField.GetValue(gm);
+            int heightened, plain;
+            try
+            {
+                spellField.SetValue(gm, pending);
+                mmField.SetValue(gm, heighten);
+                heightened = (int)helper.Invoke(gm, new object[] { wizard, pending });
+                plain = (int)helper.Invoke(gm, new object[] { wizard, other });
+            }
+            finally
+            {
+                spellField.SetValue(gm, oldSpell);
+                mmField.SetValue(gm, oldMm);
+            }
+
+            int expectedHeightened = 10 + 5 + s.INTMod + focus;
+            int expectedPlain = 10 + hold.GetSpellLevelFor("Wizard") + s.INTMod + focus;
+            ctx.Note("spell-dc handler helper: pending Hold Person heightened to 5th DC " + heightened + " (expected " + expectedHeightened
+                + "), another Hold Person DC " + plain + " (expected " + expectedPlain + ")");
+            return heightened == expectedHeightened && plain == expectedPlain;
         }
 
         /// <summary>Passes when the traced actor has the level, BAB and max HP given.</summary>

@@ -28,7 +28,7 @@ public partial class GameManager
         if (caster == null || target == null || spell == null) return null;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -110,7 +110,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -206,7 +206,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -427,7 +427,7 @@ public partial class GameManager
         if (isUndead)
         {
             int damage = Mathf.Min(casterLevel * 10, 150);
-            int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+            int saveDc = GetSpellSaveDC(caster, spell);
             var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
             sb.AppendLine($"  ☠ Undead — positive energy deals damage!");
             saveResult.AppendHalfDamageLog(sb);
@@ -708,7 +708,7 @@ public partial class GameManager
         if (caster == null || target == null || spell == null) return null;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
         string casterName = caster.Stats.CharacterName;
 
         var sb = new StringBuilder();

@@ -75,7 +75,7 @@ Use when the spell needs behavior beyond what the generic cast path does with it
 4. **Wire Shape B into `ApplySpellBuff` ABOVE line 7659** (`// Use StatusEffectManager for tracked buff application`), next to MAGIC_STONE (`:7565`) or SHIELD_OF_FAITH (`:7599`). `ApplySpellBuff` is shared by the PC chain, the NPC chain and the generic AoE loop, so nothing else needs wiring, but it only runs for Buff/Debuff/Control/Illusion/Wall after reclassification.
 5. **Use the shared helpers; never hand-roll rules.**
    - Caster level and duration: `SpellCastingHelper.GetEffectiveCasterLevel(caster, spell)`, `CalculateDuration(spell, cl)` (`Spell/Casting/SpellCastingHelper.cs:103, :144`).
-   - DC: `SpellUtilities.GetSpellSaveDC(caster, spell)` (honors a pre-baked `spell.SaveDC` from scrolls/wands).
+   - DC: inside a GameManager handler `GetSpellSaveDC(caster, spell)` (adds the pending cast's Heighten; never the static `SpellUtilities.GetSpellSaveDC` there, which drops it); elsewhere `SpellSaveDCRules.Compute(caster, spell, metamagic)` or `SpellUtilities.GetSpellSaveDC`. All honor a pre-baked `spell.SaveDC` from scrolls/wands. A spell-like ability uses `SpellSaveDCRules.ComputeSpellLikeAbility` (MM p.315), a magic item `SpellSaveDCRules.ForMagicItem` (DMG p.214). A special DC built on the spell's DC (Dismissal: DC - HD + CL, PHB p.222) starts from it.
    - Defenses: `SpellSaveResolver.RollSave / RollSpellResistance / ResolveSpellDefenses / ApplyEvasion / ApplyBlinkHalving` (`Spell/Casting/SpellSaveResolver.cs:193-347`).
    - Damage: `new DamagePacket { RawDamage, Types = new HashSet<DamageType>{...}, Source = AttackSource.Spell, SourceName }` + `target.Stats.ApplyIncomingDamage(raw, packet)` (template `GameManager.SpellCasting.cs:6330-6342`), then `CheckConcentrationOnDamage(target, dmg)`; on kill `target.OnDeath()` + `HandleSummonDeathCleanup(target)`.
    - Tracked effect: `StatusEffectManager.AddEffect`. Conditions: `_conditionService.ApplyCondition(target, type, rounds, source: caster, sourceNameOverride: spell.Name, sourceCategory: "Spell", sourceId: spell.SpellId)` (pattern `:6379-6386`).
@@ -92,7 +92,7 @@ Pitfalls:
 - Before moving `ApplyMagicFangEffect` above `:7659`, fix its double bonus: `AddEffect` already applies `BuffAttackBonus/BuffDamageBonus`, the handler adds +1 again (`GameManager_Spells_MagicFang.cs:80-81`) and `RemoveEffect` subtracts once.
 - `appliesTrackedEffect` excludes Dispel/Escape/Divination/Utility/Summon. After reclassification, the `ApplySpellBuff` branches for Dispel Magic (`:7643`, the only cast route to `PerformTargetedDispel`), Remove Fear, See Invisibility and alignment detection are never reached from a cast (static analysis). New spells in those categories need a TryResolve handler or a wider gate.
 - **The NPC chain is a divergent copy**: 17 handlers versus about 50 on the PC side and null metamagic (`SpellCaster.Cast(..., null, ...)` in `TryNPCPerformSpellCast`). Both chains compute `effectNegatedBySave` with `SpellUtilities.IsEffectNegatedBySave`; use it rather than testing `EffectType` locally, because `SpellCategoryClassifier` turns many Debuff spells into Control.
-- `SpellCaster.Cast` computes its own DC with INT for wizards and WIS for everyone else (`SpellCaster.cs:378-381`), so Sorcerer/Bard DCs on the generic path are wrong. `SpellUtilities.GetSpellSaveDC` uses the right ability but ignores Spell Focus and Heighten. Never hand-roll DCs (616bf32 patched about 10).
+- Every cast path gets its DC from `SpellSaveDCRules` (SPL-001): the casting class's key ability and spell level, Heighten, Spell Focus and the gnome illusion bonus. Never hand-roll DCs or pass a hard-coded level (616bf32 patched about 10; SPL-001 removed the last ones).
 - 22 `target.Stats.TakeDamage(int)` calls under `Assets/Scripts/Spell` bypass energy resistance, immunity and Protection from Energy. Use `ApplyIncomingDamage` with a `DamagePacket`.
 - The generic StatusEffectManager path passes `caster.Stats.Level` (character level, not caster level, `:7667`).
 - Two `SaveResult` structs exist: global `SaveResult` (`SpellSaveResolver.cs:42`, has `Saved`) and `SavingThrowResolver.SaveResult`. f706ac6 and 615b1df fixed handlers that used non-existent members.
@@ -168,7 +168,7 @@ Files: `Spell/Components/MetamagicData.cs`, `Character/Feats/FeatDefinitions.cs`
 Pitfalls:
 - Missing switch cases fail silently: level adjustments default to 0 (a free feat), `IsApplicable` to false (never offered), `GetDisplayName` to "Unknown" (`HasFeat` never matches).
 - Metamagic reaches only spells resolved by `SpellCaster.Cast`. Custom TryResolve handlers ignore `_pendingMetamagic`; NPCs never use metamagic.
-- Only Heighten should change the save DC (616bf32, PHB p.88). `SpellCaster.Cast` uses the heightened level; `SpellUtilities.GetSpellSaveDC` ignores it.
+- Only Heighten changes the save DC (PHB p.95). `SpellSaveDCRules` reads it from the `MetamagicData` passed in, else from `spell.MetamagicDataRef`; a handler outside the pending PC cast must pass the metamagic itself.
 - Static `GetDisplayName(feat)` and instance `GetDisplayName()` both exist (167daee fixed 13 call sites). The instance one joins `GetAdjective` values sorted by enum int and is used as a matching key; keep adjectives unique.
 - Append, never insert: `ScrollData.MetamagicFeats`, `ItemData.ScrollMetamagicFeats` and `WandData` store `MetamagicFeatId` values.
 - Three implementations must stay in sync: live cast, `BuildConsumableSpellVariant` (Empower approximated as average x 0.5 added to `BonusDamage`), and validation.
@@ -207,7 +207,7 @@ Pitfalls:
 4. Hook the mechanic where it is read:
    - Saves, initiative, AC: `FeatManager.GetFortitudeSaveBonus/GetReflexSaveBonus/GetWillSaveBonus/GetInitiativeBonus/GetACBonus` (`:73-113`).
    - Attack/damage: `AttackCalculator.CalculateAllFeatModifiers` (`Combat/Core/AttackCalculator.cs`), called only by `CharacterController.BuildAttackBonus`, which `Attack`, `FullAttack`, `DualWieldAttack` and `FlurryOfBlows` all use (CMB-043). A term with no `CombatResult` field also needs a log entry in `AttackBonusBreakdown.ApplyToResult`. Patch `PerformRakeAttacks` and the grapple weapon attacks separately (CMB-087).
-   - On-hit riders: `PerformSingleAttackWithCrit` (`:6353`). AoO rules: `ThreatSystem.ExecuteAoO` (`Combat/Core/ThreatSystem.cs:491`). Spell DC: `SpellCaster.Cast` (Spell Focus at `:380`). SR: `SpellSaveResolver.RollSpellResistance` (`:242`).
+   - On-hit riders: `PerformSingleAttackWithCrit` (`:6353`). AoO rules: `ThreatSystem.ExecuteAoO` (`Combat/Core/ThreatSystem.cs:491`). Spell DC: `SpellSaveDCRules.Explain` (Spell Focus through `FeatManager.GetSpellFocusDCBonus`). SR: `SpellSaveResolver.RollSpellResistance` (`:242`).
 5. Trackers: per round, a `CharacterStats` field (pattern `DeflectArrowsUsedThisRound`) reset in `CharacterController.StartNewTurn` (`:10340`); per day, a reset in `GameManager.RestorePartyAfterCombat` (`_Core/GameManager.cs:868`), which runs after every combat.
 6. Toggle/activated feats: fields on `CombatUI` (`[Header("Feat Controls")]`), created in `SceneBootstrap.CreateFeatControls` (`_Core/SceneBootstrap.cs:952`; Power Attack `:958`, Rapid Shot `:976-982`), wired in `SceneBootstrap.WireButtons` (`:1241-1244`) to a public GameManager handler (pattern `OnPowerAttackSliderChanged`, `OnRapidShotTogglePressed`), refreshed in `CombatUI.UpdateFeatControls` (`:796`).
 7. NPCs: Power Attack/Combat Expertise-like feats use `ManeuverPreferences.UsePowerAttack/UseCombatExpertise` (`AI/AIBehaviorData.cs:58-69`); others need explicit `AIService` logic. Give monsters the feat via `Feats` in `NPCDatabase_*.cs`.
@@ -218,7 +218,7 @@ Files: `Character/Feats/FeatDefinitions.cs`, `FeatManager.cs`, `Combat/Core/Atta
 Pitfalls:
 - `FeatBenefit` numeric fields and flags (`AttackBonus`, `ACBonus`, `Grants*`, ...) are never read. Only `Benefit.SkillBonuses`, `RequiresWeaponChoice` and `Description` are consumed; behavior is keyed on the name string. A typo across FeatDefinitions, FeatManager, class `InitFeats` and NPC lists fails silently.
 - 65be722 declared Stunning Fist and Manyshot toggle panels on CombatUI but never built them; `CombatFlowService.PerformWhirlwindAttack/PerformManyshotAttack` have no callers. Stunning Fist, Manyshot and Whirlwind Attack are unreachable in play. `StunningFistUsesRemaining` is never reset after combat.
-- Spell Focus only affects spells resolved by `SpellCaster.Cast`; `SpellUtilities.GetSpellSaveDC` has no feat bonus.
+- Spell Focus applies on every cast path through `SpellSaveDCRules`, but character creation never sets `SpellFocusSchool` (CHR-021), so it only works where code sets the school.
 - Class-scaled feats use `stats.GetClassLevel("Monk")`, not `stats.Level` (40b58d1). Weapon-specific feats store the weapon in lists like `stats.WeaponFocusWeapons` (b1746a8).
 - Route SR through `RollSpellResistance`; cfbd478 had to patch inline SR checks for Spell Penetration.
 
@@ -420,7 +420,7 @@ Pitfalls:
 - `PotionFactory` and `WandFactory` skip existing ids; `ScrollFactory` overwrites. So the legacy `potion_cure_light_wounds` wins over the factory one, with `ConsumableEffect = SpellEffect` (not HealHP).
 - An item with `ConsumableEffect` None fails with "has no implemented consumable effect yet". `CraftingExecutor.CreatePotion` never sets it, so crafted potions probably cannot be used (4e2dd1a fixed the same for scrolls; not verified in Play mode).
 - Wand charges live in both `ItemData.CurrentCharges` and `WandData.CurrentCharges` (3e32bd8 fixed drift). Wand sell value is implemented twice, differently (`StoreInventory.GetSellPrice`, `EconomyService.GetSellPrice`).
-- Wand DC is `10 + SL + floor(SL/2)`; only Heighten raises it (616bf32). Consumable metamagic is applied in `BuildConsumableSpellVariant`.
+- Scroll and wand DC is `10 + SL + floor(SL/2)` (`SpellSaveDCRules.ForMagicItem`, DMG p.214) at the level on the item's arcane or divine list (`GetItemSpellLevel`); only Heighten raises it (616bf32, SPL-001). Consumable metamagic is applied in `BuildConsumableSpellVariant`.
 - Legacy `ItemID` scroll enums map to ids no factory creates (`scroll_magic_missile` vs `scroll_arcane_magic_missile`). Use the factory id strings.
 - Crafted consumables get GUID ids that are not in ItemDatabase.
 

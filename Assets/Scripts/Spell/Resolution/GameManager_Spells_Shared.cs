@@ -134,8 +134,8 @@ public partial class GameManager
         if (halfDamage)
             damage = Mathf.Max(1, damage / 2);
 
-        // Will save: DC = 10 + spell level (4) + WIS mod
-        int saveDC = CombatCalculationService.SpellSaveDC(4, caster.Stats.WISMod);
+        // Will save at the spell's DC (Clr 4 or domain 4; SpellSaveDCRules, SPL-001, SPL-031)
+        int saveDC = GetSpellSaveDC(caster, spell);
         var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDC);
         bool saveSuccess = saveResult.Saved;
 

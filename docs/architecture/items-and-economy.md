@@ -167,7 +167,7 @@ Everything else goes through `TryApplySpellConsumableEffect`, which affects only
 Known deviations (details in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)):
 
 - On a healing wand (`HealHP`), the healing roll happens before `WandValidator` and the UMD check run. A failed check still heals and spends no charge.
-- Save DC rules differ by source. Store scrolls use 10 + SL, wands use 10 + SL + SL/2, and crafted metamagic scrolls bake in the crafter's ability modifier.
+- Scrolls and wands use the DMG item DC, 10 + SL + SL/2 (`SpellSaveDCRules.ForMagicItem`, DMG p.214, since 2026-10-09) at the level on the item's arcane or divine list (prices still use the lowest level on any list, ITM-074), but scrolls crafted in the workshop bake in the crafter's own DC through the shared rule (ITM-008, owner question).
 - Crafted potions cannot be used (see [Crafting](#crafting)).
 
 ## Enchantments and materials

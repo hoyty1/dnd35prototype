@@ -77,13 +77,6 @@ public static class SpellCaster
         if (!string.IsNullOrEmpty(protection.SourceSpellName))
             result.ProtectionSourceName = protection.SourceSpellName;
 
-        // ========== DETERMINE EFFECTIVE SPELL LEVEL (for save DC with Heighten) ==========
-        int effectiveSpellLevel = spell.SpellLevel;
-        if (isHeightened && metamagic.HeightenToLevel > spell.SpellLevel)
-        {
-            effectiveSpellLevel = metamagic.HeightenToLevel;
-        }
-
         // ========== DEAFENED VERBAL SPELL FAILURE ==========
         if (casterStats != null
             && spell != null
@@ -369,21 +362,13 @@ public static class SpellCaster
             result.RequiredSave = true;
             result.SaveType = spell.SavingThrowType;
 
-            if (spell.SaveDC > 0)
-            {
-                // Use pre-baked DC (scroll, imbued spell, or other external source)
-                result.SaveDC = spell.SaveDC;
-                Debug.Log($"[SpellCaster] Using pre-baked save DC {spell.SaveDC} for {spell.Name}");
-            }
-            else
-            {
-                int castingMod = casterStats.IsWizard ? casterStats.INTMod : casterStats.WISMod;
-                // Heighten Spell increases save DC by using the heightened spell level
-                int spellFocusBonus = FeatManager.GetSpellFocusDCBonus(casterStats, spell.School);
-                result.SaveDC = 10 + effectiveSpellLevel + castingMod + spellFocusBonus;
-                if (spellFocusBonus > 0)
-                    Debug.Log($"[SpellCaster] Spell Focus bonus +{spellFocusBonus} to DC for {spell.School} school");
-            }
+            // One DC rule for every cast path (SpellSaveDCRules, SPL-001): a pre-baked DC (scroll, wand, imbued
+            // spell) is kept; otherwise 10 + the casting class's (or heightened) level + its key ability + Spell Focus.
+            SpellSaveDCBreakdown dc = casterController != null
+                ? SpellSaveDCRules.Explain(casterController, spell, metamagic)
+                : SpellSaveDCRules.Explain(casterStats, spell, metamagic);
+            result.SaveDC = dc.Total;
+            Debug.Log($"[SpellCaster] {spell.Name} save {dc}");
 
             if (forceTargetToFailSave)
             {

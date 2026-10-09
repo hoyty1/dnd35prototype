@@ -315,7 +315,7 @@ public static class CraftingExecutor
 
         // Calculate DC using DMG wand formula if not provided
         int dcLevel = (heightenToLevel > spell.SpellLevel) ? heightenToLevel : spell.SpellLevel;
-        int dc = savedDC > 0 ? savedDC : (10 + dcLevel + dcLevel / 2);
+        int dc = savedDC > 0 ? savedDC : SpellSaveDCRules.ForMagicItem(dcLevel);
 
         // Create unified WandData
         WandData wandData = WandData.Create(

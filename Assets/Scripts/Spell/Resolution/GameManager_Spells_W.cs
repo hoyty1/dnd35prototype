@@ -370,9 +370,8 @@ public partial class GameManager
     /// </summary>
     private int GetWallOfIceReflexDC(CharacterController caster, SpellData spell)
     {
-        int abilityMod = GetSpellSaveAbilityModifier(caster, spell);
-        int spellLevel = spell != null ? spell.SpellLevel : 4;
-        return CombatCalculationService.SpellSaveDC(spellLevel, abilityMod);
+        // The spell's own save DC (SpellSaveDCRules, SPL-001).
+        return GetSpellSaveDC(caster, spell ?? SpellDatabase.GetSpell(SpellNames.WALL_OF_ICE));
     }
 
     /// <summary>

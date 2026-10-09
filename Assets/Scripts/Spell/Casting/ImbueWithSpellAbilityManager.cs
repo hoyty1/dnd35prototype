@@ -123,7 +123,6 @@ public static class ImbueWithSpellAbilityManager
         if (spellComp == null) return;
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
-        int wisBonus = caster.Stats.WISMod;
         string casterName = caster.Stats.CharacterName ?? "Unknown";
 
         // Clear previous state just in case
@@ -142,8 +141,9 @@ public static class ImbueWithSpellAbilityManager
             SpellData spell = slot.PreparedSpell;
             if (spell == null) continue;
 
-            // Calculate DC: 10 + spell level + WIS modifier
-            int saveDC = 10 + spell.SpellLevel + wisBonus;
+            // The cleric's own DC for the spell, with the slot's class (SpellSaveDCRules, SPL-001).
+            int saveDC = SpellSaveDCRules.Compute(caster.Stats, spell, slot.AppliedMetamagic,
+                string.IsNullOrWhiteSpace(slot.CasterClassName) ? "Cleric" : slot.CasterClassName);
 
             var entry = new ImbueSpellEntry(spell, casterLevel, saveDC, idx, casterName);
             target.Stats.ImbuedSpells.Add(entry);

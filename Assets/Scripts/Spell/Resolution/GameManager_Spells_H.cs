@@ -95,7 +95,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         // Filter to undead only
         List<CharacterController> undeadCandidates = new List<CharacterController>();

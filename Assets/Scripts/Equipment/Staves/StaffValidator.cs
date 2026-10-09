@@ -200,14 +200,23 @@ public static class StaffValidator
     }
 
     /// <summary>
-    /// Calculate save DC for a spell cast from a staff.
-    /// D&D 3.5e: 10 + spell level + minimum ability modifier for that spell level.
-    /// Same formula as wands (DMG p.243).
+    /// Save DC for a spell cast from a staff. Staffs are the exception to the magic-item rule: the save is treated as
+    /// if the wielder cast the spell, with all the wielder's modifiers to save DC (DMG p.214), so this is the
+    /// wielder's own DC through <see cref="SpellSaveDCRules"/> (SPL-001). Without a wielder or a known spell, the
+    /// magic-item DC of <paramref name="spellLevel"/>.
     /// </summary>
-    public static int CalculateStaffSaveDC(int spellLevel)
+    public static int CalculateStaffSaveDC(CharacterController wielder, StaffSpellEntry entry)
     {
-        // Minimum ability score to cast spell of level N = 10 + N
-        // Modifier for that score = floor((10 + N - 10) / 2) = floor(N / 2)
-        return 10 + spellLevel + (spellLevel / 2);
+        if (entry == null)
+            return SpellSaveDCRules.ForMagicItem(0);
+
+        SpellDatabase.Init();
+        SpellData spell = !string.IsNullOrWhiteSpace(entry.SpellId) ? SpellDatabase.GetSpell(entry.SpellId) : null;
+        if (spell == null && !string.IsNullOrWhiteSpace(entry.SpellName))
+            spell = SpellDatabase.GetSpellByName(entry.SpellName);
+
+        if (wielder == null || wielder.Stats == null || spell == null)
+            return SpellSaveDCRules.ForMagicItem(entry.SpellLevel);
+        return SpellSaveDCRules.Compute(wielder, spell);
     }
 }

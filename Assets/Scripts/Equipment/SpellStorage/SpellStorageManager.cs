@@ -212,24 +212,11 @@ public static class SpellStorageManager
     // ── Internal helpers ──
 
     /// <summary>
-    /// Calculate the save DC for a stored spell based on the caster's stats at time of storage.
-    /// D&D 3.5e: DC = 10 + spell level + relevant ability modifier.
+    /// The save DC for a stored spell: the storing caster's own DC at the time of storage, through the one DC rule
+    /// (<see cref="SpellSaveDCRules"/>, SPL-001; a Paladin uses WIS, not CHA).
     /// </summary>
     private static int CalculateStoredSpellDC(SpellData spell, CharacterController caster)
     {
-        if (caster == null || caster.Stats == null || spell == null) return 10 + spell.SpellLevel;
-
-        // Determine casting stat modifier
-        int abilityMod = 0;
-        if (caster.Stats.HasClass("Wizard"))
-            abilityMod = caster.Stats.INTMod;
-        else if (caster.Stats.HasClass("Cleric") || caster.Stats.HasClass("Druid") || caster.Stats.HasClass("Ranger"))
-            abilityMod = caster.Stats.WISMod;
-        else if (caster.Stats.HasClass("Sorcerer") || caster.Stats.HasClass("Bard") || caster.Stats.HasClass("Paladin"))
-            abilityMod = caster.Stats.CHAMod;
-        else
-            abilityMod = Mathf.Max(caster.Stats.INTMod, Mathf.Max(caster.Stats.WISMod, caster.Stats.CHAMod));
-
-        return 10 + spell.SpellLevel + abilityMod;
+        return SpellSaveDCRules.Compute(caster, spell);
     }
 }

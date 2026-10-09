@@ -98,6 +98,16 @@ public class ScrollData
     // ======================== FACTORY ========================
 
     /// <summary>
+    /// The magic-item DC (DMG p.214) of an arcane or divine item spell: the level on that kind of list
+    /// (<see cref="SpellSaveDCRules.GetItemSpellLevel"/>), raised by Heighten.
+    /// </summary>
+    internal static int DefaultItemSaveDC(SpellData spell, bool isArcane, int heightenToLevel)
+    {
+        int dcLevel = SpellSaveDCRules.GetItemSpellLevel(spell, isArcane);
+        return SpellSaveDCRules.ForMagicItem(heightenToLevel > dcLevel ? heightenToLevel : dcLevel);
+    }
+
+    /// <summary>
     /// Creates a ScrollData from a SpellData and creation parameters.
     /// This is the SINGLE entry point for all scroll creation (store, crafted, debug).
     /// </summary>
@@ -107,7 +117,7 @@ public class ScrollData
     /// <param name="goldValue">Market price in GP.</param>
     /// <param name="metamagicFeats">Optional metamagic feats applied at creation.</param>
     /// <param name="effectiveSpellLevel">Effective spell level after metamagic (for slot/cost). -1 = use base level.</param>
-    /// <param name="saveDC">Baked save DC. 0 = auto-calculate as 10 + base level (only Heighten increases DC).</param>
+    /// <param name="saveDC">Baked save DC. 0 = the magic-item DC (DMG p.214) of the level on the scroll's arcane or divine list, or the heightened level.</param>
     /// <param name="heightenToLevel">For Heighten Spell: the target level. -1 = not heightened.</param>
     public static ScrollData Create(
         SpellData spell,
@@ -135,7 +145,8 @@ public class ScrollData
             CasterLevel = Mathf.Max(1, casterLevel),
             BaseSpellLevel = baseLevel,
             EffectiveSpellLevel = effLevel,
-            SaveDC = saveDC > 0 ? saveDC : (10 + baseLevel), // Only Heighten raises DC; fallback uses base level
+            // Magic-item DC (DMG p.214; SpellSaveDCRules.ForMagicItem, ITM-008): only Heighten raises the level used.
+            SaveDC = saveDC > 0 ? saveDC : DefaultItemSaveDC(spell, isArcane, heightenToLevel),
             HeightenToLevel = heightenToLevel,
             MetamagicFeats = hasMetamagic ? new List<MetamagicFeatId>(metamagicFeats) : null,
             IsArcane = isArcane,

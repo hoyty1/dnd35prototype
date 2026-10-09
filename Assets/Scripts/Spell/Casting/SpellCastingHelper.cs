@@ -73,13 +73,14 @@ public static class SpellCastingHelper
     ///   int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
     ///   string casterName = caster.Stats.CharacterName;
     /// </summary>
-    public static SpellCastContext BuildContext(CharacterController caster, SpellData spell)
+    /// <param name="metamagic">The cast's metamagic, so a heightened spell uses its heightened level for the DC (PHB p.95).</param>
+    public static SpellCastContext BuildContext(CharacterController caster, SpellData spell, MetamagicData metamagic = null)
     {
         int cl = GetEffectiveCasterLevel(caster, spell);
         return new SpellCastContext
         {
             CasterLevel = cl,
-            SaveDC = SpellUtilities.GetSpellSaveDC(caster, spell),
+            SaveDC = SpellSaveDCRules.Compute(caster, spell, metamagic),
             CasterName = caster != null && caster.Stats != null
                 ? caster.Stats.CharacterName
                 : "Unknown",

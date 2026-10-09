@@ -181,10 +181,8 @@ public class WandData
         int baseLevel = spell.SpellLevel;
         int effLevel = effectiveSpellLevel >= 0 ? effectiveSpellLevel : baseLevel;
 
-        // Calculate DC using DMG formula: 10 + SL + floor(SL/2), where SL is base level
-        // (only Heighten raises DC — if heightened, use heightened level for DC)
-        int dcLevel = (heightenToLevel > baseLevel) ? heightenToLevel : baseLevel;
-        int defaultDC = 10 + dcLevel + (dcLevel / 2);
+        // Magic-item DC (DMG p.214): the level on the wand's arcane or divine list; only Heighten raises it.
+        int defaultDC = ScrollData.DefaultItemSaveDC(spell, isArcane, heightenToLevel);
 
         int actualCharges = charges >= 0 ? charges : StandardMaxCharges;
 

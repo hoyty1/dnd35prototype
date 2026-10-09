@@ -113,7 +113,8 @@ public partial class GameManager
     // ================================================================
     //  DISMISSAL  (PHB p.222)
     // ================================================================
-    // Close range. Will save negates (–5 penalty for extraplanar creatures).
+    // Close range. Will negates, against a special DC: the spell's save DC - the target's HD + the caster level
+    // (PHB p.222; built on SpellSaveDCRules, SPL-001).
     // Sends an extraplanar creature back to its home plane.
     // In this prototype, we check for the "Extraplanar" or "Outsider"
     // creature type and kill/remove the creature on failed save.
@@ -142,11 +143,14 @@ public partial class GameManager
             return true;
         }
 
-        // Will save with -5 penalty (D&D 3.5e)
-        int saveDC = CombatCalculationService.SpellSaveDC(4, caster.Stats.WISMod);
-        // Note: -5 penalty baked into the DC for resolver (DC+5 equivalent to save-5)
-        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDC + 5);
+        // PHB p.222: a special Will save, DC = the spell's save DC - the creature's HD + your caster level
+        // (SpellSaveDCRules gives the spell's DC: Clr 4 with WIS, Sor/Wiz 5 with INT or CHA; SPL-001, SPL-031).
+        int spellDC = GetSpellSaveDC(caster, spell);
+        int targetHD = TeamUtility.GetHitDice(target);
+        int saveDC = spellDC - targetHD + casterLevel;
+        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDC);
         bool saveSuccess = saveResult.Saved;
+        Debug.Log($"[Dismissal] DC {saveDC} = spell DC {spellDC} - {targetHD} HD + CL {casterLevel}");
 
         if (saveSuccess)
         {

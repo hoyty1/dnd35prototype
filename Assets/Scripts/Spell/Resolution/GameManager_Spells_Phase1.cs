@@ -34,7 +34,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int diceCount = Mathf.Clamp(casterLevel, 1, 15); // 1d6/CL, max 15d6
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -127,7 +127,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int diceCount = Mathf.Clamp(casterLevel, 1, 20); // 1d6/CL, max 20d6
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
         int maxSecondary = Mathf.Min(casterLevel, 20);
 
         // Roll primary damage once
@@ -226,7 +226,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int hdDiceCount = Mathf.Clamp(casterLevel, 1, 20);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         // Roll total HD pool
         int hdPool = 0;
@@ -333,7 +333,7 @@ public partial class GameManager
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -419,7 +419,7 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
         int fogDurationRounds = 300; // 30 minutes = 300 rounds
 
         var sb = new StringBuilder();
@@ -507,7 +507,7 @@ public partial class GameManager
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int maxTargets = casterLevel;
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -598,7 +598,7 @@ public partial class GameManager
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int numSwarms = Mathf.Clamp(casterLevel / 3, 1, 6);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
-        int saveDc = SpellUtilities.GetSpellSaveDC(caster, spell);
+        int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");

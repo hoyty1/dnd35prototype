@@ -4803,8 +4803,7 @@ public partial class GameManager
             return;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
-        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
+        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
         int hdPool = DiceService.RollMultiple(2, 4, "Hypnotism HD pool 2d4"); // 2d4
         int fascinatedRounds = DiceService.RollMultiple(2, 4, "Fascinated rounds 2d4"); // 2d4
 
@@ -4957,12 +4956,12 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Delegates to <see cref="SpellUtilities.GetCastingAbilityModifier(CharacterController)"/>.
-    /// Kept as an instance method so existing call-sites compile unchanged.
+    /// The caster's key spellcasting ability modifier for the class that casts <paramref name="spell"/>
+    /// (<see cref="SpellSaveDCRules.GetKeyAbilityModifier(CharacterStats, SpellData)"/>).
     /// </summary>
     private int GetSpellSaveAbilityModifier(CharacterController caster, SpellData spell)
     {
-        return SpellUtilities.GetCastingAbilityModifier(caster);
+        return SpellUtilities.GetCastingAbilityModifier(caster, spell);
     }
 
     private void ResolveSleepSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
@@ -4971,8 +4970,7 @@ public partial class GameManager
             return;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
-        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
+        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
         int hdPool = DiceService.RollMultiple(4, 4, "Sleep HD pool 4d4"); // 4d4
         int sleepRounds = SpellCastingHelper.CalculateDuration(_pendingSpell, casterLevel);
 
@@ -5083,8 +5081,7 @@ public partial class GameManager
             return;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
-        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
+        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
         int hdPool = 10; // Deep Slumber: flat 10 HD (no dice roll, unlike Sleep's 4d4)
         int sleepRounds = SpellCastingHelper.CalculateDuration(_pendingSpell, casterLevel);
 
@@ -5190,8 +5187,7 @@ public partial class GameManager
             return;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
-        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, castingAbilityMod);
+        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
 
         var logBuilder = new System.Text.StringBuilder();
         logBuilder.AppendLine("═══════════════════════════════════");
@@ -5701,7 +5697,10 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("☠", $"Carrion stench emanates from {targetName} (10-ft radius, sickens living creatures)."));
 
         // Apply stench to nearby creatures immediately
-        ApplyGhoulTouchStench(caster, target, ghoulEffect);
+        // The stench uses this cast's save DC (PHB p.235): the paralysis DC SpellCaster.Cast rolled against, else the
+        // handler DC (keeps a scroll's or wand's fixed DC and the pending cast's Heighten; SPL-001).
+        int stenchDC = result != null && result.SaveDC > 0 ? result.SaveDC : GetSpellSaveDC(caster, spell);
+        ApplyGhoulTouchStench(caster, target, ghoulEffect, stenchDC);
 
         Debug.Log($"[GameManager] Ghoul Touch: {targetName} paralyzed for {ghoulEffect.ParalysisDurationRounds} rounds, stench active");
         return true;
@@ -5711,20 +5710,13 @@ public partial class GameManager
     /// Apply Ghoul Touch stench aura to living creatures within 10 ft of the paralyzed target.
     /// Each creature makes a Fort save or becomes sickened. Caster is exempt. Poison effect.
     /// </summary>
-    private void ApplyGhoulTouchStench(CharacterController caster, CharacterController paralyzedTarget, GhoulTouchEffectData ghoulEffect)
+    private void ApplyGhoulTouchStench(CharacterController caster, CharacterController paralyzedTarget, GhoulTouchEffectData ghoulEffect, int spellDC)
     {
         if (paralyzedTarget == null || !ghoulEffect.IsStenchActive)
             return;
 
         var allCharacters = GetAllCharacters();
         if (allCharacters == null) return;
-
-        int spellDC = 10 + 2; // Base DC for a level 2 spell; caster ability mod added below
-        if (caster != null && caster.Stats != null)
-        {
-            int casterAbilityMod = Mathf.Max(caster.Stats.INTMod, caster.Stats.CHAMod);
-            spellDC = CombatCalculationService.SpellSaveDC(2, casterAbilityMod); // spell level 2
-        }
 
         foreach (CharacterController creature in allCharacters)
         {
@@ -5920,7 +5912,7 @@ public partial class GameManager
             return;
 
         int casterLevel = SpellCastingHelper.GetBaseCasterLevel(caster);
-        int saveDc = _pendingSpell.SaveDC > 0 ? _pendingSpell.SaveDC : CombatCalculationService.SpellSaveDC(_pendingSpell.SpellLevel, caster.Stats.GetPrimaryCastingModifier());
+        int saveDc = GetSpellSaveDC(caster, _pendingSpell);
         string casterName = caster.Stats.CharacterName;
 
         var logBuilder = new System.Text.StringBuilder();
@@ -6601,7 +6593,7 @@ public partial class GameManager
         {
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
-            int wakeDc = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, GetSpellSaveAbilityModifier(caster, spell));
+            int wakeDc = GetSpellSaveDC(caster, spell);
 
             ApplySleepState(caster, target, sleepRounds, wakeDc, spell);
 
@@ -6614,7 +6606,7 @@ public partial class GameManager
         {
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
             int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
-            int wakeDc = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, GetSpellSaveAbilityModifier(caster, spell));
+            int wakeDc = GetSpellSaveDC(caster, spell);
 
             ApplySleepState(caster, target, sleepRounds, wakeDc, spell);
 
@@ -7320,7 +7312,7 @@ public partial class GameManager
                 return null;
 
             int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
-            int saveDC = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, recipient.Stats != null ? recipient.Stats.WISMod : 0);
+            int saveDC = GetSpellSaveDC(caster ?? recipient, spell);
 
             StatusEffectManager recipientStatusMgr = recipient.StatusEffectManager;
             if (recipientStatusMgr == null)
@@ -7353,7 +7345,7 @@ public partial class GameManager
                 return null;
 
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-            int saveDC = spell.SaveDC > 0 ? spell.SaveDC : CombatCalculationService.SpellSaveDC(spell.SpellLevel, caster != null && caster.Stats != null ? caster.Stats.WISMod : 0);
+            int saveDC = GetSpellSaveDC(caster, spell);
 
             StatusEffectManager targetStatusMgr = target.StatusEffectManager;
             if (targetStatusMgr == null)
