@@ -1579,12 +1579,7 @@ public class CharacterStats
         RefreshConditionDuration(helpless, rounds);
     }
 
-    private static void RefreshConditionDuration(StatusEffect existing, int rounds)
-    {
-        if (existing.RemainingRounds < 0) return; // existing indefinite stays
-        if (rounds < 0 || rounds > existing.RemainingRounds)
-            existing.RemainingRounds = rounds;
-    }
+    private static void RefreshConditionDuration(StatusEffect existing, int rounds) => TurnDurations.Refresh(existing, rounds);
 
     /// <summary>
     /// Remove a specific combat condition.
@@ -1608,12 +1603,20 @@ public class CharacterStats
     /// <summary>
     /// Tick all condition durations and return expired effects.
     /// </summary>
-    public List<StatusEffect> TickConditions()
+    public List<StatusEffect> TickConditions() => TickConditions(null);
+
+    /// <summary>
+    /// Tick by one round the conditions whose <see cref="StatusEffect.DurationAnchor"/> passes
+    /// <paramref name="ticksForAnchor"/> (null: every condition) and return the expired ones (CMB-006).
+    /// </summary>
+    public List<StatusEffect> TickConditions(System.Func<CharacterController, bool> ticksForAnchor)
     {
         var expired = new List<StatusEffect>();
         for (int i = ActiveConditions.Count - 1; i >= 0; i--)
         {
             var cond = ActiveConditions[i];
+            if (ticksForAnchor != null && !ticksForAnchor(cond.DurationAnchor))
+                continue;
             if (!cond.Tick())
                 continue;
 

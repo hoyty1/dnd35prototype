@@ -103,7 +103,8 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
             ActiveSpellEffect existing = statusMgr.ActiveEffects[i];
             if (existing != null && existing.Spell != null && existing.Spell.SpellId == ConcealmentSpellId)
             {
-                existing.RemainingRounds = 1;
+                // Kept up while inside and renewed at the round boundary, so it ticks there (CMB-006).
+                TurnDurations.SustainAtRoundBoundary(existing, 1);
                 existing.MissChance = 20;
                 existing.IsTotalConcealment = false;
                 existing.ConcealmentSource = "Obscuring Mist";
@@ -129,6 +130,7 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
             SourceAreaEffect = this
         };
 
+        TurnDurations.SustainAtRoundBoundary(effect, 1);
         statusMgr.ActiveEffects.Add(effect);
         LogEffect($"{character.Stats.CharacterName} is shrouded by mist (20% at 5 ft, 50% beyond 5 ft).");
     }

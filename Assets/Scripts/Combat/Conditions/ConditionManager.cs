@@ -141,7 +141,13 @@ public class ConditionManager : MonoBehaviour
         return true;
     }
 
-    public List<StatusEffect> TickConditions()
+    public List<StatusEffect> TickConditions() => TickConditions(null);
+
+    /// <summary>
+    /// Ticks by one round the conditions whose <see cref="StatusEffect.DurationAnchor"/> passes
+    /// <paramref name="ticksForAnchor"/> (null: every condition) and removes the expired ones (CMB-006).
+    /// </summary>
+    public List<StatusEffect> TickConditions(System.Func<CharacterController, bool> ticksForAnchor)
     {
         var expired = new List<StatusEffect>();
         if (_stats == null || _stats.ActiveConditions == null) return expired;
@@ -149,6 +155,7 @@ public class ConditionManager : MonoBehaviour
         for (int i = _stats.ActiveConditions.Count - 1; i >= 0; i--)
         {
             var cond = _stats.ActiveConditions[i];
+            if (ticksForAnchor != null && !ticksForAnchor(cond.DurationAnchor)) continue;
             if (!cond.Tick()) continue;
 
             CombatConditionType normalized = ConditionRules.Normalize(cond.Type);
@@ -233,12 +240,7 @@ public class ConditionManager : MonoBehaviour
         }
     }
 
-    private static void RefreshDuration(StatusEffect existing, int rounds)
-    {
-        if (existing.RemainingRounds < 0) return;
-        if (rounds < 0 || rounds > existing.RemainingRounds)
-            existing.RemainingRounds = rounds;
-    }
+    private static void RefreshDuration(StatusEffect existing, int rounds) => TurnDurations.Refresh(existing, rounds);
 
     private void OnConditionApplied(StatusEffect condition)
     {

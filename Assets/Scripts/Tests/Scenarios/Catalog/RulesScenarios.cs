@@ -113,11 +113,15 @@ namespace Tests.Scenarios
     /// p.250 (Magic Fang), DMG p.301 (Sickened: -2 on weapon damage rolls), MM p.283 (wolf bite 1d6+1: STR 13, 1-1/2 x
     /// +1). Data: orc_warrior STR 17 with a greataxe (two-handed, no enhancement), wolf_pack_hunter (alias wolf) STR 13
     /// with one bite of 1-1/2 x STR.
+    /// Turn-relative durations (CMB-006; checked 2026-10-09): PHB p.138 (an effect of N rounds ends just before the
+    /// initiative count it began on; the monk's 1-round stun example), DMG p.301 (Dazed: typically 1 round; Stunned).
+    /// orc_grapple_drill as the two idle stun targets. Stunning Fist's own timing (PHB p.101) is in the static
+    /// TurnDurationRulesTests, not here.
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 109;
+        public const int Count = 110;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -234,6 +238,7 @@ namespace Tests.Scenarios
             yield return S("spell-dice-undead", SpellDiceUndead);
             yield return S("spell-buff-dispatch", SpellBuffDispatch);
             yield return S("weapon-damage-modifier", WeaponDamageModifier);
+            yield return S("condition-duration-turn-relative", ConditionDurationTurnRelative);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -5867,6 +5872,110 @@ namespace Tests.Scenarios
         }
 
         private const string WeaponDamageNotePrefix = "cmb003 ";
+
+        // ── Turn-relative durations (CMB-006) ───────────────────────────
+
+        /// <summary>
+        /// CMB-006 (PHB p.138: an effect that lasts a number of rounds ends just before the same initiative count it began
+        /// on; the monk's 1-round stun there lasts until just before the monk's count in the next round). Initiative
+        /// watcher, early orc, applier, late orc. On its round-1 turn the scripted applier stuns both orcs for 1 round (the
+        /// harness stand-in for a failed save against a stun) and puts a 1-round Bless on the early orc (its duration set
+        /// to 1 round). The early orc, which acted before the stun, is still stunned at its round-2 turn and loses it; the
+        /// late orc loses its round-1 turn only; both stuns, still on at the watcher's round-2 turn, are gone when the
+        /// applier's round-2 turn starts, and the Bless ends at the same count (CMB-034, SPL-032). Before the fix every
+        /// condition and spell effect ticked at the round boundary, so the early orc's stun and the Bless were gone at the
+        /// start of round 2 and the stun cost it nothing.
+        /// </summary>
+        private static ScenarioDef ConditionDurationTurnRelative()
+        {
+            return Rules("rules/condition-duration-turn-relative", "A 1-round stun and a 1-round spell effect end just before the applier's next initiative count (PHB p.138, CMB-006)")
+                .Covers("CMB-006", "CMB-034", "SPL-032", "PHB p.138", "DMG p.301", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("watcher", ActorSource.Stats(() => Fighter("Watcher", 4)), 3, 3, Control.Scripted)
+                .Npc("early", "orc_grapple_drill", 16, 3, Control.Idle)
+                .Pc("applier", ActorSource.Stats(() => Fighter("Applier", 4)), 3, 16, Control.Scripted)
+                .Npc("late", "orc_grapple_drill", 16, 16, Control.Idle)
+                .Initiative("watcher", "early", "applier", "late")
+                .Script("watcher", NoteEarlyBless)
+                .Script("applier", StunOrcsAndBless)
+                .Expect("A 1-round stun from a later count holds at the early orc's next turn, which it loses (PHB p.138)", v =>
+                {
+                    JsonObj o = v.Snapshot("early", 2, "early");
+                    if (o == null) return ExpectResult.Fail("no early-orc turn in round 2");
+                    if (!HasCond(o, "Stunned")) return ExpectResult.Fail("the early orc was no longer stunned at its round-2 turn");
+                    return LostTurn(v, "early", 2) ? ExpectResult.Pass("stunned and skipped in round 2") : ExpectResult.Fail("stunned but its round-2 turn was not skipped");
+                })
+                .Expect("A creature later in the order loses its round-1 turn only (PHB p.138)", v =>
+                {
+                    JsonObj o1 = v.Snapshot("late", 1, "late"), o2 = v.Snapshot("late", 2, "late");
+                    if (o1 == null || o2 == null) return ExpectResult.Fail("a late-orc turn is missing");
+                    if (!HasCond(o1, "Stunned") || !LostTurn(v, "late", 1)) return ExpectResult.Fail("the late orc was not stunned and skipped in round 1");
+                    return !HasCond(o2, "Stunned") && !LostTurn(v, "late", 2) ? ExpectResult.Pass("skipped in round 1, free in round 2") : ExpectResult.Fail("the late orc lost its round-2 turn too");
+                })
+                .Expect("Both stuns are still on at the watcher's round-2 turn and end just before the applier's round-2 count (PHB p.138)", v =>
+                {
+                    JsonObj we = v.Snapshot("early", 2, "watcher"), wl = v.Snapshot("late", 2, "watcher");
+                    JsonObj ae = v.Snapshot("early", 2, "applier"), al = v.Snapshot("late", 2, "applier");
+                    if (we == null || ae == null) return ExpectResult.Fail("a round-2 turn of the watcher or the applier is missing");
+                    if (!HasCond(we, "Stunned") || !HasCond(wl, "Stunned")) return ExpectResult.Fail("a stun had ended at the round boundary");
+                    return !HasCond(ae, "Stunned") && !HasCond(al, "Stunned") ? ExpectResult.Pass("on at the watcher's turn, off at the applier's") : ExpectResult.Fail("a stun outlasted the applier's count");
+                })
+                .Expect("A 1-round spell effect from the applier's turn ends at the applier's next count, like the conditions (CMB-034, SPL-032)", v =>
+                {
+                    List<TraceEvent> notes = v.Of("note").ToList();
+                    TraceEvent watcher2 = notes.FirstOrDefault(e => e.Round == 2 && (e.Str("text") ?? "").StartsWith(TurnDurationNotePrefix + "watcher", StringComparison.Ordinal));
+                    TraceEvent applier2 = notes.FirstOrDefault(e => e.Round == 2 && (e.Str("text") ?? "").StartsWith(TurnDurationNotePrefix + "applier", StringComparison.Ordinal));
+                    if (watcher2 == null || applier2 == null) return ExpectResult.Fail("a round-2 Bless note is missing");
+                    bool onAtWatcher = watcher2.Str("text").EndsWith("bless True", StringComparison.Ordinal);
+                    bool offAtApplier = applier2.Str("text").EndsWith("bless False", StringComparison.Ordinal);
+                    return onAtWatcher && offAtApplier
+                        ? ExpectResult.Pass("Bless on at the watcher's round-2 turn, off at the applier's", watcher2.Seq, applier2.Seq)
+                        : ExpectResult.Fail(watcher2.Str("text") + " / " + applier2.Str("text"), watcher2.Seq, applier2.Seq);
+                })
+                .Build();
+        }
+
+        private const string TurnDurationNotePrefix = "cmb006 ";
+
+        /// <summary>True when <paramref name="key"/>'s turn in <paramref name="round"/> was skipped as stunned.</summary>
+        private static bool LostTurn(TraceView v, string key, int round)
+        {
+            TraceEvent ts = v.TurnsOf(key).FirstOrDefault(e => e.Round == round);
+            return ts != null && v.Log("is stunned and cannot act").Any(e => e.Round == round && e.Turn == ts.Turn);
+        }
+
+        private static bool EarlyHasBless(ScenarioContext ctx)
+        {
+            CharacterController early = ctx.Get("early");
+            StatusEffectManager mgr = early != null ? early.StatusEffectManager : null;
+            return mgr != null && mgr.HasEffect(DND35e.Identifiers.SpellNames.BLESS);
+        }
+
+        /// <summary>Watcher script: notes whether the early orc carries the 1-round Bless.</summary>
+        private static System.Collections.IEnumerator NoteEarlyBless(ScenarioContext ctx, CharacterController watcher)
+        {
+            ctx.Note(TurnDurationNotePrefix + "watcher r" + ctx.Gm.CurrentRound + " bless " + EarlyHasBless(ctx));
+            yield break;
+        }
+
+        /// <summary>
+        /// Applier script: in round 1 stuns both orcs for 1 round and puts a 1-round Bless on the early orc (a harness
+        /// stand-in for failed saves and a cast); every round notes whether the early orc carries the Bless.
+        /// </summary>
+        private static System.Collections.IEnumerator StunOrcsAndBless(ScenarioContext ctx, CharacterController applier)
+        {
+            if (ctx.Gm.CurrentRound == 1)
+            {
+                CharacterController early = ctx.Get("early"), late = ctx.Get("late");
+                ctx.Gm.ApplyCondition(early, CombatConditionType.Stunned, 1, applier, sourceCategory: "Harness");
+                ctx.Gm.ApplyCondition(late, CombatConditionType.Stunned, 1, applier, sourceCategory: "Harness");
+                StatusEffectManager mgr = early != null ? early.StatusEffectManager : null;
+                ActiveSpellEffect bless = mgr != null ? mgr.AddEffect(SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.BLESS).Clone(), applier.Stats.CharacterName, 1, 1) : null;
+                ctx.Note("applier stuns both orcs for 1 round and blesses the early orc for 1 round" + (bless == null ? " (no Bless added)" : ""));
+            }
+            ctx.Note(TurnDurationNotePrefix + "applier r" + ctx.Gm.CurrentRound + " bless " + EarlyHasBless(ctx));
+            yield break;
+        }
 
         /// <summary><see cref="SturdyDummy"/> without armor or an off-hand item, so the attacks against it mostly hit.</summary>
         private static void UnarmoredSturdyDummy(CharacterController c)

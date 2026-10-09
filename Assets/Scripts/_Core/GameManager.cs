@@ -506,6 +506,8 @@ public partial class GameManager : MonoBehaviour
         _turnService ??= gameObject.GetComponent<TurnService>() ?? gameObject.AddComponent<TurnService>();
         _turnService.OnTurnStarted += OnTurnStarted;
         _turnService.OnNewRound += OnNewRound;
+        _turnService.OnInitiativeCountReached += OnInitiativeCountReached;
+        _turnService.OnInitiativeCountRemoved += OnInitiativeCountRemoved;
         _turnService.OnCombatEnded += OnCombatEnded;
 
         _movementService ??= gameObject.GetComponent<MovementService>() ?? gameObject.AddComponent<MovementService>();
@@ -529,7 +531,8 @@ public partial class GameManager : MonoBehaviour
 
         _conditionService ??= gameObject.GetComponent<ConditionService>() ?? gameObject.AddComponent<ConditionService>();
         _conditionService.Initialize(GetAllCharacters);
-        _conditionService.BindTurnService(_turnService);
+        // ConditionService has no TurnService subscription of its own: GameManager drives it, once per turn and per
+        // initiative count (OnTurnStarted, OnInitiativeCountReached) and at the round boundary (OnNewRound) (CMB-006).
         _conditionService.OnConditionExpired += HandleConditionExpired;
 
         _aiService ??= gameObject.GetComponent<AIService>() ?? gameObject.AddComponent<AIService>();
@@ -593,6 +596,8 @@ public partial class GameManager : MonoBehaviour
         {
             _turnService.OnTurnStarted -= OnTurnStarted;
             _turnService.OnNewRound -= OnNewRound;
+            _turnService.OnInitiativeCountReached -= OnInitiativeCountReached;
+            _turnService.OnInitiativeCountRemoved -= OnInitiativeCountRemoved;
             _turnService.OnCombatEnded -= OnCombatEnded;
         }
 
@@ -606,7 +611,6 @@ public partial class GameManager : MonoBehaviour
         if (_conditionService != null)
         {
             _conditionService.OnConditionExpired -= HandleConditionExpired;
-            _conditionService.UnbindTurnService();
         }
 
         _aiService?.Cleanup();
@@ -3547,8 +3551,13 @@ public partial class GameManager : MonoBehaviour
         if (CurrentPhase == TurnPhase.CombatOver)
         {
             Debug.LogWarning($"[CombatPhase] Ignoring turn start for {characterName} because phase is CombatOver.");
+            TurnDurations.ClearCurrentAnchor(); // effects created after the fight have no initiative count (CMB-006)
             return;
         }
+
+        // Start-of-turn condition processing, once per turn for PCs and NPCs alike and before the turn-skip check, so a
+        // creature that cannot act still loses its start-of-turn conditions such as ChargePenalty (CMB-006, CMB-075).
+        _conditionService?.OnTurnStart(character);
 
         // Publish turn started event
         GameEventSystem.Instance.Publish(new TurnStartedEvent
@@ -3584,9 +3593,10 @@ public partial class GameManager : MonoBehaviour
         ResetQuickenedSpellTrackingForAllCharacters();
         ResetAttackDamageModesForAllCharacters();
 
-        // Tick all spell + condition effect durations at the start of each new round.
-        TickAllSpellDurations();
-        _conditionService?.OnRoundEnd();
+        // Spell effects and conditions tick at their duration anchor's initiative count (OnInitiativeCountReached);
+        // only those with no anchor in the initiative order tick here, at the round boundary (PHB p.138, CMB-006).
+        TickAllSpellDurations(TicksAtRoundBoundary, roundBoundary: true);
+        _conditionService?.OnRoundBoundary(TicksAtRoundBoundary);
 
         // Tick summon durations (Summon Monster: 1 round/level)
         TickSummonDurations();
@@ -3604,6 +3614,43 @@ public partial class GameManager : MonoBehaviour
         if (round > 0 && round % RoundsPerDay == 0)
             ProcessDailyEffects();
     }
+
+    /// <summary>
+    /// An initiative count was reached (TurnService), before its creature's turn starts, also for a dead creature
+    /// whose turn is skipped: spell effects and conditions anchored to that creature lose a round, so an effect of N
+    /// rounds ends just before the initiative count it began on, N rounds later (PHB p.138, CMB-006, CMB-034).
+    /// </summary>
+    private void OnInitiativeCountReached(CharacterController count)
+    {
+        if (CurrentPhase == TurnPhase.CombatOver)
+        {
+            TurnDurations.ClearCurrentAnchor(); // effects created after the fight have no initiative count
+            return;
+        }
+        if (count == null)
+            return;
+
+        System.Func<CharacterController, bool> atThisCount = anchor => TurnDurations.TicksAtCount(anchor, count);
+        TickAllSpellDurations(atThisCount, roundBoundary: false);
+        _conditionService?.OnInitiativeCountReached(count);
+        PruneTurnUndeadTrackers();
+    }
+
+    /// <summary>
+    /// <paramref name="removed"/> left the initiative order (a summon that ended or was slain): the durations it
+    /// anchored pass to <paramref name="heir"/>'s count (null: the round boundary), so they keep one tick per round
+    /// instead of ticking twice or skipping a round (PHB p.138, CMB-006).
+    /// </summary>
+    private void OnInitiativeCountRemoved(CharacterController removed, CharacterController heir)
+    {
+        int moved = TurnDurations.Reanchor(GetAllCharacters(), removed, heir);
+        if (moved > 0)
+            Debug.Log($"[Duration] {moved} duration(s) anchored to {removed?.Stats?.CharacterName ?? "<removed>"} now tick at {(heir != null && heir.Stats != null ? heir.Stats.CharacterName + "'s count" : "the round boundary")}.");
+    }
+
+    /// <summary>True when a duration with this anchor ticks at the round boundary: none, or not in the initiative order (CMB-006).</summary>
+    private bool TicksAtRoundBoundary(CharacterController anchor)
+        => TurnDurations.TicksAtRoundBoundary(anchor, _turnService != null ? (System.Func<CharacterController, bool>)(c => _turnService.GetInitiative(c) != null) : null);
 
     private void OnCombatEnded()
     {
@@ -3762,7 +3809,7 @@ public partial class GameManager : MonoBehaviour
     {
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
-        _conditionService?.OnTurnStart(pc);
+        // ConditionService.OnTurnStart already ran in OnTurnStarted (CMB-006).
         HandleFlamingSphereTurnStart(pc);
         ApplyMelfsAcidArrowTurnStartDamage(pc);
         pc.TickBombardierAcidSprayCooldown();
@@ -10905,7 +10952,7 @@ public partial class GameManager : MonoBehaviour
         if (npc == null)
             return;
 
-        _conditionService?.OnTurnStart(npc);
+        // ConditionService.OnTurnStart already ran in OnTurnStarted, before the turn-skip check (CMB-006).
         ApplyMelfsAcidArrowTurnStartDamage(npc);
         npc.TickBombardierAcidSprayCooldown();
         npc.ApplyRegenerationAtTurnStart();

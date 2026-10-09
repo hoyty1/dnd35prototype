@@ -32,6 +32,13 @@ public class ActiveSpellEffect
     /// <summary>Remaining duration in combat rounds. -1 = permanent/indefinite.</summary>
     public int RemainingRounds;
 
+    /// <summary>
+    /// The creature whose initiative count was current when the effect was created (the caster, on its own turn): the
+    /// duration ticks at that count (PHB p.138, CMB-006, SPL-032; see <see cref="TurnDurations"/>), the same timing as
+    /// the conditions a spell imposes. Null ticks at the round boundary.
+    /// </summary>
+    [System.NonSerialized] public CharacterController DurationAnchor = TurnDurations.CurrentAnchor;
+
     /// <summary>The duration type from the spell definition.</summary>
     public DurationType DurationType;
 
@@ -130,7 +137,8 @@ public class ActiveSpellEffect
         => SpellDurationRules.Rounds(spell, casterLevel);
 
     /// <summary>
-    /// Tick this effect by 1 round. Returns true if the effect has expired.
+    /// Tick this effect by 1 round (once per round, at <see cref="DurationAnchor"/>'s initiative count or, without one,
+    /// at the round boundary). Returns true if the effect has expired.
     /// Permanent (-1) and Concentration (-2) effects are not ticked.
     /// </summary>
     public bool Tick()

@@ -3932,13 +3932,19 @@ public class CharacterController : MonoBehaviour
         return EnsureConditions().TickConditions();
     }
 
-    public List<StatusEffect> TickConditionsDirect()
+    public List<StatusEffect> TickConditionsDirect() => TickConditionsDirect(null);
+
+    /// <summary>
+    /// Ticks the conditions whose duration anchor passes <paramref name="ticksForAnchor"/> (null: all) and returns the
+    /// expired ones (CMB-006).
+    /// </summary>
+    public List<StatusEffect> TickConditionsDirect(Func<CharacterController, bool> ticksForAnchor)
     {
         if (Stats == null) return new List<StatusEffect>();
 
         List<StatusEffect> expired = _conditionManager != null
-            ? _conditionManager.TickConditions()
-            : Stats.TickConditions();
+            ? _conditionManager.TickConditions(ticksForAnchor)
+            : Stats.TickConditions(ticksForAnchor);
 
         EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
         SpellcastingComponent spellComp = Spellcasting;
@@ -7953,7 +7959,7 @@ public class CharacterController : MonoBehaviour
                 bool isUnarmedAttack = weapon == null || (weapon.Name ?? "").ToLowerInvariant().Contains("unarmed");
                 if (isUnarmedAttack || FeatManager.HasImprovedUnarmedStrike(Stats))
                 {
-                    bool stunned = FeatManager.TryApplyStunningFist(Stats, target);
+                    bool stunned = FeatManager.TryApplyStunningFist(Stats, target, this);
                     int dc = FeatManager.GetStunningFistDC(Stats);
                     if (stunned)
                     {

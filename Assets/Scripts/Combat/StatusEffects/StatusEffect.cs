@@ -859,15 +859,24 @@ public class StatusEffect
     public string SourceName;
     public int RemainingRounds; // -1 = indefinite
 
+    /// <summary>
+    /// The creature whose initiative count was current when this condition was applied or last refreshed: its
+    /// duration ticks at that count (PHB p.138, CMB-006; see <see cref="TurnDurations"/>). Null ticks at the round
+    /// boundary.
+    /// </summary>
+    [NonSerialized] public CharacterController DurationAnchor;
+
     public StatusEffect(CombatConditionType type, string sourceName, int rounds)
     {
         Type = ConditionRules.Normalize(type);
         SourceName = sourceName ?? "Unknown";
         RemainingRounds = rounds;
+        DurationAnchor = TurnDurations.CurrentAnchor;
     }
 
     /// <summary>
-    /// Tick one round. Returns true if expired this tick.
+    /// Tick one round. Returns true if expired this tick. Called once per round, at the duration anchor's initiative
+    /// count or, without one, at the round boundary.
     /// </summary>
     public bool Tick()
     {

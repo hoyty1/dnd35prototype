@@ -75,7 +75,7 @@ Where to look first:
 7. **Static databases** with lazy `Init()`; rings, rods, wondrous items join `ItemDatabase` only via `RegisterAll*` (ITM-032).
 8. **UI is built in code** and wired by `SceneBootstrap`; `WaitingFor*` flags block world input.
 9. **Dormant:** `CommandProcessor`, `CombatStateMachine`, `BaseCombatManeuver` shells, unused service copies, most of `MetamagicSystem` (SPL-055, SPL-056).
-10. **Conditions:** apply with `GameManager.ApplyCondition` (wraps `ConditionService.ApplyCondition`, which records source and data); `ConditionManager` stores them in `CharacterStats.ActiveConditions`. Spell buffs live in `StatusEffectManager` with separate durations (CMB-034).
+10. **Conditions:** apply with `GameManager.ApplyCondition` (wraps `ConditionService.ApplyCondition`, which records source and data); `ConditionManager` stores them in `CharacterStats.ActiveConditions`. Spell buffs live in `StatusEffectManager`, unlinked to the conditions they impose (CMB-034). Both tick at the initiative count of the creature whose turn it was when they were created (`Combat/Core/TurnDurations.cs`, PHB p.138, CMB-006); unanchored ones at the round boundary.
 11. **Logging:** `CombatUI?.ShowCombatLog(CombatLogHelper.<Semantic>(...))`, never raw `<color>`; diagnostics `Debug.Log("[Tag] ...")`.
 12. **Dice:** unseeded `UnityEngine.Random`; `DiceRoller.Roll(count, sides)` is NdS, `DiceService.Roll(min, max)` is a range.
 

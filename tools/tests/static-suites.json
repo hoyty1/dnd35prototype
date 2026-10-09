@@ -1096,6 +1096,17 @@
       "notes": "TST-031: the suite reseeds UnityEngine.Random with 42 itself, so the runner seed does not vary it; its 2 known failures depend on the current order of Random calls. If they go STALE after an unrelated change, the touch attack now hits: delete the two entries rather than investigating."
     },
     {
+      "type": "Tests.Combat.TurnDurationRulesTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 40,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CMB-006 (with CMB-034, SPL-032): TurnService reports every initiative count once per round (a dead creature's too) before the turn and sets TurnDurations.CurrentAnchor; conditions (ConditionManager and the CharacterStats fallback) and StatusEffectManager spell effects tick only at their anchor's count, unanchored ones and ones whose anchor left the initiative order at the round boundary; re-application keeps the later end, for conditions and spell recasts (AddEffect with a duration, Death Knell); Stunning Fist on an attack of opportunity is timed from the monk (PHB p.101); Obscuring Mist concealment and Entangle tick at the round boundary; a creature removed from the initiative order hands its durations to a neighbouring count; the PHB p.138 1-round example through TurnService and ConditionService in both initiative orders. Added 2026-10-09; the counts are the suite's 40 assertions counted from the source, not yet confirmed by a run (the Unity MCP was unreachable; not verified in Play mode)"
+    },
+    {
       "type": "Tests.Combat.UnarmedDamageModeTests",
       "needs": "play",
       "skip": "",

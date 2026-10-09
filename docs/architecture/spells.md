@@ -171,21 +171,27 @@ Known deviations, one line each (tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md
 
 Every registered spell sets its PHB duration in the three fields (checked against the PHB for the 54 spells that once set only the legacy `BuffDurationRounds`, and for 8 with wrong values, by `Tests.Magic.SpellDurationRulesTests`). `BuffDurationRounds` sets no duration: `SpellDatabase.Register` turns a spell that sets only that field into fixed rounds (or 1 hour/level for -1), logs a warning and lists it in `SpellDatabase.LegacyDurationSpellIds`, which the suite requires to be empty. Before 2026-10-09 such spells defaulted to Instantaneous and their effects ended at the first tick (SPL-002). Most handlers with their own state take their rounds from `SpellCastingHelper.CalculateDuration(spell, cl)`, so an extended clone lasts longer; random durations (Cause Fear 1d4, Ghoul Touch 1d6+2) are rolled by the handler, and Ghoul Touch sets its tracked effect to the roll. `SpellDurationRules.Describe` writes the PHB line for the spell selection screen and `SpellData.GetShortDescription`, using `DurationText` when set. The handlers that still compute their own rounds are listed in SPL-038 (the Bull's Strength family, False Life, Scare, Spectral Hand, Rainbow Pattern, Summon Swarm, Death Knell).
 
-**Tick order.** Everything ticks at the global round boundary, not on the caster's turn, so a 1-round effect cast late in initiative expires before the caster acts again.
+**Tick order.** StatusEffectManager effects (and conditions) tick at the initiative count of the creature whose turn it was when they were created, normally the caster, so a 1-round effect lasts until just before the caster's next count (PHB p.138; CMB-006, `TurnDurations`, see [Combat & grid](combat-and-grid.md#turn-structure)). Only those with no anchor in the initiative order, and every tracker kept outside StatusEffectManager, still tick at the global round boundary (SPL-032). Area-sustained effects (fog and darkness concealment, which the area renews each round) are created without an anchor on purpose (`TurnDurations.SustainAtRoundBoundary`). Pass a handler's own duration to `StatusEffectManager.AddEffect(spell, caster, cl, durationRounds)` rather than setting `RemainingRounds` afterwards, so a recast is compared with the right count (`TurnDurations.Refresh`).
 
 ```
-TurnService.OnNewRound -> GameManager.OnNewRound (_Core/GameManager.cs:3806)
+TurnService.OnInitiativeCountReached(c) -> GameManager.OnInitiativeCountReached (_Core/GameManager.cs)
+  TickAllSpellDurations(anchor == c, roundBoundary: false)
+    per living PC and NPC with an effect anchored to c: TickCharacterSpellDurations
+      StatusEffectManager.TickEffects -> RemoveEffect (reverses stats) on expiry
+      expiry if-chain and sync if-chain as below (no EffectService, item or cleric trackers)
+  _conditionService.OnInitiativeCountReached(c)   (conditions anchored to c)
+TurnService.OnNewRound -> GameManager.OnNewRound (_Core/GameManager.cs)
   ResetQuickenedSpellTrackingForAllCharacters
-  TickAllSpellDurations (GameManager.SpellCasting.cs:7926)
-    per living PC and NPC: TickCharacterSpellDurations (:7979)
-      StatusEffectManager.TickAllEffects -> RemoveEffect (reverses stats) on expiry
+  TickAllSpellDurations(TicksAtRoundBoundary, roundBoundary: true) (GameManager.SpellCasting.cs)
+    per living PC and NPC: TickCharacterSpellDurations
+      StatusEffectManager.TickEffects (effects with no anchor in the initiative order) -> RemoveEffect on expiry
       expiry if-chain: per-spell side-state cleanup
       sync if-chain: copy RemainingRounds into CharacterController *EffectData objects
       EffectService.TickResistEnergyEffects / TickProtectionFromEnergyEffects / TickDebuffEffects
       TickCharacterItemSpellDurations
       TickClericSpell2Durations, TickClericSpell3Durations, TickClericSpell4Durations
     TickAllAlignmentDetectionDurations
-  _conditionService.OnRoundEnd      (conditions; see Combat & grid)
+  _conditionService.OnRoundBoundary(TicksAtRoundBoundary)   (unanchored conditions; see Combat & grid)
   TickSummonDurations
   TickEmanations -> EffectService.TickEmanations
   TickActiveGreaseEffects -> WindEffectManager, AreaEffectManager.OnCombatRoundStart, greased objects
@@ -200,7 +206,7 @@ Turn start: StartPCTurn -> HandleFlamingSphereTurnStart, ApplyMelfsAcidArrowTurn
 | Route | Code |
 |---|---|
 | Any removal (expiry, dispel, `RemoveAllEffects`) | `StatusEffectManager.RemoveEffect` (`:256`) and `ApplySpellSpecificAdjustments(effect, applying: false)` (`:640`) |
-| Expiry | the if-chain after `TickAllEffects` in `TickCharacterSpellDurations` |
+| Expiry | the if-chain after `StatusEffectManager.TickEffects(ticksForAnchor)` in `TickCharacterSpellDurations` (`TickAllEffects` is used only by tests); the shadow-duration sync and the EffectService, item and cleric trackers after it run only when `roundBoundary` is true |
 | Every round while active | the sync if-chain in `TickCharacterSpellDurations` |
 | Dispel | `DispelMagicService.HandleDispelSpecialCleanup` (`Services/DispelMagicService.cs:295`) |
 | End of combat | `GameManager.RestorePartyAfterCombat` (per-PC `Clear*Effect` calls, `Stats.Active*Effect = null`) and `GameManager.OnCombatEnded`, which an ordinary victory does not reach (see [the runtime loop](../ARCHITECTURE.md#what-the-game-is-and-the-runtime-loop)) (`EffectService.ClearAll`, `ClearAllActiveGreaseEffects`, `ClearAllMirrorImageEffects`, `CurseTracker.ClearAll`) |

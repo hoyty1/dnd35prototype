@@ -5686,9 +5686,8 @@ public partial class GameManager
         }
 
         // PHB p.235: 1d6+2 rounds; the tracked effect lasts as long as the paralysis just rolled.
-        ActiveSpellEffect ghoulTracked = targetStatusMgr.AddEffect(spell, casterName, caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1);
-        if (ghoulTracked != null)
-            ghoulTracked.RemainingRounds = Mathf.Max(1, ghoulEffect.ParalysisDurationRounds);
+        targetStatusMgr.AddEffect(spell, casterName, caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1,
+            Mathf.Max(1, ghoulEffect.ParalysisDurationRounds));
 
         if (result != null)
         {
@@ -7866,32 +7865,40 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Tick all spell effect durations for all characters (PCs and NPCs).
-    /// Called at the start of each new combat round.
-    /// Removes expired effects and reverses their stat modifications.
+    /// Tick spell effect durations for all characters (PCs and NPCs): the effects whose duration anchor passes
+    /// <paramref name="ticksForAnchor"/>. Called with each initiative count reached (the effects anchored to that
+    /// creature) and at the round boundary (the effects with no anchor in the initiative order), so each effect loses
+    /// one round per round at its caster's initiative count (PHB p.138, CMB-006, SPL-032).
+    /// Removes expired effects and reverses their stat modifications. At the round boundary it also ticks the
+    /// alignment/undead detection effects, which are tracked apart.
     /// </summary>
-    private void TickAllSpellDurations()
+    private void TickAllSpellDurations(Func<CharacterController, bool> ticksForAnchor, bool roundBoundary)
     {
-        Debug.Log($"[SpellDuration] Ticking spell durations for round {CurrentRound}...");
+        if (roundBoundary)
+            Debug.Log($"[SpellDuration] Ticking round-boundary spell durations for round {CurrentRound}...");
+
+        bool anyExpired = false;
 
         // Tick active, living PCs
         foreach (var pc in PCs)
         {
             if (!IsActiveCombatant(pc) || pc.Stats.IsDead) continue;
-            TickCharacterSpellDurations(pc);
+            anyExpired |= TickCharacterSpellDurations(pc, ticksForAnchor, roundBoundary);
         }
 
         // Tick active, living NPCs
         foreach (var npc in NPCs)
         {
             if (!IsActiveCombatant(npc) || npc.Stats.IsDead) continue;
-            TickCharacterSpellDurations(npc);
+            anyExpired |= TickCharacterSpellDurations(npc, ticksForAnchor, roundBoundary);
         }
 
         // Tick alignment/undead detection effects (concentration-based, separate from StatusEffectManager)
-        TickAllAlignmentDetectionDurations();
+        if (roundBoundary)
+            TickAllAlignmentDetectionDurations();
 
-        UpdateAllStatsUI();
+        if (roundBoundary || anyExpired)
+            UpdateAllStatsUI();
     }
 
     /// <summary>
@@ -7921,16 +7928,22 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Tick spell durations for a single character.
+    /// Tick the spell durations of a single character whose duration anchor passes <paramref name="ticksForAnchor"/>.
+    /// The spell trackers kept outside StatusEffectManager (EffectService energy and debuff effects, item spells, the
+    /// cleric spell counters) have no anchor and tick only at the round boundary (<paramref name="roundBoundary"/>;
+    /// SPL-032). Returns true when an effect expired.
     /// </summary>
-    private void TickCharacterSpellDurations(CharacterController character)
+    private bool TickCharacterSpellDurations(CharacterController character, Func<CharacterController, bool> ticksForAnchor, bool roundBoundary)
     {
         if (!IsActiveCombatant(character) || character.Stats.IsDead)
-            return;
+            return false;
+        bool anyExpired = false;
         var statusMgr = character.StatusEffectManager;
-        if (statusMgr != null && statusMgr.ActiveEffectCount > 0)
+        if (statusMgr != null && statusMgr.ActiveEffectCount > 0
+            && (ticksForAnchor == null || statusMgr.ActiveEffects.Exists(e => e != null && ticksForAnchor(e.DurationAnchor))))
         {
-            var expired = statusMgr.TickAllEffects();
+            var expired = statusMgr.TickEffects(ticksForAnchor);
+            anyExpired = expired.Count > 0;
 
             foreach (var effect in expired)
             {
@@ -8082,6 +8095,9 @@ public partial class GameManager
             }
         }
 
+        if (!roundBoundary)
+            return anyExpired;
+
         // Delegate energy resist, protection, and debuff ticking to EffectService
         Action<string> logCb = msg => CombatUI?.ShowCombatLog(msg);
         EffectService.TickResistEnergyEffects(character, logCb);
@@ -8094,6 +8110,7 @@ public partial class GameManager
         TickClericSpell2Durations(character);
         TickClericSpell3Durations(character);
         TickClericSpell4Durations(character);
+        return anyExpired;
     }
 
     private void TickCharacterItemSpellDurations(CharacterController character)

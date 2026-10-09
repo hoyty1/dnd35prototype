@@ -9,7 +9,8 @@ using Random = UnityEngine.Random;
 /// Responsibilities:
 /// - Track active combat conditions per character
 /// - Apply/remove/query condition state
-/// - Run turn/round-based expiration processing
+/// - Run turn/round-based expiration processing: each condition ticks at its duration anchor's initiative count
+///   (PHB p.138, CMB-006; see TurnDurations), an unanchored one at the round boundary
 /// - Coordinate tactical condition refreshes (for example Flanked)
 /// - Cleanup condition state on death/combat end
 ///
@@ -46,9 +47,7 @@ public class ConditionService : MonoBehaviour
     private readonly Dictionary<CharacterController, List<ActiveCondition>> _activeConditionsByCharacter =
         new Dictionary<CharacterController, List<ActiveCondition>>();
 
-    private TurnService _turnService;
     private Func<List<CharacterController>> _allCharactersProvider;
-    private int _lastProcessedRound = -1;
 
     public event Action<CharacterController, ActiveCondition> OnConditionExpired;
 
@@ -56,31 +55,6 @@ public class ConditionService : MonoBehaviour
     {
         _allCharactersProvider = allCharactersProvider;
         SyncAllTrackedCharacters();
-    }
-
-    public void BindTurnService(TurnService turnService)
-    {
-        if (_turnService == turnService)
-            return;
-
-        UnbindTurnService();
-        _turnService = turnService;
-
-        if (_turnService != null)
-        {
-            _turnService.OnTurnStarted += OnTurnStartedFromTurnService;
-            _turnService.OnNewRound += OnNewRoundFromTurnService;
-        }
-    }
-
-    public void UnbindTurnService()
-    {
-        if (_turnService == null)
-            return;
-
-        _turnService.OnTurnStarted -= OnTurnStartedFromTurnService;
-        _turnService.OnNewRound -= OnNewRoundFromTurnService;
-        _turnService = null;
     }
 
     public void ApplyCondition(
@@ -149,7 +123,11 @@ public class ConditionService : MonoBehaviour
         return removed;
     }
 
-    public List<ActiveCondition> UpdateConditionTimers(CharacterController target)
+    /// <summary>
+    /// Ticks <paramref name="target"/>'s conditions by one round, only those whose duration anchor passes
+    /// <paramref name="ticksForAnchor"/> (null: all), and raises <see cref="OnConditionExpired"/> for each that ended.
+    /// </summary>
+    public List<ActiveCondition> UpdateConditionTimers(CharacterController target, Func<CharacterController, bool> ticksForAnchor = null)
     {
         var expired = new List<ActiveCondition>();
         if (!IsValidCharacter(target))
@@ -160,7 +138,7 @@ public class ConditionService : MonoBehaviour
             ? new List<bool>(new bool[previousConditions.Count])
             : null;
 
-        List<StatusEffect> expiredEffects = target.TickConditionsDirect();
+        List<StatusEffect> expiredEffects = target.TickConditionsDirect(ticksForAnchor);
         if (expiredEffects == null || expiredEffects.Count == 0)
         {
             SyncCharacter(target);
@@ -194,6 +172,11 @@ public class ConditionService : MonoBehaviour
         return expired;
     }
 
+    /// <summary>
+    /// Start of <paramref name="actor"/>'s turn, PC or NPC alike: called once, from GameManager.OnTurnStarted, before
+    /// the turn-skip check (CMB-006, CMB-075). Ends its start-of-turn conditions (ChargePenalty), runs the turn-start
+    /// escape saves and refreshes negative levels.
+    /// </summary>
     public void OnTurnStart(CharacterController actor)
     {
         if (!IsValidCharacter(actor))
@@ -217,10 +200,26 @@ public class ConditionService : MonoBehaviour
         ExpireTurnBoundaryConditions(actor, expireAtStart: false);
     }
 
-    public void OnRoundEnd()
+    /// <summary>
+    /// The round boundary (GameManager.OnNewRound): ticks the conditions whose duration anchor passes
+    /// <paramref name="ticksForAnchor"/> (null: every condition), which in combat are those with no anchor in the
+    /// initiative order (CMB-006).
+    /// </summary>
+    public void OnRoundBoundary(Func<CharacterController, bool> ticksForAnchor = null)
     {
-        int roundKey = _turnService != null ? _turnService.CurrentRound : Time.frameCount;
-        ProcessRoundEndInternal(roundKey);
+        TickConditionDurations(ticksForAnchor);
+    }
+
+    /// <summary>
+    /// <paramref name="count"/>'s initiative count was reached (TurnService.OnInitiativeCountReached), before the
+    /// creature there acts: ticks every condition anchored to it, on any creature (PHB p.138, CMB-006).
+    /// </summary>
+    public void OnInitiativeCountReached(CharacterController count)
+    {
+        if (count == null)
+            return;
+
+        TickConditionDurations(anchor => TurnDurations.TicksAtCount(anchor, count));
     }
 
     public bool HasCondition(CharacterController target, CombatConditionType type)
@@ -358,22 +357,8 @@ public class ConditionService : MonoBehaviour
         return condition != null ? condition.Source : null;
     }
 
-    private void OnTurnStartedFromTurnService(CharacterController actor)
+    private void TickConditionDurations(Func<CharacterController, bool> ticksForAnchor)
     {
-        OnTurnStart(actor);
-    }
-
-    private void OnNewRoundFromTurnService(int round)
-    {
-        ProcessRoundEndInternal(round);
-    }
-
-    private void ProcessRoundEndInternal(int roundKey)
-    {
-        if (roundKey == _lastProcessedRound)
-            return;
-
-        _lastProcessedRound = roundKey;
         SyncAllTrackedCharacters();
 
         List<CharacterController> characters = GetAllCharactersInternal();
@@ -383,7 +368,7 @@ public class ConditionService : MonoBehaviour
             if (!IsValidCharacter(character) || character.Stats.IsDead)
                 continue;
 
-            UpdateConditionTimers(character);
+            UpdateConditionTimers(character, ticksForAnchor);
         }
     }
 

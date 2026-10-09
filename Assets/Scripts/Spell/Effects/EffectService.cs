@@ -434,17 +434,16 @@ public static class EffectService
         if (statusMgr == null)
             return durationRounds;
 
-        ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, casterLevel);
+        ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, casterLevel, durationRounds);
         if (effect != null)
-        {
-            effect.RemainingRounds = durationRounds;
             return durationRounds;
-        }
 
         ActiveSpellEffect existing = FindTrackedEffect(statusMgr, spell.SpellId);
         if (existing == null)
             return durationRounds;
 
+        // AddEffect kept the active effect (it lasts as long or longer); an equal count was re-timed from the current
+        // initiative count there (TurnDurations.Refresh, CMB-006).
         newCastApplies = false;
         return existing.RemainingRounds > 0 ? existing.RemainingRounds : durationRounds;
     }
@@ -470,7 +469,7 @@ public static class EffectService
             ActiveSpellEffect active = FindTrackedEffect(statusMgr, SpellNames.DEATH_KNELL);
             if (active != null)
             {
-                active.RemainingRounds = Mathf.Max(active.RemainingRounds, buffRounds);
+                TurnDurations.Refresh(active, buffRounds); // keeps the later end, timed from its casting (CMB-006)
                 active.AppliedTempHP = Mathf.Max(active.AppliedTempHP, tempHP);
                 stats.DeathKnellRoundsRemaining = active.RemainingRounds;
             }
@@ -489,10 +488,9 @@ public static class EffectService
 
         if (statusMgr != null && spell != null)
         {
-            ActiveSpellEffect effect = statusMgr.AddEffect(spell, stats.CharacterName, casterLevel);
+            ActiveSpellEffect effect = statusMgr.AddEffect(spell, stats.CharacterName, casterLevel, buffRounds);
             if (effect != null)
             {
-                effect.RemainingRounds = buffRounds;
                 effect.AppliedStatName = "STR";
                 effect.AppliedStatBonus = 2;
                 effect.AppliedTempHP = tempHP;

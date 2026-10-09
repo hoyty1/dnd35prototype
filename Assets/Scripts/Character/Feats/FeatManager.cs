@@ -533,8 +533,11 @@ public static class FeatManager
     /// Attempt to apply Stunning Fist after a successful unarmed hit.
     /// Returns true if the target is stunned.
     /// Must be called AFTER the attack hits and damage is applied.
+    /// The stun lasts "until just before your next action" (PHB p.101): its 1 round is timed from
+    /// <paramref name="attacker"/>'s initiative count even when it lands on an attack of opportunity during another
+    /// creature's turn (CMB-006). Without an attacker it is timed from the current count.
     /// </summary>
-    public static bool TryApplyStunningFist(CharacterStats attackerStats, CharacterController target)
+    public static bool TryApplyStunningFist(CharacterStats attackerStats, CharacterController target, CharacterController attacker = null)
     {
         if (attackerStats == null || target == null || target.Stats == null) return false;
         if (!CanUseStunningFist(attackerStats)) return false;
@@ -552,7 +555,8 @@ public static class FeatManager
         if (fortSave < dc)
         {
             // Target is stunned for 1 round
-            target.ApplyCondition(CombatConditionType.Stunned, 1, "Stunning Fist");
+            using (TurnDurations.Anchor(attacker))
+                target.ApplyCondition(CombatConditionType.Stunned, 1, "Stunning Fist");
             Debug.Log($"[Stunning Fist] {targetName} STUNNED by {attackerName}! (Fort {fortSave} < DC {dc}) [{attackerStats.StunningFistUsesRemaining} uses remaining]");
             return true;
         }

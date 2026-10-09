@@ -42,6 +42,9 @@ public class TurnService : MonoBehaviour
     private int _currentRound;
     private CharacterController _currentCharacter;
     private bool _combatActive;
+    // The last initiative count reached (CMB-006): its entry and round, so a count is reported once per round.
+    private InitiativeEntry _lastCountReachedEntry;
+    private int _lastCountReachedRound = -1;
 
     public IReadOnlyList<InitiativeEntry> InitiativeOrder => _initiativeOrder;
     public int CurrentInitiativeIndex => _currentInitiativeIndex;
@@ -51,6 +54,21 @@ public class TurnService : MonoBehaviour
 
     public event Action<CharacterController> OnTurnStarted;
     public event Action<int> OnNewRound;
+    /// <summary>
+    /// An initiative count was reached, before its creature's turn starts (<see cref="OnTurnStarted"/>), once per
+    /// count per round, also when its creature is dead and its turn is skipped. Durations anchored to that creature
+    /// tick here (PHB p.138, CMB-006; <see cref="TurnDurations"/>).
+    /// </summary>
+    public event Action<CharacterController> OnInitiativeCountReached;
+    /// <summary>
+    /// A creature left the initiative order (<see cref="RemoveFromInitiative"/>): (removed, heir). The durations it
+    /// anchored should tick at the heir's count from now on, null meaning the round boundary (CMB-006,
+    /// <see cref="TurnDurations.Reanchor"/>). The heir is the neighbouring count that keeps one tick per round: the next
+    /// count if the removed one was not reached this round (null when it was the last), the next one if it was reached
+    /// earlier this round, and the previous one if it is the current count (null when it was the first, which then
+    /// loses one extra round).
+    /// </summary>
+    public event Action<CharacterController, CharacterController> OnInitiativeCountRemoved;
     public event Action OnCombatEnded;
 
     public void StartCombat(
@@ -64,6 +82,7 @@ public class TurnService : MonoBehaviour
         _currentRound = 0;
         _currentCharacter = null;
         _combatActive = true;
+        ResetCountReached();
 
         if (pcs != null)
         {
@@ -105,6 +124,8 @@ public class TurnService : MonoBehaviour
         }
 
         _currentRound = 1;
+        // Effects created while the round boundary is processed have no initiative count (CMB-006).
+        TurnDurations.ClearCurrentAnchor();
         OnNewRound?.Invoke(_currentRound);
 
         Debug.Log("[TurnService][Initiative] ===== INITIATIVE ORDER =====");
@@ -197,10 +218,12 @@ public class TurnService : MonoBehaviour
             {
                 _currentInitiativeIndex = 0;
                 _currentRound++;
+                TurnDurations.ClearCurrentAnchor();
                 OnNewRound?.Invoke(_currentRound);
             }
 
             InitiativeEntry entry = _initiativeOrder[_currentInitiativeIndex];
+            ReachInitiativeCount(entry);
             if (IsEligibleCombatant(entry.Character))
             {
                 _currentCharacter = entry.Character;
@@ -213,6 +236,32 @@ public class TurnService : MonoBehaviour
         }
 
         EndCombat();
+    }
+
+    /// <summary>
+    /// Makes <paramref name="entry"/>'s count the current one for new durations and raises
+    /// <see cref="OnInitiativeCountReached"/> the first time this round (CMB-006).
+    /// </summary>
+    private void ReachInitiativeCount(InitiativeEntry entry)
+    {
+        if (entry == null)
+            return;
+
+        TurnDurations.SetCurrentAnchor(entry.Character);
+        if (ReferenceEquals(entry, _lastCountReachedEntry) && _lastCountReachedRound == _currentRound)
+            return;
+
+        _lastCountReachedEntry = entry;
+        _lastCountReachedRound = _currentRound;
+        if (entry.Character != null)
+            OnInitiativeCountReached?.Invoke(entry.Character);
+    }
+
+    private void ResetCountReached()
+    {
+        _lastCountReachedEntry = null;
+        _lastCountReachedRound = -1;
+        TurnDurations.ClearCurrentAnchor();
     }
 
     public void EndTurn()
@@ -239,6 +288,7 @@ public class TurnService : MonoBehaviour
         _currentCharacter = null;
         _initiativeOrder.Clear();
         _currentInitiativeIndex = 0;
+        ResetCountReached();
         Debug.Log("[TurnService][Flow] EndCombat invoking OnCombatEnded event.");
         OnCombatEnded?.Invoke();
         Debug.Log("[TurnService][Flow] EndCombat EXIT");
@@ -258,6 +308,7 @@ public class TurnService : MonoBehaviour
         _initiativeOrder.Clear();
         _currentInitiativeIndex = 0;
         _currentRound = 0;
+        ResetCountReached();
     }
 
     public void AddToInitiative(CharacterController combatant, bool isPC, CharacterController insertAfter = null)
@@ -284,7 +335,9 @@ public class TurnService : MonoBehaviour
         if (index < 0)
             return false;
 
+        CharacterController durationHeir = GetDurationHeir(index);
         _initiativeOrder.RemoveAt(index);
+        OnInitiativeCountRemoved?.Invoke(combatant, durationHeir);
 
         if (index < _currentInitiativeIndex)
             _currentInitiativeIndex = Mathf.Max(0, _currentInitiativeIndex - 1);
@@ -298,6 +351,24 @@ public class TurnService : MonoBehaviour
             EndCombat();
 
         return true;
+    }
+
+    /// <summary>
+    /// The creature whose count takes over the durations anchored to the entry at <paramref name="index"/> when it
+    /// leaves the order (CMB-006; see <see cref="OnInitiativeCountRemoved"/>).
+    /// </summary>
+    private CharacterController GetDurationHeir(int index)
+    {
+        InitiativeEntry removed = _initiativeOrder[index];
+        bool isCurrentCount = index == _currentInitiativeIndex
+            && ReferenceEquals(removed, _lastCountReachedEntry) && _lastCountReachedRound == _currentRound;
+
+        if (isCurrentCount)
+            return index > 0 ? _initiativeOrder[index - 1].Character : null;
+
+        // Reached earlier this round (the next count was reached too) or not yet reached (nor is the next count): the
+        // next count ticks once more before the removed count would have come up again.
+        return index + 1 < _initiativeOrder.Count ? _initiativeOrder[index + 1].Character : null;
     }
 
     public InitiativeEntry GetInitiative(CharacterController character)

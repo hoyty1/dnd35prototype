@@ -178,7 +178,7 @@ Consequences (CMB-075; the PC path uses the same gate, GameManager.cs:3991):
 | # | Line | Gate | Effect |
 |---|---|---|---|
 | 0 | 50 | GameManager, npc or Stats null | end |
-| 1 | 53 | `BeginNPCTurnForAI` (GameManager.cs:10932) | `ConditionService.OnTurnStart`, acid arrow damage, bombardier cooldown tick, `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
+| 1 | 53 | `BeginNPCTurnForAI` (GameManager.cs:10932) | acid arrow damage, bombardier cooldown tick, `ApplyRegenerationAtTurnStart`, `StartNewTurn`, round-start perception (`ProcessRoundStartPerception` 2934: tracker update plus a Listen check), turn-undead tracker pruning. No breath, ranged-special or terrain cooldown is ticked (AI-032) |
 | 2 | 55-61 | Turn banner | `CombatUI.` without null check (AI-018), wait 0.6 s |
 | 3 | 66 | `CurrentHP <= 0` | end. A Disabled (0 HP) NPC never takes its single action (AI-053) |
 | 4 | 73 | Confused | d% roll; any result except ActNormally runs the controller and ends the turn |
@@ -212,7 +212,7 @@ Side effects of the order: auras and free-action Spittle are skipped on any turn
 
 ### 3.5 How a turn ends
 
-The routine returns; unused actions are discarded (no Delay, Ready, Total Defense). `SingleNPCTurnFromInitiative` runs `EvaluateCombatEnd`, then `NextInitiativeTurn` runs True Strike expiry, pinned-duration bookkeeping, `ConditionService.OnTurnEnd`, `ProcessEndOfTurnHPState` (dying and stabilisation), the combat-end check again (no next turn once it is over), threat-preview invalidation, and advances `TurnService`. On wrap, `OnNewRound` ticks spell durations and `ConditionService.OnRoundEnd` (which runs at round start, CMB-006).
+The routine returns; unused actions are discarded (no Delay, Ready, Total Defense). `SingleNPCTurnFromInitiative` runs `EvaluateCombatEnd`, then `NextInitiativeTurn` runs True Strike expiry, pinned-duration bookkeeping, `ConditionService.OnTurnEnd`, `ProcessEndOfTurnHPState` (dying and stabilisation), the combat-end check again (no next turn once it is over), threat-preview invalidation, and advances `TurnService`. Spell effects and conditions tick at their duration anchor's initiative count (`GameManager.OnInitiativeCountReached`, before that creature's turn, PHB p.138); on wrap, `OnNewRound` ticks those with no anchor in the initiative order and the other spell trackers (SPL-032). `ConditionService.OnTurnStart` runs in `GameManager.OnTurnStarted`, before the skip gate, for PCs and NPCs alike (CMB-006).
 
 ## 4. Target selection and movement scoring
 
@@ -625,7 +625,7 @@ From [issues/AI.md](../issues/AI.md), AI-001 to AI-031 (AI-032 to AI-054 were fi
 - **Missing behaviour:** AI-009 (consumables), AI-010 (flee thresholds, lich aura), AI-012 (difficulty unused).
 - **Structure and performance:** AI-018 (`CombatUI` null derefs), AI-019 (A* per cell), AI-020 (3,504-line god class), AI-023 (hard-coded delays), AI-024 (two-way coupling via `*ForAI`), AI-025 (duplicate maneuver choosers), AI-026 (unread settings), AI-027 (`SelectBestAction` results other than `Charge` are ignored; if morale is built, wire in its `Retreat` result instead of reducing it to a charge test, 13.3), AI-029 (uncalled members), AI-030 (dead `ShouldNPCUseCharge`).
 
-From other files: CMB-004, CMB-006, CMB-015 to CMB-019, CMB-021 to CMB-029, CMB-031 to CMB-033, CMB-037, CMB-039, CMB-044, CMB-055 ([issues/CMB.md](../issues/CMB.md)); SPL-024, SPL-025, SPL-027, SPL-038, SPL-041, SPL-047, SPL-054, SPL-068 ([issues/SPL.md](../issues/SPL.md)); CRE-006, CRE-007, CRE-012 to CRE-018, CRE-020, CRE-022 to CRE-024 ([issues/CRE.md](../issues/CRE.md)); CORE-002, CORE-004, CORE-012 to CORE-015, CORE-017, CORE-022, CORE-030 ([issues/CORE.md](../issues/CORE.md)); GRID-005, GRID-007, GRID-009 to GRID-011 ([issues/GRID.md](../issues/GRID.md)); ITM-005, ITM-018, ITM-019, ITM-024 ([issues/ITM.md](../issues/ITM.md)); CHR-003 to CHR-005, CHR-008, CHR-020, CHR-021, CHR-023, CHR-024, CHR-026, CHR-053, CHR-062 ([issues/CHR.md](../issues/CHR.md)); ENC-005, ENC-012 ([issues/ENC.md](../issues/ENC.md)); TST-001 to TST-003, TST-008 ([issues/TST.md](../issues/TST.md)).
+From other files: CMB-004, CMB-015 to CMB-019, CMB-021 to CMB-029, CMB-031 to CMB-033, CMB-037, CMB-039, CMB-044, CMB-055 ([issues/CMB.md](../issues/CMB.md)); SPL-024, SPL-025, SPL-027, SPL-038, SPL-041, SPL-047, SPL-054, SPL-068 ([issues/SPL.md](../issues/SPL.md)); CRE-006, CRE-007, CRE-012 to CRE-018, CRE-020, CRE-022 to CRE-024 ([issues/CRE.md](../issues/CRE.md)); CORE-002, CORE-004, CORE-012 to CORE-015, CORE-017, CORE-022, CORE-030 ([issues/CORE.md](../issues/CORE.md)); GRID-005, GRID-007, GRID-009 to GRID-011 ([issues/GRID.md](../issues/GRID.md)); ITM-005, ITM-018, ITM-019, ITM-024 ([issues/ITM.md](../issues/ITM.md)); CHR-003 to CHR-005, CHR-008, CHR-020, CHR-021, CHR-023, CHR-024, CHR-026, CHR-053, CHR-062 ([issues/CHR.md](../issues/CHR.md)); ENC-005, ENC-012 ([issues/ENC.md](../issues/ENC.md)); TST-001 to TST-003, TST-008 ([issues/TST.md](../issues/TST.md)).
 
 ### 10.2 Issues found while writing this doc
 

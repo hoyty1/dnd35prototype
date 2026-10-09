@@ -47,8 +47,10 @@ public class EntangleAreaEffect : PersistentAreaEffect
 
         if (!saved)
         {
-            // Apply Entangled condition: -2 attack, -4 Dex, can't move
-            character.ApplyCondition(CombatConditionType.Entangled, 1, "Entangle");
+            // Apply Entangled condition: -2 attack, -4 Dex, can't move. The area renews it at the round boundary
+            // (OnCreatureInAreaAtRoundStart), so it ticks there, not at the caster's or the mover's count (CMB-006).
+            using (TurnDurations.AtRoundBoundary())
+                character.ApplyCondition(CombatConditionType.Entangled, 1, "Entangle");
             LogEffect($"🌿 {character.Stats.CharacterName} is entangled! (-2 attack, -4 Dex, can't move — DC {BreakFreeDC} Str/Escape Artist to break free)");
         }
     }

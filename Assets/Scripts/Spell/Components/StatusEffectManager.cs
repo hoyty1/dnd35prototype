@@ -49,12 +49,16 @@ public class StatusEffectManager : MonoBehaviour
     ///   3. Different bonus types to same stat DO stack.
     ///   4. Stackable types: Dodge, Untyped, Circumstance, Luck (house rule).
     /// Returns the created ActiveSpellEffect, or null if the effect was suppressed.
+    /// <paramref name="durationRounds"/> overrides the spell's default duration before the same-spell comparison, for a
+    /// caller whose rule sets its own count (CMB-006).
     /// </summary>
-    public ActiveSpellEffect AddEffect(SpellData spell, string casterName, int casterLevel)
+    public ActiveSpellEffect AddEffect(SpellData spell, string casterName, int casterLevel, int? durationRounds = null)
     {
         if (spell == null || _stats == null) return null;
 
         var effect = new ActiveSpellEffect(spell, casterName, casterLevel, _stats.CharacterName);
+        if (durationRounds.HasValue)
+            effect.RemainingRounds = durationRounds.Value;
         BonusType bonusType = spell.GetEffectiveBonusType();
 
         // === RULE 1: Same spell doesn't stack (D&D 3.5e: use longer duration) ===
@@ -70,6 +74,10 @@ public class StatusEffectManager : MonoBehaviour
             }
             else
             {
+                // An equal count from the current initiative count ends no earlier than the existing effect, which
+                // ends within its remaining rounds: keep the existing effect, timed from the new count (CMB-006).
+                if (effect.RemainingRounds == existingSameSpell.RemainingRounds && effect.RemainingRounds > 0)
+                    TurnDurations.Refresh(existingSameSpell, effect.RemainingRounds);
                 Debug.Log($"[StatusEffect] {_stats.CharacterName}: {spell.Name} already active with equal/longer duration, ignoring");
                 return null;
             }
@@ -245,15 +253,24 @@ public class StatusEffectManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Tick all active effects by 1 round. Returns list of effects that expired.
-    /// Call this at the end of each combat round (or start of new round).
+    /// Tick all active effects by 1 round, whatever their duration anchor. Returns list of effects that expired.
+    /// Combat ticks each effect at its anchor's initiative count instead (<see cref="TickEffects"/>, CMB-006).
     /// </summary>
-    public List<ActiveSpellEffect> TickAllEffects()
+    public List<ActiveSpellEffect> TickAllEffects() => TickEffects(null);
+
+    /// <summary>
+    /// Tick by 1 round the active effects whose <see cref="ActiveSpellEffect.DurationAnchor"/> passes
+    /// <paramref name="ticksForAnchor"/> (null: every effect), remove the expired ones and reverse their stat
+    /// modifications. Returns the effects that expired.
+    /// </summary>
+    public List<ActiveSpellEffect> TickEffects(System.Func<CharacterController, bool> ticksForAnchor)
     {
         var expired = new List<ActiveSpellEffect>();
 
         foreach (var effect in ActiveEffects)
         {
+            if (ticksForAnchor != null && !ticksForAnchor(effect.DurationAnchor))
+                continue;
             if (effect.Tick())
             {
                 expired.Add(effect);

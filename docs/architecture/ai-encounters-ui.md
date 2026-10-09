@@ -37,7 +37,8 @@ TurnService.StartTurnAtCurrentIndex -> OnTurnStarted
       ShouldSkipTurnDueToHPState -> NextInitiativeTurn, stop
       behavior = GetNPCBehaviorForAI(npc)                  _Core/GameManager.cs:10924
       yield AIService.ExecuteNPCTurn(npc, behavior)        Services/AIService.cs:48
-        BeginNPCTurnForAI: ConditionService.OnTurnStart, Melf's Acid Arrow damage, regeneration,
+        BeginNPCTurnForAI: Melf's Acid Arrow damage, regeneration (ConditionService.OnTurnStart
+                           already ran in GameManager.OnTurnStarted, CMB-006),
                            StartNewTurn, ProcessRoundStartPerception (Listen checks)
         HP <= 0 -> stop
         Confused / Charmed / Fascinated / Frightened controllers (may end the turn)
