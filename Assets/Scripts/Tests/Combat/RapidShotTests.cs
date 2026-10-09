@@ -413,7 +413,7 @@ public static class RapidShotTests
     }
 
     /// <summary>
-    /// Bless-style morale +1 (StatusEffectManager adds spell attack buffs to MoraleAttackBonus) must reach
+    /// Bless-style morale +1 (a morale attack bonus in CharacterStats.Bonuses, as StatusEffectManager registers Bless) must reach
     /// single, full (melee and ranged) and flurry attacks alike; the old full attack and flurry dropped it.
     /// </summary>
     private static void TestMoraleBonusReachesEveryAttackPath()
@@ -433,9 +433,9 @@ public static class RapidShotTests
             int rangedBefore = AttackMod(archer.Attack(farTarget, false, 0, null, range));
             int unarmedBefore = AttackMod(monk.Attack(target, false, 0, null, null));
 
-            fighter.Stats.MoraleAttackBonus += 1;
-            archer.Stats.MoraleAttackBonus += 1;
-            monk.Stats.MoraleAttackBonus += 1;
+            fighter.Stats.Bonuses.Set("test:morale", BonusTarget.AttackRoll, BonusType.Morale, 1, "test morale");
+            archer.Stats.Bonuses.Set("test:morale", BonusTarget.AttackRoll, BonusType.Morale, 1, "test morale");
+            monk.Stats.Bonuses.Set("test:morale", BonusTarget.AttackRoll, BonusType.Morale, 1, "test morale");
 
             CombatResult meleeSingle = fighter.Attack(target, false, 0, null, null);
             FullAttackResult meleeFull = fighter.FullAttack(target, false, 0, null, null);
@@ -488,7 +488,7 @@ public static class RapidShotTests
             attacker = CreateCombatant("TwfParity", "Fighter", 6, 6, 12, 16, Vector2Int.zero,
                 ItemID.WeaponLongsword, ItemID.WeaponDagger, "Weapon Finesse", "Two-Weapon Fighting");
             target = CreateDummy("TwfParityTarget", Vector2Int.right);
-            attacker.Stats.MoraleAttackBonus += 1;
+            attacker.Stats.Bonuses.Set("test:morale", BonusTarget.AttackRoll, BonusType.Morale, 1, "test morale");
 
             var (mainPenalty, offPenalty, _) = attacker.GetDualWieldPenalties();
             FullAttackResult result = attacker.DualWieldAttack(target, false, 0, null, null);

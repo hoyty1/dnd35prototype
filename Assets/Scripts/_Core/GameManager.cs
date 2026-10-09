@@ -985,6 +985,9 @@ public partial class GameManager : MonoBehaviour
             }
             stats.HasInspireCourageBonus = false;
             stats.AppliedInspireCourageValue = 0;
+            // Inspire Courage and a pounce's charge bonus are ledger entries of their own (CharacterStats.Bonuses).
+            stats.Bonuses.RemoveOwner(CharacterStats.InspireCourageBonusSource);
+            stats.Bonuses.RemoveOwner(CharacterStats.ChargeBonusSource);
             // Reset domain power daily uses
             stats.StrengthDomainUsesToday = 0;
             stats.DestructionDomainUsesToday = 0;

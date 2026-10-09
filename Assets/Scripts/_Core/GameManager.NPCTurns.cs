@@ -1433,7 +1433,13 @@ public partial class GameManager
         if (!handledCauseFear && !handledLesserGlobe && result.Success)
             handledSearingLight = TryResolveSearingLightSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledLesserGlobe && !handledSearingLight && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        // Prayer's burst around the caster (PHB p.264): allies +1 luck, foes -1, from the same resolver as the PC side
+        // (SPL-042, SPL-054).
+        bool handledPrayer = false;
+        if (!handledCauseFear && !handledSearingLight && result.Success)
+            handledPrayer = TryResolvePrayerSpellEffect(npc, target, spell, result);
+
+        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledLesserGlobe && !handledSearingLight && !handledPrayer && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp, result);
 
         if (result.DamageDealt > 0)

@@ -1,13 +1,13 @@
 /// <summary>
-/// D&D 3.5e bonus types from the Player's Handbook (PHB p.21, p.177).
-/// Used to enforce stacking rules: bonuses of the same type to the same
-/// statistic do NOT stack (only the highest applies), with exceptions
-/// for Dodge, Untyped, and Luck (per house rule).
+/// D&D 3.5e bonus types (PHB p.171 "Bonus Types"; DMG p.21 "Bonus Types"; PHB glossary).
+/// Used to enforce stacking rules: bonuses of the same type to the same statistic do NOT stack (only the highest
+/// applies), except dodge bonuses, circumstance bonuses from different circumstances and untyped bonuses from
+/// different sources (<see cref="BonusTypeHelper.DoesStack"/>, <see cref="BonusStacking"/>).
 /// </summary>
 using DND35e.Identifiers;
 public enum BonusType
 {
-    /// <summary>No typed bonus — always stacks with everything.</summary>
+    /// <summary>No typed bonus: stacks with every bonus, except another from the same source (PHB p.172, glossary "stack" p.313).</summary>
     Untyped = 0,
 
     /// <summary>Alchemical bonus (e.g., alchemical items).</summary>
@@ -16,7 +16,7 @@ public enum BonusType
     /// <summary>Armor bonus to AC (e.g., Mage Armor, actual armor). Does not stack with other armor bonuses.</summary>
     Armor,
 
-    /// <summary>Circumstance bonus — always stacks (even with itself).</summary>
+    /// <summary>Circumstance bonus: stacks with other circumstance bonuses unless they arise from essentially the same circumstance (PHB glossary p.306; DMG p.21).</summary>
     Circumstance,
 
     /// <summary>Competence bonus (e.g., Guidance cantrip).</summary>
@@ -25,7 +25,7 @@ public enum BonusType
     /// <summary>Deflection bonus to AC (e.g., Shield of Faith, Ring of Protection).</summary>
     Deflection,
 
-    /// <summary>Dodge bonus to AC — always stacks (even with itself).</summary>
+    /// <summary>Dodge bonus to AC (and sometimes Reflex): stacks with other dodge bonuses (PHB glossary p.307).</summary>
     Dodge,
 
     /// <summary>Enhancement bonus (e.g., Bull's Strength, magic weapon enhancement).</summary>
@@ -34,7 +34,7 @@ public enum BonusType
     /// <summary>Insight bonus (e.g., True Strike).</summary>
     Insight,
 
-    /// <summary>Luck bonus (e.g., Divine Favor). House rule: stacks like dodge.</summary>
+    /// <summary>Luck bonus (e.g., Divine Favor, Prayer, a stone of good luck). Multiple luck bonuses do not stack; only the highest applies (PHB glossary p.310).</summary>
     Luck,
 
     /// <summary>Morale bonus (e.g., Bless, Good Hope).</summary>
@@ -121,25 +121,25 @@ public enum BonusType
 }
 
 /// <summary>
-/// Helper class for D&D 3.5e bonus type stacking rules.
-/// 
-/// Standard Rules (PHB p.177):
-///   - Most bonuses of the same type do NOT stack (only highest applies).
-///   - Dodge bonuses always stack.
-///   - Circumstance bonuses always stack.
-///   - Untyped bonuses always stack.
-///   
-/// House Rules applied:
-///   - Luck bonuses stack (per user request — non-standard but requested).
+/// Helper class for D&D 3.5e bonus type stacking rules (PHB p.171-172, glossary p.305-313; DMG p.21):
+///   - Bonuses of the same type do NOT stack (only the highest applies); penalties of the same type, only the worst.
+///   - Dodge bonuses stack with each other.
+///   - Circumstance bonuses stack unless they arise from the same circumstance (same source).
+///   - Untyped bonuses stack unless they come from the same source.
+///   - The same spell or effect never stacks with itself.
+/// The totals are computed by <see cref="BonusStacking.Combine(System.Collections.Generic.IList{TypedBonus})"/>.
+/// No house rule changes these (owner directive 2026-10-09: strict RAW).
 /// </summary>
 public static class BonusTypeHelper
 {
     /// <summary>
-    /// Determine whether a bonus type stacks with itself (i.e., multiple bonuses of the
-    /// same type to the same stat are all applied rather than using only the highest).
-    /// 
-    /// Returns true for: Dodge, Untyped, Circumstance, Luck (house rule).
-    /// Returns false for all other types.
+    /// Whether bonuses of this type from DIFFERENT sources stack with each other (all are applied rather than only the
+    /// highest). Bonuses from the same source never stack, whatever their type (<see cref="BonusStacking"/>).
+    ///
+    /// Returns true for Dodge, Untyped and Circumstance (PHB p.171-172; glossary "stack" p.313, "circumstance bonus"
+    /// p.306, "dodge bonus" p.307). Returns false for every named type, luck included (glossary "luck bonus" p.310).
+    /// Racial returns false (DMG p.21); PHB p.171 lists racial bonuses among those that stack, an open owner question
+    /// (CHR-019).
     /// </summary>
     public static bool DoesStack(BonusType type)
     {
@@ -148,7 +148,6 @@ public static class BonusTypeHelper
             case BonusType.Dodge:
             case BonusType.Untyped:
             case BonusType.Circumstance:
-            case BonusType.Luck:  // House rule: luck bonuses stack
                 return true;
             default:
                 return false;

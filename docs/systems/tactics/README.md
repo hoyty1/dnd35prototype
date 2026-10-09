@@ -232,7 +232,7 @@ The order is frequency (creatures or entries affected) × AI value × size of th
 | 2 | Executor split plus `ActionRegistry` skeleton (attack, full attack, charge, maneuvers, single-target spell, consumable, aid another, turn undead) | all | High: the precondition for everything below | High | AI-054, SPL-054, ITM-005 |
 | 3 | Enemy spell carriers: DMG class casters get spells; slot and known-spell caps; mis-slotting; vampire as Fighter; stale placeholder flag on SM I/II | every caster spawn (max NPC CL in tables is 5) | High | High | ENC-021, SPL-041, SPL-015, CRE-030, SPL-021, CRE-015 |
 | 4 | NPC area casting through the shared AoE core; true burst resolution | 77 in-scope entries cite AI-001 (62 Area spells in the DB) | High: sleep, color spray, web, fireball | High | AI-001, SPL-046, SPL-042 |
-| 5 | NPC-path effect parity: summon, dispel and escape do nothing; Prayer, Magic Vestment and Magic Weapon have no NPC handler; Hold Person/Monster have no per-round save (new); SR flags missing | about 30 P1/P2 spells | High | Med | SPL-091, SPL-057, new SPL (hold) |
+| 5 | NPC-path effect parity: summon, dispel and escape do nothing; Magic Vestment and Magic Weapon have no NPC handler (Prayer's added 2026-10-09); Hold Person/Monster have no per-round save (new); SR flags missing | about 30 P1/P2 spells | High | Med | SPL-091, SPL-057, new SPL (hold) |
 | 6 | Grapple family as triggers: Improved Grab (49, works), **Constrict (22, text only in 10 creature files)**, Rake (regrade, see section 3), grapple blood drain | 49+22+9 | High | Med | CRE-031, CMB-075 |
 | 7 | Movement modes: fly 42 (+ fly variants), climb 10+2, swim 3+2+1, burrow 4, earth glide 6. Prerequisite for flyby, ink-cloud escape and burrow-ambush AI | 60+ | High (positioning) | High (no fly/swim/climb speed exists on `NPCDefinition`) | file new GRID/CRE issue; AI-019 |
 | 8 | SLA system (`SpecialAbilityEntry`) feeding spell actions | about 100 SLA ids (charm person, darkness, invisibility, stinking cloud, suggestion...) | High | High | CRE-015, CRE-017 |
@@ -351,7 +351,7 @@ PC usability before correction is 129 yes, 94 partial and 186 no. 29 Cleric- or 
   - non-SRD MM creatures and their SLA lists: mind flayer charm monster DC, yuan-ti deeper darkness, beholder/gauth eye rays
 - **Spells:**
   - Summon Instrument, Animal Messenger, Animate Rope and Calm Animals (untrained-animal save clause)
-  - Goodberry eating action (no PHB ruling; flag any choice as a house rule)
+  - Goodberry eating action (no PHB ruling; any choice is an owner interpretation of a RAW silence: ask the owner, RULES_COVERAGE 4.1)
   - Alter Self form list, Soften Earth and Stone, SM II and SNA II lists, Charm Monster
   - Meld into Stone expulsion damage, Phantom Steed table, Plant Growth speeds, Poison, Quench
   - Giant Vermin CL table, Imbue with Spell Ability recipient rule, Lesser Planar Ally payment

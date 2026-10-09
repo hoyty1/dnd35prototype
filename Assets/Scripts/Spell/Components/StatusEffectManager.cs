@@ -7,15 +7,19 @@ using DND35e.Identifiers;
 /// Manages active spell effects on a single character.
 /// Tracks durations, handles effect application/removal, and enforces D&D 3.5e stacking rules.
 ///
-/// D&D 3.5e Stacking Rules (PHB p.177):
-///   - Most bonuses of the same TYPE to the same statistic do NOT stack (only the highest applies).
-///   - Dodge bonuses always stack.
-///   - Circumstance bonuses always stack.
-///   - Untyped bonuses always stack.
-///   - House Rule: Luck bonuses stack (per user request).
-///   - Different bonus types to the same stat DO stack.
-///   - Penalties always stack.
-///   - Same spell from multiple casters: only the best applies (no stacking).
+/// D&D 3.5e stacking rules (PHB p.171-172 "Combining Magical Effects"; glossary p.305-313; DMG p.21), applied per
+/// statistic by <see cref="BonusStacking"/> over <see cref="CharacterStats.Bonuses"/>, where every applied effect
+/// registers its attack, weapon damage, save, skill, speed and ability bonuses with its real <see cref="BonusType"/>:
+///   - Bonuses of the same type to the same statistic do not stack (only the highest applies); luck included.
+///   - Dodge bonuses stack; circumstance and untyped bonuses stack unless they come from the same source.
+///   - Different bonus types to the same statistic stack.
+///   - Penalties: of one type, only the worst; untyped penalties from different sources add up.
+///   - The same spell never stacks with itself (the source of its bonuses is its SpellId): only the best applies.
+///   - Effects that do not stack still coexist: when the better one ends, the other applies again (PHB p.172). Only
+///     size-changing transmutations still replace each other, and a second copy of a spell with side effects of its own
+///     (flags, size, attribute enhancement tracking) keeps one copy (<see cref="CanCoexistWithItself"/>).
+/// Armor, deflection, natural armor enhancement and typed save bonuses take the highest applied value per type
+/// (Recompute* helpers). No house rule applies (owner directive 2026-10-09).
 ///
 /// This component is attached to each character GameObject alongside CharacterController.
 /// </summary>
@@ -42,13 +46,16 @@ public class StatusEffectManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Add a new spell effect to this character.
-    /// Handles D&D 3.5e stacking rules:
-    ///   1. Same spell doesn't stack (replaces with longer duration).
-    ///   2. Same bonus type to same stat doesn't stack (highest only) — unless stackable type.
-    ///   3. Different bonus types to same stat DO stack.
-    ///   4. Stackable types: Dodge, Untyped, Circumstance, Luck (house rule).
-    /// Returns the created ActiveSpellEffect, or null if the effect was suppressed.
+    /// Add a new spell effect to this character. Stacking (PHB p.171-172):
+    ///   1. The same spell does not stack with itself. A copy that is no stronger and lasts no longer than an active one
+    ///      adds nothing (the active one is re-timed when the counts are equal); a copy that is at least as strong and
+    ///      lasts at least as long replaces it; otherwise both coexist for a spell that allows it
+    ///      (<see cref="CanCoexistWithItself"/>) and only the better one counts, else the stronger one is kept. Dropping
+    ///      the dominated copy differs from PHB p.172 only when the better copy is dispelled early (SPL-134).
+    ///   2. Effects of different spells all apply; for each statistic the bonuses of one type do not stack (highest
+    ///      only) except dodge, circumstance and untyped ones (<see cref="BonusStacking"/>). Size-changing
+    ///      transmutations still replace or suppress each other.
+    /// Returns the created ActiveSpellEffect, or null if the effect was not added.
     /// <paramref name="durationRounds"/> overrides the spell's default duration before the same-spell comparison, for a
     /// caller whose rule sets its own count (CMB-006).
     /// </summary>
@@ -61,76 +68,106 @@ public class StatusEffectManager : MonoBehaviour
             effect.RemainingRounds = durationRounds.Value;
         BonusType bonusType = spell.GetEffectiveBonusType();
 
-        // === RULE 1: Same spell doesn't stack (D&D 3.5e: use longer duration) ===
-        var existingSameSpell = ActiveEffects.FirstOrDefault(e => e.Spell.SpellId == spell.SpellId);
-        if (existingSameSpell != null)
+        // The values this copy applies (some depend on the caster level), set before the stacking comparison.
+        ConfigureAppliedValues(effect, spell, casterLevel);
+
+        // === RULE 1: the same spell does not stack with itself (PHB p.172, "Same Effect More than Once in Different Strengths") ===
+        var sameSpell = ActiveEffects.Where(e => e != null && e.Spell != null && e.Spell.SpellId == spell.SpellId).ToList();
+        foreach (var existing in sameSpell)
         {
-            if (effect.RemainingRounds > existingSameSpell.RemainingRounds ||
-                (effect.RemainingRounds == -1 && existingSameSpell.RemainingRounds != -1))
-            {
-                Debug.Log($"[StatusEffect] {_stats.CharacterName}: Replacing {spell.Name} with longer duration " +
-                          $"({existingSameSpell.RemainingRounds} → {effect.RemainingRounds} rounds)");
-                RemoveEffect(existingSameSpell);
-            }
-            else
+            // A bonus copy and a penalty copy of one spell (Prayer from an ally's caster and from a foe's, PHB p.264) are
+            // different effects: both apply (the ledger keeps a source's best bonus and its worst penalty apart).
+            if (EffectSign(existing) != EffectSign(effect))
+                continue;
+
+            int newPower = GetEffectPower(effect);
+            int oldPower = GetEffectPower(existing);
+            long newLasts = Lasts(effect.RemainingRounds);
+            long oldLasts = Lasts(existing.RemainingRounds);
+
+            if (oldPower >= newPower && oldLasts >= newLasts)
             {
                 // An equal count from the current initiative count ends no earlier than the existing effect, which
                 // ends within its remaining rounds: keep the existing effect, timed from the new count (CMB-006).
-                if (effect.RemainingRounds == existingSameSpell.RemainingRounds && effect.RemainingRounds > 0)
-                    TurnDurations.Refresh(existingSameSpell, effect.RemainingRounds);
-                Debug.Log($"[StatusEffect] {_stats.CharacterName}: {spell.Name} already active with equal/longer duration, ignoring");
+                if (effect.RemainingRounds == existing.RemainingRounds && effect.RemainingRounds > 0)
+                    TurnDurations.Refresh(existing, effect.RemainingRounds);
+                Debug.Log($"[StatusEffect] {_stats.CharacterName}: {spell.Name} already active as strong and as long, ignoring");
+                return null;
+            }
+
+            if (newPower >= oldPower && newLasts >= oldLasts)
+            {
+                Debug.Log($"[StatusEffect] {_stats.CharacterName}: Replacing {spell.Name} with a copy at least as strong and as long " +
+                          $"(+{oldPower} → +{newPower}, {existing.RemainingRounds} → {effect.RemainingRounds} rounds)");
+                RemoveEffect(existing);
+                continue;
+            }
+
+            if (CanCoexistWithItself(effect))
+            {
+                // Both copies operate; only the better one counts (same source), and the other applies when it ends.
+                Debug.Log($"[StatusEffect] {_stats.CharacterName}: second {spell.Name} coexists (+{oldPower}, {existing.RemainingRounds} rounds " +
+                          $"and +{newPower}, {effect.RemainingRounds} rounds); the better applies");
+                continue;
+            }
+
+            // A spell with side effects of its own keeps one copy: the stronger one, so the bonus that applies now is
+            // the one RAW gives (PHB p.172); the weaker copy's longer tail is lost (SPL-134).
+            if (newPower > oldPower)
+            {
+                Debug.Log($"[StatusEffect] {_stats.CharacterName}: Replacing {spell.Name} with a stronger, shorter copy " +
+                          $"(+{oldPower} → +{newPower}, {existing.RemainingRounds} → {effect.RemainingRounds} rounds)");
+                RemoveEffect(existing);
+            }
+            else
+            {
+                Debug.Log($"[StatusEffect] {_stats.CharacterName}: {spell.Name} already active and stronger, ignoring the weaker, longer copy");
                 return null;
             }
         }
 
-        // === RULE 2: Same bonus type stacking check ===
-        // Only applies to "core" D&D bonus types that have standard stacking rules.
-        // Spell-specific types (MirrorImage, Invisibility, etc.) only check same-spell (handled above).
-        if (BonusTypeHelper.IsCoreType(bonusType) && !BonusTypeHelper.DoesStack(bonusType))
+        // === RULE 2: size-changing transmutations (Enlarge Person, Reduce Person and their mass versions) replace or
+        // suppress each other: a creature has one size. Every other effect applies; same-type bonuses are resolved per
+        // statistic when they are read (CharacterStats.Bonuses, BonusStacking).
+        if (IsSizeShiftSpell(spell.SpellId))
         {
-            // Non-stackable type — check if another effect of the same bonus type exists
-            // We need to check per-stat: same bonus type to the same stat doesn't stack.
-            // For simplicity, we compare effects with the same BonusTypeEnum.
-            var existingSameType = ActiveEffects.Where(e =>
-                e.BonusTypeEnum == bonusType && e.Spell.SpellId != spell.SpellId).ToList();
-
-            if (existingSameType.Count > 0)
+            foreach (var existing in ActiveEffects.Where(e => e != null && e.Spell != null && e.Spell.SpellId != spell.SpellId
+                                                              && IsSizeShiftSpell(e.Spell.SpellId)).ToList())
             {
-                // Check if bonuses overlap on the same stats
-                foreach (var existing in existingSameType)
+                int existingPower = GetEffectPower(existing);
+                int newPower = GetEffectPowerFromSpell(spell);
+                if (newPower <= existingPower)
                 {
-                    bool overlaps = DoBonusesOverlap(spell, existing);
-                    if (!overlaps) continue; // Different stats, both apply
-
-                    int existingPower = GetEffectPower(existing);
-                    int newPower = GetEffectPowerFromSpell(spell);
-
-                    string bonusTypeName = BonusTypeHelper.GetDisplayName(bonusType);
-
-                    if (newPower <= existingPower)
-                    {
-                        // New effect is weaker or equal — suppressed
-                        string logMsg = $"⚠ {spell.Name} doesn't stack with existing {bonusTypeName} bonus " +
-                                        $"from {existing.Spell.Name} (+{existingPower} vs +{newPower})";
-                        Debug.Log($"[StatusEffect] {_stats.CharacterName}: {logMsg}");
-                        LogCombatMessage($"{_stats.CharacterName}: {logMsg}");
-                        return null;
-                    }
-                    else
-                    {
-                        // New effect is stronger — replace the old one
-                        string logMsg = $"⚠ {spell.Name} ({bonusTypeName} +{newPower}) replaces " +
-                                        $"{existing.Spell.Name} ({bonusTypeName} +{existingPower})";
-                        Debug.Log($"[StatusEffect] {_stats.CharacterName}: {logMsg}");
-                        LogCombatMessage($"{_stats.CharacterName}: {logMsg}");
-                        RemoveEffect(existing);
-                    }
+                    string logMsg = $"⚠ {spell.Name} does not change the size set by {existing.Spell.Name}";
+                    Debug.Log($"[StatusEffect] {_stats.CharacterName}: {logMsg}");
+                    LogCombatMessage($"{_stats.CharacterName}: {logMsg}");
+                    return null;
                 }
+                string replaceMsg = $"⚠ {spell.Name} replaces {existing.Spell.Name}";
+                Debug.Log($"[StatusEffect] {_stats.CharacterName}: {replaceMsg}");
+                LogCombatMessage($"{_stats.CharacterName}: {replaceMsg}");
+                RemoveEffect(existing);
             }
         }
-        // Stackable types (Dodge, Untyped, Circumstance, Luck): no stacking check needed, all apply
 
-        // Store the stat modifications that will be applied
+        // Apply stat modifications
+        ApplyStatModifications(effect);
+        effect.IsApplied = true;
+
+        ActiveEffects.Add(effect);
+
+        // Log with bonus type info
+        string typeStr = bonusType != BonusType.Untyped ? $" [{BonusTypeHelper.GetDisplayName(bonusType)}]" : "";
+        Debug.Log($"[StatusEffect] {_stats.CharacterName}: Applied{typeStr} — {effect.GetDetailedString()}");
+        return effect;
+    }
+
+    /// <summary>
+    /// The values <paramref name="effect"/> applies: the spell's Buff* fields plus the caster-level and spell-specific
+    /// adjustments, so every path that adds the effect (a cast, a scroll, a wand, a potion) grants the same bonus.
+    /// </summary>
+    private void ConfigureAppliedValues(ActiveSpellEffect effect, SpellData spell, int casterLevel)
+    {
         effect.AppliedAttackBonus = spell.BuffAttackBonus;
         effect.AppliedDamageBonus = spell.BuffDamageBonus;
         // Divine Favor: +1 per three caster levels on attack and weapon damage rolls, at least +1 (PHB p.224). The owner's
@@ -245,16 +282,29 @@ public class StatusEffectManager : MonoBehaviour
             effect.RemainingRounds = -1; // Permanent until removed
         }
 
-        // Apply stat modifications
-        ApplyStatModifications(effect);
-        effect.IsApplied = true;
+        // Haste's +1 bonus on attack rolls and +1 dodge bonus to AC and Reflex saves are the Haste* fields, which
+        // ApplyHasteBuff sets (PHB p.239); the effect applies only the +30 ft enhancement bonus to speed, so the
+        // attack and Reflex bonuses are not counted twice and Mage Armor is not replaced (SPL-024, SPL-025).
+        if (string.Equals(spell.SpellId, SpellNames.HASTE, System.StringComparison.Ordinal))
+        {
+            effect.AppliedAttackBonus = 0;
+            effect.AppliedSaveBonus = 0;
+            effect.AppliedACBonus = 0;
+        }
 
-        ActiveEffects.Add(effect);
-
-        // Log with bonus type info
-        string typeStr = bonusType != BonusType.Untyped ? $" [{BonusTypeHelper.GetDisplayName(bonusType)}]" : "";
-        Debug.Log($"[StatusEffect] {_stats.CharacterName}: Applied{typeStr} — {effect.GetDetailedString()}");
-        return effect;
+        // Rage (PHB p.268): +2 morale bonus to Strength and Constitution, registered as the effect's two ability bonuses
+        // so they end with it; its +1 morale bonus is on Will saves only and its -2 AC penalty is SpellRageACPenalty, both
+        // set in ApplySpellSpecificAdjustments (the spell data's BuffSaveBonus and BuffACBonus would reach every save and
+        // the armor bonus).
+        if (string.Equals(spell.SpellId, SpellNames.RAGE, System.StringComparison.Ordinal))
+        {
+            effect.AppliedStatName = "STR";
+            effect.AppliedStatBonus = 2;
+            effect.AppliedSecondaryStatName = "CON";
+            effect.AppliedSecondaryStatBonus = 2;
+            effect.AppliedSaveBonus = 0;
+            effect.AppliedACBonus = 0;
+        }
     }
 
     /// <summary>
@@ -350,9 +400,10 @@ public class StatusEffectManager : MonoBehaviour
         }
 
         // Shield of Faith: ReverseStatModifications above already removed its deflection (AppliedDeflectionBonus);
-        // only the indicator field is cleared here, so the bonus is not subtracted twice (ITM-001).
+        // only the indicator field follows the copies left, so the bonus is not subtracted twice (ITM-001). Two copies
+        // may coexist (the better applies, PHB p.172), so the indicator shows the best one still active.
         if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SHIELD_OF_FAITH, System.StringComparison.Ordinal) && _stats != null)
-            _stats.ShieldOfFaithDeflectionBonus = 0;
+            _stats.ShieldOfFaithDeflectionBonus = BestAppliedDeflection(SpellNames.SHIELD_OF_FAITH);
 
         // SPL-003: Death Knell, Silence and Align Weapon flags end with their tracked effect (expiry, dispel or rest).
         // Death Knell's +2 STR is an applied stat of the effect, so ReverseStatModifications above already took it back.
@@ -368,8 +419,8 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.GLOBE_OF_INVULNERABILITY, System.StringComparison.Ordinal))
             LesserGlobeOfInvulnerabilityAreaEffect.EndGlobesOf(_controller != null ? _controller : GetComponent<CharacterController>(), SpellNames.GLOBE_OF_INVULNERABILITY);
 
-        // Also remove from SpellcastingComponent's ActiveBuffs for backward compat
-        if (_spellComp != null && effect.Spell != null)
+        // Also remove from SpellcastingComponent's ActiveBuffs for backward compat (unless another copy still operates)
+        if (_spellComp != null && effect.Spell != null && !HasEffect(effect.Spell.SpellId))
         {
             _spellComp.ActiveBuffs.Remove(effect.Spell.SpellId);
         }
@@ -427,6 +478,16 @@ public class StatusEffectManager : MonoBehaviour
         return ActiveEffects.Any(e => e.Spell != null && e.Spell.SpellId == spellId);
     }
 
+    /// <summary>The highest deflection bonus among the active copies of <paramref name="spellId"/> (0 when none).</summary>
+    public int BestAppliedDeflection(string spellId)
+    {
+        int best = 0;
+        foreach (var e in ActiveEffects)
+            if (e != null && e.IsApplied && e.Spell != null && e.Spell.SpellId == spellId && e.AppliedDeflectionBonus > best)
+                best = e.AppliedDeflectionBonus;
+        return best;
+    }
+
     /// <summary>
     /// Get remaining rounds for a specific spell effect. Returns 0 if not active.
     /// </summary>
@@ -445,23 +506,19 @@ public class StatusEffectManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Get the total bonus of a specific type currently active on the character.
-    /// For non-stackable types, returns the highest value.
-    /// For stackable types (Dodge, Untyped, Circumstance, Luck), returns the sum.
+    /// The "power" of the active effects of one bonus type, by the PHB stacking rules: the sum over distinct spells for a
+    /// type that stacks (dodge, circumstance, untyped), else the highest; two copies of one spell count once.
     /// </summary>
     public int GetTotalBonusOfType(BonusType type)
     {
-        var matching = ActiveEffects.Where(e => e.BonusTypeEnum == type).ToList();
+        var matching = ActiveEffects.Where(e => e != null && e.BonusTypeEnum == type).ToList();
         if (matching.Count == 0) return 0;
 
-        if (BonusTypeHelper.DoesStack(type))
-        {
-            return matching.Sum(e => GetEffectPower(e));
-        }
-        else
-        {
-            return matching.Max(e => GetEffectPower(e));
-        }
+        var perSpell = matching
+            .GroupBy(e => e.Spell != null ? e.Spell.SpellId : string.Empty)
+            .Select(g => g.Max(e => GetEffectPower(e)))
+            .ToList();
+        return BonusTypeHelper.DoesStack(type) ? perSpell.Sum() : perSpell.Max();
     }
 
     /// <summary>
@@ -498,106 +555,26 @@ public class StatusEffectManager : MonoBehaviour
     // ========== PRIVATE HELPERS ==========
 
     /// <summary>
-    /// Check if two effects' bonuses overlap on the same stats.
-    /// Used to determine if same-type stacking rules apply.
-    /// E.g., two enhancement bonuses to STR overlap, but enhancement to STR and enhancement to DEX don't.
-    /// For general bonuses (attack, damage, saves, AC), they overlap if both modify the same category.
+    /// Apply the stat modifications of an effect: its typed attack, weapon damage, save, skill, speed and ability bonuses
+    /// go to <see cref="CharacterStats.Bonuses"/> (resolved per statistic by the PHB stacking rules when read), and the
+    /// per-type AC and save fields are recomputed as the highest applied value of their type.
     /// </summary>
-    private bool DoBonusesOverlap(SpellData newSpell, ActiveSpellEffect existing)
-    {
-        // Size-changing transmutations overlap each other by definition.
-        string newId = newSpell?.SpellId ?? string.Empty;
-        string existingId = existing?.Spell?.SpellId ?? string.Empty;
-        bool newIsSizeShift = newId == SpellNames.ENLARGE_PERSON || newId == SpellNames.REDUCE_PERSON
-            || newId == SpellNames.MASS_ENLARGE_PERSON || newId == SpellNames.MASS_REDUCE_PERSON;
-        bool existingIsSizeShift = existingId == SpellNames.ENLARGE_PERSON || existingId == SpellNames.REDUCE_PERSON
-            || existingId == SpellNames.MASS_ENLARGE_PERSON || existingId == SpellNames.MASS_REDUCE_PERSON;
-        if (newIsSizeShift && existingIsSizeShift) return true;
-        // If both modify the same ability score
-        if (!string.IsNullOrEmpty(newSpell.BuffStatName) && !string.IsNullOrEmpty(existing.AppliedStatName))
-        {
-            if (newSpell.BuffStatName.ToUpper() == existing.AppliedStatName.ToUpper())
-                return true;
-            // Different stats with same bonus type — both can apply
-            // BUT if either also has attack/damage/save/AC bonuses, check those too
-        }
-
-        // If both modify attack bonus
-        if (newSpell.BuffAttackBonus != 0 && existing.AppliedAttackBonus != 0) return true;
-        // If both modify land speed
-        if (newSpell.BuffSpeedBonusFeet != 0 && existing.AppliedSpeedBonusFeet != 0) return true;
-        // If both modify the same skill
-        if (!string.IsNullOrEmpty(newSpell.BuffSkillName) && !string.IsNullOrEmpty(existing.AppliedSkillName)
-            && string.Equals(newSpell.BuffSkillName, existing.AppliedSkillName, System.StringComparison.OrdinalIgnoreCase)) return true;
-        // If both modify damage bonus
-        if (newSpell.BuffDamageBonus != 0 && existing.AppliedDamageBonus != 0) return true;
-        // If both modify save bonus
-        if (newSpell.BuffSaveBonus != 0 && existing.AppliedSaveBonus != 0) return true;
-        // If both grant same typed resistance
-        if (newSpell.BuffDamageResistanceAmount > 0 && existing.AppliedDamageResistanceAmount > 0 &&
-            newSpell.BuffDamageResistanceType == existing.AppliedDamageResistanceType) return true;
-
-        // If both grant same immunity type
-        if (newSpell.BuffDamageImmunityType != DamageType.Untyped &&
-            newSpell.BuffDamageImmunityType == existing.AppliedDamageImmunityType) return true;
-
-        // If both grant DR, treat as overlapping mitigation category
-        if (newSpell.BuffDamageReductionAmount > 0 && existing.AppliedDamageReductionAmount > 0) return true;
-        // If both modify AC (armor type)
-        if (newSpell.BuffACBonus != 0 && existing.AppliedACBonus != 0) return true;
-        // If both modify shield bonus
-        if (newSpell.BuffShieldBonus != 0 && existing.AppliedShieldBonus != 0) return true;
-        // If both modify deflection bonus
-        if (newSpell.BuffDeflectionBonus != 0 && existing.AppliedDeflectionBonus != 0) return true;
-
-        // For stat bonuses to DIFFERENT stats with same bonus type, don't count as overlap
-        if (!string.IsNullOrEmpty(newSpell.BuffStatName) && !string.IsNullOrEmpty(existing.AppliedStatName))
-        {
-            if (newSpell.BuffStatName.ToUpper() != existing.AppliedStatName.ToUpper())
-                return false;
-        }
-
-        // If both have stat bonuses and at least one doesn't have a stat name, assume overlap
-        if (newSpell.BuffStatBonus != 0 && existing.AppliedStatBonus != 0) return true;
-
-        return false;
-    }
-
-    /// <summary>Apply stat modifications from an effect to the character.</summary>
     private void ApplyStatModifications(ActiveSpellEffect effect)
     {
         if (_stats == null) return;
 
-        // Attack bonus (morale type for Bless, etc.)
-        if (effect.AppliedAttackBonus != 0)
-            _stats.MoraleAttackBonus += effect.AppliedAttackBonus;
-
-        // Damage bonus
-        if (effect.AppliedDamageBonus != 0)
-            _stats.MoraleDamageBonus += effect.AppliedDamageBonus;
+        RegisterBonuses(effect, includeStats: false);
 
         // Save bonus: a resistance or competence bonus (Resistance, Shield Other, Guidance) is kept as the highest of its
         // type so it does not stack with a cloak, ring or ioun stone of the same type (CharacterStats.GetSaveTotal), and
         // Bless's and Aid's morale bonus applies only against fear (SaveRules; CHR-018); every other spell save bonus
-        // or penalty goes to the untyped pool (SPL-026).
-        if (effect.AppliedSaveBonus != 0)
-        {
-            if (IsTypedSaveBonus(effect))
-                RecomputeTypedSpellSaveBonuses(effect, null);
-            else
-                _stats.MoraleSaveBonus += effect.AppliedSaveBonus;
-        }
+        // or penalty is in the ledger with its type (RegisterBonuses).
+        if (effect.AppliedSaveBonus != 0 && IsTypedSaveBonus(effect))
+            RecomputeTypedSpellSaveBonuses(effect, null);
 
-        // Spell AC bonus (Mage Armor)
+        // Armor bonus (Mage Armor): the highest applied one (PHB p.171), which CharacterStats.ArmorClass compares with worn armor.
         if (effect.AppliedACBonus != 0)
-        {
-            _stats.SpellACBonus = effect.AppliedACBonus;
-            if (_spellComp != null)
-            {
-                _spellComp.MageArmorActive = true;
-                _spellComp.MageArmorACBonus = effect.AppliedACBonus;
-            }
-        }
+            RecomputeSpellArmor(effect, null);
 
         // Shield bonus
         if (effect.AppliedShieldBonus != 0)
@@ -617,10 +594,6 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedTempHP != 0 && effect.Spell != null && effect.Spell.SpellId != SpellNames.FALSE_LIFE)
             _stats.TempHP += effect.AppliedTempHP;
 
-        // Land speed enhancement bonus (feet).
-        if (effect.AppliedSpeedBonusFeet != 0)
-            _stats.LandSpeedEnhancementBonusFeet += effect.AppliedSpeedBonusFeet;
-
         // Typed resistance
         if (effect.AppliedDamageResistanceAmount > 0 && effect.AppliedDamageResistanceType != DamageType.Untyped)
             _stats.AddDamageResistance(effect.AppliedDamageResistanceType, effect.AppliedDamageResistanceAmount);
@@ -633,23 +606,12 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedDamageReductionAmount > 0)
             _stats.AddDamageReduction(effect.AppliedDamageReductionAmount, effect.AppliedDamageReductionBypass, effect.AppliedDamageReductionRangedOnly);
 
-
         ApplySpellSpecificAdjustments(effect, applying: true);
 
-        // Stat buff(s) (STR, DEX, CON, etc.)
-        string sourceId = effect.Spell?.SpellId;
-        if (!string.IsNullOrEmpty(effect.AppliedStatName) && effect.AppliedStatBonus != 0)
-        {
-            ApplyStatBonus(effect.AppliedStatName, effect.AppliedStatBonus, sourceId);
-        }
-
-        if (!string.IsNullOrEmpty(effect.AppliedSecondaryStatName) && effect.AppliedSecondaryStatBonus != 0)
-        {
-            ApplyStatBonus(effect.AppliedSecondaryStatName, effect.AppliedSecondaryStatBonus, sourceId);
-        }
-
-        if (!string.IsNullOrEmpty(effect.AppliedSkillName) && effect.AppliedSkillBonus != 0)
-            ApplySkillBonus(effect.AppliedSkillName, effect.AppliedSkillBonus);
+        // Ability score bonuses (from the spell data, or set by the size shift above): registered with their type, and
+        // the score fields follow the stacked totals (SyncAbilityScores).
+        RegisterBonuses(effect, includeStats: true);
+        SyncAbilityScores(effect, effect.AppliedStatName, effect.AppliedSecondaryStatName);
     }
 
     /// <summary>
@@ -674,8 +636,8 @@ public class StatusEffectManager : MonoBehaviour
     /// <summary>
     /// Which kind of save bonus <paramref name="effect"/> gives (a positive one): resistance (a resistance-typed spell
     /// such as Resistance, and the save part of Shield Other and Shield of Law, whose AC part is a deflection bonus,
-    /// PHB p.278), competence (Guidance), morale against fear only (Bless, PHB p.205; Aid, PHB p.196), or the untyped
-    /// pool (everything else, SPL-026).
+    /// PHB p.278), competence (Guidance), morale against fear only (Bless, PHB p.205; Aid, PHB p.196), or the ledger
+    /// (everything else, with the effect's own type: CharacterStats.Bonuses, AllSaves).
     /// </summary>
     private static int SaveBonusKind(ActiveSpellEffect effect)
     {
@@ -692,6 +654,13 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.BonusTypeEnum == BonusType.Competence)
             return SaveBonusCompetence;
         return SaveBonusPool;
+    }
+
+    /// <summary>True for a save penalty that applies only against fear effects: Bane's -1 (PHB p.203).</summary>
+    private static bool IsFearOnlySavePenalty(ActiveSpellEffect effect)
+    {
+        return effect != null && effect.AppliedSaveBonus < 0 && effect.Spell != null
+            && string.Equals(effect.Spell.SpellId, SpellNames.BANE, System.StringComparison.Ordinal);
     }
 
     /// <summary>True when <paramref name="effect"/>'s save bonus is kept apart from the untyped pool (<see cref="SaveBonusKind"/>).</summary>
@@ -749,29 +718,17 @@ public class StatusEffectManager : MonoBehaviour
     {
         if (_stats == null) return;
 
-        if (effect.AppliedAttackBonus != 0)
-            _stats.MoraleAttackBonus -= effect.AppliedAttackBonus;
+        // The ledger entries this effect registered (attack, damage, save, skill, speed, abilities) end with it; a weaker
+        // effect of the same type that did not count applies again (PHB p.172).
+        _registeredStats.TryGetValue(effect, out RegisteredStats registered);
+        _registeredStats.Remove(effect);
+        _stats.Bonuses.RemoveOwner(effect);
 
-        if (effect.AppliedDamageBonus != 0)
-            _stats.MoraleDamageBonus -= effect.AppliedDamageBonus;
-
-        if (effect.AppliedSaveBonus != 0)
-        {
-            if (IsTypedSaveBonus(effect))
-                RecomputeTypedSpellSaveBonuses(null, effect);
-            else
-                _stats.MoraleSaveBonus -= effect.AppliedSaveBonus;
-        }
+        if (effect.AppliedSaveBonus != 0 && IsTypedSaveBonus(effect))
+            RecomputeTypedSpellSaveBonuses(null, effect);
 
         if (effect.AppliedACBonus != 0)
-        {
-            _stats.SpellACBonus = 0;
-            if (_spellComp != null)
-            {
-                _spellComp.MageArmorActive = false;
-                _spellComp.MageArmorACBonus = 0;
-            }
-        }
+            RecomputeSpellArmor(null, effect);
 
         if (effect.AppliedShieldBonus != 0)
             _stats.ShieldBonus -= effect.AppliedShieldBonus;
@@ -788,9 +745,6 @@ public class StatusEffectManager : MonoBehaviour
             _stats.TempHP = Mathf.Max(0, _stats.TempHP - effect.AppliedTempHP);
         }
 
-        if (effect.AppliedSpeedBonusFeet != 0)
-            _stats.LandSpeedEnhancementBonusFeet = Mathf.Max(0, _stats.LandSpeedEnhancementBonusFeet - effect.AppliedSpeedBonusFeet);
-
         if (effect.AppliedDamageResistanceAmount > 0 && effect.AppliedDamageResistanceType != DamageType.Untyped)
             _stats.RemoveDamageResistance(effect.AppliedDamageResistanceType, effect.AppliedDamageResistanceAmount);
 
@@ -802,19 +756,246 @@ public class StatusEffectManager : MonoBehaviour
 
         ApplySpellSpecificAdjustments(effect, applying: false);
 
+        // Ability scores follow the ledger totals without this effect.
+        SyncAbilityScores(effect, effect.AppliedStatName, effect.AppliedSecondaryStatName);
+
+        // A caller that set an ability bonus on the effect after AddEffect (Death Knell's +2 Strength, which it adds to
+        // the score itself) gets it taken back directly, as before the ledger (CHR-010).
         string reverseSourceId = effect.Spell?.SpellId;
-        if (!string.IsNullOrEmpty(effect.AppliedStatName) && effect.AppliedStatBonus != 0)
+        if (!string.IsNullOrEmpty(effect.AppliedStatName) && effect.AppliedStatBonus != 0
+            && !registered.Covers(effect.AppliedStatName, effect.AppliedStatBonus))
         {
             ApplyStatBonus(effect.AppliedStatName, -effect.AppliedStatBonus, reverseSourceId);
         }
 
-        if (!string.IsNullOrEmpty(effect.AppliedSecondaryStatName) && effect.AppliedSecondaryStatBonus != 0)
+        if (!string.IsNullOrEmpty(effect.AppliedSecondaryStatName) && effect.AppliedSecondaryStatBonus != 0
+            && !registered.Covers(effect.AppliedSecondaryStatName, effect.AppliedSecondaryStatBonus))
         {
             ApplyStatBonus(effect.AppliedSecondaryStatName, -effect.AppliedSecondaryStatBonus, reverseSourceId);
         }
+    }
 
-        if (!string.IsNullOrEmpty(effect.AppliedSkillName) && effect.AppliedSkillBonus != 0)
-            ApplySkillBonus(effect.AppliedSkillName, -effect.AppliedSkillBonus);
+    // ========== TYPED BONUS LEDGER ==========
+
+    /// <summary>The ability bonuses an effect registered in the ledger (to tell them from ones a caller set afterwards).</summary>
+    private struct RegisteredStats
+    {
+        public string Name1;
+        public int Bonus1;
+        public string Name2;
+        public int Bonus2;
+
+        public bool Covers(string name, int bonus)
+        {
+            return (bonus == Bonus1 && string.Equals(name, Name1, System.StringComparison.OrdinalIgnoreCase))
+                || (bonus == Bonus2 && string.Equals(name, Name2, System.StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private readonly Dictionary<ActiveSpellEffect, RegisteredStats> _registeredStats = new Dictionary<ActiveSpellEffect, RegisteredStats>();
+
+    /// <summary>
+    /// The bonus type <paramref name="effect"/>'s bonuses have in the ledger: its BonusType when that is one of the PHB
+    /// types, Size for Enlarge and Reduce Person (DMG p.21: the Strength change of enlarge person is a size bonus), the
+    /// spell's own BuffBonusType when that is a PHB type, else untyped (Haste's, Bane's and Doom's modifiers have no type).
+    /// </summary>
+    private static BonusType LedgerType(ActiveSpellEffect effect)
+    {
+        if (effect == null)
+            return BonusType.Untyped;
+        if (BonusTypeHelper.IsCoreType(effect.BonusTypeEnum))
+            return effect.BonusTypeEnum;
+        if (effect.Spell != null && IsSizeShiftSpell(effect.Spell.SpellId))
+            return BonusType.Size;
+        if (effect.Spell != null && BonusTypeHelper.IsCoreType(effect.Spell.BuffBonusType))
+            return effect.Spell.BuffBonusType;
+        return BonusType.Untyped;
+    }
+
+    /// <summary>
+    /// Records <paramref name="effect"/>'s attack, weapon damage, save (outside the typed save kinds), skill and speed
+    /// bonuses (or, with <paramref name="includeStats"/>, its ability bonuses) in <see cref="CharacterStats.Bonuses"/>,
+    /// owned by the effect, with its type and its SpellId as the stacking source (the same spell never stacks with itself).
+    /// </summary>
+    private void RegisterBonuses(ActiveSpellEffect effect, bool includeStats)
+    {
+        if (_stats == null || effect == null)
+            return;
+        BonusLedger ledger = _stats.Bonuses;
+        string source = effect.Spell != null ? effect.Spell.SpellId : null;
+        string label = effect.Spell != null && !string.IsNullOrWhiteSpace(effect.Spell.Name) ? effect.Spell.Name : "spell";
+        BonusType type = LedgerType(effect);
+
+        if (!includeStats)
+        {
+            ledger.Add(effect, BonusTarget.AttackRoll, type, effect.AppliedAttackBonus, source, label);
+            ledger.Add(effect, BonusTarget.WeaponDamage, type, effect.AppliedDamageBonus, source, label);
+            if (effect.AppliedSaveBonus != 0 && !IsTypedSaveBonus(effect))
+            {
+                // Bane's -1 is on saves against fear effects only (PHB p.203); SaveRules adds it for a fear save.
+                BonusTarget saveTarget = IsFearOnlySavePenalty(effect) ? BonusTarget.FearSaves : BonusTarget.AllSaves;
+                ledger.Add(effect, saveTarget, type, effect.AppliedSaveBonus, source, label);
+            }
+            // Every spell land-speed bonus here is an enhancement bonus (Longstrider p.249, Expeditious Retreat p.228,
+            // Haste p.239), so they do not stack with each other or with boots of striding and springing.
+            ledger.Add(effect, BonusTarget.LandSpeedFeet, BonusType.Enhancement, effect.AppliedSpeedBonusFeet, source, label);
+            if (!string.IsNullOrWhiteSpace(effect.AppliedSkillName) && effect.AppliedSkillBonus != 0)
+            {
+                if (string.Equals(effect.AppliedSkillName, SpellData.AllSkillsBuffSkillName, System.StringComparison.OrdinalIgnoreCase))
+                    ledger.Add(effect, BonusTarget.AllSkills, type, effect.AppliedSkillBonus, source, label);
+                else
+                    ledger.Add(effect, BonusTarget.Skill, type, effect.AppliedSkillBonus, source, label, effect.AppliedSkillName);
+            }
+            return;
+        }
+
+        var registered = new RegisteredStats();
+        if (TryAbilityTarget(effect.AppliedStatName, out BonusTarget statTarget) && effect.AppliedStatBonus != 0)
+        {
+            ledger.Add(effect, statTarget, type, effect.AppliedStatBonus, source, label);
+            registered.Name1 = effect.AppliedStatName;
+            registered.Bonus1 = effect.AppliedStatBonus;
+        }
+        if (TryAbilityTarget(effect.AppliedSecondaryStatName, out BonusTarget secondTarget) && effect.AppliedSecondaryStatBonus != 0)
+        {
+            ledger.Add(effect, secondTarget, type, effect.AppliedSecondaryStatBonus, source, label);
+            registered.Name2 = effect.AppliedSecondaryStatName;
+            registered.Bonus2 = effect.AppliedSecondaryStatBonus;
+        }
+        _registeredStats[effect] = registered;
+    }
+
+    private static bool TryAbilityTarget(string statName, out BonusTarget target)
+    {
+        target = BonusTarget.Strength;
+        if (string.IsNullOrEmpty(statName))
+            return false;
+        switch (statName.ToUpperInvariant())
+        {
+            case "STR": target = BonusTarget.Strength; return true;
+            case "DEX": target = BonusTarget.Dexterity; return true;
+            case "CON": target = BonusTarget.Constitution; return true;
+            case "INT": target = BonusTarget.Intelligence; return true;
+            case "WIS": target = BonusTarget.Wisdom; return true;
+            case "CHA": target = BonusTarget.Charisma; return true;
+            default: return false;
+        }
+    }
+
+    private static AbilityType ToAbilityType(BonusTarget target)
+    {
+        switch (target)
+        {
+            case BonusTarget.Dexterity: return AbilityType.DEX;
+            case BonusTarget.Constitution: return AbilityType.CON;
+            case BonusTarget.Intelligence: return AbilityType.INT;
+            case BonusTarget.Wisdom: return AbilityType.WIS;
+            case BonusTarget.Charisma: return AbilityType.CHA;
+            default: return AbilityType.STR;
+        }
+    }
+
+    /// <summary>
+    /// Brings the ability score fields named by <paramref name="statName"/> and <paramref name="secondStatName"/> in
+    /// step with the stacked ledger totals (<see cref="CharacterStats.SyncAbilityScoreWithBonuses"/>). A change in
+    /// Constitution changes hit points by 1 per Hit Die per 2 points (CHR-071), except for an attribute enhancement spell
+    /// (Bear's Endurance), whose hit points CharacterController.ApplyAttributeEnhancement handles.
+    /// </summary>
+    private void SyncAbilityScores(ActiveSpellEffect cause, string statName, string secondStatName)
+    {
+        SyncAbilityScore(cause, statName);
+        if (!string.Equals(statName, secondStatName, System.StringComparison.OrdinalIgnoreCase))
+            SyncAbilityScore(cause, secondStatName);
+    }
+
+    private void SyncAbilityScore(ActiveSpellEffect cause, string statName)
+    {
+        if (_stats == null || !TryAbilityTarget(statName, out BonusTarget target))
+            return;
+        AbilityType ability = ToAbilityType(target);
+        int delta = _stats.SyncAbilityScoreWithBonuses(ability);
+        if (delta == 0 || ability != AbilityType.CON)
+            return;
+        string sourceSpellId = cause != null && cause.Spell != null ? cause.Spell.SpellId : null;
+        if (sourceSpellId != null && AttributeEnhancementEffectData.IsAttributeEnhancementSpell(sourceSpellId))
+            return;
+        int hpChange = _stats.GetHitDice() * (delta / 2);
+        if (delta > 0)
+            _stats.BonusMaxHP += hpChange;
+        else
+            _stats.BonusMaxHP = Mathf.Max(0, _stats.BonusMaxHP + hpChange);
+    }
+
+    /// <summary>
+    /// Set CharacterStats.SpellACBonus (an armor bonus, Mage Armor) to the highest armor bonus among the applied spell
+    /// effects (PHB p.171: armor bonuses do not stack; SPL-025). Arguments as for <see cref="RecomputeSpellDeflection"/>.
+    /// </summary>
+    private void RecomputeSpellArmor(ActiveSpellEffect adding, ActiveSpellEffect removing)
+    {
+        int best = 0, worst = 0;
+        void Take(ActiveSpellEffect e)
+        {
+            if (e.AppliedACBonus > best) best = e.AppliedACBonus;
+            if (e.AppliedACBonus < worst) worst = e.AppliedACBonus;
+        }
+        if (adding != null)
+            Take(adding);
+        foreach (var active in ActiveEffects)
+        {
+            if (active == null || active == removing || active == adding || !active.IsApplied) continue;
+            Take(active);
+        }
+        _stats.SpellACBonus = best + worst;
+        if (_spellComp != null)
+        {
+            _spellComp.MageArmorActive = best > 0;
+            _spellComp.MageArmorACBonus = best;
+        }
+    }
+
+    /// <summary>True for Enlarge Person, Reduce Person and their mass versions.</summary>
+    private static bool IsSizeShiftSpell(string spellId)
+    {
+        return spellId == SpellNames.ENLARGE_PERSON || spellId == SpellNames.REDUCE_PERSON
+            || spellId == SpellNames.MASS_ENLARGE_PERSON || spellId == SpellNames.MASS_REDUCE_PERSON;
+    }
+
+    /// <summary>Remaining rounds for comparison: permanent (-1) and concentration (-2) count as longest.</summary>
+    private static long Lasts(int remainingRounds) => remainingRounds < 0 ? long.MaxValue : remainingRounds;
+
+    /// <summary>
+    /// Spells whose removal or application does more than add and remove bonuses (flags on CharacterStats, a
+    /// controller effect, a size change, temporary hit points, damage mitigation, a miss chance): a second copy of one of
+    /// these keeps a single copy instead of coexisting.
+    /// </summary>
+    private static readonly HashSet<string> SingleCopySpellIds = new HashSet<string>
+    {
+        SpellNames.PROTECTION_FROM_ARROWS, SpellNames.STONESKIN, SpellNames.SANCTUARY, SpellNames.HIDE_FROM_UNDEAD,
+        SpellNames.REMOVE_FEAR, SpellNames.ENTROPIC_SHIELD, SpellNames.MAGIC_STONE,
+        SpellNames.DEATH_KNELL, SpellNames.SILENCE, SpellNames.ALIGN_WEAPON, SpellNames.SHIELD_OTHER,
+        SpellNames.GLOBE_OF_INVULNERABILITY, SpellNames.FALSE_LIFE, SpellNames.RAGE, SpellNames.DISGUISE_SELF,
+        SpellNames.EXPEDITIOUS_RETREAT, SpellNames.INVISIBILITY, SpellNames.INVISIBILITY_SPHERE, SpellNames.GLITTERDUST,
+        SpellNames.ENLARGE_PERSON, SpellNames.REDUCE_PERSON, SpellNames.MASS_ENLARGE_PERSON, SpellNames.MASS_REDUCE_PERSON,
+        SpellNames.HASTE, SpellNames.PRAYER, SpellNames.BLINDNESS_DEAFNESS, SpellNames.DIVINE_POWER
+    };
+
+    /// <summary>
+    /// True when two copies of <paramref name="effect"/>'s spell may operate at once (PHB p.172: both continue, the
+    /// better applies, and the other remains when one ends): a spell that only adds bonuses (Divine Favor, Bless,
+    /// Heroism, Magic Fang, Barkskin, ...).
+    /// </summary>
+    private static bool CanCoexistWithItself(ActiveSpellEffect effect)
+    {
+        string id = effect?.Spell?.SpellId;
+        if (string.IsNullOrEmpty(id) || SingleCopySpellIds.Contains(id))
+            return false;
+        if (AttributeEnhancementEffectData.IsAttributeEnhancementSpell(id))
+            return false;
+        if (AlignmentProtectionRules.TryGetProtectionTypeForSpell(id, out _))
+            return false;
+        return effect.AppliedTempHP == 0 && effect.AppliedShieldBonus == 0 && effect.AppliedDamageResistanceAmount == 0
+            && effect.AppliedDamageImmunityType == DamageType.Untyped && effect.AppliedDamageReductionAmount == 0
+            && effect.MissChance == 0;
     }
 
     /// <summary>
@@ -848,16 +1029,19 @@ public class StatusEffectManager : MonoBehaviour
             return;
         }
 
-        // Rage spell: reset the SpellRageACPenalty and morale Will bonus on removal
+        // Rage spell (PHB p.268): the -2 AC penalty and the +1 morale bonus on Will saves. The Will bonus is a ledger
+        // entry owned by the effect, so ReverseStatModifications removes it with the effect's +2 Strength and
+        // Constitution (ConfigureAppliedValues), and it does not stack with another morale bonus on Will.
         if (spellId == SpellNames.RAGE)
         {
-            if (!applying)
+            if (applying)
+            {
+                _stats.SpellRageACPenalty = -2;
+                _stats.Bonuses.Add(effect, BonusTarget.Will, BonusType.Morale, 1, SpellNames.RAGE, effect.Spell.Name);
+            }
+            else
             {
                 _stats.SpellRageACPenalty = 0;
-                // MoraleSaveBonus is decremented via AppliedSaveBonus in ReverseStatModifications,
-                // but we applied +1 directly in ApplyRageSpellBuff, so reverse it here
-                _stats.MoraleSaveBonus = Mathf.Max(0, _stats.MoraleSaveBonus - 1);
-                // STR and CON are reversed by the ApplyStatBuff reversal path
             }
             return;
         }
@@ -1009,13 +1193,14 @@ public class StatusEffectManager : MonoBehaviour
         }
     }
 
-    private void ApplySkillBonus(string skillName, int bonus)
+    /// <summary>+1 when <paramref name="effect"/>'s modifiers add up to a bonus, -1 to a penalty, 0 when it has none.</summary>
+    private static int EffectSign(ActiveSpellEffect effect)
     {
-        if (_stats == null || string.IsNullOrWhiteSpace(skillName) || bonus == 0)
-            return;
-
-        if (string.Equals(skillName, "Jump", System.StringComparison.OrdinalIgnoreCase))
-            _stats.JumpEnhancementBonus += bonus;
+        int sum = effect.AppliedAttackBonus + effect.AppliedDamageBonus + effect.AppliedSaveBonus + effect.AppliedSkillBonus
+            + effect.AppliedACBonus + effect.AppliedShieldBonus + effect.AppliedDeflectionBonus
+            + effect.AppliedNaturalArmorEnhancementBonus + effect.AppliedStatBonus + effect.AppliedSecondaryStatBonus
+            + effect.AppliedSpeedBonusFeet;
+        return sum > 0 ? 1 : (sum < 0 ? -1 : 0);
     }
 
     /// <summary>Get the "power" of an existing effect for stacking comparison.</summary>

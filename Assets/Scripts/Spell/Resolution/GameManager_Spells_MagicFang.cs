@@ -34,10 +34,10 @@ public partial class GameManager
     //  Implementation: the spell data's BuffAttackBonus/BuffDamageBonus
     //  (+1/+1) become the tracked effect's AppliedAttackBonus /
     //  AppliedDamageBonus through StatusEffectManager.AddEffect, which
-    //  adds them on cast and takes them back when the spell ends. Like
-    //  every spell bonus they land in the Morale* fields, so they reach
-    //  the attack and damage roll of every attack of the subject, not
-    //  only one natural weapon (SPL-026).
+    //  adds them on cast and takes them back when the spell ends. They are
+    //  enhancement bonuses in CharacterStats.Bonuses, which reach the attack
+    //  and damage roll of every attack of the subject, not only one natural
+    //  weapon (SPL-133).
     //  Before SPL-037 this handler added a second +1 that was never
     //  removed; it adds nothing of its own now.
     // ================================================================

@@ -483,7 +483,10 @@ public class SpellData
     /// <summary>Save bonus (morale, luck, etc.).</summary>
     public int BuffSaveBonus;
 
-    /// <summary>Skill to buff (e.g., "Jump").</summary>
+    /// <summary>The <see cref="BuffSkillName"/> that means every skill check (Heroism, Prayer).</summary>
+    public const string AllSkillsBuffSkillName = "All";
+
+    /// <summary>Skill to buff (e.g., "Jump"), or <see cref="AllSkillsBuffSkillName"/> for every skill check.</summary>
     public string BuffSkillName;
     /// <summary>Skill bonus amount. If 0, spell-specific logic can compute it from caster level.</summary>
     public int BuffSkillBonus;

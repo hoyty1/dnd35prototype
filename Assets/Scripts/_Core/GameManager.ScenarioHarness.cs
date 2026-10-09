@@ -462,6 +462,18 @@ public partial class GameManager
     }
 
     /// <summary>
+    /// Confirms an open self-centered area preview (Bless, Prayer: "Left-click to confirm"), as the player's left click
+    /// does (HandleInputModeLeftClick); false when no such preview is open. Writes no game state of its own.
+    /// </summary>
+    internal bool Harness_ConfirmSelfAoE()
+    {
+        if (CurrentSubPhase != PlayerSubPhase.ConfirmingSelfAoE)
+            return false;
+        OnSelfAoEConfirmed();
+        return true;
+    }
+
+    /// <summary>
     /// Presses Cast Now on the open touch-spell prompt (a melee touch spell's Cast Now / Discharge Later choice), as a
     /// player clicks it; false when no prompt or button is open. Writes no game state of its own.
     /// </summary>

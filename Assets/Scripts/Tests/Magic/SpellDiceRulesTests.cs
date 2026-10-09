@@ -16,7 +16,7 @@ namespace Tests.Magic
 /// (PHB p.215), so it does nothing to a construct.
 /// Builds CharacterStats only (no controllers), so it runs in edit or Play mode. Every die is forced to its maximum
 /// through ScenarioHooks.RollFilter (so a touch attack is a natural 20 and every save roll is 20); saves are decided
-/// with a +/-30 MoraleSaveBonus.
+/// with a +/-30 untyped save modifier in CharacterStats.Bonuses.
 /// </summary>
 public static class SpellDiceRulesTests
 {
@@ -108,7 +108,7 @@ public static class SpellDiceRulesTests
             damageDice: 6, damageCount: 1, bonusDamage: 0,
             baseSpeed: 6, atkRange: 1, baseHitDieHP: 200, raceName: "Human");
         stats.CreatureType = type;
-        stats.MoraleSaveBonus = saveBonus;
+        stats.Bonuses.Set("test:save", BonusTarget.AllSaves, BonusType.Untyped, saveBonus);
         stats.CurrentHP = stats.TotalMaxHP - damageTaken;
         return stats;
     }

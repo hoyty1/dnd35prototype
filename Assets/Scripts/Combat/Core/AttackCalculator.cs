@@ -37,7 +37,10 @@ public struct AttackBonusBreakdown
     public bool PreciseShotNegated;
     public int WeaponNonProficiencyPenalty;
     public int ArmorNonProficiencyPenalty;
-    /// <summary>CharacterStats.MoraleAttackBonus (Bless, Inspire Courage, charge or Pounce +2, other spell buffs; SPL-026).</summary>
+    /// <summary>
+    /// CharacterStats.EffectAttackBonus: the typed effect bonuses and penalties on attack rolls (Bless, Heroism, Divine
+    /// Favor, Prayer, Inspire Courage, the charge's +2 on a pounce, Bane), stacked by the PHB rules (BonusStacking).
+    /// </summary>
     public int MoraleBonus;
     /// <summary>CharacterStats.ConditionAttackPenalty (Shaken, Sickened, Haste, Slow and other conditions).</summary>
     public int ConditionModifier;
@@ -139,7 +142,7 @@ public struct AttackBonusBreakdown
 /// p.264 (Prayer), p.224 (Divine Favor), p.250 (Magic Fang), p.186 (Destruction domain smite, melee
 /// only), DMG p.224 (bane: +2 enhancement against its foe), DMG p.301 (Sickened: -2 weapon damage),
 /// DMG p.250 (Bracers of Archery), PHB p.281 (Solid Fog), DMG p.283 (alchemical silver -1).
-/// Spell bonuses of every type land in MoraleBonus (SPL-026).
+/// Effect bonuses of every type are in MoraleBonus, already stacked by type (CharacterStats.EffectWeaponDamageBonus).
 /// </summary>
 public struct WeaponDamageBreakdown
 {
@@ -162,8 +165,9 @@ public struct WeaponDamageBreakdown
     public int PointBlankShotBonus;
     public int WeaponSpecializationBonus;
     /// <summary>
-    /// CharacterStats.MoraleDamageBonus: Inspire Courage, Prayer, Divine Favor, Magic Fang and other spell buffs. Every
-    /// spell bonus type is pooled there (SPL-026), so the term is labelled by its sources ("Divine Favor"), not as morale.
+    /// CharacterStats.EffectWeaponDamageBonus: Inspire Courage, Prayer, Divine Favor, Magic Fang and other effects,
+    /// stacked by type (two luck bonuses give the better one). The term is labelled by the sources that count
+    /// ("Divine Favor, Inspire Courage"), since the types differ.
     /// </summary>
     public int MoraleBonus;
     public string MoraleLabel;

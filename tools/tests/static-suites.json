@@ -73,6 +73,17 @@
       "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
+      "type": "Tests.Character.BonusStackingRulesTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 0,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "Bonus stacking by the rules as written (owner directive 2026-10-09): BonusStacking, BonusLedger, StatusEffectManager and the CharacterStats totals; bare stats and a StatusEffectManager on a plain GameObject. Added 2026-10-09; not run yet (the Unity MCP was unavailable), so passed is 0 until the first run."
+    },
+    {
       "type": "Tests.Character.CharacterTagSystemTests",
       "needs": "play",
       "skip": "",
@@ -716,7 +727,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 25,
+      "passed": 26,
       "failed": 1,
       "flakyFailures": 0,
       "knownFailures": [
@@ -725,7 +736,7 @@
           "issue": "TST-030"
         }
       ],
-      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
+      "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009). passed 26 since 2026-10-09 (the enhancement-stacking test checks that both effects stay and the weaker applies again, PHB p.172), counted from the source, not yet confirmed by a run."
     },
     {
       "type": "Tests.Combat.FalseLifeRulesTests",

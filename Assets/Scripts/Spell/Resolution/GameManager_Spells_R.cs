@@ -193,10 +193,10 @@ public partial class GameManager
     // ================================================================
 
     /// <summary>
-    /// Applies the Rage spell effect to a target.
-    /// Per PHB p.268: +2 morale bonus to Str and Con, +1 morale bonus on Will saves, -2 AC.
-    /// Uses the existing stat buff system (direct stat modification) for consistency
-    /// with Bull's Strength, Bear's Endurance, etc.
+    /// Applies the Rage spell effect to a target (PHB p.268): +2 morale bonus to Strength and Constitution, +1 morale
+    /// bonus on Will saves, -2 penalty to AC. The effect goes through <see cref="StatusEffectManager.AddEffect"/>, which
+    /// registers the ability and Will bonuses in the ledger with the morale type and takes them back when the effect
+    /// ends, and applies the same-spell rule (a second Rage does not add another +2, PHB p.171-172; CHR-010).
     /// Called from ApplySpellBuff when the spell matches.
     /// </summary>
     private ActiveSpellEffect ApplyRageSpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
@@ -210,38 +210,20 @@ public partial class GameManager
         // For simplicity in combat, we use caster level rounds (max 10)
         int rageRounds = Mathf.Clamp(casterLevel, 1, 10);
 
-        // Apply stat bonuses using the same pattern as Bull's Strength / Bear's Endurance
-        // +2 morale bonus to Str
-        ApplyStatBuff(target, "STR", 2);
-        // +2 morale bonus to Con (ApplyStatBuff handles HP gain)
-        ApplyStatBuff(target, "CON", 2);
-
-        // +1 morale bonus on Will saves (uses existing MoraleSaveBonus field)
-        target.Stats.MoraleSaveBonus += 1;
-
-        // -2 penalty to AC (separate from barbarian rage AC penalty)
-        target.Stats.SpellRageACPenalty = -2;
-
-        // Create the tracked effect
         StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(target.Stats);
 
-        var effect = new ActiveSpellEffect
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+        ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, casterLevel, rageRounds);
+        if (effect == null)
         {
-            Spell = spell,
-            CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown",
-            CasterLevel = casterLevel,
-            RemainingRounds = rageRounds,
-            DurationType = DurationType.Rounds,
-            AffectedCharacterName = target.Stats.CharacterName,
-            BonusTypeLegacy = "morale",
-            BonusTypeEnum = BonusType.Morale,
-            IsApplied = true
-        };
-
-        statusMgr.ActiveEffects.Add(effect);
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔥", $"{target.Stats.CharacterName} is already raging; the second Rage adds nothing (the same spell does not stack with itself)."));
+            return null;
+        }
+        // Tracked as a plain count of rounds, as before (the concentration part is not modelled).
+        effect.DurationType = DurationType.Rounds;
 
         CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔥", $"{target.Stats.CharacterName} is filled with magical rage! (+2 Str, +2 Con, +1 Will, -2 AC) for {rageRounds} round(s)!"));
         Debug.Log($"[GameManager] Rage spell applied to {target.Stats.CharacterName} for {rageRounds} rounds");

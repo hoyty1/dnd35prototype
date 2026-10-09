@@ -97,7 +97,7 @@ public partial class GameManager
             if (effect != null)
             {
                 effect.RemainingRounds = durationRounds;
-                effect.AppliedAttackBonus = babBonus; // Track for reversal
+                // BAB is restored from DivinePowerBABBonus when the spell ends (EffectService); not an attack bonus.
             }
         }
 

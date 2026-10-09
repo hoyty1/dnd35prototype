@@ -285,7 +285,7 @@ public static class WeaponDamageModifierTests
             a = Create("Smiter", 16, new Vector2Int(0, 0));
             t = CreateDefender(new Vector2Int(1, 0));
             Equip(a, ItemID.WeaponLongsword, EquipSlot.RightHand);
-            int moraleAttack = a.Stats.MoraleAttackBonus, moraleDamage = a.Stats.MoraleDamageBonus;
+            int moraleAttack = a.Stats.EffectAttackBonus, moraleDamage = a.Stats.EffectWeaponDamageBonus;
             CombatResult r = a.Attack(t, false, 0, null, situationalAttackBonus: 3, situationalDamageBonus: 4, situationalLabel: "Smite");
             bool listed = false;
             if (r != null)
@@ -296,7 +296,7 @@ public static class WeaponDamageModifierTests
             Assert(r != null && r.WeaponDamageBonus.SituationalBonus == 4 && HasTerm(r.WeaponDamageBonus, "Smite", 4),
                 "The smite's damage bonus is a term of that attack's damage", r != null ? r.WeaponDamageBonus.Describe() : "no result");
             Assert(listed, "The smite's attack bonus is listed on that attack roll");
-            Assert(a.Stats.MoraleAttackBonus == moraleAttack && a.Stats.MoraleDamageBonus == moraleDamage,
+            Assert(a.Stats.EffectAttackBonus == moraleAttack && a.Stats.EffectWeaponDamageBonus == moraleDamage,
                 "The smite leaves the morale fields untouched");
         }
         finally { Cleanup(a, t); }
@@ -409,7 +409,7 @@ public static class WeaponDamageModifierTests
             // Create() builds no StatusEffectManager (the game adds one in GameManager's party and NPC setup).
             if (a.StatusEffectManager == null)
                 a.gameObject.AddComponent<StatusEffectManager>().Init(a.Stats);
-            int damageBefore = a.Stats.MoraleDamageBonus;
+            int damageBefore = a.Stats.EffectWeaponDamageBonus;
             ActiveSpellEffect low = a.StatusEffectManager != null
                 ? a.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.DIVINE_FAVOR).Clone(), "Test", 2)
                 : null;
@@ -420,8 +420,8 @@ public static class WeaponDamageModifierTests
                 ? a.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(SpellNames.DIVINE_FAVOR).Clone(), "Test", 7)
                 : null;
             Assert(high != null && high.AppliedAttackBonus == 2 && high.AppliedDamageBonus == 2
-                && a.Stats.MoraleDamageBonus == damageBefore + 2,
-                "Divine Favor at caster level 7 gives +2 on attack and damage (PHB p.224)", $"damage bonus {a.Stats.MoraleDamageBonus}");
+                && a.Stats.EffectWeaponDamageBonus == damageBefore + 2,
+                "Divine Favor at caster level 7 gives +2 on attack and damage (PHB p.224)", $"damage bonus {a.Stats.EffectWeaponDamageBonus}");
         }
         finally { Cleanup(a); }
     }

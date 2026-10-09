@@ -96,7 +96,8 @@ namespace Tests.Scenarios
         /// <summary>
         /// Casts a prepared spell at <paramref name="target"/>. Scripted: TryNPCPerformSpellCastForAI with a clone of the
         /// database spell (never the template); no metamagic on that path. Ui: the cast menu with the first unused
-        /// prepared slot holding that spell, then the target square.
+        /// prepared slot holding that spell, then the target square (or, for a self-centered burst such as Prayer, the
+        /// preview's confirmation).
         /// </summary>
         public static Step Cast(string spellId, string target, MetamagicData metamagic = null)
             => new Step(StepKind.Cast) { SpellId = spellId, Target = target, Metamagic = metamagic };
@@ -776,6 +777,9 @@ namespace Tests.Scenarios
                     GameManager.PlayerSubPhase sub = gm.CurrentSubPhase;
                     if (sub == GameManager.PlayerSubPhase.SelectingAttackTarget || sub == GameManager.PlayerSubPhase.SelectingAoETarget)
                         ClickIf(gm, sub, target.GridPosition);
+                    // A self-centered burst (Bless, Prayer) opens a preview that a left click confirms; the step confirms it.
+                    else if (sub == GameManager.PlayerSubPhase.ConfirmingSelfAoE && !gm.Harness_ConfirmSelfAoE())
+                        _awaitNote = "the self-centered area preview could not be confirmed";
                     break;
                 }
                 case StepKind.Charge:

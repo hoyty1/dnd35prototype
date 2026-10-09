@@ -1374,9 +1374,10 @@ public class Inventory
         if (item.WondrousRobeStarsLuckSaveBonus > 0)
             OwnerStats.WondrousRobeLuckSaveBonus = Mathf.Max(OwnerStats.WondrousRobeLuckSaveBonus, item.WondrousRobeStarsLuckSaveBonus);
 
-        // --- Caster Level Bonus (Orange Prism — stacks from multiple sources) ---
+        // --- Caster Level Bonus (Orange Prism, DMG p.260) ---
+        // Two orange prisms are the same source: their untyped bonus does not stack (PHB glossary "stack", p.313).
         if (item.WondrousCasterLevelBonus > 0)
-            OwnerStats.WondrousCasterLevelBonus += item.WondrousCasterLevelBonus;
+            OwnerStats.WondrousCasterLevelBonus = Mathf.Max(OwnerStats.WondrousCasterLevelBonus, item.WondrousCasterLevelBonus);
 
         // --- Regeneration (Pearly White Spindle — 1 HP/hour, best source wins) ---
         if (item.WondrousRegenPerHour > 0)

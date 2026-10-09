@@ -71,11 +71,11 @@ public static class LevelUpCalculator
         data.HPGained = EstimateHpGain(selected, stats.CONMod);
         data.NewBAB = stats.BaseAttackBonus + EstimateBabGain(selected, projectedClassLevel);
         data.NewFortSave = stats.CONMod + EstimateProjectedBestSave(stats, selected, projectedClassLevel, SaveKind.Fort)
-            + stats.FeatFortitudeBonus + stats.MoraleSaveBonus + stats.ConditionFortitudeModifier;
+            + stats.FeatFortitudeBonus + stats.EffectSaveBonus(SavingThrowType.Fortitude) + stats.ConditionFortitudeModifier;
         data.NewRefSave = stats.DEXMod + EstimateProjectedBestSave(stats, selected, projectedClassLevel, SaveKind.Ref)
-            + stats.FeatReflexBonus + stats.MoraleSaveBonus + stats.ConditionReflexModifier;
+            + stats.FeatReflexBonus + stats.EffectSaveBonus(SavingThrowType.Reflex) + stats.ConditionReflexModifier;
         data.NewWillSave = stats.WISMod + EstimateProjectedBestSave(stats, selected, projectedClassLevel, SaveKind.Will)
-            + stats.FeatWillBonus + stats.RageWillBonus + stats.MoraleSaveBonus + stats.ConditionWillModifier;
+            + stats.FeatWillBonus + stats.EffectSaveBonus(SavingThrowType.Will) + stats.ConditionWillModifier;
 
         int baseSkillPointsPerLevel = Mathf.Max(1, ClassSkillDefinitions.GetBaseSkillPointsPerLevel(selected) + stats.INTMod);
         int newSkillPoints = projectedClassLevel <= 1 ? baseSkillPointsPerLevel * 4 : baseSkillPointsPerLevel;

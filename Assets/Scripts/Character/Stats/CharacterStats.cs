@@ -680,18 +680,22 @@ public class CharacterStats
     /// <summary>The magnitude of the Inspire Courage bonus currently applied.</summary>
     public int AppliedInspireCourageValue;
 
+    /// <summary>Ledger key (owner and stacking source) of Inspire Courage: two bards' songs are the same effect and do not stack.</summary>
+    public const string InspireCourageBonusSource = "inspire_courage";
+
+    /// <summary>Ledger key of the charge's +2 bonus on the attack roll (untyped, PHB p.154), set for a pounce's full attack.</summary>
+    public const string ChargeBonusSource = "charge";
+
     /// <summary>
-    /// Apply Inspire Courage morale bonuses to this character.
-    /// Adds morale bonus to attack, damage, and saves vs fear/charm.
-    /// Per PHB p.28, the morale save bonus technically only applies vs charm and fear,
-    /// but we use the global MoraleSaveBonus field for simplicity (matches existing pattern).
+    /// Apply Inspire Courage's morale bonus (PHB p.29): on attack and weapon damage rolls through <see cref="Bonuses"/>
+    /// (morale, so it does not stack with Bless or Heroism), and on saves against charm and fear effects only, which
+    /// <see cref="SaveRules"/> adds for such a save (<see cref="AppliedInspireCourageValue"/>).
     /// </summary>
     public void ApplyInspireCourage(int bonus)
     {
         if (HasInspireCourageBonus) return; // Already has the bonus
-        MoraleAttackBonus += bonus;
-        MoraleDamageBonus += bonus;
-        MoraleSaveBonus += bonus;
+        Bonuses.Set(InspireCourageBonusSource, BonusTarget.AttackRoll, BonusType.Morale, bonus, "Inspire Courage");
+        Bonuses.Set(InspireCourageBonusSource, BonusTarget.WeaponDamage, BonusType.Morale, bonus, "Inspire Courage");
         HasInspireCourageBonus = true;
         AppliedInspireCourageValue = bonus;
         Debug.Log($"[BardicMusic] Applied Inspire Courage +{bonus} to {CharacterName} (Atk/Dmg/Save)");
@@ -703,9 +707,7 @@ public class CharacterStats
     public void RemoveInspireCourage()
     {
         if (!HasInspireCourageBonus) return;
-        MoraleAttackBonus -= AppliedInspireCourageValue;
-        MoraleDamageBonus -= AppliedInspireCourageValue;
-        MoraleSaveBonus -= AppliedInspireCourageValue;
+        Bonuses.RemoveOwner(InspireCourageBonusSource);
         HasInspireCourageBonus = false;
         Debug.Log($"[BardicMusic] Removed Inspire Courage from {CharacterName}");
         AppliedInspireCourageValue = 0;
@@ -2034,11 +2036,11 @@ public class CharacterStats
     public int EffectiveCompetenceSaveBonus => Mathf.Max(WondrousCompetenceSaveBonus, CompetenceSaveBonusFromSpells);
 
     /// <summary>
-    /// Luck bonus on all saves from equipment: a luck blade (LuckSaveBonus), a Stone of Good Luck (DMG p.267) and a Robe
-    /// of Stars (DMG p.265). Luck bonuses stack by the owner's house rule (Assets/Scripts/Spell/BonusType.cs); each item
-    /// kind counts once (its field keeps the best of that kind). Luck-typed spells add through MoraleSaveBonus (SPL-026).
+    /// Luck bonus on all saves from equipment: the best of a luck blade (LuckSaveBonus), a Stone of Good Luck (DMG p.267)
+    /// and a Robe of Stars (DMG p.265). Luck bonuses do not stack (PHB glossary "luck bonus" p.310): only the highest
+    /// applies, and in <see cref="EffectSaveBonus"/> it is also compared with luck-typed spells such as Prayer.
     /// </summary>
-    public int EquipmentLuckSaveBonus => LuckSaveBonus + WondrousLuckSaveBonus + WondrousRobeLuckSaveBonus;
+    public int EquipmentLuckSaveBonus => Mathf.Max(LuckSaveBonus, Mathf.Max(WondrousLuckSaveBonus, WondrousRobeLuckSaveBonus));
 
     /// <summary>The racial bonus on every save (halfling +1, PHB p.20; RaceData.SaveBonusAllSaves). 0 without a race.</summary>
     public int RacialAllSavesBonus => Race != null ? Mathf.Max(0, Race.SaveBonusAllSaves) : 0;
@@ -2046,15 +2048,15 @@ public class CharacterStats
     /// <summary>
     /// The save modifier against an effect that has no special bonus (CHR-018, PHB p.177-178): ability modifier, base
     /// save (racial Hit Dice and class levels), feats (Great Fortitude, Lightning Reflexes, Iron Will), Divine Grace
-    /// (paladin 2, CHA bonus, PHB p.44), the racial bonus on all saves, the resistance, competence and equipment luck
-    /// bonuses above, the pool of spell save bonuses (<see cref="MoraleSaveBonus"/>, SPL-026), the barbarian's rage
-    /// (morale, Will only, PHB p.25), a familiar's bonus and condition modifiers. Bonuses that apply only against some
+    /// (paladin 2, CHA bonus, PHB p.44), the racial bonus on all saves, the resistance and competence bonuses above, the
+    /// typed effect bonuses of <see cref="EffectSaveBonus"/> (spells, equipment luck, the barbarian's rage on Will; PHB
+    /// p.171 stacking), a familiar's bonus and condition modifiers. Bonuses that apply only against some
     /// effects (racial against poison or enchantment, Still Mind, morale against fear, ...) are added by
     /// <see cref="SaveRules.Modifier(CharacterStats, SavingThrowType, SaveContext)"/>, which every save roll uses.
     /// </summary>
     public int GetSaveTotal(SavingThrowType save)
     {
-        int shared = DivineGraceBonus + RacialAllSavesBonus + MoraleSaveBonus + EquipmentLuckSaveBonus
+        int shared = DivineGraceBonus + RacialAllSavesBonus + EffectSaveBonus(save)
             + EffectiveResistanceSaveBonus + EffectiveCompetenceSaveBonus;
         switch (save)
         {
@@ -2065,7 +2067,7 @@ public class CharacterStats
                 return DEXMod + ClassRefSave + FeatReflexBonus + shared + ConditionReflexModifier
                     + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
             default:
-                return WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + shared + ConditionWillModifier;
+                return WISMod + ClassWillSave + FeatWillBonus + shared + ConditionWillModifier;
         }
     }
 
@@ -2768,7 +2770,32 @@ public class CharacterStats
     public int BonusDamage;     // Extra flat damage (magic weapon, etc.)
     public int AttackRange;     // Square tiles for attack reach (1 = melee)
     public int BaseSpeed;       // Base movement speed in squares
-    public int LandSpeedEnhancementBonusFeet; // Typed enhancement bonus to land speed (e.g., Expeditious Retreat)
+    /// <summary>
+    /// Enhancement bonus to land speed in feet from effects (<see cref="Bonuses"/>): Longstrider, Expeditious Retreat,
+    /// Haste. Enhancement bonuses do not stack, so the best applies (PHB p.171).
+    /// </summary>
+    public int LandSpeedEnhancementBonusFeet => Bonuses.Total(BonusTarget.LandSpeedFeet);
+
+    /// <summary>
+    /// The land speed enhancement bonus that applies: effects (<see cref="LandSpeedEnhancementBonusFeet"/>), an item's
+    /// (<see cref="WondrousSpeedBonus"/>, boots of striding and springing, DMG p.250) and the monk's fast movement (an
+    /// enhancement bonus to her speed, PHB p.41) together, the best enhancement only (PHB p.171): Longstrider's +10 and
+    /// the boots' +10 give +10, and a monk under Haste gets +30, not +40. The barbarian's fast movement has no type
+    /// (PHB p.25) and is added outside (<see cref="EffectiveSpeedFeet"/>).
+    /// </summary>
+    public int LandSpeedEnhancementWithItemsFeet
+    {
+        get
+        {
+            // The effects' stacked total with their best enhancement bonus replaced by the best of it, the boots' and the
+            // monk's (all enhancement bonuses: only the highest applies). Read through the ledger's cached totals, since
+            // movement and AI loops read the speed often.
+            int effectsTotal = Bonuses.Total(BonusTarget.LandSpeedFeet);
+            int effectsBestEnhancement = Bonuses.BestOfType(BonusTarget.LandSpeedFeet, BonusType.Enhancement);
+            int bestEnhancement = Mathf.Max(effectsBestEnhancement, Mathf.Max(0, WondrousSpeedBonus), MonkFastMovementBonus * 5);
+            return effectsTotal - effectsBestEnhancement + bestEnhancement;
+        }
+    }
     public int MagicVestmentACBonus;             // Enhancement bonus to armor from Magic Vestment (PHB p.251)
     public int CritThreatMin;   // Minimum natural d20 roll for crit threat (from equipped weapon, default 20)
     public int CritMultiplier;  // Crit damage multiplier (from equipped weapon, default 2)
@@ -3043,15 +3070,77 @@ public class CharacterStats
         return $"{currentDisplay}/{baseScore}";
     }
 
-    // EffectiveXXXScore: base score - ability damage/drain + wondrous enhancement bonus
-    public int EffectiveSTRScore { get { int s = GetEffectiveAbilityScore(AbilityType.STR); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementSTR; } }
-    public int EffectiveDEXScore { get { int s = GetEffectiveAbilityScore(AbilityType.DEX); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementDEX; } }
-    public int EffectiveCONScore { get { int s = GetEffectiveAbilityScore(AbilityType.CON); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementCON; } }
-    public int EffectiveINTScore { get { int s = GetEffectiveAbilityScore(AbilityType.INT); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementINT; } }
-    public int EffectiveWISScore { get { int s = GetEffectiveAbilityScore(AbilityType.WIS); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementWIS; } }
-    public int EffectiveCHAScore { get { int s = GetEffectiveAbilityScore(AbilityType.CHA); return s == NO_SCORE ? NO_SCORE : s + WondrousEnhancementCHA; } }
+    // EffectiveXXXScore: base score - ability damage/drain + the enhancement bonus of an item (and, for STR, the
+    // Strength domain's feat of strength) beyond the spell enhancement bonus already in the score field.
+    public int EffectiveSTRScore { get { int s = GetEffectiveAbilityScore(AbilityType.STR); return s == NO_SCORE ? NO_SCORE : s + EnhancementBeyondSpells(AbilityType.STR, Mathf.Max(WondrousEnhancementSTR, TemporarySTRBonus)); } }
+    public int EffectiveDEXScore { get { int s = GetEffectiveAbilityScore(AbilityType.DEX); return s == NO_SCORE ? NO_SCORE : s + EnhancementBeyondSpells(AbilityType.DEX, WondrousEnhancementDEX); } }
+    public int EffectiveCONScore { get { int s = GetEffectiveAbilityScore(AbilityType.CON); return s == NO_SCORE ? NO_SCORE : s + EnhancementBeyondSpells(AbilityType.CON, WondrousEnhancementCON); } }
+    public int EffectiveINTScore { get { int s = GetEffectiveAbilityScore(AbilityType.INT); return s == NO_SCORE ? NO_SCORE : s + EnhancementBeyondSpells(AbilityType.INT, WondrousEnhancementINT); } }
+    public int EffectiveWISScore { get { int s = GetEffectiveAbilityScore(AbilityType.WIS); return s == NO_SCORE ? NO_SCORE : s + EnhancementBeyondSpells(AbilityType.WIS, WondrousEnhancementWIS); } }
+    public int EffectiveCHAScore { get { int s = GetEffectiveAbilityScore(AbilityType.CHA); return s == NO_SCORE ? NO_SCORE : s + EnhancementBeyondSpells(AbilityType.CHA, WondrousEnhancementCHA); } }
 
-    public int EffectiveStrengthScore => !HasStrength() ? NO_SCORE : Mathf.Max(1, EffectiveSTRScore - StrengthConditionPenalty - EnfeeblementStrengthPenalty + TemporarySTRBonus);
+    /// <summary>
+    /// The part of an item's (or the Strength domain's) enhancement bonus to <paramref name="ability"/> above the best
+    /// spell enhancement bonus to it, which StatusEffectManager already put in the score field from <see cref="Bonuses"/>.
+    /// Enhancement bonuses to one ability score do not stack: a belt of giant Strength and bull's strength give the
+    /// better one only (PHB p.172; glossary "enhancement bonus" p.308; CHR-010). The domain power is an enhancement
+    /// bonus too (PHB p.188, Strength domain; CHR-065).
+    /// </summary>
+    private int EnhancementBeyondSpells(AbilityType ability, int otherEnhancement)
+    {
+        if (otherEnhancement <= 0)
+            return 0;
+        int spellEnhancement = Bonuses.BestOfType(AbilityBonusTarget(ability), BonusType.Enhancement);
+        return Mathf.Max(0, otherEnhancement - spellEnhancement);
+    }
+
+    [NonSerialized] private int[] _abilityBonusesApplied;
+
+    /// <summary>
+    /// Puts the change in the stacked <see cref="Bonuses"/> total for <paramref name="ability"/> into its score field
+    /// (STR..CHA), so every reader of the field sees the spell bonuses that count by the PHB stacking rules: bull's
+    /// strength and another enhancement bonus to Strength give the better one, enlarge person's size bonus adds to
+    /// them. Returns the change made to the field. StatusEffectManager calls it whenever an effect with an ability bonus
+    /// begins or ends.
+    /// </summary>
+    public int SyncAbilityScoreWithBonuses(AbilityType ability)
+    {
+        _abilityBonusesApplied ??= new int[7];
+        int index = (int)ability;
+        if (index <= 0 || index >= _abilityBonusesApplied.Length)
+            return 0;
+        int total = Bonuses.Total(AbilityBonusTarget(ability));
+        int delta = total - _abilityBonusesApplied[index];
+        if (delta == 0)
+            return 0;
+        _abilityBonusesApplied[index] = total;
+        switch (ability)
+        {
+            case AbilityType.STR: STR += delta; break;
+            case AbilityType.DEX: DEX += delta; break;
+            case AbilityType.CON: CON += delta; break;
+            case AbilityType.INT: INT += delta; break;
+            case AbilityType.WIS: WIS += delta; break;
+            case AbilityType.CHA: CHA += delta; break;
+        }
+        return delta;
+    }
+
+    /// <summary>The <see cref="BonusTarget"/> of an ability score (Strength for STR, ...).</summary>
+    public static BonusTarget AbilityBonusTarget(AbilityType ability)
+    {
+        switch (ability)
+        {
+            case AbilityType.DEX: return BonusTarget.Dexterity;
+            case AbilityType.CON: return BonusTarget.Constitution;
+            case AbilityType.INT: return BonusTarget.Intelligence;
+            case AbilityType.WIS: return BonusTarget.Wisdom;
+            case AbilityType.CHA: return BonusTarget.Charisma;
+            default: return BonusTarget.Strength;
+        }
+    }
+
+    public int EffectiveStrengthScore => !HasStrength() ? NO_SCORE : Mathf.Max(1, EffectiveSTRScore - StrengthConditionPenalty - EnfeeblementStrengthPenalty);
     public int EffectiveDexterityScore => !HasDexterity() ? NO_SCORE : Mathf.Max(0, EffectiveDEXScore - DexterityConditionPenalty);
 
     public int STRMod => GetAbilityModifier(EffectiveStrengthScore);
@@ -3163,34 +3252,98 @@ public class CharacterStats
     /// </summary>
     public int EffectiveDeflectionBonus => Mathf.Max(DeflectionBonus, RingDeflectionBonus);
 
-    /// <summary>Morale bonus to attack rolls from spells (e.g., Bless).</summary>
-    public int MoraleAttackBonus;
+    [NonSerialized] private BonusLedger _bonuses;
 
-    /// <summary>Morale bonus to damage rolls from spells (e.g., Divine Favor).</summary>
-    public int MoraleDamageBonus;
+    /// <summary>
+    /// The typed bonuses and penalties this creature has from effects: spells (StatusEffectManager registers each
+    /// effect's attack, weapon damage, save, skill, speed and ability bonuses with its real type), Inspire Courage,
+    /// Prayer, the charge's +2 and others. Totals follow the PHB stacking rules (<see cref="BonusStacking"/>): the same
+    /// type does not stack except dodge, circumstance and untyped bonuses from different sources; the same source never
+    /// stacks with itself (SPL-026).
+    /// </summary>
+    public BonusLedger Bonuses => _bonuses ??= new BonusLedger();
 
-    /// <summary>Morale bonus to saving throws from spells (e.g., Bless).</summary>
-    public int MoraleSaveBonus;
+    /// <summary>
+    /// The attack roll modifier from effects (<see cref="Bonuses"/>): Bless and Heroism (morale), Divine Favor and Prayer
+    /// (luck), Magic Fang (enhancement), Inspire Courage (morale), the charge (+2, untyped), Bane and Prayer's penalty,
+    /// combined by the PHB stacking rules.
+    /// </summary>
+    public int EffectAttackBonus => Bonuses.Total(BonusTarget.AttackRoll);
+
+    /// <summary>The weapon damage modifier from effects (<see cref="Bonuses"/>): Divine Favor, Prayer, Inspire Courage, Magic Fang.</summary>
+    public int EffectWeaponDamageBonus => Bonuses.Total(BonusTarget.WeaponDamage);
+
+    /// <summary>
+    /// The modifier on <paramref name="save"/> from effects and the bonuses typed like them, combined by the PHB stacking
+    /// rules (<see cref="BonusStacking"/>): every effect in <see cref="Bonuses"/> for all saves or this save (Heroism
+    /// morale, Prayer luck, Bane and Doom penalties, ...), the luck bonus of a luck blade, a stone of good luck and a robe
+    /// of stars (luck bonuses do not stack, PHB glossary p.310; only the best applies), and on Will the barbarian's rage
+    /// (morale, PHB p.25), which does not stack with a morale spell such as Heroism. Resistance, competence and
+    /// fear-only morale bonuses are kept apart (<see cref="EffectiveResistanceSaveBonus"/>,
+    /// <see cref="EffectiveCompetenceSaveBonus"/>, <see cref="SaveRules"/>).
+    /// </summary>
+    public int EffectSaveBonus(SavingThrowType save) => BonusStacking.Combine(CollectSaveBonuses(save));
+
+    /// <summary>The highest bonus of <paramref name="type"/> on <paramref name="save"/> in <see cref="EffectSaveBonus"/> (0 when none).</summary>
+    public int BestSaveBonusOfType(SavingThrowType save, BonusType type) => BonusStacking.BestBonusOfType(CollectSaveBonuses(save), type);
+
+    /// <summary>
+    /// What the modifiers on saves against fear only (<see cref="BonusTarget.FearSaves"/>: Bane's -1, PHB p.203) add to
+    /// <paramref name="save"/> against a fear effect, stacked with the save's other effect modifiers (PHB p.171); 0 when
+    /// none. SaveRules adds it for a fear save.
+    /// </summary>
+    public int FearOnlySaveModifier(SavingThrowType save)
+    {
+        if (!Bonuses.HasTarget(BonusTarget.FearSaves))
+            return 0;
+        List<TypedBonus> list = CollectSaveBonuses(save);
+        int without = BonusStacking.Combine(list);
+        Bonuses.Collect(BonusTarget.FearSaves, list);
+        return BonusStacking.Combine(list) - without;
+    }
+
+    /// <summary>"Heroism +2, stone of good luck +1": the modifiers that count in <see cref="EffectSaveBonus"/>, for logs.</summary>
+    public string DescribeEffectSaveBonus(SavingThrowType save) => BonusStacking.Describe(CollectSaveBonuses(save));
+
+    private List<TypedBonus> CollectSaveBonuses(SavingThrowType save)
+    {
+        var list = new List<TypedBonus>();
+        BonusTarget target = save == SavingThrowType.Fortitude ? BonusTarget.Fortitude
+            : save == SavingThrowType.Reflex ? BonusTarget.Reflex : BonusTarget.Will;
+        Bonuses.Collect(target, list, null, BonusTarget.AllSaves);
+        if (LuckSaveBonus > 0) list.Add(new TypedBonus(BonusType.Luck, LuckSaveBonus, "item:luck_blade", "luck blade"));
+        if (WondrousLuckSaveBonus > 0) list.Add(new TypedBonus(BonusType.Luck, WondrousLuckSaveBonus, "item:stone_of_good_luck", "stone of good luck"));
+        if (WondrousRobeLuckSaveBonus > 0) list.Add(new TypedBonus(BonusType.Luck, WondrousRobeLuckSaveBonus, "item:robe_of_stars", "robe of stars"));
+        if (save == SavingThrowType.Will && RageWillBonus > 0)
+            list.Add(new TypedBonus(BonusType.Morale, RageWillBonus, "barbarian_rage", "rage"));
+        return list;
+    }
+
+    /// <summary>
+    /// The modifier on <paramref name="skillName"/> checks from effects (<see cref="Bonuses"/>, all skills or this one):
+    /// Heroism (morale), Prayer (luck) and its penalty, the Jump spell (enhancement on Jump).
+    /// </summary>
+    public int EffectSkillBonus(string skillName) => Bonuses.Total(BonusTarget.Skill, skillName, BonusTarget.AllSkills);
 
     /// <summary>Luck bonus to saving throws from items toggled on equip (Luck Blade).</summary>
     public int LuckSaveBonus;
 
     /// <summary>
     /// The highest resistance-typed spell save bonus on this character (Resistance, PHB p.272), kept by
-    /// StatusEffectManager outside <see cref="MoraleSaveBonus"/> so that it does not stack with a cloak or ring of
+    /// StatusEffectManager outside <see cref="Bonuses"/> so that it does not stack with a cloak or ring of
     /// resistance (<see cref="EffectiveResistanceSaveBonus"/>, CHR-018).
     /// </summary>
     public int ResistanceSaveBonusFromSpells;
 
     /// <summary>
     /// The highest competence-typed spell save bonus on this character (Guidance, PHB p.238), kept by StatusEffectManager
-    /// outside <see cref="MoraleSaveBonus"/> so that it does not stack with a Pale Green Prism (<see cref="EffectiveCompetenceSaveBonus"/>).
+    /// outside <see cref="Bonuses"/> so that it does not stack with a Pale Green Prism (<see cref="EffectiveCompetenceSaveBonus"/>).
     /// </summary>
     public int CompetenceSaveBonusFromSpells;
 
     /// <summary>
     /// The highest spell morale bonus on saves against fear only (Bless, PHB p.205; Aid, PHB p.196), kept by
-    /// StatusEffectManager outside <see cref="MoraleSaveBonus"/>; SaveRules adds it for a save against fear (CHR-018).
+    /// StatusEffectManager outside <see cref="Bonuses"/>; SaveRules adds it for a save against fear (CHR-018).
     /// </summary>
     public int FearMoraleSaveBonusFromSpells;
 
@@ -3235,8 +3388,8 @@ public class CharacterStats
     /// <summary>Competence bonus to Disguise checks from active effects (e.g., Disguise Self).</summary>
     public int DisguiseCompetenceBonus;
 
-    /// <summary>Enhancement bonus to Jump checks from active effects (e.g., Jump spell).</summary>
-    public int JumpEnhancementBonus;
+    /// <summary>Bonus to Jump checks from effects naming the Jump skill (the Jump spell's enhancement bonus, PHB p.246), from <see cref="Bonuses"/>.</summary>
+    public int JumpEnhancementBonus => Bonuses.Total(BonusTarget.Skill, "Jump");
 
     // ── Ring Equipment Bonuses (D&D 3.5e DMG pp. 229–233) ──
     // These fields are set by Inventory.RecalculateStats() when rings are equipped.
@@ -3296,7 +3449,8 @@ public class CharacterStats
     /// Inventory.ApplyAllWondrousItemBonuses; kept out of the resistance bonus so it stacks with cloaks and wards.</summary>
     public int WondrousLuckSaveBonus;
     /// <summary>Luck bonus to all saves from a worn Robe of Stars (+1, DMG p.265). Rebuilt by
-    /// Inventory.ApplyAllWondrousItemBonuses; stacks with the Stone of Good Luck (luck stacks, house rule; CHR-018).</summary>
+    /// Inventory.ApplyAllWondrousItemBonuses; a luck bonus, so only the best of it, the Stone of Good Luck and other luck
+    /// bonuses applies (<see cref="EffectSaveBonus"/>, PHB glossary p.310).</summary>
     public int WondrousRobeLuckSaveBonus;
     /// <summary>Enhancement bonus to base land speed from Boots of Striding (+10 ft). Highest wins.</summary>
     public int WondrousSpeedBonus;
@@ -3580,7 +3734,7 @@ public class CharacterStats
     }
 
     /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier + morale bonus + condition penalties.</summary>
-    public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
+    public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier + EffectAttackBonus + ConditionAttackPenalty;
 
     /// <summary>
     /// Convenience wrapper for AC comparisons used by AI profiles.
@@ -3601,7 +3755,7 @@ public class CharacterStats
     /// </summary>
     public int GetMeleeAttackBonus()
     {
-        return BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
+        return BaseAttackBonus + STRMod + SizeModifier + EffectAttackBonus + ConditionAttackPenalty;
     }
 
     /// <summary>
@@ -3609,7 +3763,7 @@ public class CharacterStats
     /// </summary>
     public int GetRangedAttackBonus()
     {
-        return BaseAttackBonus + DEXMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
+        return BaseAttackBonus + DEXMod + SizeModifier + EffectAttackBonus + ConditionAttackPenalty;
     }
 
     /// <summary>Movement speed in squares per turn after class bonuses, encumbrance, conditions, and 5-ft rounding.</summary>
@@ -3636,9 +3790,8 @@ public class CharacterStats
             // BaseSpeed is the race's speed for a PC (set by the constructor) and the MM entry's speed for an NPC, whose
             // RaceData is attached without changing its speed (CRE-038).
             int baseFeet = BaseSpeed * 5
-                           + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5
-                           + Mathf.Max(0, LandSpeedEnhancementBonusFeet)
-                           + Mathf.Max(0, WondrousSpeedBonus);
+                           + BarbarianFastMovementBonus * 5
+                           + Mathf.Max(0, LandSpeedEnhancementWithItemsFeet);
 
             float speed = baseFeet;
             if (!SpeedNotReducedByArmor)
@@ -4532,7 +4685,7 @@ public class CharacterStats
         {
             total += UnityEngine.Random.Range(1, BaseDamageDice + 1);
         }
-        total += STRMod + BonusDamage + MoraleDamageBonus;
+        total += STRMod + BonusDamage + EffectWeaponDamageBonus;
         return Mathf.Max(1, total); // Minimum 1 damage on a hit
     }
 
@@ -6302,6 +6455,13 @@ public class CharacterStats
         return total;
     }
 
+    /// <summary>
+    /// The spell and effect term of a skill check, shared by <see cref="GetSkillBonus"/> and <see cref="RollSkillCheck"/>
+    /// so the two cannot drift: the hand-kept spell and ring fields (<see cref="GetSpellSkillModifier"/>) plus the typed
+    /// effect bonuses stacked by the PHB rules (<see cref="EffectSkillBonus"/>: the Jump spell, Heroism, Prayer).
+    /// </summary>
+    public int SpellAndEffectSkillModifier(string skillName) => GetSpellSkillModifier(skillName) + EffectSkillBonus(skillName);
+
     private int GetSpellSkillModifier(string skillName)
     {
         if (string.IsNullOrWhiteSpace(skillName))
@@ -6313,7 +6473,7 @@ public class CharacterStats
             modifier += DisguiseCompetenceBonus;
 
         if (string.Equals(skillName, "Jump", System.StringComparison.OrdinalIgnoreCase))
-            modifier += JumpSpeedModifier + JumpEnhancementBonus;
+            modifier += JumpSpeedModifier;
 
         if (string.Equals(skillName, "Hide", System.StringComparison.OrdinalIgnoreCase) && OwnerCharacter != null)
         {
@@ -6359,7 +6519,7 @@ public class CharacterStats
         int featBonus = GetFeatSkillBonus(skillName);
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
         int conditionModifier = GetConditionSkillModifier(skillName);
-        int spellModifier = GetSpellSkillModifier(skillName);
+        int spellModifier = SpellAndEffectSkillModifier(skillName);
         int familiarModifier = GetFamiliarSkillModifier(skillName);
         int wondrousBonus = GetWondrousSkillModifier(skillName);
         int racialModifier = GetRacialSkillModifier(skillName);
@@ -6438,7 +6598,7 @@ public class CharacterStats
         int featBonus = GetFeatSkillBonus(skillName);
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
         int conditionModifier = GetConditionSkillModifier(skillName);
-        int spellModifier = GetSpellSkillModifier(skillName);
+        int spellModifier = SpellAndEffectSkillModifier(skillName);
         int wondrousBonus = GetWondrousSkillModifier(skillName);
         int racialModifier = GetRacialSkillModifier(skillName);
         int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier + spellModifier + wondrousBonus + racialModifier;

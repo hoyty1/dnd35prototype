@@ -6,7 +6,7 @@ namespace Tests.Character
 {
 /// <summary>
 /// CHR-018: the one saving throw modifier (CharacterStats.GetSaveTotal and SaveRules.Modifier) applies every save
-/// bonus source with the PHB p.171 stacking rules (luck stacks by the owner's house rule, BonusType.cs), and the
+/// bonus source with the PHB p.171 stacking rules (luck bonuses do not stack, PHB glossary p.310), and the
 /// shared resolvers (SavingThrowResolver, SpellSaveResolver) use it. Rules: PHB p.44 Divine Grace; PHB p.15-20 racial
 /// save bonuses; PHB p.41 Still Mind; PHB p.26 and p.51 trap sense; PHB p.36 Resist Nature's Lure; PHB p.37 venom
 /// immunity; PHB p.93-97 Great Fortitude, Iron Will, Lightning Reflexes; PHB p.272 Resistance; PHB p.238 Guidance;
@@ -390,9 +390,9 @@ public static class SaveBonusRulesTests
         inv.DirectEquip(WondrousItemFactory.CreateStoneOfGoodLuck(), EquipSlot.Slotless);
         AssertEq(s.ReflexSave, bare + 2, "Stone of Good Luck: +1 luck on top of the competence bonus");
         inv.DirectEquip(WondrousItemFactory.CreateRobeOfStars(), EquipSlot.Torso);
-        AssertEq(s.ReflexSave, bare + 3, "Robe of Stars: +1 luck, stacking with the luckstone (house rule, BonusType.cs; DMG p.265)");
+        AssertEq(s.ReflexSave, bare + 2, "Robe of Stars: +1 luck, not stacking with the luckstone's luck bonus (PHB glossary p.310; DMG p.265)");
         inv.Unequip(EquipSlot.Torso);
-        AssertEq(s.ReflexSave, bare + 2, "Robe of Stars removed: its luck bonus goes");
+        AssertEq(s.ReflexSave, bare + 2, "Robe of Stars removed: the luckstone's +1 luck remains");
     }
 
     private static void TestCloakOfArachnida()
@@ -439,7 +439,7 @@ public static class SaveBonusRulesTests
             AssertEq(s.WillSave, bare + 1, "Resistance with a +1 cloak: +1, not +2 (PHB p.171)");
             sem.RemoveEffectsBySpellId(SpellNames.RESISTANCE);
             AssertEq(s.WillSave, bare + 1, "Resistance ended: the cloak's +1 remains");
-            AssertEq(s.MoraleSaveBonus, 0, "Resistance ended: nothing left in the spell save pool");
+            AssertEq(s.EffectSaveBonus(SavingThrowType.Will), 0, "Resistance ended: no effect save bonus left (resistance is kept apart from the ledger)");
 
             inv.DirectEquip(WondrousItemFactory.CreateIounStonePaleGreenPrism(), EquipSlot.Slotless);
             sem.AddEffect(SpellDatabase.GetSpell(SpellNames.GUIDANCE).Clone(), "Tester", 1);

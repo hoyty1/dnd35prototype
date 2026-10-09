@@ -376,6 +376,9 @@ public static partial class SpellDatabase
                     BuffAttackBonus = 2,
                     BuffSaveBonus = 2,
                     BuffDamageBonus = 0,
+                    // +2 morale bonus on skill checks too (PHB p.240).
+                    BuffSkillName = SpellData.AllSkillsBuffSkillName,
+                    BuffSkillBonus = 2,
                     BuffType = "morale",
                     BuffBonusType = BonusType.Morale,
                     BonusTypeExplicitlySet = true,

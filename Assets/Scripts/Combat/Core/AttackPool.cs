@@ -23,12 +23,13 @@ public enum AttackStepKind
 }
 
 /// <summary>
-/// Turn-scoped, per-creature attack-sequence state (house-rule progressive attack flow).
+/// Turn-scoped, per-creature attack-sequence state: the full attack decided attack by attack, as PHB p.143
+/// "Deciding between an Attack or a Full Attack" allows (a rule of the book, not a house rule).
 /// The first attack, or a maneuver that replaces one, spends only the standard action, so the
-/// creature may still take its move action if it stops there. A second attack turns the turn into
-/// a full attack and spends the move action; after that only a 5-foot step is allowed, and a
-/// creature that has already used its move action cannot take a second attack.
-/// This applies PHB p.143 "Deciding between an Attack or a Full Attack". Trip, disarm, sunder and
+/// creature may still take its move action if it stops there (after a 5-foot step that move action
+/// cannot move it any distance, PHB p.143-144). A second attack turns the turn into a full attack
+/// (a full-round action, PHB p.143) and spends the move action; after that only a 5-foot step is
+/// allowed, and a creature that has already used its move action cannot take a second attack. Trip, disarm, sunder and
 /// grapple replace a melee attack (PHB p.141 Table 8-2 note 7) and use the same steps, at that
 /// step's bonus (an iterative BAB, or for a natural-attack creature the BAB of the natural attack
 /// replaced, MM p.312). Cleared by <see cref="CharacterController.StartNewTurn"/>.

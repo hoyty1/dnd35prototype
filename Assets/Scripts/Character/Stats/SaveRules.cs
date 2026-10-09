@@ -26,11 +26,14 @@ public sealed class SaveContext
     public readonly bool IsTrap;
     /// <summary>A spell-like ability of a fey (Resist Nature's Lure, PHB p.36).</summary>
     public readonly bool IsFeySpellLike;
+    /// <summary>A charm effect (enchantment, charm subschool: Inspire Courage's +1 morale bonus, PHB p.29).</summary>
+    public readonly bool IsCharm;
     /// <summary>What the save is against, for logs (may be null).</summary>
     public readonly string Label;
 
     public SaveContext(bool spell = false, bool enchantment = false, bool illusion = false, bool fear = false,
-        bool poison = false, bool spiderPoison = false, bool trap = false, bool feySpellLike = false, string label = null)
+        bool poison = false, bool spiderPoison = false, bool trap = false, bool feySpellLike = false, string label = null,
+        bool charm = false)
     {
         IsSpell = spell;
         IsEnchantment = enchantment;
@@ -40,6 +43,7 @@ public sealed class SaveContext
         IsSpiderPoison = spiderPoison;
         IsTrap = trap;
         IsFeySpellLike = feySpellLike;
+        IsCharm = charm;
         Label = label;
     }
 
@@ -81,7 +85,18 @@ public sealed class SaveContext
         bool fear = SpellCaster.IsFearSpell(spell);
         bool poison = string.Equals(spell.SpellId, DND35e.Identifiers.SpellNames.POISON, System.StringComparison.Ordinal);
         return new SaveContext(spell: true, enchantment: enchantment, illusion: illusion, fear: fear, poison: poison,
-            feySpellLike: feySpellLike, label: spell.Name);
+            feySpellLike: feySpellLike, label: spell.Name, charm: IsCharmSpell(spell.SpellId));
+    }
+
+    /// <summary>
+    /// The charm-subschool spells of the PHB in this game (the spell data keep no subschool): Charm Person (p.209),
+    /// Charm Monster (p.209) and Enthrall (p.227).
+    /// </summary>
+    public static bool IsCharmSpell(string spellId)
+    {
+        return spellId == DND35e.Identifiers.SpellNames.CHARM_PERSON
+            || spellId == DND35e.Identifiers.SpellNames.CHARM_MONSTER
+            || spellId == DND35e.Identifiers.SpellNames.ENTHRALL;
     }
 
     /// <summary>A save against the spell <paramref name="spellId"/> (looked up read-only in SpellDatabase).</summary>
@@ -99,8 +114,9 @@ public sealed class SaveContext
 /// <see cref="SaveContext"/>. Every save roll site uses it, on the PC and the NPC side alike (PC_NPC_PARITY); the
 /// spell-specific situational bonuses of SpellCaster.GetSaveModifier (Charm Person, Hideous Laughter, the alignment
 /// ward, Lullaby) are added there on top (SPL-018).
-/// Stacking (PHB p.171): bonuses of one type do not stack except dodge and untyped ones; luck bonuses stack by the
-/// owner's house rule (Assets/Scripts/Spell/BonusType.cs).
+/// Stacking (PHB p.171-172): bonuses of one type do not stack except dodge, circumstance and untyped ones from different
+/// sources (<see cref="BonusStacking"/>); a situational bonus of a type the creature already has on that save (morale,
+/// luck) counts only for the part above it.
 /// </summary>
 public static class SaveRules
 {
@@ -173,16 +189,19 @@ public static class SaveRules
     /// and poison). DMG p.21 states only the general rule (same-type bonuses do not stack, except dodge and some
     /// circumstance bonuses); which book governs is an open owner question (CHR-019).</item>
     /// <item>Morale against fear: the halfling's +2 (PHB p.20), Remove Fear's +4 (PHB p.271), Bless's and Aid's +1
-    /// (PHB p.205, p.196; <see cref="CharacterStats.FearMoraleSaveBonusFromSpells"/>) and a paladin's Aura of
-    /// Courage, +4 to each ally within 10 ft while she is conscious (PHB p.44, <see cref="AuraOfCourageBonus"/>). Morale
-    /// bonuses do not stack (PHB p.171), so the best one applies, and on a Will save only beyond the barbarian's rage
-    /// morale bonus already in <see cref="CharacterStats.GetSaveTotal"/> (PHB p.25). Spell morale bonuses such as
-    /// Heroism sit in the untyped pool <see cref="CharacterStats.MoraleSaveBonus"/> and still stack with it (SPL-026).</item>
+    /// (PHB p.205, p.196; <see cref="CharacterStats.FearMoraleSaveBonusFromSpells"/>), a paladin's Aura of Courage,
+    /// +4 to each ally within 10 ft while she is conscious (PHB p.44, <see cref="AuraOfCourageBonus"/>), and Inspire
+    /// Courage's +1 (PHB p.29, also against charm). Morale bonuses do not stack (PHB p.171), so the best one applies,
+    /// and only beyond the morale bonus the creature already has on that save in
+    /// <see cref="CharacterStats.EffectSaveBonus"/> (Heroism, the Rage spell, the barbarian's rage on Will).</item>
+    /// <item>Penalties on saves against fear only: Bane's -1 (PHB p.203; <see cref="CharacterStats.FearOnlySaveModifier"/>),
+    /// stacked with the save's other effect modifiers by the PHB rules.</item>
     /// <item>Still Mind (monk 3, PHB p.41): +2 on every save against enchantments.</item>
     /// <item>Indomitable Will (barbarian 14, PHB p.26): +4 on Will saves against enchantment spells while raging.</item>
     /// <item>Resist Nature's Lure (druid 4, PHB p.36): +4 against the spell-like abilities of fey.</item>
     /// <item>Trap sense (barbarian 3 and rogue 3, PHB p.26, p.51): on Reflex saves against traps; the classes' bonuses stack.</item>
-    /// <item>Cloak of Arachnida (DMG p.253): +2 luck bonus on Fortitude saves against spider poison (luck stacks, house rule).</item>
+    /// <item>Cloak of Arachnida (DMG p.253): +2 luck bonus on Fortitude saves against spider poison, beyond the luck bonus
+    /// the creature already has on Fortitude saves (luck bonuses do not stack, PHB glossary p.310).</item>
     /// </list>
     /// </summary>
     public static int SituationalBonus(CharacterStats stats, SavingThrowType save, SaveContext context, out string sources)
@@ -209,17 +228,27 @@ public static class SaveRules
                 Add(ref total, parts, racial, "racial (" + race.RaceName + ")");
         }
 
-        if (context.IsFear)
+        if (context.IsFear || context.IsCharm)
         {
-            int fearMorale = Mathf.Max(race != null ? race.SaveVsFear : 0, stats.RemoveFearMoraleBonus);
-            fearMorale = Mathf.Max(fearMorale, stats.FearMoraleSaveBonusFromSpells);
-            fearMorale = Mathf.Max(fearMorale, AuraOfCourageBonus(stats));
-            // Morale bonuses do not stack (PHB p.171): only the part beyond the rage morale bonus on Will counts.
-            if (save == SavingThrowType.Will)
-                fearMorale -= Mathf.Max(0, stats.RageWillBonus);
-            if (fearMorale > 0)
-                Add(ref total, parts, fearMorale, "morale vs fear");
+            int situationalMorale = 0;
+            if (context.IsFear)
+            {
+                situationalMorale = Mathf.Max(race != null ? race.SaveVsFear : 0, stats.RemoveFearMoraleBonus);
+                situationalMorale = Mathf.Max(situationalMorale, stats.FearMoraleSaveBonusFromSpells);
+                situationalMorale = Mathf.Max(situationalMorale, AuraOfCourageBonus(stats));
+            }
+            // Inspire Courage: +1 morale on saves against charm and fear effects (PHB p.29).
+            if (stats.HasInspireCourageBonus)
+                situationalMorale = Mathf.Max(situationalMorale, stats.AppliedInspireCourageValue);
+            // Morale bonuses do not stack (PHB p.171): only the part beyond the morale bonus already on this save counts.
+            situationalMorale -= stats.BestSaveBonusOfType(save, BonusType.Morale);
+            if (situationalMorale > 0)
+                Add(ref total, parts, situationalMorale, context.IsFear ? "morale vs fear" : "morale vs charm");
         }
+
+        // Modifiers on saves against fear only, stacked with the save's own (Bane's -1, PHB p.203).
+        if (context.IsFear)
+            Add(ref total, parts, stats.FearOnlySaveModifier(save), "vs fear");
 
         if (context.IsEnchantment)
         {
@@ -235,7 +264,8 @@ public static class SaveRules
             Add(ref total, parts, stats.TrapSenseSaveBonus, "trap sense");
 
         if (context.IsSpiderPoison && save == SavingThrowType.Fortitude)
-            Add(ref total, parts, stats.WondrousLuckFortSaveBonus, "luck vs spider poison");
+            Add(ref total, parts, Mathf.Max(0, stats.WondrousLuckFortSaveBonus - stats.BestSaveBonusOfType(save, BonusType.Luck)),
+                "luck vs spider poison");
 
         sources = parts.ToString();
         return total;

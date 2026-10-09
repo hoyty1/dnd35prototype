@@ -1594,7 +1594,7 @@ public partial class GameManager
                     yield return StartCoroutine(PromptHasteNaturalAttackChoice(charger, target,
                         choice => pounceHasteNaturalAttackIndex = choice, labelBonusOffset: 2));
 
-                charger.Stats.MoraleAttackBonus += 2;
+                charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 2, "Charge"); // +2 untyped (PHB p.154)
                 FullAttackResult pounceResult;
                 FullAttackResult pounceRakeResult = null;
                 try
@@ -1608,7 +1608,7 @@ public partial class GameManager
                 }
                 finally
                 {
-                    charger.Stats.MoraleAttackBonus -= 2;
+                    charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
                 }
 
                 bool improvedGrabAttempted = false;
@@ -2006,7 +2006,7 @@ public partial class GameManager
         else if (usedPounce)
         {
             CombatUI?.ShowCombatLog(CombatLogHelper.Summon("🐅", $"{npc.Stats.CharacterName} uses Pounce!"));
-            npc.Stats.MoraleAttackBonus += 2;
+            npc.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 2, "Charge"); // +2 untyped (PHB p.154)
             FullAttackResult pounceResult;
             FullAttackResult pounceRakeResult = null;
             try
@@ -2025,7 +2025,7 @@ public partial class GameManager
             }
             finally
             {
-                npc.Stats.MoraleAttackBonus -= 2;
+                npc.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
             }
 
             if (pounceResult != null)

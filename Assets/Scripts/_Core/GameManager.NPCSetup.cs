@@ -299,7 +299,7 @@ public partial class GameManager
             if (npc.Stats != null && string.Equals(enemyId, "target_dummy", StringComparison.Ordinal))
             {
                 // Force extremely low saves for deterministic save-or-suck / save-for-half spell validation.
-                npc.Stats.MoraleSaveBonus = -10;
+                npc.Stats.Bonuses.Set("test:target_dummy", BonusTarget.AllSaves, BonusType.Untyped, -10, "target dummy");
                 Debug.Log($"[SpellTest] Applied target dummy save penalty: F={npc.Stats.FortitudeSave}, R={npc.Stats.ReflexSave}, W={npc.Stats.WillSave}");
             }
 

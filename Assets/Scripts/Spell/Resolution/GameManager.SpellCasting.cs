@@ -6368,6 +6368,17 @@ public partial class GameManager
             return ApplyRageSpellBuff(caster, target, spell, spellComp);
         }
 
+        // Prayer (PHB p.264): the area cast path calls this once per creature in the burst; each gets its share, the
+        // caster and allies a +1 luck bonus, foes a -1 penalty (SPL-042).
+        if (spell != null && spell.SpellId == SpellNames.PRAYER)
+        {
+            CharacterController prayerCaster = caster ?? target;
+            int prayerCasterLevel = SpellCastingHelper.GetEffectiveCasterLevel(prayerCaster, spell);
+            int prayerRounds = SpellCastingHelper.CalculateDuration(spell, prayerCasterLevel);
+            ApplyPrayerToCreature(prayerCaster, target, spell, prayerCasterLevel, prayerRounds, out ActiveSpellEffect prayerEffect);
+            return prayerEffect;
+        }
+
         if (spell != null && spell.SpellId == SpellNames.BLINDNESS_DEAFNESS)
         {
             int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
@@ -7551,7 +7562,7 @@ public partial class GameManager
                 // AddEffect already applied the bonus to DeflectionBonus (AppliedDeflectionBonus) and reverses it
                 // on removal; this field only feeds the status indicator. A Ring of Protection is kept apart and
                 // combined at read time (CharacterStats.EffectiveDeflectionBonus, ITM-001).
-                target.Stats.ShieldOfFaithDeflectionBonus = deflectionBonus;
+                target.Stats.ShieldOfFaithDeflectionBonus = targetStatusMgr.BestAppliedDeflection(SpellNames.SHIELD_OF_FAITH);
 
                 SpellcastingComponent targetSpellComp = target.Spellcasting;
                 if (targetSpellComp != null)

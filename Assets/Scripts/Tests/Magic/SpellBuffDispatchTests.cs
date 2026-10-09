@@ -224,17 +224,17 @@ public static class SpellBuffDispatchTests
     {
         CharacterController druid = Actor("Druid", "Druid", 3, 1, wis: 14);
         CharacterController wolf = Actor("Wolf", "Fighter", 2, 2);
-        int attackBefore = wolf.Stats.MoraleAttackBonus;
-        int damageBefore = wolf.Stats.MoraleDamageBonus;
+        int attackBefore = wolf.Stats.EffectAttackBonus;
+        int damageBefore = wolf.Stats.EffectWeaponDamageBonus;
 
         ActiveSpellEffect effect = Apply(druid, wolf, SpellNames.MAGIC_FANG);
         Assert(effect != null && HasEffect(wolf, SpellNames.MAGIC_FANG), "Magic Fang: tracked effect");
-        Assert(wolf.Stats.MoraleAttackBonus == attackBefore + 1 && wolf.Stats.MoraleDamageBonus == damageBefore + 1,
+        Assert(wolf.Stats.EffectAttackBonus == attackBefore + 1 && wolf.Stats.EffectWeaponDamageBonus == damageBefore + 1,
             "Magic Fang: +1 on attack and damage once (PHB p.250; the branch used to add a second +1)",
-            $"attack {attackBefore} -> {wolf.Stats.MoraleAttackBonus}, damage {damageBefore} -> {wolf.Stats.MoraleDamageBonus}");
+            $"attack {attackBefore} -> {wolf.Stats.EffectAttackBonus}, damage {damageBefore} -> {wolf.Stats.EffectWeaponDamageBonus}");
 
         wolf.StatusEffectManager.RemoveEffectsBySpellId(SpellNames.MAGIC_FANG);
-        Assert(wolf.Stats.MoraleAttackBonus == attackBefore && wolf.Stats.MoraleDamageBonus == damageBefore,
+        Assert(wolf.Stats.EffectAttackBonus == attackBefore && wolf.Stats.EffectWeaponDamageBonus == damageBefore,
             "Magic Fang: the bonus ends with the spell");
     }
 
@@ -625,7 +625,7 @@ public static class SpellBuffDispatchTests
     {
         CharacterController cleric = Actor("Cleric", "Cleric", 9, 1, wis: 18);
         CharacterController enemy = Actor("Enemy", "Fighter", 5, 2);
-        enemy.Stats.MoraleSaveBonus = 100; // would save if the handler rolled again
+        enemy.Stats.Bonuses.Set("test:save", BonusTarget.AllSaves, BonusType.Untyped, 100); // would save if the handler rolled again
         Apply(cleric, enemy, SpellNames.PLANE_SHIFT, LandedSave(false));
         Assert(CombatEndRules.IsOutOfFight(enemy),
             "Plane Shift: after the cast's failed Will save the target leaves the battle; the handler does not roll a second save");

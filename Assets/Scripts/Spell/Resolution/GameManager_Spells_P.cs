@@ -17,10 +17,60 @@ public partial class GameManager
     //  PRAYER  (PHB p.264)
     // ================================================================
     // 40-ft burst centered on caster. 1 round/level.
-    // Allies: +1 luck bonus to attack rolls, weapon damage, saves, skill checks.
-    // Enemies: –1 luck penalty to attack rolls, weapon damage, saves, skill checks.
-    // Note: Prayer is cast on "self" but affects all in area. The resolution
-    // applies buffs to allies and debuffs to enemies, tracked via ActiveSpellEffect.
+    // Allies: +1 luck bonus on attack rolls, weapon damage rolls, saves and skill checks.
+    // Foes: -1 penalty (untyped) on the same rolls.
+    // Note: Prayer is cast on "self" but affects all in area. Each creature gets a tracked ActiveSpellEffect built from
+    // a clone of the spell with the right values and type, so the luck bonus does not stack with another luck bonus
+    // (Divine Favor, a stone of good luck; PHB glossary p.310) and the penalty stacks with other untyped penalties
+    // (CharacterStats.Bonuses, BonusStacking).
+
+    /// <summary>
+    /// A clone of Prayer (never the database template) carrying what it gives one creature (PHB p.264): an ally a +1 luck
+    /// bonus on attack rolls, weapon damage rolls, saves and skill checks; a foe a -1 penalty (untyped) on the same rolls.
+    /// </summary>
+    public static SpellData PrayerEffectSpell(SpellData prayer, bool ally)
+    {
+        SpellData clone = prayer.Clone();
+        int value = ally ? 1 : -1;
+        clone.BuffAttackBonus = value;
+        clone.BuffDamageBonus = value;
+        clone.BuffSaveBonus = value;
+        clone.BuffSkillName = SpellData.AllSkillsBuffSkillName;
+        clone.BuffSkillBonus = value;
+        clone.BuffType = ally ? "luck" : "untyped";
+        clone.BuffBonusType = ally ? BonusType.Luck : BonusType.Untyped;
+        clone.BonusTypeExplicitlySet = true;
+        return clone;
+    }
+
+    /// <summary>
+    /// Gives one creature in Prayer's burst its share of the spell (PHB p.264): the caster and each ally the +1 luck
+    /// effect, each foe the -1 penalty effect (<see cref="PrayerEffectSpell"/>). Shared by the burst resolver
+    /// (<see cref="TryResolvePrayerSpellEffect"/>, the single-target and NPC cast paths) and by <c>ApplySpellBuff</c>,
+    /// which the area cast path calls once per creature in the burst (SPL-042). Returns true for an ally.
+    /// </summary>
+    private bool ApplyPrayerToCreature(CharacterController caster, CharacterController creature, SpellData spell,
+        int casterLevel, int durationRounds, out ActiveSpellEffect effect)
+    {
+        effect = null;
+        if (creature == null || creature.Stats == null || spell == null)
+            return false;
+        bool isAlly = caster == null || creature == caster || TeamUtility.IsAlly(caster, creature);
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName ?? "Unknown" : "Unknown";
+        StatusEffectManager statusMgr = creature.StatusEffectManager;
+        if (statusMgr == null)
+        {
+            statusMgr = creature.gameObject.AddComponent<StatusEffectManager>();
+            statusMgr.Init(creature.Stats);
+        }
+        if (isAlly)
+        {
+            creature.Stats.PrayerActive = true;
+            creature.Stats.PrayerRoundsRemaining = durationRounds;
+        }
+        effect = statusMgr.AddEffect(PrayerEffectSpell(spell, isAlly), casterName, casterLevel, durationRounds);
+        return isAlly;
+    }
 
     private bool TryResolvePrayerSpellEffect(
         CharacterController caster, CharacterController target,
@@ -52,62 +102,13 @@ public partial class GameManager
             int dist = SquareGridUtils.GetDistance(caster.GridPosition, ch.GridPosition);
             if (dist > radiusSquares) continue;
 
-            bool isAlly = ch == caster || TeamUtility.IsAlly(caster, ch);
-
-            if (isAlly)
-            {
-                // +1 luck bonus to attacks, damage, saves
-                ch.Stats.PrayerActive = true;
-                ch.Stats.PrayerRoundsRemaining = durationRounds;
-
-                var statusMgr = ch.StatusEffectManager;
-                if (statusMgr != null)
-                {
-                    var effect = statusMgr.AddEffect(spell, casterName, casterLevel);
-                    if (effect != null)
-                    {
-                        effect.RemainingRounds = durationRounds;
-                        effect.AppliedAttackBonus = 1;
-                        effect.AppliedDamageBonus = 1;
-                        effect.AppliedSaveBonus = 1;
-                    }
-                }
-
-                // Apply luck bonuses (piggyback on morale fields — stacks with morale
-                // in the real game, but this is the closest existing stat path).
-                ch.Stats.MoraleAttackBonus += 1;
-                ch.Stats.MoraleDamageBonus += 1;
-                ch.Stats.MoraleSaveBonus += 1;
-
+            if (ApplyPrayerToCreature(caster, ch, spell, casterLevel, durationRounds, out _))
                 allyCount++;
-            }
             else
-            {
-                // –1 luck penalty to attacks, damage, saves
-                // Apply via debuff ActiveSpellEffect
-                var statusMgr = ch.StatusEffectManager;
-                if (statusMgr != null)
-                {
-                    var effect = statusMgr.AddEffect(spell, casterName, casterLevel);
-                    if (effect != null)
-                    {
-                        effect.RemainingRounds = durationRounds;
-                        effect.AppliedAttackBonus = -1;
-                        effect.AppliedDamageBonus = -1;
-                        effect.AppliedSaveBonus = -1;
-                    }
-                }
-
-                // Apply luck penalties (same morale fields — reversed on expiration)
-                ch.Stats.MoraleAttackBonus -= 1;
-                ch.Stats.MoraleDamageBonus -= 1;
-                ch.Stats.MoraleSaveBonus -= 1;
-
                 enemyCount++;
-            }
         }
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Special("🙏", $"Prayer! {casterName} prays — {allyCount} allies gain +1 luck bonus, {enemyCount} enemies suffer –1 luck penalty. Duration: {durationRounds} rounds."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Special("🙏", $"Prayer! {casterName} prays — {allyCount} allies gain +1 luck bonus, {enemyCount} enemies suffer a –1 penalty. Duration: {durationRounds} rounds."));
         Debug.Log($"[Prayer] {casterName}: allies={allyCount}, enemies={enemyCount}, duration={durationRounds} rounds");
 
         return true;

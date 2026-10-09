@@ -126,7 +126,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 113;
+        public const int Count = 116;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -247,6 +247,8 @@ namespace Tests.Scenarios
             yield return S("critical-damage", CriticalDamage);
             yield return S("condition-duration-turn-relative", ConditionDurationTurnRelative);
             yield return S("racial-traits", RacialTraits);
+            yield return S("bonus-stacking", BonusStackingScenario);
+            yield return S("prayer-cast", PrayerCast);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -5113,8 +5115,9 @@ namespace Tests.Scenarios
                     foreach (string key in keys)
                     {
                         CharacterStats s = ctx.Get(key).Stats;
-                        int others = s.EffectiveResistanceSaveBonus + s.EffectiveCompetenceSaveBonus + s.EquipmentLuckSaveBonus
-                            + s.MoraleSaveBonus + s.FeatWillBonus + s.ConditionWillModifier;
+                        // EffectSaveBonus already includes the equipment luck bonus (luck blade, stone, robe).
+                        int others = s.EffectiveResistanceSaveBonus + s.EffectiveCompetenceSaveBonus
+                            + s.EffectSaveBonus(SavingThrowType.Will) + s.FeatWillBonus + s.ConditionWillModifier;
                         if (others != 0)
                         {
                             ctx.Note("save-bonus mismatch: " + key + " carries other save bonuses (" + others + ")");
@@ -5243,7 +5246,7 @@ namespace Tests.Scenarios
                 .Npc("gob", "goblin", 14, 12, Control.Idle)
                 .Tweak("cleric", c => PrepareTwice(c, 2, DND35e.Identifiers.SpellNames.SILENCE))
                 .Tweak("acolyte", c => ReplacePrepared(c, null, DND35e.Identifiers.SpellNames.GUIDANCE))
-                .Tweak("gob", c => c.Stats.MoraleSaveBonus = -30)
+                .Tweak("gob", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
                 .Initiative("cleric", "acolyte", "fighter", "gob2", "gob")
                 .Turn("cleric", 1, Step.Cast(DND35e.Identifiers.SpellNames.SILENCE, "gob"))
                 .Turn("acolyte", 1, Step.Cast(DND35e.Identifiers.SpellNames.GUIDANCE, "gob2"))
@@ -5528,16 +5531,16 @@ namespace Tests.Scenarios
                 .Npc("dIceDr", "target_dummy", 14, 5, Control.Idle)
                 .Npc("dAcid", "target_dummy", 15, 5, Control.Idle)
                 .Hp("dLow", 5)
-                .Tweak("hero", c => { c.Stats.AddDamageResistance(DamageType.Fire, 10); c.Stats.MoraleSaveBonus = -30; })
-                .Tweak("hero2", c => c.Stats.MoraleSaveBonus = -30)
-                .Tweak("dPlain", c => c.Stats.MoraleSaveBonus = -30)
-                .Tweak("dResist", c => { c.Stats.AddDamageResistance(DamageType.Fire, 10); c.Stats.MoraleSaveBonus = -30; })
-                .Tweak("dImmune", c => { c.Stats.AddDamageImmunity(DamageType.Fire); c.Stats.MoraleSaveBonus = -30; })
-                .Tweak("dDr", c => { c.Stats.AddDamageReduction(10, DamageBypassTag.Magic); c.Stats.MoraleSaveBonus = -30; })
-                .Tweak("dLow", c => c.Stats.MoraleSaveBonus = -30)
-                .Tweak("dCold", c => { c.Stats.AddDamageImmunity(DamageType.Cold); c.Stats.MoraleSaveBonus = -30; })
-                .Tweak("dIceDr", c => { c.Stats.AddDamageReduction(10, DamageBypassTag.Magic); c.Stats.MoraleSaveBonus = -30; })
-                .Tweak("dAcid", c => { c.Stats.AddDamageResistance(DamageType.Acid, 2); c.Stats.MoraleSaveBonus = -30; })
+                .Tweak("hero", c => { c.Stats.AddDamageResistance(DamageType.Fire, 10); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
+                .Tweak("hero2", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
+                .Tweak("dPlain", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
+                .Tweak("dResist", c => { c.Stats.AddDamageResistance(DamageType.Fire, 10); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
+                .Tweak("dImmune", c => { c.Stats.AddDamageImmunity(DamageType.Fire); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
+                .Tweak("dDr", c => { c.Stats.AddDamageReduction(10, DamageBypassTag.Magic); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
+                .Tweak("dLow", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
+                .Tweak("dCold", c => { c.Stats.AddDamageImmunity(DamageType.Cold); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
+                .Tweak("dIceDr", c => { c.Stats.AddDamageReduction(10, DamageBypassTag.Magic); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
+                .Tweak("dAcid", c => { c.Stats.AddDamageResistance(DamageType.Acid, 2); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
                 .Initiative("dragon", "hero2", "hero", "mage", "mouther", "dPlain", "dResist", "dImmune", "dDr", "dLow", "dCold", "dIceDr", "dAcid")
                 .Force(10, 10, "Breath weapon damage", -1)
                 .Script("dragon", BreathAtHeroes)
@@ -5703,9 +5706,9 @@ namespace Tests.Scenarios
                 .Npc("dummy", "target_dummy", 12, 11, Control.Idle)
                 .Hp("zombie", 5)
                 .Tweak("cleric", c => PrepareTwice(c, 1, DND35e.Identifiers.SpellNames.CURE_LIGHT_WOUNDS))
-                .Tweak("ghoul", c => { c.Stats.CreatureType = "Undead"; c.Stats.MoraleSaveBonus = 30; })
+                .Tweak("ghoul", c => { c.Stats.CreatureType = "Undead"; c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, 30, "scenario save tweak"); })
                 .Tweak("acolyte", c => PrepareTwice(c, 1, DND35e.Identifiers.SpellNames.INFLICT_LIGHT_WOUNDS))
-                .Tweak("dummy", c => c.Stats.MoraleSaveBonus = -30)
+                .Tweak("dummy", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
                 .Initiative("cleric", "acolyte", "ghoul", "zombie", "dummy")
                 .Force(8, 8, SpellDiceRules.DamageDieContext, -1)
                 .Force(8, 8, SpellDiceRules.HealingDieContext, -1)
@@ -5877,8 +5880,8 @@ namespace Tests.Scenarios
         private static bool RecordBonuses(ScenarioContext ctx, string key)
         {
             CharacterStats s = ctx.Get(key).Stats;
-            _spellBuffBonusesBefore[key] = new[] { s.MoraleAttackBonus, s.MoraleDamageBonus };
-            ctx.Note(SpellBuffNotePrefix + key + " morale attack " + s.MoraleAttackBonus + ", damage " + s.MoraleDamageBonus);
+            _spellBuffBonusesBefore[key] = new[] { s.EffectAttackBonus, s.EffectWeaponDamageBonus };
+            ctx.Note(SpellBuffNotePrefix + key + " morale attack " + s.EffectAttackBonus + ", damage " + s.EffectWeaponDamageBonus);
             return true;
         }
 
@@ -5888,9 +5891,9 @@ namespace Tests.Scenarios
             if (!_spellBuffBonusesBefore.TryGetValue(key, out int[] before))
                 return false;
             bool tracked = c.StatusEffectManager != null && c.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.MAGIC_FANG);
-            ctx.Note(SpellBuffNotePrefix + key + " Magic Fang: attack " + before[0] + " -> " + c.Stats.MoraleAttackBonus
-                + ", damage " + before[1] + " -> " + c.Stats.MoraleDamageBonus + ", tracked " + tracked);
-            return tracked && c.Stats.MoraleAttackBonus == before[0] + 1 && c.Stats.MoraleDamageBonus == before[1] + 1;
+            ctx.Note(SpellBuffNotePrefix + key + " Magic Fang: attack " + before[0] + " -> " + c.Stats.EffectAttackBonus
+                + ", damage " + before[1] + " -> " + c.Stats.EffectWeaponDamageBonus + ", tracked " + tracked);
+            return tracked && c.Stats.EffectAttackBonus == before[0] + 1 && c.Stats.EffectWeaponDamageBonus == before[1] + 1;
         }
 
         private static bool HasSpellEffect(ScenarioContext ctx, string key, string spellId)
@@ -6295,6 +6298,178 @@ namespace Tests.Scenarios
             return ac == noted + delta ? ExpectResult.Pass(detail, note.Seq, attacks[0].Seq) : ExpectResult.Fail(detail + ", expected " + (noted + delta), note.Seq, attacks[0].Seq);
         }
 
+        // ── Bonus stacking by the rules as written (owner directive 2026-10-09) ──
+
+        private const string BonusStackingNotePrefix = "bonus-stacking ";
+
+        /// <summary>
+        /// Bonus stacking, RAW (owner directive 2026-10-09; SPL-026, SPL-024, SPL-025). PHB p.171-172: bonuses of one type
+        /// do not stack (luck and morale included; PHB glossary p.310), the same spell never stacks with itself, a weaker
+        /// effect applies again when the stronger one ends, untyped penalties from different spells add up. A Stats
+        /// fighter (PC slot, Scripted) attacks a sturdy goblin every round and the goblin attacks back. Round 1: no
+        /// effects (baseline). Round 2, before the fighter attacks: Bless (+1 morale), Heroism (+2 morale) and Divine
+        /// Favor (+1 luck at caster level 1, PHB p.224) through the landed-cast effect step, and Prayer's ally effect (+1
+        /// luck, PHB p.264) on the fighter; Prayer's foe effect (-1) and Bane (-1, PHB p.203) on the goblin. The fighter's
+        /// effect attack bonus is +3 (morale 2 + luck 1; before: +4, the luck bonuses stacked through the morale pool),
+        /// weapon damage +1, Will +3 (Heroism's morale + Prayer's luck), a fear save gains nothing from Bless over
+        /// Heroism, Climb +3; the goblin's effect attack modifier is -2. Round 3: Heroism is removed, so Bless's +1 morale
+        /// applies again (+2; before, Heroism had replaced Bless outright). The expectations compare the trace's attack
+        /// modifiers with round 1: the fighter +3 in round 2 and +2 in round 3, the goblin -2 in rounds 2 and 3.
+        /// </summary>
+        private static ScenarioDef BonusStackingScenario()
+        {
+            return Rules("rules/bonus-stacking", "Same-type bonuses do not stack, luck included; a weaker effect resumes; untyped penalties add (PHB p.171-172, owner directive 2026-10-09)")
+                .Covers("SPL-026", "SPL-024", "SPL-025", "PHB p.171", "PHB p.172", "PHB p.224", "PHB p.240", "PHB p.264", "PC_NPC_PARITY")
+                .MaxRounds(3)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Stacking Fighter", 3)), 5, 10, Control.Scripted)
+                .Npc("goblin", "goblin", 6, 10, Control.Scripted)
+                .Tweak("hero", c => { StripOffHand(c); SturdyDummy(c); })
+                .Tweak("goblin", SturdyDummy)
+                .Initiative("hero", "goblin")
+                .Turn("hero", 1, Step.Attack("goblin"))
+                .Turn("hero", 2, Step.Assert("Bless, Heroism, Divine Favor and Prayer: the better bonus of each type applies", ApplyStackingBuffs), Step.Attack("goblin"))
+                .Turn("hero", 3, Step.Assert("Heroism ended: Bless's morale bonus applies again", ctx =>
+                {
+                    CharacterController hero = ctx.Get("hero");
+                    hero.StatusEffectManager.RemoveEffectsBySpellId(DND35e.Identifiers.SpellNames.HEROISM);
+                    bool ok = AcCheck(ctx, "effect attack bonus without Heroism (Bless +1 morale, luck +1)", hero.Stats.EffectAttackBonus, 2);
+                    ctx.Note(BonusStackingNotePrefix + "r3 hero " + hero.Stats.EffectAttackBonus);
+                    return ok;
+                }), Step.Attack("goblin"))
+                .Turn("goblin", 0, Step.Attack("hero"))
+                .Expect("Every stacking check holds", Expect.AssertsPass())
+                .Expect("The fighter's attack modifier rises by +3 with the effects (not +4) and by +2 once Heroism ends", v => AllPass(
+                    StackingAttackDelta(v, "hero", "goblin", 2, 3), StackingAttackDelta(v, "hero", "goblin", 3, 2)))
+                .Expect("The goblin's attack modifier falls by 2 under Prayer's and Bane's untyped penalties", v => AllPass(
+                    StackingAttackDelta(v, "goblin", "hero", 2, -2), StackingAttackDelta(v, "goblin", "hero", 3, -2)))
+                .Build();
+        }
+
+        private static bool ApplyStackingBuffs(ScenarioContext ctx)
+        {
+            CharacterController hero = ctx.Get("hero");
+            CharacterController goblin = ctx.Get("goblin");
+            CharacterStats s = hero.Stats;
+            int willBefore = s.WillSave;
+            int climbBefore = s.GetSkillBonus("Climb");
+            bool ok = AcCheck(ctx, "no effect attack bonus before the spells", s.EffectAttackBonus, 0);
+            ok &= AcCheck(ctx, "Bless applied", ApplySpell(ctx, hero, DND35e.Identifiers.SpellNames.BLESS) ? 1 : 0, 1);
+            ok &= AcCheck(ctx, "Heroism applied", ApplySpell(ctx, hero, DND35e.Identifiers.SpellNames.HEROISM) ? 1 : 0, 1);
+            ok &= AcCheck(ctx, "Divine Favor applied", ApplySpell(ctx, hero, DND35e.Identifiers.SpellNames.DIVINE_FAVOR) ? 1 : 0, 1);
+            SpellData prayer = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.PRAYER);
+            ok &= AcCheck(ctx, "Prayer's ally effect added",
+                hero.StatusEffectManager.AddEffect(GameManager.PrayerEffectSpell(prayer, ally: true), "Scenario", 5, 5) != null ? 1 : 0, 1);
+            ok &= AcCheck(ctx, "Prayer's foe effect added",
+                goblin.StatusEffectManager.AddEffect(GameManager.PrayerEffectSpell(prayer, ally: false), "Scenario", 5, 5) != null ? 1 : 0, 1);
+            ok &= AcCheck(ctx, "Bane added",
+                goblin.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.BANE).Clone(), "Scenario", 3) != null ? 1 : 0, 1);
+
+            ok &= AcCheck(ctx, "effect attack bonus (Heroism +2 morale over Bless +1; Divine Favor +1 and Prayer +1 luck count once)", s.EffectAttackBonus, 3);
+            ok &= AcCheck(ctx, "effect weapon damage bonus (two +1 luck bonuses)", s.EffectWeaponDamageBonus, 1);
+            ok &= AcCheck(ctx, "Will save rise (Heroism +2 morale, Prayer +1 luck)", s.WillSave - willBefore, 3);
+            ok &= AcCheck(ctx, "fear save over the plain Will save (Bless's +1 morale against fear is under Heroism's +2)",
+                SaveRules.Modifier(s, SavingThrowType.Will, SaveContext.Fear) - s.WillSave, 0);
+            ok &= AcCheck(ctx, "Climb rise (Heroism +2 morale, Prayer +1 luck)", s.GetSkillBonus("Climb") - climbBefore, 3);
+            ok &= AcCheck(ctx, "goblin effect attack modifier (Prayer -1 and Bane -1, untyped, different spells)", goblin.Stats.EffectAttackBonus, -2);
+            ctx.Note(BonusStackingNotePrefix + "r2 hero " + s.EffectAttackBonus + " goblin " + goblin.Stats.EffectAttackBonus
+                + " applied " + s.Bonuses.Describe(BonusTarget.AttackRoll));
+            return ok;
+        }
+
+        /// <summary>
+        /// Prayer through the real cast pipelines (PHB p.264: you and each ally in the 40-ft burst gain a +1 luck bonus on
+        /// attack rolls, weapon damage rolls, saves and skill checks; each foe takes a -1 penalty on them; SPL-042,
+        /// SPL-054, PC_NPC_PARITY). Two groups far apart (more than 40 ft): the Quick Start cleric (Cleric 3, a Ui actor, so
+        /// the PC area pipeline: the self-centered preview, its confirmation, then ApplySpellBuff once per creature) with a
+        /// Stats fighter beside it and a goblin 30 ft away; human_cleric (Cleric 5) through the NPC cast executor, with a
+        /// goblin beside it and a second Stats fighter 25 ft away. The Quick Start cleric has no 3rd-level slot, so the
+        /// scenario prepares a clone of Prayer marked 2nd level in one of its 2nd-level slots (the slot level changes
+        /// nothing Prayer does); human_cleric gets Prayer in a 3rd-level slot. The fighter's round-1 Assert checks, after
+        /// both casts: each caster and its ally +1 luck on attacks (and the fighter on weapon damage, Will and Climb),
+        /// each foe -1 on attacks and Will. Before the fix the PC area path gave every creature in the burst a bonus-less
+        /// effect and the NPC path a bonus-less self buff.
+        /// </summary>
+        private static ScenarioDef PrayerCast()
+        {
+            return Rules("rules/prayer-cast", "Prayer cast through the PC area pipeline and the NPC executor gives allies +1 luck and foes -1 (PHB p.264; SPL-042)")
+                .Covers("SPL-042", "SPL-054", "SPL-026", "PHB p.264", "PHB p.171", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("cleric", ActorSource.QuickStart("Cleric"), 3, 3, Control.Ui)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Prayer Ally", 3)), 4, 3, Control.Scripted)
+                .Pc("fighter2", ActorSource.Stats(() => Fighter("Prayer Foe", 3)), 8, 16, Control.Idle)
+                .Npc("priest", "human_cleric", 3, 16, Control.Scripted)
+                .Npc("gob1", "goblin", 9, 3, Control.Idle)
+                .Npc("gob2", "goblin", 4, 16, Control.Idle)
+                .Tweak("cleric", c => PreparePrayerInSlot(c, 2))
+                .Tweak("priest", c => PreparePrayerInSlot(c, 3))
+                .Initiative("cleric", "priest", "fighter", "fighter2", "gob1", "gob2")
+                .Turn("cleric", 1, Step.Cast(DND35e.Identifiers.SpellNames.PRAYER, "cleric"))
+                .Turn("priest", 1, Step.Cast(DND35e.Identifiers.SpellNames.PRAYER, "priest"))
+                .Turn("fighter", 1, Step.Assert("Both Prayers gave allies +1 luck and foes -1", PrayerCastCheck))
+                .Expect("Both casts ran", Expect.All(
+                    Expect.StepStatus("cleric", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("priest", 1, "Cast", 0, "done")))
+                .Expect("Each caster and ally gains +1 luck, each foe takes -1 (PHB p.264)", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>Puts a clone of Prayer into the first non-domain prepared slot of <paramref name="slotLevel"/>, marked at that level.</summary>
+        private static void PreparePrayerInSlot(CharacterController c, int slotLevel)
+        {
+            SpellcastingComponent sc = c.Spellcasting;
+            if (sc == null || sc.SpellSlots == null)
+                return;
+            foreach (SpellSlot slot in sc.SpellSlots)
+            {
+                if (slot != null && slot.Level == slotLevel && !slot.IsDomainSlot)
+                {
+                    SpellData prayer = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.PRAYER).Clone();
+                    prayer.SpellLevel = slotLevel;
+                    slot.PreparedSpell = prayer;
+                    return;
+                }
+            }
+        }
+
+        private static bool PrayerCastCheck(ScenarioContext ctx)
+        {
+            bool ok = true;
+            foreach (string key in new[] { "cleric", "fighter", "priest", "gob2" })
+            {
+                CharacterStats s = ctx.Get(key).Stats;
+                ok &= AcCheck(ctx, key + " effect attack bonus (Prayer +1 luck)", s.EffectAttackBonus, 1);
+                ok &= AcCheck(ctx, key + " luck bonus on attacks", s.Bonuses.BestOfType(BonusTarget.AttackRoll, BonusType.Luck), 1);
+            }
+            foreach (string key in new[] { "gob1", "fighter2" })
+            {
+                CharacterStats s = ctx.Get(key).Stats;
+                ok &= AcCheck(ctx, key + " effect attack modifier (Prayer -1)", s.EffectAttackBonus, -1);
+                ok &= AcCheck(ctx, key + " Will modifier from effects (Prayer -1)", s.EffectSaveBonus(SavingThrowType.Will), -1);
+            }
+            CharacterStats f = ctx.Get("fighter").Stats;
+            ok &= AcCheck(ctx, "fighter weapon damage (Prayer +1 luck)", f.EffectWeaponDamageBonus, 1);
+            ok &= AcCheck(ctx, "fighter Will modifier from effects (Prayer +1 luck)", f.EffectSaveBonus(SavingThrowType.Will), 1);
+            ok &= AcCheck(ctx, "fighter Climb modifier from effects (Prayer +1 luck)", f.EffectSkillBonus("Climb"), 1);
+            ctx.Note("prayer-cast cleric " + ctx.Get("cleric").Stats.EffectAttackBonus + " fighter " + f.EffectAttackBonus
+                + " gob1 " + ctx.Get("gob1").Stats.EffectAttackBonus + " priest " + ctx.Get("priest").Stats.EffectAttackBonus
+                + " gob2 " + ctx.Get("gob2").Stats.EffectAttackBonus + " fighter2 " + ctx.Get("fighter2").Stats.EffectAttackBonus);
+            return ok;
+        }
+
+        /// <summary><paramref name="by"/>'s first attack on <paramref name="target"/> in <paramref name="round"/> has a modifier <paramref name="delta"/> above its round-1 attack.</summary>
+        private static ExpectResult StackingAttackDelta(TraceView v, string by, string target, int round, int delta)
+        {
+            List<TraceEvent> baseline = v.Attacks(by, target, false, 1);
+            List<TraceEvent> later = v.Attacks(by, target, false, round);
+            if (baseline.Count == 0 || later.Count == 0)
+                return ExpectResult.Inconclusive(by + ": " + baseline.Count + " round-1 and " + later.Count + " round-" + round + " attacks on " + target);
+            int got = later[0].Int("mod") - baseline[0].Int("mod");
+            string detail = by + " round " + round + " mod " + CharacterStats.FormatMod(later[0].Int("mod")) + " vs round 1 " + CharacterStats.FormatMod(baseline[0].Int("mod"));
+            return got == delta
+                ? ExpectResult.Pass(detail, baseline[0].Seq, later[0].Seq)
+                : ExpectResult.Fail(detail + ", expected a difference of " + CharacterStats.FormatMod(delta), baseline[0].Seq, later[0].Seq);
+        }
+
         /// <summary>The first result that is not a pass, else one pass joining the details.</summary>
         private static ExpectResult AllPass(params ExpectResult[] results)
         {
@@ -6433,8 +6608,8 @@ namespace Tests.Scenarios
         {
             CharacterController c = ctx.Get("inspired");
             c.Stats.ApplyInspireCourage(1);
-            ctx.Note(WeaponDamageNotePrefix + "inspired morale damage " + c.Stats.MoraleDamageBonus);
-            return PlainWeapon(ctx, "inspired", "Longsword") && c.Stats.HasInspireCourageBonus && c.Stats.MoraleDamageBonus == 1;
+            ctx.Note(WeaponDamageNotePrefix + "inspired morale damage " + c.Stats.EffectWeaponDamageBonus);
+            return PlainWeapon(ctx, "inspired", "Longsword") && c.Stats.HasInspireCourageBonus && c.Stats.EffectWeaponDamageBonus == 1;
         }
 
         private static bool FavorFighter(ScenarioContext ctx)
@@ -6443,8 +6618,8 @@ namespace Tests.Scenarios
             if (c.StatusEffectManager == null || !c.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.DIVINE_FAVOR))
                 ctx.Gm.Harness_ApplySpellBuff(c, c, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.DIVINE_FAVOR).Clone());
             c.SetPowerAttack(2);
-            ctx.Note(WeaponDamageNotePrefix + "favored morale damage " + c.Stats.MoraleDamageBonus + ", Power Attack " + c.PowerAttackValue);
-            return PlainWeapon(ctx, "favored", "Longsword") && c.Stats.MoraleDamageBonus == 1 && c.PowerAttackValue == 2;
+            ctx.Note(WeaponDamageNotePrefix + "favored morale damage " + c.Stats.EffectWeaponDamageBonus + ", Power Attack " + c.PowerAttackValue);
+            return PlainWeapon(ctx, "favored", "Longsword") && c.Stats.EffectWeaponDamageBonus == 1 && c.PowerAttackValue == 2;
         }
 
         private static bool SickenOrc(ScenarioContext ctx)
@@ -6460,8 +6635,8 @@ namespace Tests.Scenarios
             CharacterController c = ctx.Get("wolf");
             if (c.StatusEffectManager == null || !c.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.MAGIC_FANG))
                 ctx.Gm.Harness_ApplySpellBuff(c, c, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.MAGIC_FANG).Clone());
-            ctx.Note(WeaponDamageNotePrefix + "wolf STR " + c.Stats.STR + ", morale damage " + c.Stats.MoraleDamageBonus);
-            return c.Stats.STR == 13 && c.Stats.MoraleDamageBonus == 1;
+            ctx.Note(WeaponDamageNotePrefix + "wolf STR " + c.Stats.STR + ", morale damage " + c.Stats.EffectWeaponDamageBonus);
+            return c.Stats.STR == 13 && c.Stats.EffectWeaponDamageBonus == 1;
         }
 
         /// <summary>

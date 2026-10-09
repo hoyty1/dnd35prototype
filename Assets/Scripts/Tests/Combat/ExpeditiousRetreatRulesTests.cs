@@ -277,11 +277,18 @@ public static class ExpeditiousRetreatRulesTests
             Assert(controller.Stats.SpeedInFeet == baseSpeed + 10, "Initial weaker enhancement modifies speed");
 
             ActiveSpellEffect stronger = statusMgr.AddEffect(strongerSpeedEnhancement, "Tester", 1);
-            Assert(stronger != null, "Stronger enhancement replaces weaker one");
+            Assert(stronger != null, "Stronger enhancement applies alongside the weaker one");
             Assert(controller.Stats.SpeedInFeet == baseSpeed + 30,
                 "Highest enhancement bonus applies",
                 $"expected={baseSpeed + 30}, actual={controller.Stats.SpeedInFeet}");
-            Assert(!statusMgr.HasEffect("test_speed_weaker"), "Weaker enhancement removed after stronger replacement");
+            // PHB p.172: effects of different spells that do not stack both keep operating; only the best counts.
+            Assert(statusMgr.HasEffect("test_speed_weaker") && statusMgr.HasEffect("test_speed_stronger"),
+                "Both enhancement effects stay active (PHB p.172: non-stacking effects still operate)");
+
+            statusMgr.RemoveEffect(stronger);
+            Assert(controller.Stats.SpeedInFeet == baseSpeed + 10,
+                "Stronger enhancement ended: the weaker one applies again (PHB p.172)",
+                $"expected={baseSpeed + 10}, actual={controller.Stats.SpeedInFeet}");
         }
         finally
         {

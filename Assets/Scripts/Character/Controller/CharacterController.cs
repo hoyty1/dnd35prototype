@@ -413,7 +413,8 @@ public class CharacterController : MonoBehaviour
     public ActionEconomy Actions = new ActionEconomy();
 
     /// <summary>
-    /// Progressive attack pool used by the house-rule iterative attack flow.
+    /// The creature's attack sequence for this turn: the first attack spends the standard action and a second one turns
+    /// the turn into a full attack, as PHB p.143 "Deciding between an Attack or a Full Attack" allows (see AttackPool).
     /// The pool is rebuilt at turn start and consumed as attack actions are committed.
     /// </summary>
     public AttackPool ProgressiveAttackPool { get; } = new AttackPool();
@@ -3510,8 +3511,7 @@ public class CharacterController : MonoBehaviour
         if (Stats != null)
         {
             Stats.SetEnfeeblementStrengthPenalty(0);
-            Stats.LandSpeedEnhancementBonusFeet = 0;
-            Stats.JumpEnhancementBonus = 0;
+            // Land speed and Jump enhancement bonuses are Stats.Bonuses entries owned by their spell effects (removed with them).
             Stats.HasteAttackBonus = 0;
             Stats.HasteACBonus = 0;
             Stats.HasteReflexBonus = 0;
@@ -5471,7 +5471,7 @@ public class CharacterController : MonoBehaviour
             FightingDefensivelyPenalty = IsFightingDefensively ? CombatCalculationService.FightingDefensivelyAttackPenalty : 0,
             WeaponNonProficiencyPenalty = Stats.GetWeaponNonProficiencyPenalty(weapon),
             ArmorNonProficiencyPenalty = Stats.GetArmorNonProficiencyAttackPenalty(),
-            MoraleBonus = Stats.MoraleAttackBonus,
+            MoraleBonus = Stats.EffectAttackBonus,
             ConditionModifier = Stats.ConditionAttackPenalty,
             AidAnotherBonus = 0,
             DamageModePenalty = ResolveDamageModeAttackProfile(weapon).AttackPenalty,
@@ -5498,8 +5498,8 @@ public class CharacterController : MonoBehaviour
     /// the same terms: the Strength share (PHB p.134: 1/2 in the off hand, 1-1/2 two-handed, a penalty never
     /// multiplied, a composite bow's rating; a natural attack's own share, MM p.312), the profile's flat damage,
     /// weapon enhancement and material, the feat terms in <paramref name="feats"/> (Power Attack, Point Blank Shot,
-    /// Weapon Specialization; pass default when the path has no feat terms), CharacterStats.MoraleDamageBonus
-    /// (Inspire Courage, Prayer, Divine Favor, Magic Fang and other spell buffs, SPL-026), condition modifiers
+    /// Weapon Specialization; pass default when the path has no feat terms), CharacterStats.EffectWeaponDamageBonus
+    /// (Inspire Courage, Prayer, Divine Favor, Magic Fang and other effects, stacked by type), condition modifiers
     /// (Sickened -2, DMG p.301), Solid Fog's melee penalty, Bracers of Archery with a bow, and an optional
     /// per-attack situational term (a template smite, a charge). The Destruction smite (melee only) and a bane
     /// weapon's +2 against its foe (DMG p.224) are added by PerformSingleAttackWithCrit, which also uses up the
@@ -5550,7 +5550,7 @@ public class CharacterController : MonoBehaviour
             d.MaterialModifier = weapon.MaterialDamageModifier;
         }
 
-        d.MoraleBonus = Stats.MoraleDamageBonus;
+        d.MoraleBonus = Stats.EffectWeaponDamageBonus;
         d.MoraleLabel = d.MoraleBonus != 0 ? DescribeMoraleDamageSources() : null;
         d.ConditionModifier = Stats.ConditionWeaponDamageModifier;
         d.ConditionLabel = d.ConditionModifier != 0 ? DescribeConditionDamageSources() : null;
@@ -5595,35 +5595,14 @@ public class CharacterController : MonoBehaviour
         return weaponOverride != GetEquippedMainWeapon() && weaponOverride == GetOffHandAttackWeapon();
     }
 
-    /// <summary>"Inspire Courage, Prayer": the sources of CharacterStats.MoraleDamageBonus for the combat log.</summary>
+    /// <summary>
+    /// "Divine Favor, Inspire Courage": the effects whose weapon damage modifier counts after stacking
+    /// (CharacterStats.EffectWeaponDamageBonus, BonusLedger.DescribeSources), for the combat log.
+    /// </summary>
     private string DescribeMoraleDamageSources()
     {
-        var names = new List<string>();
-        int named = 0;
-        StatusEffectManager effects = StatusEffectManager;
-        if (effects != null && effects.ActiveEffects != null)
-        {
-            for (int i = 0; i < effects.ActiveEffects.Count; i++)
-            {
-                ActiveSpellEffect effect = effects.ActiveEffects[i];
-                if (effect == null || effect.AppliedDamageBonus == 0)
-                    continue;
-                string spellName = effect.Spell != null && !string.IsNullOrWhiteSpace(effect.Spell.Name) ? effect.Spell.Name : "spell";
-                if (!names.Contains(spellName))
-                    names.Add(spellName);
-                named += effect.AppliedDamageBonus;
-            }
-        }
-        if (Stats.HasInspireCourageBonus && Stats.AppliedInspireCourageValue != 0)
-        {
-            names.Add("Inspire Courage");
-            named += Stats.AppliedInspireCourageValue;
-        }
-        if (names.Count > 0 && named != Stats.MoraleDamageBonus)
-            names.Add("other");
-        // Named by source, not as "morale": every spell bonus type is pooled in MoraleDamageBonus (SPL-026), so
-        // Divine Favor and Prayer (luck) and Magic Fang (enhancement) land here too.
-        return names.Count == 0 ? "spell and morale bonuses" : string.Join(", ", names);
+        string names = Stats.Bonuses.DescribeSources(BonusTarget.WeaponDamage);
+        return string.IsNullOrEmpty(names) ? "spell and morale bonuses" : names;
     }
 
     /// <summary>"conditions (Sickened)": the conditions behind CharacterStats.ConditionWeaponDamageModifier.</summary>
@@ -6070,7 +6049,7 @@ public class CharacterController : MonoBehaviour
         // === Debug Logging ===
         Debug.Log($"[FullAttack] {Stats.CharacterName}: FullAttack() called");
         Debug.Log($"[FullAttack] Weapon: {(equippedWeapon != null ? equippedWeapon.Name : "(unarmed)")}, Ranged: {isRanged}, ability: {sequenceBonus.AbilityName} {CharacterStats.FormatMod(sequenceBonus.AbilityMod)}, morale: {CharacterStats.FormatMod(sequenceBonus.MoraleBonus)}");
-        Debug.Log($"[FullAttack] Feats: WF={sequenceBonus.Feats.WeaponFocusBonus}, WS={sequenceBonus.Feats.WeaponSpecDamageBonus}, PA={sequenceBonus.Feats.PowerAttackDamageBonus}, CE={sequenceBonus.Feats.CombatExpertisePenalty}, morale damage={CharacterStats.FormatMod(Stats.MoraleDamageBonus)}");
+        Debug.Log($"[FullAttack] Feats: WF={sequenceBonus.Feats.WeaponFocusBonus}, WS={sequenceBonus.Feats.WeaponSpecDamageBonus}, PA={sequenceBonus.Feats.PowerAttackDamageBonus}, CE={sequenceBonus.Feats.CombatExpertisePenalty}, effect damage={CharacterStats.FormatMod(Stats.EffectWeaponDamageBonus)}");
         if (rapidShotActive) Debug.Log($"[FullAttack] Rapid Shot active: -2 penalty, +1 extra attack");
 
         // Build the list of BAB steps, inserting the Rapid Shot extra attack
@@ -9842,36 +9821,14 @@ public class CharacterController : MonoBehaviour
         else
             result.AttackBuffDebuffModifiers.Clear();
 
-        int spellAttackBonusTotal = 0;
-        StatusEffectManager statusEffectManager = StatusEffectManager;
-        if (statusEffectManager != null && statusEffectManager.ActiveEffects != null)
+        // The effect modifiers that count after stacking (CharacterStats.EffectAttackBonus): each one by its source
+        // (Bless, Divine Favor, Inspire Courage, Charge, ...), so two luck or morale bonuses list only the better one.
+        List<TypedBonus> effectAttackModifiers = Stats.Bonuses.AppliedModifiers(BonusTarget.AttackRoll);
+        for (int i = 0; i < effectAttackModifiers.Count; i++)
         {
-            for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
-            {
-                ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
-                if (effect == null)
-                    continue;
-
-                int attackBonus = effect.AppliedAttackBonus;
-                if (attackBonus == 0)
-                    continue;
-
-                string spellLabel = effect.Spell != null && !string.IsNullOrWhiteSpace(effect.Spell.Name)
-                    ? effect.Spell.Name
-                    : "Spell effect";
-                result.AddAttackBuffDebuffModifier(spellLabel, attackBonus);
-                spellAttackBonusTotal += attackBonus;
-            }
-        }
-
-        int remainingMoraleAttackBonus = Stats.MoraleAttackBonus - spellAttackBonusTotal;
-        if (remainingMoraleAttackBonus != 0)
-        {
-            string moraleLabel = "Other morale effects";
-            if (spellAttackBonusTotal == 0 && remainingMoraleAttackBonus == 2)
-                moraleLabel = "Charge";
-
-            result.AddAttackBuffDebuffModifier(moraleLabel, remainingMoraleAttackBonus);
+            TypedBonus modifier = effectAttackModifiers[i];
+            string label = !string.IsNullOrWhiteSpace(modifier.Label) ? modifier.Label : (modifier.Source ?? "Spell effect");
+            result.AddAttackBuffDebuffModifier(label, modifier.Value);
         }
 
         int conditionAttackBonusTotal = 0;
@@ -13165,7 +13122,7 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Shared bull rush legality for PCs and NPCs (PHB p.154, CMB-102). Spends nothing. Refuses when
     /// the target is missing, dead or this creature; the target is a swarm (MM p.316); this creature
-    /// is a swarm (house interpretation confirmed by the owner, see below); either side is
+    /// is a swarm (owner interpretation of a RAW silence, 2026-10-07, see below); either side is
     /// incorporeal (MM p.311); this creature is grappling or pinned (PHB p.156); the target is more
     /// than one size category larger; or the target is not adjacent (the bull rusher must enter its
     /// space).
@@ -13188,9 +13145,9 @@ public class CharacterController : MonoBehaviour
             return false;
         }
 
-        // House interpretation, owner decision 2026-10-07: a swarm cannot bull rush. MM p.316 bars
-        // bull rushing a swarm and gives swarms no standard melee attacks, but does not say a swarm
-        // cannot bull rush; the owner kept the refusal (listed in docs/systems/RULES_COVERAGE.md).
+        // Owner interpretation of a RAW silence (2026-10-07; not a house rule): a swarm cannot bull rush. MM p.316
+        // bars bull rushing a swarm and gives swarms no standard melee attacks, but does not say whether a swarm can
+        // bull rush; the owner ruled that it cannot (docs/systems/RULES_COVERAGE.md section 4.1).
         if (Stats != null && Stats.IsSwarm)
         {
             reason = "a swarm cannot bull rush";
