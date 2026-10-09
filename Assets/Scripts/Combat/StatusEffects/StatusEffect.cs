@@ -946,4 +946,22 @@ public class SpecialAttackResult
     public string FollowUpLabel;
     /// <summary>Why an Improved Trip attack was not made after a trip that landed (out of reach, a ranged weapon), or null.</summary>
     public string FollowUpNote;
+
+    // Coup de grace metadata (PHB p.153; CMB-004).
+    /// <summary>A coup de grace's weapon damage: an automatic critical, the dice and static modifier rolled the multiplier number of times.</summary>
+    public WeaponDamageRoll WeaponDamageRoll;
+    /// <summary>Sneak attack damage a coup de grace added once (never multiplied, PHB p.140).</summary>
+    public int SneakAttackDamage;
+    /// <summary>
+    /// A coup de grace's special-ability dice (energy, burst, alignment, bane) and specific-item damage, added once (never
+    /// multiplied, PHB p.140).
+    /// </summary>
+    public int ExtraDamage;
+    /// <summary>The target's Fortification negated the coup de grace's critical: the weapon damage was rolled once (DMG p.219).</summary>
+    public bool CritNegated;
+    /// <summary>
+    /// A coup de grace's damage before mitigation: <see cref="WeaponDamageRoll"/> total + <see cref="SneakAttackDamage"/>
+    /// + <see cref="ExtraDamage"/>.
+    /// </summary>
+    public int RawDamage;
 }

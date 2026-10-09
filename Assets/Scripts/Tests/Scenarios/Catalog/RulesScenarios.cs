@@ -108,6 +108,11 @@ namespace Tests.Scenarios
     /// 2026-10-08: neutral_mage_test (Wizard 3, Daze prepared x4), skeleton_owlbear, zombie_bugbear; Quick Start bard
     /// (Half-Elf, CON 12) and ranger (Human, CON 12, no Toughness); ogre (MM p.199: 4d8+11 = 29), ghoul (MM p.119: 2d12 = 13,
     /// stored as CON 0) and orc_warrior (CON 12) for the NPC hit point checks.
+    /// Critical damage (CMB-004, owner ruling 2026-10-08: RAW; checked 2026-10-09): PHB p.134 (multiplying damage: roll
+    /// the damage with all modifiers that many times and total the rolls; extra dice such as sneak attack are never
+    /// multiplied), p.140 (critical hits: the same rule, and a threat confirmed by a second roll that hits), p.116 (the
+    /// longsword 19-20/x2 and greataxe x3 of Table 7-5), MM p.317 (undead: not subject to critical hits). Data:
+    /// zombie_shambler is Undead with DR 5/slashing (a longsword bypasses it).
     /// Weapon damage modifier (CMB-003; checked 2026-10-09): PHB p.134 (Strength x1 one-handed, 1-1/2 two-handed,
     /// rounded down), p.98 (Power Attack), p.29 (Inspire Courage: morale bonus on weapon damage), p.224 (Divine Favor),
     /// p.250 (Magic Fang), DMG p.301 (Sickened: -2 on weapon damage rolls), MM p.283 (wolf bite 1d6+1: STR 13, 1-1/2 x
@@ -121,7 +126,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 112;
+        public const int Count = 113;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -239,6 +244,7 @@ namespace Tests.Scenarios
             yield return S("spell-dice-undead", SpellDiceUndead);
             yield return S("spell-buff-dispatch", SpellBuffDispatch);
             yield return S("weapon-damage-modifier", WeaponDamageModifier);
+            yield return S("critical-damage", CriticalDamage);
             yield return S("condition-duration-turn-relative", ConditionDurationTurnRelative);
             yield return S("racial-traits", RacialTraits);
         }
@@ -5978,7 +5984,7 @@ namespace Tests.Scenarios
         /// greataxe two-handed: 1-1/2 x +3 = +4, PHB p.134) is Sickened (-2 weapon damage, DMG p.301): +2. The wolf (STR 13,
         /// its one bite at 1-1/2 x +1 = +1, MM p.283) has Magic Fang (+1, PHB p.250): +2. For every hit the trace's dmgMod
         /// must be that total, its terms must name the sources, and the weapon damage must be the dice roll plus dmgMod
-        /// (added once on a critical, CMB-004) and equal the damage dealt (no DR or riders here). Before the fix the morale
+        /// (once per roll, so times the multiplier on a critical, CMB-004) and equal the damage dealt (no DR or riders here). Before the fix the morale
         /// and condition terms were never added (Inspire Courage, Divine Favor and Magic Fang dealt nothing extra).
         /// </summary>
         private static ScenarioDef WeaponDamageModifier()
@@ -6020,6 +6026,132 @@ namespace Tests.Scenarios
         }
 
         private const string WeaponDamageNotePrefix = "cmb003 ";
+
+        // ── Critical damage (CMB-004) ───────────────────────────────────
+
+        /// <summary>
+        /// CMB-004: a confirmed critical hit rolls the weapon damage, every static modifier included, the multiplier number
+        /// of times and adds the rolls (PHB p.134, p.140); sneak attack dice are added once; a creature immune to critical
+        /// hits takes normal damage (MM p.317; CMB-064). Every d20 rolls a natural 20, so every attack threatens and
+        /// confirms. "favored" (a Ui fighter, the PC Attack button) with Divine Favor and Power Attack 2: longsword
+        /// 19-20/x2, +6 per roll, so 2d8 + 12. The orc warrior (NPC path): greataxe x3 with 1-1/2 x STR +4, so 3d12 + 12.
+        /// The Quick Start rogue (Scripted, NPC path) acts before its dummy, which is still flat-footed: its weapon damage is
+        /// rolled twice with its modifier and its sneak attack dice are added once. "inspired" (Stats fighter, NPC path)
+        /// attacks a zombie: the natural 20 is a threat and the confirmation (also a 20) succeeds, but the zombie is not
+        /// subject to critical hits, so the damage is 1d8 + 4 once and only the weapon's critical-hit effects would apply
+        /// (DMG p.222, "Magic Weapons and Critical Hits").
+        /// Before the fix a critical multiplied only the dice (2d8 + 6, 3d12 + 4) and the zombie took a critical.
+        /// </summary>
+        private static ScenarioDef CriticalDamage()
+        {
+            return Rules("rules/critical-damage", "A critical hit rolls the weapon damage with all its modifiers x times; sneak attack is added once; undead take normal damage (PHB p.134, p.140; MM p.317; CMB-004)")
+                .Covers("CMB-004", "CMB-064", "PHB p.134", "PHB p.140", "PHB p.98", "PHB p.224", "MM p.317", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("rogue", ActorSource.QuickStart("Rogue"), 3, 3, Control.Scripted)
+                .Pc("favored", ActorSource.Stats(() => Fighter("Favored", 3, "Power Attack")), 3, 8, Control.Ui)
+                .Pc("inspired", ActorSource.Stats(() => Fighter("Inspired", 3)), 3, 13, Control.Scripted)
+                .Pc("p1", ActorSource.Stats(() => Fighter("Target1", 3)), 13, 8, Control.Scripted)
+                .Npc("d3", "target_dummy", 4, 3, Control.Idle)
+                .Npc("d1", "target_dummy", 4, 8, Control.Idle)
+                .Npc("zombie", "zombie_shambler", 4, 13, Control.Idle)
+                .Npc("orc", "orc_warrior", 12, 8, Control.Scripted)
+                .Tweak("favored", StripOffHand)
+                .Tweak("inspired", StripOffHand)
+                .Tweak("p1", UnarmoredSturdyDummy)
+                .Tweak("d1", SturdyDummy)
+                .Tweak("d3", SturdyDummy)
+                .Tweak("zombie", SturdyDummy)
+                .Force(20, 20, null, -1)
+                .Initiative("rogue", "favored", "inspired", "orc", "p1", "d1", "d3", "zombie")
+                .Turn("rogue", 1, Step.Attack("d3"))
+                .Turn("favored", 1, Step.Assert("Divine Favor and Power Attack 2 on the favored fighter", FavorFighter), Step.Attack("d1"))
+                .Turn("inspired", 1, Step.Assert("Inspire Courage +1 on the inspired fighter with a plain longsword", InspireFighter), Step.Attack("zombie"))
+                .Turn("orc", 1, Step.Assert("The orc warrior holds a plain greataxe", ctx => PlainWeapon(ctx, "orc", "Greataxe")), Step.Attack("p1"))
+                .Turn("p1", 1, Step.Pass())
+                .Expect("Every setup check holds", Expect.AssertsPass())
+                .Expect("PC Attack button: longsword x2, (1d8 + 6) twice = 2d8 + 12 on every hit (PHB p.134, p.140)",
+                    CriticalHits("favored", "d1", 2, 1, 8, 6, sneak: false))
+                .Expect("NPC orc: greataxe x3, (1d12 + 4) three times = 3d12 + 12 on every hit (PHB p.134, p.140)",
+                    CriticalHits("orc", "p1", 3, 1, 12, 4, sneak: false))
+                .Expect("Rogue against a flat-footed dummy: weapon damage rolled twice with its modifier, sneak attack added once (PHB p.134, p.140)",
+                    CriticalHits("rogue", "d3", 2, 0, 0, null, sneak: true))
+                .Expect("A zombie is not subject to critical hits: a confirmed threat deals 1d8 + 4 once (MM p.317, DMG p.222; CMB-064)",
+                    CritImmuneHits("inspired", "zombie", 1, 8, 4))
+                .Build();
+        }
+
+        /// <summary>
+        /// Every hit by <paramref name="attacker"/> on <paramref name="target"/> is a confirmed critical whose weapon damage
+        /// was rolled <paramref name="mult"/> times: dmgRolls = mult, the dice roll within mult x count dice of
+        /// <paramref name="sides"/> sides (count 0: not checked), dmgMod = <paramref name="mod"/> (null: the traced one),
+        /// weapon damage = max(1, dice roll + dmgMod x mult), and damage dealt = weapon damage, plus the sneak attack
+        /// damage once when <paramref name="sneak"/>. Inconclusive when it never hit.
+        /// </summary>
+        private static Func<TraceView, ExpectResult> CriticalHits(string attacker, string target, int mult, int count, int sides, int? mod, bool sneak)
+        {
+            return v =>
+            {
+                List<TraceEvent> hits = v.Attacks(attacker, target).Where(e => e.Bool("hit")).ToList();
+                if (hits.Count == 0)
+                    return ExpectResult.Inconclusive(attacker + " never hit " + target);
+                foreach (TraceEvent h in hits)
+                {
+                    int dmgMod = h.Int("dmgMod", int.MinValue);
+                    int rolls = h.Int("dmgRolls");
+                    int baseRoll = h.Int("baseRoll");
+                    int weaponDmg = h.Int("weaponDmg");
+                    int sneakDmg = h.Int("sneakDmg");
+                    int want = Mathf.Max(1, baseRoll + dmgMod * mult);
+                    string got = "confirmed " + h.Bool("confirmed") + ", dmgRolls " + rolls + ", dice " + h.Str("dice") + " roll " + baseRoll
+                        + ", dmgMod " + dmgMod + " [" + h.Str("dmgTerms") + "], weapon damage " + weaponDmg + ", sneak " + h.Bool("sneak") + " " + sneakDmg
+                        + ", dealt " + h.Int("dmg");
+                    if (!h.Bool("confirmed") || rolls != mult)
+                        return ExpectResult.Fail(got + "; expected a confirmed x" + mult + " critical", h.Seq);
+                    if (count > 0 && (h.Str("dice") != count + "d" + sides || baseRoll < count * mult || baseRoll > count * mult * sides))
+                        return ExpectResult.Fail(got + "; expected " + (count * mult) + "d" + sides + " in all", h.Seq);
+                    if (mod.HasValue && dmgMod != mod.Value)
+                        return ExpectResult.Fail(got + "; expected dmgMod " + mod.Value, h.Seq);
+                    if (weaponDmg != want)
+                        return ExpectResult.Fail(got + "; expected weapon damage " + want + " (the modifier on each of " + mult + " rolls)", h.Seq);
+                    if (sneak && (!h.Bool("sneak") || sneakDmg < 1))
+                        return ExpectResult.Fail(got + "; expected sneak attack", h.Seq);
+                    if (h.Int("dmg") != weaponDmg + (sneak ? sneakDmg : 0))
+                        return ExpectResult.Fail(got + "; expected damage dealt " + (weaponDmg + (sneak ? sneakDmg : 0)) + (sneak ? " (sneak attack once)" : string.Empty), h.Seq);
+                }
+                return ExpectResult.Pass(hits.Count + " critical hit(s), each x" + mult + " with the modifier on every roll", hits.Select(e => e.Seq).ToArray());
+            };
+        }
+
+        /// <summary>
+        /// Every attack by <paramref name="attacker"/> on <paramref name="target"/> (a creature immune to critical hits)
+        /// that threatens and is confirmed (every d20 is a 20) is a normal hit: critImmune and critEffects (the weapon's
+        /// critical-hit effects only, DMG p.222), not a confirmed critical, dmgRolls 1, dice roll within
+        /// <paramref name="count"/>d<paramref name="sides"/>, dmgMod <paramref name="mod"/>, weapon damage = max(1, roll + mod).
+        /// </summary>
+        private static Func<TraceView, ExpectResult> CritImmuneHits(string attacker, string target, int count, int sides, int mod)
+        {
+            return v =>
+            {
+                List<TraceEvent> hits = v.Attacks(attacker, target).Where(e => e.Bool("hit") && e.Bool("threat")).ToList();
+                if (hits.Count == 0)
+                    return ExpectResult.Inconclusive(attacker + " never threatened " + target);
+                foreach (TraceEvent h in hits)
+                {
+                    int baseRoll = h.Int("baseRoll");
+                    int weaponDmg = h.Int("weaponDmg");
+                    string got = "threat " + h.Bool("threat") + ", critImmune " + h.Bool("critImmune") + ", critEffects " + h.Bool("critEffects")
+                        + ", confirmed " + h.Bool("confirmed") + ", dmgRolls " + h.Int("dmgRolls") + ", roll " + baseRoll + ", dmgMod " + h.Int("dmgMod")
+                        + ", weapon damage " + weaponDmg;
+                    if (!h.Bool("critImmune") || !h.Bool("critEffects") || h.Bool("confirmed") || h.Int("dmgRolls") != 1)
+                        return ExpectResult.Fail(got + "; expected a normal hit (immune to critical hits)", h.Seq);
+                    if (h.Str("dice") != count + "d" + sides || baseRoll < count || baseRoll > count * sides || h.Int("dmgMod") != mod)
+                        return ExpectResult.Fail(got + "; expected " + count + "d" + sides + " + " + mod, h.Seq);
+                    if (weaponDmg != Mathf.Max(1, baseRoll + mod))
+                        return ExpectResult.Fail(got + "; expected weapon damage " + Mathf.Max(1, baseRoll + mod), h.Seq);
+                }
+                return ExpectResult.Pass(hits.Count + " threat(s) on an immune target, normal damage", hits.Select(e => e.Seq).ToArray());
+            };
+        }
 
         // ── Racial traits (CHR-019, CRE-038) ────────────────────────────
 
@@ -6334,8 +6466,9 @@ namespace Tests.Scenarios
 
         /// <summary>
         /// Every hit by <paramref name="attacker"/> traces dmgMod <paramref name="wantMod"/> with each term in
-        /// <paramref name="wantTerms"/> ("label:value"), weapon damage = max(1, dice roll + dmgMod) (a torch's critical
-        /// aside, none here), and damage dealt = weapon damage. Inconclusive when it never hit.
+        /// <paramref name="wantTerms"/> ("label:value"), weapon damage = max(1, dice roll + dmgMod x dmgRolls) (dmgRolls is
+        /// the critical multiplier on a confirmed critical, else 1; CMB-004), and damage dealt = weapon damage.
+        /// Inconclusive when it never hit.
         /// </summary>
         private static Func<TraceView, ExpectResult> WeaponDamageTerms(string attacker, int wantMod, params string[] wantTerms)
         {
@@ -6350,7 +6483,7 @@ namespace Tests.Scenarios
                     string terms = h.Str("dmgTerms") ?? string.Empty;
                     List<string> listed = terms.Split(new[] { "; " }, StringSplitOptions.RemoveEmptyEntries).ToList();
                     int weaponDmg = h.Int("weaponDmg");
-                    int want = Mathf.Max(1, h.Int("baseRoll") + mod);
+                    int want = Mathf.Max(1, h.Int("baseRoll") + mod * Mathf.Max(1, h.Int("dmgRolls")));
                     string got = "dmgMod " + mod + " [" + terms + "], roll " + h.Int("baseRoll") + ", weapon damage " + weaponDmg + ", dealt " + h.Int("dmg");
                     if (mod != wantMod)
                         return ExpectResult.Fail(got + "; expected dmgMod " + wantMod, h.Seq);

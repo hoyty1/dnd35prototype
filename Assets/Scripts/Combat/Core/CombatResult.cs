@@ -159,12 +159,41 @@ public class CombatResult
 
     /// <summary>
     /// Every static term this hit's damage roll added, from CharacterController.BuildWeaponDamageBonus (CMB-003); valid
-    /// when <see cref="HasWeaponDamageBonus"/>. On a confirmed critical it is added once (CMB-004).
+    /// when <see cref="HasWeaponDamageBonus"/>. A confirmed critical adds it once per roll, so
+    /// <see cref="DamageRollCount"/> times (PHB p.134, p.140; CMB-004).
     /// </summary>
     public WeaponDamageBreakdown WeaponDamageBonus;
     public bool HasWeaponDamageBonus;
-    /// <summary>A torch-style weapon's critical: its enhancement multiplied with the fixed damage package (0 otherwise).</summary>
-    public int TorchCritEnhancementExtra;
+    /// <summary>
+    /// The weapon damage roll of a hit (dice and static modifier, rolled the critical multiplier number of times on a
+    /// confirmed critical; CMB-004); valid when <see cref="HasWeaponDamageRoll"/>. Its total is <see cref="Damage"/>
+    /// before specific-item adjustments.
+    /// </summary>
+    public WeaponDamageRoll WeaponDamageRoll;
+    public bool HasWeaponDamageRoll;
+
+    /// <summary>
+    /// A threat against a creature immune to critical hits: the confirmation is rolled, but the damage is never
+    /// multiplied (CMB-064).
+    /// </summary>
+    public bool CritImmunityPrevented;
+    /// <summary>
+    /// That threat was confirmed: the weapon's critical-hit effects (burst dice, specific-item OnCriticalHit) apply, the
+    /// multiplied damage does not (DMG p.222, "Magic Weapons and Critical Hits").
+    /// </summary>
+    public bool CritEffectsOnly;
+
+    /// <summary>
+    /// How many times the weapon damage (dice and static modifier) was rolled: read from <see cref="WeaponDamageRoll"/>
+    /// when the hit made one, so the log, trace and tests describe the roll that was made; otherwise the multiplier on a
+    /// confirmed critical, else 1.
+    /// </summary>
+    public int DamageRollCount => HasWeaponDamageRoll
+        ? Math.Max(1, WeaponDamageRoll.Multiplier)
+        : (CritConfirmed ? Math.Max(2, CritMultiplier) : 1);
+
+    /// <summary>The weapon dice this hit rolled in all: the multiplied dice of a confirmed critical (e.g. 3d12), else the base dice.</summary>
+    public string DamageDiceShown => CritConfirmed && !string.IsNullOrWhiteSpace(CritDamageDice) ? CritDamageDice : BaseDamageDiceStr;
 
     public string DamageTypeSummary = "";
     public int RawTotalDamage;
@@ -263,7 +292,7 @@ public class CombatResult
         DamageRollBreakdown.PowerAttackBonus = PowerAttackDamageBonus;
         DamageRollBreakdown.SneakAttackDice = SneakAttackDice;
         DamageRollBreakdown.SneakAttackRoll = SneakAttackDamage;
-        DamageRollBreakdown.CriticalMultiplier = CritConfirmed ? (CritMultiplier > 1 ? CritMultiplier : 2) : 1;
+        DamageRollBreakdown.CriticalMultiplier = DamageRollCount;
         DamageRollBreakdown.OtherBonuses.Clear();
         DamageRollBreakdown.OtherBonus = 0;
 
@@ -278,9 +307,9 @@ public class CombatResult
                     continue;
                 DamageRollBreakdown.OtherBonuses.Add(terms[i]);
             }
-            if (TorchCritEnhancementExtra != 0)
-                DamageRollBreakdown.OtherBonuses.Add(new AttackModifierBreakdownEntry("torch critical", TorchCritEnhancementExtra));
-            known = BaseDamageRoll + WeaponDamageBonus.Total + TorchCritEnhancementExtra + SneakAttackDamage;
+            // On a confirmed critical every term is added once per roll (CMB-004); the compact formula shows them
+            // multiplied as a group.
+            known = BaseDamageRoll + WeaponDamageBonus.Total * DamageRollCount + SneakAttackDamage;
         }
         else
         {
@@ -358,13 +387,11 @@ public class CombatResult
     {
         RebuildBreakdownsFromComputedValues();
 
-        // A confirmed critical's roll is already of the multiplied dice (CritDamageDice); the terms after it are added
-        // once (CMB-004).
+        // A confirmed critical's roll is already of the multiplied dice (CritDamageDice); the static terms after it are
+        // added once per roll, so they are shown as a group times the multiplier (CMB-004).
         string diceShown = CritConfirmed && !string.IsNullOrWhiteSpace(CritDamageDice) ? CritDamageDice : DamageRollBreakdown.BaseDice;
-        var pieces = new List<string>
-        {
-            $"{diceShown}({DamageRollBreakdown.BaseRoll})"
-        };
+        string dicePiece = $"{diceShown}({DamageRollBreakdown.BaseRoll})";
+        var pieces = new List<string>();
 
         bool showZeroAbilityLine = DamageRollBreakdown.AbilityModifier == 0
             && !string.IsNullOrWhiteSpace(DamageModifierDesc)
@@ -390,11 +417,33 @@ public class CombatResult
             sneakSuffix = $" + {DamageRollBreakdown.SneakAttackDice}d6({DamageRollBreakdown.SneakAttackRoll}) sneak attack";
 
         int shownDamage = TotalDamage;
-        string coreExpression = string.Join(" ", pieces).Trim();
 
         if (CritConfirmed)
-            return $"CRITICAL ×{DamageRollBreakdown.CriticalMultiplier} (weapon dice)! {DamageRollBreakdown.SourceName}: {coreExpression}{sneakSuffix} = {shownDamage} damage";
+        {
+            // Every static term except the "other bonuses" remainder (riders, specific-item damage) is added once per
+            // roll; the remainder is listed last and is never multiplied.
+            int mult = DamageRollBreakdown.CriticalMultiplier;
+            var perRoll = new List<string>();
+            string remainder = string.Empty;
+            for (int i = 0; i < pieces.Count; i++)
+            {
+                if (string.IsNullOrEmpty(pieces[i]))
+                    continue;
+                if (pieces[i].EndsWith(" other bonuses", StringComparison.Ordinal))
+                    remainder = " " + pieces[i];
+                else
+                    perRoll.Add(pieces[i]);
+            }
+            string joined = string.Join(" ", perRoll).Trim();
+            if (joined.StartsWith("+ ", StringComparison.Ordinal))
+                joined = joined.Substring(2);
+            else if (joined.StartsWith("- ", StringComparison.Ordinal))
+                joined = "-" + joined.Substring(2);
+            string group = perRoll.Count == 0 ? string.Empty : $" + {mult} × ({joined})";
+            return $"CRITICAL ×{mult}! {DamageRollBreakdown.SourceName}: {dicePiece}{group}{remainder}{sneakSuffix} = {shownDamage} damage";
+        }
 
+        string coreExpression = (dicePiece + " " + string.Join(" ", pieces)).Trim();
         return $"{DamageRollBreakdown.SourceName}: {coreExpression}{sneakSuffix} = {shownDamage} damage";
     }
 
@@ -538,7 +587,12 @@ public class CombatResult
         {
             string threatRange = CritThreatMin < 20 ? $"{CritThreatMin}-20" : "20";
             string confModStr = CharacterStats.FormatMod(ConfirmationTotal - ConfirmationRoll);
-            if (CritConfirmed)
+            if (CritImmunityPrevented)
+                sb.AppendLine($"  Confirmation: d20 = {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - "
+                    + (CritEffectsOnly
+                        ? "confirmed, but the target is immune to critical hits: normal damage, critical-hit weapon effects only"
+                        : "not confirmed; the target is immune to critical hits: normal damage"));
+            else if (CritConfirmed)
                 sb.AppendLine($"  Confirmation: d20 = {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - CONFIRMED! (×{CritMultiplier})");
             else
                 sb.AppendLine($"  Confirmation: d20 = {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - Not confirmed");
@@ -666,23 +720,43 @@ public class CombatResult
 
     /// <summary>
     /// The weapon dice line and one line per static damage term (CMB-003), so the listed lines add up to the weapon
-    /// damage before riders. A confirmed critical shows its multiplied dice; the terms are added once (CMB-004).
+    /// damage before riders. A confirmed critical rolls the dice and every term the multiplier number of times
+    /// (PHB p.134, p.140; CMB-004): it lists each roll's dice, then each term times the multiplier.
     /// </summary>
     private void AppendDamageTermLines(StringBuilder sb, string indent, string diceStr, string abilityName)
     {
+        int rolls = DamageRollCount;
         if (CritConfirmed)
-            sb.AppendLine($"{indent}{(string.IsNullOrWhiteSpace(CritDamageDice) ? diceStr : CritDamageDice)} = {BaseDamageRoll} (critical ×{(CritMultiplier > 1 ? CritMultiplier : 2)}: weapon dice only)");
+        {
+            sb.AppendLine($"{indent}Critical ×{rolls}: weapon damage rolled {rolls} times, every modifier on each roll");
+            if (HasWeaponDamageRoll && WeaponDamageRoll.DicePerRoll != null && WeaponDamageRoll.DicePerRoll.Length == rolls)
+            {
+                var each = new List<string>(rolls);
+                for (int i = 0; i < rolls; i++)
+                    each.Add($"{WeaponDamageRoll.DicePerRollLabel}({WeaponDamageRoll.DicePerRoll[i]})");
+                sb.AppendLine($"{indent}{string.Join(" + ", each)} = {BaseDamageRoll} ({DamageDiceShown})");
+            }
+            else
+            {
+                sb.AppendLine($"{indent}{(string.IsNullOrWhiteSpace(CritDamageDice) ? diceStr : CritDamageDice)} = {BaseDamageRoll}");
+            }
+        }
         else
+        {
             sb.AppendLine($"{indent}{diceStr} = {BaseDamageRoll}");
+        }
 
         if (HasWeaponDamageBonus)
         {
             List<AttackModifierBreakdownEntry> terms = WeaponDamageBonus.GetTerms();
             for (int i = 0; i < terms.Count; i++)
-                sb.AppendLine($"{indent}{FormatModLine(terms[i].Value, terms[i].Label)}");
-            if (TorchCritEnhancementExtra != 0)
-                sb.AppendLine($"{indent}{FormatModLine(TorchCritEnhancementExtra, "torch critical")}");
-            int weaponTotal = BaseDamageRoll + WeaponDamageBonus.Total + TorchCritEnhancementExtra;
+            {
+                if (rolls > 1)
+                    sb.AppendLine($"{indent}{FormatModLine(terms[i].Value * rolls, terms[i].Label + " " + CharacterStats.FormatMod(terms[i].Value) + " ×" + rolls)}");
+                else
+                    sb.AppendLine($"{indent}{FormatModLine(terms[i].Value, terms[i].Label)}");
+            }
+            int weaponTotal = BaseDamageRoll + WeaponDamageBonus.Total * rolls;
             if (weaponTotal != Damage)
                 sb.AppendLine($"{indent}= {Damage} weapon damage ({(weaponTotal < 1 ? "minimum 1" : "other effects")})");
             return;

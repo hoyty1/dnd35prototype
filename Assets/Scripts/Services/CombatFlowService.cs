@@ -130,11 +130,6 @@ public class CombatFlowService : MonoBehaviour
         return confirmationTotal >= targetAc;
     }
 
-    public int CalculateCriticalDamage(int baseDamage, int critMultiplier)
-    {
-        return Mathf.Max(0, baseDamage * Mathf.Max(2, critMultiplier));
-    }
-
     public string GenerateCombatResult(CharacterController attacker, CombatResult result)
     {
         if (result == null)

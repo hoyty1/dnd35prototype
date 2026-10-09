@@ -128,9 +128,10 @@ public struct AttackBonusBreakdown
 /// coup de grace, sunder and grapple damage, so they all add the same terms (CMB-003; the attack
 /// roll's counterpart is <see cref="AttackBonusBreakdown"/>, CMB-043). The weapon dice and the extra
 /// dice that are never multiplied (sneak attack, energy, alignment and bane riders, specific-item
-/// effects) stay with the caller. On a confirmed critical hit these terms are added once, not
-/// multiplied (CMB-004, an open owner question; RAW PHB p.134 multiplies them). Mount attacks and the
-/// Confused self-attack still roll their own damage without it (CMB-162).
+/// effects) stay with the caller. The weapon dice and these terms are rolled together by
+/// <see cref="WeaponDamageRoll"/>, once on a normal hit and the critical multiplier number of times on
+/// a confirmed critical (PHB p.134 and p.140; CMB-004). Mount attacks and the Confused self-attack
+/// still roll their own damage without it (CMB-162).
 /// Rules applied: PHB p.134 (Strength to melee, thrown and sling damage; 1/2 in the off hand,
 /// 1-1/2 two-handed, a penalty never multiplied, CMB-161; a bow takes only a penalty, a composite bow its
 /// rating), PHB p.41 (full Strength in a flurry), MM p.312 (a natural attack's Strength share),
@@ -235,6 +236,109 @@ public struct WeaponDamageBreakdown
     {
         if (value != 0)
             terms.Add(new AttackModifierBreakdownEntry(label, value));
+    }
+}
+
+// ============================================================================
+// One hit's weapon damage roll, normal or critical (CMB-004)
+// ============================================================================
+
+/// <summary>
+/// The weapon damage of one hit: the weapon dice plus the static modifier (<see cref="WeaponDamageBreakdown.Total"/>),
+/// rolled once on a normal hit and <see cref="Multiplier"/> times on a confirmed critical hit, the rolls added
+/// together (PHB p.134 "Multiplying Damage" and p.140 "Critical Hits": a x3 greataxe with +4 deals 1d12+4 three
+/// times, the same as 3d12+12). Extra dice over and above the weapon's normal damage (sneak attack, flaming, holy,
+/// bane and other special-ability dice) are never multiplied, so the caller adds them once after this roll. A coup de
+/// grace (PHB p.153) is an automatic critical hit and uses this roll too. Owner ruling 2026-10-08: follow RAW. Every
+/// weapon attack path (CharacterController.PerformSingleAttackWithCrit) and the coup de grace roll through
+/// <see cref="Roll"/>, for PCs and NPCs alike. The damage dice pass the scenario dice filter with
+/// <see cref="DiceContext"/>; the RNG draws are the same as rolling all the dice in one go.
+/// The minimum of 1 damage for a hit (PHB p.134) applies to the summed total, not to each roll.
+/// </summary>
+public struct WeaponDamageRoll
+{
+    /// <summary>The dice-filter context of every weapon damage die (ScenarioHooks.FilterRoll).</summary>
+    public const string DiceContext = "Weapon damage";
+
+    /// <summary>Weapon dice per roll (the 1 of 1d12).</summary>
+    public int DiceCount;
+    /// <summary>Sides of each weapon die (the 12 of 1d12).</summary>
+    public int DiceSides;
+    /// <summary>How many times the damage was rolled: 1 on a normal hit, the critical multiplier on a confirmed critical.</summary>
+    public int Multiplier;
+    /// <summary>The static modifier added to each roll (WeaponDamageBreakdown.Total).</summary>
+    public int StaticPerRoll;
+    /// <summary>The weapon dice total of each roll, <see cref="Multiplier"/> entries.</summary>
+    public int[] DicePerRoll;
+    /// <summary>All weapon dice of every roll added together.</summary>
+    public int DiceTotal;
+
+    /// <summary>The static modifier over every roll: <see cref="StaticPerRoll"/> x <see cref="Multiplier"/>.</summary>
+    public int StaticTotal => StaticPerRoll * Mathf.Max(1, Multiplier);
+    /// <summary>The rolls added together before the minimum of 1.</summary>
+    public int Unclamped => DiceTotal + StaticTotal;
+    /// <summary>The weapon damage of the hit: the rolls added together, at least 1 (PHB p.134).</summary>
+    public int Total => Mathf.Max(1, Unclamped);
+    public bool IsCritical => Multiplier > 1;
+    /// <summary>Every weapon die rolled, e.g. "3d12" for 1d12 on a x3 critical.</summary>
+    public string DiceLabel => (DiceCount * Mathf.Max(1, Multiplier)) + "d" + DiceSides;
+    /// <summary>The dice of one roll, e.g. "1d12".</summary>
+    public string DicePerRollLabel => DiceCount + "d" + DiceSides;
+
+    /// <summary>
+    /// Rolls <paramref name="diceCount"/>d<paramref name="diceSides"/> + <paramref name="staticPerRoll"/>
+    /// <paramref name="multiplier"/> times (at least once). <paramref name="rollDice"/> (count, sides) replaces the
+    /// dice for a test; by default every die is drawn from UnityEngine.Random and passes the scenario dice filter.
+    /// </summary>
+    public static WeaponDamageRoll Roll(int diceCount, int diceSides, int staticPerRoll, int multiplier,
+        System.Func<int, int, int> rollDice = null)
+    {
+        int rolls = Mathf.Max(1, multiplier);
+        var r = new WeaponDamageRoll
+        {
+            DiceCount = Mathf.Max(0, diceCount),
+            DiceSides = Mathf.Max(0, diceSides),
+            Multiplier = rolls,
+            StaticPerRoll = staticPerRoll,
+            DicePerRoll = new int[rolls],
+        };
+        for (int i = 0; i < rolls; i++)
+        {
+            int dice = 0;
+            if (r.DiceCount > 0 && r.DiceSides > 0)
+                dice = rollDice != null ? rollDice(r.DiceCount, r.DiceSides) : RollDice(r.DiceCount, r.DiceSides);
+            r.DicePerRoll[i] = dice;
+            r.DiceTotal += dice;
+        }
+        return r;
+    }
+
+    private static int RollDice(int count, int sides)
+    {
+        int total = 0;
+        for (int i = 0; i < count; i++)
+            total += ScenarioHooks.FilterRoll(sides, DiceContext, Random.Range(1, sides + 1));
+        return total;
+    }
+
+    /// <summary>
+    /// The roll for logs, adding up to <see cref="Total"/>: "1d8(5) + 4 = 9" on a normal hit, and on a critical
+    /// "x3: [1d12(7) + 4] + [1d12(3) + 4] + [1d12(10) + 4] = 32" (each roll with the whole static modifier).
+    /// </summary>
+    public string Describe()
+    {
+        string mod = StaticPerRoll == 0 ? string.Empty : (StaticPerRoll > 0 ? " + " + StaticPerRoll : " - " + (-StaticPerRoll));
+        string minimum = Unclamped < 1 ? " (minimum 1)" : string.Empty;
+        if (!IsCritical)
+            return DicePerRollLabel + "(" + (DicePerRoll != null && DicePerRoll.Length > 0 ? DicePerRoll[0] : DiceTotal) + ")" + mod + " = " + Total + minimum;
+
+        var parts = new List<string>(Multiplier);
+        for (int i = 0; i < Multiplier; i++)
+        {
+            int dice = DicePerRoll != null && i < DicePerRoll.Length ? DicePerRoll[i] : 0;
+            parts.Add("[" + DicePerRollLabel + "(" + dice + ")" + mod + "]");
+        }
+        return "x" + Multiplier + ": " + string.Join(" + ", parts) + " = " + Total + minimum;
     }
 }
 

@@ -614,6 +614,17 @@
       "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
+      "type": "Tests.Combat.CriticalDamageRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 42,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CMB-004, CMB-064 (2026-10-09; owner ruling 2026-10-08: RAW): a confirmed critical rolls the weapon dice and every static modifier the multiplier number of times (PHB p.134, p.140), sneak attack is added once, a creature immune to critical hits (including elementals and plants, MM p.308, p.313) takes normal damage and no sneak attack (MM p.317, PHB p.50) while a confirmed threat still applies burst dice (DMG p.222), swarms too (MM p.316), and a coup de grace multiplies the weapon damage but not sneak attack, adds bane, energy dice and Fortification like any critical, and is refused against helpless crit-immune targets (PHB p.153). Forces the d20s and weapon dice through ScenarioHooks.RollFilter. Play only (CharacterController.Init). Assertions counted from the source (42); not yet confirmed by a run (the Unity MCP failed on 2026-10-09)."
+    },
+    {
       "type": "Tests.Combat.DamageModifierTests",
       "needs": "either",
       "skip": "",

@@ -205,7 +205,7 @@ Reachability: `StoreInventory` never lists the `mw_*`/material variants or the 1
 
 Keen, Throwing and Distance act only at creation time, in `EnchantmentFactory.ApplyAbilitySideEffects`. The remaining roughly 49 abilities are data only, including Speed, Ghost Touch, armor energy resistance, SR and skill bonuses. Their helpers in `EnchantmentEffects` have no callers, so grep for a call site before assuming an ability works.
 
-Several combat defects are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md): enchantment energy damage is resolved as physical damage, normal crits do not check crit immunity, Fortification is checked after Vorpal and burst dice, and Keen stacks with Improved Critical. `MagicItemLootGenerator` (`Equipment/SpecificItems/`) also uses enchantments, but it is dead code.
+Several combat defects are tracked in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md): enchantment energy damage is resolved as physical damage, Fortification is checked after Vorpal and burst dice, and Keen stacks with Improved Critical. `MagicItemLootGenerator` (`Equipment/SpecificItems/`) also uses enchantments, but it is dead code.
 
 ## Rings, rods, wondrous items, staves, specific items
 

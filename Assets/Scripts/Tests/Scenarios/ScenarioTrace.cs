@@ -208,9 +208,11 @@ namespace Tests.Scenarios
         /// <summary>
         /// 2: the cast event; 3: the attack event's weapon damage dice (dice, baseRoll); 4: the actor event's Hit Dice,
         /// racial Hit Dice and base saves (hd, racialHd, baseFort, baseRef, baseWill; CRE-004); 5: the attack event's
-        /// static damage modifier and its terms (dmgMod, dmgTerms, weaponDmg; CMB-003).
+        /// static damage modifier and its terms (dmgMod, dmgTerms, weaponDmg; CMB-003); 6: the attack event's damage roll
+        /// count, sneak attack damage, crit immunity and a confirmed threat on an immune target (dmgRolls, sneakDmg,
+        /// critImmune, critEffects; CMB-004).
         /// </summary>
-        public const string HarnessVersion = "5";
+        public const string HarnessVersion = "6";
 
         private readonly ScenarioJob _job;
         private readonly GameManager _gm;
@@ -602,6 +604,10 @@ namespace Tests.Scenarios
                 .Set("dmgMod", r.HasWeaponDamageBonus ? r.WeaponDamageBonus.Total : 0)
                 .Set("dmgTerms", r.HasWeaponDamageBonus ? DamageTerms(r) : string.Empty)
                 .Set("weaponDmg", r.Hit ? r.Damage : 0)
+                .Set("dmgRolls", r.Hit ? r.DamageRollCount : 0)
+                .Set("sneakDmg", r.Hit ? r.SneakAttackDamage : 0)
+                .Set("critImmune", r.CritImmunityPrevented)
+                .Set("critEffects", r.CritEffectsOnly)
                 .Set("conceal", r.MissedDueToConcealment)
                 .Set("barrier", r.ProtectionSummonedBarrierBlocked)
                 .Set("deflected", IsDeflected(r))

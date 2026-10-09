@@ -238,7 +238,7 @@ public static class WeaponDamageModifierTests
         Assert(d.Describe().EndsWith("= +15"), "Describe ends with the total", d.Describe());
     }
 
-    // Every hit: weapon damage = dice roll + the recorded modifier (added once on a critical, CMB-004), and the
+    // Every hit: weapon damage = dice roll + the recorded modifier (once per roll, so times the multiplier on a critical, CMB-004), and the
     // detailed log lists the morale term.
     private static void TestAttackDamageIsDicePlusModifier()
     {
@@ -259,7 +259,7 @@ public static class WeaponDamageModifierTests
                 if (r == null || !r.Hit)
                     continue;
                 hits++;
-                int want = Mathf.Max(1, r.BaseDamageRoll + r.WeaponDamageBonus.Total + r.TorchCritEnhancementExtra);
+                int want = Mathf.Max(1, r.BaseDamageRoll + r.WeaponDamageBonus.Total * r.DamageRollCount);
                 if (!r.HasWeaponDamageBonus || r.Damage != want || r.WeaponDamageBonus.Total != 5)
                 {
                     allAddUp = false;
@@ -317,7 +317,7 @@ public static class WeaponDamageModifierTests
             Assert(r != null && r.WeaponDamageBonus.DestructionSmiteBonus == want && HasTerm(r.WeaponDamageBonus, "Destruction smite", want),
                 "The smiting attack's damage carries +cleric level (PHB p.186; CHR-005)", r != null ? r.WeaponDamageBonus.Describe() : "no result");
             Assert(!a.Stats.DestructionSmiteActive, "The smite is used up by the attack");
-            Assert(r == null || !r.Hit || r.Damage == Mathf.Max(1, r.BaseDamageRoll + r.WeaponDamageBonus.Total + r.TorchCritEnhancementExtra),
+            Assert(r == null || !r.Hit || r.Damage == Mathf.Max(1, r.BaseDamageRoll + r.WeaponDamageBonus.Total * r.DamageRollCount),
                 "A smiting hit's damage includes the smite bonus");
             CombatResult next = a.Attack(t, false, 0, null);
             Assert(next != null && next.WeaponDamageBonus.DestructionSmiteBonus == 0, "The next attack has no smite bonus");

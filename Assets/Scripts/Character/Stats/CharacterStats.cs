@@ -4593,31 +4593,6 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Roll critical hit damage: multiply only the weapon dice by the crit multiplier,
-    /// then add static bonuses (STR, magic, etc.) once. D&D 3.5 rules.
-    /// Example: Longsword 1d8+3 with ×2 crit = 2d8 + 3
-    /// </summary>
-    /// <param name="damageDice">Sides of the damage die</param>
-    /// <param name="damageCount">Base number of dice</param>
-    /// <param name="bonusDamage">Flat bonus damage from weapon</param>
-    /// <param name="strMultiplier">STR mod multiplier (1.0 main hand, 0.5 off-hand)</param>
-    /// <param name="critMultiplier">Crit damage multiplier (2, 3, or 4)</param>
-    public int RollCritDamage(int damageDice, int damageCount, int bonusDamage, float strMultiplier, int critMultiplier)
-    {
-        int mult = critMultiplier > 0 ? critMultiplier : 2;
-        // Roll weapon dice × multiplier
-        int diceTotal = 0;
-        int totalDice = damageCount * mult;
-        for (int i = 0; i < totalDice; i++)
-        {
-            diceTotal += UnityEngine.Random.Range(1, damageDice + 1);
-        }
-        // Add static bonuses once (NOT multiplied per D&D 3.5)
-        int strBonus = ApplyStrengthDamageMultiplier(STRMod, strMultiplier);
-        int total = diceTotal + strBonus + bonusDamage;
-        return Mathf.Max(1, total);
-    }
-    /// <summary>
     /// Apply incoming damage through the full mitigation pipeline:
     /// immunity -> typed resistance -> DR (weapon damage only) -> HP/Temp HP.
     /// </summary>
@@ -6616,23 +6591,6 @@ public class CharacterStats
             total += UnityEngine.Random.Range(1, damageDice + 1);
         }
         total += damageModifier + bonusDamage;
-        return Mathf.Max(1, total);
-    }
-
-    /// <summary>
-    /// Roll critical damage using the weapon's DamageModifierType system.
-    /// Multiplies weapon dice; adds static bonuses (STR + bonus) once.
-    /// </summary>
-    public int RollCritDamageWithModType(int damageDice, int damageCount, int bonusDamage, int damageModifier, int critMultiplier)
-    {
-        int mult = critMultiplier > 0 ? critMultiplier : 2;
-        int diceTotal = 0;
-        int totalDice = damageCount * mult;
-        for (int i = 0; i < totalDice; i++)
-        {
-            diceTotal += UnityEngine.Random.Range(1, damageDice + 1);
-        }
-        int total = diceTotal + damageModifier + bonusDamage;
         return Mathf.Max(1, total);
     }
 }

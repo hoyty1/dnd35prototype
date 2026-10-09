@@ -6894,6 +6894,10 @@ public class CharacterController : MonoBehaviour
         if (target.Stats.Immunities != null && target.Stats.Immunities.immuneToSneakAttack)
             return true;
 
+        // PHB p.50: any creature immune to critical hits is not vulnerable to sneak attacks.
+        if (target.IsImmuneToCriticalHits())
+            return true;
+
         string creatureType = string.IsNullOrEmpty(target.Stats.CreatureType)
             ? string.Empty
             : target.Stats.CreatureType.Trim().ToLowerInvariant();
@@ -6937,10 +6941,17 @@ public class CharacterController : MonoBehaviour
             ? string.Empty
             : Stats.CreatureType.Trim().ToLowerInvariant();
 
-        // D&D 3.5 baseline critical-hit immunity used in this prototype.
+        // A swarm has no discernible anatomy and is not subject to critical hits (MM p.316, swarm subtype).
+        if (Stats.IsSwarm)
+            return true;
+
+        // Types not subject to critical hits (MM type traits: construct p.307, elemental p.308, ooze and plant p.313,
+        // undead p.317); other creatures carry Immunities.immuneToCriticalHits (CMB-004).
         return creatureType == "undead"
             || creatureType == "construct"
-            || creatureType == "ooze";
+            || creatureType == "ooze"
+            || creatureType == "elemental"
+            || creatureType == "plant";
     }
 
     private bool IsTargetDeniedDexForSneakAttack(CharacterController target, bool isMeleeAttack, bool feintWindowConsumed, out string reason)
@@ -7065,13 +7076,196 @@ public class CharacterController : MonoBehaviour
         return result;
     }
 
+    // ========================================================================
+    // Damage after the weapon roll, shared by every weapon hit and the coup de grace (CMB-004)
+    // ========================================================================
+
+    /// <summary>
+    /// The special-ability damage of <paramref name="weapon"/> against <paramref name="target"/>: energy dice (flaming,
+    /// frost, shock), burst dice on a confirmed critical, alignment dice (holy, unholy, axiomatic, anarchic), bane dice,
+    /// vicious (with its backlash to the wielder), vorpal (a confirmed critical on a natural 20) and wounding. These are
+    /// extra damage over the weapon's normal damage, so they are added once and never multiplied on a critical hit
+    /// (PHB p.140; burst dice scale with the multiplier themselves, DMG p.224). <paramref name="critEffectsOnly"/> is a
+    /// confirmed critical against a creature immune to critical hits: burst dice still apply (DMG p.222, "Magic Weapons
+    /// and Critical Hits"), Vorpal does not (undead and golems are unaffected by losing their heads, oozes have none,
+    /// DMG p.226; ITM-067). Log notes go to <paramref name="notes"/>. Shared by
+    /// <see cref="PerformSingleAttackWithCritCore"/> and <see cref="ResolveCoupDeGrace"/> (an automatic critical hit,
+    /// PHB p.153), for PCs and NPCs alike.
+    /// </summary>
+    private int RollWeaponEnchantmentRiderDamage(ItemData weapon, CharacterController target, bool critConfirmed,
+        bool critEffectsOnly, int critMultiplier, int naturalRoll, List<string> notes)
+    {
+        if (weapon == null || !weapon.IsEnchanted)
+            return 0;
+
+        int enchantmentBonusDamage = 0;
+        string enchantmentDamageLog = "";
+
+        // --- Elemental damage (Flaming, Frost, Shock, etc.) ---
+        var elemDmg = EnchantmentEffects.RollElementalDamage(weapon);
+        for (int ed = 0; ed < elemDmg.Count; ed++)
+        {
+            enchantmentBonusDamage += elemDmg[ed].Amount;
+            enchantmentDamageLog += $" {elemDmg[ed]}";
+        }
+
+        // --- Crit bonus damage (Flaming Burst, Icy Burst, Shocking Burst, Thundering) ---
+        if (critConfirmed || critEffectsOnly)
+        {
+            var critDmg = EnchantmentEffects.RollCritBonusDamage(weapon, critMultiplier);
+            for (int cd = 0; cd < critDmg.Count; cd++)
+            {
+                enchantmentBonusDamage += critDmg[cd].Amount;
+                enchantmentDamageLog += $" {critDmg[cd]}";
+            }
+        }
+
+        // --- Alignment damage (Holy, Unholy, Axiomatic, Anarchic) ---
+        if (target != null && target.Stats != null)
+        {
+            var alignDmg = EnchantmentEffects.RollAlignmentDamage(weapon, target.Stats.CharacterAlignment);
+            for (int ad = 0; ad < alignDmg.Count; ad++)
+            {
+                enchantmentBonusDamage += alignDmg[ad].Amount;
+                enchantmentDamageLog += $" {alignDmg[ad]}";
+            }
+
+            // --- Bane damage ---
+            string targetCreatureType = target.Stats.CreatureType ?? "";
+            var baneDmg = EnchantmentEffects.RollBaneDamage(weapon, targetCreatureType);
+            for (int bd = 0; bd < baneDmg.Count; bd++)
+            {
+                enchantmentBonusDamage += baneDmg[bd].Amount;
+                enchantmentDamageLog += $" {baneDmg[bd]}";
+            }
+        }
+
+        // --- Vicious damage (to target and backlash to wielder) ---
+        if (EnchantmentEffects.RollViciousDamage(weapon, out int viciousTarget, out int viciousBacklash))
+        {
+            enchantmentBonusDamage += viciousTarget;
+            enchantmentDamageLog += $" +{viciousTarget} (Vicious)";
+            if (viciousBacklash > 0 && Stats != null)
+            {
+                Stats.TakeDamage(viciousBacklash);
+                Debug.Log($"[Enchantment] Vicious backlash: {Stats.CharacterName} takes {viciousBacklash} damage from Vicious weapon.");
+            }
+        }
+
+        // --- Vorpal (instant kill on natural 20 confirmed crit) ---
+        if (EnchantmentEffects.CheckVorpalEffect(weapon, naturalRoll, critConfirmed))
+        {
+            if (target != null && target.Stats != null)
+            {
+                Debug.Log($"[Enchantment] VORPAL! {Stats.CharacterName}'s {weapon.Name} decapitates {target.Stats.CharacterName}!");
+                notes?.Add("⚔ VORPAL DECAPITATION!");
+                // Vorpal is instant death (set HP to lethal threshold)
+                target.Stats.TakeDamage(target.Stats.CurrentHP + 100);
+            }
+        }
+
+        // --- Wounding (1 CON damage per hit) ---
+        if (EnchantmentEffects.HasWoundingEffect(weapon) && target != null && target.Stats != null)
+        {
+            Debug.Log($"[Enchantment] Wounding: {target.Stats.CharacterName} takes 1 CON damage from Wounding weapon.");
+            notes?.Add("Wounding: -1 CON");
+            // Note: actual CON damage tracking would need ability damage system
+        }
+
+        if (enchantmentBonusDamage > 0)
+        {
+            Debug.Log($"[Enchantment] {Stats.CharacterName}'s enchanted {weapon.Name} deals +{enchantmentBonusDamage} bonus damage:{enchantmentDamageLog}");
+        }
+
+        return enchantmentBonusDamage;
+    }
+
+    /// <summary>
+    /// A specific weapon's OnDamageRoll (e.g. Sword of Subtlety +4, Sylvan Scimitar +1d6) and, on a confirmed critical
+    /// hit, its OnCriticalHit hook, also against a creature immune to critical hits (<paramref name="critEffectsOnly"/>;
+    /// DMG p.222: a mace of smiting destroys an iron golem on a confirmed critical). Adjusts
+    /// <paramref name="rawTotalDamage"/> and returns how much OnDamageRoll changed it. Specific-item damage that RAW
+    /// multiplies on a critical is still added once (ITM-077).
+    /// </summary>
+    private static int ApplySpecificItemDamageHooks(ItemData weapon, CharacterController target, bool critConfirmed,
+        bool critEffectsOnly, ref int rawTotalDamage, List<string> notes)
+    {
+        if (weapon == null || weapon.SpecificItemBehavior == null || target == null)
+            return 0;
+
+        var behaviorDmgNotes = new List<string>();
+
+        // OnDamageRoll: modify damage
+        int before = rawTotalDamage;
+        weapon.SpecificItemBehavior.OnDamageRoll(target, ref rawTotalDamage, critConfirmed, behaviorDmgNotes);
+        int delta = rawTotalDamage - before;
+
+        // OnCriticalHit: crit-triggered effects
+        if (critConfirmed || critEffectsOnly)
+            weapon.SpecificItemBehavior.OnCriticalHit(target, rawTotalDamage, behaviorDmgNotes);
+
+        notes?.AddRange(behaviorDmgNotes);
+        return delta;
+    }
+
+    /// <summary>
+    /// Fortification on <paramref name="target"/>'s armor and shield (DMG p.219): when a critical hit or sneak attack is
+    /// scored on the wearer, a percentile roll may negate it, and the damage is rolled normally. True when it does.
+    /// </summary>
+    private static bool RollDefenderFortification(CharacterController target, out int fortPercent)
+    {
+        fortPercent = 0;
+        Inventory targetInv = target?.GetInventoryData();
+        ItemData defenderArmor = targetInv?.ArmorRobeSlot;
+        ItemData defenderShield = (targetInv?.LeftHandSlot != null && targetInv.LeftHandSlot.IsShield) ? targetInv.LeftHandSlot : null;
+        if (!EnchantmentEffects.CheckFortification(defenderArmor, defenderShield, out int fortRoll))
+            return false;
+
+        fortPercent = EnchantmentEffects.GetFortificationPercent(defenderArmor)
+                    + EnchantmentEffects.GetFortificationPercent(defenderShield);
+        fortPercent = Mathf.Min(fortPercent, 100);
+        Debug.Log($"[Enchantment] Fortification! Roll {fortRoll} ≤ {fortPercent}%: crit/sneak negated for {target.Stats.CharacterName}.");
+        return true;
+    }
+
+    /// <summary>
+    /// What a hit with <paramref name="weapon"/> counts as against damage reduction: the weapon's own tags, ranged, the
+    /// enchantment tags (holy counts as good, unholy as evil, ...) and Magic Stone on a sling (PHB p.251).
+    /// </summary>
+    private DamageBypassTag GetWeaponAttackBypassTags(ItemData weapon, bool isRangedAttack)
+    {
+        DamageBypassTag attackTags = weapon != null ? weapon.GetBypassTags() : DamageBypassTag.Bludgeoning;
+        if (isRangedAttack)
+            attackTags |= DamageBypassTag.Ranged;
+
+        // Add enchantment bypass tags (Holy → Good, Unholy → Evil, etc.)
+        if (weapon != null && weapon.IsEnchanted)
+            attackTags |= EnchantmentEffects.GetEnchantmentBypassTags(weapon);
+
+        // D&D 3.5e Magic Stone: sling attacks with active Magic Stone count as magic weapons (PHB p.251)
+        if (Stats != null && Stats.MagicStoneActive && Stats.MagicStoneCharges >= 0
+            && weapon != null && weapon.Id == ItemIDs.SLING)
+            attackTags |= DamageBypassTag.Magic;
+
+        return attackTags;
+    }
+
+    private static void AppendSpecialAttackNotes(CombatResult result, List<string> notes)
+    {
+        if (result == null || notes == null)
+            return;
+        for (int i = 0; i < notes.Count; i++)
+            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? notes[i] : $"{result.SpecialAttackNote} {notes[i]}";
+    }
+
     /// <summary>
     /// Perform a single attack with full D&D 3.5 critical hit mechanics.
     /// Step 1: Roll d20. Check if in threat range.
     /// Step 2: If threat, roll confirmation vs same AC with same bonus.
-    /// Step 3: Roll the weapon dice (multiplied on a confirmed critical) and add <paramref name="damageBonus"/>'s
-    /// total once (CMB-004: RAW PHB p.134 multiplies the static bonuses too; an open owner question), then the extra
-    /// dice that are never multiplied (sneak attack, enchantment riders).
+    /// Step 3: Roll the weapon dice plus <paramref name="damageBonus"/>'s total with <see cref="WeaponDamageRoll"/>:
+    /// once on a normal hit, the critical multiplier number of times on a confirmed critical (PHB p.134, p.140; CMB-004),
+    /// then add the extra dice that are never multiplied (sneak attack, enchantment riders). A target immune to critical
+    /// hits makes no confirmation roll and takes normal damage.
     /// </summary>
     /// <param name="weapon">The weapon being used (null = unarmed or natural)</param>
     /// <param name="damageBonus">Every static damage term, from <see cref="BuildWeaponDamageBonus"/> (CMB-003).</param>
@@ -7635,6 +7829,10 @@ public class CharacterController : MonoBehaviour
                 return result;
             }
 
+            // A confirmed threat against a creature immune to critical hits: no multiplied damage, but the weapon's
+            // critical-hit effects (burst dice, specific-item OnCriticalHit) still apply (DMG p.222).
+            bool critEffectsOnly = false;
+
             bool autoCritOnParalyzed = !isRangedAttack
                 && target != null
                 && target.HasCondition(CombatConditionType.Paralyzed)
@@ -7665,46 +7863,51 @@ public class CharacterController : MonoBehaviour
                 {
                     // Roll confirmation with the same attack modifier
                     var (confirmed, confRoll, confTotal) = Stats.RollCritConfirmation(totalAtkModWithTrueStrike, targetAC);
-                    critConfirmed = confirmed;
                     confirmRoll = confRoll;
                     confirmTotal = confTotal;
-                    result.CritConfirmed = critConfirmed;
                     result.ConfirmationRoll = confirmRoll;
                     result.ConfirmationTotal = confirmTotal;
+
+                    if (target != null && target.IsImmuneToCriticalHits())
+                    {
+                        // A creature not subject to critical hits (MM p.307-317 type traits: construct, elemental, ooze,
+                        // plant, undead; swarms) takes normal damage: the weapon damage is never multiplied (CMB-004,
+                        // CMB-064). The threat is still confirmed as usual, and a confirmed critical still applies the
+                        // weapon's critical-hit effects such as burst dice (DMG p.222, "Magic Weapons and Critical Hits").
+                        critEffectsOnly = confirmed;
+                        result.CritImmunityPrevented = true;
+                        result.CritEffectsOnly = confirmed;
+                        string immuneNote = confirmed
+                            ? $"{target.Stats.CharacterName} is immune to critical hits: normal damage, critical-hit weapon effects only."
+                            : $"{target.Stats.CharacterName} is immune to critical hits: normal damage.";
+                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                            ? immuneNote
+                            : $"{result.SpecialAttackNote} {immuneNote}";
+                    }
+                    else
+                    {
+                        critConfirmed = confirmed;
+                        result.CritConfirmed = critConfirmed;
+                    }
                 }
             }
 
             // Step 3: Roll weapon damage. The static modifier is built once for every attack path (CMB-003,
-            // BuildWeaponDamageBonus) and added once, also on a critical hit, where only the weapon dice are
-            // multiplied (CMB-004, an open owner question; RAW PHB p.134 multiplies the static bonuses too).
+            // BuildWeaponDamageBonus). A normal hit rolls the weapon dice plus that modifier once; a confirmed critical
+            // rolls both the multiplier number of times and adds the rolls (PHB p.134 and p.140; CMB-004, owner ruling
+            // 2026-10-08: RAW). Extra dice (sneak attack, enchantment riders) are added once below, never multiplied.
             int staticDamage = damageBonus.Total;
-            int rawWeaponDamage;
-            int baseDmgRoll;
+            WeaponDamageRoll weaponRoll = WeaponDamageRoll.Roll(damageCount, damageDice, staticDamage, critConfirmed ? critMultiplier : 1);
+            int baseDmgRoll = weaponRoll.DiceTotal;
+            int rawWeaponDamage = weaponRoll.Total; // a weapon hit always deals at least 1 before mitigation (PHB p.134)
             if (critConfirmed)
-            {
-                int totalCritDice = damageCount * critMultiplier;
-                baseDmgRoll = Stats.RollBaseDamage(damageDice, totalCritDice);
-                // Torch-style weapons (no Strength to damage): a critical hit multiplies the fixed weapon damage
-                // package, including the enhancement on the weapon's base damage.
-                int torchCritExtra = suppressStrengthToDamage && damageBonus.EnhancementBonus > 0 && critMultiplier > 1
-                    ? damageBonus.EnhancementBonus * (critMultiplier - 1)
-                    : 0;
-                result.TorchCritEnhancementExtra = torchCritExtra;
-                rawWeaponDamage = baseDmgRoll + staticDamage + torchCritExtra;
-                result.CritDamageDice = $"{totalCritDice}d{damageDice}";
-            }
-            else
-            {
-                baseDmgRoll = Stats.RollBaseDamage(damageDice, damageCount);
-                rawWeaponDamage = baseDmgRoll + staticDamage;
-            }
-            rawWeaponDamage = CombatCalculationService.ClampMinimumDamage(rawWeaponDamage); // Weapon hit always deals at least 1 before mitigation
+                result.CritDamageDice = weaponRoll.DiceLabel;
+            result.WeaponDamageRoll = weaponRoll;
+            result.HasWeaponDamageRoll = true;
             result.Damage = rawWeaponDamage;
             result.BaseDamageRoll = baseDmgRoll;
             Debug.Log($"[Damage] {Stats.CharacterName} -> {(target != null && target.Stats != null ? target.Stats.CharacterName : "?")}: "
-                + $"{(critConfirmed ? result.CritDamageDice + " (critical x" + critMultiplier + ", dice only)" : damageCount + "d" + damageDice)}"
-                + $"({baseDmgRoll}) + [{damageBonus.Describe()}]{(result.TorchCritEnhancementExtra != 0 ? " + torch critical " + result.TorchCritEnhancementExtra : string.Empty)}"
-                + $" = {rawWeaponDamage} weapon damage{(rawWeaponDamage != baseDmgRoll + staticDamage + result.TorchCritEnhancementExtra ? " (minimum 1)" : string.Empty)}");
+                + $"{(critConfirmed ? "critical " : string.Empty)}{weaponRoll.Describe()} weapon damage; modifier per roll [{damageBonus.Describe()}]");
 
             // Sneak attack: applies if attacker is Rogue and target is either flanked
             // or denied DEX to AC (feint, flat-footed, stunned, etc.).
@@ -7724,7 +7927,9 @@ public class CharacterController : MonoBehaviour
             {
                 if (IsTargetImmuneToSneakAttackDamage(target))
                 {
-                    string immunityReason = $"target creature type '{target.Stats.CreatureType}' is immune to sneak attack precision damage";
+                    string immunityReason = target.IsImmuneToCriticalHits()
+                        ? $"{target.Stats.CharacterName} is immune to critical hits, so to sneak attack ({target.Stats.CreatureType})"
+                        : $"target creature type '{target.Stats.CreatureType}' is immune to sneak attack precision damage";
                     result.SneakAttackTriggerReason = immunityReason;
                     Debug.Log($"[Sneak Attack] {Stats.CharacterName} cannot sneak attack {target.Stats.CharacterName}: {immunityReason}.");
                 }
@@ -7767,164 +7972,51 @@ public class CharacterController : MonoBehaviour
             }
 
             // ================================================================
-            // ENCHANTMENT BONUS DAMAGE (D&D 3.5 DMG special abilities)
+            // EXTRA DAMAGE, SPECIFIC ITEMS, FORTIFICATION (shared with the coup de grace, CMB-004)
             // ================================================================
-            int enchantmentBonusDamage = 0;
-            string enchantmentDamageLog = "";
-            if (weapon != null && weapon.IsEnchanted)
-            {
-                // --- Elemental damage (Flaming, Frost, Shock, etc.) ---
-                var elemDmg = EnchantmentEffects.RollElementalDamage(weapon);
-                for (int ed = 0; ed < elemDmg.Count; ed++)
-                {
-                    enchantmentBonusDamage += elemDmg[ed].Amount;
-                    enchantmentDamageLog += $" {elemDmg[ed]}";
-                }
-
-                // --- Crit bonus damage (Flaming Burst, Icy Burst, Shocking Burst, Thundering) ---
-                if (critConfirmed)
-                {
-                    var critDmg = EnchantmentEffects.RollCritBonusDamage(weapon, critMultiplier);
-                    for (int cd = 0; cd < critDmg.Count; cd++)
-                    {
-                        enchantmentBonusDamage += critDmg[cd].Amount;
-                        enchantmentDamageLog += $" {critDmg[cd]}";
-                    }
-                }
-
-                // --- Alignment damage (Holy, Unholy, Axiomatic, Anarchic) ---
-                if (target != null && target.Stats != null)
-                {
-                    var alignDmg = EnchantmentEffects.RollAlignmentDamage(weapon, target.Stats.CharacterAlignment);
-                    for (int ad = 0; ad < alignDmg.Count; ad++)
-                    {
-                        enchantmentBonusDamage += alignDmg[ad].Amount;
-                        enchantmentDamageLog += $" {alignDmg[ad]}";
-                    }
-
-                    // --- Bane damage ---
-                    string targetCreatureType = target.Stats.CreatureType ?? "";
-                    var baneDmg = EnchantmentEffects.RollBaneDamage(weapon, targetCreatureType);
-                    for (int bd = 0; bd < baneDmg.Count; bd++)
-                    {
-                        enchantmentBonusDamage += baneDmg[bd].Amount;
-                        enchantmentDamageLog += $" {baneDmg[bd]}";
-                    }
-                }
-
-                // --- Vicious damage (to target and backlash to wielder) ---
-                if (EnchantmentEffects.RollViciousDamage(weapon, out int viciousTarget, out int viciousBacklash))
-                {
-                    enchantmentBonusDamage += viciousTarget;
-                    enchantmentDamageLog += $" +{viciousTarget} (Vicious)";
-                    if (viciousBacklash > 0 && Stats != null)
-                    {
-                        Stats.TakeDamage(viciousBacklash);
-                        Debug.Log($"[Enchantment] Vicious backlash: {Stats.CharacterName} takes {viciousBacklash} damage from Vicious weapon.");
-                    }
-                }
-
-                // --- Vorpal (instant kill on natural 20 confirmed crit) ---
-                if (EnchantmentEffects.CheckVorpalEffect(weapon, result.DieRoll, critConfirmed))
-                {
-                    if (target != null && target.Stats != null)
-                    {
-                        Debug.Log($"[Enchantment] VORPAL! {Stats.CharacterName}'s {weapon.Name} decapitates {target.Stats.CharacterName}!");
-                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                            ? "⚔ VORPAL DECAPITATION!"
-                            : $"{result.SpecialAttackNote} ⚔ VORPAL DECAPITATION!";
-                        // Vorpal is instant death (set HP to lethal threshold)
-                        target.Stats.TakeDamage(target.Stats.CurrentHP + 100);
-                    }
-                }
-
-                // --- Wounding (1 CON damage per hit) ---
-                if (EnchantmentEffects.HasWoundingEffect(weapon) && target != null && target.Stats != null)
-                {
-                    Debug.Log($"[Enchantment] Wounding: {target.Stats.CharacterName} takes 1 CON damage from Wounding weapon.");
-                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                        ? "Wounding: -1 CON"
-                        : $"{result.SpecialAttackNote} Wounding: -1 CON";
-                    // Note: actual CON damage tracking would need ability damage system
-                }
-
-                if (enchantmentBonusDamage > 0)
-                {
-                    Debug.Log($"[Enchantment] {Stats.CharacterName}'s enchanted {weapon.Name} deals +{enchantmentBonusDamage} bonus damage:{enchantmentDamageLog}");
-                }
-            }
-
+            // Special-ability dice are extra damage over the weapon's normal damage: added once, never multiplied on a
+            // critical (PHB p.140). The same helpers run for a coup de grace (ResolveCoupDeGrace), an automatic critical.
+            var extraDamageNotes = new List<string>();
+            int enchantmentBonusDamage = RollWeaponEnchantmentRiderDamage(weapon, target, critConfirmed, critEffectsOnly,
+                critMultiplier, result.DieRoll, extraDamageNotes);
             rawTotalDamage += enchantmentBonusDamage;
 
-            // ================================================================
-            // SPECIFIC ITEM BEHAVIOR: OnDamageRoll + OnCriticalHit
-            // ================================================================
-            if (weapon != null && weapon.SpecificItemBehavior != null && target != null)
+            int specificDelta = ApplySpecificItemDamageHooks(weapon, target, critConfirmed, critEffectsOnly, ref rawTotalDamage,
+                extraDamageNotes);
+            rawWeaponDamage += specificDelta; // Track in weapon damage too
+            AppendSpecialAttackNotes(result, extraDamageNotes);
+
+            // Fortification (defender's armor or shield, DMG p.219) may negate a critical hit or sneak attack.
+            if ((critConfirmed || (result.SneakAttackApplied && rawSneakDamage > 0))
+                && RollDefenderFortification(target, out int fortPercent))
             {
-                var behaviorDmgNotes = new System.Collections.Generic.List<string>();
-
-                // OnDamageRoll: modify damage (e.g., Sword of Subtlety +4, Sylvan Scimitar +1d6)
-                int specificDamageBonus = rawTotalDamage;
-                weapon.SpecificItemBehavior.OnDamageRoll(target, ref rawTotalDamage, critConfirmed, behaviorDmgNotes);
-                int specificDelta = rawTotalDamage - specificDamageBonus;
-                rawWeaponDamage += specificDelta; // Track in weapon damage too
-
-                // OnCriticalHit: crit-triggered effects
+                // Negate critical: revert to normal damage
                 if (critConfirmed)
                 {
-                    weapon.SpecificItemBehavior.OnCriticalHit(target, rawTotalDamage, behaviorDmgNotes);
+                    // Recalculate as non-crit damage: the weapon dice and the static modifier rolled once.
+                    WeaponDamageRoll normalRoll = WeaponDamageRoll.Roll(damageCount, damageDice, staticDamage, 1);
+                    rawWeaponDamage = normalRoll.Total + specificDelta;
+                    result.BaseDamageRoll = normalRoll.DiceTotal;
+                    result.WeaponDamageRoll = normalRoll;
+                    result.CritDamageDice = null;
+                    result.CritConfirmed = false;
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? $"Fortification ({fortPercent}%): crit negated"
+                        : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): crit negated";
                 }
 
-                foreach (var note in behaviorDmgNotes)
+                // Negate sneak attack damage
+                if (result.SneakAttackApplied)
                 {
-                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote) ? note : $"{result.SpecialAttackNote} {note}";
+                    rawSneakDamage = 0;
+                    result.SneakAttackDamage = 0;
+                    result.SneakAttackApplied = false;
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? $"Fortification ({fortPercent}%): sneak attack negated"
+                        : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): sneak attack negated";
                 }
-            }
 
-            // ================================================================
-            // FORTIFICATION CHECK (defender's armor/shield)
-            // ================================================================
-            if (critConfirmed || (result.SneakAttackApplied && rawSneakDamage > 0))
-            {
-                Inventory targetInv = target?.GetInventoryData();
-                ItemData defenderArmor = targetInv?.ArmorRobeSlot;
-                ItemData defenderShield = (targetInv?.LeftHandSlot != null && targetInv.LeftHandSlot.IsShield) ? targetInv.LeftHandSlot : null;
-                if (EnchantmentEffects.CheckFortification(defenderArmor, defenderShield, out int fortRoll))
-                {
-                    int fortPercent = EnchantmentEffects.GetFortificationPercent(defenderArmor)
-                                    + EnchantmentEffects.GetFortificationPercent(defenderShield);
-                    fortPercent = Mathf.Min(fortPercent, 100);
-                    Debug.Log($"[Enchantment] Fortification! Roll {fortRoll} ≤ {fortPercent}%: crit/sneak negated for {target.Stats.CharacterName}.");
-
-                    // Negate critical: revert to normal damage
-                    if (critConfirmed)
-                    {
-                        // Recalculate as non-crit damage: the weapon dice once plus the same static modifier.
-                        int normalRoll = Stats.RollBaseDamage(damageDice, damageCount);
-                        int normalDmg = normalRoll + staticDamage;
-                        normalDmg = Mathf.Max(1, normalDmg);
-                        rawWeaponDamage = normalDmg;
-                        result.BaseDamageRoll = normalRoll;
-                        result.TorchCritEnhancementExtra = 0;
-                        result.CritConfirmed = false;
-                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                            ? $"Fortification ({fortPercent}%): crit negated"
-                            : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): crit negated";
-                    }
-
-                    // Negate sneak attack damage
-                    if (result.SneakAttackApplied)
-                    {
-                        rawSneakDamage = 0;
-                        result.SneakAttackDamage = 0;
-                        result.SneakAttackApplied = false;
-                        result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                            ? $"Fortification ({fortPercent}%): sneak attack negated"
-                            : $"{result.SpecialAttackNote} Fortification ({fortPercent}%): sneak attack negated";
-                    }
-
-                    rawTotalDamage = rawWeaponDamage + rawSneakDamage + enchantmentBonusDamage;
-                }
+                rawTotalDamage = rawWeaponDamage + rawSneakDamage + enchantmentBonusDamage;
             }
 
             result.Damage = rawWeaponDamage;
@@ -7935,18 +8027,8 @@ public class CharacterController : MonoBehaviour
                 ? weapon.GetDamageTypes()
                 : new System.Collections.Generic.HashSet<DamageType> { DamageType.Bludgeoning };
 
-            DamageBypassTag attackTags = weapon != null ? weapon.GetBypassTags() : DamageBypassTag.Bludgeoning;
-            if (weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0))
-                attackTags |= DamageBypassTag.Ranged;
-
-            // Add enchantment bypass tags (Holy → Good, Unholy → Evil, etc.)
-            if (weapon != null && weapon.IsEnchanted)
-                attackTags |= EnchantmentEffects.GetEnchantmentBypassTags(weapon);
-
-            // D&D 3.5e Magic Stone: sling attacks with active Magic Stone count as magic weapons (PHB p.251)
-            if (Stats != null && Stats.MagicStoneActive && Stats.MagicStoneCharges >= 0
-                && weapon != null && weapon.Id == ItemIDs.SLING)
-                attackTags |= DamageBypassTag.Magic;
+            DamageBypassTag attackTags = GetWeaponAttackBypassTags(weapon,
+                weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0));
 
             var packet = new DamagePacket
             {
@@ -10714,7 +10796,7 @@ public class CharacterController : MonoBehaviour
             {
                 logLines.Add(BuildDamageFormula(
                     "Damage roll",
-                    string.IsNullOrEmpty(attackResult.BaseDamageDiceStr) ? $"{damageCount}d{damageDice}" : attackResult.BaseDamageDiceStr,
+                    string.IsNullOrEmpty(attackResult.DamageDiceShown) ? $"{damageCount}d{damageDice}" : attackResult.DamageDiceShown,
                     attackResult.BaseDamageRoll,
                     attackDamageStaticModifier,
                     attackDamageRaw,
@@ -10977,7 +11059,7 @@ public class CharacterController : MonoBehaviour
             attackResult.Hit
                 ? BuildDamageFormula(
                     $"Damage roll ({damageTypeLabel})",
-                    string.IsNullOrEmpty(attackResult.BaseDamageDiceStr) ? $"{damageCount}d{damageDice}" : attackResult.BaseDamageDiceStr,
+                    string.IsNullOrEmpty(attackResult.DamageDiceShown) ? $"{damageCount}d{damageDice}" : attackResult.DamageDiceShown,
                     attackResult.BaseDamageRoll,
                     grappleAttackStaticModifier,
                     grappleAttackRawDamage,
@@ -13371,30 +13453,57 @@ public class CharacterController : MonoBehaviour
         AttackCalculator.FeatModifiers cdgFeats = cdgNatural != null ? default(AttackCalculator.FeatModifiers) : DamageOnlyFeatModifiers(weapon);
         WeaponDamageBreakdown cdgDamage = BuildWeaponDamageBonus(weapon, isRanged: false, isOffHand: false, cdgFeats,
             bonusDamage, naturalAttack: cdgNatural);
-        int damageModifier = cdgDamage.Total;
-        int baseDamageRoll = Stats.RollBaseDamage(damageDice, damageCount);
-        int baseDamage = Mathf.Max(1, baseDamageRoll + damageModifier);
+        // Bane: against its foe the weapon's enhancement bonus is +2 better on damage too (DMG p.224), as on any hit.
+        if (weapon != null && weapon.IsEnchanted)
+            cdgDamage.BaneBonus = EnchantmentEffects.GetBaneEnhancementBonus(weapon, target.Stats.CreatureType ?? "");
+        // A coup de grace is an automatic critical hit (PHB p.153): the weapon damage, static modifier included, is
+        // rolled the weapon's multiplier number of times (PHB p.134, p.140), the same roll as a confirmed critical on
+        // any attack path (WeaponDamageRoll, CMB-004). Unarmed and natural attacks are x2 (ResolveWeaponCritProfile).
+        ResolveWeaponCritProfile(weapon, out _, out int critMultiplier);
+        WeaponDamageRoll cdgRoll = WeaponDamageRoll.Roll(damageCount, damageDice, cdgDamage.Total, critMultiplier);
+        int weaponDamage = cdgRoll.Total;
 
+        // Sneak attack dice are extra damage over the weapon's normal damage: added once, never multiplied (PHB p.134,
+        // p.140), and a rogue gets them against a helpless target on a coup de grace (PHB p.153).
         int sneakDamage = 0;
+        int sneakDice = 0;
         bool sneakApplied = false;
-        if (Stats.IsRogue)
+        if (Stats.IsRogue && !IsTargetImmuneToSneakAttackDamage(target))
         {
             int rogueLevel = Stats.GetClassLevel("Rogue");
+            sneakDice = CombatUtils.GetSneakAttackDice(rogueLevel);
             sneakDamage = CombatUtils.RollSneakAttackDamage(rogueLevel);
             sneakApplied = sneakDamage > 0;
         }
 
-        int preCritDamage = baseDamage + sneakDamage;
-        int critMultiplier = weapon != null && weapon.CritMultiplier > 0
-            ? weapon.CritMultiplier
-            : (Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2);
-        int rawCriticalDamage = Mathf.Max(1, preCritDamage * critMultiplier);
+        // Everything after the weapon roll is the same as on a confirmed critical on any attack path (CMB-004): the
+        // special-ability dice added once (burst dice included), the specific-item hooks, then Fortification on the
+        // target's armor or shield, which can negate the critical and the sneak attack (DMG p.219).
+        var cdgNotes = new List<string>();
+        int riderDamage = RollWeaponEnchantmentRiderDamage(weapon, target, critConfirmed: true, critEffectsOnly: false,
+            critMultiplier, naturalRoll: 0, cdgNotes);
+        int rawCriticalDamage = weaponDamage + sneakDamage + riderDamage;
+        int specificDelta = ApplySpecificItemDamageHooks(weapon, target, critConfirmed: true, critEffectsOnly: false,
+            ref rawCriticalDamage, cdgNotes);
+        weaponDamage += specificDelta;
+
+        bool critNegated = false;
+        if (RollDefenderFortification(target, out int fortPercent))
+        {
+            critNegated = true;
+            cdgRoll = WeaponDamageRoll.Roll(damageCount, damageDice, cdgDamage.Total, 1);
+            weaponDamage = cdgRoll.Total + specificDelta;
+            cdgNotes.Add($"Fortification ({fortPercent}%): critical hit{(sneakApplied ? " and sneak attack" : string.Empty)} negated, damage rolled normally.");
+            sneakDamage = 0;
+            sneakApplied = false;
+            rawCriticalDamage = weaponDamage + riderDamage;
+        }
 
         var damageTypes = weapon != null
             ? weapon.GetDamageTypes()
             : new HashSet<DamageType> { DamageType.Bludgeoning };
 
-        DamageBypassTag attackTags = weapon != null ? weapon.GetBypassTags() : DamageBypassTag.Bludgeoning;
+        DamageBypassTag attackTags = GetWeaponAttackBypassTags(weapon, isRangedAttack: false);
 
         var packet = new DamagePacket
         {
@@ -13437,9 +13546,15 @@ public class CharacterController : MonoBehaviour
 
         string mitigationSummary = mitigation.GetMitigationSummary();
         string sneakSegment = sneakApplied
-            ? $" + Sneak {sneakDamage}"
+            ? $" + sneak attack {sneakDice}d6({sneakDamage}), not multiplied"
             : string.Empty;
         string damageSource = weapon != null ? weapon.Name : attackLabel;
+        string riderSegment = riderDamage != 0 ? $" + special abilities {riderDamage}, not multiplied" : string.Empty;
+        string specificSegment = specificDelta != 0 ? $" {(specificDelta > 0 ? "+" : "-")} item {Mathf.Abs(specificDelta)}" : string.Empty;
+        string rollSegment = critNegated
+            ? $"critical negated, normal damage {cdgRoll.Describe()}"
+            : $"automatic critical {cdgRoll.Describe()}";
+        string notesSegment = cdgNotes.Count > 0 ? string.Join(" ", cdgNotes) + " " : string.Empty;
 
         string saveLine = diedFromDamage
             ? $"{target.Stats.CharacterName} is slain by damage before the Fortitude save can matter."
@@ -13457,8 +13572,14 @@ public class CharacterController : MonoBehaviour
             Success = true,
             DamageDealt = finalDamage,
             TargetKilled = targetKilled,
+            WeaponDamageRoll = cdgRoll,
+            SneakAttackDamage = sneakDamage,
+            ExtraDamage = riderDamage + specificDelta,
+            CritNegated = critNegated,
+            RawDamage = rawCriticalDamage,
             Log = $"{Stats.CharacterName} performs Coup de Grace on helpless {target.Stats.CharacterName} with {damageSource}: "
-                + $"({damageCount}d{damageDice}={baseDamageRoll} + [{cdgDamage.Describe()}]{sneakSegment}) ×{critMultiplier} = {rawCriticalDamage}; "
+                + $"{rollSegment} (modifier per roll: {cdgDamage.Describe()}){specificSegment}{sneakSegment}{riderSegment} = {rawCriticalDamage}; "
+                + notesSegment
                 + $"mitigated to {finalDamage} ({hpBefore} → {target.Stats.CurrentHP}). "
                 + (string.IsNullOrEmpty(mitigationSummary) ? string.Empty : mitigationSummary + " ")
                 + saveLine + " " + deathLine

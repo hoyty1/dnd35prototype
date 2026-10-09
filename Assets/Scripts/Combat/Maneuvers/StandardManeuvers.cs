@@ -718,6 +718,12 @@ public partial class GameManager
             if (!candidate.IsHelplessForCoupDeGrace())
                 continue;
 
+            // A creature immune to critical hits cannot be coup de graced (PHB p.153), so it is no target for the
+            // button or the AI, which would otherwise pay the full round and the AoOs before the resolver refuses
+            // (CMB-099).
+            if (candidate.IsImmuneToCriticalHits())
+                continue;
+
             adjacentHelpless.Add(candidate);
         }
 
