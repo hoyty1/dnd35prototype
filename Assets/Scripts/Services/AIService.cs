@@ -595,6 +595,7 @@ public class AIService : MonoBehaviour
                     Debug.Log($"[AI] {npc.Stats.CharacterName} attempting ranged special attack (distance {distance} squares, range {rangeSquares} squares)");
                     if (TryExecuteRangedSpecialAttack(npc, target))
                     {
+                        _gameManager.EvaluateCombatEnd("AI.RangedSpecial");
                         yield return new WaitForSeconds(0.8f);
                         yield break;
                     }
@@ -684,6 +685,7 @@ public class AIService : MonoBehaviour
                         Debug.Log($"[AI] {npc.Stats.CharacterName} attempting post-movement ranged special attack (distance {postMoveDistance} squares, range {rangeSquares} squares)");
                         if (TryExecuteRangedSpecialAttack(npc, target))
                         {
+                            _gameManager.EvaluateCombatEnd("AI.PostMoveRangedSpecial");
                             yield return new WaitForSeconds(0.8f);
                             yield break;
                         }
@@ -791,6 +793,7 @@ public class AIService : MonoBehaviour
 
                     yield return _gameManager.StartCoroutine(
                         _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget));
+                    if (CombatEnded()) yield break; // the breath ran the combat-end check
 
                     // After breath weapon, dragon may still have move action for repositioning
                     if (npc.Stats.CurrentHP > 0 && npc.Actions.HasMoveAction)
@@ -837,6 +840,7 @@ public class AIService : MonoBehaviour
                               $"(hits {dragonProfile.BreathWeaponExpectedHits} enemies)!");
                     yield return _gameManager.StartCoroutine(
                         _gameManager.NPCExecuteBreathWeaponForAI(npc, dragonProfile.BreathWeaponAimTarget));
+                    if (CombatEnded()) yield break; // the breath ran the combat-end check
 
                     if (npc.Stats.CurrentHP > 0 && npc.Actions.HasMoveAction)
                     {
@@ -1448,19 +1452,25 @@ public class AIService : MonoBehaviour
             if (damage <= 0)
                 continue;
 
+            // A swarm attack is a nonmagical natural attack: damage reduction applies unless the swarm's damage type
+            // bypasses it (MM p.316), and so do immunity and resistance; then the shared concentration and death
+            // checks (SPL-004, AI-006).
             string dmgTypeStr = traits.SwarmDamageType.ToString();
-            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("", $"🐝 {swarm.Stats.CharacterName} swarm damage: {damage} {dmgTypeStr} damage to {victim.Stats.CharacterName}! (no attack roll)"));
+            DamageResolutionResult dealt = _gameManager.DealDamage(victim, damage,
+                DamagePackets.CreatureAttack(swarm.Stats.CharacterName + " swarm", traits.SwarmDamageType));
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Interrupted("", $"🐝 {swarm.Stats.CharacterName} swarm damage: {dealt.FinalDamage} {dmgTypeStr} damage to {victim.Stats.CharacterName}! (no attack roll){GameManager.DescribeMitigation(dealt)}"));
 
-            victim.Stats.TakeDamage(damage);
             yield return new WaitForSeconds(0.25f);
 
             // Check if victim died from swarm damage
             if (victim.Stats.IsDead)
             {
                 _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{victim.Stats.CharacterName} is killed by the swarm!"));
-                victim.OnDeath();
                 continue;
             }
+
+            // Distraction does not yet check MM p.316's "vulnerable to the swarm's damage" (immune, incorporeal, or
+            // damage reduction that stops the swarm's maximum) or living creatures only (CRE-060).
 
             // ── Distraction: Fort save or nauseated 1 round (MM p.239) ──
             if (traits.DistractionDC > 0)
@@ -1487,6 +1497,8 @@ public class AIService : MonoBehaviour
                 // Poison application handled by existing poison system if available
             }
         }
+
+        _gameManager.EvaluateCombatEnd("AI.SwarmDamage");
     }
 
     /// <summary>
@@ -3403,10 +3415,14 @@ public class AIService : MonoBehaviour
         
         if (isHit)
         {
+            // Energy damage (spittle acid) ignores damage reduction, physical damage takes it as a natural attack
+            // (MM p.307); immunity and resistance apply either way; then the shared concentration and death checks
+            // (SPL-004, AI-006).
             int damage = RollDamage(attack.DamageDice, attack.DamageCount);
-            target.Stats.TakeDamage(damage);
+            DamageResolutionResult dealt = _gameManager.DealDamage(target, damage,
+                DamagePackets.CreatureAttack($"{npc.Stats.CharacterName}'s {attack.Name}", attack.DamageType, true));
             _gameManager.CombatUI?.ShowCombatLog(
-                CombatLogHelper.Damage("💥", $"{npc.Stats.CharacterName}'s {attack.Name} hits for {damage} {attack.DamageType} damage!"));
+                CombatLogHelper.Damage("💥", $"{npc.Stats.CharacterName}'s {attack.Name} hits for {dealt.FinalDamage} {attack.DamageType} damage{GameManager.DescribeMitigation(dealt)}!"));
 
             // Check for on-hit effects (blinding on crit, etc.)
             if (!string.IsNullOrEmpty(attack.OnHitStatusEffectType) && !attack.OnHitOnCritOnly)
@@ -3419,9 +3435,6 @@ public class AIService : MonoBehaviour
             _gameManager.CombatUI?.ShowCombatLog(
                 CombatLogHelper.Failure("❌", $"{npc.Stats.CharacterName}'s {attack.Name} misses!"));
         }
-
-        if (target.Stats.IsDead)
-            target.OnDeath();
 
         return true;
     }
@@ -3676,7 +3689,7 @@ public class AIService : MonoBehaviour
         int attackBonus = attacker.Stats.BaseAttackBonus + attacker.Stats.DEXMod;
         int targetAC = CombatCalculationService.SimpleTouchAC(target.Stats);  // Ranged touch ignores armor/shield
 
-        int roll = UnityEngine.Random.Range(1, 21);
+        int roll = DiceService.D20("Special attack ranged touch"); // DiceService, so the scenario harness can force it
         int total = roll + attackBonus;
 
         Debug.Log($"[AI] Ranged touch attack: d20({roll}) + {attackBonus} = {total} vs AC {targetAC}");
@@ -3689,11 +3702,10 @@ public class AIService : MonoBehaviour
     /// </summary>
     private int RollDamage(int damageDice, int damageCount)
     {
-        int total = 0;
-        for (int i = 0; i < damageCount; i++)
-        {
-            total += UnityEngine.Random.Range(1, damageDice + 1);
-        }
+        // DiceService, so the scenario harness can force the dice (docs/TESTING.md 3.3)
+        int total = damageCount > 0
+            ? DiceService.RollMultiple(damageCount, Mathf.Max(2, damageDice), "Special attack damage")
+            : 0;
         return Mathf.Max(1, total);
     }
 

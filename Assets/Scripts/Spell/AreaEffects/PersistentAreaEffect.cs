@@ -663,6 +663,25 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         Destroy(gameObject);
     }
 
+    /// <summary>
+    /// Deals this effect's spell damage of one type to <paramref name="character"/> through the shared path
+    /// (<see cref="GameManager.DealDamage"/>: immunity and resistance apply, damage reduction does not, MM p.307; then
+    /// the concentration and death checks; SPL-004). <paramref name="savedForHalf"/>: a successful Reflex save for half.
+    /// The combat-end check runs at the next turn start or boundary.
+    /// </summary>
+    protected DamageResolutionResult DealSpellDamage(CharacterController character, int rawDamage, DamageType type, bool savedForHalf = false)
+    {
+        DamagePacket packet = DamagePackets.Spell(EffectName, type, savedForHalf);
+        GameManager gm = gameManager != null ? gameManager : GameManager.Instance;
+        if (gm != null)
+            return gm.DealDamage(character, rawDamage, packet);
+
+        DamageResolutionResult result = GameManager.ApplyDamagePacket(character, rawDamage, packet);
+        if (character != null && character.Stats != null && character.Stats.IsDead)
+            character.OnDeath();
+        return result;
+    }
+
     protected void LogEffect(string message)
     {
         if (gameManager != null && gameManager.CombatUI != null)

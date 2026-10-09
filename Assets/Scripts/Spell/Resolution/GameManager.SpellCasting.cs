@@ -2428,8 +2428,9 @@ public partial class GameManager
 
             Grid.ClearAllHighlights();
 
-            // Check for victory (all NPCs dead) or defeat (all PCs dead)
-            if (result.TargetKilled)
+            // Check for victory or defeat: also when a handler dealt the damage through DealDamage (Produce Flame,
+            // Spiritual Weapon, Heat Metal, Disintegrate) without setting result.TargetKilled (SPL-004)
+            if (result.TargetKilled || (target != null && CombatEndRules.IsOutOfFight(target)))
             {
                 if (EvaluateCombatEnd("ResolveSingleTargetSpell"))
                 {
@@ -4080,6 +4081,7 @@ public partial class GameManager
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
 
+                if (EvaluateCombatEnd("IceStorm")) { _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));
@@ -4106,6 +4108,7 @@ public partial class GameManager
                 UpdateAllStatsUI();
                 Grid.ClearAllHighlights();
 
+                if (EvaluateCombatEnd("Shout")) { _pendingSpell = null; _pendingMetamagic = null; return; }
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 StartCoroutine(AfterAttackDelay(caster, 1.5f));

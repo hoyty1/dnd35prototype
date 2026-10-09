@@ -51,16 +51,17 @@ public class SpikeStoneAreaEffect : PersistentAreaEffect
             bool saved = reflexTotal >= ReflexDC;
             int actualDamage = saved ? Mathf.Max(1, damage / 2) : damage;
 
+            // Spell damage: temporary hit points, resistance and death handling apply; damage reduction does not
+            // (MM p.307; SPL-004).
             int hpBefore = character.Stats.CurrentHP;
-            character.Stats.CurrentHP -= actualDamage;
+            DamageResolutionResult dealt = DealSpellDamage(character, actualDamage, DamageType.Piercing);
             int hpAfter = character.Stats.CurrentHP;
 
             string saveStr = saved ? $"Reflex {reflexTotal} vs DC {ReflexDC} SAVED (half)" : $"Reflex {reflexTotal} vs DC {ReflexDC} FAILED";
-            LogEffect($"💎 {character.Stats.CharacterName} steps on spike stones: 1d8={damage} → {actualDamage} piercing ({saveStr}) [{hpBefore}→{hpAfter} HP]");
+            LogEffect($"💎 {character.Stats.CharacterName} steps on spike stones: 1d8={damage} → {dealt.FinalDamage} piercing ({saveStr}){GameManager.DescribeMitigation(dealt)} [{hpBefore}→{hpAfter} HP]");
 
             if (character.Stats.IsDead)
             {
-                character.OnDeath();
                 LogEffect($"💀 {character.Stats.CharacterName} has been slain by spike stones!");
             }
         }

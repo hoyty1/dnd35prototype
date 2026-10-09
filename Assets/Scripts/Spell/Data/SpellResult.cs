@@ -270,7 +270,7 @@ public class SpellResult
             else if (DamageDealt > 0 || DamageRolled > 0)
             {
                 sb.AppendLine($"  Damage:");
-                if (Spell.DamageCount > 0)
+                if (Spell.DamageCount > 0 && !Spell.DamageResolvedByHandler)
                 {
                     string diceStr = FormatDiceRolls(DamageRolls);
                     if (!string.IsNullOrEmpty(diceStr))

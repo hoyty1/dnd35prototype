@@ -73,16 +73,22 @@ public class FireShieldReactionEffect : IMeleeReactionEffect
 
         Debug.Log($"[FireShield] Retribution damage={damage} ({dmgType}) | CL={casterLevel} | isWarm={isWarm} | attacker HP before={attacker.Stats.CurrentHP}");
 
-        attacker.Stats.TakeDamage(damage);
+        // Spell damage of the shield's type: the attacker's immunity and resistance apply, damage reduction does not
+        // (MM p.307); then the shared concentration and death checks (SPL-004).
+        DamagePacket packet = DamagePackets.Spell("Fire Shield", isWarm ? DamageType.Fire : DamageType.Cold);
+        GameManager gm = GameManager.Instance;
+        DamageResolutionResult dealt = gm != null
+            ? gm.DealDamage(attacker, damage, packet)
+            : GameManager.ApplyDamagePacket(attacker, damage, packet);
+        if (gm == null && attacker.Stats.IsDead)
+            attacker.OnDeath();
 
         // Show combat log
-        var combatUI = GameManager.Instance?.CombatUI;
-        combatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  \ud83d\udd25 Fire Shield retribution! {attacker.Stats.CharacterName} takes {damage} {dmgType} damage (no save)!"));
+        var combatUI = gm?.CombatUI;
+        combatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  \ud83d\udd25 Fire Shield retribution! {attacker.Stats.CharacterName} takes {dealt.FinalDamage} {dmgType} damage (no save){GameManager.DescribeMitigation(dealt)}!"));
 
         if (attacker.Stats.IsDead)
         {
-            attacker.OnDeath();
-            GameManager.Instance?.Combat_HandleSummonDeathCleanup(attacker);
             combatUI?.ShowCombatLog(CombatLogHelper.Info("", $"  \ud83d\udc80 {attacker.Stats.CharacterName} is slain by Fire Shield retribution!"));
         }
     }

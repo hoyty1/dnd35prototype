@@ -35,7 +35,7 @@ public static partial class SpellDatabase
                     Name = "Vampiric Touch",
                     Description = "Necromancy [Negative Energy]. Melee touch attack. Deals 1d6 negative energy damage "
                         + "per 2 caster levels (max 10d6). Caster gains temporary hit points equal to damage dealt "
-                        + "(capped by caster's max HP), lasting 1 hour. SR: Yes. PHB p.281",
+                        + "(no more than the subject's current hit points + 10), lasting 1 hour. SR: Yes. PHB p.298",
                     SpellLevel = 3,
                     School = "Necromancy",
                     AvailableFor = new List<SpellAvailability>

@@ -41,7 +41,7 @@ Under `Assets/Scripts/`; full map in `docs/ARCHITECTURE.md`.
 
 | Folder | Contents |
 |---|---|
-| `_Core/` | `GameManager.cs` (about 11.5K lines) + 10 `GameManager.*.cs` partials, `SceneBootstrap`, `ScenarioHooks` (inert test seams) |
+| `_Core/` | `GameManager.cs` (about 11.5K lines) + 11 `GameManager.*.cs` partials, `SceneBootstrap`, `ScenarioHooks` (inert test seams) |
 | `Combat/` | `Core/` (AttackCalculator, ThreatSystem, DamageModel, TeamUtility), `Conditions/`, `StatusEffects/` (ConditionRules), `Maneuvers/` + `Special/` (GameManager partials), `Behaviors/` (Charmed/Confused/Fascinated/Frightened), `Utilities/` (CombatCalculationService, CombatUtils), `Reactions/`, `Mounts/`, `Logging/` |
 | `Spell/` | `Data/`, `Database/`, `Casting/` (SpellCaster), `Components/` (StatusEffectManager, MetamagicData); GameManager partials in `Resolution/`, `Special/`, `Domain/` |
 | `Character/` | `Controller/CharacterController.cs` (about 12K lines), `Stats/CharacterStats.cs`, `Classes/`, `Creatures/`, `Templates/`, `Feats/` |
@@ -56,7 +56,7 @@ Where to look first:
 | Concern | Start at |
 |---|---|
 | Attack math | `CharacterController.Attack`/`FullAttack`/`DualWieldAttack`/`FlurryOfBlows` (modifier from `BuildAttackBonus`) -> `PerformSingleAttackWithCrit`; `CombatFlowService.PerformPlayerAttack`; `GameManager.NPCPerformAttack` |
-| Damage | `CharacterStats.ApplyIncomingDamage` -> `TakeDamage`; `Combat/Core/DamageModel.cs` |
+| Damage | `CharacterStats.ApplyIncomingDamage` -> `TakeDamage`; non-weapon damage `GameManager.DealDamage` (`_Core/GameManager.Damage.cs`); `Combat/Core/DamageModel.cs` (`DamagePackets`) |
 | Conditions | `GameManager.ApplyCondition`, `ConditionService`, `ConditionManager`, `ConditionRules` |
 | Maneuvers, grapple | `CombatUI.ShowSpecialAttackMenu` -> `GameManager.OnSpecialAttackSelected` -> `GameManager.ExecuteSpecialAttack` (`GameManager.CombatActions.cs`); partials in `Combat/Maneuvers/*.cs`; `CharacterController.ExecuteSpecialAttack` -> `Resolve*` |
 | Spell casting | `Spell/Resolution/GameManager.SpellCasting.cs` (`BeginPendingSpellTargeting`, `PerformSpellCast`, `PerformAoESpellCast`, `ApplySpellBuff`); `GameManager_Spells_<Letter>.cs`; `SpellCaster.Cast` |
@@ -66,7 +66,7 @@ Where to look first:
 
 ## Architecture in brief
 
-1. **GameManager**: singleton `partial class`, 54 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`, `_pending*`).
+1. **GameManager**: singleton `partial class`, 55 files in 7 folders (the `ScenarioHarness` partial is editor-only), owns all session state (party, NPCs, `CurrentPhase`, `_pending*`).
 2. **Services** are added in `GameManager.Awake` and reach private state via `Combat_*` accessors and `*ForAI` wrappers.
 3. **CharacterController** resolves actions; **CharacterStats** has one named field per bonus source, hand-summed per stat. No modifier engine.
 4. **Spell effects dispatch by SpellId string compare** in chained `TryResolve<Name>SpellEffect` handlers; unclaimed spells fall to `ApplySpellBuff`.
@@ -86,7 +86,7 @@ Where to look first:
 - In `ApplySpellBuff`, special cases go above the generic `StatusEffectManager` branch (SPL-037).
 - Weapon attack-roll terms go in `CharacterController.BuildAttackBonus` (CMB-043); rake and grapple weapon attacks still sum their own (CMB-087); spell bonuses all land in `Morale*` (SPL-026).
 - A new `CharacterStats` bonus field needs a writer and a reader in every formula (`docs/architecture/characters-and-creatures.md`).
-- `TakeDamage`/`CurrentHP -=` skip DR and resistance (SPL-004); use `ApplyIncomingDamage`, then `GameManager.EvaluateCombatEnd` (one check for both sides) where the change can drop a creature.
+- `TakeDamage`/`CurrentHP -=` skip immunity, resistance and DR; deal non-weapon damage with `GameManager.DealDamage(target, raw, DamagePackets.Spell/Supernatural/CreatureAttack(...))` (mitigation, concentration, death; SPL-004), then `GameManager.EvaluateCombatEnd` (one check for both sides) once the effect has resolved.
 - `GameManager.Awake` runs before scene references are assigned (CORE-009); unassigned `CombatUI` fields fail silently (UI-013).
 - `ShowActionChoices` cancels active targeting (UI-012). Turns advance re-entrantly (CORE-012); `ResetCombatStateForNextEncounter` stops GameManager coroutines (CORE-013).
 - Magic strings fail silently: case-sensitive `HasFeat` (CHR-030), duplicate NPC ids (CRE-022), unknown preset ids (ENC-012), sources matched by name (CORE-017).

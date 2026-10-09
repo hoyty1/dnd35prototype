@@ -14,10 +14,10 @@ using UnityEngine;
 public partial class GameManager
 {
     // ================================================================
-    //  VAMPIRIC TOUCH — PHB p.281
+    //  VAMPIRIC TOUCH — PHB p.298
     //  Melee touch attack. Deals 1d6 negative energy damage per 2 CL
     //  (max 10d6). Caster gains temp HP equal to damage dealt
-    //  (capped at caster's max HP), lasting 1 hour. SR: Yes.
+    //  (no more than the subject's current HP + 10, PHB p.298), lasting 1 hour. SR: Yes.
     // ================================================================
 
     private static bool IsVampiricTouchSpell(SpellData spell)
@@ -28,7 +28,7 @@ public partial class GameManager
     /// <summary>
     /// Resolves Vampiric Touch. The melee touch must hit. Rolls
     /// 1d6/2CL (max 10d6) negative energy damage. Caster gains temporary
-    /// HP equal to damage dealt, capped at caster's max HP, for 1 hour.
+    /// HP equal to damage dealt, no more than the subject's current HP + 10 (PHB p.298), for 1 hour.
     /// Called from the touch/ray spell pipeline in PC and NPC casts.
     /// </summary>
     private bool TryResolveVampiricTouchSpellEffect(
@@ -64,12 +64,15 @@ public partial class GameManager
         for (int i = 0; i < diceCount; i++)
             damage += DiceRoller.D6();
 
+        // Negative energy damage through the mitigation pipeline (SPL-004); the touch pipeline runs concentration,
+        // death and the combat-end check from result. The temporary hit points equal the damage dealt (PHB p.298).
         int hpBefore = target.Stats.CurrentHP;
-        target.Stats.TakeDamage(damage);
+        int rolledDamage = damage;
+        damage = ApplyDamagePacket(target, damage, DamagePackets.Spell(spell.Name, DamageType.Negative)).FinalDamage;
         int hpAfter = target.Stats.CurrentHP;
 
         result.DamageDealt = damage;
-        result.DamageRolled = damage;
+        result.DamageRolled = rolledDamage;
         result.DamageType = "negative";
         result.TargetHPBefore = hpBefore;
         result.TargetHPAfter = hpAfter;
@@ -79,9 +82,9 @@ public partial class GameManager
 
         // Concentration on damage is checked downstream in the touch pipeline (uses result.DamageDealt).
 
-        // Caster gains temp HP equal to damage dealt, capped at caster's max HP
-        int casterMaxHP = Mathf.Max(1, caster.Stats.MaxHP);
-        int tempHP = Mathf.Min(damage, casterMaxHP);
+        // Caster gains temp HP equal to the damage dealt, but no more than the subject's current hit points + 10
+        // before the touch (PHB p.298)
+        int tempHP = Mathf.Min(damage, Mathf.Max(0, hpBefore) + 10);
 
         if (tempHP > 0)
         {

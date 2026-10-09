@@ -91,7 +91,8 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsRangedTouch = true,
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 8, DamageCount = 2, // Base 2d8 at CL3; custom resolution overrides
+                    DamageDice = 8, DamageCount = 2, // Base 2d8 at CL3, for AI scoring and UI only
+                    DamageResolvedByHandler = true, // TryResolveSearingLightSpellEffect deals the damage (SPL-124)
                     DamageType = "divine", // Not fire — positive energy / light
                     HasVerbalComponent = true,
                     HasSomaticComponent = true,

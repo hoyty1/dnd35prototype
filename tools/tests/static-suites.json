@@ -603,6 +603,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Combat.DamagePacketRulesTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 25,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "SPL-004 (2026-10-09): DamagePackets through ApplyIncomingDamage, CharacterStats only; also the generic SpellCaster.Cast branch (Fire Shield after a Reflex save, Searing Light skipped, SPL-124)."
+    },
+    {
       "type": "Tests.Combat.DazeMonsterAndHideousLaughterRulesTests",
       "needs": "edit",
       "skip": "",

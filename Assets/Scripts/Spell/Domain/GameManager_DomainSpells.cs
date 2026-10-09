@@ -329,20 +329,14 @@ public partial class GameManager
             damage = Mathf.Max(1, damage);
 
             int hpBefore = target.Stats.CurrentHP;
-            target.Stats.CurrentHP -= damage;
+            DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Fire, false, true));
             int hpAfter = target.Stats.CurrentHP;
 
-            sb.AppendLine($"<color=#FF4444>  Fire Damage: 1d6+{bonusDamage} = {damage}</color>");
+            sb.AppendLine($"<color=#FF4444>  Fire Damage: 1d6+{bonusDamage} = {damage}{(dealt.FinalDamage != damage ? $" → {dealt.FinalDamage}{DescribeMitigation(dealt)}" : "")}</color>");
             sb.AppendLine($"<color=#FF4444>  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP</color>");
 
-            CheckConcentrationOnDamage(target, damage);
-
             if (target.Stats.IsDead)
-            {
-                target.OnDeath();
-                HandleSummonDeathCleanup(target);
                 sb.AppendLine($"<color=#FF0000>  💀 {target.Stats.CharacterName} has been slain!</color>");
-            }
         }
 
         CombatUI?.ShowCombatLog(sb.ToString());
@@ -433,19 +427,13 @@ public partial class GameManager
             totalDamage += DiceRoller.D4(); // 1d4
 
         int hpBefore = target.Stats.CurrentHP;
-        target.Stats.CurrentHP -= totalDamage;
+        DamageResolutionResult dealt = DealDamage(target, totalDamage, DamagePackets.Spell("Heat Metal", DamageType.Fire));
         int hpAfter = target.Stats.CurrentHP;
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("🔥", $"Heat Metal on {target.Stats.CharacterName}: {phase} — {diceCount}d4 = {totalDamage} fire [{hpBefore}→{hpAfter} HP]"));
-
-        CheckConcentrationOnDamage(target, totalDamage);
+        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("🔥", $"Heat Metal on {target.Stats.CharacterName}: {phase} — {diceCount}d4 = {totalDamage} fire{(dealt.FinalDamage != totalDamage ? $" → {dealt.FinalDamage}{DescribeMitigation(dealt)}" : "")} [{hpBefore}→{hpAfter} HP]"));
 
         if (target.Stats.IsDead)
-        {
-            target.OnDeath();
-            HandleSummonDeathCleanup(target);
             CombatUI?.ShowCombatLog(CombatLogHelper.Death("💀", $"{target.Stats.CharacterName} has been slain by Heat Metal!"));
-        }
 
         UpdateAllStatsUI();
     }

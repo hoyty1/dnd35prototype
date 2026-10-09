@@ -82,20 +82,14 @@ public partial class GameManager
                 saveResult.AppendHalfDamageLog(sb);
 
                 int hpBefore = target.Stats.CurrentHP;
-                target.Stats.TakeDamage(damage);
+                DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Cold, saveResult.Saved));
                 int hpAfter = target.Stats.CurrentHP;
 
-                sb.AppendLine($"  Damage: {damage} cold");
+                sb.AppendLine($"  Damage: {dealt.FinalDamage} cold{DescribeMitigation(dealt)}");
                 sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
-                CheckConcentrationOnDamage(target, damage);
-
                 if (target.Stats.IsDead)
-                {
-                    target.OnDeath();
-                    HandleSummonDeathCleanup(target);
                     sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
-                }
                 sb.AppendLine();
             }
         }
@@ -181,20 +175,14 @@ public partial class GameManager
                 saveResult.AppendHalfDamageLog(sb);
 
                 int hpBefore = target.Stats.CurrentHP;
-                target.Stats.TakeDamage(damage);
+                DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Electricity, saveResult.Saved, true));
                 int hpAfter = target.Stats.CurrentHP;
 
-                sb.AppendLine($"  Damage: {damage} electricity");
+                sb.AppendLine($"  Damage: {dealt.FinalDamage} electricity{DescribeMitigation(dealt)}");
                 sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
-                CheckConcentrationOnDamage(target, damage);
-
                 if (target.Stats.IsDead)
-                {
-                    target.OnDeath();
-                    HandleSummonDeathCleanup(target);
                     sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
-                }
                 sb.AppendLine();
             }
         }
@@ -622,19 +610,17 @@ public partial class GameManager
                 // Swarm damage: 2d6 (no save, no SR)
                 int swarmDmg = DiceRoller.D6() + DiceRoller.D6();
 
+                // Resolved as spell damage, so damage reduction does not apply (MM p.307). Whether the summoned
+                // locust swarms' attacks should take DR as swarm attacks (MM p.316) is an owner question (SPL-004).
                 int hpBefore = target.Stats.CurrentHP;
-                target.Stats.TakeDamage(swarmDmg);
+                DamageResolutionResult dealt = DealDamage(target, swarmDmg, DamagePackets.Spell(spell.Name, DamageType.Piercing));
                 int hpAfter = target.Stats.CurrentHP;
 
-                sb.AppendLine($"  🦗 Swarm damage: 2d6 = {swarmDmg}");
+                sb.AppendLine($"  🦗 Swarm damage: 2d6 = {swarmDmg}{(dealt.FinalDamage != swarmDmg ? $" → {dealt.FinalDamage}" : "")}{DescribeMitigation(dealt)}");
                 sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
-
-                CheckConcentrationOnDamage(target, swarmDmg);
 
                 if (target.Stats.IsDead)
                 {
-                    target.OnDeath();
-                    HandleSummonDeathCleanup(target);
                     sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
                     sb.AppendLine();
                     continue;
@@ -709,20 +695,14 @@ public partial class GameManager
                 int thornDmg = Mathf.Max(1, 25 - target.Stats.ArmorClass);
 
                 int hpBefore = target.Stats.CurrentHP;
-                target.Stats.TakeDamage(thornDmg);
+                DamageResolutionResult dealt = DealDamage(target, thornDmg, DamagePackets.Spell(spell.Name, DamageType.Slashing)); // slashing, PHB p.300
                 int hpAfter = target.Stats.CurrentHP;
 
-                sb.AppendLine($"  🌿 {target.Stats.CharacterName} caught in thorns! 25 - AC({target.Stats.ArmorClass}) = {thornDmg} piercing damage.");
+                sb.AppendLine($"  🌿 {target.Stats.CharacterName} caught in thorns! 25 - AC({target.Stats.ArmorClass}) = {thornDmg} slashing damage{DescribeMitigation(dealt)}.");
                 sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
-                CheckConcentrationOnDamage(target, thornDmg);
-
                 if (target.Stats.IsDead)
-                {
-                    target.OnDeath();
-                    HandleSummonDeathCleanup(target);
                     sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
-                }
                 sb.AppendLine();
             }
         }

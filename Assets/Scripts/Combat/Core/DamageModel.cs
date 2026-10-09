@@ -257,3 +257,88 @@ public static class DamageTextUtils
         return tags;
     }
 }
+
+/// <summary>
+/// Packets for damage that is not a weapon hit (SPL-004). Every such damage goes through
+/// <see cref="CharacterStats.ApplyIncomingDamage"/> (normally through <c>GameManager.DealDamage</c>), which applies
+/// immunity and resistance by type and damage reduction only for weapon and natural attacks.
+/// RAW: damage reduction does not reduce energy damage (even nonmagical), spells, spell-like abilities or supernatural
+/// abilities (MM p.307); it does reduce a swarm's attack, which is nonmagical (MM p.316); resistance to energy ignores
+/// the stated amount each time the creature takes damage of that type (MM p.314).
+/// </summary>
+public static class DamagePackets
+{
+    /// <summary>Acid, cold, electricity, fire or sonic.</summary>
+    public static bool IsEnergy(DamageType type)
+        => type == DamageType.Fire || type == DamageType.Cold || type == DamageType.Acid
+            || type == DamageType.Electricity || type == DamageType.Sonic;
+
+    /// <summary>Bludgeoning, piercing or slashing.</summary>
+    public static bool IsPhysical(DamageType type)
+        => type == DamageType.Bludgeoning || type == DamageType.Piercing || type == DamageType.Slashing;
+
+    /// <summary>The damage-reduction bypass tag of a physical damage type (none for other types).</summary>
+    public static DamageBypassTag PhysicalTag(DamageType type)
+    {
+        switch (type)
+        {
+            case DamageType.Bludgeoning: return DamageBypassTag.Bludgeoning;
+            case DamageType.Piercing: return DamageBypassTag.Piercing;
+            case DamageType.Slashing: return DamageBypassTag.Slashing;
+            default: return DamageBypassTag.None;
+        }
+    }
+
+    /// <summary>
+    /// Damage from a spell or spell-like effect, of one type: immunity and resistance of that type apply, damage
+    /// reduction never does (MM p.307; Spiritual Weapon "strikes as a spell", PHB p.283).
+    /// <paramref name="savedForHalf"/> is true when the target made a Reflex save for half, which Fire Shield turns
+    /// into no damage (PHB p.230).
+    /// </summary>
+    public static DamagePacket Spell(string sourceName, DamageType type, bool savedForHalf = false, bool isRanged = false)
+        => new DamagePacket
+        {
+            Types = new HashSet<DamageType> { type },
+            AttackTags = DamageBypassTag.None,
+            IsRanged = isRanged,
+            IsNonlethal = false,
+            Source = AttackSource.Spell,
+            SourceName = sourceName,
+            SavedForHalf = savedForHalf,
+        };
+
+    /// <summary>
+    /// Damage from a supernatural ability such as a breath weapon: immunity and resistance apply, damage reduction does
+    /// not (MM p.307).
+    /// </summary>
+    public static DamagePacket Supernatural(string sourceName, DamageType type, bool savedForHalf = false)
+        => new DamagePacket
+        {
+            Types = new HashSet<DamageType> { type },
+            AttackTags = DamageBypassTag.None,
+            IsRanged = false,
+            IsNonlethal = false,
+            Source = AttackSource.Other,
+            SourceName = sourceName,
+            SavedForHalf = savedForHalf,
+        };
+
+    /// <summary>
+    /// Damage from a creature's own nonmagical attack that is not a weapon roll (a swarm attack, spittle): physical
+    /// damage counts as a natural attack, so damage reduction applies unless the damage type bypasses it (MM p.316);
+    /// energy damage ignores damage reduction (MM p.307).
+    /// </summary>
+    public static DamagePacket CreatureAttack(string sourceName, DamageType type, bool isRanged = false)
+    {
+        bool physical = IsPhysical(type);
+        return new DamagePacket
+        {
+            Types = new HashSet<DamageType> { type },
+            AttackTags = PhysicalTag(type) | (isRanged && physical ? DamageBypassTag.Ranged : DamageBypassTag.None),
+            IsRanged = isRanged,
+            IsNonlethal = false,
+            Source = physical ? AttackSource.Natural : AttackSource.Other,
+            SourceName = sourceName,
+        };
+    }
+}

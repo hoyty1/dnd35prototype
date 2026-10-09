@@ -299,16 +299,17 @@ public class BlackTentaclesAreaEffect : PersistentAreaEffect
 
         int damage = Random.Range(1, DamageDie + 1) + DamageBonus;
         int previousHp = creature.Stats.CurrentHP;
-        creature.Stats.CurrentHP -= damage;
+        // Spell damage: temporary hit points, resistance and death handling apply; damage reduction does not
+        // (MM p.307; SPL-004). Death is at -10 HP (PHB p.145), not at 0.
+        DamageResolutionResult dealt = DealSpellDamage(creature, damage, DamageType.Bludgeoning);
 
-        LogEffect($"  🦑 Tentacles crush {creature.Stats.CharacterName} for {damage} bludgeoning damage! " +
+        LogEffect($"  🦑 Tentacles crush {creature.Stats.CharacterName} for {dealt.FinalDamage} bludgeoning damage{GameManager.DescribeMitigation(dealt)}! " +
             $"(HP: {previousHp} → {creature.Stats.CurrentHP})");
 
         // Check for death
-        if (creature.Stats.CurrentHP <= 0 && !creature.Stats.IsDead)
+        if (creature.Stats.IsDead)
         {
             LogEffect($"  💀 {creature.Stats.CharacterName} is crushed to death by the tentacles!");
-            creature.OnDeath();
         }
     }
 

@@ -340,6 +340,11 @@ public class SpellData
     public int DamageDice;              // Sides of damage die (e.g., 6 for d6)
     public int DamageCount;             // Number of dice
     public int BonusDamage;             // Flat bonus (e.g., per missile for Magic Missile)
+    /// <summary>
+    /// True when a custom handler of both cast pipelines rolls and deals this Damage spell's damage, so the generic
+    /// damage branch of SpellCaster.Cast deals none (SPL-124). DamageDice/DamageCount stay set for AI scoring and UI.
+    /// </summary>
+    public bool DamageResolvedByHandler;
     public string DamageType;           // "fire", "cold", "acid", "force", "negative", "positive"
     public bool AutoHit;                // True for Magic Missile (no attack roll)
     public bool AllowsSavingThrow;      // Whether targets get a save

@@ -819,26 +819,35 @@ public partial class GameManager
                 // D&D 3.5e PHB p.206: Blinking creatures take half damage from area attacks
                 bool targetIsBlinking = target.HasActiveBlinkEffect;
                 if (targetIsBlinking)
-                    totalDamage = Mathf.Max(1, totalDamage / 2);
+                {
+                    // Halve the total (at least 1), then split it so each part keeps its own type: the cold
+                    // part is halved and the bludgeoning part takes the rest, never above its own roll.
+                    int halved = Mathf.Max(1, totalDamage / 2);
+                    coldDamage /= 2;
+                    bludgeoningDamage = Mathf.Min(bludgeoningDamage, halved - coldDamage);
+                    coldDamage = halved - bludgeoningDamage;
+                    totalDamage = halved;
+                }
 
                 sb.AppendLine($"  Damage: {bludgeoningDamage} bludgeoning + {coldDamage} cold = {totalDamage} total (no save)");
                 if (targetIsBlinking)
                     sb.AppendLine($"  Blink: area damage halved");
 
+                // Two parts, each mitigated by its own type (SPL-004): cold immunity or resistance reduces only the
+                // cold part; the bludgeoning part is spell damage, which damage reduction does not reduce (MM p.307).
                 int hpBefore = target.Stats.CurrentHP;
-                target.Stats.TakeDamage(totalDamage);
+                DamageResolutionResult bludgeoningDealt = ApplyDamagePacket(target, bludgeoningDamage, DamagePackets.Spell(spell.Name, DamageType.Bludgeoning));
+                DamageResolutionResult coldDealt = ApplyDamagePacket(target, coldDamage, DamagePackets.Spell(spell.Name, DamageType.Cold));
+                int taken = bludgeoningDealt.FinalDamage + coldDealt.FinalDamage;
+                AfterDamageTaken(target, taken);
                 int hpAfter = target.Stats.CurrentHP;
 
+                if (taken != totalDamage)
+                    sb.AppendLine($"  Damage taken: {bludgeoningDealt.FinalDamage} bludgeoning{DescribeMitigation(bludgeoningDealt)} + {coldDealt.FinalDamage} cold{DescribeMitigation(coldDealt)} = {taken}");
                 sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
-                CheckConcentrationOnDamage(target, totalDamage);
-
                 if (target.Stats.IsDead)
-                {
-                    target.OnDeath();
-                    HandleSummonDeathCleanup(target);
                     sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
-                }
 
                 sb.AppendLine();
             }

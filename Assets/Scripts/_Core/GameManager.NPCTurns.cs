@@ -1438,7 +1438,12 @@ public partial class GameManager
         if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && result.Success)
             handledLesserGlobe = TryResolveLesserGlobeSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledLesserGlobe && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        // Searing Light's damage by creature type comes from its handler on both sides (SPL-054, SPL-124).
+        bool handledSearingLight = false;
+        if (!handledCauseFear && !handledLesserGlobe && result.Success)
+            handledSearingLight = TryResolveSearingLightSpellEffect(npc, target, spell, result);
+
+        if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledLesserGlobe && !handledSearingLight && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)
@@ -1516,31 +1521,15 @@ public partial class GameManager
             if (victim.HasActiveBlinkEffect)
                 damageToApply = Mathf.Max(damageToApply > 0 ? 1 : 0, damageToApply / 2);
 
-            DamagePacket packet = new DamagePacket
-            {
-                RawDamage = damageToApply,
-                Types = new HashSet<DamageType> { DamageType.Acid },
-                AttackTags = DamageBypassTag.None,
-                IsRanged = true,
-                IsNonlethal = false,
-                Source = AttackSource.Other,
-                SourceName = "Bombardier Beetle Acid Spray"
-            };
-
-            DamageResolutionResult mitigation = victim.Stats.ApplyIncomingDamage(damageToApply, packet);
+            // Acid (energy) from an extraordinary ability: immunity and resistance apply, damage reduction does not
+            // (MM p.307); then the shared concentration and death checks (SPL-004).
+            DamagePacket packet = DamagePackets.CreatureAttack("Bombardier Beetle Acid Spray", DamageType.Acid, true);
+            packet.SavedForHalf = saveSuccess;
+            DamageResolutionResult mitigation = DealDamage(victim, damageToApply, packet);
             int finalDamage = mitigation.FinalDamage;
 
             string blinkAreaNote = victim.HasActiveBlinkEffect ? " [Blink: halved]" : "";
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {victim.Stats.CharacterName}: Reflex d20({saveRoll}) + {victim.Stats.ReflexSave} = {saveTotal} {(saveSuccess ? "SUCCESS" : "FAIL")} | Acid {finalDamage} damage{blinkAreaNote}"));
-
-            if (finalDamage > 0)
-                CheckConcentrationOnDamage(victim, finalDamage);
-
-            if (victim.Stats.IsDead)
-            {
-                victim.OnDeath();
-                HandleSummonDeathCleanup(victim);
-            }
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"   {victim.Stats.CharacterName}: Reflex d20({saveRoll}) + {victim.Stats.ReflexSave} = {saveTotal} {(saveSuccess ? "SUCCESS" : "FAIL")} | Acid {finalDamage} damage{blinkAreaNote}{DescribeMitigation(mitigation)}"));
         }
 
         int cooldown = DiceService.D4("Acid spray cooldown 1d4");
@@ -1548,6 +1537,7 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(CombatLogHelper.Expired("⏱", $"Acid spray recharges in {cooldown} rounds."));
 
         UpdateAllStatsUI();
+        EvaluateCombatEnd("BombardierAcidSpray");
         return true;
     }
 
@@ -1955,9 +1945,10 @@ public partial class GameManager
         }
 
         // Roll damage: DamageCount × d(DamageDice)
-        int totalDamage = 0;
-        for (int i = 0; i < bw.DamageCount; i++)
-            totalDamage += UnityEngine.Random.Range(1, bw.DamageDice + 1);
+        // A breath with no damage dice (the gorgon's petrifying breath) deals none.
+        int totalDamage = (bw.DamageCount > 0 && bw.DamageDice > 0)
+            ? DiceService.RollMultiple(bw.DamageCount, bw.DamageDice, "Breath weapon damage")
+            : 0;
 
         // Gather targets in the area
         List<CharacterController> allChars = GetAllCharacters();
@@ -1985,59 +1976,33 @@ public partial class GameManager
             CharacterController target = targets[t];
             log.AppendLine($"  --- {target.Stats.CharacterName} ---");
 
-            // Check damage immunity
-            if (target.Stats.DamageImmunities != null && target.Stats.DamageImmunities.Contains(bw.DamageType))
-            {
-                log.AppendLine($"  IMMUNE to {bw.DamageType}! No damage taken.");
-                log.AppendLine();
-                continue;
-            }
-
-            // Roll saving throw
+            // Roll saving throw (raw d20 + save: AI-040)
             int saveBonus = bw.IsReflexSave ? target.Stats.ReflexSave : target.Stats.FortitudeSave;
             int saveRoll = DiceRoller.D20();
             int saveTotal = saveRoll + saveBonus;
             bool saved = saveTotal >= bw.SaveDC;
 
-            int damageTaken = saved ? totalDamage / 2 : totalDamage;
-
-            // Check damage resistance
-            if (target.Stats.DamageResistances != null)
-            {
-                for (int r = 0; r < target.Stats.DamageResistances.Count; r++)
-                {
-                    var res = target.Stats.DamageResistances[r];
-                    if (res != null && res.Type == bw.DamageType && res.Amount > 0)
-                    {
-                        int reduced = Mathf.Min(damageTaken, res.Amount);
-                        damageTaken -= reduced;
-                        log.AppendLine($"  Resistance ({bw.DamageType} {res.Amount}): -{reduced} damage");
-                        break;
-                    }
-                }
-            }
+            int damageRolled = saved ? totalDamage / 2 : totalDamage;
 
             string saveResult = saved ? "SAVED" : "FAILED";
             log.AppendLine($"  {(bw.IsReflexSave ? "Reflex" : "Fortitude")} save DC {bw.SaveDC}: d20={saveRoll}+{saveBonus}={saveTotal} - {saveResult}!");
 
-            int hpBefore = target.Stats.CurrentHP;
-            if (damageTaken > 0)
-                target.Stats.TakeDamage(damageTaken);
-            int hpAfter = target.Stats.CurrentHP;
-
-            log.AppendLine($"  Damage: {damageTaken} {bw.DamageType}{(saved ? " (half)" : "")}");
-            log.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
-
-            if (target.Stats.IsDead || hpAfter <= -10)
+            // A breath weapon is a supernatural ability: immunity, Protection from Energy, resistance and Fire Shield
+            // apply by its energy type, damage reduction does not (MM p.307); then the concentration and death checks
+            // (SPL-004). The combat-end check runs once after every target.
+            if (damageRolled > 0)
             {
-                target.OnDeath();
-                HandleSummonDeathCleanup(target);
-                log.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
+                int hpBefore = target.Stats.CurrentHP;
+                DamageResolutionResult dealt = DealDamage(target, damageRolled,
+                    DamagePackets.Supernatural(npc.Stats.CharacterName + "'s breath weapon", bw.DamageType, saved && bw.IsReflexSave));
+                int hpAfter = target.Stats.CurrentHP;
+
+                log.AppendLine($"  Damage: {dealt.FinalDamage} {bw.DamageType}{(saved ? " (half)" : "")}{DescribeMitigation(dealt)}");
+                log.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
             }
 
-            // Check concentration
-            if (damageTaken > 0)
-                CheckConcentrationOnDamage(target, damageTaken);
+            if (target.Stats.IsDead)
+                log.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
 
             log.AppendLine();
         }
@@ -2047,6 +2012,9 @@ public partial class GameManager
         CombatUI?.ShowCombatLog(log.ToString());
         if (LogAttacksToConsole)
             Debug.Log(log.ToString());
+
+        UpdateAllStatsUI();
+        EvaluateCombatEnd("NPCBreathWeapon");
 
         yield return new WaitForSeconds(1.0f);
     }

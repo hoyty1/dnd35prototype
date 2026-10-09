@@ -5645,11 +5645,12 @@ public partial class GameManager : MonoBehaviour
                 {
                     if (clCheck.Mishap)
                     {
-                        // Scroll mishap: deal damage and consume scroll
-                        actor.Stats.TakeDamage(clCheck.MishapDamage);
+                        // Scroll mishap: a surge of magical energy (DMG p.238); untyped magic damage through the
+                        // mitigation pipeline, then concentration and death (SPL-004).
+                        DamageResolutionResult mishapDealt = DealDamage(actor, clCheck.MishapDamage, DamagePackets.Spell(scrollItem.Name + " mishap", DamageType.Untyped));
                         if (inv != null) ConsumeOneFromStack(inv, inventoryIndex, scrollItem);
                         UpdateAllStatsUI();
-                        resultMessage = $"📜 SCROLL MISHAP! {charName} takes {clCheck.MishapDamage} damage from uncontrolled magical energy! Scroll destroyed.";
+                        resultMessage = $"📜 SCROLL MISHAP! {charName} takes {mishapDealt.FinalDamage} damage from uncontrolled magical energy{DescribeMitigation(mishapDealt)}! Scroll destroyed.";
                         return true; // Return true so the calling code doesn't show a second error
                     }
                     else

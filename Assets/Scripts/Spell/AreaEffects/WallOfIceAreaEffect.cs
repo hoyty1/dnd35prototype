@@ -205,15 +205,12 @@ public class WallOfIceAreaEffect : PersistentAreaEffect, ILineOfEffectBlocker
         {
             // Creatures caught when wall forms take CL cold damage (1 HP per CL)
             int coldDamage = Mathf.Max(1, CasterLevel);
-            character.Stats.TakeDamage(coldDamage);
+            DamageResolutionResult dealt = DealSpellDamage(character, coldDamage, DamageType.Cold);
 
-            LogEffect($"  ❄ {character.Stats.CharacterName} is caught in the forming Wall of Ice: {coldDamage} cold damage!");
+            LogEffect($"  ❄ {character.Stats.CharacterName} is caught in the forming Wall of Ice: {dealt.FinalDamage} cold damage{GameManager.DescribeMitigation(dealt)}!");
 
             if (character.Stats.IsDead)
-            {
-                character.OnDeath();
                 LogEffect($"  💀 {character.Stats.CharacterName} is frozen to death!");
-            }
         }
         else
         {
@@ -604,13 +601,12 @@ public class WallOfIceAreaEffect : PersistentAreaEffect, ILineOfEffectBlocker
 
         // Line mode: 1d6 + CL cold damage
         int coldDamage = DiceRoller.D6() + CasterLevel;
-        character.Stats.TakeDamage(coldDamage);
+        DamageResolutionResult dealt = DealSpellDamage(character, coldDamage, DamageType.Cold);
 
-        LogEffect($"❄️ {character.Stats.CharacterName} takes {coldDamage} cold damage passing through breached Wall of Ice at ({cell.x},{cell.y})");
+        LogEffect($"❄️ {character.Stats.CharacterName} takes {dealt.FinalDamage} cold damage{GameManager.DescribeMitigation(dealt)} passing through breached Wall of Ice at ({cell.x},{cell.y})");
 
         if (character.Stats.IsDead)
         {
-            character.OnDeath();
             LogEffect($"  💀 {character.Stats.CharacterName} is frozen to death passing through the Wall of Ice!");
         }
     }

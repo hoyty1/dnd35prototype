@@ -73,18 +73,14 @@ public partial class GameManager
         }
 
         int hpBefore = target.Stats.CurrentHP;
-        target.Stats.TakeDamage(damage);
+        DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Untyped, false, true));
         int hpAfter = target.Stats.CurrentHP;
+        if (dealt.FinalDamage != damage)
+            sb.AppendLine($"  Damage taken: {dealt.FinalDamage}{DescribeMitigation(dealt)}");
         sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
-        CheckConcentrationOnDamage(target, damage);
-
         if (target.Stats.IsDead)
-        {
-            target.OnDeath();
-            HandleSummonDeathCleanup(target);
             sb.AppendLine($"  💀 {target.Stats.CharacterName} is reduced to fine dust!");
-        }
 
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
@@ -159,9 +155,8 @@ public partial class GameManager
                 if (damage > 0)
                 {
                     int hpBefore = target.Stats.CurrentHP;
-                    target.Stats.TakeDamage(damage);
-                    sb.AppendLine($"    {target.Stats.CharacterName}: {hpBefore} → {target.Stats.CurrentHP} HP");
-                    CheckConcentrationOnDamage(target, damage);
+                    DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Untyped, saveResult.Saved));
+                    sb.AppendLine($"    {target.Stats.CharacterName}: {hpBefore} → {target.Stats.CurrentHP} HP{DescribeMitigation(dealt)}");
                 }
 
                 // Blindness on failed save (permanent)
@@ -172,11 +167,7 @@ public partial class GameManager
                 }
 
                 if (target.Stats.IsDead)
-                {
-                    target.OnDeath();
-                    HandleSummonDeathCleanup(target);
                     sb.AppendLine($"    💀 {target.Stats.CharacterName} has been destroyed!");
-                }
 
                 sb.AppendLine();
             }
@@ -235,16 +226,11 @@ public partial class GameManager
 
                     // Debris damage: simplified (structures collapse for 8d6 in PHB, minor outdoors)
                     int debrisDmg = DiceRoller.D6();
-                    target.Stats.TakeDamage(debrisDmg);
-                    sb.AppendLine($"    Debris: {debrisDmg} bludgeoning damage");
-                    CheckConcentrationOnDamage(target, debrisDmg);
+                    DamageResolutionResult dealt = DealDamage(target, debrisDmg, DamagePackets.Spell(spell.Name, DamageType.Bludgeoning));
+                    sb.AppendLine($"    Debris: {dealt.FinalDamage} bludgeoning damage{DescribeMitigation(dealt)}");
 
                     if (target.Stats.IsDead)
-                    {
-                        target.OnDeath();
-                        HandleSummonDeathCleanup(target);
                         sb.AppendLine($"    💀 {target.Stats.CharacterName} crushed!");
-                    }
                 }
                 else
                 {
@@ -435,16 +421,11 @@ public partial class GameManager
 
             if (saved) damage = Mathf.Max(1, damage / 2);
             int hpBefore = target.Stats.CurrentHP;
-            target.Stats.TakeDamage(damage);
-            sb.AppendLine($"  Damage: {damage} | {target.Stats.CharacterName}: {hpBefore} → {target.Stats.CurrentHP} HP");
-            CheckConcentrationOnDamage(target, damage);
+            DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Positive));
+            sb.AppendLine($"  Damage: {dealt.FinalDamage}{DescribeMitigation(dealt)} | {target.Stats.CharacterName}: {hpBefore} → {target.Stats.CurrentHP} HP");
 
             if (target.Stats.IsDead)
-            {
-                target.OnDeath();
-                HandleSummonDeathCleanup(target);
                 sb.AppendLine($"  💀 {target.Stats.CharacterName} destroyed by positive energy!");
-            }
         }
         else
         {

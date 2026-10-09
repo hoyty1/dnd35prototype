@@ -69,8 +69,8 @@ public class FireballAreaEffect : PersistentAreaEffect
             damage /= 2;
 
         damage = Mathf.Max(0, damage);
-        character.Stats.TakeDamage(damage);
+        DamageResolutionResult dealt = DealSpellDamage(character, damage, DamageType.Fire, saveSucceeded);
 
-        LogEffect($"{character.Stats.CharacterName} Reflex: d20({roll}) + {reflexSave} = {total} vs DC {SaveDC} -> {(saveSucceeded ? "half" : "full")} {damage} fire damage.");
+        LogEffect($"{character.Stats.CharacterName} Reflex: d20({roll}) + {reflexSave} = {total} vs DC {SaveDC} -> {(saveSucceeded ? "half" : "full")} {dealt.FinalDamage} fire damage{GameManager.DescribeMitigation(dealt)}.");
     }
 }

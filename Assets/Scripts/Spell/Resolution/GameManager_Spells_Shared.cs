@@ -142,9 +142,12 @@ public partial class GameManager
         if (saveSuccess)
             damage = Mathf.Max(1, damage / 2);
 
-        // Apply damage
-        target.Stats.TakeDamage(damage);
+        // Apply damage: untyped divine (holy/unholy/order's/chaos) damage through the mitigation pipeline (SPL-004).
+        // The single-target pipeline runs concentration, death and the combat-end check from result.
+        DamageResolutionResult dealt = ApplyDamagePacket(target, damage, DamagePackets.Spell(spellName, DamageType.Untyped));
+        damage = dealt.FinalDamage;
         result.DamageDealt = damage;
+        result.TargetKilled |= target.Stats.IsDead;
 
         // Apply condition only if save failed and full damage alignment
         int conditionDuration = 0;
@@ -260,21 +263,15 @@ public partial class GameManager
                 saveResult.AppendHalfDamageLog(sb);
 
                 int hpBefore = target.Stats.CurrentHP;
-                target.Stats.TakeDamage(damage);
+                DamageResolutionResult dealt = DealDamage(target, damage,
+                    DamagePackets.Spell(spellName, isFireball ? DamageType.Fire : DamageType.Electricity, savePassed, !isCallLightning));
                 int hpAfter = target.Stats.CurrentHP;
 
-                sb.AppendLine($"  Damage: {damage} {damageType}");
+                sb.AppendLine($"  Damage: {dealt.FinalDamage} {damageType}{DescribeMitigation(dealt)}");
                 sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
-                // Check concentration for spell damage on the target
-                CheckConcentrationOnDamage(target, damage);
-
                 if (target.Stats.IsDead)
-                {
-                    target.OnDeath();
-                    HandleSummonDeathCleanup(target);
                     sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
-                }
 
                 sb.AppendLine();
             }

@@ -73,9 +73,15 @@ public partial class GameManager
             damageDesc = $"{numDice}d8 = {fullDamage}, halved to {damage} (living creature)";
         }
 
-        // Apply damage
-        target.Stats.TakeDamage(damage);
+        // Apply damage: untyped (divine light) through the mitigation pipeline (SPL-004). The single-target
+        // pipeline runs concentration, death and the combat-end check from result.
+        DamageResolutionResult dealt = ApplyDamagePacket(target, damage, DamagePackets.Spell(spell.Name, DamageType.Untyped, false, true));
+        string mitigationNote = DescribeMitigation(dealt);
+        damage = dealt.FinalDamage;
         result.DamageDealt = damage;
+        result.TargetKilled |= target.Stats.IsDead;
+        if (!string.IsNullOrEmpty(mitigationNote))
+            damageDesc += $" → {damage}{mitigationNote}";
 
         // Log
         string typeLabel = isUndead ? "☀💀" : isConstruct ? "☀🔧" : "☀";
@@ -325,10 +331,11 @@ public partial class GameManager
                     sb.AppendLine($"  Blink: area damage halved");
 
                 int hpBefore = target.Stats.CurrentHP;
-                target.Stats.TakeDamage(damage);
+                // Fortitude half: Fire Shield's no-damage-on-a-save covers Reflex saves only (PHB p.230).
+                DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Sonic));
                 int hpAfter = target.Stats.CurrentHP;
 
-                sb.AppendLine($"  Damage: {damage} sonic");
+                sb.AppendLine($"  Damage: {dealt.FinalDamage} sonic{DescribeMitigation(dealt)}");
                 sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
                 if (deafened && !target.Stats.IsDead)
@@ -337,14 +344,8 @@ public partial class GameManager
                     sb.AppendLine($"  🔇 {target.Stats.CharacterName} is DEAFENED for {deafRounds} rounds!");
                 }
 
-                CheckConcentrationOnDamage(target, damage);
-
                 if (target.Stats.IsDead)
-                {
-                    target.OnDeath();
-                    HandleSummonDeathCleanup(target);
                     sb.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
-                }
 
                 sb.AppendLine();
             }
@@ -577,9 +578,13 @@ public partial class GameManager
             int damage = DiceService.D8("Spiritual Weapon damage 1d8") + damageBonus;
             damage = Mathf.Max(1, damage);
 
-            target.Stats.TakeDamage(damage);
+            // Force damage that "strikes as a spell, not as a weapon", so damage reduction does not apply (PHB p.283).
+            DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell("Spiritual Weapon", DamageType.Force));
+            damage = dealt.FinalDamage;
 
-            sb.Append($"  ⚔ Spiritual Weapon attacks {target.Stats.CharacterName}: {attackRoll}+{bab}+{wisMod}={totalAttack} vs AC {targetAC} — HIT for {damage} force damage!");
+            sb.Append($"  ⚔ Spiritual Weapon attacks {target.Stats.CharacterName}: {attackRoll}+{bab}+{wisMod}={totalAttack} vs AC {targetAC} — HIT for {damage} force damage{DescribeMitigation(dealt)}!");
+            if (target.Stats.IsDead)
+                sb.Append($" 💀 {target.Stats.CharacterName} has been slain!");
             Debug.Log($"[SpiritualWeapon] Hit {target.Stats.CharacterName}: roll={attackRoll}+BAB{bab}+WIS{wisMod}={totalAttack} vs AC{targetAC}, damage={damage}");
         }
         else

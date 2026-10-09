@@ -93,7 +93,7 @@ Other GameObjects created at runtime:
 
 #### GameManager singleton and lifecycle
 
-`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 54 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
+`GameManager` (`_Core/GameManager.cs:23`) is a MonoBehaviour on the `GameBootstrap` GameObject. It is a partial class split over 55 files (about 53,000 lines; `_Core/GameManager.ScenarioHarness.cs` is editor-only), and it owns all session state:
 
 - the party and enemy lists;
 - `CurrentPhase` (`TurnPhase {PCTurn, NPCTurn, CombatOver}`; a backing field whose setter raises the inert `ScenarioHooks.PhaseChanged` on a change) and `CurrentSubPhase` (13-value `PlayerSubPhase`), both at :207-241;
@@ -140,14 +140,15 @@ None of these exist in the scene file. The `??` operator bypasses Unity's overlo
 
 ### GameManager partial files
 
-There are 54 files, found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Six files with system-sounding names are also partials.
+There are 55 files, found with `grep -rlE '^\s*public partial class GameManager\b' Assets/Scripts`. Both naming styles occur: `GameManager.X.cs` and `GameManager_X.cs`. Six files with system-sounding names are also partials.
 
 | Folder / file | Lines | Responsibility |
 |---|---|---|
-| **_Core/** (11) | | |
+| **_Core/** (12) | | |
 | GameManager.cs | 11,467 | Main partial: singleton, state and enums, Awake/Start wiring, creation callbacks, encounter selection, hub, preset/random setup, rest and reset, `Update`/input routing, `StartCombat`, turn callbacks, `StartPCTurn`/`ShowActionChoices`, item/scroll/wand/staff use, 31 of the 51 GameManager `On*ButtonPressed` handlers, `*ForAI` wrappers (~10879-11026), path and hover previews. |
 | GameManager.CombatActions.cs | 2,697 | `OnCellClicked` routing by sub-phase; movement with AoO; attack target clicks; off-hand, full attack and special-attack execution; hand-off to `CombatFlowService`; `EndActivePCTurn`. |
 | GameManager.CombatEnd.cs | 268 | The shared combat-end check `EvaluateCombatEnd` (both sides, by team, through `CombatEndRules`; `GetCombatEndSides` remembers which sides had members this combat), `CheckCombatVictory`, XP registration of defeated enemies, victory and defeat handling, the defeat screen and `StartNewPartyAfterDefeat` (CORE-011, CORE-037, CORE-034, CORE-001). |
+| GameManager.Damage.cs | 79 | The shared damage path for everything but weapon hits (SPL-004): `DealDamage` (`ApplyIncomingDamage` with a `DamagePackets` packet, then `AfterDamageTaken`: concentration and death), `ApplyDamagePacket` (mitigation only, for pipelines that read `SpellResult`), `DescribeMitigation` (log suffix). The combat-end check stays with the caller. |
 | GameManager.CombatFlowAccessors.cs | 130 | `Combat_*` getters, setters and forwarders over private state. |
 | GameManager.LootCollection.cs | 800 | Post-combat loot, XP flow, level-up sequence, `ContinueToRestAndNextCombat`. |
 | GameManager.NPCSetup.cs | 1,027 | `SetupEnemyEncounter` (pool growth `EnsureNPCPoolSize` and `CreateNPCPoolSlot`, spawn squares through `EncounterSpawnPlacement`, ENC-001), `ResetCharacterSlotForSpawn` and `ResetPCSlotForNewCharacter` (CRE-046), `InitializeNPCFromDefinition`, `BuildRuntimeAIProfile`, spawn overrides. |
@@ -243,7 +244,7 @@ There are 675 `.cs` files (about 305K lines, recounted 2026-10-07). The layout c
 
 ```
 Assets/Scripts/
-  _Core/ (17)            GameManager.cs + 10 GameManager.*.cs partials (ScenarioHarness is editor-only),
+  _Core/ (18)            GameManager.cs + 11 GameManager.*.cs partials (ScenarioHarness is editor-only),
                          SceneBootstrap, GameEventSystem, ScenarioHooks, GameSettings, GameConstants, PlaneType
     Commands/ (3)        dormant command pattern
   AI/ (10)               AISpellcastingStrategist, LastKnownPositionTracker, SpellCategoryClassifier,

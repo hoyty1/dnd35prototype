@@ -400,7 +400,8 @@ public static class SpellCaster
         }
 
         // ========== DAMAGE ==========
-        if (spell.EffectType == SpellEffectType.Damage && result.AttackHit)
+        // A spell whose custom handler deals the damage skips this branch, or the target takes both (SPL-124).
+        if (spell.EffectType == SpellEffectType.Damage && result.AttackHit && !spell.DamageResolvedByHandler)
         {
             result.TargetHPBefore = targetStats.CurrentHP;
 
@@ -492,7 +493,10 @@ public static class SpellCaster
                 IsRanged = isRangedSpellDamage,
                 IsNonlethal = false,
                 Source = AttackSource.Spell,
-                SourceName = spell.Name
+                SourceName = spell.Name,
+                // Fire Shield turns a successful Reflex save for half into no damage (PHB p.230; SPL-004).
+                SavedForHalf = result.RequiredSave && result.SaveSucceeded && spell.SaveHalves
+                    && spell.SavingThrowType == "Reflex"
             };
 
             DamageResolutionResult mitigation = targetStats.ApplyIncomingDamage(result.DamageDealt, packet);

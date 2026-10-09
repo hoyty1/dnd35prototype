@@ -112,7 +112,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 106;
+        public const int Count = 107;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -225,6 +225,7 @@ namespace Tests.Scenarios
             yield return S("creature-progression", CreatureProgression);
             yield return S("spell-save-dc", SpellSaveDc);
             yield return S("spell-durations", SpellDurations);
+            yield return S("spell-damage-mitigation", SpellDamageMitigation);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -5314,6 +5315,214 @@ namespace Tests.Scenarios
             ctx.Note("spell-dc handler helper: pending Hold Person heightened to 5th DC " + heightened + " (expected " + expectedHeightened
                 + "), another Hold Person DC " + plain + " (expected " + expectedPlain + ")");
             return heightened == expectedHeightened && plain == expectedPlain;
+        }
+
+        // ── Damage mitigation of spells, breath and special attacks (SPL-004) ──
+
+        private const string DamageNotePrefix = "spl004 ";
+        private static int _breathHeroHpBefore;
+        private static int _breathHero2HpBefore;
+
+        /// <summary>
+        /// SPL-004: every spell, breath weapon and special attack deals its damage through
+        /// CharacterStats.ApplyIncomingDamage with its type (GameManager.DealDamage), so immunity and resistance apply
+        /// (MM p.314) and damage reduction does not reduce energy damage, spells or supernatural abilities (MM p.307);
+        /// the shared concentration and death checks follow. On the NPC side a red dragon wyrmling (breath 2d10 fire,
+        /// 20-ft cone, a supernatural ability) breathes on two Stats-built fighters through the AI executor
+        /// (GameManager.NPCExecuteBreathWeaponForAI) in its scripted turn: the one with fire resistance 10 takes 10 of
+        /// 20, the other 20 (the breath dice are forced to 10, both fighters get -30 on saves). Then a scripted fighter's
+        /// Assert step runs the PC-side area handlers on target dummies with every die at its maximum (a local roll
+        /// filter) and saves made to fail (-30): Fireball (TryResolveScaledAoEDamageSpell, PHB p.231) cast by
+        /// arcane_missile_adept (Wizard 5, so 5d6 = 30 fire) on a plain dummy (30), one with fire resistance 10 (20),
+        /// one immune to fire (0), one with DR 10/magic (30: a spell ignores DR) and one at 5 HP (killed, and its death
+        /// handled); Ice Storm (TryResolveIceStormAoE, PHB p.243: 3d6 bludgeoning + 2d6 cold = 18 + 12) on a dummy immune
+        /// to cold (only the 18 bludgeoning) and one with DR 10/magic (30); a gibbering mouther's acid spittle
+        /// (AIService.TryExecuteRangedSpecialAttack, MM p.126: 1d4 acid, an extraordinary attack) on a dummy with acid
+        /// resistance 2 (2 of 4); Searing Light on that dummy, where SpellCaster.Cast deals nothing and the handler alone deals its damage (SPL-124); and a Warm Fire Shield's retribution (FireShieldReactionEffect, PHB p.230: 1d6 + CL 5 =
+        /// 11 fire) on the fire-immune dummy (0) and the fire-resistant one (1). Before SPL-004 each of these but the
+        /// breath (which had its own first-match resistance code) dealt its full rolled damage.
+        /// </summary>
+        private static ScenarioDef SpellDamageMitigation()
+        {
+            return Rules("rules/spell-damage-mitigation", "Spell, breath and special-attack damage takes immunity and resistance, not DR (MM p.307, p.314; SPL-004)")
+                .Covers("SPL-004", "SPL-124", "AI-006", "AI-040", "CMB-013", "MM p.307", "MM p.314", "PHB p.230", "PHB p.231", "PHB p.243", "PHB p.275", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Npc("dragon", "dragon_red_wyrmling", 10, 10, Control.Scripted)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 11, 10, Control.Idle)
+                .Pc("hero2", ActorSource.Stats(() => Fighter("Second", 6)), 12, 10, Control.Scripted)
+                .Npc("mage", "arcane_missile_adept", 2, 2, Control.Idle)
+                .Npc("mouther", "gibbering_mouther", 15, 7, Control.Idle)
+                .Npc("dPlain", "target_dummy", 13, 3, Control.Idle)
+                .Npc("dResist", "target_dummy", 14, 3, Control.Idle)
+                .Npc("dImmune", "target_dummy", 15, 3, Control.Idle)
+                .Npc("dDr", "target_dummy", 16, 3, Control.Idle)
+                .Npc("dLow", "target_dummy", 17, 3, Control.Idle)
+                .Npc("dCold", "target_dummy", 13, 5, Control.Idle)
+                .Npc("dIceDr", "target_dummy", 14, 5, Control.Idle)
+                .Npc("dAcid", "target_dummy", 15, 5, Control.Idle)
+                .Hp("dLow", 5)
+                .Tweak("hero", c => { c.Stats.AddDamageResistance(DamageType.Fire, 10); c.Stats.MoraleSaveBonus = -30; })
+                .Tweak("hero2", c => c.Stats.MoraleSaveBonus = -30)
+                .Tweak("dPlain", c => c.Stats.MoraleSaveBonus = -30)
+                .Tweak("dResist", c => { c.Stats.AddDamageResistance(DamageType.Fire, 10); c.Stats.MoraleSaveBonus = -30; })
+                .Tweak("dImmune", c => { c.Stats.AddDamageImmunity(DamageType.Fire); c.Stats.MoraleSaveBonus = -30; })
+                .Tweak("dDr", c => { c.Stats.AddDamageReduction(10, DamageBypassTag.Magic); c.Stats.MoraleSaveBonus = -30; })
+                .Tweak("dLow", c => c.Stats.MoraleSaveBonus = -30)
+                .Tweak("dCold", c => { c.Stats.AddDamageImmunity(DamageType.Cold); c.Stats.MoraleSaveBonus = -30; })
+                .Tweak("dIceDr", c => { c.Stats.AddDamageReduction(10, DamageBypassTag.Magic); c.Stats.MoraleSaveBonus = -30; })
+                .Tweak("dAcid", c => { c.Stats.AddDamageResistance(DamageType.Acid, 2); c.Stats.MoraleSaveBonus = -30; })
+                .Initiative("dragon", "hero2", "hero", "mage", "mouther", "dPlain", "dResist", "dImmune", "dDr", "dLow", "dCold", "dIceDr", "dAcid")
+                .Force(10, 10, "Breath weapon damage", -1)
+                .Script("dragon", BreathAtHeroes)
+                .Turn("hero2", 1,
+                    Step.Assert("The breath weapon's fire takes the fighter's fire resistance (MM p.314)", BreathMitigationCheck),
+                    Step.Assert("Spell and special-attack damage takes immunity and resistance and ignores DR (MM p.307)", SpellDamageMitigationChecks))
+                .Expect("The dragon breathed", v =>
+                {
+                    TraceEvent n = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "") == DamageNotePrefix + "breath");
+                    return n != null ? ExpectResult.Pass("breath used", n.Seq) : ExpectResult.Fail("no breath note");
+                })
+                .Expect("Every damage check holds", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>Dragon script: breathes once at the heroes (the AI's breath executor), recording their HP first.</summary>
+        private static System.Collections.IEnumerator BreathAtHeroes(ScenarioContext ctx, CharacterController dragon)
+        {
+            CharacterController hero = ctx.Get("hero");
+            CharacterController hero2 = ctx.Get("hero2");
+            if (dragon == null || hero == null || hero2 == null || !dragon.HasBreathWeapon || !dragon.IsBreathWeaponReady)
+            {
+                ctx.Note(DamageNotePrefix + "breath not ready");
+                yield break;
+            }
+
+            _breathHeroHpBefore = hero.Stats.CurrentHP;
+            _breathHero2HpBefore = hero2.Stats.CurrentHP;
+            ctx.Note(DamageNotePrefix + "breath");
+            yield return ctx.Gm.StartCoroutine(ctx.Gm.NPCExecuteBreathWeaponForAI(dragon, hero));
+        }
+
+        /// <summary>The fire-resistant fighter took 20 - 10, the other the full 20 (2d10 forced to 10 each, failed saves).</summary>
+        private static bool BreathMitigationCheck(ScenarioContext ctx)
+        {
+            int heroTaken = _breathHeroHpBefore - ctx.Get("hero").Stats.CurrentHP;
+            int hero2Taken = _breathHero2HpBefore - ctx.Get("hero2").Stats.CurrentHP;
+            ctx.Note(DamageNotePrefix + "breath: resistant fighter took " + heroTaken + " (expected 10), other fighter " + hero2Taken + " (expected 20)");
+            return heroTaken == 10 && hero2Taken == 20;
+        }
+
+        /// <summary>The Assert step of <see cref="SpellDamageMitigation"/>: the PC-side area handlers, spittle and Fire Shield.</summary>
+        private static bool SpellDamageMitigationChecks(ScenarioContext ctx)
+        {
+            GameManager gm = ctx.Gm;
+            CharacterController mage = ctx.Get("mage");
+            Func<int, string, int, int> previous = ScenarioHooks.RollFilter;
+            // Every die at its maximum while the checks run; saves still fail through the -30 tweaks.
+            ScenarioHooks.RollFilter = (sides, c, natural) => sides;
+            bool ok = true;
+            try
+            {
+                const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+
+                // Fireball: 1d6 per caster level, max 10d6 (PHB p.231).
+                SpellData fireball = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.FIREBALL).Clone();
+                int fireballRaw = 6 * Mathf.Clamp(SpellCastingHelper.GetEffectiveCasterLevel(mage, fireball), 1, 10);
+                var fireballTargets = new[] { "dPlain", "dResist", "dImmune", "dDr", "dLow" };
+                Dictionary<string, int> before = HpOf(ctx, fireballTargets);
+                object[] args = { mage, fireball, fireballTargets.Select(ctx.Get).ToList(), null, null };
+                System.Reflection.MethodInfo scaled = typeof(GameManager).GetMethod("TryResolveScaledAoEDamageSpell", flags);
+                bool handled = scaled != null && (bool)scaled.Invoke(gm, args);
+                ok &= Taken(ctx, "Fireball", "dPlain", before, fireballRaw);
+                ok &= Taken(ctx, "Fireball", "dResist", before, fireballRaw - 10);
+                ok &= Taken(ctx, "Fireball", "dImmune", before, 0);
+                ok &= Taken(ctx, "Fireball", "dDr", before, fireballRaw);
+                CharacterController low = ctx.Get("dLow");
+                bool lowDead = low.Stats.IsDead && low.IsDead;
+                ctx.Note(DamageNotePrefix + "Fireball handled " + handled + ", rolled " + fireballRaw + "; dLow dead " + lowDead + " (HP " + low.Stats.CurrentHP + ")");
+                ok &= handled && lowDead;
+
+                // Ice Storm: 3d6 bludgeoning + 2d6 cold, no save (PHB p.243); each part mitigated by its own type.
+                SpellData iceStorm = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.ICE_STORM).Clone();
+                var iceTargets = new[] { "dCold", "dIceDr" };
+                before = HpOf(ctx, iceTargets);
+                args = new object[] { mage, iceStorm, iceTargets.Select(ctx.Get).ToList(), null, null };
+                System.Reflection.MethodInfo ice = typeof(GameManager).GetMethod("TryResolveIceStormAoE", flags);
+                handled = ice != null && (bool)ice.Invoke(gm, args);
+                ctx.Note(DamageNotePrefix + "Ice Storm handled " + handled);
+                ok &= handled;
+                ok &= Taken(ctx, "Ice Storm", "dCold", before, 18);
+                ok &= Taken(ctx, "Ice Storm", "dIceDr", before, 30);
+
+                // Gibbering mouther spittle: ranged touch (forced 20), 1d4 acid (4) vs acid resistance 2.
+                AIService ai = gm.GetComponent<AIService>();
+                before = HpOf(ctx, "dAcid");
+                bool spat = ai != null && ai.TryExecuteRangedSpecialAttack(ctx.Get("mouther"), ctx.Get("dAcid"));
+                ctx.Note(DamageNotePrefix + "spittle used " + spat);
+                ok &= spat && Taken(ctx, "Spittle", "dAcid", before, 2);
+
+                // Searing Light (PHB p.275): SpellCaster.Cast deals no generic damage (SPL-124), and its handler deals
+                // 1d8 per 2 caster levels (max 5d8), halved for a living creature, 1d6 per die for a construct.
+                SpellData searing = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.SEARING_LIGHT).Clone();
+                CharacterController lit = ctx.Get("dAcid");
+                before = HpOf(ctx, "dAcid");
+                SpellResult searingResult = SpellCaster.Cast(searing, mage.Stats, lit.Stats, null, false, false, mage, lit);
+                ok &= Taken(ctx, "Searing Light generic branch", "dAcid", before, 0);
+                int searingDice = Mathf.Clamp(SpellCastingHelper.GetEffectiveCasterLevel(mage, searing) / 2, 1, 5);
+                int searingExpected = SpellTargetingService.IsUndead(lit) ? 8 * searingDice
+                    : SpellTargetingService.IsConstruct(lit) ? 6 * searingDice
+                    : Mathf.Max(1, 8 * searingDice / 2);
+                before = HpOf(ctx, "dAcid");
+                System.Reflection.MethodInfo searingHandler = typeof(GameManager).GetMethod("TryResolveSearingLightSpellEffect", flags);
+                bool searingHandled = searingResult != null && searingResult.Success && searingHandler != null
+                    && (bool)searingHandler.Invoke(gm, new object[] { mage, lit, searing, searingResult });
+                ctx.Note(DamageNotePrefix + "Searing Light hit " + (searingResult != null && searingResult.Success) + ", handled " + searingHandled
+                    + ", DamageDealt " + (searingResult != null ? searingResult.DamageDealt : -1));
+                ok &= searingHandled && Taken(ctx, "Searing Light handler", "dAcid", before, searingExpected)
+                    && searingResult.DamageDealt == searingExpected;
+
+                // Warm Fire Shield retribution: 1d6 + CL 5 = 11 fire, no save (PHB p.230).
+                CharacterController shielded = ctx.Get("hero2");
+                CharacterStats s = shielded.Stats;
+                bool wasActive = s.FireShieldActive, wasWarm = s.FireShieldIsWarm;
+                int oldCl = s.FireShieldCasterLevel;
+                s.FireShieldActive = true;
+                s.FireShieldIsWarm = true;
+                s.FireShieldCasterLevel = 5;
+                try
+                {
+                    var shield = new FireShieldReactionEffect(shielded);
+                    before = HpOf(ctx, "dImmune", "dResist");
+                    shield.OnMeleeAttackHit(ctx.Get("dImmune"), shielded, null);
+                    shield.OnMeleeAttackHit(ctx.Get("dResist"), shielded, null);
+                    ok &= Taken(ctx, "Fire Shield", "dImmune", before, 0);
+                    ok &= Taken(ctx, "Fire Shield", "dResist", before, 1);
+                }
+                finally
+                {
+                    s.FireShieldActive = wasActive;
+                    s.FireShieldIsWarm = wasWarm;
+                    s.FireShieldCasterLevel = oldCl;
+                }
+            }
+            finally
+            {
+                ScenarioHooks.RollFilter = previous;
+            }
+            return ok;
+        }
+
+        private static Dictionary<string, int> HpOf(ScenarioContext ctx, params string[] keys)
+            => keys.ToDictionary(k => k, k => ctx.Get(k).Stats.CurrentHP);
+
+        /// <summary>Notes and checks the HP <paramref name="key"/> lost since <paramref name="before"/>.</summary>
+        private static bool Taken(ScenarioContext ctx, string source, string key, Dictionary<string, int> before, int expected)
+        {
+            int taken = before[key] - ctx.Get(key).Stats.CurrentHP;
+            ctx.Note(DamageNotePrefix + source + " " + key + " took " + taken + " (expected " + expected + ")");
+            if (taken != expected)
+                ctx.Note(DamageNotePrefix + "mismatch: " + source + " " + key);
+            return taken == expected;
         }
 
         /// <summary>Passes when the traced actor has the level, BAB and max HP given.</summary>

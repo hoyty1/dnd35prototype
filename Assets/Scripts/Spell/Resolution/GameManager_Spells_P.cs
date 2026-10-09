@@ -246,8 +246,10 @@ public partial class GameManager
             // Fort succeeded: 3d6 damage + shaken for 1 round
             int damage = DiceService.RollMultiple(3, 6, "Phantasmal Killer 3d6 damage");
 
+            // Untyped damage through the mitigation pipeline (SPL-004); the single-target pipeline runs
+            // concentration, death and the combat-end check from result.
             int hpBefore = target.Stats.CurrentHP;
-            target.Stats.TakeDamage(damage);
+            damage = ApplyDamagePacket(target, damage, DamagePackets.Spell(spell.Name, DamageType.Untyped)).FinalDamage;
             int hpAfter = target.Stats.CurrentHP;
 
             result.DamageDealt = damage;
@@ -258,8 +260,8 @@ public partial class GameManager
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"   Fort save: {fortRollStr} → SUCCESS!"));
             CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"   Takes {damage} damage ({hpBefore} → {hpAfter} HP) and is shaken for 1 round."));
 
-            // Check if damage killed the target
-            if (hpAfter <= 0)
+            // Check if damage killed the target (dead at -10 or lower, PHB p.145; 0 or below is disabled or dying)
+            if (target.Stats.IsDead)
             {
                 result.TargetKilled = true;
                 CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("☠", $"{targetName} is slain by the phantasm's lingering terror!"));

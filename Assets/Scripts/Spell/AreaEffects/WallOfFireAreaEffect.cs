@@ -305,17 +305,19 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         // NO saving throw for pass-through damage (PHB p.298)
         int finalDamage = Mathf.Max(0, baseDamage);
 
+        DamageResolutionResult dealt = null;
         if (finalDamage > 0)
-            character.Stats.TakeDamage(finalDamage);
+        {
+            dealt = DealSpellDamage(character, finalDamage, DamageType.Fire);
+            finalDamage = dealt.FinalDamage;
+        }
 
         string undeadNote = isUndead ? " [UNDEAD ×2]" : "";
         LogEffect($"🔥 {character.Stats.CharacterName} takes {finalDamage} fire damage from Wall of Fire PASS-THROUGH "
-            + $"[2d6({d1}+{d2})+{clBonus}CL={d1 + d2 + clBonus}] [No save]{undeadNote}");
+            + $"[2d6({d1}+{d2})+{clBonus}CL={d1 + d2 + clBonus}] [No save]{undeadNote}{GameManager.DescribeMitigation(dealt)}");
 
         if (character.Stats.IsDead || character.Stats.IsUnconscious)
         {
-            if (character.Stats.IsDead)
-                character.OnDeath();
             LogEffect($"  💀 {character.Stats.CharacterName} is {(character.Stats.IsDead ? "slain" : "disabled")} by the Wall of Fire! Turn ended immediately.");
         }
     }
@@ -971,18 +973,16 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
         int finalDamage = Mathf.Max(1, damage);
 
-        if (finalDamage > 0)
-            character.Stats.TakeDamage(finalDamage);
+        DamageResolutionResult dealt = DealSpellDamage(character, finalDamage, DamageType.Fire);
+        finalDamage = dealt.FinalDamage;
 
         string undeadNote = isUndead ? " [UNDEAD ×2]" : "";
         string sideNote = IsRingMode ? $" [{GetEffectiveRingDirection()} heat]" : "";
         LogEffect($"🔥 HEAT WAVE: {character.Stats.CharacterName} takes {finalDamage} fire damage "
-            + $"({bandLabel}) [{diceLabel}({diceRolls})] [No save]{undeadNote}{sideNote}");
+            + $"({bandLabel}) [{diceLabel}({diceRolls})] [No save]{undeadNote}{sideNote}{GameManager.DescribeMitigation(dealt)}");
 
         if (character.Stats.IsDead || character.Stats.IsUnconscious)
         {
-            if (character.Stats.IsDead)
-                character.OnDeath();
             LogEffect($"  💀 {character.Stats.CharacterName} is {(character.Stats.IsDead ? "slain" : "disabled")} by heat waves from the Wall of Fire! Turn ended immediately.");
         }
     }
