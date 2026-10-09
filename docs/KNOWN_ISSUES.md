@@ -39,8 +39,8 @@ Entries per section:
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 2 | 34 | 39 | 75 | ITM-079 |
 | [AI](issues/AI.md) | AI | 1 | 22 | 39 | 62 | AI-064 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
-| [Tests](issues/TST.md) | TST | 0 | 7 | 26 | 33 | TST-037 |
-| **All** | | 13 | 282 | 388 | 683 | |
+| [Tests](issues/TST.md) | TST | 0 | 8 | 26 | 34 | TST-038 |
+| **All** | | 13 | 283 | 388 | 684 | |
 
 ## Top issues
 
