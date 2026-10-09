@@ -153,7 +153,7 @@ namespace DND35.AI.Profiles
             int enemiesHit = 0;
             int alliesHit = 0;
             float effectiveCasualties = 0f;
-            int estimatedDamage = EstimateAverageDamage(spell);
+            int estimatedDamage = EstimateAverageDamage(spell, caster);
             DamageType damageType = DamageTextUtils.ParseSingleDamageType(spell.DamageType);
 
             if (allCombatants == null)
@@ -235,20 +235,20 @@ namespace DND35.AI.Profiles
             return 1f;
         }
 
-        private static int EstimateAverageDamage(SpellData spell)
+        /// <summary>Average damage at the caster's caster level (SpellDiceRules, SPL-005).</summary>
+        private static int EstimateAverageDamage(SpellData spell, CharacterController caster)
         {
             if (spell == null)
                 return 0;
 
-            int diceAverage = 0;
-            if (spell.DamageDice > 0 && spell.DamageCount > 0)
-                diceAverage = spell.DamageCount * (spell.DamageDice + 1) / 2;
+            int casterLevel = SpellDiceRules.CasterLevelFor(caster != null ? caster.Stats : null, spell);
+            int diceAverage = Mathf.FloorToInt(SpellDiceRules.Damage(spell, casterLevel).Average);
 
             int missileAverage = 0;
             if (spell.AutoHit && spell.MissileCount > 0)
                 missileAverage = spell.MissileCount * ((spell.DamageDice + 1) / 2 + spell.BonusDamage);
 
-            return Mathf.Max(diceAverage + spell.BonusDamage, missileAverage);
+            return Mathf.Max(diceAverage, missileAverage);
         }
 
         public override float ScoreTarget(CharacterController target, CharacterController self)

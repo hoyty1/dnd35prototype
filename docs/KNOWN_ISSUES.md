@@ -32,15 +32,15 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-039 |
 | [Combat](issues/CMB.md) | CMB | 3 | 58 | 66 | 127 | CMB-158 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 5 | 58 | 57 | 120 | SPL-125 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 4 | 62 | 58 | 124 | SPL-130 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 5 | 28 | 41 | 74 | CHR-078 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 3 | 29 | 25 | 57 | CRE-061 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 2 | 33 | 36 | 71 | ITM-075 |
-| [AI](issues/AI.md) | AI | 1 | 19 | 40 | 60 | AI-062 |
+| [AI](issues/AI.md) | AI | 1 | 20 | 40 | 61 | AI-063 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 25 | 32 | TST-036 |
-| **All** | | 20 | 282 | 378 | 680 | |
+| **All** | | 19 | 287 | 379 | 685 | |
 
 ## Top issues
 
@@ -53,7 +53,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at the round boundary (GameManager.OnNewRound -> ConditionService.OnRoundEnd), so 1-round conditions can cost the target nothing | Yes |
 | [CHR-018](issues/CHR.md) | High | Characters, feats and classes | Divine Grace and other save bonuses are computed but never applied | Yes |
 | [CHR-019](issues/CHR.md) | High | Characters, feats and classes | Most racial traits are display-only | Yes |
-| [SPL-005](issues/SPL.md) | High | Spells and metamagic | Generic spell dice do not scale with caster level; Cure/Inflict ignore undead | Yes |
 | [SPL-037](issues/SPL.md) | High | Spells and metamagic | Spell-specific branches at the end of ApplySpellBuff never run | Yes |
 | [SPL-123](issues/SPL.md) | High | Spells and metamagic | The NPC cast executor refuses every spell of a spontaneous caster, so AI-run spellcasting dragons, sorcerers and bards cast nothing | Yes |
 | [CRE-056](issues/CRE.md) | High | Creatures, templates and summoning | 212 of 389 NPC definitions (all dragons, animals and vermin, goblin, gnoll, bugbear) set no alignment, so smite and Protection from Evil ignore them | Yes |

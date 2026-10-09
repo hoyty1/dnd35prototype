@@ -5500,10 +5500,8 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        int casterLevel = item.Scroll != null ? item.Scroll.CasterLevel
-            : item.Wand != null ? item.Wand.CasterLevel
-            : Mathf.Max(1, item.ConsumableMinimumCasterLevel);
-        SpellData consumableSpell = BuildConsumableSpellVariant(baseSpell, item);
+        int casterLevel = GetConsumableCasterLevel(item);
+        SpellData consumableSpell = BuildConsumableSpellVariant(baseSpell, item, casterLevel);
 
         // Use stored DC from scroll (unified ScrollData or legacy metamagic fields); a scroll without one uses the
         // magic-item DC (DMG p.214; SpellSaveDCRules.ForMagicItem, ITM-008), never the reader's own DC.
@@ -5746,14 +5744,60 @@ public partial class GameManager : MonoBehaviour
 
         string charName = actor.Stats != null ? actor.Stats.CharacterName : "Unknown";
 
-        // Clone the spell so modifications don't affect the database
+        SpellData spellClone = BuildScrollPipelineSpell(scrollItem, baseSpell, out MetamagicData scrollMetamagic, out int scrollCasterLevel);
+
+        // Store scroll state for consumption after spell resolves
+        _pendingScrollCastItem = scrollItem;
+        _pendingScrollCastInventoryIndex = inventoryIndex;
+        _pendingScrollCastActive = true;
+
+        // Set up pending spell state (mirrors OnSpellSelectedWithMetamagic)
+        _pendingSpell = spellClone;
+        _pendingMetamagic = scrollMetamagic ?? new MetamagicData();
+        _pendingSpellFromHeldCharge = false;
+        _pendingAnimateRopeItem = null;
+        _pendingResistEnergyType = null;
+        _pendingProtectionFromEnergyType = null;
+        _pendingFireShieldIsWarm = null;
+        _pendingMagicWeaponItem = null;
+        _pendingKeenEdgeItem = null;
+        _pendingKeenEdgeIsAmmo = false;
+        _pendingGreaterMagicWeaponItem = null;
+        _pendingDisguiseSelfRace = null;
+        _pendingSummonSelection = null;
+        _pendingSummonListLevel = 0;
+        _pendingSummonCountInfo = null;
+        _pendingSummonSwarmNpcId = null;
+
+        string metamagicInfo = scrollItem.HasScrollMetamagic ? $" (metamagic: {scrollItem.ScrollMetamagicFeats.Count} feat(s))" : "";
+        Debug.Log($"[ScrollCast] {charName} initiating scroll cast: {spellClone.Name}{metamagicInfo} CL {scrollCasterLevel}");
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("📜", $"{charName} reads {scrollItem.Name} — select a target for {spellClone.Name}."));
+
+        // Kick off the targeting pipeline
+        BeginPendingSpellTargeting(actor);
+        return true;
+    }
+
+    /// <summary>
+    /// The spell a scroll casts through the targeting pipeline: a clone with the dice at the scroll's caster level
+    /// (DMG p.237; SpellDiceRules.BakeForCasterLevel, SPL-005), the scroll's metamagic and its save DC. Duration, range
+    /// and the SR check still read the reader's caster level (SPL-016).
+    /// </summary>
+    internal static SpellData BuildScrollPipelineSpell(ItemData scrollItem, SpellData baseSpell, out MetamagicData scrollMetamagic, out int scrollCasterLevel)
+    {
+        scrollMetamagic = null;
+        scrollCasterLevel = GetConsumableCasterLevel(scrollItem);
+        if (scrollItem == null || baseSpell == null)
+            return baseSpell != null ? baseSpell.Clone() : null;
+
+        // Clone the spell so modifications don't affect the database, then fix its dice at the scroll's caster level
         SpellData spellClone = baseSpell.Clone();
+        SpellDiceRules.BakeForCasterLevel(spellClone, scrollCasterLevel);
 
         // Use unified ScrollData when available, fall back to legacy fields
         ScrollData sd = scrollItem.Scroll;
 
         // Build metamagic data from scroll's stored metamagic feats
-        MetamagicData scrollMetamagic = null;
         var mmFeats = sd?.MetamagicFeats ?? (scrollItem.HasScrollMetamagic ? scrollItem.ScrollMetamagicFeats : null);
         int effLevel = sd?.EffectiveSpellLevel ?? scrollItem.ScrollEffectiveSpellLevel;
         if (mmFeats != null && mmFeats.Count > 0)
@@ -5790,38 +5834,7 @@ public partial class GameManager : MonoBehaviour
             spellClone.SaveDC = SpellSaveDCRules.ForMagicItem(dcLevel);
         }
 
-        int scrollCasterLevel = sd?.CasterLevel ?? Mathf.Max(1, scrollItem.ConsumableMinimumCasterLevel);
-
-        // Store scroll state for consumption after spell resolves
-        _pendingScrollCastItem = scrollItem;
-        _pendingScrollCastInventoryIndex = inventoryIndex;
-        _pendingScrollCastActive = true;
-
-        // Set up pending spell state (mirrors OnSpellSelectedWithMetamagic)
-        _pendingSpell = spellClone;
-        _pendingMetamagic = scrollMetamagic ?? new MetamagicData();
-        _pendingSpellFromHeldCharge = false;
-        _pendingAnimateRopeItem = null;
-        _pendingResistEnergyType = null;
-        _pendingProtectionFromEnergyType = null;
-        _pendingFireShieldIsWarm = null;
-        _pendingMagicWeaponItem = null;
-        _pendingKeenEdgeItem = null;
-        _pendingKeenEdgeIsAmmo = false;
-        _pendingGreaterMagicWeaponItem = null;
-        _pendingDisguiseSelfRace = null;
-        _pendingSummonSelection = null;
-        _pendingSummonListLevel = 0;
-        _pendingSummonCountInfo = null;
-        _pendingSummonSwarmNpcId = null;
-
-        string metamagicInfo = scrollItem.HasScrollMetamagic ? $" (metamagic: {scrollItem.ScrollMetamagicFeats.Count} feat(s))" : "";
-        Debug.Log($"[ScrollCast] {charName} initiating scroll cast: {spellClone.Name}{metamagicInfo} CL {scrollCasterLevel}");
-        CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("📜", $"{charName} reads {scrollItem.Name} — select a target for {spellClone.Name}."));
-
-        // Kick off the targeting pipeline
-        BeginPendingSpellTargeting(actor);
-        return true;
+        return spellClone;
     }
 
     /// <summary>
@@ -5875,37 +5888,8 @@ public partial class GameManager : MonoBehaviour
 
         string charName = actor.Stats != null ? actor.Stats.CharacterName : "Unknown";
 
-        // Clone the spell so modifications don't affect the database
-        SpellData spellClone = baseSpell.Clone();
-
-        // Use unified WandData when available
+        SpellData spellClone = BuildWandPipelineSpell(wandItem, baseSpell, out MetamagicData wandMetamagic, out int wandCasterLevel);
         WandData wd = wandItem.Wand;
-
-        // Build metamagic data from wand's stored metamagic feats
-        MetamagicData wandMetamagic = null;
-        var mmFeats = wd?.MetamagicFeats;
-        if (mmFeats != null && mmFeats.Count > 0)
-        {
-            wandMetamagic = new MetamagicData();
-            foreach (var feat in mmFeats)
-            {
-                wandMetamagic.Toggle(feat);
-                if (feat == MetamagicFeatId.HeightenSpell)
-                {
-                    int htl = wd?.HeightenToLevel ?? -1;
-                    if (htl > spellClone.SpellLevel)
-                        wandMetamagic.HeightenToLevel = htl;
-                }
-            }
-            SpellCaster.ApplyMetamagicToSpellData(spellClone, wandMetamagic);
-        }
-
-        // Override the spell's save DC with the wand's stored DC
-        int wandSaveDC = wd?.SaveDC ?? WandFactory.CalculateWandSaveDC(wandItem.WandSpellLevel);
-        if (wandSaveDC > 0)
-            spellClone.SaveDC = wandSaveDC;
-
-        int wandCasterLevel = wd?.CasterLevel ?? Mathf.Max(1, wandItem.WandCasterLevel);
 
         // Store wand state for charge consumption after spell resolves
         _pendingWandCastItem = wandItem;
@@ -5937,6 +5921,51 @@ public partial class GameManager : MonoBehaviour
         // Kick off the targeting pipeline
         BeginPendingSpellTargeting(actor);
         return true;
+    }
+
+    /// <summary>
+    /// The spell a wand casts through the targeting pipeline: a clone with the dice at the wand's caster level
+    /// (DMG p.213; SpellDiceRules.BakeForCasterLevel, SPL-005), the wand's metamagic and its save DC. Duration, range
+    /// and the SR check still read the user's caster level (SPL-016).
+    /// </summary>
+    internal static SpellData BuildWandPipelineSpell(ItemData wandItem, SpellData baseSpell, out MetamagicData wandMetamagic, out int wandCasterLevel)
+    {
+        wandMetamagic = null;
+        wandCasterLevel = GetConsumableCasterLevel(wandItem);
+        if (wandItem == null || baseSpell == null)
+            return baseSpell != null ? baseSpell.Clone() : null;
+
+        // Clone the spell so modifications don't affect the database, then fix its dice at the wand's caster level
+        SpellData spellClone = baseSpell.Clone();
+        SpellDiceRules.BakeForCasterLevel(spellClone, wandCasterLevel);
+
+        // Use unified WandData when available
+        WandData wd = wandItem.Wand;
+
+        // Build metamagic data from wand's stored metamagic feats
+        var mmFeats = wd?.MetamagicFeats;
+        if (mmFeats != null && mmFeats.Count > 0)
+        {
+            wandMetamagic = new MetamagicData();
+            foreach (var feat in mmFeats)
+            {
+                wandMetamagic.Toggle(feat);
+                if (feat == MetamagicFeatId.HeightenSpell)
+                {
+                    int htl = wd?.HeightenToLevel ?? -1;
+                    if (htl > spellClone.SpellLevel)
+                        wandMetamagic.HeightenToLevel = htl;
+                }
+            }
+            SpellCaster.ApplyMetamagicToSpellData(spellClone, wandMetamagic);
+        }
+
+        // Override the spell's save DC with the wand's stored DC
+        int wandSaveDC = wd?.SaveDC ?? WandFactory.CalculateWandSaveDC(wandItem.WandSpellLevel);
+        if (wandSaveDC > 0)
+            spellClone.SaveDC = wandSaveDC;
+
+        return spellClone;
     }
 
     /// <summary>
@@ -6234,9 +6263,12 @@ public partial class GameManager : MonoBehaviour
 
             if (spell != null)
             {
-                // Clone spell and override caster level to staff's CL
+                // Clone the spell and fix its dice at the staff's caster level, or the wielder's own caster level
+                // when that is higher (DMG p.244; SpellDiceRules, SPL-005).
                 SpellData staffSpell = spell.Clone();
-                int staffCL = staffDef?.CasterLevel ?? staffItem.StaffCasterLevel;
+                int staffCL = Mathf.Max(1, Mathf.Max(staffDef?.CasterLevel ?? staffItem.StaffCasterLevel,
+                    actor.Stats != null ? actor.Stats.GetCasterLevel() : 0));
+                SpellDiceRules.BakeForCasterLevel(staffSpell, staffCL);
 
                 // Apply the spell effect using the existing consumable system
                 // Build a temporary item-like context for the spell
@@ -6342,11 +6374,34 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
-    private static SpellData BuildConsumableSpellVariant(SpellData baseSpell, ItemData item)
+    /// <summary>
+    /// The caster level a scroll, wand or potion was made at, which sets its dice (DMG p.213 wands, p.229 potions,
+    /// p.237 scrolls; SPL-005): the unified ScrollData or WandData value, else the legacy wand field, else the minimum
+    /// for the spell; at least 1.
+    /// </summary>
+    internal static int GetConsumableCasterLevel(ItemData item)
+    {
+        if (item == null)
+            return 1;
+        if (item.Scroll != null)
+            return Mathf.Max(1, item.Scroll.CasterLevel);
+        if (item.Wand != null)
+            return Mathf.Max(1, item.Wand.CasterLevel);
+        if (item.IsWand && item.WandCasterLevel > 0)
+            return item.WandCasterLevel;
+        return Mathf.Max(1, item.ConsumableMinimumCasterLevel);
+    }
+
+    /// <summary>A consumable's spell: a clone with the dice at the item's caster level and the scroll's stored metamagic (PC self-use and charmed creatures).</summary>
+    internal static SpellData BuildConsumableSpellVariant(SpellData baseSpell, ItemData item, int casterLevel)
     {
         SpellData spell = baseSpell != null ? baseSpell.Clone() : null;
         if (spell == null || item == null)
             return spell;
+
+        // The item's dice at its own caster level, written into the clone's base fields so the metamagic below and
+        // RollHealingFromSpell read them (SpellDiceRules, SPL-005).
+        SpellDiceRules.BakeForCasterLevel(spell, casterLevel);
 
         // Apply stored metamagic effects from scroll (unified ScrollData or legacy fields)
         ScrollData sd = item.Scroll;

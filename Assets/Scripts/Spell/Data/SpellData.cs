@@ -425,7 +425,21 @@ public class SpellData
     // ========== HEALING ==========
     public int HealDice;                // Sides of healing die
     public int HealCount;               // Number of dice
-    public int BonusHealing;            // Flat bonus healing (e.g., caster level for Cure spells)
+    public int BonusHealing;            // Flat bonus healing (the caster-level part of a Cure spell is LevelBonusPerLevels/LevelBonusMax)
+
+    // ========== CASTER-LEVEL SCALING (SpellDiceRules, SPL-005) ==========
+    // They scale the spell's own dice: the healing dice of a Healing spell, the damage dice otherwise. A spell whose
+    // custom handler rolls its damage scales in that handler and leaves them at 0.
+    /// <summary>One die per this many caster levels replaces DamageCount/HealCount (0 = fixed count). Burning Hands: 1.</summary>
+    public int ScalingDicePerLevels;
+    /// <summary>Most dice <see cref="ScalingDicePerLevels"/> gives (0 = no cap). Burning Hands: 5.</summary>
+    public int ScalingDiceMax;
+    /// <summary>+1 to the flat bonus per this many caster levels (0 = none). Cure Light Wounds: 1.</summary>
+    public int LevelBonusPerLevels;
+    /// <summary>Largest bonus <see cref="LevelBonusPerLevels"/> gives (0 = no cap). Cure Light Wounds: 5.</summary>
+    public int LevelBonusMax;
+    /// <summary>Positive (Cure) or negative (Inflict) energy: inverted on undead, no effect on constructs (SpellDiceRules.OutcomeFor).</summary>
+    public SpellEnergy Energy;
 
     // ========== CASTING ==========
     public SpellActionType ActionType;  // Standard, FullRound, Swift, Free
@@ -580,11 +594,11 @@ public class SpellData
             if (AutoHit && MissileCount > 0)
                 effectStr = $"{MissileCount}×(1d{DamageDice}+{BonusDamage}) {DamageType}";
             else
-                effectStr = $"{DamageCount}d{DamageDice} {DamageType}";
+                effectStr = $"{SpellDiceRules.Describe(this)} {DamageType}";
         }
         else if (EffectType == SpellEffectType.Healing)
         {
-            effectStr = $"Heals {HealCount}d{HealDice}+{BonusHealing}";
+            effectStr = $"Heals {SpellDiceRules.Describe(this)}";
         }
         else if (EffectType == SpellEffectType.Buff)
         {

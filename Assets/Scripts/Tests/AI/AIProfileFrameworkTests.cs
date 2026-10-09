@@ -52,6 +52,7 @@ namespace Tests.AI
             TestHealerChoosesMeleeWithHighACAndMeleeAB();
             TestHealerChoosesRangedWithLowAC();
             TestHealerPrioritizesMostWoundedAlly();
+            TestHealerIgnoresWoundedUndeadAlly();
             TestRangedRiskMultiplierDefaults();
             TestConcealmentTargetingAdjustmentUsesPriorityTiers();
             TestConcealmentTargetingAdjustmentSupportsProfileMultiplier();
@@ -801,6 +802,51 @@ namespace Tests.AI
             finally
             {
                 TestHelpers.Cleanup(healer != null ? healer.gameObject : null, profile);
+            }
+        }
+
+        /// <summary>
+        /// SPL-005: a cure harms an undead (PHB p.215), so a wounded undead ally does not make a healer heal, and a
+        /// cure finds no target (not a wasted self-cure at full HP) when nobody it can cure is hurt.
+        /// </summary>
+        private static void TestHealerIgnoresWoundedUndeadAlly()
+        {
+            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            CharacterController healer = TestHelpers.CreateCleric("Healer_UndeadEscort", level: 5);
+            CharacterController undeadAlly = TestHelpers.CreateWarrior("Ally_Zombie", level: 5);
+
+            try
+            {
+                healer.IsPlayerControlled = true;
+                undeadAlly.IsPlayerControlled = true;
+                undeadAlly.Stats.CreatureType = "Undead";
+                undeadAlly.Stats.CurrentHP = Mathf.CeilToInt(undeadAlly.Stats.TotalMaxHP * 0.15f);
+                TestHelpers.SetGridPosition(healer, 0, 0);
+                TestHelpers.SetGridPosition(undeadAlly, 1, 0);
+
+                var all = new List<CharacterController> { healer, undeadAlly };
+                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true);
+                Assert(action != HealerActionType.Healing && action != HealerActionType.CriticalHealing,
+                    "Healer does not choose healing for a wounded undead ally",
+                    $"(action={action})");
+
+                SpellData cure = SpellDatabase.GetSpell(SpellNames.CURE_LIGHT_WOUNDS);
+                CharacterController target = AISpellcastingStrategist.SelectBestSpellTarget(healer, cure, null, all, null);
+                Assert(target == null,
+                    "A cure finds no target when only an undead ally is hurt and the caster is unhurt",
+                    $"(selected={target?.Stats?.CharacterName ?? "null"})");
+
+                healer.Stats.CurrentHP = healer.Stats.TotalMaxHP - 3;
+                target = AISpellcastingStrategist.SelectBestSpellTarget(healer, cure, null, all, null);
+                Assert(target == healer,
+                    "A wounded caster still cures itself",
+                    $"(selected={target?.Stats?.CharacterName ?? "null"})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(healer != null ? healer.gameObject : null,
+                    undeadAlly != null ? undeadAlly.gameObject : null,
+                    profile);
             }
         }
 

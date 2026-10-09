@@ -38,7 +38,10 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 8, DamageCount = 1, BonusDamage = 3, // +CL
+                    DamageDice = 8, DamageCount = 1, // +1 per caster level, max +5 (SpellDiceRules, SPL-005)
+                    LevelBonusPerLevels = 1, LevelBonusMax = 5,
+                    Energy = SpellEnergy.Negative, // cures undead instead (PHB p.244)
+                    SpellResistanceApplies = true,
                     DamageType = "negative",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
@@ -51,17 +54,19 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.INFLICT_MINOR_WOUNDS,
                     Name = "Inflict Minor Wounds",
-                    Description = "Touch attack deals 1 point of negative energy damage. Will save halves.",
+                    Description = "Touch attack deals 1 point of negative energy damage. Will negates. PHB p.244",
                     SpellLevel = 0, School = "Necromancy",
                     ClassList = new[] { "Cleric" },
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Damage,
                     DamageDice = 0, DamageCount = 0, BonusDamage = 1,
+                    Energy = SpellEnergy.Negative, // cures undead 1 point (PHB p.244)
+                    SpellResistanceApplies = true,
                     DamageType = "negative",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
-                    SaveHalves = true,
+                    SaveHalves = false, // Will negates (PHB p.244)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -78,7 +83,10 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 8, DamageCount = 2, BonusDamage = 3,
+                    DamageDice = 8, DamageCount = 2, // +1 per caster level, max +10 (SpellDiceRules, SPL-005)
+                    LevelBonusPerLevels = 1, LevelBonusMax = 10,
+                    Energy = SpellEnergy.Negative,
+                    SpellResistanceApplies = true,
                     DamageType = "negative",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
@@ -111,7 +119,10 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 8, DamageCount = 3, BonusDamage = 5, // +CL (max +15)
+                    DamageDice = 8, DamageCount = 3, // +1 per caster level, max +15 (SpellDiceRules, SPL-005)
+                    LevelBonusPerLevels = 1, LevelBonusMax = 15,
+                    Energy = SpellEnergy.Negative,
+                    SpellResistanceApplies = true,
                     DamageType = "negative",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
@@ -358,7 +369,10 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 8, DamageCount = 4, BonusDamage = 7,
+                    DamageDice = 8, DamageCount = 4, // +1 per caster level, max +20 (SpellDiceRules, SPL-005)
+                    LevelBonusPerLevels = 1, LevelBonusMax = 20,
+                    Energy = SpellEnergy.Negative,
+                    SpellResistanceApplies = true,
                     DamageType = "negative",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",

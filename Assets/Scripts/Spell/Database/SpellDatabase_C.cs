@@ -381,7 +381,9 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Healing,
-                    HealDice = 8, HealCount = 1, BonusHealing = 3, // +CL (3 at CL3, max +5)
+                    HealDice = 8, HealCount = 1, // +1 per caster level, max +5 (SpellDiceRules, SPL-005)
+                    LevelBonusPerLevels = 1, LevelBonusMax = 5,
+                    Energy = SpellEnergy.Positive, // harms undead: Will half, SR applies (PHB p.215)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -397,6 +399,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Healing,
                     HealDice = 0, HealCount = 0, BonusHealing = 1, // Fixed 1 HP
+                    Energy = SpellEnergy.Positive, // deals 1 to undead, Will half (PHB p.216: as cure light wounds)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -413,7 +416,9 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Healing,
-                    HealDice = 8, HealCount = 2, BonusHealing = 3, // +CL
+                    HealDice = 8, HealCount = 2, // +1 per caster level, max +10 (SpellDiceRules, SPL-005)
+                    LevelBonusPerLevels = 1, LevelBonusMax = 10,
+                    Energy = SpellEnergy.Positive,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -477,7 +482,9 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Healing,
-                    HealDice = 8, HealCount = 3, BonusHealing = 5, // +CL (max +15 at CL15, using 5 for CL5)
+                    HealDice = 8, HealCount = 3, // +1 per caster level, max +15 (SpellDiceRules, SPL-005)
+                    LevelBonusPerLevels = 1, LevelBonusMax = 15,
+                    Energy = SpellEnergy.Positive,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -503,7 +510,9 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Healing,
-                    HealDice = 8, HealCount = 4, BonusHealing = 7, // +CL (max +20)
+                    HealDice = 8, HealCount = 4, // +1 per caster level, max +20 (SpellDiceRules, SPL-005)
+                    LevelBonusPerLevels = 1, LevelBonusMax = 20,
+                    Energy = SpellEnergy.Positive,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

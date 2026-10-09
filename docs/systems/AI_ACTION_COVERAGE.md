@@ -63,9 +63,10 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Destruction domain smite | Never | NPCs have no domains | Yes (Domain Power button; the +4 attack applies, the damage bonus never does) | CHR-005; 11.8.7 |
 | Domain powers | Never | NPCs have no domains | Yes (Strength, Destruction, Death, Sun, Travel, Plant, Luck, elemental turning) | CHR-023, CHR-062 |
 | Lay on Hands, Wild Shape, Favored Enemy and other data-only class features | Never | | No | CHR-020, CHR-053 |
-| Single-target damage/debuff/control spell | Used | kiter, dragon, healer | Yes | SPL-005, AI-046 |
+| Single-target damage/debuff/control spell | Used | kiter, dragon, healer | Yes | AI-046 |
 | Area spells, metamagic | Never | refused at cast | Yes | AI-001; 11.8.2 |
-| Heal, buff | Partial | adjacent or self only | Yes | AI-047; 11.8.6 |
+| Heal, buff | Partial | adjacent or self only; no cure for an undead or construct ally, no cure on an unhurt caster | Yes | AI-047; 11.8.6 |
+| Inflict to heal an undead ally, cure to hurt an undead enemy | Never | the AI only avoids the wrong use (SPL-005) | Yes | AI-062; 11.8.6 |
 | Spontaneous cure/inflict conversion | Never | PC cast path only (GameManager.SpellCasting.cs:193) | Yes | 11.8.6 |
 | Hold the charge, discharge a held touch spell | Never | NPC touch spells resolve at once against an adjacent target | Yes | |
 | Dismiss a spell | Never | | Yes (Invisibility, See Invisibility, Expeditious Retreat, Disguise Self, Jump) | |

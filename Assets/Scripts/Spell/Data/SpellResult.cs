@@ -73,6 +73,23 @@ public class SpellResult
     public int HealRolled;              // Raw healing dice roll
     public int[] HealRolls;             // Individual healing dice results
 
+    // ========== DICE AND ENERGY (SpellDiceRules, SPL-005) ==========
+    public int CasterLevel;             // Caster level the dice were rolled at
+    public int DiceCount;               // Dice rolled by the generic branch (0 when none)
+    public int DiceSides;
+    public int DiceBonus;               // Flat bonus, caster-level part included
+    public bool SaveHalves;             // A successful save halves (else negates) this cast's damage
+    /// <summary>Cure on an undead (damage) or Inflict on an undead (healing), or no effect on a construct.</summary>
+    public SpellEnergyOutcome EnergyOutcome;
+
+    /// <summary>The cast deals damage: a Damage spell (not curing an undead) or a cure harming an undead.</summary>
+    public bool IsDamageEffect => EnergyOutcome == SpellEnergyOutcome.HarmsUndead
+        || (Spell != null && Spell.EffectType == SpellEffectType.Damage && EnergyOutcome != SpellEnergyOutcome.HealsUndead);
+
+    /// <summary>The cast cures: a Healing spell (not harming an undead) or an inflict spell curing an undead.</summary>
+    public bool IsHealingEffect => EnergyOutcome == SpellEnergyOutcome.HealsUndead
+        || (Spell != null && Spell.EffectType == SpellEffectType.Healing && EnergyOutcome != SpellEnergyOutcome.HarmsUndead);
+
     // ========== BUFF ==========
     public bool BuffApplied;
     public string BuffDescription;
@@ -252,7 +269,12 @@ public class SpellResult
         }
 
         // ========== DAMAGE ==========
-        if (Spell.EffectType == SpellEffectType.Damage && (AttackHit || !RequiredAttackRoll))
+        if (EnergyOutcome == SpellEnergyOutcome.HarmsUndead)
+            sb.AppendLine("  Positive energy harms the undead (PHB p.215).");
+        else if (EnergyOutcome == SpellEnergyOutcome.HealsUndead)
+            sb.AppendLine("  Negative energy cures the undead (PHB p.244).");
+
+        if (IsDamageEffect && (AttackHit || !RequiredAttackRoll))
         {
             if (MissileCount > 0 && MissileDamages != null)
             {
@@ -270,21 +292,25 @@ public class SpellResult
             else if (DamageDealt > 0 || DamageRolled > 0)
             {
                 sb.AppendLine($"  Damage:");
-                if (Spell.DamageCount > 0 && !Spell.DamageResolvedByHandler)
+                if (DiceCount > 0 && DiceSides > 0 && !Spell.DamageResolvedByHandler)
                 {
                     string diceStr = FormatDiceRolls(DamageRolls);
+                    int diceTotal = 0;
+                    if (DamageRolls != null)
+                        foreach (int r in DamageRolls) diceTotal += r;
+                    string clNote = CasterLevel > 0 ? $" (CL {CasterLevel})" : "";
                     if (!string.IsNullOrEmpty(diceStr))
-                        sb.AppendLine($"    {Spell.DamageCount}d{Spell.DamageDice} {diceStr} = {DamageRolled}");
+                        sb.AppendLine($"    {DiceCount}d{DiceSides} {diceStr} = {diceTotal}{clNote}");
                     else
-                        sb.AppendLine($"    {Spell.DamageCount}d{Spell.DamageDice} = {DamageRolled}");
+                        sb.AppendLine($"    {DiceCount}d{DiceSides} = {diceTotal}{clNote}");
                 }
-                if (Spell.BonusDamage > 0 && Spell.DamageCount > 0)
-                    sb.AppendLine($"    + {Spell.BonusDamage} bonus");
+                if (DiceBonus > 0 && DiceCount > 0)
+                    sb.AppendLine($"    + {DiceBonus} bonus");
 
                 if (EmpowerBonus > 0)
                     sb.AppendLine($"    Empower: +{EmpowerBonus} (×1.5)");
                 int postSaveDamage = DamageRolled;
-                if (RequiredSave && SaveSucceeded && Spell.SaveHalves)
+                if (RequiredSave && SaveSucceeded && SaveHalves)
                 {
                     postSaveDamage = Mathf.Max(0, DamageRolled / 2);
                     sb.AppendLine($"    Save halves: {DamageRolled} → {postSaveDamage}");
@@ -310,19 +336,20 @@ public class SpellResult
         }
 
         // ========== HEALING ==========
-        if (Spell.EffectType == SpellEffectType.Healing)
+        if (IsHealingEffect && (AttackHit || !RequiredAttackRoll))
         {
             sb.AppendLine($"  Healing: healed!");
-            if (Spell.HealCount > 0)
+            if (DiceCount > 0 && DiceSides > 0)
             {
                 string healDiceStr = FormatDiceRolls(HealRolls);
+                string clNote = CasterLevel > 0 ? $" (CL {CasterLevel})" : "";
                 if (!string.IsNullOrEmpty(healDiceStr))
-                    sb.AppendLine($"    {Spell.HealCount}d{Spell.HealDice} {healDiceStr} = {HealRolled}");
+                    sb.AppendLine($"    {DiceCount}d{DiceSides} {healDiceStr} = {HealRolled}{clNote}");
                 else
-                    sb.AppendLine($"    {Spell.HealCount}d{Spell.HealDice} = {HealRolled}");
+                    sb.AppendLine($"    {DiceCount}d{DiceSides} = {HealRolled}{clNote}");
             }
-            if (Spell.BonusHealing > 0)
-                sb.AppendLine($"    + {Spell.BonusHealing} (caster level)");
+            if (DiceBonus > 0)
+                sb.AppendLine($"    + {DiceBonus}{(Spell.LevelBonusPerLevels > 0 ? " (caster level)" : "")}");
             if (EmpowerBonus > 0)
                 sb.AppendLine($"    Empower: +{EmpowerBonus} (×1.5)");
             sb.AppendLine($"    = {HealingDone} HP restored");

@@ -135,8 +135,8 @@ Combat defect CMB-064: normal crit confirmation never calls `IsImmuneToCriticalH
 | Factory (Equipment/Inventory/) | Spells covered | Caster level | Price | Save DC | Notes |
 |---|---|---|---|---|---|
 | `ScrollFactory` | every non-placeholder spell on a class list, arcane and/or divine copy | minimum for the spell level | SL × CL × 25; 0-level uses ceil(12.5 × CL) = 13 gp at CL 1 | 10 + SL + floor(SL/2) (`ScrollData.Create` fallback, `SpellSaveDCRules.ForMagicItem`) | Crafting floors the 0-level price to 12 gp (ITM-044) |
-| `PotionFactory` | SL 0-3 passing `IsEligibleForPotion` (not personal, not area damage) | minimum | SL × CL × 50 (0-level 25 gp) | n/a | Healing spells become `ConsumableEffect.HealHP` |
-| `WandFactory` | SL 0-4 | minimum | SL × CL × 750 (0-level 375 gp) | 10 + SL + floor(SL/2) (`SpellSaveDCRules.ForMagicItem`) | 50 charges |
+| `PotionFactory` | SL 0-3 passing `IsEligibleForPotion` (not personal, not area damage) | minimum | SL × CL × 50 (0-level 25 gp) | n/a | Healing spells become `ConsumableEffect.HealHP`, with the dice at the potion's caster level (`SpellDiceRules.Healing`, SPL-005: Cure Light Wounds at CL 1 is 1d8+1; Cure Minor Wounds a flat 1 point) |
+| `WandFactory` | SL 0-4 | minimum | SL × CL × 750 (0-level 375 gp) | 10 + SL + floor(SL/2) (`SpellSaveDCRules.ForMagicItem`) | 50 charges; healing wands get their dice at the wand's caster level, and combat wand and scroll casts fix the spell's dice at the item's caster level (`GameManager.BuildWandPipelineSpell`/`BuildScrollPipelineSpell`, SPL-005; duration, range and SR still use the user's, SPL-016) |
 
 Counts depend on the spell data and are logged at startup; they were not computed here. The DMG save DC for scrolls and wands is 10 + spell level + the minimum ability modifier needed to cast it (DMG p.214); since 2026-10-09 (SPL-001) scrolls and wands share it through `SpellSaveDCRules.ForMagicItem`, and a scroll with no stored DC uses it instead of the reader's DC. Scrolls crafted in the workshop still bake the crafter's own DC (ITM-008, owner question). A staff's DC is the wielder's own (DMG p.214; `StaffValidator.CalculateStaffSaveDC`).
 

@@ -77,7 +77,7 @@ public sealed class CharmedBehaviorController
         if (casterInjured)
         {
             // Try healing spell first.
-            if (TryGetBestHealingSpell(actor, out SpellData healingSpell))
+            if (TryGetBestHealingSpell(actor, caster, out SpellData healingSpell))
             {
                 int distance = actor.GetMinimumDistanceToTarget(caster, chebyshev: true);
                 if (distance > 1 && HasAnyMoveAction(actor)
@@ -143,7 +143,8 @@ public sealed class CharmedBehaviorController
             yield return gameManager.StartCoroutine(gameManager.NPCPerformAttackForAI(actor, hostileToCaster));
     }
 
-    private static bool TryGetBestHealingSpell(CharacterController actor, out SpellData healingSpell)
+    /// <summary>The prepared spell that cures <paramref name="recipient"/> most: a cure, or an inflict spell for an undead (SpellDiceRules.Heals, SPL-005).</summary>
+    private static bool TryGetBestHealingSpell(CharacterController actor, CharacterController recipient, out SpellData healingSpell)
     {
         healingSpell = null;
         if (actor == null || actor.Stats == null || !actor.Stats.IsSpellcaster)
@@ -161,10 +162,12 @@ public sealed class CharmedBehaviorController
         for (int i = 0; i < castable.Count; i++)
         {
             SpellData candidate = castable[i];
-            if (candidate == null || candidate.EffectType != SpellEffectType.Healing)
+            if (candidate == null || !SpellDiceRules.Heals(candidate, recipient != null ? recipient.Stats : null))
+                continue;
+            if (candidate.EffectType != SpellEffectType.Healing && candidate.Energy != SpellEnergy.Negative)
                 continue;
 
-            int score = candidate.HealCount * Mathf.Max(1, candidate.HealDice) + candidate.BonusHealing;
+            int score = SpellDiceRules.Effect(candidate, SpellDiceRules.CasterLevelFor(actor.Stats, candidate)).Maximum;
             if (score > bestPower)
             {
                 bestPower = score;
@@ -262,8 +265,10 @@ public sealed class CharmedBehaviorController
             SpellData spell = item.Scroll?.GetSpell()
                               ?? SpellDatabase.GetSpell(item.ConsumableSpellName)
                               ?? SpellDatabase.GetSpellByName(item.ConsumableSpellName);
-            if (spell != null && spell.EffectType == SpellEffectType.Healing)
+            if (spell != null && SpellDiceRules.Heals(spell, caster.Stats))
             {
+                // The item's spell at the item's caster level (DMG p.213/229/237), as the PC consumable path builds it (SPL-005).
+                spell = GameManager.BuildConsumableSpellVariant(spell, item, GameManager.GetConsumableCasterLevel(item));
                 SpellResult result = SpellCaster.Cast(spell, actor.Stats, caster.Stats, null, forceFriendlyTouchNoRoll: true, forceTargetToFailSave: false, actor, caster);
                 return result != null ? Mathf.Max(0, result.HealingDone) : 0;
             }

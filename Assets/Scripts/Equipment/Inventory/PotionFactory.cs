@@ -238,10 +238,20 @@ public static class PotionFactory
         // Copy healing data from spell if applicable
         if (spell.EffectType == SpellEffectType.Healing)
         {
+            // The potion's dice at its own caster level (DMG p.229; SpellDiceRules, SPL-005): CLW at CL 1 is 1d8+1.
+            SpellDice dice = SpellDiceRules.Healing(spell, casterLevel);
             potionItem.ConsumableEffect = ConsumableEffectType.HealHP;
-            potionItem.HealDiceCount = Mathf.Max(1, spell.HealCount);
-            potionItem.HealDiceSides = Mathf.Max(1, spell.HealDice);
-            potionItem.HealBonus = spell.BonusHealing;
+            if (dice.HasDice)
+            {
+                potionItem.HealDiceCount = dice.Count;
+                potionItem.HealDiceSides = dice.Sides;
+                potionItem.HealBonus = dice.Bonus;
+            }
+            else
+            {
+                // No dice (Cure Minor Wounds): a flat amount, 1 point (PHB p.216), not 1d1 + 1.
+                potionItem.HealAmount = Mathf.Max(0, dice.Bonus);
+            }
         }
 
         ItemDatabase.RegisterPotionItem(potionItem);

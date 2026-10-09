@@ -53,7 +53,7 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 43,
+      "passed": 46,
       "failed": 3,
       "flakyFailures": 0,
       "knownFailures": [
@@ -1193,6 +1193,17 @@
       "flakyFailures": 0,
       "knownFailures": [],
       "notes": ""
+    },
+    {
+      "type": "Tests.Magic.SpellDiceRulesTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 119,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "SPL-005: SpellDiceRules dice at a caster level (Burning Hands, Shocking Grasp and Flame Strike 1 die per level with their caps; Cure and Inflict Light to Critical Wounds +1 per level, max +5/+10/+15/+20; Cure and Inflict Minor Wounds 1 point, Inflict Minor Will negates), the energy outcome on living, undead and construct targets, and SpellCaster.Cast with every die at its maximum: scaled damage, cure and inflict on the living, a cure harming an undead (touch attack, Will half that a willing undead still rolls, positive damage, spell resistance), an inflict spell curing an undead (no attack roll, no save), no effect on a construct, BakeForCasterLevel for item caster levels without touching the template, the combat scroll and wand pipelines rolling at the item's caster level (GameManager.BuildScrollPipelineSpell/BuildWandPipelineSpell, DMG p.213, p.237), and factory potion and wand heal dice (Cure Minor Wounds a flat 1 point) (PHB p.207, p.215-216, p.231, p.244, p.279; MM p.307)"
     },
     {
       "type": "Tests.Magic.SpellDurationRulesTests",

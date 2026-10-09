@@ -4725,7 +4725,7 @@ public partial class GameManager
                         if (result.DamageDealt > 0)
                         {
                             if (result.DamageRolls != null && result.DamageRolls.Length > 0 && result.Spell != null)
-                                logBuilder.AppendLine($"  Damage: {result.Spell.DamageCount}d{result.Spell.DamageDice} {SpellResult.FormatDiceRolls(result.DamageRolls)} = {result.DamageDealt} {result.DamageType}");
+                                logBuilder.AppendLine($"  Damage: {result.DiceCount}d{result.DiceSides}{(result.DiceBonus > 0 ? "+" + result.DiceBonus : "")} {SpellResult.FormatDiceRolls(result.DamageRolls)} (CL {result.CasterLevel}) = {result.DamageDealt} {result.DamageType}");
                             else
                                 logBuilder.AppendLine($"  Damage: {result.DamageDealt} {result.DamageType}");
                             if (result.EmpowerBonus > 0)

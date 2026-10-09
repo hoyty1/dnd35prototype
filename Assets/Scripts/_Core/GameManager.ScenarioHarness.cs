@@ -353,15 +353,18 @@ public partial class GameManager
 
     /// <summary>
     /// The PC prompt or selection the game is waiting on, or null when none is open: "aoo" (the AoO
-    /// confirmation), "ranged-retarget", "full-attack-5ft" or "submenu" (a special-style selection
-    /// menu). Other modal prompts (bull rush push and follow, Improved Grab, the disarm item choice,
-    /// the touch-spell prompt) are not listed; a scripted UI step that never settles reports them
-    /// through <see cref="Harness_DumpState"/> and the open UI scan.
+    /// confirmation), "ranged-retarget", "full-attack-5ft", "submenu" (a special-style selection
+    /// menu) or "touch-spell" (Cast Now / Discharge Later; the Ui Cast step answers it with
+    /// <see cref="Harness_AnswerTouchSpellPromptCastNow"/>). Other modal prompts (bull rush push and
+    /// follow, Improved Grab, the disarm item choice) are not listed; a scripted UI step that never
+    /// settles reports them through <see cref="Harness_DumpState"/> and the open UI scan.
     /// </summary>
     internal string Harness_PendingPrompt()
     {
         if (_counterTripPromptOpen)
             return "counter-trip";
+        if (CombatUI != null && CombatUI.Harness_IsTouchSpellPromptOpen())
+            return "touch-spell";
         if (_waitingForAoOConfirmation)
             return "aoo";
         if (_isAwaitingRangedRetargetSelection)
@@ -456,6 +459,21 @@ public partial class GameManager
     internal void Harness_SelectSpell(SpellData spell, MetamagicData metamagic)
     {
         OnSpellSelectedWithMetamagic(spell, metamagic);
+    }
+
+    /// <summary>
+    /// Presses Cast Now on the open touch-spell prompt (a melee touch spell's Cast Now / Discharge Later choice), as a
+    /// player clicks it; false when no prompt or button is open. Writes no game state of its own.
+    /// </summary>
+    internal bool Harness_AnswerTouchSpellPromptCastNow()
+    {
+        UnityEngine.UI.Button castNow = CombatUI != null ? CombatUI.Harness_FindTouchSpellPromptButton("Cast Now") : null;
+        if (castNow == null && CombatUI != null)
+            castNow = CombatUI.Harness_FindTouchSpellPromptButton("CastNow");
+        if (castNow == null || !castNow.interactable)
+            return false;
+        castNow.onClick.Invoke();
+        return true;
     }
 
     /// <summary>

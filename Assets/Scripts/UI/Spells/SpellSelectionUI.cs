@@ -980,17 +980,13 @@ public class SpellSelectionUI : MonoBehaviour
             case SpellEffectType.Damage:
                 if (spell.AutoHit && spell.MissileCount > 0)
                     return $"<color=#FF6644>{spell.MissileCount}×(1d{spell.DamageDice}+{spell.BonusDamage}) {spell.DamageType}</color>";
-                if (spell.DamageCount > 0)
-                    return $"<color=#FF6644>{spell.DamageCount}d{spell.DamageDice}{(spell.BonusDamage > 0 ? "+" + spell.BonusDamage : "")} {spell.DamageType}</color>";
-                if (spell.BonusDamage > 0)
-                    return $"<color=#FF6644>{spell.BonusDamage} {spell.DamageType}</color>";
+                if (spell.DamageCount > 0 || spell.BonusDamage > 0 || spell.LevelBonusPerLevels > 0)
+                    return $"<color=#FF6644>{SpellDiceRules.Describe(spell)} {spell.DamageType}</color>";
                 return "<color=#FF6644>Damage</color>";
 
             case SpellEffectType.Healing:
-                if (spell.HealCount > 0)
-                    return $"<color=#44FF44>Heals {spell.HealCount}d{spell.HealDice}+{spell.BonusHealing}</color>";
-                if (spell.BonusHealing > 0)
-                    return $"<color=#44FF44>Heals {spell.BonusHealing}</color>";
+                if (spell.HealCount > 0 || spell.BonusHealing > 0 || spell.LevelBonusPerLevels > 0)
+                    return $"<color=#44FF44>Heals {SpellDiceRules.Describe(spell)}</color>";
                 return "<color=#44FF44>Healing</color>";
 
             case SpellEffectType.Buff:
@@ -1310,18 +1306,14 @@ public class SpellSelectionUI : MonoBehaviour
         {
             if (spell.AutoHit && spell.MissileCount > 0)
                 detail += $"Damage: {spell.MissileCount} × (1d{spell.DamageDice}+{spell.BonusDamage}) {spell.DamageType}\n";
-            else if (spell.DamageCount > 0)
-                detail += $"Damage: {spell.DamageCount}d{spell.DamageDice}{(spell.BonusDamage > 0 ? "+" + spell.BonusDamage : "")} {spell.DamageType}\n";
-            else if (spell.BonusDamage > 0)
-                detail += $"Damage: {spell.BonusDamage} {spell.DamageType}\n";
+            else if (spell.DamageCount > 0 || spell.BonusDamage > 0 || spell.LevelBonusPerLevels > 0)
+                detail += $"Damage: {SpellDiceRules.Describe(spell)} {spell.DamageType}\n";
         }
 
         if (spell.EffectType == SpellEffectType.Healing)
         {
-            if (spell.HealCount > 0)
-                detail += $"Healing: {spell.HealCount}d{spell.HealDice}+{spell.BonusHealing}\n";
-            else if (spell.BonusHealing > 0)
-                detail += $"Healing: {spell.BonusHealing}\n";
+            if (spell.HealCount > 0 || spell.BonusHealing > 0 || spell.LevelBonusPerLevels > 0)
+                detail += $"Healing: {SpellDiceRules.Describe(spell)}\n";
         }
 
         if (spell.AllowsSavingThrow)

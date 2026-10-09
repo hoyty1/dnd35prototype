@@ -217,10 +217,20 @@ public static class WandFactory
         // Copy healing data from spell if applicable
         if (spell.EffectType == SpellEffectType.Healing)
         {
+            // The wand's dice at its own caster level (SpellDiceRules, SPL-005).
+            SpellDice dice = SpellDiceRules.Healing(spell, casterLevel);
             wandItem.ConsumableEffect = ConsumableEffectType.HealHP;
-            wandItem.HealDiceCount = Mathf.Max(1, spell.HealCount);
-            wandItem.HealDiceSides = Mathf.Max(1, spell.HealDice);
-            wandItem.HealBonus = spell.BonusHealing;
+            if (dice.HasDice)
+            {
+                wandItem.HealDiceCount = dice.Count;
+                wandItem.HealDiceSides = dice.Sides;
+                wandItem.HealBonus = dice.Bonus;
+            }
+            else
+            {
+                // No dice (Cure Minor Wounds): a flat amount, 1 point (PHB p.216), not 1d1 + 1.
+                wandItem.HealAmount = Mathf.Max(0, dice.Bonus);
+            }
         }
 
         ItemDatabase.RegisterWandItem(wandItem);

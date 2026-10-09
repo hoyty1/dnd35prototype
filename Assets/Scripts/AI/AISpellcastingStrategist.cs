@@ -286,6 +286,10 @@ public static class AISpellcastingStrategist
             }
         }
 
+        // Every candidate refused a healing spell (an undead or construct, or nobody hurt): no target rather than a
+        // wasted cure on the caster (SPL-005).
+        if (bestTarget == null && spell.EffectType == SpellEffectType.Healing)
+            return null;
         return bestTarget ?? caster;
     }
 
@@ -300,6 +304,16 @@ public static class AISpellcastingStrategist
 
         if (spell.EffectType == SpellEffectType.Healing)
         {
+            // A cure harms an undead ally and does nothing to a construct (SpellDiceRules.OutcomeFor, PHB p.215; SPL-005).
+            if (!SpellDiceRules.Heals(spell, ally.Stats))
+                return float.NegativeInfinity;
+
+            // A spell that cures hit points does nothing for an ally with no damage, lethal or nonlethal.
+            int estimatedHeal = EstimateHealAmount(spell, caster);
+            int missingHP = ally.Stats.TotalMaxHP - ally.Stats.CurrentHP;
+            if (estimatedHeal > 0 && missingHP <= 0 && ally.Stats.NonlethalDamage <= 0)
+                return float.NegativeInfinity;
+
             // Prioritize lowest HP% ally
             score += (1f - hpPct) * 100f;
 
@@ -307,8 +321,6 @@ public static class AISpellcastingStrategist
             if (IsFrontliner(ally)) score += 10f;
 
             // Consider healing efficiency — don't overheal
-            int estimatedHeal = EstimateHealAmount(spell, caster);
-            int missingHP = ally.Stats.TotalMaxHP - ally.Stats.CurrentHP;
             if (estimatedHeal > 0 && missingHP > 0)
             {
                 float efficiency = Mathf.Min(1f, (float)missingHP / estimatedHeal);
@@ -396,6 +408,10 @@ public static class AISpellcastingStrategist
             }
         }
 
+        // An inflict spell cures an undead and does nothing to a construct (SpellDiceRules, SPL-005): no such fallback.
+        if (bestTarget == null && fallbackTarget != null && spell.EffectType == SpellEffectType.Damage
+            && spell.Energy != SpellEnergy.None && !SpellDiceRules.Harms(spell, fallbackTarget.Stats))
+            return null;
         return bestTarget ?? fallbackTarget;
     }
 
@@ -404,6 +420,10 @@ public static class AISpellcastingStrategist
     {
         float score = 10f;
         if (enemy == null || enemy.Stats == null) return float.NegativeInfinity;
+
+        // An inflict spell would cure an undead enemy and does nothing to a construct (SpellDiceRules, SPL-005).
+        if (spell.EffectType == SpellEffectType.Damage && spell.Energy != SpellEnergy.None && !SpellDiceRules.Harms(spell, enemy.Stats))
+            return float.NegativeInfinity;
 
         // Base priority scoring
         float hpPct = enemy.Stats.TotalMaxHP > 0
@@ -434,7 +454,7 @@ public static class AISpellcastingStrategist
         // "Finishing blow" logic — if damage will kill, prefer this target
         if (spell.EffectType == SpellEffectType.Damage && spell.DamageCount > 0)
         {
-            int estDamage = EstimateAverageDamage(spell);
+            int estDamage = EstimateAverageDamage(spell, caster);
             if (estDamage >= enemy.Stats.CurrentHP && enemy.Stats.CurrentHP > 0)
                 score += 15f; // This spell will likely kill the target
         }
@@ -1236,7 +1256,7 @@ public static class AISpellcastingStrategist
                 // Finishing blow bonus
                 if (primaryTarget != null && primaryTarget.Stats != null)
                 {
-                    int estDamage = EstimateAverageDamage(spell);
+                    int estDamage = EstimateAverageDamage(spell, caster);
                     if (estDamage >= primaryTarget.Stats.CurrentHP && primaryTarget.Stats.CurrentHP > 0)
                         score += 15f;
                 }
@@ -1325,6 +1345,8 @@ public static class AISpellcastingStrategist
         if (IsCreatureType(enemy, "Undead"))
         {
             if (spell.IsMindAffecting) score -= 50f;
+            // An inflict spell cures an undead (PHB p.244; SPL-005)
+            if (SpellDiceRules.OutcomeFor(spell, enemy.Stats) == SpellEnergyOutcome.HealsUndead) score -= 100f;
             // Positive energy heals are damage to undead — bonus
             if (spell.EffectType == SpellEffectType.Damage &&
                 !string.IsNullOrEmpty(spell.DamageType) &&
@@ -1504,27 +1526,24 @@ public static class AISpellcastingStrategist
                spell.BuffDamageResistanceAmount > 0 || spell.BuffDamageReductionAmount > 0;
     }
 
+    /// <summary>Average healing at the caster's caster level (SpellDiceRules, SPL-005).</summary>
     private static int EstimateHealAmount(SpellData spell, CharacterController caster)
     {
         if (spell == null) return 0;
-        int dice = spell.HealCount > 0 && spell.HealDice > 0
-            ? spell.HealCount * (spell.HealDice + 1) / 2 : 0;
-        int bonus = spell.BonusHealing;
-        if (caster?.Stats != null && spell.BonusHealing == 0)
-            bonus = Mathf.Min(caster.Stats.GetCasterLevel(), spell.SpellLevel * 5);
-        return dice + bonus;
+        int casterLevel = SpellDiceRules.CasterLevelFor(caster?.Stats, spell);
+        return Mathf.FloorToInt(SpellDiceRules.Healing(spell, casterLevel).Average);
     }
 
-    private static int EstimateAverageDamage(SpellData spell)
+    /// <summary>Average damage at the caster's caster level (SpellDiceRules, SPL-005); Magic Missile counts its listed missiles.</summary>
+    private static int EstimateAverageDamage(SpellData spell, CharacterController caster)
     {
         if (spell == null) return 0;
-        int diceAvg = 0;
-        if (spell.DamageDice > 0 && spell.DamageCount > 0)
-            diceAvg = spell.DamageCount * (spell.DamageDice + 1) / 2;
+        int casterLevel = SpellDiceRules.CasterLevelFor(caster?.Stats, spell);
+        int diceAvg = Mathf.FloorToInt(SpellDiceRules.Damage(spell, casterLevel).Average);
         int missileAvg = 0;
         if (spell.AutoHit && spell.MissileCount > 0)
             missileAvg = spell.MissileCount * ((spell.DamageDice + 1) / 2 + spell.BonusDamage);
-        return Mathf.Max(diceAvg + spell.BonusDamage, missileAvg);
+        return Mathf.Max(diceAvg, missileAvg);
     }
 
     private static bool IsHealerProfile(CharacterController caster)

@@ -182,6 +182,10 @@ namespace DND35.AI.Profiles
                 CharacterController candidate = allCombatants[i];
                 if (!IsAliveAlly(healer, candidate))
                     continue;
+                // A cure harms an undead and does nothing to a construct (PHB p.215; SpellDiceRules.OutcomeFor, SPL-005),
+                // so they are not cure targets. Healing an undead ally with an inflict spell is AI-062.
+                if (SpellDiceRules.IsUndead(candidate.Stats) || SpellDiceRules.IsConstruct(candidate.Stats))
+                    continue;
 
                 float hpPct = GetHealthPercent(candidate);
                 if (hpPct < HealingThreshold)

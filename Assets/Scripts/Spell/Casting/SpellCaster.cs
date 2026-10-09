@@ -12,6 +12,11 @@ using DND35e.Identifiers;
 /// </summary>
 public static class SpellCaster
 {
+    /// <summary>DiceService context of the touch attack roll (a scenario can force it; the draw is the same as DiceRoller.D20).</summary>
+    public const string TouchAttackContext = "Spell touch attack";
+    /// <summary>DiceService context of the target's saving throw.</summary>
+    public const string SavingThrowContext = "Spell saving throw";
+
     /// <summary>
     /// Simplified spell resolution using stats only (no metamagic).
     /// Slot consumption is handled by the caller (GameManager).
@@ -95,10 +100,27 @@ public static class SpellCaster
             }
         }
 
+        // ========== POSITIVE / NEGATIVE ENERGY (Cure and Inflict, SPL-005) ==========
+        // On an undead a cure's positive energy is damage (a touch attack against an unwilling target, spell
+        // resistance, Will half; PHB p.215) and an inflict spell's negative energy cures it (PHB p.244), which the
+        // undead accepts: no touch attack roll and no save. A construct is unaffected (SpellDiceRules.OutcomeFor).
+        SpellEnergyOutcome energyOutcome = SpellDiceRules.OutcomeFor(spell, targetStats);
+        bool harmsUndead = energyOutcome == SpellEnergyOutcome.HarmsUndead;
+        bool healsUndead = energyOutcome == SpellEnergyOutcome.HealsUndead;
+        result.EnergyOutcome = energyOutcome;
+        if (harmsUndead)
+        {
+            result.DamageType = "positive";
+            parsedSpellDamageTypes = DamageTextUtils.ParseDamageTypes("positive");
+            result.DamageTypeSummary = DamageTextUtils.FormatDamageTypes(parsedSpellDamageTypes);
+        }
+
         // ========== ATTACK ROLL (touch attacks) ==========
         // AoE spells do not use touch attack rolls.
         bool isAoESpell = spell.TargetType == SpellTargetType.Area;
         bool usesTouchAttack = spell.IsMeleeTouchSpell() || spell.IsRangedTouchSpell();
+        if (healsUndead)
+            forceFriendlyTouchNoRoll = true;
 
         bool casterIsSummoned = casterController != null
             && GameManager.Instance != null
@@ -181,7 +203,7 @@ public static class SpellCaster
                 animateRopeRangePenalty = -2 * Mathf.Max(0, animateRopeIncrement - 1);
             }
 
-            int roll = DiceRoller.D20();
+            int roll = DiceService.D20(TouchAttackContext);
             int total = roll + atkBonus + situationalSpellAttackBonus + fightingDefensivelyPenalty + shootingIntoMeleePenalty + animateRopeRangePenalty;
 
             result.AttackRoll = roll;
@@ -258,6 +280,17 @@ public static class SpellCaster
         }
 
         // ========== SPELL-SPECIFIC TARGET RESTRICTIONS ==========
+        if (result.AttackHit && energyOutcome == SpellEnergyOutcome.NoEffect)
+        {
+            result.Success = false;
+            result.NoEffectReason = spell.Energy == SpellEnergy.Positive
+                ? $"{spell.Name} has no effect: its positive energy cures only living creatures (PHB p.215)."
+                : $"{spell.Name} has no effect: constructs are immune to necromancy effects (MM p.307).";
+            result.TargetHPBefore = targetStats.CurrentHP;
+            result.TargetHPAfter = targetStats.CurrentHP;
+            return result;
+        }
+
         if (result.AttackHit && IsDisruptUndeadSpell(spell) && !IsUndeadTarget(targetStats))
         {
             result.Success = false;
@@ -316,10 +349,13 @@ public static class SpellCaster
 
         // Breaking charm: if the charm caster makes a hostile action against their charmed target,
         // the charm ends immediately.
+        bool isHostileEffect = harmsUndead
+            || (spell.EffectType == SpellEffectType.Damage && !healsUndead)
+            || spell.EffectType == SpellEffectType.Debuff;
         if (result.AttackHit
             && casterController != null
             && targetController != null
-            && (spell.EffectType == SpellEffectType.Damage || spell.EffectType == SpellEffectType.Debuff)
+            && isHostileEffect
             && GameManager.Instance != null)
         {
             GameManager.Instance.BreakCharmOnHostileAction(casterController, targetController);
@@ -330,7 +366,8 @@ public static class SpellCaster
         }
 
         // ========== SPELL RESISTANCE ==========
-        if (result.AttackHit && spell.SpellResistanceApplies && targetStats != null && targetStats.SpellResistance > 0)
+        // A cure is "Yes (harmless)" against the living, but an undead applies spell resistance against it (PHB p.215).
+        if (result.AttackHit && (spell.SpellResistanceApplies || harmsUndead) && targetStats != null && targetStats.SpellResistance > 0)
         {
             result.SpellResistanceChecked = true;
             result.SpellResistanceValue = targetStats.SpellResistance;
@@ -357,10 +394,19 @@ public static class SpellCaster
         }
 
         // ========== SAVING THROW ==========
-        if (spell.AllowsSavingThrow && result.AttackHit)
+        // A cure harming an undead allows a Will save for half (PHB p.215), and the undead never forgoes it; an
+        // inflict spell curing an undead is accepted without a save (PHB p.177: a creature may forgo its save).
+        bool allowsSave = harmsUndead || (spell.AllowsSavingThrow && !healsUndead);
+        string saveType = harmsUndead ? "Will" : spell.SavingThrowType;
+        bool saveHalves = harmsUndead || spell.SaveHalves;
+        result.SaveHalves = saveHalves;
+        if (harmsUndead)
+            forceTargetToFailSave = false;
+
+        if (allowsSave && result.AttackHit)
         {
             result.RequiredSave = true;
-            result.SaveType = spell.SavingThrowType;
+            result.SaveType = saveType;
 
             // One DC rule for every cast path (SpellSaveDCRules, SPL-001): a pre-baked DC (scroll, wand, imbued
             // spell) is kept; otherwise 10 + the casting class's (or heightened) level + its key ability + Spell Focus.
@@ -379,10 +425,11 @@ public static class SpellCaster
             }
             else
             {
-                int saveRoll = DiceRoller.D20();
+                int saveRoll = DiceService.D20(SavingThrowContext);
                 int saveMod = GetSaveModifier(
                     targetStats,
                     spell,
+                    saveType,
                     protection,
                     casterController,
                     targetController,
@@ -401,7 +448,14 @@ public static class SpellCaster
 
         // ========== DAMAGE ==========
         // A spell whose custom handler deals the damage skips this branch, or the target takes both (SPL-124).
-        if (spell.EffectType == SpellEffectType.Damage && result.AttackHit && !spell.DamageResolvedByHandler)
+        // Dice, caster-level bonus and caps come from SpellDiceRules (SPL-005); a cure harming an undead rolls its
+        // cure dice here as positive-energy damage.
+        int casterLevel = SpellDiceRules.CasterLevelFor(casterStats, spell);
+        result.CasterLevel = casterLevel;
+        bool dealsDamage = harmsUndead || (spell.EffectType == SpellEffectType.Damage && !healsUndead);
+        bool heals = healsUndead || (spell.EffectType == SpellEffectType.Healing && !harmsUndead);
+
+        if (dealsDamage && result.AttackHit && !spell.DamageResolvedByHandler)
         {
             result.TargetHPBefore = targetStats.CurrentHP;
 
@@ -420,7 +474,7 @@ public static class SpellCaster
                     if (isMaximized)
                         missileDmg = spell.DamageDice + spell.BonusDamage; // Max die value
                     else
-                        missileDmg = Random.Range(1, spell.DamageDice + 1) + spell.BonusDamage;
+                        missileDmg = DiceService.RollDie(spell.DamageDice, SpellDiceRules.DamageDieContext) + spell.BonusDamage;
 
                     result.MissileDamages[i] = missileDmg;
                     totalDmg += missileDmg;
@@ -441,18 +495,17 @@ public static class SpellCaster
             }
             else
             {
+                SpellDice dice = SpellDiceRules.Effect(spell, casterLevel);
+                result.DiceCount = dice.Count;
+                result.DiceSides = dice.Sides;
+                result.DiceBonus = dice.Bonus;
+
+                int[] rolls = SpellDiceRules.Roll(dice, isMaximized, SpellDiceRules.DamageDieContext);
                 int dmg = 0;
-                int[] rolls = new int[spell.DamageCount];
-                for (int i = 0; i < spell.DamageCount; i++)
-                {
-                    if (isMaximized)
-                        rolls[i] = spell.DamageDice; // Max die value
-                    else
-                        rolls[i] = Random.Range(1, spell.DamageDice + 1);
+                for (int i = 0; i < rolls.Length; i++)
                     dmg += rolls[i];
-                }
                 result.DamageRolls = rolls;
-                dmg += spell.BonusDamage;
+                dmg += dice.Bonus;
                 int baseDmg = Mathf.Max(0, dmg);
 
                 // Empower: multiply variable portion by 1.5
@@ -465,13 +518,13 @@ public static class SpellCaster
                     Debug.Log($"[Metamagic] Empower Spell: base damage {preDmg} + {empowerBonus} (×1.5) = {baseDmg}");
                 }
                 if (isMaximized)
-                    Debug.Log($"[Metamagic] Maximize Spell: all {spell.DamageCount}d{spell.DamageDice} dice set to max ({spell.DamageDice} each)");
+                    Debug.Log($"[Metamagic] Maximize Spell: all {dice.Count}d{dice.Sides} dice set to max ({dice.Sides} each)");
 
                 result.DamageRolled = baseDmg;
 
-                if (result.RequiredSave && result.SaveSucceeded && spell.SaveHalves)
+                if (result.RequiredSave && result.SaveSucceeded && saveHalves)
                     result.DamageDealt = Mathf.Max(0, result.DamageRolled / 2);
-                else if (result.RequiredSave && result.SaveSucceeded && !spell.SaveHalves)
+                else if (result.RequiredSave && result.SaveSucceeded && !saveHalves)
                     result.DamageDealt = 0;
                 else
                     result.DamageDealt = Mathf.Max(0, result.DamageRolled);
@@ -495,8 +548,8 @@ public static class SpellCaster
                 Source = AttackSource.Spell,
                 SourceName = spell.Name,
                 // Fire Shield turns a successful Reflex save for half into no damage (PHB p.230; SPL-004).
-                SavedForHalf = result.RequiredSave && result.SaveSucceeded && spell.SaveHalves
-                    && spell.SavingThrowType == "Reflex"
+                SavedForHalf = result.RequiredSave && result.SaveSucceeded && saveHalves
+                    && saveType == "Reflex"
             };
 
             DamageResolutionResult mitigation = targetStats.ApplyIncomingDamage(result.DamageDealt, packet);
@@ -511,24 +564,24 @@ public static class SpellCaster
         }
 
         // ========== HEALING ==========
-        if (spell.EffectType == SpellEffectType.Healing)
+        // A healing spell, or an inflict spell curing an undead (its inflict dice are the cure, PHB p.244).
+        if (heals && result.AttackHit)
         {
             result.TargetHPBefore = targetStats.CurrentHP;
 
+            SpellDice dice = SpellDiceRules.Effect(spell, casterLevel);
+            result.DiceCount = dice.Count;
+            result.DiceSides = dice.Sides;
+            result.DiceBonus = dice.Bonus;
+
+            int[] healRolls = SpellDiceRules.Roll(dice, isMaximized, SpellDiceRules.HealingDieContext);
             int healRoll = 0;
-            int[] healRolls = new int[spell.HealCount];
-            for (int i = 0; i < spell.HealCount; i++)
-            {
-                if (isMaximized)
-                    healRolls[i] = spell.HealDice; // Max die value
-                else
-                    healRolls[i] = Random.Range(1, spell.HealDice + 1);
+            for (int i = 0; i < healRolls.Length; i++)
                 healRoll += healRolls[i];
-            }
             result.HealRolls = healRolls;
             result.HealRolled = healRoll;
 
-            int totalHeal = healRoll + spell.BonusHealing;
+            int totalHeal = healRoll + dice.Bonus;
 
             // Empower: multiply total by 1.5
             if (isEmpowered)
@@ -540,7 +593,7 @@ public static class SpellCaster
                 Debug.Log($"[Metamagic] Empower Spell: base healing {preHeal} + {empowerBonus} (×1.5) = {totalHeal}");
             }
             if (isMaximized)
-                Debug.Log($"[Metamagic] Maximize Spell: all {spell.HealCount}d{spell.HealDice} heal dice set to max ({spell.HealDice} each)");
+                Debug.Log($"[Metamagic] Maximize Spell: all {dice.Count}d{dice.Sides} heal dice set to max ({dice.Sides} each)");
 
             totalHeal = Mathf.Max(1, totalHeal);
 
@@ -962,6 +1015,7 @@ public static class SpellCaster
     private static int GetSaveModifier(
         CharacterStats stats,
         SpellData spell,
+        string saveType,
         AlignmentProtectionBenefits protection,
         CharacterController casterController,
         CharacterController targetController,
@@ -977,7 +1031,7 @@ public static class SpellCaster
             return 0;
 
         int baseSave;
-        switch (spell.SavingThrowType)
+        switch (saveType)
         {
             case "Reflex":
                 baseSave = stats.ReflexSave;
@@ -996,11 +1050,11 @@ public static class SpellCaster
         bool isEnchantment = !string.IsNullOrWhiteSpace(spell.School)
             && spell.School.Trim().Equals("Enchantment", System.StringComparison.OrdinalIgnoreCase);
 
-        if (spell.SavingThrowType == "Will" && isEnchantment && stats.StillMindBonus > 0)
+        if (saveType == "Will" && isEnchantment && stats.StillMindBonus > 0)
             baseSave += stats.StillMindBonus;
 
         // D&D 3.5e Charm Person: +5 bonus on save if threatened/attacked by caster side.
-        if (spell.SavingThrowType == "Will"
+        if (saveType == "Will"
             && string.Equals(spell.SpellId, SpellNames.CHARM_PERSON, System.StringComparison.Ordinal)
             && IsBeingThreatenedBy(targetController, casterController))
         {
@@ -1036,7 +1090,7 @@ public static class SpellCaster
         // D&D 3.5e Remove Fear (PHB p.271): +4 morale bonus on saves against fear effects.
         // Applies to Will saves against spells with the [Fear] descriptor or that cause
         // Frightened/Shaken/Panicked conditions.
-        if (stats.RemoveFearMoraleBonus > 0 && spell.SavingThrowType == "Will" && IsFearSpell(spell))
+        if (stats.RemoveFearMoraleBonus > 0 && saveType == "Will" && IsFearSpell(spell))
         {
             int fearBonus = stats.RemoveFearMoraleBonus;
             baseSave += fearBonus;

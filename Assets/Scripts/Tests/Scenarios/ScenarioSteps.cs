@@ -768,6 +768,11 @@ namespace Tests.Scenarios
                     if (spell == null) { _awaitNote = "no unused prepared slot holds " + s.SpellId; break; }
                     gm.OnCastSpellButtonPressed();
                     gm.Harness_SelectSpell(spell, s.Metamagic);
+                    // A melee touch spell first asks Cast Now or Discharge Later; the step casts now, as a player would.
+                    if (gm.Harness_PendingPrompt() == "touch-spell")
+                        _awaitNote = gm.Harness_AnswerTouchSpellPromptCastNow()
+                            ? "touch-spell prompt answered Cast Now"
+                            : "the touch-spell prompt had no Cast Now button";
                     GameManager.PlayerSubPhase sub = gm.CurrentSubPhase;
                     if (sub == GameManager.PlayerSubPhase.SelectingAttackTarget || sub == GameManager.PlayerSubPhase.SelectingAoETarget)
                         ClickIf(gm, sub, target.GridPosition);

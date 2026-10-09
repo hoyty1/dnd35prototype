@@ -112,7 +112,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 107;
+        public const int Count = 108;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -226,6 +226,7 @@ namespace Tests.Scenarios
             yield return S("spell-save-dc", SpellSaveDc);
             yield return S("spell-durations", SpellDurations);
             yield return S("spell-damage-mitigation", SpellDamageMitigation);
+            yield return S("spell-dice-undead", SpellDiceUndead);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -5510,6 +5511,98 @@ namespace Tests.Scenarios
                 ScenarioHooks.RollFilter = previous;
             }
             return ok;
+        }
+
+        /// <summary>
+        /// SPL-005 (PHB p.215-216, p.244): Cure and Inflict dice scale with caster level (+1/level, capped), and their
+        /// energy is inverted on undead, on both cast paths through the shared SpellCaster.Cast. The Quick Start cleric
+        /// (Ui, the PC pipeline, Cure Light Wounds prepared in two 1st-level slots; the touch-spell prompt is answered
+        /// Cast Now) cures its undead party ally (a Stats fighter made Undead): positive energy deals 1d8 + min(CL, 5),
+        /// and the ally does not forgo its Will save although the PC pipeline casts on an ally with a forced failed save:
+        /// that first save roll is forced to a natural 20, so the ally takes half. The evil acolyte (Cleric 3, scripted through the
+        /// NPC cast executor, Inflict Light Wounds in two 1st-level slots) casts it on its wounded zombie ally (5 HP), which
+        /// it cures by 1d8 + 3 with no touch attack and no save, and in round 2 on a living target dummy ally, which takes
+        /// 1d8 + 3. Every d8 of a spell is forced to 8, and every later spell save to a natural 1. Before SPL-005 Cure Light
+        /// Wounds healed the undead 1d8 + a fixed 3 and Inflict Light Wounds damaged the zombie.
+        /// </summary>
+        private static ScenarioDef SpellDiceUndead()
+        {
+            return Rules("rules/spell-dice-undead", "Cure and Inflict scale with caster level and invert on undead on both cast paths (PHB p.215, p.244; SPL-005)")
+                .Covers("SPL-005", "PHB p.215", "PHB p.216", "PHB p.244", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("cleric", ActorSource.QuickStart("Cleric"), 5, 10, Control.Ui)
+                .Pc("ghoul", ActorSource.Stats(() => Fighter("Undead Ally", 3)), 5, 11, Control.Idle)
+                .Npc("acolyte", "evil_acolyte_test", 12, 10, Control.Scripted)
+                .Npc("zombie", "zombie_shambler", 13, 10, Control.Idle)
+                .Npc("dummy", "target_dummy", 12, 11, Control.Idle)
+                .Hp("zombie", 5)
+                .Tweak("cleric", c => PrepareTwice(c, 1, DND35e.Identifiers.SpellNames.CURE_LIGHT_WOUNDS))
+                .Tweak("ghoul", c => { c.Stats.CreatureType = "Undead"; c.Stats.MoraleSaveBonus = 30; })
+                .Tweak("acolyte", c => PrepareTwice(c, 1, DND35e.Identifiers.SpellNames.INFLICT_LIGHT_WOUNDS))
+                .Tweak("dummy", c => c.Stats.MoraleSaveBonus = -30)
+                .Initiative("cleric", "acolyte", "ghoul", "zombie", "dummy")
+                .Force(8, 8, SpellDiceRules.DamageDieContext, -1)
+                .Force(8, 8, SpellDiceRules.HealingDieContext, -1)
+                .Force(20, 20, SpellCaster.SavingThrowContext, 1)
+                .Force(20, 1, SpellCaster.SavingThrowContext, -1)
+                .Turn("cleric", 1,
+                    Step.Assert("Record the undead ally's HP", ctx => RecordHp(ctx, "ghoul")),
+                    Step.Cast(DND35e.Identifiers.SpellNames.CURE_LIGHT_WOUNDS, "ghoul"),
+                    Step.Assert("Cure Light Wounds deals 1d8 + min(CL, 5) to an undead ally, whose Will save halves it (PHB p.215)", ctx =>
+                        HpChange(ctx, "ghoul", "cleric", DND35e.Identifiers.SpellNames.CURE_LIGHT_WOUNDS, -1, halved: true)))
+                .Turn("acolyte", 1,
+                    Step.Assert("Record the zombie's HP", ctx => RecordHp(ctx, "zombie")),
+                    Step.Cast(DND35e.Identifiers.SpellNames.INFLICT_LIGHT_WOUNDS, "zombie"),
+                    Step.Assert("Inflict Light Wounds cures an undead 1d8 + min(CL, 5) (PHB p.244)", ctx =>
+                        HpChange(ctx, "zombie", "acolyte", DND35e.Identifiers.SpellNames.INFLICT_LIGHT_WOUNDS, +1)))
+                .Turn("acolyte", 2,
+                    Step.Assert("Record the dummy's HP", ctx => RecordHp(ctx, "dummy")),
+                    Step.Cast(DND35e.Identifiers.SpellNames.INFLICT_LIGHT_WOUNDS, "dummy"),
+                    Step.Assert("Inflict Light Wounds deals 1d8 + min(CL, 5) to a living creature (PHB p.244)", ctx =>
+                        HpChange(ctx, "dummy", "acolyte", DND35e.Identifiers.SpellNames.INFLICT_LIGHT_WOUNDS, -1)))
+                .Expect("All three casts ran (PC pipeline, then the NPC cast executor twice)", Expect.All(
+                    Expect.StepStatus("cleric", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("acolyte", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("acolyte", 2, "Cast", 0, "done")))
+                .Expect("Every cure and inflict check holds", Expect.AssertsPass())
+                .Expect("The PC cast's log says positive energy harms the undead", v =>
+                {
+                    TraceEvent log = v.Of("log").FirstOrDefault(e => (e.Str("text") ?? "").Contains("Positive energy harms the undead"));
+                    return log != null ? ExpectResult.Pass("logged", log.Seq) : ExpectResult.Fail("no log line says positive energy harms the undead");
+                })
+                .Build();
+        }
+
+        private const string SpellDiceNotePrefix = "spl005 ";
+        private static readonly Dictionary<string, int> _spellDiceHpBefore = new Dictionary<string, int>();
+
+        private static bool RecordHp(ScenarioContext ctx, string key)
+        {
+            _spellDiceHpBefore[key] = ctx.Get(key).Stats.CurrentHP;
+            ctx.Note(SpellDiceNotePrefix + key + " HP before " + _spellDiceHpBefore[key]);
+            return true;
+        }
+
+        /// <summary>
+        /// Checks that <paramref name="key"/> lost (<paramref name="sign"/> -1) or gained (+1, capped at max HP) 8 + min(CL, 5),
+        /// halved (rounded down) for a successful Will save when <paramref name="halved"/>, since <see cref="RecordHp"/>, with
+        /// every d8 forced to 8 and CL the caster's (SpellDiceRules.CasterLevelFor).
+        /// </summary>
+        private static bool HpChange(ScenarioContext ctx, string key, string casterKey, string spellId, int sign, bool halved = false)
+        {
+            CharacterController target = ctx.Get(key);
+            CharacterController caster = ctx.Get(casterKey);
+            SpellData spell = SpellDatabase.GetSpell(spellId);
+            int cl = SpellDiceRules.CasterLevelFor(caster.Stats, spell);
+            int amount = 8 + Mathf.Min(cl, 5);
+            if (halved)
+                amount /= 2;
+            int before = _spellDiceHpBefore.TryGetValue(key, out int b) ? b : int.MinValue;
+            int expected = sign < 0 ? before - amount : Mathf.Min(target.Stats.TotalMaxHP, before + amount);
+            int now = target.Stats.CurrentHP;
+            ctx.Note(SpellDiceNotePrefix + spellId + " by " + casterKey + " (CL " + cl + ") on " + key + ": " + before + " -> " + now
+                + " (expected " + expected + ")");
+            return before != int.MinValue && now == expected;
         }
 
         private static Dictionary<string, int> HpOf(ScenarioContext ctx, params string[] keys)

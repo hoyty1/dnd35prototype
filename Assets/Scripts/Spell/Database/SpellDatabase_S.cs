@@ -266,7 +266,8 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 6, DamageCount = 3, // 3d6 at CL3
+                    DamageDice = 6, DamageCount = 1, // 1d6 per caster level, max 5d6 (SpellDiceRules, SPL-005)
+                    ScalingDicePerLevels = 1, ScalingDiceMax = 5,
                     DamageType = "electricity",
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true

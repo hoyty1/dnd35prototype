@@ -410,7 +410,8 @@ public static partial class SpellDatabase
                     AoERangeSquares = 0, // Cone originates from caster (no placement range)
                     AoEFilter = AoETargetFilter.All, // Hits all creatures in cone
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 4, DamageCount = 3, // 3d4 at CL3
+                    DamageDice = 4, DamageCount = 1, // 1d4 per caster level, max 5d4 (SpellDiceRules, SPL-005)
+                    ScalingDicePerLevels = 1, ScalingDiceMax = 5,
                     DamageType = "fire",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Reflex",

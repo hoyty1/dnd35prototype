@@ -1619,6 +1619,28 @@ public class CombatUI : MonoBehaviour
     }
 
 #if UNITY_EDITOR
+    /// <summary>Editor-only, read-only (scenario harness): whether the touch-spell prompt (Cast Now / Discharge Later) is open.</summary>
+    internal bool Harness_IsTouchSpellPromptOpen() => _touchSpellPromptPanel != null;
+
+    /// <summary>
+    /// Editor-only, read-only (scenario harness): the open touch-spell prompt's button whose object name or label is
+    /// <paramref name="nameOrLabel"/> ("CastNow" or "Cast Now", "DischargeLater", "Cancel"), or null.
+    /// </summary>
+    internal Button Harness_FindTouchSpellPromptButton(string nameOrLabel)
+    {
+        if (_touchSpellPromptPanel == null || string.IsNullOrEmpty(nameOrLabel))
+            return null;
+        foreach (Button b in _touchSpellPromptPanel.GetComponentsInChildren<Button>(true))
+        {
+            if (b == null)
+                continue;
+            Text label = b.GetComponentInChildren<Text>(true);
+            if (b.name == nameOrLabel || (label != null && label.text == nameOrLabel))
+                return b;
+        }
+        return null;
+    }
+
     /// <summary>Editor-only, read-only (scenario harness): whether the Special Attack menu panel is shown.</summary>
     internal bool Harness_IsSpecialAttackMenuOpen()
         => _specialAttackPanel != null && _specialAttackPanel.activeInHierarchy;
@@ -2445,10 +2467,12 @@ public class CombatUI : MonoBehaviour
                           effectiveRangeSquares < 0 ? "Self" :
                           $"{effectiveRangeSquares} sq";
         string effectStr = "";
+        // The dice at this caster's caster level (SpellDiceRules, SPL-005).
+        SpellDice spellDice = SpellDiceRules.Effect(spell, SpellDiceRules.CasterLevelFor(spellComp != null ? spellComp.Stats : null, spell));
         if (spell.EffectType == SpellEffectType.Damage)
-            effectStr = $" | {spell.DamageCount}d{spell.DamageDice}{(spell.BonusDamage > 0 ? $"+{spell.BonusDamage}" : "")} {spell.DamageType}";
+            effectStr = $" | {spellDice} {spell.DamageType}";
         else if (spell.EffectType == SpellEffectType.Healing)
-            effectStr = $" | {spell.HealCount}d{spell.HealDice}+{spell.BonusHealing} HP";
+            effectStr = $" | {spellDice} HP";
         else if (spell.EffectType == SpellEffectType.Buff)
             effectStr = $" | +{spell.BuffACBonus} AC";
 
@@ -2589,10 +2613,12 @@ public class CombatUI : MonoBehaviour
                           effectiveRangeSquares < 0 ? "Self" :
                           $"{effectiveRangeSquares} sq";
         string effectStr = "";
+        // The dice at this caster's caster level (SpellDiceRules, SPL-005).
+        SpellDice spellDice = SpellDiceRules.Effect(spell, SpellDiceRules.CasterLevelFor(spellComp != null ? spellComp.Stats : null, spell));
         if (spell.EffectType == SpellEffectType.Damage)
-            effectStr = $" | {spell.DamageCount}d{spell.DamageDice}{(spell.BonusDamage > 0 ? $"+{spell.BonusDamage}" : "")} {spell.DamageType}";
+            effectStr = $" | {spellDice} {spell.DamageType}";
         else if (spell.EffectType == SpellEffectType.Healing)
-            effectStr = $" | {spell.HealCount}d{spell.HealDice}+{spell.BonusHealing} HP";
+            effectStr = $" | {spellDice} HP";
         else if (spell.EffectType == SpellEffectType.Buff)
             effectStr = $" | +{spell.BuffACBonus} AC";
 

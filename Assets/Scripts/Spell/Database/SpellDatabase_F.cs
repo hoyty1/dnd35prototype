@@ -162,7 +162,8 @@ public static partial class SpellDatabase
                     AoERangeSquares = 22,
                     AoEFilter = AoETargetFilter.EnemiesOnly,
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 6, DamageCount = 3, // 1d6/level at CL3
+                    DamageDice = 6, DamageCount = 1, // 1d6 per caster level, max 15d6 (SpellDiceRules, SPL-005)
+                    ScalingDicePerLevels = 1, ScalingDiceMax = 15,
                     DamageType = "fire/positive",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Reflex",
