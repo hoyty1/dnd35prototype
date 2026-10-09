@@ -839,11 +839,14 @@ public partial class GameManager
     //  GLOBE OF INVULNERABILITY — PHB p.236
     //  Abjuration. 10-ft-radius emanation. Blocks spells ≤ 4th level.
     //  1 round/level (D). Extends LesserGlobe with MaxBlockedSpellLevel = 4.
+    //  The emanation lasts durationRounds, the caster's tracked effect's
+    //  duration, and ends with that effect (ApplySpellBuff, SPL-037).
     // ================================================================
 
     private bool TryResolveGlobeOfInvulnerabilitySpell(
         CharacterController caster,
         SpellData spell,
+        int durationRounds,
         out string log)
     {
         log = string.Empty;
@@ -853,7 +856,6 @@ public partial class GameManager
             return false;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
-        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
         // Create globe area effect (reusing Lesser Globe class with MaxBlockedSpellLevel = 4)
         var globeObj = new GameObject("GlobeOfInvulnerability");
@@ -910,7 +912,8 @@ public partial class GameManager
             casterLevel);
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("🔥", $"{casterName} casts Continual Flame! A permanent, heatless flame springs forth. (50 gp ruby dust consumed)"));
+        // The 50 gp ruby dust is registered but not checked or consumed (SPL-020), so the log does not claim it.
+        CombatUI?.ShowCombatLog(CombatLogHelper.Buff("🔥", $"{casterName} casts Continual Flame! A permanent, heatless flame springs forth."));
         Debug.Log($"[GameManager] Continual Flame: permanent light effect applied (CL {casterLevel})");
 
         return effect;
@@ -987,10 +990,22 @@ public partial class GameManager
     }
 
     // ================================================================
-    //  BARKSKIN — PHB p.202
-    //  Transmutation. +2 to +5 enhancement bonus to natural armor.
-    //  +2 base, +1 per 3 CL above 3rd (max +5 at CL 12). 10 min/level.
+    //  BARKSKIN — PHB p.203 (printed)
+    //  Transmutation. +2 enhancement bonus to natural armor, +1 per three
+    //  caster levels above 3rd (max +5 at CL 12). 10 min/level. It stacks
+    //  with the creature's natural armor but not with other enhancement
+    //  bonuses to natural armor (an amulet of natural armor): the higher
+    //  applies (CharacterStats.SpellNaturalArmorEnhancementBonus, SPL-037).
     // ================================================================
+
+    /// <summary>Barkskin's enhancement bonus to natural armor at a caster level (PHB p.203): +2, +3 at 6, +4 at 9, +5 at 12+.</summary>
+    public static int BarkskinNaturalArmorBonus(int casterLevel)
+    {
+        if (casterLevel >= 12) return 5;
+        if (casterLevel >= 9) return 4;
+        if (casterLevel >= 6) return 3;
+        return 2;
+    }
 
     private ActiveSpellEffect ApplyBarkskinEffect(
         CharacterController caster,
@@ -1009,30 +1024,27 @@ public partial class GameManager
 
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
 
-        // +2 base, +1 per 3 levels above 3rd, max +5 at CL 12
-        int natArmorBonus = 2;
-        if (casterLevel >= 6) natArmorBonus = 3;
-        if (casterLevel >= 9) natArmorBonus = 4;
-        if (casterLevel >= 12) natArmorBonus = 5;
-
-        int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
-
+        // StatusEffectManager.AddEffect scales the bonus by the effect's caster level (the same rule for staffs, scrolls
+        // and potions), applies it as an enhancement bonus to natural armor and removes it when the spell ends.
         ActiveSpellEffect effect = statusMgr.AddEffect(
             spell,
             caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,
             casterLevel);
+        int natArmorBonus = effect != null ? effect.AppliedNaturalArmorEnhancementBonus : BarkskinNaturalArmorBonus(casterLevel);
 
+        int durationRounds = effect != null ? effect.RemainingRounds : SpellCastingHelper.CalculateDuration(spell, casterLevel);
         if (effect != null)
         {
-            recipient.Stats.NaturalArmorBonus += natArmorBonus;
-
             SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
             if (recipientSpellComp != null)
                 recipientSpellComp.ActiveBuffs[spell.SpellId] = durationRounds;
         }
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
-        CombatUI?.ShowCombatLog(CombatLogHelper.Success("", $"🌿 {casterName} casts Barkskin on {recipient.Stats.CharacterName}! +{natArmorBonus} enhancement to natural armor for {durationRounds} rounds (CL {casterLevel})"));
+        string amuletNote = effect != null && recipient.Stats.WondrousNaturalArmorBonus >= natArmorBonus
+            ? $" (no AC gain: an amulet's +{recipient.Stats.WondrousNaturalArmorBonus} natural armor enhancement is as high)"
+            : "";
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("", $"🌿 {casterName} casts Barkskin on {recipient.Stats.CharacterName}! +{natArmorBonus} enhancement to natural armor for {durationRounds} rounds (CL {casterLevel}){amuletNote}"));
 
         UpdateAllStatsUI();
         return effect;
@@ -1063,82 +1075,97 @@ public partial class GameManager
     }
 
     // ================================================================
-    //  TELEKINESIS — PHB p.292  (Combat Maneuver Mode)
-    //  Transmutation. Use caster level as BAB for one bull rush attempt.
-    //  +CL bonus on opposed check. SR: Yes. Range: Close (25 ft + 5/2 CL).
-    //  D&D 3.5e: Can attempt bull rush, disarm, grapple, or trip.
-    //  Simplified: implements bull rush (push back) only.
+    //  TELEKINESIS — PHB p.292 (printed), combat maneuver version
+    //  Transmutation. Sor/Wiz 5. Once per round the caster may bull rush,
+    //  disarm, grapple or trip with telekinetic force. The attempt is
+    //  resolved as normal, except that it provokes no attacks of opportunity,
+    //  the caster's Intelligence (wizard) or Charisma (sorcerer) modifier
+    //  replaces Strength, and a failed attempt allows no reactive attempt.
+    //  No save; spell resistance applies normally.
+    //
+    //  Implemented (SPL-037): the first round's bull rush, an opposed check
+    //  (PHB p.154): d20 + key ability modifier + the caster's special size
+    //  modifier against the defender's Strength check (Strength, special size,
+    //  +4 stability). A win pushes the defender 5 ft straight away from the
+    //  caster; the caster does not move with it, so it earns no extra 5 ft.
+    //  Not implemented: the later rounds (concentration), disarm, grapple,
+    //  trip, sustained force and violent thrust (SPL-130).
     // ================================================================
+
+    /// <summary>Dice context of the caster's telekinetic bull rush roll (scenario dice forcing).</summary>
+    public const string TelekinesisBullRushContext = "Telekinesis bull rush";
 
     private ActiveSpellEffect ApplyTelekinesisEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
-        SpellcastingComponent spellComp)
+        SpellcastingComponent spellComp,
+        SpellResult castResult = null)
     {
-        if (target == null || target.Stats == null || spell == null)
+        if (target == null || target.Stats == null || spell == null || caster == null || caster.Stats == null)
             return null;
 
-        int casterLevel = caster != null && caster.Stats != null
-            ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell)) : 1;
-        string casterName = caster != null && caster.Stats != null
-            ? caster.Stats.CharacterName : "Caster";
+        int casterLevel = Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell));
+        string casterName = caster.Stats.CharacterName;
+        string targetName = target.Stats.CharacterName;
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
-        sb.AppendLine($"🫳 {casterName} casts Telekinesis (Combat Maneuver — Bull Rush)!");
-        sb.AppendLine($"  School: Transmutation | Level: 5 | Range: Close");
-        sb.AppendLine($"  Uses CL {casterLevel} as BAB for opposed bull rush check | SR: Yes");
-        sb.AppendLine($"  Target: {target.Stats.CharacterName}");
+        sb.AppendLine($"🫳 {casterName} casts Telekinesis (combat maneuver: bull rush)!");
+        sb.AppendLine($"  School: Transmutation | Level: 5 | No save | SR: Yes | No attacks of opportunity");
+        sb.AppendLine($"  Target: {targetName}");
 
-        // Spell Resistance check
-        var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
-        srResult.AppendToLog(sb);
-        if (!srResult.Overcame)
+        // The landed cast already checked spell resistance (SpellCaster.Cast); roll it only without one (harness).
+        if (castResult == null)
         {
-            sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
+            var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+            srResult.AppendToLog(sb);
+            if (!srResult.Overcame)
+            {
+                sb.AppendLine($"  ✦ {targetName} resists (Spell Resistance)!");
+                sb.Append("═══════════════════════════════════");
+                CombatUI?.ShowCombatLog(sb.ToString());
+                return null;
+            }
+        }
+
+        // Bull rush as normal (PHB p.154): the defender may be at most one size category larger than the bull rusher.
+        if ((int)target.GetCurrentSizeCategory() - (int)caster.GetCurrentSizeCategory() > 1)
+        {
+            sb.AppendLine($"  ✘ {targetName} is more than one size category larger than {casterName}: no bull rush.");
             sb.Append("═══════════════════════════════════");
             CombatUI?.ShowCombatLog(sb.ToString());
             return null;
         }
 
-        // Telekinetic bull rush: use caster level as BAB
-        // Attacker check: d20 + CL (as BAB) + CL (telekinetic force bonus) + STR mod (use INT for caster)
-        int intMod = caster != null && caster.Stats != null ? caster.Stats.INTMod : 0;
-        int attackRoll = DiceRoller.D20();
-        int attackTotal = attackRoll + casterLevel + intMod;
-        sb.AppendLine($"  Bull Rush (Attacker): d20({attackRoll}) + CL({casterLevel}) + INT({intMod}) = {attackTotal}");
+        string castingClass = SpellSaveDCRules.ResolveCastingClass(caster.Stats, spell);
+        int abilityMod = SpellSaveDCRules.GetKeyAbilityModifier(caster.Stats, castingClass, out string abilityName);
+        int sizeMod = caster.GetSpecialSizeModifier();
+        int attackMod = abilityMod + sizeMod;
+        int attackRoll = DiceService.D20(TelekinesisBullRushContext);
+        int attackTotal = attackRoll + attackMod;
+        sb.AppendLine($"  Telekinetic bull rush: d20({attackRoll}) + {abilityName}({abilityMod:+#;-#;+0}) + size({sizeMod:+#;-#;+0}) = {attackTotal}");
 
-        // Defender check: d20 + BAB + STR mod + size
-        int defRoll = DiceRoller.D20();
-        int defBAB = target.Stats.BaseAttackBonus;
-        int defSTR = target.Stats.STRMod;
-        int defTotal = defRoll + defBAB + defSTR;
-        sb.AppendLine($"  Bull Rush (Defender): d20({defRoll}) + BAB({defBAB}) + STR({defSTR}) = {defTotal}");
+        BullRushCheckResult defense = target.RollBullRushDefenderCheck();
+        int defenseMod = defense.Total - defense.BaseRoll;
+        sb.AppendLine($"  {targetName} resists: d20({defense.BaseRoll}) + STR({defense.StrengthModifier:+#;-#;+0}) + size({defense.SizeModifier:+#;-#;+0})"
+            + (defense.StabilityBonus != 0 ? $" + stability({defense.StabilityBonus:+#;-#;+0})" : "")
+            + (defense.MiscModifier != 0 ? $" + other({defense.MiscModifier:+#;-#;+0})" : "")
+            + $" = {defense.Total}");
 
-        bool success = attackTotal > defTotal;
-        int margin = Mathf.Max(0, attackTotal - defTotal);
-        int pushSquares = success ? 1 + (margin / 5) : 0;
-
+        bool success = CharacterController.DoesAttackerWinOpposedCheck(attackTotal, attackMod, defense.Total, defenseMod);
         if (success)
-        {
-            sb.AppendLine($"  ✦ SUCCESS! {target.Stats.CharacterName} pushed back {pushSquares} square(s) ({pushSquares * 5} ft)!");
-            sb.AppendLine($"    (Telekinetic force wins by {margin})");
-
-            // Apply prone if pushed more than 2 squares (falling over obstacles)
-            if (pushSquares >= 3)
-            {
-                target.Stats.ApplyCondition(CombatConditionType.Prone, 1, "Telekinesis (Bull Rush)");
-                sb.AppendLine($"    🔻 {target.Stats.CharacterName} is knocked PRONE from the impact!");
-            }
-        }
+            sb.AppendLine($"  ✦ SUCCESS! The telekinetic force shoves {targetName} 5 ft away from {casterName}.");
         else
-        {
-            sb.AppendLine($"  ✘ FAILED! {target.Stats.CharacterName} resists the telekinetic force.");
-        }
+            sb.AppendLine($"  ✘ FAILED! {targetName} holds its ground (no reactive attempt).");
 
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
+
+        // The caster stays where it is, so the push is the base 5 ft (one square).
+        if (success)
+            TryPushTargetAway(caster, target, 1, allowAttackerFollow: false);
+
         UpdateAllStatsUI();
         return null;
     }

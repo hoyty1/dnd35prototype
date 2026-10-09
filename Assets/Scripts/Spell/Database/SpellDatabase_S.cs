@@ -700,6 +700,7 @@ public static partial class SpellDatabase
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Healing,
+                    HealingResolvedByHandler = true, // no hit points: the ApplySpellBuff branch ends the petrification (SPL-037)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

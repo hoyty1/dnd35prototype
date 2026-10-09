@@ -72,7 +72,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Dismiss a spell | Never | | Yes (Invisibility, See Invisibility, Expeditious Retreat, Disguise Self, Jump) | |
 | Direct a Flaming Sphere | Never | `TryControlFlamingSphereForAI` has no callers | Yes | AI-053 |
 | Cast an imbued spell (Imbue with Spell Ability) | Never | | Yes | |
-| Summon, dispel, escape spells | Never effective | slot spent, no effect | Yes | SPL-091 |
+| Summon, dispel, escape spells | Summon and escape never effective; Dispel Magic, Break Enchantment and Remove Fear work since SPL-037 | summon and escape: slot spent, no effect | Yes | SPL-091 |
 | Full-round casting time | Ignored | always a standard action | Yes | |
 | Counterspell, ready, delay | Never | | No | SPL-047, CMB-029 |
 | Potions, wands, scrolls | Never | charmed-heals-charmer exception | Yes | AI-009, ITM-005, AI-054; 11.8.3 |

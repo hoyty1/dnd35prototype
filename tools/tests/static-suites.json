@@ -1195,6 +1195,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Magic.SpellBuffDispatchTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 145,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "SPL-037: the ApplySpellBuff branches that sat below the generic branch, applied through GameManager.Harness_ApplySpellBuff (editor-only suite): the SpellEffectRouting table, the generic branch adding a missing StatusEffectManager, Barkskin (enhancement bonus to natural armor by caster level, stacking with armor and natural armor, not with an amulet, ending with the spell), Magic Fang once, Levitate, Continual Flame, Dancing Lights, Shrink Item, Alter Self, the duration cantrips and instantaneous ones, Lullaby and its -2 against sleep, True Seeing, Mislead, Protection from Spells, Spell Turning, Globe of Invulnerability (its tracked effect; blocking 4th level is checked by rules/spell-buff-dispatch), Heal on the living, undead (harm) and constructs and SpellCaster.Cast no longer healing, Disintegrate dice and disintegration, Plane Shift reading the cast's save, Resurrection, Dispel Magic checking every spell (targeted) or stopping at the first success (area), Break Enchantment against the victimizing enchantments and transmutations, Barkskin scaled in StatusEffectManager.AddEffect (staff CL 13: +5), Disintegrate with Maximize and Empower, the globe ending with its tracked effect, Restoration and Greater Restoration dispelling ability penalties, and the branches SpellCategoryClassifier's reclassification had kept out: Dispel Magic, Break Enchantment, Remove Fear, See Invisibility, detection, Restoration, Greater Restoration, Stone to Flesh (PHB p.223, p.271, p.275, p.285, p.203, p.250, p.248, p.213, p.216, p.279, p.197, p.235, p.253, p.264, p.249, p.296, p.254, p.266, p.282, p.236, p.239, p.222, p.262, p.272, p.207, p.93, p.97)"
+    },
+    {
       "type": "Tests.Magic.SpellDiceRulesTests",
       "needs": "either",
       "skip": "",

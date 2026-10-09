@@ -274,7 +274,8 @@ public class SpellResult
         else if (EnergyOutcome == SpellEnergyOutcome.HealsUndead)
             sb.AppendLine("  Negative energy cures the undead (PHB p.244).");
 
-        if (IsDamageEffect && (AttackHit || !RequiredAttackRoll))
+        // A spell whose ApplySpellBuff or custom handler deals the damage logs it there; the cast dealt none (SPL-037, SPL-124).
+        if (IsDamageEffect && (AttackHit || !RequiredAttackRoll) && !(Spell != null && Spell.DamageResolvedByHandler))
         {
             if (MissileCount > 0 && MissileDamages != null)
             {
@@ -336,7 +337,7 @@ public class SpellResult
         }
 
         // ========== HEALING ==========
-        if (IsHealingEffect && (AttackHit || !RequiredAttackRoll))
+        if (IsHealingEffect && (AttackHit || !RequiredAttackRoll) && !(Spell != null && Spell.HealingResolvedByHandler))
         {
             sb.AppendLine($"  Healing: healed!");
             if (DiceCount > 0 && DiceSides > 0)

@@ -129,6 +129,16 @@ public class StatusEffectManager : MonoBehaviour
         effect.AppliedACBonus = spell.BuffACBonus;
         effect.AppliedShieldBonus = spell.BuffShieldBonus;
         effect.AppliedDeflectionBonus = spell.BuffDeflectionBonus;
+        // Barkskin's AC value is an enhancement bonus to natural armor (PHB p.203), not an armor bonus like Mage Armor's.
+        // Its size follows the effect's caster level here, so every path that adds it (a cast, a staff, a scroll or a
+        // potion) grants the same bonus (SPL-037).
+        if (string.Equals(spell.BuffType, SpellData.NaturalArmorBuffType, System.StringComparison.OrdinalIgnoreCase))
+        {
+            effect.AppliedNaturalArmorEnhancementBonus = string.Equals(spell.SpellId, SpellNames.BARKSKIN, System.StringComparison.Ordinal)
+                ? GameManager.BarkskinNaturalArmorBonus(casterLevel)
+                : spell.BuffACBonus;
+            effect.AppliedACBonus = 0;
+        }
         effect.AppliedTempHP = spell.BuffTempHP;
         effect.AppliedStatName = spell.BuffStatName;
         effect.AppliedStatBonus = spell.BuffStatBonus;
@@ -321,6 +331,11 @@ public class StatusEffectManager : MonoBehaviour
         // Shield Other (PHB p.278, 1 hour/level): the damage-sharing link ends with the spell on the protected subject.
         if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SHIELD_OTHER, System.StringComparison.Ordinal) && _stats != null)
             ClearShieldOtherLink(_stats);
+
+        // Globe of Invulnerability (PHB p.236): the emanation around the caster ends with the caster's tracked effect,
+        // whether it expires, is dispelled or is cleared (SPL-037).
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.GLOBE_OF_INVULNERABILITY, System.StringComparison.Ordinal))
+            LesserGlobeOfInvulnerabilityAreaEffect.EndGlobesOf(_controller != null ? _controller : GetComponent<CharacterController>(), SpellNames.GLOBE_OF_INVULNERABILITY);
 
         // Also remove from SpellcastingComponent's ActiveBuffs for backward compat
         if (_spellComp != null && effect.Spell != null)
@@ -554,6 +569,10 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedDeflectionBonus != 0)
             RecomputeSpellDeflection(effect, null);
 
+        // Natural armor enhancement (Barkskin): the highest applied one counts (same-type bonuses do not stack).
+        if (effect.AppliedNaturalArmorEnhancementBonus != 0)
+            RecomputeSpellNaturalArmorEnhancement(effect, null);
+
         // Temp HP — False Life is handled separately via FalseLifeEffectData (1d10+CL calculation).
         // Only apply static temp HP for other spells that use BuffTempHP directly.
         if (effect.AppliedTempHP != 0 && effect.Spell != null && effect.Spell.SpellId != SpellNames.FALSE_LIFE)
@@ -611,6 +630,22 @@ public class StatusEffectManager : MonoBehaviour
         _stats.DeflectionBonus = highest;
     }
 
+    /// <summary>
+    /// Set CharacterStats.SpellNaturalArmorEnhancementBonus to the highest natural armor enhancement among the applied
+    /// spell effects (Barkskin, PHB p.203; same-type bonuses do not stack, PHB p.171). Arguments as for
+    /// <see cref="RecomputeSpellDeflection"/>. An amulet of natural armor is combined at read time (ArmorClass).
+    /// </summary>
+    private void RecomputeSpellNaturalArmorEnhancement(ActiveSpellEffect adding, ActiveSpellEffect removing)
+    {
+        int highest = adding != null ? Mathf.Max(0, adding.AppliedNaturalArmorEnhancementBonus) : 0;
+        foreach (var active in ActiveEffects)
+        {
+            if (active == null || active == removing || !active.IsApplied) continue;
+            if (active.AppliedNaturalArmorEnhancementBonus > highest) highest = active.AppliedNaturalArmorEnhancementBonus;
+        }
+        _stats.SpellNaturalArmorEnhancementBonus = highest;
+    }
+
     /// <summary>Reverse stat modifications from an expired/removed effect.</summary>
     private void ReverseStatModifications(ActiveSpellEffect effect)
     {
@@ -640,6 +675,9 @@ public class StatusEffectManager : MonoBehaviour
 
         if (effect.AppliedDeflectionBonus != 0)
             RecomputeSpellDeflection(null, effect);
+
+        if (effect.AppliedNaturalArmorEnhancementBonus != 0)
+            RecomputeSpellNaturalArmorEnhancement(null, effect);
 
         // False Life temp HP removal is handled by CharacterController.RemoveFalseLifeEffect()
         if (effect.AppliedTempHP != 0 && (effect.Spell == null || effect.Spell.SpellId != SpellNames.FALSE_LIFE))
@@ -887,6 +925,7 @@ public class StatusEffectManager : MonoBehaviour
         power += Mathf.Abs(effect.AppliedACBonus);
         power += Mathf.Abs(effect.AppliedShieldBonus);
         power += Mathf.Abs(effect.AppliedDeflectionBonus);
+        power += Mathf.Abs(effect.AppliedNaturalArmorEnhancementBonus);
         power += Mathf.Abs(effect.AppliedStatBonus);
         power += Mathf.Abs(effect.AppliedSecondaryStatBonus);
         power += Mathf.Abs(effect.AppliedSkillBonus);

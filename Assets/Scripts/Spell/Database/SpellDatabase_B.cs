@@ -55,9 +55,9 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Buff,
-                    BuffACBonus = 2,
+                    BuffACBonus = 2, // enhancement bonus to natural armor at CL 1-5 (BuffType natural_armor); StatusEffectManager.AddEffect scales it by caster level
                     BuffDurationRounds = 100, // Legacy fallback: 10 min/level
-                    BuffType = "natural_armor",
+                    BuffType = SpellData.NaturalArmorBuffType,
                     BuffBonusType = BonusType.Enhancement,
                     BonusTypeExplicitlySet = true,
                     DurationType = DurationType.Minutes,
@@ -229,9 +229,9 @@ public static partial class SpellDatabase
         // effect. For each such effect, you make a caster level check
         // (1d20 + CL, max +15) against DC 11 + caster level of the effect.
         //
-        // NOTE: Prototype implementation uses PerformTargetedDispel with
-        //       a +15 CL cap, targeting enchantment/transmutation/curse
-        //       effects. Simplified to single-target for now.
+        // NOTE: DispelMagicService.PerformBreakEnchantment checks (max +15)
+        //       each enchantment, transmutation or curse that victimizes the
+        //       subject. Simplified to single-target for now (SPL-131).
         // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {

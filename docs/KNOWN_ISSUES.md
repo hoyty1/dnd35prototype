@@ -32,7 +32,7 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-039 |
 | [Combat](issues/CMB.md) | CMB | 3 | 58 | 66 | 127 | CMB-158 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 4 | 62 | 58 | 124 | SPL-130 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 3 | 61 | 61 | 125 | SPL-132 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 5 | 28 | 41 | 74 | CHR-078 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 3 | 29 | 25 | 57 | CRE-061 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
@@ -40,7 +40,7 @@ Entries per section:
 | [AI](issues/AI.md) | AI | 1 | 20 | 40 | 61 | AI-063 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 7 | 25 | 32 | TST-036 |
-| **All** | | 19 | 287 | 379 | 685 | |
+| **All** | | 18 | 286 | 382 | 686 | |
 
 ## Top issues
 
@@ -53,7 +53,6 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 | [CMB-006](issues/CMB.md) | High | Combat | Conditions tick at the round boundary (GameManager.OnNewRound -> ConditionService.OnRoundEnd), so 1-round conditions can cost the target nothing | Yes |
 | [CHR-018](issues/CHR.md) | High | Characters, feats and classes | Divine Grace and other save bonuses are computed but never applied | Yes |
 | [CHR-019](issues/CHR.md) | High | Characters, feats and classes | Most racial traits are display-only | Yes |
-| [SPL-037](issues/SPL.md) | High | Spells and metamagic | Spell-specific branches at the end of ApplySpellBuff never run | Yes |
 | [SPL-123](issues/SPL.md) | High | Spells and metamagic | The NPC cast executor refuses every spell of a spontaneous caster, so AI-run spellcasting dragons, sorcerers and bards cast nothing | Yes |
 | [CRE-056](issues/CRE.md) | High | Creatures, templates and summoning | 212 of 389 NPC definitions (all dragons, animals and vermin, goblin, gnoll, bugbear) set no alignment, so smite and Protection from Evil ignore them | Yes |
 | [AI-001](issues/AI.md) | High | AI | NPCs never cast area spells, although AI scoring favours them | Yes |

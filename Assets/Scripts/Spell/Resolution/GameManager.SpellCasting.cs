@@ -2100,13 +2100,9 @@ public partial class GameManager
 
             SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, forceTargetToFailSave, caster, target);
 
-            // Apply tracked buff/debuff effects based on spell type
-            // Includes expanded categories that also apply status effects
-            bool appliesTrackedEffect = _pendingSpell.EffectType == SpellEffectType.Buff ||
-                                        _pendingSpell.EffectType == SpellEffectType.Debuff ||
-                                        _pendingSpell.EffectType == SpellEffectType.Control ||
-                                        _pendingSpell.EffectType == SpellEffectType.Illusion ||
-                                        _pendingSpell.EffectType == SpellEffectType.Wall;
+            // The landed cast's effect step (ApplySpellBuff): every Buff, Debuff, Control, Illusion and Wall spell, and
+            // the other spells ApplySpellBuff has a branch for. Shared with TryNPCPerformSpellCast (SPL-037).
+            bool appliesTrackedEffect = SpellEffectRouting.ReachesApplySpellBuff(_pendingSpell);
 
             // Shared with TryNPCPerformSpellCast (SPL-007): Debuff and Control saves negate;
             // Cause Fear and Scare are partial; nonintelligent undead get no save vs Command Undead.
@@ -2122,18 +2118,16 @@ public partial class GameManager
                 CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧠", $"{target.Stats.CharacterName} is immune to mind-affecting effects. {_pendingSpell.Name} has no effect."));
             }
 
-            // ── Lesser Globe of Invulnerability check ──
-            // PHB p.246: Spell effects of 3rd level or lower are excluded from the globe area.
-            // Check if target is inside a Lesser Globe and the incoming spell is ≤ 3rd level.
+            // ── Globe of Invulnerability check (lesser: 3rd level or lower, PHB p.246; globe: 4th or lower, PHB p.236) ──
             // Note: the caster's own spells are also blocked if target is in a globe.
             bool blockedByGlobe = false;
             if (target != null && _pendingSpell != null && result.Success && !effectNegatedBySave)
             {
-                if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target))
+                if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target, out LesserGlobeOfInvulnerabilityAreaEffect blockingGlobe))
                 {
                     blockedByGlobe = true;
                     result.Success = false;
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{_pendingSpell.Name} (level {_pendingSpell.SpellLevel}) is blocked by Lesser Globe of Invulnerability! Spell effects of 3rd level or lower cannot affect {target.Stats.CharacterName}."));
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{_pendingSpell.Name} (level {_pendingSpell.SpellLevel}) is blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(blockingGlobe)} around {target.Stats.CharacterName}."));
                 }
             }
 
@@ -2358,7 +2352,7 @@ public partial class GameManager
 
             if (!anyPriorHandled && !anyClericHandled && !anyCleric4Handled && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
-                var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+                var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp, result);
 
                 // If this is a concentration spell, begin tracking concentration on the caster
                 if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration)
@@ -4684,17 +4678,16 @@ public partial class GameManager
                     targetIndex++;
                     logBuilder.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
 
-                    // ── Lesser Globe of Invulnerability — block AoE spell effects ≤ 3rd level ──
-                    if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target))
+                    // ── Globe of Invulnerability (lesser or full) — block AoE spell effects of its levels ──
+                    if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(_pendingSpell, target, out LesserGlobeOfInvulnerabilityAreaEffect aoeBlockingGlobe))
                     {
-                        logBuilder.AppendLine($"  🛡 Blocked by Lesser Globe of Invulnerability (spell level {_pendingSpell.SpellLevel} ≤ 3)!");
+                        logBuilder.AppendLine($"  🛡 Blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(aoeBlockingGlobe)} (spell level {_pendingSpell.SpellLevel})!");
                         continue;
                     }
 
-                    // For buff/debuff/control/illusion/wall spells, apply tracked effects
-                    if (_pendingSpell.EffectType == SpellEffectType.Buff || _pendingSpell.EffectType == SpellEffectType.Debuff ||
-                        _pendingSpell.EffectType == SpellEffectType.Control || _pendingSpell.EffectType == SpellEffectType.Illusion ||
-                        _pendingSpell.EffectType == SpellEffectType.Wall)
+                    // For buff/debuff/control/illusion/wall spells, apply tracked effects. The area pipeline routes only
+                    // the tracked effect types (SpellEffectRouting.IsTrackedEffectType), not the single-target extras.
+                    if (SpellEffectRouting.IsTrackedEffectType(_pendingSpell.EffectType))
                     {
                         var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -5044,7 +5037,7 @@ public partial class GameManager
             }
 
             int saveRoll = DiceService.D20("Sleep Will save");
-            int saveTotal = saveRoll + target.Stats.WillSave;
+            int saveTotal = saveRoll + target.Stats.WillSave + SpellCaster.LullabySleepSavePenalty(target, _pendingSpell); // Lullaby -2 (PHB p.249)
             if (saveTotal >= saveDc)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
@@ -5155,7 +5148,7 @@ public partial class GameManager
 
             // Will save
             int saveRoll = DiceService.D20("Color Spray Will save");
-            int saveTotal = saveRoll + target.Stats.WillSave;
+            int saveTotal = saveRoll + target.Stats.WillSave + SpellCaster.LullabySleepSavePenalty(target, _pendingSpell); // Lullaby -2 vs Deep Slumber (PHB p.249)
             if (saveTotal >= saveDc)
             {
                 logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
@@ -6272,11 +6265,15 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Apply buff effects from a spell to the target character.
-    /// Uses StatusEffectManager for proper duration tracking and stat modification reversal.
-    /// Falls back to legacy system if StatusEffectManager is not available.
+    /// The shared effect step of a landed cast: the PC pipeline (PerformSpellCast), the NPC cast executor
+    /// (TryNPCPerformSpellCast), the area pipeline for each target, and the scenario harness. Spell-specific branches
+    /// come first, dispatched by SpellId; the generic StatusEffectManager branch at the end handles every other spell
+    /// and returns, so a new special case goes above it (SPL-037). Which casts reach this method: SpellEffectRouting.
+    /// <paramref name="castResult"/> is the SpellCaster.Cast result of a single-target cast (null for area casts and
+    /// the harness): a handler whose attack roll, spell resistance or save the cast already resolved reads it instead
+    /// of rolling again (Disintegrate, Heal on an undead, Plane Shift, Telekinesis).
     /// </summary>
-    private ActiveSpellEffect ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
+    private ActiveSpellEffect ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp, SpellResult castResult = null)
     {
         if (spell != null && (spell.SpellId == SpellNames.DAZE || spell.SpellId == SpellNames.DAZE_MONSTER))
         {
@@ -6595,10 +6592,25 @@ public partial class GameManager
             return null;
         }
 
+        // Restoration (Clr 4) and Greater Restoration (Clr 7), PHB p.272: both function like lesser restoration, so they
+        // dispel magical effects that reduce ability scores (restoration one, greater restoration all of them); negative
+        // levels dispelled, all temporary ability damage cured, fatigue and exhaustion ended; greater restoration also ends
+        // confusion. Restoring drained levels and drained ability points is not modelled (SPL-131).
         if (spell != null && (spell.SpellId == SpellNames.RESTORATION || spell.SpellId == SpellNames.GREATER_RESTORATION))
         {
             int removed = NegativeLevelSystem.RemoveNegativeLevels(target, int.MaxValue, spell.Name);
-            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✨", $"{target.Stats.CharacterName} recovers {removed} negative level(s)."));
+            // Before the ability damage cure: ending Touch of Idiocy heals the ability damage it is modelled as.
+            List<string> penaltiesDispelled = DispelAbilityPenaltyEffects(target, spell.SpellId == SpellNames.GREATER_RESTORATION);
+            int abilityHealed = target.Stats.HealAllAbilityDamage(999);
+            var ended = new List<string>();
+            foreach (string penalty in penaltiesDispelled)
+                ended.Add(penalty);
+            if (target.RemoveCondition(CombatConditionType.Exhausted)) ended.Add("exhaustion");
+            if (target.RemoveCondition(CombatConditionType.Fatigued)) ended.Add("fatigue");
+            if (spell.SpellId == SpellNames.GREATER_RESTORATION && target.RemoveCondition(CombatConditionType.Confused)) ended.Add("confusion");
+            string extra = (abilityHealed > 0 ? $", {abilityHealed} point(s) of ability damage cured" : "")
+                + (ended.Count > 0 ? $", {string.Join(" and ", ended)} ended" : "");
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("✨", $"{target.Stats.CharacterName} recovers {removed} negative level(s){extra}."));
             return null;
         }
 
@@ -6793,7 +6805,8 @@ public partial class GameManager
                 recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
             recipientStatusMgr.Init(recipient.Stats);
 
-            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            // The duration's caster level is the cast's caster level, not the character level (SPL-002, SPL-017).
+            int casterLevel = SpellDurationRules.CasterLevelFor(caster, spell);
             ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
             if (effect != null)
             {
@@ -7557,77 +7570,22 @@ public partial class GameManager
         }
 
         // ===== DISPEL MAGIC — D&D 3.5e PHB p.223 =====
-        // Targeted dispel: make one dispel check (1d20 + CL, max +10) vs DC 11 + spell's CL.
-        // Check spells in descending CL order. Remove at most ONE spell per casting.
-        // Auto-succeeds against own spells.
+        // Targeted dispel: a dispel check (1d20 + the cast's CL, max +10) against each ongoing spell on the target,
+        // DC 11 + that spell's CL; every success dispels its spell. Auto-succeeds against the caster's own spells.
         if (spell != null && spell.SpellId == SpellNames.DISPEL_MAGIC)
         {
-            PerformTargetedDispel(caster, target);
+            PerformTargetedDispel(caster, target, SpellDurationRules.CasterLevelFor(caster, spell));
             return null; // Dispel Magic is instantaneous — no ongoing effect to track
         }
 
         // ── Break Enchantment (PHB p.207) ──
-        // Frees victims from enchantments, transmutations, and curses.
-        // Reuses PerformTargetedDispel (same CL check mechanic).
+        // Frees victims from enchantments, transmutations and curses: a caster level check (1d20 + CL, max +15) against
+        // each such effect on the subject, DC 11 + its caster level (DispelMagicService.PerformBreakEnchantment).
         if (spell != null && spell.SpellId == SpellNames.BREAK_ENCHANTMENT)
         {
-            PerformTargetedDispel(caster, target);
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("✨", $"{caster.Stats.CharacterName} attempts to break enchantments on {target.Stats.CharacterName}!"));
+            PerformBreakEnchantment(caster, target, SpellDurationRules.CasterLevelFor(caster, spell));
             return null; // Break Enchantment is instantaneous
-        }
-
-        // Use StatusEffectManager for tracked buff application
-        var statusMgr = target.StatusEffectManager;
-        if (statusMgr != null)
-        {
-            // Defensive rebind: some encounter presets reinitialize CharacterStats objects on existing
-            // character GameObjects, so the manager must always point at the current stats instance.
-            statusMgr.Init(target.Stats);
-
-            // The duration's caster level is the cast's caster level, not the character level (SPL-002, SPL-017).
-            int casterLevel = SpellDurationRules.CasterLevelFor(caster, spell);
-            var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
-
-            if (effect != null)
-            {
-                // Also track in SpellcastingComponent's ActiveBuffs for backward compat
-                var targetSpellComp = target.Spellcasting;
-                if (targetSpellComp != null)
-                {
-                    targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
-                }
-
-                // ── Magic Circle area emanation registration ──
-                if (AlignmentProtectionRules.IsMagicCircleSpell(spell.SpellId))
-                {
-                    AlignmentProtectionRules.TryGetProtectionTypeForSpell(spell.SpellId, out AlignmentProtectionType mcWardType);
-                    var mcData = new MagicCircleEffectData
-                    {
-                        WardedAlignment = mcWardType,
-                        CenterCreature = target,
-                        CasterLevel = casterLevel,
-                        RemainingRounds = effect.RemainingRounds,
-                        SourceSpellId = spell.SpellId,
-                        CasterName = caster.Stats.CharacterName
-                    };
-                    RegisterMagicCircle(mcData);
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🔵", $"{spell.Name} emanation (10-ft radius) centered on {target.Stats.CharacterName}."));
-                }
-
-                string durStr = effect.GetDurationDisplayString();
-                bool isDebuff = spell.EffectType == SpellEffectType.Debuff || spell.EffectType == SpellEffectType.Control;
-                string color = isDebuff ? "#FF8888" : "#88FF88";
-                string effectLabel = isDebuff ? "debuff" : "buff";
-                CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"<color={color}>✨ {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} [{durStr}]</color>"));
-                Debug.Log($"[GameManager] {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} via StatusEffectManager: {effect.GetDetailedString()}");
-            }
-            else
-            {
-                Debug.Log($"[GameManager] {spell.Name} effect NOT applied to {target.Stats.CharacterName} (stacking rules prevented it)");
-            }
-
-            UpdateAllStatsUI();
-            return effect;
         }
 
         // ===== PHASE 1 STAFF SINGLE-TARGET SPELLS =====
@@ -7635,7 +7593,7 @@ public partial class GameManager
         // Telekinesis (Violent Thrust mode)
         if (spell != null && spell.SpellId == SpellNames.TELEKINESIS)
         {
-            return ApplyTelekinesisEffect(caster, target, spell, spellComp);
+            return ApplyTelekinesisEffect(caster, target, spell, spellComp, castResult);
         }
 
         // Continual Flame — permanent light
@@ -7671,9 +7629,30 @@ public partial class GameManager
         // Globe of Invulnerability — self-targeting abjuration sphere
         if (spell != null && spell.SpellId == SpellNames.GLOBE_OF_INVULNERABILITY)
         {
-            TryResolveGlobeOfInvulnerabilitySpell(caster, spell, out string globeLog);
+            if (caster == null || caster.Stats == null)
+                return null;
+
+            // The tracked effect on the caster comes first and owns the spell's duration: the emanation is created only
+            // when it lands (a recast while a globe as long is up adds nothing), lasts exactly as long, and ends with it
+            // when it expires or is dispelled (StatusEffectManager.RemoveEffect -> EndGlobesOf; PHB p.223, p.236).
+            StatusEffectManager globeStatusMgr = caster.StatusEffectManager;
+            if (globeStatusMgr == null)
+                globeStatusMgr = caster.gameObject.AddComponent<StatusEffectManager>();
+            globeStatusMgr.Init(caster.Stats);
+            ActiveSpellEffect globeEffect = globeStatusMgr.AddEffect(spell, caster.Stats.CharacterName, SpellDurationRules.CasterLevelFor(caster, spell));
+            if (globeEffect == null)
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Info("🔮", $"{caster.Stats.CharacterName}'s Globe of Invulnerability is already up; the new casting adds nothing."));
+                return null;
+            }
+
+            if (!TryResolveGlobeOfInvulnerabilitySpell(caster, spell, globeEffect.RemainingRounds, out string globeLog))
+            {
+                globeStatusMgr.RemoveEffect(globeEffect);
+                return null;
+            }
             CombatUI?.ShowCombatLog(globeLog);
-            return null;
+            return globeEffect;
         }
 
         // ===== PHASE 2 & 3 SINGLE-TARGET SPELLS =====
@@ -7681,7 +7660,7 @@ public partial class GameManager
         // Disintegrate — ranged touch ray, massive damage
         if (spell != null && spell.SpellId == SpellNames.DISINTEGRATE)
         {
-            return ApplyDisintegrateEffect(caster, target, spell, spellComp);
+            return ApplyDisintegrateEffect(caster, target, spell, spellComp, castResult);
         }
 
         // Protection from Spells — +8 resistance saves
@@ -7699,7 +7678,7 @@ public partial class GameManager
         // Heal — major healing + condition cure
         if (spell != null && spell.SpellId == SpellNames.HEAL)
         {
-            return ApplyHealSpellEffect(caster, target, spell, spellComp);
+            return ApplyHealSpellEffect(caster, target, spell, spellComp, castResult);
         }
 
         // Resurrection — restore dead to life
@@ -7743,7 +7722,7 @@ public partial class GameManager
         // Plane Shift — touch attack, Will save or removed from combat
         if (spell != null && spell.SpellId == SpellNames.PLANE_SHIFT)
         {
-            return ApplyPlaneShiftEffect(caster, target, spell, spellComp);
+            return ApplyPlaneShiftEffect(caster, target, spell, spellComp, castResult);
         }
 
         // Alter Self — shape change buff
@@ -7752,61 +7731,108 @@ public partial class GameManager
             return ApplyAlterSelfEffect(caster, target, spell, spellComp);
         }
 
-        // ===== LEGACY FALLBACK (no StatusEffectManager) =====
-        var legacySpellComp = target.Spellcasting;
+        // ===== GENERIC TRACKED EFFECT (every spell without a branch above) =====
+        // This branch returns for every spell, so a spell-specific branch must sit above it (SPL-037). A spell whose
+        // effect type is not Buff/Debuff/Control/Illusion/Wall reaches this method only when SpellEffectRouting lists it.
+        var genericStatusMgr = target.StatusEffectManager;
+        if (genericStatusMgr == null)
+            genericStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+        // Defensive rebind: some encounter presets reinitialize CharacterStats objects on existing
+        // character GameObjects, so the manager must always point at the current stats instance.
+        genericStatusMgr.Init(target.Stats);
 
-        if (spell.SpellId == SpellNames.MAGE_ARMOR)
+        // The duration's caster level is the cast's caster level, not the character level (SPL-002, SPL-017).
+        int genericCasterLevel = SpellDurationRules.CasterLevelFor(caster, spell);
+        string genericCasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
+        var genericEffect = genericStatusMgr.AddEffect(spell, genericCasterName, genericCasterLevel);
+
+        if (genericEffect != null)
         {
-            target.Stats.SpellACBonus = spell.BuffACBonus;
-            if (legacySpellComp != null)
+            // Also track in SpellcastingComponent's ActiveBuffs for backward compat
+            var targetSpellComp = target.Spellcasting;
+            if (targetSpellComp != null)
             {
-                legacySpellComp.MageArmorActive = true;
-                legacySpellComp.MageArmorACBonus = spell.BuffACBonus;
+                targetSpellComp.ActiveBuffs[spell.SpellId] = genericEffect.RemainingRounds;
             }
-            else
+
+            // ── Magic Circle area emanation registration ──
+            if (AlignmentProtectionRules.IsMagicCircleSpell(spell.SpellId))
             {
-                SpellcastingComponent.ApplyMageArmor(target, spell);
+                AlignmentProtectionRules.TryGetProtectionTypeForSpell(spell.SpellId, out AlignmentProtectionType mcWardType);
+                var mcData = new MagicCircleEffectData
+                {
+                    WardedAlignment = mcWardType,
+                    CenterCreature = target,
+                    CasterLevel = genericCasterLevel,
+                    RemainingRounds = genericEffect.RemainingRounds,
+                    SourceSpellId = spell.SpellId,
+                    CasterName = genericCasterName
+                };
+                RegisterMagicCircle(mcData);
+                CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🔵", $"{spell.Name} emanation (10-ft radius) centered on {target.Stats.CharacterName}."));
             }
-        }
-        else if (spell.BuffAttackBonus != 0 || spell.BuffDamageBonus != 0 || spell.BuffSaveBonus != 0)
-        {
-            if (spell.BuffAttackBonus != 0) target.Stats.MoraleAttackBonus += spell.BuffAttackBonus;
-            if (spell.BuffDamageBonus != 0) target.Stats.MoraleDamageBonus += spell.BuffDamageBonus;
-            if (spell.BuffSaveBonus != 0) target.Stats.MoraleSaveBonus += spell.BuffSaveBonus;
-            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
-        }
-        else if (spell.BuffDeflectionBonus > 0)
-        {
-            target.Stats.DeflectionBonus += spell.BuffDeflectionBonus;
-            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
-        }
-        else if (spell.BuffShieldBonus > 0)
-        {
-            target.Stats.ShieldBonus += spell.BuffShieldBonus;
-            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
-        }
-        else if (!string.IsNullOrEmpty(spell.BuffStatName) && spell.BuffStatBonus != 0)
-        {
-            ApplyStatBuff(target, spell.BuffStatName, spell.BuffStatBonus);
-            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
-        }
-        else if (spell.BuffTempHP > 0)
-        {
-            target.Stats.TempHP += spell.BuffTempHP;
-            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
+
+            string durStr = genericEffect.GetDurationDisplayString();
+            bool isDebuff = spell.EffectType == SpellEffectType.Debuff || spell.EffectType == SpellEffectType.Control;
+            string color = isDebuff ? "#FF8888" : "#88FF88";
+            string effectLabel = isDebuff ? "debuff" : "buff";
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("", $"<color={color}>✨ {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} [{durStr}]</color>"));
+            Debug.Log($"[GameManager] {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} via StatusEffectManager: {genericEffect.GetDetailedString()}");
         }
         else
         {
-            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
-            else if (spellComp != null) spellComp.ApplyBuff(spell);
+            Debug.Log($"[GameManager] {spell.Name} effect NOT applied to {target.Stats.CharacterName} (stacking rules prevented it)");
         }
 
-        Debug.Log($"[GameManager] {spell.Name} buff applied to {target.Stats.CharacterName} (legacy path)");
-        return null; // Legacy path doesn't return tracked effects
+        UpdateAllStatsUI();
+        return genericEffect;
     }
 
     /// <summary>
-    /// Apply a stat buff to a target character (e.g., +4 STR from Bull's Strength).
+    /// Dispels the magical effects that penalize the target's ability scores (lesser restoration, PHB p.272, which
+    /// restoration and greater restoration function like): Ray of Enfeeblement, Touch of Idiocy and tracked spell
+    /// effects with a negative ability modifier. <paramref name="all"/> false ends one (restoration), true ends every
+    /// one (greater restoration). Returns the names of the effects ended.
+    /// </summary>
+    internal static List<string> DispelAbilityPenaltyEffects(CharacterController target, bool all)
+    {
+        var ended = new List<string>();
+        if (target == null || target.Stats == null)
+            return ended;
+
+        if (target.ActiveEnfeeblementEffect != null)
+        {
+            target.RemoveEnfeeblementEffect();
+            ended.Add("Ray of Enfeeblement");
+            if (!all) return ended;
+        }
+
+        if (target.ActiveTouchOfIdiocyEffect != null)
+        {
+            target.RemoveTouchOfIdiocyEffect();
+            ended.Add("Touch of Idiocy");
+            if (!all) return ended;
+        }
+
+        StatusEffectManager effects = target.StatusEffectManager;
+        if (effects != null)
+        {
+            foreach (ActiveSpellEffect effect in new List<ActiveSpellEffect>(effects.ActiveEffects))
+            {
+                if (effect == null || !effect.IsApplied || (effect.AppliedStatBonus >= 0 && effect.AppliedSecondaryStatBonus >= 0))
+                    continue;
+                effects.RemoveEffect(effect);
+                ended.Add(effect.Spell != null ? effect.Spell.Name : "ability penalty");
+                if (!all) return ended;
+            }
+        }
+
+        return ended;
+    }
+
+    /// <summary>
+    /// Apply a stat buff to a target character by changing the score directly (the Rage spell's +2 Str and Con,
+    /// ApplyRageSpellBuff). CON adds 1 HP per Hit Die per +2 (CHR-071).
     /// </summary>
     private void ApplyStatBuff(CharacterController target, string statName, int bonus)
     {

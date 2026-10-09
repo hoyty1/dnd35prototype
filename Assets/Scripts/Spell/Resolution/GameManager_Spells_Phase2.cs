@@ -14,20 +14,51 @@ using UnityEngine;
 public partial class GameManager
 {
     // ================================================================
-    //  DISINTEGRATE — PHB p.222
-    //  Transmutation. Ranged touch ray, 2d6/CL (max 40d6).
-    //  Fort save: 5d6 instead. SR: Yes.
+    //  DISINTEGRATE — PHB p.222 (printed)
+    //  Transmutation. Ranged touch ray, 2d6 per caster level (max 40d6).
+    //  Fortitude partial: a creature that saves takes 5d6 instead. Any
+    //  creature reduced to 0 or fewer hit points by the spell is entirely
+    //  disintegrated (dead, a trace of fine dust). SR: Yes.
+    //  The cast pipeline (SpellCaster.Cast) rolls the ranged touch attack,
+    //  spell resistance and the save; this handler deals the damage
+    //  (DamageResolvedByHandler) and reads the save from castResult (SPL-037).
     // ================================================================
+
+    /// <summary>Disintegrate's damage dice at a caster level (PHB p.222): 2d6 per level, max 40d6; 5d6 after a successful save.</summary>
+    public static int DisintegrateDiceCount(int casterLevel, bool saved)
+    {
+        return saved ? 5 : Mathf.Clamp(casterLevel * 2, 2, 40);
+    }
+
+    /// <summary>
+    /// Rolls <paramref name="diceCount"/>d6 of Disintegrate damage with the cast's metamagic, through the same dice
+    /// rule as SpellCaster.Cast (SpellDiceRules.Roll): Maximize sets every die to 6 (PHB p.97), Empower adds half the
+    /// total (PHB p.93), as SpellCaster does.
+    /// </summary>
+    public static int RollDisintegrateDamage(int diceCount, bool maximized, bool empowered, out int empowerBonus)
+    {
+        var dice = new SpellDice { Count = diceCount, Sides = 6 };
+        int[] rolls = SpellDiceRules.Roll(dice, maximized, SpellDiceRules.DamageDieContext);
+        int damage = 0;
+        for (int i = 0; i < rolls.Length; i++)
+            damage += rolls[i];
+        empowerBonus = empowered ? Mathf.RoundToInt(damage * 0.5f) : 0;
+        return damage + empowerBonus;
+    }
 
     private ActiveSpellEffect ApplyDisintegrateEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
-        SpellcastingComponent spellComp)
+        SpellcastingComponent spellComp,
+        SpellResult castResult = null)
     {
-        if (caster == null || target == null || spell == null) return null;
+        if (caster == null || target == null || target.Stats == null || spell == null) return null;
 
-        int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        // The cast's caster level when there is a cast (SpellCaster.Cast records it), else the caster's.
+        int casterLevel = castResult != null && castResult.CasterLevel > 0
+            ? castResult.CasterLevel
+            : SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int saveDc = GetSpellSaveDC(caster, spell);
 
         var sb = new StringBuilder();
@@ -37,53 +68,64 @@ public partial class GameManager
         sb.AppendLine($"  Fort DC {saveDc} partial (5d6) | SR: Yes");
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
-        // Spell Resistance + Fort save
-        var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
-        srResult.AppendToLog(sb);
-        if (!srResult.Overcame)
+        bool saved;
+        if (castResult != null)
         {
-            sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
-            sb.Append("═══════════════════════════════════");
-            CombatUI?.ShowCombatLog(sb.ToString());
-            return null;
-        }
-
-        // Fort save
-        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
-        bool saved = saveResult.Saved;
-        saveResult.AppendToLog(sb, "SAVED", "FAILED");
-
-        int damage;
-        if (saved)
-        {
-            // On successful save: 5d6 damage
-            damage = 0;
-            for (int i = 0; i < 5; i++)
-                damage += DiceRoller.D6();
-            sb.AppendLine($"  Partial: 5d6 = {damage} damage (Fort save succeeded)");
+            // The ray hit, spell resistance was overcome and the save was rolled by SpellCaster.Cast.
+            saved = castResult.RequiredSave && castResult.SaveSucceeded;
+            if (castResult.RequiredSave)
+                sb.AppendLine($"  Fortitude save: {castResult.SaveTotal} vs DC {castResult.SaveDC} — {(saved ? "SAVED" : "FAILED")}");
         }
         else
         {
-            // Full damage: 2d6 per CL, max 40d6
-            int diceCount = Mathf.Clamp(casterLevel * 2, 2, 40);
-            damage = 0;
-            for (int i = 0; i < diceCount; i++)
-                damage += DiceRoller.D6();
-            sb.AppendLine($"  DISINTEGRATED: {diceCount}d6 = {damage} damage!");
+            var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+            srResult.AppendToLog(sb);
+            if (!srResult.Overcame)
+            {
+                sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
+                sb.Append("═══════════════════════════════════");
+                CombatUI?.ShowCombatLog(sb.ToString());
+                return null;
+            }
+
+            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc);
+            saved = saveResult.Saved;
+            saveResult.AppendToLog(sb, "SAVED", "FAILED");
         }
 
+        // Metamagic from the cast (PHB p.93 Empower: variable numeric effects x1.5; p.97 Maximize: dice at their
+        // maximum), applied as SpellCaster.Cast applies it to every other damage spell.
+        MetamagicData metamagic = castResult?.Metamagic;
+        bool maximized = metamagic != null && metamagic.Has(MetamagicFeatId.MaximizeSpell);
+        bool empowered = metamagic != null && metamagic.Has(MetamagicFeatId.EmpowerSpell);
+        int diceCount = DisintegrateDiceCount(casterLevel, saved);
+        int damage = RollDisintegrateDamage(diceCount, maximized, empowered, out int empowerBonus);
+        if (castResult != null)
+            castResult.EmpowerBonus = empowerBonus;
+        string metamagicNote = (maximized ? " maximized" : "") + (empowered ? $", empowered +{empowerBonus}" : "");
+        sb.AppendLine(saved
+            ? $"  Partial: 5d6{metamagicNote} = {damage} damage (Fort save succeeded)"
+            : $"  {diceCount}d6{metamagicNote} = {damage} damage!");
+
         int hpBefore = target.Stats.CurrentHP;
-        DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Untyped, false, true));
-        int hpAfter = target.Stats.CurrentHP;
+        DamageResolutionResult dealt = ApplyDamagePacket(target, damage, DamagePackets.Spell(spell.Name, DamageType.Untyped, false, true));
         if (dealt.FinalDamage != damage)
             sb.AppendLine($"  Damage taken: {dealt.FinalDamage}{DescribeMitigation(dealt)}");
-        sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {hpAfter} HP");
 
-        if (target.Stats.IsDead)
+        // PHB p.222: a creature reduced to 0 or fewer hit points by this spell is entirely disintegrated.
+        bool disintegrated = dealt.FinalDamage > 0 && target.Stats.CurrentHP <= 0;
+        if (disintegrated && !target.Stats.IsDead)
+            target.Stats.CurrentHP = Mathf.Min(target.Stats.CurrentHP, -10);
+        sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {target.Stats.CurrentHP} HP");
+        if (disintegrated)
             sb.AppendLine($"  💀 {target.Stats.CharacterName} is reduced to fine dust!");
 
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
+
+        // Concentration check and death handling (OnDeath, summon cleanup); the pipelines' combat-end check reads
+        // CombatEndRules.IsOutOfFight(target).
+        AfterDamageTaken(target, dealt.FinalDamage);
         return null;
     }
 
@@ -283,10 +325,8 @@ public partial class GameManager
 
                 StatusEffectManager statusMgr = target.StatusEffectManager;
                 if (statusMgr == null)
-                {
                     statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
-                    statusMgr.Init(target.Stats);
-                }
+                statusMgr.Init(target.Stats); // always rebind to the current stats, as the generic branch does
 
                 ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, casterLevel);
                 if (effect != null)
@@ -320,10 +360,8 @@ public partial class GameManager
 
         StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
-        {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
-            statusMgr.Init(target.Stats);
-        }
+        statusMgr.Init(target.Stats); // always rebind to the current stats, as the generic branch does
 
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, casterLevel);
 
@@ -340,7 +378,7 @@ public partial class GameManager
         sb.Append("═══════════════════════════════════");
 
         CombatUI?.ShowCombatLog(sb.ToString());
-        return null;
+        return effect;
     }
 
     // ================================================================
@@ -364,10 +402,8 @@ public partial class GameManager
 
         StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
-        {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
-            statusMgr.Init(target.Stats);
-        }
+        statusMgr.Init(target.Stats); // always rebind to the current stats, as the generic branch does
 
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, casterLevel);
         if (effect != null)
@@ -386,20 +422,55 @@ public partial class GameManager
     }
 
     // ================================================================
-    //  HEAL — PHB p.239
-    //  Conjuration (Healing). 10 HP/CL (max 150). Cures conditions.
-    //  No effect on undead (deals damage to undead). SR: Yes (harmless).
+    //  HEAL — PHB p.239 (printed)
+    //  Conjuration (Healing). Touch. Cures 10 points of damage per caster
+    //  level (max 150 at 15th) and ends ability damage, blinded, confused,
+    //  dazed, dazzled, deafened, diseased, exhausted, fatigued, feebleminded,
+    //  insanity, nauseated, sickened, stunned and poisoned. It does not
+    //  remove negative levels or drained levels or ability points.
+    //  Against an undead it acts like harm: 10 per level (max 150), Will
+    //  half; a successful save cannot reduce it below 1 hp. No effect on a
+    //  construct (positive energy cures only the living, as for the cures;
+    //  SpellDiceRules.OutcomeFor, SPL-005).
+    //  Heal is positive energy (SpellEnergy.Positive): SpellCaster.Cast
+    //  rolls the touch attack, spell resistance and Will save against an
+    //  undead, and this handler deals the damage or does the healing
+    //  (DamageResolvedByHandler, HealingResolvedByHandler; SPL-022, SPL-037).
     // ================================================================
+
+    /// <summary>Heal's hit points cured, or harm damage dealt, at a caster level (PHB p.239): 10 per level, max 150.</summary>
+    public static int HealAmount(int casterLevel)
+    {
+        return Mathf.Clamp(casterLevel * 10, 0, 150);
+    }
+
+    /// <summary>The conditions Heal ends (PHB p.239) that the game tracks as conditions.</summary>
+    public static readonly CombatConditionType[] HealCuredConditions =
+    {
+        CombatConditionType.Blinded,
+        CombatConditionType.Confused,
+        CombatConditionType.Dazed,
+        CombatConditionType.Dazzled,
+        CombatConditionType.Deafened,
+        CombatConditionType.Exhausted,
+        CombatConditionType.Fatigued,
+        CombatConditionType.Nauseated,
+        CombatConditionType.Sickened,
+        CombatConditionType.Stunned,
+        CombatConditionType.Poisoned,
+    };
 
     private ActiveSpellEffect ApplyHealSpellEffect(
         CharacterController caster,
         CharacterController target,
         SpellData spell,
-        SpellcastingComponent spellComp)
+        SpellcastingComponent spellComp,
+        SpellResult castResult = null)
     {
-        if (caster == null || target == null || spell == null) return null;
+        if (caster == null || target == null || target.Stats == null || spell == null) return null;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
+        int amount = HealAmount(casterLevel);
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -407,67 +478,80 @@ public partial class GameManager
         sb.AppendLine($"  School: Conjuration (Healing) | Level: 6 | Touch");
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
-        // Check undead — Heal damages undead (like Harm)
         bool isUndead = SpellTargetingService.IsUndead(target);
+        if (!isUndead && SpellTargetingService.IsConstruct(target))
+        {
+            sb.AppendLine($"  ✘ No effect: positive energy cures only living creatures.");
+            sb.Append("═══════════════════════════════════");
+            CombatUI?.ShowCombatLog(sb.ToString());
+            return null;
+        }
 
         if (isUndead)
         {
-            int damage = Mathf.Min(casterLevel * 10, 150);
-            int saveDc = GetSpellSaveDC(caster, spell);
-            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
-            sb.AppendLine($"  ☠ Undead — positive energy deals damage!");
-            saveResult.AppendHalfDamageLog(sb);
-            bool saved = saveResult.Saved;
-
-            if (saved) damage = Mathf.Max(1, damage / 2);
-            int hpBefore = target.Stats.CurrentHP;
-            DamageResolutionResult dealt = DealDamage(target, damage, DamagePackets.Spell(spell.Name, DamageType.Positive));
-            sb.AppendLine($"  Damage: {dealt.FinalDamage}{DescribeMitigation(dealt)} | {target.Stats.CharacterName}: {hpBefore} → {target.Stats.CurrentHP} HP");
-
-            if (target.Stats.IsDead)
-                sb.AppendLine($"  💀 {target.Stats.CharacterName} destroyed by positive energy!");
-        }
-        else
-        {
-            // Heal living creature: 10 HP/CL, max 150
-            int healAmount = Mathf.Min(casterLevel * 10, 150);
-            int hpBefore = target.Stats.CurrentHP;
-            int nonlethalHealed;
-            int actualHealed = target.Stats.HealDamage(healAmount, out nonlethalHealed);
-            sb.AppendLine($"  Heals: {healAmount} HP (actual: {actualHealed})");
-            sb.AppendLine($"  {target.Stats.CharacterName}: {hpBefore} → {target.Stats.CurrentHP} HP");
-
-            // Cure conditions per PHB p.239
-            var conditionsToCure = new[]
+            // Acts like harm (PHB p.239): Will half, and a successful save cannot take the undead below 1 hp.
+            bool saved;
+            if (castResult != null)
             {
-                CombatConditionType.Blinded,
-                CombatConditionType.Confused,
-                CombatConditionType.Dazed,
-                CombatConditionType.Deafened,
-                CombatConditionType.Exhausted,
-                CombatConditionType.Fatigued,
-                CombatConditionType.Nauseated,
-                CombatConditionType.Sickened,
-                CombatConditionType.Stunned,
-            };
-
-            var curedList = new List<string>();
-            foreach (var cond in conditionsToCure)
+                saved = castResult.RequiredSave && castResult.SaveSucceeded;
+                if (castResult.RequiredSave)
+                    sb.AppendLine($"  Will save: {castResult.SaveTotal} vs DC {castResult.SaveDC} — {(saved ? "SAVED (half)" : "FAILED")}");
+            }
+            else
             {
-                if (target.Stats.RemoveCondition(cond))
-                    curedList.Add(cond.ToString());
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, GetSpellSaveDC(caster, spell));
+                saveResult.AppendHalfDamageLog(sb);
+                saved = saveResult.Saved;
             }
 
-            // Heal all ability damage
-            int abilityHealed = target.Stats.HealAllAbilityDamage(999);
-            if (abilityHealed > 0)
-                curedList.Add($"Ability damage ({abilityHealed} pts)");
+            int damage = saved ? amount / 2 : amount;
+            if (saved)
+                damage = Mathf.Min(damage, Mathf.Max(0, target.Stats.CurrentHP - 1));
+            sb.AppendLine($"  ☠ Undead — positive energy acts like harm: {damage} damage{(saved ? " (half, not below 1 hp)" : "")}");
 
-            if (curedList.Count > 0)
-                sb.AppendLine($"  Conditions cured: {string.Join(", ", curedList)}");
-            else
-                sb.AppendLine($"  No conditions to cure.");
+            int hpBefore = target.Stats.CurrentHP;
+            DamageResolutionResult dealt = ApplyDamagePacket(target, damage, DamagePackets.Spell(spell.Name, DamageType.Positive));
+            sb.AppendLine($"  Damage: {dealt.FinalDamage}{DescribeMitigation(dealt)} | {target.Stats.CharacterName}: {hpBefore} → {target.Stats.CurrentHP} HP");
+            if (target.Stats.IsDead)
+                sb.AppendLine($"  💀 {target.Stats.CharacterName} destroyed by positive energy!");
+
+            sb.Append("═══════════════════════════════════");
+            CombatUI?.ShowCombatLog(sb.ToString());
+            AfterDamageTaken(target, dealt.FinalDamage);
+            return null;
         }
+
+        int before = target.Stats.CurrentHP;
+        int actualHealed = target.Stats.HealDamage(amount, out int nonlethalHealed);
+        sb.AppendLine($"  Heals: {amount} HP (CL {casterLevel}; actual: {actualHealed}{(nonlethalHealed > 0 ? $", {nonlethalHealed} nonlethal removed" : "")})");
+        sb.AppendLine($"  {target.Stats.CharacterName}: {before} → {target.Stats.CurrentHP} HP");
+
+        var curedList = new List<string>();
+        foreach (var cond in HealCuredConditions)
+        {
+            if (target.RemoveCondition(cond))
+                curedList.Add(cond.ToString());
+        }
+
+        if (target.ActivePoisons != null && target.ActivePoisons.Count > 0)
+        {
+            target.ActivePoisons.Clear();
+            curedList.Add("poison");
+        }
+
+        if (target.ActiveDiseases != null && target.ActiveDiseases.Count > 0)
+        {
+            target.ActiveDiseases.Clear();
+            curedList.Add("disease");
+        }
+
+        int abilityHealed = target.Stats.HealAllAbilityDamage(999);
+        if (abilityHealed > 0)
+            curedList.Add($"ability damage ({abilityHealed} pts)");
+
+        sb.AppendLine(curedList.Count > 0
+            ? $"  Cured: {string.Join(", ", curedList)}"
+            : "  No conditions to cure.");
 
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
@@ -494,13 +578,16 @@ public partial class GameManager
         sb.AppendLine($"  School: Conjuration (Healing) | Level: 7 | Touch");
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
-        // Check creature type restrictions
+        // PHB p.272: constructs, elementals, outsiders and undead creatures can't be resurrected.
         bool isUndead = SpellTargetingService.IsUndead(target);
         bool isConstruct = SpellTargetingService.IsConstruct(target);
+        string creatureType = target.Stats.CreatureType ?? string.Empty;
+        bool isElemental = creatureType.IndexOf("Elemental", StringComparison.OrdinalIgnoreCase) >= 0;
+        bool isOutsider = creatureType.IndexOf("Outsider", StringComparison.OrdinalIgnoreCase) >= 0;
 
-        if (isUndead || isConstruct)
+        if (isUndead || isConstruct || isElemental || isOutsider)
         {
-            string ct = isUndead ? "undead" : "construct";
+            string ct = isUndead ? "undead" : isConstruct ? "construct" : isElemental ? "elemental" : "outsider";
             sb.AppendLine($"  ✘ Cannot resurrect {ct} creatures!");
             sb.Append("═══════════════════════════════════");
             CombatUI?.ShowCombatLog(sb.ToString());
@@ -573,10 +660,8 @@ public partial class GameManager
         // Apply via StatusEffectManager
         StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
-        {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
-            statusMgr.Init(target.Stats);
-        }
+        statusMgr.Init(target.Stats); // always rebind to the current stats, as the generic branch does
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, casterLevel);
 
         // Grant see invisibility via the proper system
@@ -623,10 +708,8 @@ public partial class GameManager
         // Also register as a spell effect for duration tracking
         StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
-        {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
-            statusMgr.Init(target.Stats);
-        }
+        statusMgr.Init(target.Stats); // always rebind to the current stats, as the generic branch does
         statusMgr.AddEffect(spell, casterName, casterLevel);
 
         sb.AppendLine($"  ✦ {target.Stats.CharacterName}: INVISIBLE (Greater) + illusory double created");
@@ -654,10 +737,8 @@ public partial class GameManager
 
         StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
-        {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
-            statusMgr.Init(target.Stats);
-        }
+        statusMgr.Init(target.Stats); // always rebind to the current stats, as the generic branch does
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         statusMgr.AddEffect(spell, casterName, casterLevel);
 
@@ -684,9 +765,10 @@ public partial class GameManager
         CharacterController caster,
         CharacterController target,
         SpellData spell,
-        SpellcastingComponent spellComp)
+        SpellcastingComponent spellComp,
+        SpellResult castResult = null)
     {
-        if (caster == null || target == null || spell == null) return null;
+        if (caster == null || target == null || target.Stats == null || spell == null) return null;
 
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int saveDc = GetSpellSaveDC(caster, spell);
@@ -695,42 +777,44 @@ public partial class GameManager
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
         sb.AppendLine($"🌀 {casterName} casts Plane Shift!");
-        sb.AppendLine($"  School: Conjuration (Teleportation) | Level: 7 | Touch");
+        sb.AppendLine($"  School: Conjuration (Teleportation) | Touch");
         sb.AppendLine($"  Will DC {saveDc} negates | SR: Yes");
         sb.AppendLine($"  Target: {target.Stats.CharacterName}");
 
-        // Spell Resistance + Will save
-        var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
-        srResult.AppendToLog(sb);
-        if (!srResult.Overcame)
+        // The landed cast already rolled the touch attack, spell resistance and the Will save (SpellCaster.Cast), and
+        // the pipelines reach this handler only when the save failed (SPL-037). Roll them only without a cast (harness).
+        if (castResult == null)
         {
-            sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
-            sb.Append("═══════════════════════════════════");
-            CombatUI?.ShowCombatLog(sb.ToString());
-            return null;
+            var srResult = SpellSaveResolver.RollSpellResistance(caster, target, casterLevel);
+            srResult.AppendToLog(sb);
+            if (!srResult.Overcame)
+            {
+                sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists (Spell Resistance)!");
+                sb.Append("═══════════════════════════════════");
+                CombatUI?.ShowCombatLog(sb.ToString());
+                return null;
+            }
+
+            var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
+            saveResult.AppendToLog(sb, "SAVED", "FAILED");
+            if (saveResult.Saved)
+            {
+                sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists the planar transport!");
+                sb.Append("═══════════════════════════════════");
+                CombatUI?.ShowCombatLog(sb.ToString());
+                return null;
+            }
         }
 
-        // Will save
-        var saveResult = SpellSaveResolver.RollSave(target, SaveType.Will, saveDc);
-        bool saved = saveResult.Saved;
-        saveResult.AppendToLog(sb, "SAVED", "FAILED");
+        sb.AppendLine($"  🌀 {target.Stats.CharacterName} is shifted to another plane!");
+        sb.AppendLine($"  Target is removed from combat!");
 
-        if (saved)
-        {
-            sb.AppendLine($"  ✦ {target.Stats.CharacterName} resists the planar transport!");
-        }
-        else
-        {
-            sb.AppendLine($"  🌀 {target.Stats.CharacterName} is shifted to another plane!");
-            sb.AppendLine($"  Target is removed from combat!");
-
-            // Remove from combat: kill the target (treated as removed from battlefield)
-            // Set HP to lethal threshold to trigger death/removal
-            target.Stats.CurrentHP = -10;
-            target.OnDeath();
-            HandleSummonDeathCleanup(target);
-            sb.AppendLine($"  💫 {target.Stats.CharacterName} vanishes in a shimmer of planar energy!");
-        }
+        // Removal from the battle is modelled as death (HP -10), so the combat-end check and loot treat the
+        // creature as gone; RAW it is alive on another plane (SPL-131).
+        target.Stats.CurrentHP = -10;
+        target.OnDeath();
+        HandleSummonDeathCleanup(target);
+        sb.AppendLine($"  💫 {target.Stats.CharacterName} vanishes in a shimmer of planar energy!");
 
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
@@ -757,10 +841,8 @@ public partial class GameManager
 
         StatusEffectManager statusMgr = target.StatusEffectManager;
         if (statusMgr == null)
-        {
             statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
-            statusMgr.Init(target.Stats);
-        }
+        statusMgr.Init(target.Stats); // always rebind to the current stats, as the generic branch does
 
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, casterLevel);
 
@@ -779,6 +861,6 @@ public partial class GameManager
 
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
-        return null;
+        return effect;
     }
 }

@@ -1346,9 +1346,8 @@ public partial class GameManager
 
         SpellResult result = SpellCaster.Cast(spell, npc.Stats, target.Stats, null, skipFriendlyTouchAttackRoll, forceTargetToFailSave, npc, target);
 
-        bool appliesTrackedEffect = spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff ||
-                                   spell.EffectType == SpellEffectType.Control || spell.EffectType == SpellEffectType.Illusion ||
-                                   spell.EffectType == SpellEffectType.Wall;
+        // Same routing as PerformSpellCast (SPL-037): tracked effect types, plus the spells ApplySpellBuff has a branch for.
+        bool appliesTrackedEffect = SpellEffectRouting.ReachesApplySpellBuff(spell);
         // Same rule as PerformSpellCast (SPL-007): Debuff and Control saves negate, so an NPC's
         // Hold Person no longer paralyzes a PC who saved; Cause Fear and Scare are partial;
         // nonintelligent undead get no save vs Command Undead.
@@ -1361,13 +1360,13 @@ public partial class GameManager
         if (result.MindAffectingImmunityBlocked)
             CombatUI?.ShowCombatLog(CombatLogHelper.SpellEffect("🧠", $"{target.Stats.CharacterName} is immune to mind-affecting effects. {spell.Name} has no effect."));
 
-        // ── Lesser Globe of Invulnerability check ──
+        // ── Globe of Invulnerability check (lesser: 3rd level or lower; globe: 4th or lower) ──
         if (target != null && spell != null && result.Success && !effectNegatedBySave)
         {
-            if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target))
+            if (LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(spell, target, out LesserGlobeOfInvulnerabilityAreaEffect blockingGlobe))
             {
                 result.Success = false;
-                CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{spell.Name} (level {spell.SpellLevel}) is blocked by Lesser Globe of Invulnerability! Spell effects of 3rd level or lower cannot affect {target.Stats.CharacterName}."));
+                CombatUI?.ShowCombatLog(CombatLogHelper.Defensive("🛡", $"{spell.Name} (level {spell.SpellLevel}) is blocked by {LesserGlobeOfInvulnerabilityAreaEffect.DescribeBlock(blockingGlobe)} around {target.Stats.CharacterName}."));
             }
         }
 
@@ -1444,7 +1443,7 @@ public partial class GameManager
             handledSearingLight = TryResolveSearingLightSpellEffect(npc, target, spell, result);
 
         if (!handledCauseFear && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledRayOfExhaustion && !handledVampiricTouch && !handledEnervation && !handledContagion && !handledBestowCurse && !handledGreaterInvisibility && !handledPhantasmalKiller && !handledFireShield && !handledResilientSphere && !handledAnimateRope && !handledMirrorImage && !handledLesserGlobe && !handledSearingLight && result.Success && appliesTrackedEffect && !effectNegatedBySave)
-            ApplySpellBuff(npc, target, spell, spellComp);
+            ApplySpellBuff(npc, target, spell, spellComp, result);
 
         if (result.DamageDealt > 0)
             CheckConcentrationOnDamage(target, result.DamageDealt);

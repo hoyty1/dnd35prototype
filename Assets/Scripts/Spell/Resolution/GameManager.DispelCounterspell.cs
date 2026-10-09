@@ -47,12 +47,16 @@ public partial class GameManager
     // ── Instance delegates ────────────────────────────────────────────
 
     /// <summary>Delegates to <see cref="DispelMagicService.PerformTargetedDispel"/>.</summary>
-    public void PerformTargetedDispel(CharacterController caster, CharacterController target)
-        => _dispelMagicService?.PerformTargetedDispel(caster, target);
+    public void PerformTargetedDispel(CharacterController caster, CharacterController target, int casterLevel = 0)
+        => _dispelMagicService?.PerformTargetedDispel(caster, target, casterLevel);
+
+    /// <summary>Delegates to <see cref="DispelMagicService.PerformBreakEnchantment"/>.</summary>
+    public void PerformBreakEnchantment(CharacterController caster, CharacterController target, int casterLevel = 0)
+        => _dispelMagicService?.PerformBreakEnchantment(caster, target, casterLevel);
 
     /// <summary>Delegates to <see cref="DispelMagicService.PerformAreaDispel"/>.</summary>
-    public void PerformAreaDispel(CharacterController caster, List<CharacterController> targets)
-        => _dispelMagicService?.PerformAreaDispel(caster, targets);
+    public void PerformAreaDispel(CharacterController caster, List<CharacterController> targets, int casterLevel = 0)
+        => _dispelMagicService?.PerformAreaDispel(caster, targets, casterLevel);
 
     /// <summary>Delegates to <see cref="DispelMagicService.TryResolveCounterspell"/>.</summary>
     public CounterspellResult TryResolveCounterspell(CharacterController caster, SpellData spell, bool isSpellLikeAbility = false)

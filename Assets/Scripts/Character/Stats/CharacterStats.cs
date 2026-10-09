@@ -3130,6 +3130,17 @@ public class CharacterStats
     // ── Wondrous Item Derived Stats (D&D 3.5e DMG pp. 248–271) ──
     /// <summary>Enhancement bonus to natural armor from Amulet of Natural Armor (+1 to +5). Highest wins.</summary>
     public int WondrousNaturalArmorBonus;
+    /// <summary>
+    /// Enhancement bonus to natural armor from a spell (Barkskin, PHB p.203): the highest applied one, set by
+    /// StatusEffectManager. It stacks with NaturalArmorBonus but not with WondrousNaturalArmorBonus (both enhancement
+    /// bonuses to natural armor: the higher applies, ArmorClass). A creature without natural armor counts as +0.
+    /// </summary>
+    public int SpellNaturalArmorEnhancementBonus;
+    /// <summary>
+    /// The enhancement bonus to natural armor that counts toward AC: the higher of an amulet's and a spell's (they do not
+    /// stack, PHB p.171, p.203). Read by ArmorClass and the AC breakdowns.
+    /// </summary>
+    public int NaturalArmorEnhancementBonus => Mathf.Max(WondrousNaturalArmorBonus, SpellNaturalArmorEnhancementBonus);
     /// <summary>Armor bonus from Bracers of Armor (+1 to +8). Doesn't stack with physical armor; use highest.</summary>
     public int WondrousBracersArmorBonus;
     /// <summary>Resistance bonus to all saves from Cloak of Resistance (+1 to +5). Highest wins with ring resistance.</summary>
@@ -3390,7 +3401,8 @@ public class CharacterStats
             // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
             // Magic Vestment adds enhancement bonus to armor (stacks with base armor, not with other armor enhancements).
             int effectiveArmorBonus = Mathf.Max(ArmorBonus + MagicVestmentACBonus, SpellACBonus);
-            return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + WondrousNaturalArmorBonus + SizeModifier
+            // Natural armor enhancement: an amulet and Barkskin do not stack (PHB p.171, p.203); the higher applies.
+            return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + NaturalArmorEnhancementBonus + SizeModifier
                    + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + EffectiveDeflectionBonus + ConditionACPenalty
                    + HasteACBonus + SlowACPenalty + WondrousInsightACBonus;
         }

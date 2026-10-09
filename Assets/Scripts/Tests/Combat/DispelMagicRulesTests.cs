@@ -39,7 +39,7 @@ public static class DispelMagicRulesTests
         TestDispelDCCalculation();
         TestCasterLevelCapAt10();
         TestAutoSuccessOnOwnSpells();
-        TestTargetedDispelRemovesMaxOneSpell();
+        TestTargetedDispelChecksEverySpell();
         TestTargetedDispelChecksByHighestCLFirst();
         TestCannotDispelInstantaneousEffects();
         TestDispelNoEffects();
@@ -207,10 +207,14 @@ public static class DispelMagicRulesTests
         Assert(autoSuccess, "Auto-success when dispelling own spell (CL 1 vs target CL 20)");
     }
 
-    /// <summary>Test targeted dispel removes at most ONE spell.</summary>
-    private static void TestTargetedDispelRemovesMaxOneSpell()
+    /// <summary>
+    /// Test targeted dispel makes a separate check against every spell on the target and dispels each one it beats
+    /// (PHB p.223, printed). The d20 is forced to 10: CL 20 (+10) gives 20 against DC 12 (CL 1 spells), so all go.
+    /// Needs the scene GameManager (Play mode); without it the test fails instead of passing vacuously (TST-005).
+    /// </summary>
+    private static void TestTargetedDispelChecksEverySpell()
     {
-        var caster = CreateWizardController("DispelCaster", 20); // High level for guaranteed success
+        var caster = CreateWizardController("DispelCaster", 20);
         var target = CreateWizardController("BuffedTarget", 5);
 
         var targetStatusMgr = target.GetComponent<StatusEffectManager>();
@@ -240,40 +244,26 @@ public static class DispelMagicRulesTests
         int initialCount = targetStatusMgr.ActiveEffects.Count;
         Assert(initialCount == buffsBefore, $"Target has {buffsBefore} buffs before dispel", $"Got: {initialCount}");
 
-        // Perform targeted dispel (high CL caster, should succeed)
-        if (GameManager.Instance != null)
+        if (GameManager.Instance == null)
         {
-            GameManager.Instance.PerformTargetedDispel(caster, target);
+            Assert(false, "Targeted dispel checks every spell (needs the scene GameManager: run in Play mode)");
         }
         else
         {
-            // Manual test without GameManager instance — simulate the dispel logic
-            int dispelRoll = GameManager.RollDispelCheck(20);
-            var effects = new System.Collections.Generic.List<ActiveSpellEffect>(targetStatusMgr.ActiveEffects);
-            effects.Sort((a, b) => b.CasterLevel.CompareTo(a.CasterLevel));
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == DispelMagicService.DispelCheckContext ? 10 : natural;
+            try
+            {
+                GameManager.Instance.PerformTargetedDispel(caster, target);
+            }
+            finally
+            {
+                ScenarioHooks.RollFilter = null;
+            }
 
-            bool removed = false;
-            foreach (var eff in effects)
-            {
-                int dc = GameManager.GetDispelDC(eff.CasterLevel);
-                if (dispelRoll >= dc)
-                {
-                    targetStatusMgr.RemoveEffect(eff);
-                    removed = true;
-                    break;
-                }
-            }
-            if (!removed)
-            {
-                Debug.Log("[Test] Dispel check failed — retrying with guaranteed success for test validity");
-                // Force remove one to test the "at most 1" rule
-                if (targetStatusMgr.ActiveEffects.Count > 0)
-                    targetStatusMgr.RemoveEffect(targetStatusMgr.ActiveEffects[0]);
-            }
+            int afterCount = targetStatusMgr.ActiveEffects.Count;
+            Assert(afterCount == 0, "Targeted dispel checks every spell and dispels each one it beats (PHB p.223)",
+                $"Before: {initialCount}, After: {afterCount}");
         }
-
-        int afterCount = targetStatusMgr.ActiveEffects.Count;
-        Assert(afterCount >= initialCount - 1, "Targeted dispel removes at most 1 spell", $"Before: {initialCount}, After: {afterCount}");
 
         CleanupController(caster);
         CleanupController(target);

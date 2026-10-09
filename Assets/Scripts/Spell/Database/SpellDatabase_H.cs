@@ -543,9 +543,14 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Healing,
-                    HealDice = 1, // Handled manually — 10 HP/level, max 150
+                    HealDice = 1, // Not rolled: ApplyHealSpellEffect cures 10 HP/level, max 150 (PHB p.239)
                     HealCount = 1,
                     BonusHealing = 0,
+                    // Positive energy: against an undead SpellCaster.Cast rolls the touch attack, SR and the Will save
+                    // (acts like harm), a construct is unaffected; the handler heals or harms (SPL-022, SPL-037).
+                    Energy = SpellEnergy.Positive,
+                    HealingResolvedByHandler = true,
+                    DamageResolvedByHandler = true,
                     DurationType = DurationType.Instantaneous,
                     AllowsSavingThrow = false,
                     SpellResistanceApplies = true,

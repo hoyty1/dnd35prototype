@@ -83,7 +83,7 @@ Where to look first:
 
 - A method missing from `GameManager.cs` is in another partial. Grep before adding a duplicate.
 - A new single-target spell handler goes in the PC chain, its `anyPriorHandled`/`anyClericHandled` flags, and `TryNPCPerformSpellCast` (SPL-054).
-- In `ApplySpellBuff`, special cases go above the generic `StatusEffectManager` branch (SPL-037).
+- In `ApplySpellBuff`, the generic `StatusEffectManager` branch is last and returns for every spell: a special case goes above it, and a spell that is not Buff/Debuff/Control/Illusion/Wall also needs an entry in `SpellEffectRouting` (a Healing or Damage one also `HealingResolvedByHandler`/`DamageResolvedByHandler`).
 - Weapon attack-roll terms go in `CharacterController.BuildAttackBonus` (CMB-043); rake and grapple weapon attacks still sum their own (CMB-087); spell bonuses all land in `Morale*` (SPL-026).
 - A new `CharacterStats` bonus field needs a writer and a reader in every formula (`docs/architecture/characters-and-creatures.md`).
 - `TakeDamage`/`CurrentHP -=` skip immunity, resistance and DR; deal non-weapon damage with `GameManager.DealDamage(target, raw, DamagePackets.Spell/Supernatural/CreatureAttack(...))` (mitigation, concentration, death; SPL-004), then `GameManager.EvaluateCombatEnd` (one check for both sides) once the effect has resolved.

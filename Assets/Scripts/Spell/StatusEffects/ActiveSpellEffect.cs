@@ -47,6 +47,8 @@ public class ActiveSpellEffect
     public int AppliedACBonus;         // Spell AC bonus (e.g., Mage Armor)
     public int AppliedShieldBonus;
     public int AppliedDeflectionBonus;
+    /// <summary>Enhancement bonus to natural armor (Barkskin, PHB p.203); kept apart from AppliedACBonus, an armor bonus.</summary>
+    public int AppliedNaturalArmorEnhancementBonus;
     public int AppliedTempHP;
     public string AppliedStatName;     // e.g., "STR", "DEX"
     public int AppliedStatBonus;
@@ -190,6 +192,7 @@ public class ActiveSpellEffect
         if (AppliedACBonus != 0) mods += $" AC:{AppliedACBonus:+#;-#}";
         if (AppliedShieldBonus != 0) mods += $" Shield:{AppliedShieldBonus:+#;-#}";
         if (AppliedDeflectionBonus != 0) mods += $" Defl:{AppliedDeflectionBonus:+#;-#}";
+        if (AppliedNaturalArmorEnhancementBonus != 0) mods += $" NatArmor(enh):{AppliedNaturalArmorEnhancementBonus:+#;-#}";
         if (AppliedTempHP != 0) mods += $" TempHP:{AppliedTempHP}";
         if (!string.IsNullOrEmpty(AppliedStatName)) mods += $" {AppliedStatName}:{AppliedStatBonus:+#;-#}";
         if (!string.IsNullOrEmpty(AppliedSecondaryStatName)) mods += $" {AppliedSecondaryStatName}:{AppliedSecondaryStatBonus:+#;-#}";

@@ -31,12 +31,15 @@ public partial class GameManager
     //  The spell does not change an unarmed strike's damage from
     //  nonlethal damage to lethal damage.
     //
-    //  Implementation: Since natural attacks in this prototype resolve
-    //  through GetNaturalAttackBonus (BAB + STR + size) and damage
-    //  bonus (STR-based), we track the +1 enhancement via the
-    //  StatusEffectManager and apply it as AppliedAttackBonus /
-    //  AppliedDamageBonus on the ActiveSpellEffect. The creature's
-    //  natural attacks gain the bonus for the spell's duration.
+    //  Implementation: the spell data's BuffAttackBonus/BuffDamageBonus
+    //  (+1/+1) become the tracked effect's AppliedAttackBonus /
+    //  AppliedDamageBonus through StatusEffectManager.AddEffect, which
+    //  adds them on cast and takes them back when the spell ends. Like
+    //  every spell bonus they land in the Morale* fields, so they reach
+    //  every attack of the subject, not only one natural weapon, and the
+    //  damage bonus is not read for weapon damage (SPL-026, CMB-003).
+    //  Before SPL-037 this handler added a second +1 that was never
+    //  removed; it adds nothing of its own now.
     // ================================================================
 
     private ActiveSpellEffect ApplyMagicFangEffect(
@@ -54,10 +57,8 @@ public partial class GameManager
 
         StatusEffectManager statusMgr = recipient.StatusEffectManager;
         if (statusMgr == null)
-        {
             statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
-            statusMgr.Init(recipient.Stats);
-        }
+        statusMgr.Init(recipient.Stats); // always rebind to the current stats, as the generic branch does
 
         int casterLevel = caster != null && caster.Stats != null
             ? Mathf.Max(1, caster.Stats.GetDomainBoostedCasterLevel(spell))
@@ -65,7 +66,7 @@ public partial class GameManager
 
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
 
-        // +1 enhancement bonus to attack and damage (Magic Fang is always +1)
+        // +1 enhancement bonus to attack and damage (Magic Fang is always +1): AddEffect applies the data's +1/+1.
         int enhancementBonus = 1;
 
         ActiveSpellEffect effect = statusMgr.AddEffect(
@@ -75,13 +76,6 @@ public partial class GameManager
 
         if (effect != null)
         {
-            // Apply +1 enhancement to attack and damage
-            // These bonuses apply to the creature's attacks (primarily natural weapons).
-            recipient.Stats.MoraleAttackBonus += enhancementBonus;
-            recipient.Stats.MoraleDamageBonus += enhancementBonus;
-            effect.AppliedAttackBonus = enhancementBonus;
-            effect.AppliedDamageBonus = enhancementBonus;
-
             SpellcastingComponent recipientSpellComp = recipient.Spellcasting;
             if (recipientSpellComp != null)
                 recipientSpellComp.ActiveBuffs[spell.SpellId] = durationRounds;

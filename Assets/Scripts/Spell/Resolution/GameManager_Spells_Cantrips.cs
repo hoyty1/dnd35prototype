@@ -45,7 +45,7 @@ public partial class GameManager
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
         Debug.Log($"[Cantrip] Ghost Sound cast by {casterName}");
-        return null;
+        return AddCantripTrackedEffect(caster, caster, spell); // 1 round/level (D)
     }
 
     // ================================================================
@@ -112,7 +112,7 @@ public partial class GameManager
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
         Debug.Log($"[Cantrip] Message cast by {casterName}");
-        return null;
+        return AddCantripTrackedEffect(caster, caster, spell); // 10 min/level
     }
 
     // ================================================================
@@ -146,7 +146,7 @@ public partial class GameManager
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
         Debug.Log($"[Cantrip] Prestidigitation cast by {casterName}");
-        return null;
+        return AddCantripTrackedEffect(caster, caster, spell); // 1 hour
     }
 
     // ================================================================
@@ -262,7 +262,7 @@ public partial class GameManager
     //  Saving Throw: Will negates
     //  Spell Resistance: Yes
     //
-    //  Target takes –5 penalty on Listen checks and –2 penalty on
+    //  Target takes –5 penalty on Listen and Spot checks and –2 penalty on
     //  Will saves against sleep effects while the lullaby is in effect.
     // ================================================================
 
@@ -281,12 +281,37 @@ public partial class GameManager
         sb.AppendLine("═══════════════════════════════════");
         sb.AppendLine($"🎵 {casterName} casts Lullaby on {targetName}!");
         sb.AppendLine($"  School: Enchantment (Compulsion) | Level: 0 (Cantrip)");
-        sb.AppendLine($"  {targetName} feels drowsy... –5 on Listen checks, –2 on Will saves vs sleep.");
+        sb.AppendLine($"  {targetName} feels drowsy... –5 on Listen and Spot checks (not modelled), –2 on Will saves vs sleep.");
         sb.AppendLine($"  Duration: {SpellDurationRules.DescribeRounds(SpellDurationRules.Rounds(spell, SpellDurationRules.CasterLevelFor(caster, spell)))}.");
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
         Debug.Log($"[Cantrip] Lullaby cast by {casterName} on {targetName}");
-        return null;
+        // The tracked effect carries the duration (concentration, PHB p.249) and the -2 against sleep effects
+        // (SpellCaster.LullabySleepSavePenalty); the pipelines reach this only after a failed Will save.
+        return AddCantripTrackedEffect(caster, target, spell);
+    }
+
+    /// <summary>
+    /// Adds the tracked effect of a cantrip with a duration (Ghost Sound, Message, Prestidigitation, Lullaby), as the
+    /// generic ApplySpellBuff branch would: it shows on the recipient, ticks down, can be dispelled, and tells the AI
+    /// the spell is already running. Instantaneous cantrips (Create Water, Mending, Purify Food and Drink, Know
+    /// Direction) get none.
+    /// </summary>
+    private ActiveSpellEffect AddCantripTrackedEffect(CharacterController caster, CharacterController recipient, SpellData spell)
+    {
+        if (recipient == null || recipient.Stats == null || spell == null)
+            return null;
+
+        StatusEffectManager statusMgr = recipient.StatusEffectManager;
+        if (statusMgr == null)
+            statusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+        statusMgr.Init(recipient.Stats);
+
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
+        ActiveSpellEffect effect = statusMgr.AddEffect(spell, casterName, SpellDurationRules.CasterLevelFor(caster, spell));
+        if (effect != null && recipient.Spellcasting != null)
+            recipient.Spellcasting.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+        return effect;
     }
 
     // ================================================================

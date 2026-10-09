@@ -345,6 +345,11 @@ public class SpellData
     /// damage branch of SpellCaster.Cast deals none (SPL-124). DamageDice/DamageCount stay set for AI scoring and UI.
     /// </summary>
     public bool DamageResolvedByHandler;
+    /// <summary>
+    /// True when the spell's ApplySpellBuff branch does all of its healing (Heal: 10 points per level, PHB p.239;
+    /// Resurrection), so the generic healing branch of SpellCaster.Cast heals nothing (SPL-037).
+    /// </summary>
+    public bool HealingResolvedByHandler;
     public string DamageType;           // "fire", "cold", "acid", "force", "negative", "positive"
     public bool AutoHit;                // True for Magic Missile (no attack roll)
     public bool AllowsSavingThrow;      // Whether targets get a save
@@ -376,7 +381,9 @@ public class SpellData
     public bool BlockedByProtectionFromAlignment;
 
     // ========== BUFF/DEBUFF ==========
-    public int BuffACBonus;             // AC bonus (Mage Armor = +4)
+    public int BuffACBonus;             // AC bonus (Mage Armor = +4); with BuffType NaturalArmorBuffType, an enhancement bonus to natural armor (Barkskin)
+    /// <summary>BuffType of a spell whose BuffACBonus is an enhancement bonus to natural armor (Barkskin, PHB p.203), not an armor bonus.</summary>
+    public const string NaturalArmorBuffType = "natural_armor";
     /// <summary>
     /// LEGACY rounds count (0 = none, -1 = hours/level). It sets no duration: DurationType, DurationValue and
     /// DurationScalesWithLevel do, through SpellDurationRules (SPL-002); registration turns a spell that sets only this field

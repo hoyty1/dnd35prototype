@@ -480,12 +480,14 @@ public partial class GameManager
     /// Applies a buff spell's effect exactly as a landed cast does (<c>ApplySpellBuff</c>, the shared PC and NPC
     /// effect step), without the slot, action and targeting steps around it. Pass a clone, never a database
     /// template (CLAUDE.md). Used by rules scenarios that need a spell effect on an actor that has no slot for it.
+    /// <paramref name="castResult"/> stands in for the SpellCaster.Cast result of a landed single-target cast (its
+    /// spell resistance and save already rolled); null makes the handlers that need one roll their own (SPL-037).
     /// </summary>
-    internal ActiveSpellEffect Harness_ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell)
+    internal ActiveSpellEffect Harness_ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellResult castResult = null)
     {
         if (target == null || spell == null)
             return null;
-        return ApplySpellBuff(caster ?? target, target, spell, (caster ?? target).Spellcasting);
+        return ApplySpellBuff(caster ?? target, target, spell, (caster ?? target).Spellcasting, castResult);
     }
 
     /// <summary>The AoO confirmation the player is being asked to answer, or null.</summary>

@@ -134,115 +134,41 @@ public class DispelMagicService : MonoBehaviour
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //  TARGETED DISPEL — D&D 3.5e PHB p.223
+    //  TARGETED AND AREA DISPEL — D&D 3.5e PHB p.223 (printed)
     // ═══════════════════════════════════════════════════════════════════
 
+    /// <summary>The dice context of one dispel check (1d20 + caster level), so a test or scenario can force it.</summary>
+    public const string DispelCheckContext = "Dispel check";
+
     /// <summary>
-    /// Perform a targeted dispel on a single creature.
-    /// D&D 3.5e PHB p.223:
-    /// 1. Roll one dispel check: 1d20 + CL (max +10)
-    /// 2. Compare against spells in descending CL order (highest first)
-    /// 3. Auto-succeed against own spells
-    /// 4. Remove at most ONE spell
-    /// 5. Handle special cleanup for specific spells (Bear's Endurance, Spectral Hand, etc.)
+    /// Targeted dispel on one creature (PHB p.223): a separate dispel check (1d20 + caster level, max +10) against
+    /// each ongoing spell on it, DC 11 + that spell's caster level; every check that succeeds dispels its spell.
+    /// The caster automatically succeeds against its own spells (PHB p.223 lets it choose to).
+    /// <paramref name="casterLevel"/> is the dispelling cast's caster level; 0 or less uses the caster's
+    /// <c>GetCasterLevel()</c> (callers without a cast, such as the Holy Avenger).
     /// </summary>
-    public void PerformTargetedDispel(CharacterController caster, CharacterController target)
+    public void PerformTargetedDispel(CharacterController caster, CharacterController target, int casterLevel = 0)
     {
-        if (caster == null || target == null || target.Stats == null)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Dispel Magic: Invalid target."));
-            return;
-        }
-
-        string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
-        string targetName = target.Stats.CharacterName;
-        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
-
-        StatusEffectManager targetStatusMgr = target.StatusEffectManager;
-        if (targetStatusMgr == null || targetStatusMgr.ActiveEffects == null || targetStatusMgr.ActiveEffects.Count == 0)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮", $"{casterName} casts Dispel Magic on {targetName} — no active spell effects to dispel."));
-            Debug.Log($"[DispelMagic] {casterName} targets {targetName} — no active effects found");
-            return;
-        }
-
-        // Get list of dispellable effects sorted by caster level (descending), then by spell level (descending)
-        var dispellableEffects = new List<ActiveSpellEffect>();
-        foreach (var effect in targetStatusMgr.ActiveEffects)
-        {
-            if (effect == null || effect.Spell == null)
-                continue;
-            // Cannot dispel instantaneous effects (they already happened)
-            if (effect.Spell.DurationType == DurationType.Instantaneous)
-                continue;
-            dispellableEffects.Add(effect);
-        }
-
-        if (dispellableEffects.Count == 0)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮", $"{casterName} casts Dispel Magic on {targetName} — no dispellable effects found."));
-            Debug.Log($"[DispelMagic] {casterName} targets {targetName} — all effects are instantaneous or non-dispellable");
-            return;
-        }
-
-        // Sort by caster level descending (highest first), then by remaining rounds descending as tiebreaker
-        dispellableEffects.Sort((a, b) =>
-        {
-            int clCompare = b.CasterLevel.CompareTo(a.CasterLevel);
-            if (clCompare != 0) return clCompare;
-            return b.RemainingRounds.CompareTo(a.RemainingRounds);
-        });
-
-        // Roll once: 1d20 + min(CL, 10)
-        int dispelRoll = RollDispelCheck(casterLevel);
-
-        CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮", $"{casterName} casts Dispel Magic on {targetName} (dispel check: {dispelRoll})"));
-
-        bool dispelledSomething = false;
-        foreach (var effect in dispellableEffects)
-        {
-            bool isOwnSpell = !string.IsNullOrEmpty(effect.CasterName) &&
-                              string.Equals(effect.CasterName, casterName, StringComparison.OrdinalIgnoreCase);
-
-            if (isOwnSpell)
-            {
-                // Auto-success against own spells
-                DispelSingleEffect(target, targetStatusMgr, effect, casterName, "(auto-success, own spell)");
-                dispelledSomething = true;
-                break;
-            }
-
-            int dc = GetDispelDC(effect.CasterLevel);
-            if (dispelRoll >= dc)
-            {
-                DispelSingleEffect(target, targetStatusMgr, effect, casterName, $"(roll {dispelRoll} ≥ DC {dc})");
-                dispelledSomething = true;
-                break;
-            }
-            else
-            {
-                Debug.Log($"[DispelMagic] Failed to dispel {effect.Spell.Name} (CL {effect.CasterLevel}): " +
-                          $"roll {dispelRoll} < DC {dc}");
-            }
-        }
-
-        if (!dispelledSomething)
-        {
-            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("❌", $"Dispel Magic fails — could not overcome any spell on {targetName}."));
-            Debug.Log($"[DispelMagic] All dispel checks failed on {targetName}");
-        }
-
-        _updateAllStatsUI?.Invoke();
+        ResolveDispelChecks(caster, target, casterLevel, DispelMode.Targeted);
     }
 
     /// <summary>
-    /// Perform an area dispel affecting all characters within range.
-    /// D&D 3.5e PHB p.223: 20-ft radius burst.
-    /// Simplified: targets all characters in combat (within range).
-    /// Each creature gets a separate targeted dispel (max 1 spell removed per creature).
-    /// Magic items are NOT affected by area dispel.
+    /// Break Enchantment on one creature (PHB p.207): a caster level check (1d20 + caster level, max +15) against
+    /// each enchantment, transmutation or curse on it, DC 11 + that effect's caster level; each success frees the
+    /// creature of that effect. Only the effects that victimize it are checked (Debuff or Control spells, and
+    /// Bestow Curse), so its own beneficial transmutations such as Haste stay. No automatic success.
     /// </summary>
-    public void PerformAreaDispel(CharacterController caster, List<CharacterController> targets)
+    public void PerformBreakEnchantment(CharacterController caster, CharacterController target, int casterLevel = 0)
+    {
+        ResolveDispelChecks(caster, target, casterLevel, DispelMode.BreakEnchantment);
+    }
+
+    /// <summary>
+    /// Area dispel (PHB p.223): for each creature, a dispel check against its spell with the highest caster level,
+    /// then against progressively weaker spells until one is dispelled (which ends the dispel for that creature) or
+    /// every check fails. Magic items are not affected.
+    /// </summary>
+    public void PerformAreaDispel(CharacterController caster, List<CharacterController> targets, int casterLevel = 0)
     {
         if (caster == null || targets == null || targets.Count == 0)
         {
@@ -258,8 +184,128 @@ public class DispelMagicService : MonoBehaviour
             if (target == null || target.Stats == null || target.Stats.IsDead)
                 continue;
 
-            PerformTargetedDispel(caster, target);
+            ResolveDispelChecks(caster, target, casterLevel, DispelMode.Area);
         }
+    }
+
+    private enum DispelMode { Targeted, Area, BreakEnchantment }
+
+    /// <summary>True when Break Enchantment can free the subject of this effect (PHB p.207).</summary>
+    public static bool IsBreakEnchantmentEffect(ActiveSpellEffect effect)
+    {
+        if (effect == null || effect.Spell == null)
+            return false;
+        SpellData spell = effect.Spell;
+        if (spell.SpellId == SpellNames.BESTOW_CURSE)
+            return true;
+        bool schoolMatches = !string.IsNullOrEmpty(spell.School)
+            && (spell.School.StartsWith("Enchantment", StringComparison.OrdinalIgnoreCase)
+                || spell.School.StartsWith("Transmutation", StringComparison.OrdinalIgnoreCase));
+        bool victimizes = spell.EffectType == SpellEffectType.Debuff || spell.EffectType == SpellEffectType.Control;
+        return schoolMatches && victimizes;
+    }
+
+    /// <summary>
+    /// The shared dispel loop: one check per eligible effect, highest caster level first. Targeted and Break
+    /// Enchantment remove every effect whose check succeeds; Area stops after the first success.
+    /// </summary>
+    private void ResolveDispelChecks(CharacterController caster, CharacterController target, int casterLevel, DispelMode mode)
+    {
+        string spellLabel = mode == DispelMode.BreakEnchantment ? "Break Enchantment" : "Dispel Magic";
+        if (caster == null || target == null || target.Stats == null)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{spellLabel}: Invalid target."));
+            return;
+        }
+
+        string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+        string targetName = target.Stats.CharacterName;
+        if (casterLevel <= 0)
+            casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int maxBonus = mode == DispelMode.BreakEnchantment ? 15 : 10;
+        int checkBonus = Mathf.Min(casterLevel, maxBonus);
+
+        StatusEffectManager targetStatusMgr = target.StatusEffectManager;
+        var eligible = new List<ActiveSpellEffect>();
+        if (targetStatusMgr != null && targetStatusMgr.ActiveEffects != null)
+        {
+            foreach (var effect in targetStatusMgr.ActiveEffects)
+            {
+                if (effect == null || effect.Spell == null)
+                    continue;
+                // Cannot dispel instantaneous effects (they already happened)
+                if (effect.Spell.DurationType == DurationType.Instantaneous)
+                    continue;
+                if (mode == DispelMode.BreakEnchantment && !IsBreakEnchantmentEffect(effect))
+                    continue;
+                eligible.Add(effect);
+            }
+        }
+
+        if (eligible.Count == 0)
+        {
+            string none = mode == DispelMode.BreakEnchantment ? "no enchantment, transmutation or curse to break" : "no dispellable spell effects";
+            CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮", $"{casterName} casts {spellLabel} on {targetName} — {none}."));
+            Debug.Log($"[DispelMagic] {casterName} {spellLabel} on {targetName}: nothing eligible");
+            return;
+        }
+
+        // Highest caster level first (the area order, PHB p.223), longer remaining duration as the tiebreaker.
+        eligible.Sort((a, b) =>
+        {
+            int clCompare = b.CasterLevel.CompareTo(a.CasterLevel);
+            if (clCompare != 0) return clCompare;
+            return b.RemainingRounds.CompareTo(a.RemainingRounds);
+        });
+
+        CombatUI?.ShowCombatLog(CombatLogHelper.SpellResistance("🔮",
+            $"{casterName} casts {spellLabel} on {targetName}: a check (1d20 + {checkBonus}) against each of {eligible.Count} effect(s)"
+            + (mode == DispelMode.Area ? " until one is dispelled" : "")));
+
+        int dispelled = 0;
+        foreach (var effect in eligible)
+        {
+            bool isOwnSpell = mode != DispelMode.BreakEnchantment
+                              && !string.IsNullOrEmpty(effect.CasterName)
+                              && string.Equals(effect.CasterName, casterName, StringComparison.OrdinalIgnoreCase);
+
+            bool success;
+            string detail;
+            int dc = GetDispelDC(effect.CasterLevel);
+            if (isOwnSpell)
+            {
+                success = true;
+                detail = "(auto-success, own spell)";
+            }
+            else
+            {
+                int roll = DiceService.D20(DispelCheckContext);
+                int total = roll + checkBonus;
+                success = total >= dc;
+                detail = $"(1d20 {roll} + {checkBonus} = {total} vs DC {dc})";
+            }
+
+            if (success)
+            {
+                DispelSingleEffect(target, targetStatusMgr, effect, casterName, detail, spellLabel);
+                dispelled++;
+                if (mode == DispelMode.Area)
+                    break;
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Damage("❌", $"{spellLabel} fails against {effect.Spell.Name} on {targetName} {detail}"));
+                Debug.Log($"[DispelMagic] Failed to dispel {effect.Spell.Name} (CL {effect.CasterLevel}) {detail}");
+            }
+        }
+
+        if (dispelled == 0)
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Damage("❌", $"{spellLabel} fails — could not overcome any spell on {targetName}."));
+            Debug.Log($"[DispelMagic] All dispel checks failed on {targetName}");
+        }
+
+        _updateAllStatsUI?.Invoke();
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -270,7 +316,7 @@ public class DispelMagicService : MonoBehaviour
     /// Remove a single spell effect from a target and handle special cleanup.
     /// Called when a dispel check succeeds against a specific effect.
     /// </summary>
-    private void DispelSingleEffect(CharacterController target, StatusEffectManager statusMgr, ActiveSpellEffect effect, string casterName, string checkDetail)
+    private void DispelSingleEffect(CharacterController target, StatusEffectManager statusMgr, ActiveSpellEffect effect, string casterName, string checkDetail, string spellLabel = "Dispel Magic")
     {
         if (effect == null || effect.Spell == null) return;
 
@@ -278,7 +324,7 @@ public class DispelMagicService : MonoBehaviour
         string spellId = effect.Spell.SpellId;
         string targetName = target.Stats != null ? target.Stats.CharacterName : "Unknown";
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"Dispel Magic succeeds — {spellName} dispelled from {targetName} {checkDetail}"));
+        CombatUI?.ShowCombatLog(CombatLogHelper.Success("✅", $"{spellLabel} succeeds — {spellName} ended on {targetName} {checkDetail}"));
         Debug.Log($"[DispelMagic] Dispelled {spellName} (CL {effect.CasterLevel}) from {targetName} {checkDetail}");
 
         // Handle special effect cleanup before removing the tracked effect

@@ -373,7 +373,7 @@ public static class DazeMonsterAndHideousLaughterRulesTests
 
             MethodInfo applyBuff = typeof(GameManager).GetMethod("ApplySpellBuff", BindingFlags.NonPublic | BindingFlags.Instance);
             SpellData spell = SpellDatabase.GetSpell(SpellNames.HIDEOUS_LAUGHTER);
-            applyBuff?.Invoke(gm, new object[] { caster, target, spell, null });
+            applyBuff?.Invoke(gm, new object[] { caster, target, spell, null, null }); // castResult (SPL-037)
 
             Assert(conditionService.HasCondition(target, CombatConditionType.HideousLaughter),
                 "ApplySpellBuff applies Hideous Laughter condition");

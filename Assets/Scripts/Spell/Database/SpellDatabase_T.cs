@@ -96,8 +96,10 @@ public static partial class SpellDatabase
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Long,
                     EffectType = SpellEffectType.Control,
-                    AllowsSavingThrow = true,
-                    SavingThrowType = "Will",
+                    // The implemented version is the combat maneuver (a bull rush, ApplyTelekinesisEffect): no save,
+                    // spell resistance applies (PHB p.292). Will negates only the sustained force and violent thrust
+                    // versions, which are not implemented (SPL-130).
+                    AllowsSavingThrow = false,
                     SpellResistanceApplies = true,
                     DurationType = DurationType.Rounds, // Concentration, up to 1 rd/level
                     DurationValue = 1,

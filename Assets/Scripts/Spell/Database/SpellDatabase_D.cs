@@ -1023,10 +1023,11 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Medium,
                     IsRangedTouch = true,
                     EffectType = SpellEffectType.Damage,
+                    DamageResolvedByHandler = true, // ApplyDisintegrateEffect: 2d6/CL or 5d6 on a save (SPL-037)
                     DamageType = "force",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Fortitude",
-                    SaveHalves = false, // Fort partial — handled manually (5d6 on save)
+                    SaveHalves = false, // Fort partial: the handler reads the save (5d6 on a save)
                     SpellResistanceApplies = true,
                     DurationType = DurationType.Instantaneous,
                     ActionType = SpellActionType.Standard,

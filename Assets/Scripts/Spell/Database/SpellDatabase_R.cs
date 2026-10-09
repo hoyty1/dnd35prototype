@@ -244,6 +244,7 @@ public static partial class SpellDatabase
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Healing,
+                    HealingResolvedByHandler = true, // no hit points: the ApplySpellBuff branch does the restoring (SPL-037)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -252,12 +253,13 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.GREATER_RESTORATION,
                     Name = "Greater Restoration",
-                    Description = "Restores all temporary negative levels and ability damage. PHB p.246",
+                    Description = "Restores all temporary negative levels and ability damage. PHB p.272",
                     SpellLevel = 7, School = "Conjuration",
                     ClassList = new[] { "Cleric" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Healing,
+                    HealingResolvedByHandler = true, // no hit points: the ApplySpellBuff branch does the restoring (SPL-037)
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -536,6 +538,7 @@ public static partial class SpellDatabase
                     IsTouch = true,
                     IsMeleeTouch = true,
                     EffectType = SpellEffectType.Healing,
+                    HealingResolvedByHandler = true, // ApplyResurrectionEffect restores the hit points (SPL-037)
                     DurationType = DurationType.Instantaneous,
                     AllowsSavingThrow = false,
                     SpellResistanceApplies = false,

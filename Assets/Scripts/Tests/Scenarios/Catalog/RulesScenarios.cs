@@ -227,6 +227,7 @@ namespace Tests.Scenarios
             yield return S("spell-durations", SpellDurations);
             yield return S("spell-damage-mitigation", SpellDamageMitigation);
             yield return S("spell-dice-undead", SpellDiceUndead);
+            yield return S("spell-buff-dispatch", SpellBuffDispatch);
         }
 
         private static ScenarioDef S(string name, Func<ScenarioDef> build) => ScenarioCatalog.Safe("RulesScenarios rules/" + name, build);
@@ -5603,6 +5604,208 @@ namespace Tests.Scenarios
             ctx.Note(SpellDiceNotePrefix + spellId + " by " + casterKey + " (CL " + cl + ") on " + key + ": " + before + " -> " + now
                 + " (expected " + expected + ")");
             return before != int.MinValue && now == expected;
+        }
+
+        // ── ApplySpellBuff dispatch (SPL-037) ──
+
+        /// <summary>
+        /// SPL-037: the spell-specific branches that sat below ApplySpellBuff's generic branch now run on both cast paths,
+        /// and a Utility spell with a branch reaches the method through SpellEffectRouting.
+        /// Round 1: the Quick Start cleric (Ui, PC pipeline) casts Magic Fang (PHB p.250) on the fighter beside it: +1 on
+        /// attack and damage once (the dead branch added a second +1 that was never removed). The Quick Start wizard (Ui)
+        /// casts Dancing Lights (PHB p.216, a Utility spell) on itself: the branch keeps a tracked effect. evil_acolyte_test
+        /// (NPC cast executor) casts Magic Fang on the goblin beside it. The scripted fighter's Assert steps apply, through
+        /// the shared effect step (Harness_ApplySpellBuff), Barkskin from the cleric to itself (PHB p.203: +2 enhancement to
+        /// natural armor at CL 1-5, stacking with worn armor) and Telekinesis from the wizard to the brute goblin, with the
+        /// wizard's d20 forced to 20 and the goblin's to 1 (PHB p.292 combat maneuver: a bull rush with Int in place of
+        /// Strength, no save; the caster does not move, so the push is 5 ft straight away from it). gob2 then attacks the
+        /// fighter: the trace's AC must include Barkskin. After its cast the wizard raises Globe of Invulnerability (PHB p.236)
+        /// through the shared step; in the fighter's later turn the globe blocks a 4th-level spell against the wizard (the
+        /// static check stopped at 3rd before SPL-037) and lets a 5th-level one through. Round 2: the cleric casts Heal
+        /// (PHB p.239) on the wounded, sickened fighter through the PC pipeline (SpellCaster.Cast, SpellEffectRouting, then
+        /// the handler with the cast's result): it cures 10 points per caster level exactly once (the cast itself heals
+        /// nothing, HealingResolvedByHandler) and ends sickened. The acolyte casts Dancing Lights on itself through the
+        /// NPC executor (the same routing as the PC pipeline).
+        /// The acolyte's slots spawn empty, so Magic Fang and Dancing Lights go into empty level-1 and level-0 slots; the
+        /// cleric and wizard get them in their first two slots of those levels, and the cleric gets Heal in its first two
+        /// level-0 slots (no class or level check on prepared slots). The fighter has 200 extra hit points, so the heal
+        /// is never capped by its maximum.
+        /// </summary>
+        private static ScenarioDef SpellBuffDispatch()
+        {
+            return Rules("rules/spell-buff-dispatch", "Spell-specific ApplySpellBuff branches run on the PC and NPC cast paths (SPL-037)")
+                .Covers("SPL-037", "SPL-022", "PHB p.203", "PHB p.216", "PHB p.236", "PHB p.239", "PHB p.250", "PHB p.292", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("cleric", ActorSource.QuickStart("Cleric"), 5, 10, Control.Ui)
+                .Pc("wizard", ActorSource.QuickStart("Wizard"), 5, 12, Control.Ui)
+                .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 3)), 6, 10, Control.Scripted)
+                .Npc("acolyte", "evil_acolyte_test", 12, 10, Control.Scripted)
+                .Npc("goblin", "goblin", 11, 10, Control.Idle)
+                .Npc("gob2", "goblin", 7, 10, Control.Scripted)
+                .Npc("brute", "goblin", 5, 15, Control.Idle)
+                .Tweak("cleric", c =>
+                {
+                    PrepareTwice(c, 1, DND35e.Identifiers.SpellNames.MAGIC_FANG);
+                    PrepareTwice(c, 0, DND35e.Identifiers.SpellNames.HEAL);
+                })
+                .Tweak("fighter", c => c.Stats.BonusMaxHP += 200)
+                .Tweak("wizard", c => PrepareTwice(c, 0, DND35e.Identifiers.SpellNames.DANCING_LIGHTS))
+                .Tweak("acolyte", c =>
+                {
+                    ReplacePrepared(c, null, DND35e.Identifiers.SpellNames.MAGIC_FANG);
+                    ReplacePrepared(c, null, DND35e.Identifiers.SpellNames.DANCING_LIGHTS);
+                })
+                .Initiative("cleric", "wizard", "acolyte", "fighter", "gob2", "goblin", "brute")
+                .Force(20, 20, GameManager.TelekinesisBullRushContext, 1)
+                .Force(20, 1, "Bull rush defense", 1)
+                .Turn("cleric", 1,
+                    Step.Assert("Record the fighter's attack and damage bonuses", ctx => RecordBonuses(ctx, "fighter")),
+                    Step.Cast(DND35e.Identifiers.SpellNames.MAGIC_FANG, "fighter"),
+                    Step.Assert("Magic Fang on the PC path: +1 attack and damage, once (PHB p.250)", ctx => MagicFangOnce(ctx, "fighter")))
+                .Turn("cleric", 2,
+                    Step.Assert("Wound and sicken the fighter, and record its HP", WoundFighterForHeal),
+                    Step.Cast(DND35e.Identifiers.SpellNames.HEAL, "fighter"),
+                    Step.Assert("Heal on the PC path cures 10 per caster level once and ends sickened (PHB p.239)", HealedOnce))
+                .Turn("wizard", 1,
+                    Step.Cast(DND35e.Identifiers.SpellNames.DANCING_LIGHTS, "wizard"),
+                    Step.Assert("Dancing Lights on the PC path: a Utility spell reaches its branch (tracked effect)", ctx => HasSpellEffect(ctx, "wizard", DND35e.Identifiers.SpellNames.DANCING_LIGHTS)),
+                    Step.Assert("Globe of Invulnerability raised around the wizard (shared effect step)", GlobeOnWizard))
+                .Turn("acolyte", 1,
+                    Step.Assert("Record the goblin's attack and damage bonuses", ctx => RecordBonuses(ctx, "goblin")),
+                    Step.Cast(DND35e.Identifiers.SpellNames.MAGIC_FANG, "goblin"),
+                    Step.Assert("Magic Fang on the NPC path: +1 attack and damage, once (PHB p.250)", ctx => MagicFangOnce(ctx, "goblin")))
+                .Turn("acolyte", 2,
+                    Step.Cast(DND35e.Identifiers.SpellNames.DANCING_LIGHTS, "acolyte"),
+                    Step.Assert("Dancing Lights on the NPC path: the same routing reaches the branch", ctx => HasSpellEffect(ctx, "acolyte", DND35e.Identifiers.SpellNames.DANCING_LIGHTS)))
+                .Turn("fighter", 1,
+                    Step.Assert("Barkskin adds its enhancement bonus to natural armor on top of worn armor (PHB p.203)", BarkskinOnFighter),
+                    Step.Assert("Telekinesis bull rushes the brute 5 ft away from the wizard (PHB p.292, p.154)", TelekinesisPush),
+                    Step.Assert("The globe blocks a 4th-level spell against the wizard and lets a 5th-level one through (PHB p.236)", GlobeBlocksFourthLevel))
+                .Turn("fighter", 2, Step.Pass())
+                .Turn("gob2", 1, Step.Attack("fighter"))
+                .Turn("gob2", 2, Step.Pass())
+                .Expect("The five casts ran (PC pipeline three times, NPC executor twice)", Expect.All(
+                    Expect.StepStatus("cleric", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("cleric", 2, "Cast", 0, "done"),
+                    Expect.StepStatus("wizard", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("acolyte", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("acolyte", 2, "Cast", 0, "done")))
+                .Expect("Every dispatch check holds", Expect.AssertsPass())
+                .Expect("gob2's attack meets the fighter's AC with Barkskin", v =>
+                {
+                    TraceEvent note = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(SpellBuffNotePrefix + "barkskin expect-ac=", StringComparison.Ordinal));
+                    if (note == null) return ExpectResult.Fail("no Barkskin AC note");
+                    int want = int.Parse(note.Str("text").Substring(note.Str("text").IndexOf('=') + 1));
+                    List<TraceEvent> attacks = v.Attacks("gob2", "fighter", false, 1);
+                    if (attacks.Count == 0) return ExpectResult.Fail("no gob2 attack in round 1", note.Seq);
+                    TraceEvent wrong = attacks.FirstOrDefault(e => e.Int("ac") != want);
+                    return wrong == null
+                        ? ExpectResult.Pass("attack against AC " + want, attacks[0].Seq)
+                        : ExpectResult.Fail("attack against AC " + wrong.Int("ac") + ", expected " + want, wrong.Seq);
+                })
+                .Build();
+        }
+
+        private const string SpellBuffNotePrefix = "spl037 ";
+        private static readonly Dictionary<string, int[]> _spellBuffBonusesBefore = new Dictionary<string, int[]>();
+
+        private static bool RecordBonuses(ScenarioContext ctx, string key)
+        {
+            CharacterStats s = ctx.Get(key).Stats;
+            _spellBuffBonusesBefore[key] = new[] { s.MoraleAttackBonus, s.MoraleDamageBonus };
+            ctx.Note(SpellBuffNotePrefix + key + " morale attack " + s.MoraleAttackBonus + ", damage " + s.MoraleDamageBonus);
+            return true;
+        }
+
+        private static bool MagicFangOnce(ScenarioContext ctx, string key)
+        {
+            CharacterController c = ctx.Get(key);
+            if (!_spellBuffBonusesBefore.TryGetValue(key, out int[] before))
+                return false;
+            bool tracked = c.StatusEffectManager != null && c.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.MAGIC_FANG);
+            ctx.Note(SpellBuffNotePrefix + key + " Magic Fang: attack " + before[0] + " -> " + c.Stats.MoraleAttackBonus
+                + ", damage " + before[1] + " -> " + c.Stats.MoraleDamageBonus + ", tracked " + tracked);
+            return tracked && c.Stats.MoraleAttackBonus == before[0] + 1 && c.Stats.MoraleDamageBonus == before[1] + 1;
+        }
+
+        private static bool HasSpellEffect(ScenarioContext ctx, string key, string spellId)
+        {
+            CharacterController c = ctx.Get(key);
+            bool has = c.StatusEffectManager != null && c.StatusEffectManager.HasEffect(spellId);
+            ctx.Note(SpellBuffNotePrefix + key + " has " + spellId + ": " + has);
+            return has;
+        }
+
+        private static bool BarkskinOnFighter(ScenarioContext ctx)
+        {
+            CharacterController fighter = ctx.Get("fighter");
+            CharacterController cleric = ctx.Get("cleric");
+            SpellData barkskin = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.BARKSKIN);
+            int before = fighter.Stats.ArmorClass;
+            int armorBonus = fighter.Stats.SpellACBonus;
+            ctx.Gm.Harness_ApplySpellBuff(cleric, fighter, barkskin.Clone());
+            int cl = cleric.Stats.GetDomainBoostedCasterLevel(barkskin);
+            int want = before + GameManager.BarkskinNaturalArmorBonus(cl);
+            ctx.Note(SpellBuffNotePrefix + "barkskin CL " + cl + ": AC " + before + " -> " + fighter.Stats.ArmorClass + " (worn armor " + fighter.Stats.ArmorBonus + ")");
+            ctx.Note(SpellBuffNotePrefix + "barkskin expect-ac=" + want);
+            return fighter.Stats.ArmorClass == want && fighter.Stats.SpellACBonus == armorBonus
+                && fighter.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.BARKSKIN);
+        }
+
+        private static int _healHpBefore = int.MinValue;
+
+        private static bool WoundFighterForHeal(ScenarioContext ctx)
+        {
+            CharacterController fighter = ctx.Get("fighter");
+            fighter.Stats.CurrentHP = 5;
+            fighter.ApplyCondition(CombatConditionType.Sickened, 10, "Scenario");
+            _healHpBefore = fighter.Stats.CurrentHP;
+            ctx.Note(SpellBuffNotePrefix + "heal: fighter HP " + _healHpBefore + " of " + fighter.Stats.TotalMaxHP
+                + ", sickened " + fighter.HasCondition(CombatConditionType.Sickened));
+            return fighter.HasCondition(CombatConditionType.Sickened);
+        }
+
+        private static bool HealedOnce(ScenarioContext ctx)
+        {
+            CharacterController fighter = ctx.Get("fighter");
+            CharacterController cleric = ctx.Get("cleric");
+            int cl = SpellCastingHelper.GetEffectiveCasterLevel(cleric, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.HEAL));
+            int want = Mathf.Min(fighter.Stats.TotalMaxHP, _healHpBefore + GameManager.HealAmount(cl));
+            bool sickened = fighter.HasCondition(CombatConditionType.Sickened);
+            ctx.Note(SpellBuffNotePrefix + "heal CL " + cl + ": HP " + _healHpBefore + " -> " + fighter.Stats.CurrentHP
+                + " (expected " + want + "), sickened " + sickened);
+            return _healHpBefore != int.MinValue && fighter.Stats.CurrentHP == want && !sickened;
+        }
+
+        private static bool GlobeOnWizard(ScenarioContext ctx)
+        {
+            CharacterController wizard = ctx.Get("wizard");
+            ctx.Gm.Harness_ApplySpellBuff(wizard, wizard, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.GLOBE_OF_INVULNERABILITY).Clone());
+            return wizard.StatusEffectManager != null && wizard.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.GLOBE_OF_INVULNERABILITY);
+        }
+
+        /// <summary>A later turn, so the globe's squares exist (they are computed in its Start, the frame after it is created).</summary>
+        private static bool GlobeBlocksFourthLevel(ScenarioContext ctx)
+        {
+            CharacterController wizard = ctx.Get("wizard");
+            SpellData fourth = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.PHANTASMAL_KILLER);
+            SpellData fifth = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.TELEKINESIS);
+            bool blocksFourth = LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(fourth, wizard);
+            bool blocksFifth = LesserGlobeOfInvulnerabilityAreaEffect.DoesAnyGlobeBlockSpell(fifth, wizard);
+            ctx.Note(SpellBuffNotePrefix + "globe blocks level " + fourth.SpellLevel + ": " + blocksFourth + ", level " + fifth.SpellLevel + ": " + blocksFifth);
+            return fourth.SpellLevel == 4 && blocksFourth && fifth.SpellLevel == 5 && !blocksFifth;
+        }
+
+        private static bool TelekinesisPush(ScenarioContext ctx)
+        {
+            CharacterController wizard = ctx.Get("wizard");
+            CharacterController brute = ctx.Get("brute");
+            Vector2Int from = brute.GridPosition;
+            Vector2Int want = from + BullRushRules.GetPushDirection(wizard, brute);
+            var landed = new SpellResult { Success = true, AttackHit = true };
+            ctx.Gm.Harness_ApplySpellBuff(wizard, brute, SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.TELEKINESIS).Clone(), landed);
+            ctx.Note(SpellBuffNotePrefix + "telekinesis brute " + from + " -> " + brute.GridPosition + " (expected " + want + ")");
+            return brute.GridPosition == want && wizard.GridPosition == new Vector2Int(5, 12);
         }
 
         private static Dictionary<string, int> HpOf(ScenarioContext ctx, params string[] keys)

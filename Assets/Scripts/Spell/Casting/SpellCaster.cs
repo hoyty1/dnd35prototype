@@ -564,8 +564,9 @@ public static class SpellCaster
         }
 
         // ========== HEALING ==========
-        // A healing spell, or an inflict spell curing an undead (its inflict dice are the cure, PHB p.244).
-        if (heals && result.AttackHit)
+        // A healing spell, or an inflict spell curing an undead (its inflict dice are the cure, PHB p.244). A spell whose
+        // ApplySpellBuff branch does the healing (Heal, Resurrection) heals nothing here, or the target is healed twice (SPL-037).
+        if (heals && result.AttackHit && !spell.HealingResolvedByHandler)
         {
             result.TargetHPBefore = targetStats.CurrentHP;
 
@@ -1107,7 +1108,40 @@ public static class SpellCaster
             }
         }
 
+        // Lullaby (PHB p.249): -2 on Will saves against sleep effects while it lasts.
+        int lullabyPenalty = saveType == "Will" ? LullabySleepSavePenalty(targetController, spell) : 0;
+        if (lullabyPenalty != 0)
+        {
+            baseSave += lullabyPenalty;
+            situationalSaveBonus += lullabyPenalty;
+            situationalSaveSource = string.IsNullOrEmpty(situationalSaveSource)
+                ? $"Lullaby ({lullabyPenalty} vs sleep)"
+                : situationalSaveSource + $", Lullaby ({lullabyPenalty} vs sleep)";
+        }
+
         return baseSave;
+    }
+
+    /// <summary>
+    /// Lullaby (PHB p.249): a creature under the spell takes a -2 penalty on Will saves against sleep effects
+    /// (Sleep, Deep Slumber). Returns -2 for such a save, else 0. The -5 on Listen and Spot checks is not modelled
+    /// (no Listen or Spot checks in combat). Used by every Will save against a sleep effect: SpellCaster.Cast and the Sleep and Deep
+    /// Slumber area resolvers (SPL-037).
+    /// </summary>
+    public static int LullabySleepSavePenalty(CharacterController target, SpellData spell)
+    {
+        if (target == null || spell == null || !IsSleepEffect(spell))
+            return 0;
+        StatusEffectManager effects = target.StatusEffectManager;
+        return effects != null && effects.HasEffect(SpellNames.LULLABY) ? -2 : 0;
+    }
+
+    /// <summary>The sleep effects among the game's spells (PHB [Sleep]-type enchantments: Sleep, Deep Slumber).</summary>
+    public static bool IsSleepEffect(SpellData spell)
+    {
+        return spell != null
+            && (string.Equals(spell.SpellId, SpellNames.SLEEP, System.StringComparison.Ordinal)
+                || string.Equals(spell.SpellId, SpellNames.DEEP_SLUMBER, System.StringComparison.Ordinal));
     }
 
     /// <summary>
