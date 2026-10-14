@@ -307,7 +307,7 @@ public class MovementService : MonoBehaviour
         if (threatener.Stats == null || threatener.Stats.IsDead)
             return null;
 
-        if (!ThreatSystem.CanMakeAoO(threatener))
+        if (!ThreatSystem.CanMakeAoOAgainst(threatener, target))
             return null;
 
         return ThreatSystem.ExecuteAoO(threatener, target, isFromMovement: true);

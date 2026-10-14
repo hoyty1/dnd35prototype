@@ -156,6 +156,16 @@ public class CombatFlowService : MonoBehaviour
         if (_gameManager == null || attacker == null || target == null)
             return;
 
+        // A creature holding the target with one body part after Improved Grab attacks only other opponents, in every
+        // attack mode (MM p.310; delegated RAW reading 2026-10-14, CMB-163). The target clicks check this first; this
+        // keeps every caller of the PC attack entry on the same rule.
+        if (attacker.IsBarredFromOrdinaryAttackOn(target, out string holdReason))
+        {
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", holdReason));
+            _gameManager.Combat_ShowActionChoices();
+            return;
+        }
+
         // ── Resilient Sphere boundary block (PHB p.263) ──
         // Nothing passes through the sphere boundary. Attacks between creatures
         // separated by a sphere boundary are blocked. Creatures inside the SAME
@@ -298,7 +308,7 @@ public class CombatFlowService : MonoBehaviour
 
         foreach (CharacterController enemy in threateningEnemies)
         {
-            if (!ThreatSystem.CanMakeAoO(enemy))
+            if (!ThreatSystem.CanMakeAoOAgainst(enemy, attacker))
             {
                 Debug.Log($"[AOO-DEBUG] {enemy?.Stats?.CharacterName ?? "<unknown>"} cannot make AoO now (used {enemy?.Stats?.AttacksOfOpportunityUsed}/{enemy?.Stats?.MaxAttacksOfOpportunity}).");
                 continue;
@@ -357,6 +367,9 @@ public class CombatFlowService : MonoBehaviour
             if (candidate.Team == attacker.Team)
                 continue; // Skip allies
             if (!SquareGridUtils.IsAdjacent(attacker.GridPosition, candidate.GridPosition))
+                continue;
+            // The Improved Grab hold bar: no cleave into the creature this attacker holds (MM p.310, CMB-163).
+            if (attacker.IsBarredFromOrdinaryAttackOn(candidate, out _))
                 continue;
 
             return candidate;
@@ -1355,9 +1368,19 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
+        List<CharacterController> adjacentEnemies = FindAllAdjacentEnemies(attacker);
+        // Whirlwind Attack makes one attack against each opponent, never the one this attacker holds with one body part
+        // (MM p.310; delegated RAW reading 2026-10-14, CMB-163). When the held creature is the only adjacent foe, the
+        // action is refused before its cost.
+        int barredCount = adjacentEnemies.RemoveAll(enemy => enemy != null && attacker.IsBarredFromOrdinaryAttackOn(enemy, out _));
+        if (adjacentEnemies.Count == 0 && barredCount > 0)
+        {
+            _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{attacker.Stats.CharacterName} cannot use Whirlwind Attack: its only adjacent foe is the creature it holds (MM p.310)."));
+            return;
+        }
+
         attacker.Actions.UseFullRoundAction();
 
-        List<CharacterController> adjacentEnemies = FindAllAdjacentEnemies(attacker);
         if (adjacentEnemies.Count == 0)
         {
             _gameManager.CombatUI?.ShowCombatLog(CombatLogHelper.Debuff("🌀", $"{attacker.Stats.CharacterName} uses Whirlwind Attack but has no adjacent enemies!"));

@@ -265,7 +265,7 @@ public partial class GameManager
             CharacterController enemy = GetEnemyAtPositionForOverrun(attacker, stepPosition);
             if (enemy != null)
             {
-                if (ThreatSystem.CanMakeAoO(enemy) && !enemy.Stats.IsDead)
+                if (ThreatSystem.CanMakeAoOAgainst(enemy, attacker) && !enemy.Stats.IsDead)
                 {
                     CombatUI?.ShowCombatLog(CombatLogHelper.Info("", $"{enemy.Stats.CharacterName} gets an attack of opportunity!"));
                     CombatResult aooResult = TriggerAoO(enemy, attacker);
@@ -776,7 +776,7 @@ public partial class GameManager
         bool attackerHasImprovedOverrun = attacker.Stats.HasFeat("Improved Overrun");
         bool provokedAoO = false;
 
-        if (!attackerHasImprovedOverrun && ThreatSystem.CanMakeAoO(target) && !target.Stats.IsDead)
+        if (!attackerHasImprovedOverrun && ThreatSystem.CanMakeAoOAgainst(target, attacker) && !target.Stats.IsDead)
         {
             provokedAoO = true;
             CombatResult aooResult = TriggerAoO(target, attacker);

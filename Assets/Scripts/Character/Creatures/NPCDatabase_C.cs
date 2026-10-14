@@ -213,6 +213,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 22,
             CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase" },
             HasImprovedGrab = true,
+            IsQuadruped = true, // PHB p.162 quadruped drag multipliers (CMB-163)
             ImprovedGrabTriggerAttackName = "Bite",
             HasScent = true,
             SpecialAbilities = new List<string> { "Improved grab", "Hold breath (68 rounds)", "Low-light vision", "Scent" },

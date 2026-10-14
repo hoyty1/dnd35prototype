@@ -102,6 +102,7 @@ public static class GrappleDamageRulesTests
         TestNaturalWeaponDisarmOneHandedOwnSize();
         TestSunderOpposedRollSizeAndHandedness();
         TestUnarmedSunderLightWeapon();
+        TestSunderShieldDefenderRollsWithItsWeapon();
         TestNaturalSunderAtHasteStep();
         TestNaturalSecondaryGrapplePenaltyOnTouchOnly();
         TestNpcNaturalSequenceMakesOneSubstitute();
@@ -2888,6 +2889,86 @@ public static class GrappleDamageRulesTests
         }
     }
 
+    private static void TestSunderShieldDefenderRollsWithItsWeapon()
+    {
+        // CMB-165 (delegated RAW reading 2026-10-14; PHB p.158 Step 2, p.113, p.139; MM p.312): when its shield is the
+        // target, the defender rolls with the weapon it holds (main hand first, else the off hand); with none, a true
+        // natural weapon at 0, or its unarmed strike as a light weapon at -4, an NPC's "Unarmed Strike" natural attack
+        // included. The targeted shield is never its weapon, and the defender takes no damage-mode -4.
+        System.Func<int, string, int, int> savedFilter = ScenarioHooks.RollFilter;
+        var attacker = CreateIterativeAttacker("ShieldSunderAttacker");
+        var shieldOnly = CreateWeakDefender("ShieldSunderEmptyHanded");
+        var natural = CreateBiteClawsCreature("ShieldSunderNatural", 3, false);
+        var monk = CreateNaturalCreature("ShieldSunderMonk", 1, ("Unarmed Strike", true, 1));
+        var offHanded = CreateWeakDefender("ShieldSunderOffHand");
+        attacker.GridPosition = new Vector2Int(26, 12);
+        shieldOnly.GridPosition = new Vector2Int(27, 12);
+        natural.GridPosition = new Vector2Int(27, 13);
+        monk.GridPosition = new Vector2Int(25, 12);
+        offHanded.GridPosition = new Vector2Int(25, 13);
+        try
+        {
+            attacker.Stats.BaseAttackBonusOverride = 1;
+            attacker.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.WeaponLongsword), EquipSlot.RightHand);
+            foreach (CharacterController d in new[] { shieldOnly, natural, monk })
+                d.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemID.ShieldHeavyWooden), EquipSlot.LeftHand);
+            natural.SetTeam(CharacterTeam.Enemy);
+            monk.SetTeam(CharacterTeam.Enemy);
+
+            ScenarioHooks.RollFilter = (sides, ctx, natural20) =>
+                ctx == "Sunder attack roll" ? 1 : ctx == "Sunder defense roll" ? 20 : natural20;
+            SpecialAttackResult vsEmpty = attacker.ExecuteSpecialAttack(SpecialAttackType.Sunder, shieldOnly, sunderTargetSlot: EquipSlot.LeftHand);
+            SpecialAttackResult vsNatural = attacker.ExecuteSpecialAttack(SpecialAttackType.Sunder, natural, sunderTargetSlot: EquipSlot.LeftHand);
+            SpecialAttackResult vsMonk = attacker.ExecuteSpecialAttack(SpecialAttackType.Sunder, monk, sunderTargetSlot: EquipSlot.LeftHand);
+            int Def(SpecialAttackResult r) => r == null ? int.MinValue : r.OpposedTotal - r.OpposedRoll;
+            Assert(vsEmpty != null && Def(vsEmpty) == PlainOpposedMod(shieldOnly) - 4 && vsEmpty.Log.Contains("unarmed strike (light) -4"),
+                $"CMB-165: a defender holding only the targeted shield rolls with its unarmed strike, a light weapon (-4; {Def(vsEmpty)} vs base {PlainOpposedMod(shieldOnly)})");
+            Assert(vsNatural != null && natural.FightsWithNaturalWeapons() && Def(vsNatural) == PlainOpposedMod(natural) + GetLargerSizeBonusForTest(natural, attacker),
+                $"CMB-165: a natural-weapon defender holding only the targeted shield rolls with a natural weapon (0; {Def(vsNatural)} vs base {PlainOpposedMod(natural)})");
+            Assert(vsMonk != null && !monk.FightsWithNaturalWeapons() && Def(vsMonk) == PlainOpposedMod(monk) - 4,
+                $"CMB-165: an NPC whose only natural attack is 'Unarmed Strike' rolls as unarmed (-4; {Def(vsMonk)} vs base {PlainOpposedMod(monk)})");
+
+            // The weapon choice (static helpers shared by every caller): a shield target leaves the held weapon, the main
+            // hand first, else the off hand; the shield itself never counts.
+            ItemData shield = ItemDatabase.CloneItem(ItemID.ShieldLightSteel);
+            ItemData dagger = ItemDatabase.CloneItem(ItemID.WeaponDagger);
+            var offInv = offHanded.GetComponent<InventoryComponent>().CharacterInventory;
+            offInv.DirectEquip(dagger, EquipSlot.LeftHand);
+            ItemData offHandPick = CharacterController.GetSunderDefenderWeapon(offHanded, shield);
+            int offHandMod = CharacterController.GetSunderDefenderHandednessModifier(offHanded, offHandPick, out string offHandLabel);
+            ItemData greataxe = ItemDatabase.CloneItem(ItemID.WeaponGreataxe);
+            offInv.DirectEquip(greataxe, EquipSlot.RightHand);
+            ItemData mainPick = CharacterController.GetSunderDefenderWeapon(offHanded, shield);
+            Assert(offHandPick == dagger && offHandMod == -4 && offHandLabel == "handedness"
+                && mainPick == greataxe && CharacterController.GetSunderDefenderWeapon(shieldOnly, shield) == null,
+                $"CMB-165: with the main hand empty the defender rolls with its off-hand dagger ({offHandPick?.Name}, {offHandMod}); with a main-hand weapon, that one ({mainPick?.Name}); a shield is never its weapon");
+
+            // A ranged weapon is no sunder defender's weapon (handedness is a melee weapon trait, PHB p.113): a defender
+            // holding only a longbow beside its targeted shield rolls with its unarmed strike (-4).
+            ItemData longbow = ItemDatabase.CloneItem(ItemID.WeaponLongbow);
+            shieldOnly.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(longbow, EquipSlot.RightHand);
+            ItemData bowPick = CharacterController.GetSunderDefenderWeapon(shieldOnly, shield);
+            int bowMod = CharacterController.GetSunderDefenderHandednessModifier(shieldOnly, bowPick, out string bowLabel);
+            Assert(longbow != null && longbow.IsRangedWeapon && shieldOnly.GetEquippedMainWeapon() == longbow
+                && bowPick == null && bowMod == -4 && bowLabel == "unarmed strike (light)",
+                $"CMB-165: a defender holding only a longbow rolls with its unarmed strike, not the bow ({bowPick?.Name}, {bowMod}, '{bowLabel}')");
+        }
+        catch (System.Exception ex)
+        {
+            System.Exception inner = ex.InnerException ?? ex;
+            Assert(false, $"Shield sunder defender check threw {inner.GetType().Name}: {inner.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = savedFilter;
+            Cleanup(attacker, shieldOnly, natural, monk, offHanded);
+        }
+    }
+
+    /// <summary>PHB p.158: +4 per size category for the larger combatant (the same term ResolveSunder adds).</summary>
+    private static int GetLargerSizeBonusForTest(CharacterController actor, CharacterController opponent)
+        => Mathf.Max(0, (int)actor.Stats.CurrentSizeCategory - (int)opponent.Stats.CurrentSizeCategory) * 4;
+
     private static void TestNaturalSunderAtHasteStep()
     {
         // Haste's extra natural attack is made with a natural attack of the attacker's choice (CMB-106). A
@@ -3866,6 +3947,72 @@ public static class GrappleDamageRulesTests
                 $"CMB-148: the Improved Grab hold with the bite takes -20 on the free check ({CheckMod(hold)} vs {baseMod}) and leaves the holder ungrappled; the held creature is grappled");
             Assert(holder.IsBarredFromOrdinaryAttackOn(held, out _) && !holder.IsBarredFromOrdinaryAttackOn(other, out _),
                 "CMB-149: the holder's ordinary attacks go only against other opponents (MM p.310)");
+
+            // CMB-163 (delegated RAW reading 2026-10-14): no attack on the held creature in any form: trip, disarm,
+            // sunder, bull rush (PHB p.154 "(an attack)") and coup de grace are barred (overrun, feint and aid another
+            // are not attacks), the resolver refuses a trip and a bull rush, and the holder takes no AoO against it
+            // (refused before any AoO is spent), while third parties stay open.
+            bool specialBars = holder.IsBarredFromSpecialAttackOn(SpecialAttackType.Trip, held, out _)
+                && holder.IsBarredFromSpecialAttackOn(SpecialAttackType.Disarm, held, out _)
+                && holder.IsBarredFromSpecialAttackOn(SpecialAttackType.Sunder, held, out _)
+                && holder.IsBarredFromSpecialAttackOn(SpecialAttackType.CoupDeGrace, held, out _)
+                && holder.IsBarredFromSpecialAttackOn(SpecialAttackType.BullRushAttack, held, out _)
+                && holder.IsBarredFromSpecialAttackOn(SpecialAttackType.BullRushCharge, held, out _)
+                && !holder.IsBarredFromSpecialAttackOn(SpecialAttackType.Overrun, held, out _)
+                && !holder.IsBarredFromSpecialAttackOn(SpecialAttackType.Feint, held, out _)
+                && !holder.IsBarredFromSpecialAttackOn(SpecialAttackType.AidAnother, held, out _)
+                && !holder.IsBarredFromSpecialAttackOn(SpecialAttackType.Trip, other, out _)
+                && !holder.IsBarredFromSpecialAttackOn(SpecialAttackType.BullRushAttack, other, out _);
+            SpecialAttackResult tripHeld = holder.ExecuteSpecialAttack(SpecialAttackType.Trip, held);
+            SpecialAttackResult bullRushHeld = holder.ExecuteSpecialAttack(SpecialAttackType.BullRushAttack, held);
+            Assert(specialBars && tripHeld != null && !tripHeld.Success && tripHeld.Log.Contains("other opponents")
+                && bullRushHeld != null && !bullRushHeld.Success && bullRushHeld.Log.Contains("other opponents")
+                && holder.IsHoldingWithImprovedGrab(),
+                $"CMB-163: the holder may not trip, disarm, sunder, bull rush or coup de grace the held creature; the resolver refuses a trip (got '{tripHeld?.Log}') and a bull rush (got '{bullRushHeld?.Log}')");
+            holder.SetTeam(CharacterTeam.Player);
+
+            // A summon holding a creature picks another target and makes no smite on the held one (CMB-163). The smite
+            // preconditions (smite evil, an evil target, a standard action) hold, so only the bar refuses it.
+            CharacterController summonPick = AIService.SelectSummonTarget(holder, null, SummonCommandType.AttackNearest,
+                new System.Collections.Generic.List<CharacterController> { holder, held, other });
+            Assert(summonPick == other, $"CMB-163: a holding summon targets another foe, not the held creature (picked {summonPick?.Stats?.CharacterName})");
+            GameManager smiteGm = GameManager.Instance;
+            MethodInfo summonSmite = typeof(GameManager).GetMethod("TryExecuteSummonSmiteAttack", BindingFlags.Instance | BindingFlags.NonPublic);
+            System.Type summonDataType = typeof(GameManager).GetNestedType("ActiveSummonInstance", BindingFlags.NonPublic);
+            if (smiteGm != null && summonSmite != null && summonDataType != null)
+            {
+                Alignment heldAlignmentBefore = held.Stats.CharacterAlignment;
+                bool smiteEvilBefore = holder.Stats.HasTemplateSmiteEvil;
+                held.Stats.CharacterAlignment = Alignment.ChaoticEvil;
+                holder.Stats.HasTemplateSmiteEvil = true;
+                holder.Stats.TemplateSmiteUsed = false;
+                object summonData = System.Activator.CreateInstance(summonDataType, true);
+                bool smiteReady = holder.Actions != null && holder.Actions.HasStandardAction;
+                bool smote = (bool)summonSmite.Invoke(smiteGm, new object[] { holder, held, summonData });
+                held.Stats.CharacterAlignment = heldAlignmentBefore;
+                holder.Stats.HasTemplateSmiteEvil = smiteEvilBefore;
+                Assert(smiteReady && !smote && !holder.Stats.TemplateSmiteUsed,
+                    $"CMB-163: a holding summon makes no smite on the creature it holds (ready {smiteReady}, smote {smote})");
+            }
+            else
+            {
+                Assert(summonSmite != null && summonDataType != null, "CMB-163: GameManager.TryExecuteSummonSmiteAttack and ActiveSummonInstance exist (renamed?)");
+                Debug.Log("  [SKIP] GameManager.Instance is null; the summon smite bar check needs Play mode");
+            }
+
+            ThreatSystem.ResetAoOForTurn(holder);
+            bool holderCanAoO = ThreatSystem.CanMakeAoO(holder);
+            int aoosUsedBefore = holder.Stats.AttacksOfOpportunityUsed;
+            CombatResult aooOnHeld = ThreatSystem.ExecuteAoO(holder, held, isFromMovement: false, trigger: "test");
+            var aooAll = new System.Collections.Generic.List<CharacterController> { holder, held, other };
+            System.Collections.Generic.List<AoOThreatInfo> heldPathAoOs = ThreatSystem.AnalyzePathForAoOs(held,
+                new System.Collections.Generic.List<Vector2Int> { held.GridPosition + new Vector2Int(-1, 0) }, aooAll);
+            Assert(holderCanAoO && aooOnHeld == null && holder.Stats.AttacksOfOpportunityUsed == aoosUsedBefore
+                && !ThreatSystem.CanMakeAoOAgainst(holder, held)
+                && ThreatSystem.CanMakeAoOAgainst(holder, other)
+                && !heldPathAoOs.Exists(a => a.Threatener == holder),
+                $"CMB-163: the holder (able to make AoOs: {holderCanAoO}) makes no attack of opportunity against the creature it holds (AoO {(aooOnHeld != null ? "made" : "refused")}, used {holder.Stats.AttacksOfOpportunityUsed}/{aoosUsedBefore}); third parties stay open to its AoOs");
+            holder.SetTeam(CharacterTeam.Enemy);
             SpecialAttackResult heldPin = held.ResolveGrappleAction(GrappleActionType.PinOpponent);
             Assert(heldPin != null && !heldPin.Success && heldPin.Log.Contains("not grappled"),
                 "CMB-163: a creature held with one body part cannot pin its holder, which is not grappled");
@@ -3905,6 +4052,26 @@ public static class GrappleDamageRulesTests
             holder.Stats.STR = strBefore;
             Assert(!string.IsNullOrEmpty(tooHeavy) && tooHeavy.Contains("drag") && !holder.IsHoldingWithImprovedGrab() && !held.IsGrappling(),
                 $"CMB-163: a holder that cannot drag the held creature's weight drops it when it moves away (PHB p.162; got '{tooHeavy}')");
+
+            // The drag limit follows the holder's body plan (PHB p.162; delegated RAW reading 2026-10-14, CMB-163):
+            // quadruped multipliers (Large x3) for a four-legged holder, biped ones (Large x2) for the rest. STR 4 Large:
+            // 5 x 40 x 2 = 400 lb. cannot drag a Medium creature's 500 lb.; 5 x 40 x 3 = 600 lb. can (if its gear is light).
+            Assert(CharacterController.GetQuadrupedCarryingCapacityMultiplier(SizeCategory.Large) == 3f
+                && CharacterController.GetQuadrupedCarryingCapacityMultiplier(SizeCategory.Medium) == 1.5f
+                && CharacterController.GetQuadrupedCarryingCapacityMultiplier(SizeCategory.Colossal) == 24f
+                && CharacterController.GetCarryingCapacityMultiplier(SizeCategory.Huge, isQuadruped: false) == 4f
+                && CharacterController.GetCarryingCapacityMultiplier(SizeCategory.Huge, isQuadruped: true) == 6f,
+                "CMB-163: PHB p.162 carrying capacity multipliers by body plan (quadruped Medium x1-1/2, Large x3, Colossal x24; biped Huge x4)");
+            // The held test creature's gear must stay at 100 lb. or less for these numbers; asserted, never skipped.
+            float heldGear = Mathf.Max(0f, held.Stats.TotalCarriedWeightLbs);
+            holder.Stats.STR = 4;
+            bool bipedDrags = holder.CanDragImprovedGrabHeldCreature(held, out _);
+            holder.Stats.IsQuadruped = true;
+            bool quadrupedDrags = holder.CanDragImprovedGrabHeldCreature(held, out _);
+            holder.Stats.IsQuadruped = false;
+            holder.Stats.STR = strBefore;
+            Assert(heldGear <= 100f && !bipedDrags && quadrupedDrags,
+                $"CMB-163: a STR 4 Large holder drags a Medium creature only as a quadruped (biped {bipedDrags}, quadruped {quadrupedDrags}; gear {heldGear} lb., must be <= 100)");
 
             // The held creature moved out of reach by something else: the hold ends.
             n = 0;

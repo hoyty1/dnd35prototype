@@ -8212,7 +8212,7 @@ public partial class GameManager
             }
         }
 
-        threatening.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+        threatening.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, caster));
         return threatening;
     }
 
@@ -8402,7 +8402,7 @@ public partial class GameManager
 
         foreach (var enemy in threateningEnemies)
         {
-            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy))
+            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, caster))
                 continue;
 
             CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, caster, trigger: "spellcast");

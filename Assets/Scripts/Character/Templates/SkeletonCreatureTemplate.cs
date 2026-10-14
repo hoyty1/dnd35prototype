@@ -89,6 +89,7 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
 
         // Cleared capabilities
         target.HasImprovedGrab = source.HasImprovedGrab;
+        target.IsQuadruped = source.IsQuadruped;
         target.ImprovedGrabTriggerAttackName = source.ImprovedGrabTriggerAttackName;
         target.ImprovedGrabMaxTargetSize = source.ImprovedGrabMaxTargetSize;
         target.TripTriggerAttackName = source.TripTriggerAttackName;

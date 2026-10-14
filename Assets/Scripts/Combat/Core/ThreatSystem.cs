@@ -256,7 +256,7 @@ public static class ThreatSystem
             if (enemy == null || enemy.Stats == null)
                 continue;
 
-            if (!CanMakeAoO(enemy))
+            if (!CanMakeAoOAgainst(enemy, attacker))
                 continue;
 
             totalExpectedDamage += EstimateExpectedAoODamage(enemy, attacker);
@@ -369,6 +369,21 @@ public static class ThreatSystem
     }
 
     /// <summary>
+    /// <see cref="CanMakeAoO"/> against a known <paramref name="target"/>: also false when <paramref name="threatener"/>
+    /// holds the target with one body part after Improved Grab, because a holder may not attack the creature it holds in
+    /// any form, an attack of opportunity included (MM p.310 "against other opponents"; delegated RAW reading 2026-10-14,
+    /// CMB-163; CharacterController.IsBarredFromOrdinaryAttackOn). The holder still threatens and takes AoOs against third
+    /// parties. The provoker lists and <see cref="ExecuteAoO"/> read it.
+    /// </summary>
+    public static bool CanMakeAoOAgainst(CharacterController threatener, CharacterController target)
+    {
+        if (!CanMakeAoO(threatener))
+            return false;
+
+        return target == null || !threatener.IsBarredFromOrdinaryAttackOn(target, out _);
+    }
+
+    /// <summary>
     /// Use one AoO for a character. Returns false if none remaining.
     /// </summary>
     public static bool UseAoO(CharacterController character)
@@ -460,6 +475,8 @@ public static class ThreatSystem
             if (excludedThreateners != null && excludedThreateners.Contains(character)) continue;
             // Its one movement opportunity against this mover this round already came (CMB-128).
             if (HasHadMovementOpportunity(character, mover)) continue;
+            // An Improved Grab holder makes no AoO against the creature it holds (CMB-163).
+            if (character.IsBarredFromOrdinaryAttackOn(mover, out _)) continue;
 
             enemyThreats[character] = GetThreatenedSquares(character);
             enemyAoOUsedThisMovement[character] = 0;
@@ -629,6 +646,14 @@ public static class ThreatSystem
         if (ResilientSphereAreaEffect.DoesSphereBlockInteraction(threatener, target))
         {
             Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} cannot make AoO against {target.Stats.CharacterName}: Resilient Sphere blocks interaction across barrier.");
+            return null;
+        }
+
+        // A creature holding the target with one body part after Improved Grab makes no attack on it, an AoO included
+        // (MM p.310; delegated RAW reading 2026-10-14, CMB-163). Checked before UseAoO, so no AoO is spent.
+        if (threatener.IsBarredFromOrdinaryAttackOn(target, out _))
+        {
+            Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} makes no AoO against {target.Stats.CharacterName}: it holds that creature with one body part (MM p.310, CMB-163).");
             return null;
         }
 
@@ -852,7 +877,7 @@ public static class ThreatSystem
             provokers.Add(target);
         }
 
-        provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoO(enemy));
+        provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoOAgainst(enemy, attacker));
         return provokers;
     }
 
@@ -864,7 +889,7 @@ public static class ThreatSystem
     public static List<CharacterController> GetStandUpAoOProvokers(CharacterController actor, List<CharacterController> allCharacters)
     {
         var provokers = GetEnemiesThreateningFootprint(actor, allCharacters);
-        provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoO(enemy));
+        provokers.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !CanMakeAoOAgainst(enemy, actor));
         return provokers;
     }
 

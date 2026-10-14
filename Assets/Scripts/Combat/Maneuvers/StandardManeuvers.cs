@@ -774,6 +774,11 @@ public partial class GameManager
             if (candidate.IsImmuneToCriticalHits())
                 continue;
 
+            // A coup de grace is an attack, so a holder may not deliver one to the creature it holds with one body part
+            // (MM p.310; delegated RAW reading 2026-10-14, CMB-163). One filter for the PC button, the UI count and the AI.
+            if (attacker.IsBarredFromSpecialAttackOn(SpecialAttackType.CoupDeGrace, candidate, out _))
+                continue;
+
             adjacentHelpless.Add(candidate);
         }
 
@@ -1459,7 +1464,7 @@ public partial class GameManager
             if (provoker == null || provoker == partner)
                 continue;
             ThreatSystem.RecordMovementOpportunity(provoker, mover);
-            if (!ThreatSystem.CanMakeAoO(provoker))
+            if (!ThreatSystem.CanMakeAoOAgainst(provoker, mover))
                 continue;
 
             int moverHpBefore = mover.Stats.CurrentHP;
@@ -1646,7 +1651,7 @@ public partial class GameManager
         if (attacker == null || target == null || attacker.Stats == null || target.Stats == null
             || attacker.Team == target.Team
             || !attacker.DoesImprovedTripAttackProvoke(target, result)
-            || !ThreatSystem.CanMakeAoO(target)
+            || !ThreatSystem.CanMakeAoOAgainst(target, attacker)
             || !CombatUtils.IsThreatening(target, attacker))
             return;
 

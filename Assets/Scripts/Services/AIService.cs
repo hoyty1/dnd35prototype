@@ -179,7 +179,8 @@ public class AIService : MonoBehaviour
         }
 
         // An Improved Grab hold with one body part (MM p.310; CMB-148, CMB-149): the AI keeps holding while another foe is
-        // within reach to fight; otherwise it lets go (a free action until the owner rules, CMB-163) and acts normally.
+        // within reach to fight; otherwise it lets go (a free action on its turn, delegated RAW reading 2026-10-14, CMB-163)
+        // and acts normally. When to let go is an AI design item (AI-064).
         if (npc.TryGetImprovedGrabHold(out CharacterController heldFoe, out _)
             && !AIProfile.HasOtherEnemyInReach(npc, heldFoe, _gameManager.GetAllCharactersForAI()))
         {
@@ -1191,7 +1192,7 @@ public class AIService : MonoBehaviour
             return assessment;
 
         List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(npc.GridPosition, npc, allCombatants);
-        threateningEnemies.RemoveAll(enemy => !ThreatSystem.CanMakeAoO(enemy));
+        threateningEnemies.RemoveAll(enemy => !ThreatSystem.CanMakeAoOAgainst(enemy, npc));
 
         assessment.ThreatCount = threateningEnemies.Count;
         assessment.IsThreatened = assessment.ThreatCount > 0;
@@ -1273,7 +1274,7 @@ public class AIService : MonoBehaviour
                 continue;
 
             List<CharacterController> threatsAfterStep = ThreatSystem.GetThreateningEnemies(candidate, npc, allCombatants);
-            threatsAfterStep.RemoveAll(enemy => !ThreatSystem.CanMakeAoO(enemy));
+            threatsAfterStep.RemoveAll(enemy => !ThreatSystem.CanMakeAoOAgainst(enemy, npc));
 
             float expectedAfterStep = ThreatSystem.CalculateExpectedAoODamageForRangedAttack(npc, threatsAfterStep);
             float rangeScore = -Mathf.Abs(distToTarget - preferredRange);
@@ -3131,6 +3132,10 @@ public class AIService : MonoBehaviour
                 continue;
             if (!TeamUtility.IsEnemy(source, candidate))
                 continue;
+            // A creature holding with one body part attacks only other opponents (MM p.310; delegated RAW reading
+            // 2026-10-14, CMB-163), so a free Spittle goes to another foe in range.
+            if (source.IsBarredFromOrdinaryAttackOn(candidate, out _))
+                continue;
 
             int dist = SquareGridUtils.GetDistance(source.GridPosition, candidate.GridPosition);
             if (dist <= rangeSquares && dist < closestDist)
@@ -3167,6 +3172,10 @@ public class AIService : MonoBehaviour
             if (candidate == null || candidate == summon || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
             if (!TeamUtility.IsEnemy(summon, candidate))
+                continue;
+            // A summon holding with one body part attacks only other opponents (MM p.310; delegated RAW reading
+            // 2026-10-14, CMB-163).
+            if (summon.IsBarredFromOrdinaryAttackOn(candidate, out _))
                 continue;
             enemies.Add(candidate);
         }
@@ -3479,6 +3488,14 @@ public class AIService : MonoBehaviour
         RangedSpecialAttackDefinition attack = npc.GetRangedSpecialAttackDefinition();
         if (attack == null)
             return false;
+
+        // A ranged touch attack is an attack, so a holder may not make it against the creature it holds with one body
+        // part (MM p.310; delegated RAW reading 2026-10-14, CMB-163).
+        if (npc.IsBarredFromOrdinaryAttackOn(target, out string holdReason))
+        {
+            Debug.Log($"[AI] {npc.Stats.CharacterName} cannot use {attack.Name} on {target.Stats.CharacterName}: {holdReason}");
+            return false;
+        }
 
         int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
         if (distance > attack.RangeFeet / 5)  // Convert feet to squares (5 ft = 1 square)

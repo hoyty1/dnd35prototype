@@ -4354,7 +4354,7 @@ public partial class GameManager : MonoBehaviour
         bool wandNoProvoke = item != null && item.IsWand;
 
         var threateningEnemies = ThreatSystem.GetThreateningEnemies(actor.GridPosition, actor, GetAllCharacters());
-        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actor));
 
         if (wandNoProvoke || threateningEnemies.Count == 0)
         {
@@ -4404,7 +4404,7 @@ public partial class GameManager : MonoBehaviour
         foreach (var enemy in threateningEnemies)
         {
             if (actor.Stats.IsDead) break;
-            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy))
+            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actor))
                 continue;
 
             CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor, trigger: "item");
@@ -4758,7 +4758,7 @@ public partial class GameManager : MonoBehaviour
             return;
 
         var threateningEnemies = ThreatSystem.GetThreateningEnemies(actor.GridPosition, actor, GetAllCharacters());
-        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actor));
 
         if (threateningEnemies.Count == 0)
         {
@@ -4800,7 +4800,7 @@ public partial class GameManager : MonoBehaviour
         foreach (var enemy in threateningEnemies)
         {
             if (actor.Stats.IsDead) break;
-            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy))
+            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actor))
                 continue;
 
             CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor, trigger: "pickup");
@@ -7133,7 +7133,7 @@ public partial class GameManager : MonoBehaviour
             foreach (var enemy in threateners)
             {
                 if (IsDroppedWhileStanding()) break;
-                if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy)) continue;
+                if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actor)) continue;
 
                 CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor, trigger: "standup");
                 if (aooResult == null)
@@ -11532,7 +11532,7 @@ public partial class GameManager : MonoBehaviour
         if (actionInfo.ThreateningEnemies == null)
             actionInfo.ThreateningEnemies = new List<CharacterController>();
 
-        actionInfo.ThreateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+        actionInfo.ThreateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoOAgainst(enemy, actionInfo.Actor));
 
         if (actionInfo.ThreateningEnemies.Count == 0)
         {

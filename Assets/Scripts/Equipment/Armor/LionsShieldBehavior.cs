@@ -303,6 +303,7 @@ public class LionsShieldBehavior : SpecificItemBehavior
         stats.NaturalArmorBonus = def.NaturalArmorBonus;
         stats.SetBaseSizeCategory(def.SizeCategory);
         stats.IsTallCreature = def.IsTallCreature;
+        stats.IsQuadruped = def.IsQuadruped;
         stats.IsExceptionallyStable = def.IsExceptionallyStable;
         stats.HasPounce = def.HasPounce;
         stats.HasRake = def.HasRake;

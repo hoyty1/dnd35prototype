@@ -345,6 +345,7 @@ public static partial class NPCDatabase
             BAB = 10,
             HasPounce = true,
             HasImprovedGrab = true,
+            IsQuadruped = true, // PHB p.162 quadruped drag multipliers (CMB-163)
             ImprovedGrabTriggerAttackName = "Claw",
             HasRake = true,
             RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false },

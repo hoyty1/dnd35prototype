@@ -768,6 +768,7 @@ public partial class GameManager
         stats.MaterialComposition = def.MaterialComposition;
         stats.SetBaseSizeCategory(def.SizeCategory);
         stats.IsTallCreature = def.IsTallCreature;
+        stats.IsQuadruped = def.IsQuadruped;
         stats.NaturalArmorBonus = def.NaturalArmorBonus;
         stats.HasTripAttack = def.HasTripAttack;
         stats.TripAttackCheckBonus = def.TripAttackCheckBonus;

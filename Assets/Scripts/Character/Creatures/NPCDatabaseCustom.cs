@@ -675,6 +675,7 @@ public static partial class NPCDatabase
             Feats = new List<string> { "Improved Natural Attack (bite)", "Improved Natural Attack (claw)" },
             HasScent = true,
             HasImprovedGrab = true,
+            IsQuadruped = true, // PHB p.162 quadruped drag multipliers (CMB-163)
             ImprovedGrabTriggerAttackName = "Claw,Bite", // MM p.281: "a claw or bite attack"
             HasPounce = true,
             HasRake = true,
@@ -724,6 +725,7 @@ public static partial class NPCDatabase
             Feats = new List<string> { "Alertness", "Improved Natural Attack (claw)", "Improved Natural Attack (bite)", "Run", "Stealthy", "Weapon Focus (claw)" },
             HasScent = true,
             HasImprovedGrab = true,
+            IsQuadruped = true, // PHB p.162 quadruped drag multipliers (CMB-163)
             ImprovedGrabTriggerAttackName = "Bite", // MM p.65: "must hit with its bite attack"
             HasPounce = true,
             HasRake = true,
@@ -807,6 +809,7 @@ public static partial class NPCDatabase
             Feats = new List<string> { "Weapon Focus (claw)" },
             HasScent = true,
             HasImprovedGrab = true,
+            IsQuadruped = true, // PHB p.162 quadruped drag multipliers (CMB-163)
             ImprovedGrabTriggerAttackName = "Claw",
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.44f, 0.3f, 0.22f, 1f),

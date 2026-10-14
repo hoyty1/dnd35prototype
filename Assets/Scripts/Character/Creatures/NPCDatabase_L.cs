@@ -334,6 +334,7 @@ public static partial class NPCDatabase
                 "Alignment: True Neutral"
             },
             HasImprovedGrab = true,
+            IsQuadruped = true, // PHB p.162 quadruped drag multipliers (CMB-163)
             ImprovedGrabTriggerAttackName = "Bite",
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.85f, 0.72f, 0.4f, 1f),
@@ -391,6 +392,7 @@ public static partial class NPCDatabase
                 "Alignment: True Neutral"
             },
             HasImprovedGrab = true,
+            IsQuadruped = true, // PHB p.162 quadruped drag multipliers (CMB-163)
             ImprovedGrabTriggerAttackName = "Bite",
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.78f, 0.62f, 0.30f, 1f),
@@ -573,6 +575,7 @@ public static partial class NPCDatabase
             BAB = 2,
             HasPounce = true,
             HasImprovedGrab = true,
+            IsQuadruped = true, // PHB p.162 quadruped drag multipliers (CMB-163)
             ImprovedGrabTriggerAttackName = "Bite", // MM p.274: "must hit with its bite attack"
             HasScent = true,
             HasRake = true,

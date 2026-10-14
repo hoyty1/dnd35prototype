@@ -111,6 +111,11 @@ public partial class GameManager
         if (!validAlignment)
             return false;
 
+        // A smite is an attack, so a holder may not smite the creature it holds with one body part (MM p.310; delegated
+        // RAW reading 2026-10-14, CMB-163): the Smite button opens only when another target is valid.
+        if (attacker.IsBarredFromOrdinaryAttackOn(target, out _))
+            return false;
+
         return attacker.IsTargetInCurrentWeaponRange(target);
     }
 

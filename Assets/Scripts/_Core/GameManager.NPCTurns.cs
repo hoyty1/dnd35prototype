@@ -201,6 +201,11 @@ public partial class GameManager
         if (!smiteEvil && !smiteGood)
             return false;
 
+        // A smite is an attack, so a summon holding the target with one body part makes none on it (MM p.310; delegated
+        // RAW reading 2026-10-14, CMB-163); it falls through to the melee sequence, which retargets.
+        if (summon.IsBarredFromOrdinaryAttackOn(target, out _))
+            return false;
+
         // Smite uses Charisma modifier "if any"; clamp to 0 so low CHA never creates a penalty.
         int attackBonus = Mathf.Max(0, summon.Stats.CHAMod + 2);
         // HD, not Level, as TemplateSmiteSystem reads them (CHR-071); the +2 and the attack bonus are AI-056.
@@ -448,6 +453,14 @@ public partial class GameManager
             return false;
         }
 
+        // The Improved Grab hold bar, as on the PC wrapper (MM p.310; delegated RAW reading 2026-10-14, CMB-163): no
+        // trip, disarm, sunder or coup de grace on the creature this NPC holds with one body part, before any cost.
+        if (npc.IsBarredFromSpecialAttackOn(choice.Value, target, out string holdReason))
+        {
+            Debug.Log($"[AI][SpecialAttack] {holdReason}");
+            return false;
+        }
+
         // Same trip legality as the PC wrapper (size, swarm, incorporeal; PHB p.158, CMB-079), checked
         // before any cost or AoO.
         if (choice.Value == SpecialAttackType.Trip && !npc.CanTrip(target, out string tripReason))
@@ -601,7 +614,7 @@ public partial class GameManager
 
         foreach (CharacterController enemy in threateningEnemies)
         {
-            if (!ThreatSystem.CanMakeAoO(enemy))
+            if (!ThreatSystem.CanMakeAoOAgainst(enemy, attacker))
             {
                 Debug.Log($"[AOO-DEBUG] {enemy?.Stats?.CharacterName ?? "<unknown>"} cannot make AoO now (used {enemy?.Stats?.AttacksOfOpportunityUsed}/{enemy?.Stats?.MaxAttacksOfOpportunity}).");
                 continue;
@@ -647,7 +660,8 @@ public partial class GameManager
 
         // One grapple link per creature: a creature that holds another with one body part (not grappling, MM p.310)
         // starts no second grapple with its remaining attacks, and a creature already in a grapple is not grabbed again
-        // (provisional, owner question CMB-163). Checked before the PC prompt and the AI choice.
+        // (the engine's one-link-per-creature limit, a known RAW deviation, CMB-163: RAW allows a second hold or grapple).
+        // Checked before the PC prompt and the AI choice.
         if (attacker.IsInAnyGrappleLink(out CharacterController attackerLinked) || target.IsInAnyGrappleLink(out _))
         {
             string attackName = !string.IsNullOrWhiteSpace(attackResult.WeaponName) ? attackResult.WeaponName : "trigger attack";
@@ -1624,6 +1638,17 @@ public partial class GameManager
             CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", $"{npc.Stats.CharacterName} is grappling, so its attack is a grapple action (PHB p.156)."));
             if (CanUseGrappleAttackOption(npc) || (npc.Actions != null && npc.Actions.HasStandardAction))
                 yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
+            yield break;
+        }
+
+        // A creature holding the target with one body part makes no ranged attack on it either (MM p.310; delegated RAW
+        // reading 2026-10-14, CMB-163). Checked before anything that assumes an attack happens (wards, frightful
+        // presence); the melee sequence below retargets on its own.
+        if (npc.GetEquippedMainWeapon()?.WeaponCat == WeaponCategory.Ranged
+            && npc.IsBarredFromOrdinaryAttackOn(target, out string rangedHoldReason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Info("🪢", rangedHoldReason));
+            yield return new WaitForSeconds(0.4f);
             yield break;
         }
 

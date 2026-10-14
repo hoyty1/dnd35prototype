@@ -4183,8 +4183,9 @@ namespace Tests.Scenarios
         /// grapple +13, so +13 -20 = -7 while holding) has Improved Grab on its claw. On round 1 its claw hits a Small goblin
         /// (grapple -9), the Improved Grab menu opens and it picks the hold: the free check is rolled at -20 and still wins
         /// (grapple dice forced to 10), the goblin is grappled and the hero is not. Its bite then goes to a second goblin,
-        /// and its second claw at the held goblin is refused (its remaining attacks go against other opponents; provisional,
-        /// CMB-163). On round 2 its Grapple: Damage button makes the hold's Damage check at -20, which deals the claw's
+        /// and its second claw at the held goblin is refused (its remaining attacks go against other opponents), and so is a
+        /// trip at it from the Special Attack menu (no attack on the held creature in any form; delegated RAW reading
+        /// 2026-10-14, CMB-163). On round 2 its Grapple: Damage button makes the hold's Damage check at -20, which deals the claw's
         /// damage (MM p.310: each successful grapple check in successive rounds), and the Release button lets go.
         /// </summary>
         private static ScenarioDef ImprovedGrabHoldUi()
@@ -4207,7 +4208,8 @@ namespace Tests.Scenarios
                 .Turn("held", 0, Step.Pass())
                 .Turn("other", 0, Step.Pass())
                 .Turn("hero", 1, Step.NaturalAttack("held", "Claw"), Step.AnswerImprovedGrab("hold"),
-                    Step.NaturalAttack("other", "Bite"), Step.NaturalAttack("held", "Claw"))
+                    Step.NaturalAttack("other", "Bite"), Step.NaturalAttack("held", "Claw"),
+                    Step.Maneuver(SpecialAttackType.Trip, "held"))
                 .Turn("hero", 2, Step.GrappleDamage(), Step.GrappleAction("ReleasePin"))
                 .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
                 .Expect("Round 1: the claw hits, the hold is chosen in the Improved Grab menu, and the bite on the other goblin is made", Expect.All(
@@ -4228,7 +4230,7 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass("goblin grappled, hero not")
                         : ExpectResult.Fail("hero grappled " + HasCond(h, "Grappled") + ", goblin grappled " + HasCond(g, "Grappled"));
                 })
-                .Expect("The second claw at the held goblin is refused: the holder's other attacks go against other opponents (provisional, CMB-163)", v =>
+                .Expect("The second claw at the held goblin is refused: the holder's other attacks go against other opponents (CMB-163)", v =>
                 {
                     List<TraceEvent> claws = v.Steps("hero", "NaturalAttack(Claw,held)", 1);
                     if (claws.Count < 2) return ExpectResult.Fail(claws.Count + " claw steps at the held goblin");
@@ -4236,6 +4238,21 @@ namespace Tests.Scenarios
                     return claws[1].Str("status") == "refused" && bar != null
                         ? ExpectResult.Pass("refused with the hold's reason", claws[1].Seq, bar.Seq)
                         : ExpectResult.Fail("second claw " + claws[1].Str("status") + ", bar logged " + (bar != null), claws[1].Seq);
+                })
+                .Expect("A trip at the held goblin is refused with the hold's reason too, and no trip is resolved (no attack in any form, delegated RAW reading 2026-10-14, CMB-163)", v =>
+                {
+                    TraceEvent trip = v.Steps("hero", "Maneuver(Trip", 1).FirstOrDefault();
+                    if (trip == null) return ExpectResult.Fail("no trip step");
+                    List<TraceEvent> claws = v.Steps("hero", "NaturalAttack(Claw,held)", 1);
+                    if (claws.Count < 2) return ExpectResult.Fail(claws.Count + " claw steps at the held goblin", trip.Seq);
+                    // Step events are emitted after their step ran, so the trip's own bar line lies after the second
+                    // claw's step event and before the trip's step event.
+                    TraceEvent bar = v.Of("log").FirstOrDefault(e => e.Round == 1 && e.Seq > claws[1].Seq && e.Seq < trip.Seq
+                        && (e.Str("text") ?? "").Contains("other attacks only against other opponents"));
+                    bool noTrip = !v.Maneuvers("hero", SpecialAttackType.Trip).Any(e => e.Round == 1);
+                    return trip.Str("status") == "refused" && bar != null && noTrip
+                        ? ExpectResult.Pass("trip refused with the hold's reason", trip.Seq, bar.Seq)
+                        : ExpectResult.Fail("trip " + trip.Str("status") + ", bar line for the trip " + (bar != null) + ", trip resolved " + !noTrip, trip.Seq);
                 })
                 .Expect("Round 2: the hold's Damage check (at -20) is done and deals the claw's damage (MM p.310)", v =>
                 {
@@ -4300,7 +4317,7 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass("halfling grappled, mantis not")
                         : ExpectResult.Fail("mantis grappled " + HasCond(m, "Grappled") + ", halfling grappled " + HasCond(h, "Grappled"));
                 })
-                .Expect("After the hold no other attack in round 1 goes to the held halfling (its remaining attacks go against other opponents; provisional, CMB-163), and the fighter is never grabbed", v =>
+                .Expect("After the hold no other attack in round 1 goes to the held halfling (its remaining attacks go against other opponents; delegated RAW reading 2026-10-14, CMB-163), and the fighter is never grabbed", v =>
                 {
                     List<TraceEvent> onHalfling = v.Attacks("mantis", "halfling", false, 1);
                     JsonObj f = v.Snapshot("fighter", 2, "mantis");

@@ -268,8 +268,8 @@ public partial class GameManager
     public void OnGrappleDisarmSmallObjectButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.DisarmSmallObject);
     public void OnGrappleReleasePinButtonPressed()
     {
-        // A PC holding with one body part after Improved Grab lets go here (MM p.310; a free action until the owner
-        // rules, CMB-163); the AI does the same in AIService.ExecuteNPCTurn.
+        // A PC holding with one body part after Improved Grab lets go here (MM p.310): a free action on the holder's own
+        // turn (delegated RAW reading 2026-10-14, CMB-163, RULES_COVERAGE 4.1); the AI does the same in AIService.ExecuteNPCTurn.
         CharacterController pc = ActivePC;
         if (pc != null && pc.IsHoldingWithImprovedGrab())
         {
@@ -1037,8 +1037,9 @@ public partial class GameManager
         // Moving the grapple provokes attacks of opportunity from third parties as the grappler leaves threatened
         // squares, never from the creatures in the grapple (owner interpretation 2026-10-11, CMB-152). The shared executor
         // resolves each before its step and records the round's movement opportunity (CMB-128); an AoO that drops or
-        // trips the grappler stops the move, and the opponents are dragged as far as it got. Whether the dragged
-        // creatures provoke too is still open (CMB-152).
+        // trips the grappler stops the move, and the opponents are dragged as far as it got. The dragged opponents
+        // provoke from no one: a creature moved by another creature's action provokes only where a rule says so (PHB
+        // p.137; only bull rush does, PHB p.154) (delegated RAW reading 2026-10-14, CMB-152; RULES_COVERAGE 4.1).
         List<AoOThreatInfo> dragAoOs = ThreatSystem.AnalyzePathForAoOs(actor, actorPath, GetAllCharacters(),
             excludedThreateners: new List<CharacterController>(movedOpponents));
         var dragOutcome = new MovementAoOStepOutcome();

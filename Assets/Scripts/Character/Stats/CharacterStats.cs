@@ -2472,6 +2472,13 @@ public class CharacterStats
     /// </summary>
     public bool IsTallCreature = true;
 
+    /// <summary>
+    /// True for a four-legged creature, which carries and drags with the PHB p.162 quadruped multipliers; every other
+    /// creature uses the biped ones (delegated RAW reading 2026-10-14, CMB-163; CharacterController.GetCarryingCapacityMultiplier).
+    /// Set from NPCDefinition.IsQuadruped; false for PCs.
+    /// </summary>
+    public bool IsQuadruped;
+
     /// <summary>Broad creature type used by some spells (e.g., Humanoid-only effects).</summary>
     public string CreatureType = "Humanoid";
 

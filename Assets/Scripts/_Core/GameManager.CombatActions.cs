@@ -253,6 +253,10 @@ public partial class GameManager
             if (!attacker.CanSee(candidate, incomingIsRangedAttack: true))
                 continue;
 
+            // The Improved Grab hold bar (MM p.310, CMB-163).
+            if (attacker.IsBarredFromOrdinaryAttackOn(candidate, out _))
+                continue;
+
             valid.Add(candidate);
         }
 
@@ -272,7 +276,7 @@ public partial class GameManager
             if (!TeamUtility.IsEnemy(attacker, candidate))
                 continue;
 
-            if (attacker.IsTargetInCurrentWeaponRange(candidate))
+            if (attacker.IsTargetInCurrentWeaponRange(candidate) && !attacker.IsBarredFromOrdinaryAttackOn(candidate, out _))
                 valid.Add(candidate);
         }
 
@@ -1408,6 +1412,13 @@ public partial class GameManager
                 return;
             }
 
+            // The Improved Grab hold bar (MM p.310; delegated RAW reading 2026-10-14, CMB-163).
+            if (pc.IsBarredFromOrdinaryAttackOn(smiteTarget, out string smiteHoldReason))
+            {
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", smiteHoldReason));
+                return;
+            }
+
             ExecuteTemplateSmiteAttack(pc, smiteTarget);
             return;
         }
@@ -1416,6 +1427,13 @@ public partial class GameManager
         if (_isAwaitingRangedRetargetSelection)
         {
             CharacterController retarget = GetAttackTargetInCell(pc, cell); // as highlighted (CMB-131)
+            if (retarget != null && pc.IsBarredFromOrdinaryAttackOn(retarget, out string retargetHoldReason))
+            {
+                // The Improved Grab hold bar (MM p.310; delegated RAW reading 2026-10-14, CMB-163).
+                CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", retargetHoldReason));
+                return;
+            }
+
             if (retarget != null && retarget.Stats != null && !retarget.Stats.IsDead
                 && _highlightedCells.Contains(cell))
             {
@@ -1515,6 +1533,14 @@ public partial class GameManager
             _currentOffHandBAB = 0;
             _currentOffHandWeapon = null;
             ShowActionChoices();
+            return;
+        }
+
+        // A creature holding with one body part attacks only other opponents, with its off hand too (MM p.310; delegated
+        // RAW reading 2026-10-14, CMB-163); the selection stays open for another target.
+        if (attacker.IsBarredFromOrdinaryAttackOn(clicked, out string offHandHoldReason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", offHandHoldReason));
             return;
         }
 
@@ -1667,6 +1693,7 @@ public partial class GameManager
         bool hasTarget = false;
         bool hasRefusedBullRushTarget = false;
         bool hasRefusedTripTarget = false;
+        bool hasHoldBarredTarget = false;
 
         // Drawn first so that a target sharing the attacker's square keeps its target highlight.
         HighlightCharacterFootprint(attacker, HighlightType.Selected);
@@ -1700,6 +1727,17 @@ public partial class GameManager
 
             if (!inRange)
                 continue;
+
+            // A creature holding this target with one body part may not trip, disarm, sunder or coup de grace it (MM
+            // p.310; delegated RAW reading 2026-10-14, CMB-163): shown gray, and the click is refused with the reason. It
+            // does not count as a target, so a holder whose only foe in reach is the held creature gets "No targets".
+            if (attacker.IsBarredFromSpecialAttackOn(type, occupant, out _))
+            {
+                c.SetHighlight(HighlightType.AttackDeadZone);
+                _highlightedCells.Add(c);
+                hasHoldBarredTarget = true;
+                continue;
+            }
 
             if (type == SpecialAttackType.Disarm)
             {
@@ -1760,24 +1798,31 @@ public partial class GameManager
 
         if (hasTarget)
         {
+            string indicator;
             if (type == SpecialAttackType.Disarm)
-                CombatUI.SetTurnIndicator("SPECIAL: Disarm - red targets are valid, gray targets have no disarmable weapon (Right-click/Esc to cancel)");
+                indicator = "SPECIAL: Disarm - red targets are valid, gray targets have no disarmable weapon (Right-click/Esc to cancel)";
             else if (type == SpecialAttackType.Sunder)
-                CombatUI.SetTurnIndicator("SPECIAL: Sunder - red targets are valid, gray targets have no sunderable item (Right-click/Esc to cancel)");
+                indicator = "SPECIAL: Sunder - red targets are valid, gray targets have no sunderable item (Right-click/Esc to cancel)";
             else if (type == SpecialAttackType.BullRushAttack)
-                CombatUI.SetTurnIndicator(hasRefusedBullRushTarget
+                indicator = hasRefusedBullRushTarget
                     ? "SPECIAL: Bull Rush (standard action) - red targets are valid; gray targets are too large, incorporeal or swarms (Right-click/Esc to cancel)"
-                    : "SPECIAL: Bull Rush (standard action) - select an adjacent target (Right-click/Esc to cancel)");
+                    : "SPECIAL: Bull Rush (standard action) - select an adjacent target (Right-click/Esc to cancel)";
             else if (type == SpecialAttackType.Trip && hasRefusedTripTarget)
-                CombatUI.SetTurnIndicator("SPECIAL: Trip - red targets are valid; gray targets are too large, incorporeal or swarms (Right-click/Esc to cancel)");
+                indicator = "SPECIAL: Trip - red targets are valid; gray targets are too large, incorporeal or swarms (Right-click/Esc to cancel)";
             else if (type == SpecialAttackType.CoupDeGrace)
-                CombatUI.SetTurnIndicator("SPECIAL: Coup de Grace - red targets are helpless and vulnerable to critical hits (Right-click/Esc to cancel)");
+                indicator = "SPECIAL: Coup de Grace - red targets are helpless and vulnerable to critical hits (Right-click/Esc to cancel)";
             else
-                CombatUI.SetTurnIndicator($"SPECIAL: {type} - select target (Right-click/Esc to cancel)");
+                indicator = $"SPECIAL: {type} - select target (Right-click/Esc to cancel)";
+
+            if (hasHoldBarredTarget)
+                indicator += " Gray also marks the creature you hold, which you may not attack (MM p.310).";
+            CombatUI.SetTurnIndicator(indicator);
         }
         else
         {
-            CombatUI.SetTurnIndicator($"No targets in range for {type}.");
+            CombatUI.SetTurnIndicator(hasHoldBarredTarget
+                ? $"No targets in range for {type}: the only one is the creature you hold (MM p.310)."
+                : $"No targets in range for {type}.");
             StartCoroutine(ReturnToActionChoicesAfterDelay(1.0f));
         }
     }
@@ -1789,6 +1834,14 @@ public partial class GameManager
         if (!_highlightedCells.Contains(cell) || target == null)
         {
             ShowActionChoices();
+            return;
+        }
+
+        // The Improved Grab hold bar (MM p.310; delegated RAW reading 2026-10-14, CMB-163), before any menu or cost;
+        // the selection stays open for another target.
+        if (attacker.IsBarredFromSpecialAttackOn(_pendingSpecialAttackType, target, out string specialHoldReason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", specialHoldReason));
             return;
         }
 
@@ -1819,6 +1872,18 @@ public partial class GameManager
     private void ExecuteSpecialAttack(CharacterController attacker, CharacterController target, SpecialAttackType type, EquipSlot? disarmTargetSlot = null, EquipSlot? sunderTargetSlot = null)
     {
         if (attacker == null || target == null) { ShowActionChoices(); return; }
+
+        // The Improved Grab hold bar (MM p.310; delegated RAW reading 2026-10-14, CMB-163), before any cost: this entry
+        // is also reached after the disarm and sunder item menus.
+        if (attacker.IsBarredFromSpecialAttackOn(type, target, out string holdReason))
+        {
+            CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", holdReason));
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            _isSelectingSpecialAttack = false;
+            ShowActionChoices();
+            return;
+        }
 
         // Shared bull rush legality (CMB-102) before any side effect, so a refused (gray) target
         // costs nothing and does not break turning, as on the NPC executor.
@@ -2599,13 +2664,17 @@ public partial class GameManager
             bool needsRetarget = currentTarget == null
                 || currentTarget.Stats == null
                 || currentTarget.Stats.IsDead
-                || !IsTargetInCurrentWeaponRange(attacker, currentTarget);
+                || !IsTargetInCurrentWeaponRange(attacker, currentTarget)
+                // A creature holding with one body part attacks only other opponents (MM p.310, CMB-163).
+                || attacker.IsBarredFromOrdinaryAttackOn(currentTarget, out _);
 
             if (needsRetarget)
             {
                 if (currentTarget != null && currentTarget.Stats != null && !currentTarget.Stats.IsDead)
                 {
-                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", $"{currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach."));
+                    CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", attacker.IsBarredFromOrdinaryAttackOn(currentTarget, out string sequenceHoldReason)
+                        ? sequenceHoldReason
+                        : $"{currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach."));
                 }
 
                 List<CharacterController> validTargets = GetValidTargetsForCurrentWeapon(attacker);

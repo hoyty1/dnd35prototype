@@ -9411,11 +9411,14 @@ public class CharacterController : MonoBehaviour
     // In later rounds the holder may make the Damage grapple check against the held creature in place of an attack
     // (at -20; a success deals the establishing attack's damage, MM p.310; IsGrappleActionAvailableToImprovedGrabHolder),
     // and when it moves it carries the held creature along while it can drag its weight (MM p.310, PHB p.162;
-    // CheckImprovedGrabHoldReach). A creature has one grapple link at a time, so a holder starts no second grapple and
-    // cannot be grabbed (IsInAnyGrappleLink). Still open with the owner (CMB-163), with the provisional behaviour in
-    // the code: the -20 on the free check that starts the hold, letting go as a free action (ReleaseImprovedGrabHold),
-    // the bar on ordinary attacks against the held creature, the held creature's pin and move actions, the holder's
-    // other grapple actions, a second Improved Grab while holding, and the weights used for the drag limit.
+    // CheckImprovedGrabHoldReach). The hold's details are delegated RAW readings of 2026-10-14 (RULES_COVERAGE 4.1,
+    // CMB-163): the -20 also applies to the free check that starts the hold (the choice comes first); the holder may let
+    // go as a free action on its turn (ReleaseImprovedGrabHold); it may not attack the held creature in any form,
+    // attacks of opportunity included (IsBarredFromOrdinaryAttackOn, IsBarredFromSpecialAttackOn,
+    // ThreatSystem.CanMakeAoOAgainst); its only grapple action is the Damage check; the held creature cannot pin or
+    // move its holder; the drag limit uses the holder's body plan (PHB p.162). Known deviation (CMB-163): a creature has
+    // one grapple link at a time, so a holder starts no second hold or grapple and cannot be grabbed (IsInAnyGrappleLink),
+    // which RAW allows. Data gap: no creature weights are stored (GetTypicalCreatureWeightUpperBoundLbs).
 
     /// <summary>The grapple check penalty of an Improved Grab hold with one body part (MM p.310).</summary>
     public const int ImprovedGrabHoldGrappleCheckPenalty = -20;
@@ -9457,10 +9460,18 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// MM p.310: a creature holding with one body part "can use its remaining attacks against other opponents", so its
-    /// ordinary attacks do not target the creature it holds (provisional, owner question CMB-163). Read by the PC attack
-    /// target click and the NPC attack sequence (its target and retarget choices); the other attack paths that skip it
-    /// are listed in CMB-163.
+    /// MM p.310: a creature holding with one body part "can use its remaining attacks against other opponents", so it
+    /// may not attack the creature it holds in any form: melee, iterative, off-hand, natural, ranged (ranged touch
+    /// special attacks such as Spittle included), charge, smite, trip, disarm, sunder, bull rush, coup de grace
+    /// (<see cref="IsBarredFromSpecialAttackOn"/>) or an attack of opportunity
+    /// (ThreatSystem.CanMakeAoOAgainst, ExecuteAoO). It harms the held creature only through the hold's Damage check
+    /// (delegated RAW reading 2026-10-14, CMB-163). Spells and other effects that are not attacks are not barred. A
+    /// creature entry that grants an attack on the held opponent (the giant praying mantis's hold bite, MM p.285; the
+    /// giant soldier ant's sting, MM p.284) would override this; no database creature has one yet (CRE-050).
+    /// Read by the PC attack, off-hand, ranged-retarget and smite clicks (and the template smite target test), the PC
+    /// full-attack retarget, Cleave and Whirlwind, both charge paths (CanChargeTarget), the NPC melee sequence and ranged
+    /// branch, the summon smite and target choice, the AI ranged special attack and its free-Spittle target, the coup de
+    /// grace candidate list, the AI target filter and every AoO path.
     /// </summary>
     public bool IsBarredFromOrdinaryAttackOn(CharacterController target, out string reason)
     {
@@ -9471,6 +9482,34 @@ public class CharacterController : MonoBehaviour
         string partName = bodyPart != null && !string.IsNullOrWhiteSpace(bodyPart.Name) ? bodyPart.Name.Trim().ToLowerInvariant() : "body part";
         reason = $"{Stats.CharacterName} holds {target.Stats.CharacterName} with its {partName} and can use its other attacks only against other opponents (MM p.310).";
         return true;
+    }
+
+    /// <summary>
+    /// True for the special attacks that are attacks, so the Improved Grab hold bar applies to them (delegated RAW reading
+    /// 2026-10-14, CMB-163): trip, disarm and sunder (made in place of a melee attack, PHB p.155-158), the coup de grace
+    /// (a melee attack that hits automatically, PHB p.153) and the bull rush (PHB p.154: a standard action "(an attack)" or
+    /// part of a charge, which is barred through CanChargeTarget as well). Not attacks: overrun (a standard action taken
+    /// during a move, PHB p.157), feint (a Bluff check, PHB p.155), aid another (an attack roll against AC 10 that helps
+    /// an ally and does nothing to the opponent, PHB p.154), waking an ally and turning undead. Grapple is governed by the
+    /// one-grapple-link rule instead.
+    /// </summary>
+    public static bool IsSpecialAttackAnAttack(SpecialAttackType type)
+        => type == SpecialAttackType.Trip
+            || type == SpecialAttackType.Disarm
+            || type == SpecialAttackType.Sunder
+            || type == SpecialAttackType.CoupDeGrace
+            || type == SpecialAttackType.BullRushAttack
+            || type == SpecialAttackType.BullRushCharge;
+
+    /// <summary>
+    /// The Improved Grab hold bar (<see cref="IsBarredFromOrdinaryAttackOn"/>) for a special attack: a holder may not trip,
+    /// disarm, sunder, bull rush or coup de grace the creature it holds (delegated RAW reading 2026-10-14, CMB-163). Shared by the
+    /// PC special-attack targeting and click, the NPC special-attack executor and the resolver.
+    /// </summary>
+    public bool IsBarredFromSpecialAttackOn(SpecialAttackType type, CharacterController target, out string reason)
+    {
+        reason = string.Empty;
+        return IsSpecialAttackAnAttack(type) && IsBarredFromOrdinaryAttackOn(target, out reason);
     }
 
     /// <summary>
@@ -9557,7 +9596,9 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// A creature held by an Improved Grab hold with one body part cannot pin or drag its holder, which is not grappled
-    /// (MM p.310); pending the owner's ruling on the hold's details (CMB-163). Shared by the resolver, the PC menu and the AI.
+    /// (MM p.310; PHB p.156-157: a pin or a grapple Move would make the holder grappled). It keeps its other grapple
+    /// actions against the holder (escape, attack, Damage, Escape Artist, casting, drawing a light weapon, using the
+    /// holder's weapon) (delegated RAW reading 2026-10-14, CMB-163). Shared by the resolver, the PC menu and the AI.
     /// </summary>
     public bool IsGrappleActionBlockedByImprovedGrabHold(GrappleActionType actionType, out string reason)
     {
@@ -9578,9 +9619,12 @@ public class CharacterController : MonoBehaviour
         => IsHoldingWithImprovedGrab() ? ImprovedGrabHoldGrappleCheckPenalty : 0;
 
     /// <summary>
-    /// Lets go of an Improved Grab hold with one body part, which ends the grapple for the held creature too. A free
-    /// action on the holder's turn until the owner rules otherwise (CMB-163). Returns the log line, or empty when
-    /// this creature holds nobody.
+    /// Lets go of an Improved Grab hold with one body part, which ends the grapple for the held creature too; neither
+    /// creature moves. A free action on the holder's own turn (delegated RAW reading 2026-10-14, CMB-163: MM p.310 is
+    /// silent; PHB p.157 lets a pinner release as a free action, PHB p.144 puts free actions on your turn). The hold
+    /// also ends when the held creature escapes or when the holder moves away and cannot drag it
+    /// (<see cref="CheckImprovedGrabHoldReach"/>). When the AI lets go is an AI design item (AI-064). Returns the log
+    /// line, or empty when this creature holds nobody.
     /// </summary>
     public string ReleaseImprovedGrabHold(string reason = null)
     {
@@ -9595,8 +9639,9 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// The upper end of the typical weight of a creature of <paramref name="size"/>, in pounds (MM p.314 size table; a
-    /// Colossal creature's open range uses its lower end). The game stores no creature weights, so the Improved Grab
-    /// carry test reads this, plus the creature's carried gear (owner question CMB-163, provisional).
+    /// Colossal creature's open range uses its lower end). RAW the carry test uses the held creature's own weight (its
+    /// MM entry, or PHB p.109 Table 6-6 for a PC) plus its gear; the game stores no creature weights, so the Improved
+    /// Grab carry test reads this stand-in, plus the creature's carried gear: a tracked data gap, not a ruling (CMB-163).
     /// </summary>
     public static float GetTypicalCreatureWeightUpperBoundLbs(SizeCategory size)
     {
@@ -9615,8 +9660,8 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// The carrying capacity multiplier of a bipedal creature of <paramref name="size"/> (PHB p.162). The game does not
-    /// tell bipeds from quadrupeds, so the drag test uses the lower, biped multipliers (owner question CMB-163).
+    /// The carrying capacity multiplier of a bipedal creature of <paramref name="size"/> (PHB p.162: Table 9-1 is for
+    /// Medium bipeds; Small x3/4 ... Colossal x16).
     /// </summary>
     public static float GetBipedCarryingCapacityMultiplier(SizeCategory size)
     {
@@ -9635,10 +9680,41 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// The carrying capacity multiplier of a quadruped of <paramref name="size"/> (PHB p.162: Fine x1/4, Diminutive x1/2,
+    /// Tiny x3/4, Small x1, Medium x1-1/2, Large x3, Huge x6, Gargantuan x12, Colossal x24).
+    /// </summary>
+    public static float GetQuadrupedCarryingCapacityMultiplier(SizeCategory size)
+    {
+        switch (size)
+        {
+            case SizeCategory.Fine: return 0.25f;
+            case SizeCategory.Diminutive: return 0.5f;
+            case SizeCategory.Tiny: return 0.75f;
+            case SizeCategory.Small: return 1f;
+            case SizeCategory.Large: return 3f;
+            case SizeCategory.Huge: return 6f;
+            case SizeCategory.Gargantuan: return 12f;
+            case SizeCategory.Colossal: return 24f;
+            default: return 1.5f;
+        }
+    }
+
+    /// <summary>
+    /// The PHB p.162 carrying capacity multiplier for <paramref name="size"/> and the creature's body plan: the quadruped
+    /// multipliers for a four-legged creature (<see cref="CharacterStats.IsQuadruped"/>), the biped ones for every other
+    /// creature (delegated RAW reading 2026-10-14, CMB-163).
+    /// </summary>
+    public static float GetCarryingCapacityMultiplier(SizeCategory size, bool isQuadruped)
+        => isQuadruped ? GetQuadrupedCarryingCapacityMultiplier(size) : GetBipedCarryingCapacityMultiplier(size);
+
+    /// <summary>
     /// MM p.310: a creature holding with one body part "can even move (possibly carrying away the opponent), provided it
     /// can drag the opponent's weight". PHB p.162: a creature can drag five times its maximum load. True when this
-    /// creature can drag <paramref name="held"/>: 5 x its heavy load (Strength, biped size multiplier) against the held
-    /// creature's typical weight (upper end for its size) plus its carried gear. Provisional figures, owner question CMB-163.
+    /// creature can drag <paramref name="held"/>: 5 x its heavy load (Strength, with the size multiplier of its body
+    /// plan, <see cref="GetCarryingCapacityMultiplier"/>) against the held creature's weight plus its carried gear
+    /// (delegated RAW reading 2026-10-14, CMB-163). The weight is the size-table stand-in (data gap, CMB-163); an MM entry's
+    /// own Carrying Capacity line and the ground modifiers (PHB p.162: doubled or halved) are not modelled, and no
+    /// Improved Grab creature in the database has such a line.
     /// </summary>
     public bool CanDragImprovedGrabHeldCreature(CharacterController held, out string reason)
     {
@@ -9647,7 +9723,7 @@ public class CharacterController : MonoBehaviour
             return false;
 
         float dragLimit = 5f * CharacterStats.GetHeavyLoadForStrength(Stats.EffectiveStrengthScore)
-            * GetBipedCarryingCapacityMultiplier(Stats.CurrentSizeCategory);
+            * GetCarryingCapacityMultiplier(Stats.CurrentSizeCategory, Stats.IsQuadruped);
         float weight = GetTypicalCreatureWeightUpperBoundLbs(held.Stats.CurrentSizeCategory) + Mathf.Max(0f, held.Stats.TotalCarriedWeightLbs);
         if (weight <= dragLimit)
             return true;
@@ -9661,7 +9737,9 @@ public class CharacterController : MonoBehaviour
     /// (GameManager.NotifyCharacterMovement) with the mover's step. When the holder moves out of its natural reach of
     /// the held creature, it carries the creature along (MM p.310: it can move carrying the opponent if it can drag the
     /// opponent's weight, <see cref="CanDragImprovedGrabHeldCreature"/>): the held creature moves by the same step, or
-    /// into the holder's space, without provoking (CMB-152). The hold ends when the holder cannot drag the weight, when
+    /// into the holder's space, without provoking: a creature moved by another creature's action provokes from no one
+    /// (delegated RAW reading 2026-10-14, CMB-152, CMB-163; RULES_COVERAGE 4.1; the holder's own move provokes as normal).
+    /// The hold ends when the holder cannot drag the weight, when
     /// there is no room, or when the held creature is moved out of reach by something else. Returns the log line of an
     /// ended hold, or empty.
     /// </summary>
@@ -10702,8 +10780,10 @@ public class CharacterController : MonoBehaviour
     /// The grapple actions a creature holding with one body part after Improved Grab may take against the creature it
     /// holds: the Damage grapple check, from the round after the grab (MM p.310: each successful grapple check in
     /// successive rounds deals the establishing attack's damage; at -20, GetImprovedGrabHoldGrappleCheckPenalty), in
-    /// place of an attack. Its other grapple actions are not offered (owner question CMB-163). Shared by the resolver,
-    /// the PC buttons and the AI.
+    /// place of an attack. Its other grapple actions (pin, Move, use opponent's weapon) are not offered: a holder with one
+    /// body part is not grappling (MM p.310), so it does not get the PHB p.156-157 list; it moves with its own normal
+    /// movement, carrying the held creature (delegated RAW reading 2026-10-14, CMB-163). Shared by the resolver, the PC
+    /// buttons and the AI.
     /// </summary>
     public bool IsGrappleActionAvailableToImprovedGrabHolder(GrappleActionType actionType, out string reason)
     {
@@ -12336,6 +12416,18 @@ public class CharacterController : MonoBehaviour
             };
         }
 
+        // A holder with one body part makes no attack on the creature it holds (MM p.310; delegated RAW reading
+        // 2026-10-14, CMB-163). The PC and NPC callers refuse it before any cost; this keeps the resolver on the rule.
+        if (IsBarredFromSpecialAttackOn(type, target, out string holdReason))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = type.ToString(),
+                Success = false,
+                Log = holdReason
+            };
+        }
+
         if (!CanPerformSpecialAttack(type))
         {
             string attackerName = Stats != null ? Stats.CharacterName : name;
@@ -13632,7 +13724,9 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        // A hold needs the body part that made the attack (MM p.310); without one the grapple is conducted normally.
+        // A hold needs the body part that made the attack (MM p.310); without one the grapple is conducted normally. The
+        // choice to hold comes before the free check, so the -20 applies to that establishing check too (MM p.310; PHB
+        // p.155-156 names it the "Hold" step; delegated RAW reading 2026-10-14, CMB-163).
         bool hold = holdWithBodyPart && establishingAttack != null;
         string partName = establishingAttack != null && !string.IsNullOrWhiteSpace(establishingAttack.Name)
             ? establishingAttack.Name.Trim().ToLowerInvariant()
@@ -13768,19 +13862,21 @@ public class CharacterController : MonoBehaviour
         int improvedSunderBonus = Stats.HasFeat("Improved Sunder") ? 4 : 0;
         // PHB p.158 Step 2: each side rolls with its own weapon, +4 for a two-handed one and -4 for a light
         // one, and the larger combatant gets +4 per size category of difference: the size term compares the
-        // combatants (PHB p.158; recorded 2026-10-11, CMB-141). The defender rolls with the targeted weapon, or its
-        // main-hand weapon when a shield or armor is targeted (none: 0; worn armor should not be a target at all,
-        // CMB-166; whether a defender with no weapon rolls as a light weapon is an owner question, CMB-165). A natural
-        // weapon gets no handedness modifier, as on a disarm roll (owner ruling 2026-10-08 for disarm and owner
-        // interpretation 2026-10-11 for sunder, CMB-141); the attacker's unarmed strike is a light weapon, -4 (owner
-        // interpretation 2026-10-11, CMB-141).
+        // combatants (PHB p.158; recorded 2026-10-11, CMB-141). The defender rolls with the targeted weapon, or, when a
+        // shield or armor is targeted (worn armor should not be a target at all, CMB-166), with the weapon it holds:
+        // the main-hand weapon first, else a weapon held in the off hand (GetSunderDefenderWeapon). The targeted shield
+        // is never its weapon. With no weapon in hand it rolls with a true natural weapon (0) or its unarmed strike, a
+        // light weapon (-4), an "Unarmed Strike" listed as a natural attack included (delegated RAW reading 2026-10-14,
+        // CMB-165). A natural weapon gets no handedness modifier, as on a disarm roll (owner ruling 2026-10-08 for
+        // disarm and owner interpretation 2026-10-11 for sunder, CMB-141); the attacker's unarmed strike is a light
+        // weapon, -4 (owner interpretation 2026-10-11, CMB-141).
         int handednessBonus = unarmedSunder
             ? UnarmedStrikeSunderHandednessModifier
             : sunderNatural != null ? NaturalWeaponDisarmHandednessModifier : GetSunderHandednessModifier(attackerWeapon);
         int damageModePenalty = sunderDamageMode.AttackPenalty;
         int sizeBonus = GetLargerCombatantSizeBonus(this, target);
-        ItemData defenderWeapon = targetItem.IsWeapon && !targetItem.IsShield ? targetItem : target.GetEquippedMainWeapon();
-        int defenderHandednessBonus = GetSunderHandednessModifier(defenderWeapon);
+        ItemData defenderWeapon = GetSunderDefenderWeapon(target, targetItem);
+        int defenderHandednessBonus = GetSunderDefenderHandednessModifier(target, defenderWeapon, out string defenderHandednessLabel);
         int defenderSizeBonus = GetLargerCombatantSizeBonus(target, this);
         // Both rolls are opposed attack rolls (PHB p.158), so each side's racial attack bonus against the other's kind
         // applies (PHB p.15, p.17; CHR-019).
@@ -13830,7 +13926,7 @@ public class CharacterController : MonoBehaviour
             + $" = {attackTotal}");
         logLines.Add($"Defender check: d20 {defenseRoll} + BAB {CharacterStats.FormatMod(target.Stats.BaseAttackBonus)} + STR {CharacterStats.FormatMod(target.Stats.STRMod)} + size {CharacterStats.FormatMod(target.Stats.SizeModifier)}"
             + (target.Stats.ConditionAttackPenalty != 0 ? $" + condition {CharacterStats.FormatMod(target.Stats.ConditionAttackPenalty)}" : string.Empty)
-            + (defenderHandednessBonus != 0 ? $" + handedness {CharacterStats.FormatMod(defenderHandednessBonus)}" : string.Empty)
+            + (defenderHandednessBonus != 0 ? $" + {defenderHandednessLabel} {CharacterStats.FormatMod(defenderHandednessBonus)}" : string.Empty)
             + (defenderSizeBonus != 0 ? $" + larger size {CharacterStats.FormatMod(defenderSizeBonus)}" : string.Empty)
             + (defenderRacialBonus != 0 ? $" + racial {CharacterStats.FormatMod(defenderRacialBonus)}" : string.Empty)
             + $" = {defenseTotal}");
@@ -14865,6 +14961,63 @@ public class CharacterController : MonoBehaviour
 
         int sizeStepDifference = (int)actor.Stats.CurrentSizeCategory - (int)opponent.Stats.CurrentSizeCategory;
         return Mathf.Max(0, sizeStepDifference) * 4;
+    }
+
+    /// <summary>
+    /// The weapon the defender of a sunder rolls with (PHB p.158 Step 2, "your respective weapons"): the targeted weapon
+    /// when a weapon is the target; otherwise the melee weapon it holds, the main hand first, else one held in the off
+    /// hand, else a worn spiked gauntlet. A shield is never its weapon, and neither is a ranged weapon (handedness is a
+    /// melee weapon trait, PHB p.113). Null when it holds no melee weapon, so it rolls with a natural weapon or its unarmed
+    /// strike (delegated RAW reading 2026-10-14, CMB-165).
+    /// </summary>
+    public static ItemData GetSunderDefenderWeapon(CharacterController defender, ItemData targetItem)
+    {
+        if (targetItem != null && targetItem.IsWeapon && !targetItem.IsShield)
+            return targetItem;
+
+        if (defender == null)
+            return null;
+
+        Inventory inv = defender.GetInventoryData();
+        if (inv != null)
+        {
+            if (IsSunderDefenderMeleeWeapon(inv.RightHandSlot))
+                return inv.RightHandSlot;
+            if (IsSunderDefenderMeleeWeapon(inv.LeftHandSlot))
+                return inv.LeftHandSlot;
+        }
+
+        ItemData hands = GetEquippedHandsItem(defender);
+        return IsSpikedGauntletItem(hands) ? hands : null;
+    }
+
+    private static bool IsSunderDefenderMeleeWeapon(ItemData item)
+        => item != null && item.IsWeapon && !item.IsShield && !item.IsRangedWeapon;
+
+    /// <summary>
+    /// The defender's handedness term on the sunder opposed roll (PHB p.158 Step 2): its weapon's term when it rolls with
+    /// a held weapon; with none, a true natural weapon (claw, bite, slam) is a one-handed weapon of its size (0,
+    /// <see cref="NaturalWeaponDisarmHandednessModifier"/>), and otherwise it rolls with its unarmed strike, always a
+    /// light weapon (-4, <see cref="UnarmedStrikeSunderHandednessModifier"/>; PHB p.113, p.139), an "Unarmed Strike"
+    /// listed as a natural attack included (the NPC monks). No damage-mode -4: only the attacker deals damage (PHB p.158
+    /// Step 3) (delegated RAW reading 2026-10-14, CMB-165). The same for PCs and NPCs.
+    /// </summary>
+    public static int GetSunderDefenderHandednessModifier(CharacterController defender, ItemData defenderWeapon, out string label)
+    {
+        if (defenderWeapon != null)
+        {
+            label = "handedness";
+            return GetSunderHandednessModifier(defenderWeapon);
+        }
+
+        if (defender != null && defender.FightsWithNaturalWeapons())
+        {
+            label = "natural weapon";
+            return NaturalWeaponDisarmHandednessModifier;
+        }
+
+        label = "unarmed strike (light)";
+        return UnarmedStrikeSunderHandednessModifier;
     }
 
     /// <summary>

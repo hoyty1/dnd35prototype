@@ -1126,6 +1126,13 @@ public partial class GameManager
             if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", "Need a melee weapon (or natural/unarmed attack) to charge."));
             return false;
         }
+        // A creature holding the target with one body part may not attack it, so it cannot charge it (MM p.310;
+        // delegated RAW reading 2026-10-14, CMB-163). Shared by the PC charge and the NPC charge.
+        else if (charger.IsBarredFromOrdinaryAttackOn(target, out string chargeHoldReason))
+        {
+            if (logFailures) CombatUI?.ShowCombatLog(CombatLogHelper.Warning("⚠", chargeHoldReason));
+            return false;
+        }
 
         if (charger.Stats.IsFatiguedOrExhausted)
         {

@@ -1334,6 +1334,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 59,
             BAB = 5,
             HasImprovedGrab = true,
+            IsQuadruped = true, // PHB p.162 quadruped drag multipliers (CMB-163)
             ImprovedGrabTriggerAttackName = "Bite",
             HasScent = true,
             NaturalAttacks = new List<NaturalAttackDefinition>

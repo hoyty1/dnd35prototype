@@ -518,6 +518,12 @@ public class NPCDefinition
     public SaveProgression? WillSaveOverride;
     public SizeCategory SizeCategory = SizeCategory.Medium;
     public bool IsTallCreature = true;
+    /// <summary>
+    /// A four-legged creature (PHB p.162 quadruped carrying capacity multipliers, used by the Improved Grab drag limit;
+    /// delegated RAW reading 2026-10-14, CMB-163). Set for the four-legged Improved Grab creatures; every other entry
+    /// uses the biped multipliers. A value field, so <see cref="Clone"/> copies it.
+    /// </summary>
+    public bool IsQuadruped;
     public int NaturalArmorBonus;
     public bool HasTripAttack;
     /// <summary>The MM Trip (Ex) entry's printed check modifier, reference only (CharacterStats.TripAttackCheckBonus).</summary>
