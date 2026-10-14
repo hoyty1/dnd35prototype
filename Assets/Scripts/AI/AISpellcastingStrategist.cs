@@ -208,6 +208,15 @@ public static class AISpellcastingStrategist
         return targets;
     }
 
+    /// <summary>
+    /// A spell the game casts but whose combat effect is not modelled, so an AI cast spends an action for nothing:
+    /// Alter Self (PHB p.197) until its form traits exist (SPL-135). The AI skips these; a PC can still cast them.
+    /// </summary>
+    public static bool HasNoModelledCombatEffect(SpellData spell)
+    {
+        return spell != null && spell.SpellId == SpellNames.ALTER_SELF;
+    }
+
     /// <summary>Is this a spell that should target allies?</summary>
     public static bool IsAllyTargetedSpell(SpellData spell)
     {

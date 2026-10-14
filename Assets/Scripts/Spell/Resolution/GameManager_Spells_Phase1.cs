@@ -564,10 +564,16 @@ public partial class GameManager
     }
 
     // ================================================================
-    //  INSECT PLAGUE — PHB p.244
-    //  Conjuration (Summoning). 1 swarm per 3 CL (max 6).
-    //  2d6 damage/round. Fort or nauseated 1 round.
-    //  No SR for swarm damage. Duration: 1 min/level.
+    //  INSECT PLAGUE — PHB p.244 (Saving Throw None, SR No; the swarms are
+    //  locust swarms, MM p.239). 1 swarm per 3 CL (max 6).
+    //  Each swarm: 2d6 swarm damage and its distraction (Fort DC 12 or
+    //  nauseated 1 round, MM p.239), the locust swarm's own DC, not the
+    //  caster's spell DC. Duration: 1 min/level.
+    //  The summoned locust swarms' damage is a swarm attack (MM p.316), so
+    //  damage reduction applies (owner interpretation 2026-10-11, SPL-004).
+    //  Not modelled: stationary swarms that deal damage each round for the
+    //  duration (the damage lands once, at casting), and distraction's
+    //  living, vulnerable creatures only (SPL-136, CRE-060).
     // ================================================================
 
     private bool TryResolveInsectPlagueSpell(
@@ -586,13 +592,18 @@ public partial class GameManager
         int casterLevel = SpellCastingHelper.GetEffectiveCasterLevel(caster, spell);
         int numSwarms = Mathf.Clamp(casterLevel / 3, 1, 6);
         int durationRounds = SpellCastingHelper.CalculateDuration(spell, casterLevel);
-        int saveDc = GetSpellSaveDC(caster, spell);
+        // The nausea is the locust swarm's distraction (Ex, MM p.239), not part of the spell (PHB p.244: Saving
+        // Throw None): the swarm's own DC from its template (read only), as a real locust swarm uses it (AIService).
+        NPCDefinition locustSwarm = NPCDatabase.Get("locust_swarm");
+        int saveDc = locustSwarm != null && locustSwarm.SwarmTraits != null && locustSwarm.SwarmTraits.DistractionDC > 0
+            ? locustSwarm.SwarmTraits.DistractionDC
+            : 12;
 
         var sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
         sb.AppendLine($"🦗 {caster.Stats.CharacterName} casts Insect Plague!");
         sb.AppendLine($"  School: Conjuration (Summoning) | Level: 5 | {numSwarms} swarm(s)");
-        sb.AppendLine($"  Damage: 2d6 per swarm | Fort DC {saveDc} or nauseated 1 round");
+        sb.AppendLine($"  Damage: 2d6 per swarm | Distraction: Fort DC {saveDc} or nauseated 1 round");
         sb.AppendLine($"  Duration: {durationRounds} rounds | No SR for swarm damage");
         sb.AppendLine();
 
@@ -610,10 +621,12 @@ public partial class GameManager
                 // Swarm damage: 2d6 (no save, no SR)
                 int swarmDmg = DiceRoller.D6() + DiceRoller.D6();
 
-                // Resolved as spell damage, so damage reduction does not apply (MM p.307). Whether the summoned
-                // locust swarms' attacks should take DR as swarm attacks (MM p.316) is an owner question (SPL-004).
+                // Owner interpretation 2026-10-11 (SPL-004): the plague's locust swarms are summoned creatures
+                // (Conjuration (Summoning), PHB p.244), so their damage is a nonmagical swarm attack that damage
+                // reduction reduces (MM p.316), like a summoned monster's natural attacks; MM p.307's rule that DR
+                // does not stop spells covers a spell's own effect, not the creatures it summons.
                 int hpBefore = target.Stats.CurrentHP;
-                DamageResolutionResult dealt = DealDamage(target, swarmDmg, DamagePackets.Spell(spell.Name, DamageType.Piercing));
+                DamageResolutionResult dealt = DealDamage(target, swarmDmg, DamagePackets.CreatureAttack(spell.Name + " locust swarm", DamageType.Piercing));
                 int hpAfter = target.Stats.CurrentHP;
 
                 sb.AppendLine($"  🦗 Swarm damage: 2d6 = {swarmDmg}{(dealt.FinalDamage != swarmDmg ? $" → {dealt.FinalDamage}" : "")}{DescribeMitigation(dealt)}");
@@ -626,8 +639,8 @@ public partial class GameManager
                     continue;
                 }
 
-                // Fort save vs nausea
-                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc, SaveContext.ForSpell(spell, caster != null ? caster.Stats : null));
+                // Distraction (MM p.239): an extraordinary ability of the swarm, so not a save against a spell
+                var saveResult = SpellSaveResolver.RollSave(target, SaveType.Fortitude, saveDc, SaveContext.None);
                 saveResult.AppendToLog(sb, "SAVED", "NAUSEATED");
 
                 if (!saveResult.Saved)
@@ -1087,7 +1100,9 @@ public partial class GameManager
     //  (PHB p.154): d20 + key ability modifier + the caster's special size
     //  modifier against the defender's Strength check (Strength, special size,
     //  +4 stability). A win pushes the defender 5 ft straight away from the
-    //  caster; the caster does not move with it, so it earns no extra 5 ft.
+    //  caster; the caster does not move with it, so it earns no extra 5 ft
+    //  (owner interpretation 2026-10-11, SPL-037: PHB p.154's extra push needs
+    //  the bull rusher to move with the defender, and PHB p.292 is silent).
     //  Not implemented: the later rounds (concentration), disarm, grapple,
     //  trip, sustained force and violent thrust (SPL-130).
     // ================================================================
@@ -1162,7 +1177,7 @@ public partial class GameManager
         sb.Append("═══════════════════════════════════");
         CombatUI?.ShowCombatLog(sb.ToString());
 
-        // The caster stays where it is, so the push is the base 5 ft (one square).
+        // The caster stays where it is, so the push is the base 5 ft (one square); owner interpretation 2026-10-11 (SPL-037).
         if (success)
             TryPushTargetAway(caster, target, 1, allowAttackerFollow: false);
 

@@ -388,9 +388,10 @@ public static partial class SpellDatabase
                     Name = "Insect Plague",
                     Description = "Conjuration (Summoning). You summon a number of swarms of locusts (one per three levels, max 6). "
                         + "Each swarm attacks any creature occupying its area. Each swarm deals 2d6 points of damage per round "
-                        + "to all creatures within it. Creatures in a swarm must make a Fortitude save or become nauseated for 1 round. "
-                        + "Spellcasting within a swarm requires a concentration check (DC 20 + spell level). "
-                        + "Duration 1 min/level. PHB p.244",
+                        + "to all creatures within it (a swarm attack, so damage reduction applies). The spell allows no save; "
+                        + "the swarms' distraction (MM p.239) makes creatures in them succeed on a DC 12 Fortitude save or be "
+                        + "nauseated for 1 round. Spellcasting within a swarm requires a concentration check (DC 20 + spell level). "
+                        + "Duration 1 min/level. PHB p.244, MM p.239",
                     SpellLevel = 5,
                     School = "Conjuration",
                     AvailableFor = new List<SpellAvailability>
@@ -409,7 +410,7 @@ public static partial class SpellDatabase
                     DamageDice = 6,
                     DamageCount = 2, // 2d6 per swarm per round
                     DamageType = "swarm",
-                    AllowsSavingThrow = false, // No save for damage; nausea is Fort
+                    AllowsSavingThrow = false, // Saving Throw None (PHB p.244); the nausea is the swarms' distraction (MM p.239)
                     SpellResistanceApplies = false,
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,

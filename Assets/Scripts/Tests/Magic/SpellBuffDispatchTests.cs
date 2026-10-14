@@ -15,7 +15,8 @@ namespace Tests.Magic
 /// Levitate p.248, Continual Flame p.213, Dancing Lights p.216, Shrink Item p.279, Ghost Sound p.235, Message p.253,
 /// Prestidigitation p.264, Lullaby p.249, True Seeing p.296, Mislead p.254, Protection from Spells p.266, Spell Turning
 /// p.282, Globe of Invulnerability p.236, Heal p.239 (harm p.239), Disintegrate p.222, Plane Shift p.262, Resurrection
-/// p.272. Alter Self (p.197) keeps its +2 Str pending the owner (SPL-037). Telekinesis's push and the globe's blocking need the
+/// p.272. Alter Self (p.197) gives no ability bonus (owner ruling 2026-10-11, SPL-037; its form traits are SPL-135), and
+/// Heal's 1 hp floor on an undead holds only after a successful save (owner interpretation 2026-10-11). Telekinesis's push and the globe's blocking need the
 /// grid and a frame: rules scenario rules/spell-buff-dispatch.
 /// Needs Play mode and the scene GameManager (editor only: the harness entry point is editor-only).
 /// </summary>
@@ -256,8 +257,14 @@ public static class SpellBuffDispatchTests
         Assert(Apply(wizard, ally, SpellNames.SHRINK_ITEM) == null && !HasEffect(ally, SpellNames.SHRINK_ITEM),
             "Shrink Item: affects an item, not the creature (log only)");
 
+        int strBefore = wizard.Stats.EffectiveStrengthScore;
         Assert(Apply(wizard, wizard, SpellNames.ALTER_SELF) != null && HasEffect(wizard, SpellNames.ALTER_SELF),
-            "Alter Self: tracked effect (its +2 Str awaits the owner, SPL-037)");
+            "Alter Self: tracked effect");
+        Assert(wizard.Stats.EffectiveStrengthScore == strBefore,
+            "Alter Self: no Strength bonus, the caster keeps its own ability scores (PHB p.197; owner ruling 2026-10-11, SPL-037)",
+            $"STR {strBefore} -> {wizard.Stats.EffectiveStrengthScore}");
+        Assert(AISpellcastingStrategist.HasNoModelledCombatEffect(SpellDatabase.GetSpell(SpellNames.ALTER_SELF)),
+            "Alter Self: the AI does not pick it while its form traits are unmodelled (SPL-135)");
     }
 
     private static void TestCantrips()
@@ -554,6 +561,12 @@ public static class SpellBuffDispatchTests
         wight.Stats.CurrentHP = 20;
         Apply(cleric, wight, SpellNames.HEAL, LandedSave(true));
         Assert(wight.Stats.CurrentHP == 1, "Heal on an undead: a successful save cannot reduce it below 1 hp (harm, PHB p.239)", $"HP {wight.Stats.CurrentHP}");
+
+        wight.Stats.CurrentHP = 20;
+        Apply(cleric, wight, SpellNames.HEAL, LandedSave(false));
+        Assert(wight.Stats.CurrentHP <= 0 && wight.IsDead,
+            "Heal on an undead: a failed save takes the full damage with no 1 hp floor and destroys it (owner interpretation 2026-10-11, SPL-037)",
+            $"HP {wight.Stats.CurrentHP}, dead {wight.IsDead}");
 
         CharacterController golem = Actor("Golem", "Fighter", 5, 3);
         golem.Stats.CreatureType = "Construct";

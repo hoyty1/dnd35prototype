@@ -402,8 +402,8 @@ public partial class GameManager
     //  SILENCE — PHB p.279
     //  Illusion (Glamer). Cleric 2 / Bard 2. V, S.
     //  Range: Long. Area: 20-ft-radius emanation centered on a creature/object/point.
-    //  Duration: the code's long-standing 1 round/level (D) (believed to be the SRD's; not verified); PHB p.279
-    //  prints 1 min./level; owner question SPL-003.
+    //  Duration: 1 min./level (D), as PHB p.279 prints it (owner interpretation 2026-10-11, SPL-003; the code
+    //  used the SRD's 1 round/level before).
     //  Saving Throw: Will negates (creature-targeted) or None (area).
     //  Spell Resistance: Yes.
     //  Negates all sound in the area. Creatures in the area cannot cast

@@ -8,8 +8,8 @@ namespace Tests.Magic
 /// Rules (checked 2026-10-09 against the PHB): p.176 (timed durations, per level where the spell says so; instantaneous,
 /// permanent and concentration durations), p.138 (1 round = 6 seconds, so 1 minute = 10 rounds), p.91 (Extend Spell doubles
 /// a timed duration). Each spell's duration line is cited in <see cref="PhbDurations"/>.
-/// Silence keeps the code's long-standing 1 round/level (believed to be the SRD's; not verified); PHB p.279 prints 1 min./level;
-/// owner question SPL-003.
+/// Silence lasts 1 min./level, the owner's PHB p.279 line (owner ruling 2026-10-11, SPL-003; the code used 1 round/level
+/// before).
 /// Builds CharacterStats and bare controllers (no GameManager), so it runs in edit or Play mode.
 /// </summary>
 public static class SpellDurationRulesTests
@@ -164,7 +164,7 @@ public static class SpellDurationRulesTests
         (SpellNames.RESISTANCE, DurationType.Minutes, 1, false, "p.272 1 minute"),
         (SpellNames.ROPE_TRICK, DurationType.Hours, 1, true, "p.273 1 hour/level"),
         (SpellNames.SHIELD_OTHER, DurationType.Hours, 1, true, "p.278 1 hour/level"),
-        (SpellNames.SILENCE, DurationType.Rounds, 1, true, "the code's 1 round/level (believed SRD, not verified); PHB p.279 prints 1 min./level; owner question SPL-003"),
+        (SpellNames.SILENCE, DurationType.Minutes, 1, true, "p.279 1 min./level (owner ruling 2026-10-11, SPL-003)"),
         (SpellNames.SPIDER_CLIMB, DurationType.Minutes, 10, true, "p.283 10 min./level"),
         (SpellNames.SPIRITUAL_WEAPON, DurationType.Rounds, 1, true, "p.283 1 round/level"),
         (SpellNames.STATUS, DurationType.Hours, 1, true, "p.284 1 hour/level"),
@@ -307,19 +307,24 @@ public static class SpellDurationRulesTests
         return EffectService.ApplyAlignWeapon(target, align, "Cleric", casterLevel, rounds, alignment);
     }
 
+    private static void TickRounds(CharacterController c, int rounds)
+    {
+        for (int i = 0; i < rounds; i++)
+            TickRound(c);
+    }
+
     private static void TestSilenceExpires()
     {
         CharacterController target = CreateController(BuildStats("Silenced", "Wizard", 3));
         try
         {
-            ApplySilence(target, 3);
+            AssertEq(ApplySilence(target, 1), 10, "Silence from a CL 1 caster lasts 10 rounds (1 min./level, PHB p.279; owner ruling 2026-10-11, SPL-003)");
             Assert(target.Stats.SilenceActive, "Silence sets the flag");
-            TickRound(target);
-            TickRound(target);
-            Assert(target.Stats.SilenceActive, "Silence from a CL 3 caster is still active after 2 rounds");
+            TickRounds(target, 9);
+            Assert(target.Stats.SilenceActive, "Silence from a CL 1 caster is still active after 9 rounds");
             AssertEq(target.Stats.SilenceRoundsRemaining, 1, "The flag's counter follows the tracked effect");
             TickRound(target);
-            Assert(!target.Stats.SilenceActive, "Silence ends after 3 rounds (SPL-003: it never ended)");
+            Assert(!target.Stats.SilenceActive, "Silence ends after 10 rounds (SPL-003: it never ended)");
             Assert(!target.StatusEffectManager.HasEffect(SpellNames.SILENCE), "The tracked Silence effect is gone");
         }
         finally
@@ -400,23 +405,22 @@ public static class SpellDurationRulesTests
         {
             ApplySilence(target, 3);
             TickRound(target);
-            AssertEq(target.StatusEffectManager.GetRemainingRounds(SpellNames.SILENCE), 2, "Silence has 2 rounds left after a tick");
+            AssertEq(target.StatusEffectManager.GetRemainingRounds(SpellNames.SILENCE), 29, "Silence (CL 3, 30 rounds) has 29 rounds left after a tick");
 
             // The recast lasts longer than what is left, so it replaces the old effect; that removal must not end the new flag.
-            AssertEq(ApplySilence(target, 3), 3, "A recast Silence lasts its full 3 rounds");
+            AssertEq(ApplySilence(target, 3), 30, "A recast Silence lasts its full 30 rounds");
             Assert(target.Stats.SilenceActive && target.StatusEffectManager.HasEffect(SpellNames.SILENCE),
                 "After a recast the flag and the tracked effect are both on (SPL-003 recast)");
-            AssertEq(target.Stats.SilenceRoundsRemaining, 3, "The flag's counter has the recast's 3 rounds");
+            AssertEq(target.Stats.SilenceRoundsRemaining, 30, "The flag's counter has the recast's 30 rounds");
 
             // A recast that is not longer keeps the active spell.
-            AssertEq(ApplySilence(target, 1), 3, "A shorter recast (CL 1) keeps the 3 rounds left");
+            AssertEq(ApplySilence(target, 1), 30, "A shorter recast (CL 1, 10 rounds) keeps the 30 rounds left");
             Assert(target.Stats.SilenceActive, "and the flag stays on");
 
+            TickRounds(target, 29);
+            Assert(target.Stats.SilenceActive, "The recast Silence is on 29 rounds later");
             TickRound(target);
-            TickRound(target);
-            Assert(target.Stats.SilenceActive, "The recast Silence is on 2 rounds later");
-            TickRound(target);
-            Assert(!target.Stats.SilenceActive && !target.StatusEffectManager.HasEffect(SpellNames.SILENCE), "The recast Silence ends after its 3 rounds");
+            Assert(!target.Stats.SilenceActive && !target.StatusEffectManager.HasEffect(SpellNames.SILENCE), "The recast Silence ends after its 30 rounds");
         }
         finally
         {

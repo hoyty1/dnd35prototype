@@ -35,6 +35,7 @@ public static class CraftingSystemTests
         TestMinimumCasterLevels();
         TestXPSpending();
         TestCraftingConstants();
+        TestCraftedScrollSaveDC();
 
         Debug.Log("═══════════════════════════════════════════════════════════════");
         Debug.Log($"  RESULTS: {_passed} passed, {_failed} failed ({_passed + _failed} total)");
@@ -74,6 +75,104 @@ public static class CraftingSystemTests
         AssertEqual("Scroll Fireball Gold", 187, cost.GoldCost); // 375/2 = 187
         AssertEqual("Scroll Fireball XP", 15, cost.XPCost); // 375/25 = 15
         AssertEqual("Scroll Fireball Days", 1, cost.CraftingDays); // 375/1000 = 0, min 1
+    }
+
+    // ============================== CRAFTED SCROLL SAVE DC ==============================
+
+    /// <summary>
+    /// ITM-008 (owner ruling 2026-10-11): a crafted scroll bakes the magic-item DC of DMG p.214 (10 + spell level + the
+    /// minimum ability modifier for that level), never the crafter's own DC. The level is the spell's level for the
+    /// scribe's class, and the scroll's type follows that class (DMG p.238-239); Heighten raises the level. A stale
+    /// crafter DC left in the project is ignored.
+    /// </summary>
+    private static void TestCraftedScrollSaveDC()
+    {
+        Debug.Log("\n--- Crafted Scroll Save DC (DMG p.214, p.238; ITM-008) ---");
+
+        SpellData hold = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.HOLD_PERSON);
+        if (hold == null)
+        {
+            AssertTrue("Hold Person is registered", false);
+            return;
+        }
+
+        CharacterStats wizard = CreateScribe("Test Wizard", "Wizard", 5);
+        CharacterStats bard = CreateScribe("Test Bard", "Bard", 5);
+        CharacterStats cleric = CreateScribe("Test Cleric", "Cleric", 5);
+
+        // Hold Person is Sor/Wiz 3, Brd 2, Clr 2 (PHB p.241).
+        AssertEqual("Crafted scroll DC: wizard's Hold Person (Sor/Wiz 3: 10 + 3 + 1)", 14, CraftingExecutor.CraftedScrollSaveDC(hold, wizard));
+        AssertEqual("Crafted scroll DC: bard's Hold Person (Brd 2: 10 + 2 + 1)", 13, CraftingExecutor.CraftedScrollSaveDC(hold, bard));
+        AssertEqual("Crafted scroll DC: cleric's Hold Person (Clr 2: 10 + 2 + 1)", 13, CraftingExecutor.CraftedScrollSaveDC(hold, cleric));
+        AssertTrue("Wizard's scroll is arcane", CraftingExecutor.CraftedScrollIsArcane(hold, wizard));
+        AssertTrue("Bard's scroll is arcane", CraftingExecutor.CraftedScrollIsArcane(hold, bard));
+        AssertTrue("Cleric's scroll is divine (DMG p.238)", !CraftingExecutor.CraftedScrollIsArcane(hold, cleric));
+        AssertEqual("Crafted scroll DC: wizard's Hold Person heightened to 4th (10 + 4 + 2)", 16, CraftingExecutor.CraftedScrollSaveDC(hold, wizard, 4));
+        AssertEqual("Crafted scroll DC: heightening below the class level keeps the class level", 14, CraftingExecutor.CraftedScrollSaveDC(hold, wizard, 2));
+        // Without a scribe (debug crafting) the class lists decide, as a store scroll does.
+        AssertEqual("Crafted scroll DC without a scribe equals a store arcane scroll's", ScrollData.Create(hold, 3, true, 150).SaveDC, CraftingExecutor.CraftedScrollSaveDC(hold, null));
+
+        bool oldDebug = CraftingValidator.DebugMode;
+        CraftingValidator.DebugMode = true;
+        try
+        {
+            var def = new CraftableItemDefinition
+            {
+                ItemId = "test_scroll_hold_person",
+                DisplayName = "Scroll of Hold Person",
+                RequiredFeat = CraftingFeatType.ScribeScroll,
+                IsDynamic = true,
+                DynamicSpellId = DND35e.Identifiers.SpellNames.HOLD_PERSON,
+            };
+
+            // A wizard's plain scroll: the project carries a crafter's DC (as the workshop computed before 2026-10-11).
+            var plain = new CraftingProject { Definition = def, IsValid = true, Crafter = wizard, ItemCasterLevel = 5, ScrollSavedDC = 17 };
+            ItemData plainScroll = CraftingExecutor.Execute(plain, null).CraftedItem;
+            AssertTrue("Crafted plain scroll exists", plainScroll != null && plainScroll.Scroll != null);
+            if (plainScroll != null && plainScroll.Scroll != null)
+            {
+                AssertEqual("Wizard's plain scroll bakes the item DC of 3rd level, not the crafter's 17", 14, plainScroll.Scroll.SaveDC);
+                AssertEqual("Wizard's plain scroll's ItemData DC matches", 14, plainScroll.ScrollSavedDC);
+                AssertEqual("Wizard's plain scroll is arcane", "Arcane", plainScroll.ScrollType);
+            }
+
+            // A cleric's plain scroll: divine, Clr 2.
+            var clericProject = new CraftingProject { Definition = def, IsValid = true, Crafter = cleric, ItemCasterLevel = 3 };
+            ItemData clericScroll = CraftingExecutor.Execute(clericProject, null).CraftedItem;
+            AssertTrue("Cleric's scroll exists", clericScroll != null && clericScroll.Scroll != null);
+            if (clericScroll != null && clericScroll.Scroll != null)
+            {
+                AssertEqual("Cleric's scroll bakes the item DC of 2nd level", 13, clericScroll.Scroll.SaveDC);
+                AssertEqual("Cleric's scroll is divine", "Divine", clericScroll.ScrollType);
+                AssertTrue("Cleric's ScrollData is divine", !clericScroll.Scroll.IsArcane);
+            }
+
+            // A wizard's heightened scroll (to 4th): only Heighten raises the level used.
+            var heightened = new CraftingProject
+            {
+                Definition = def, IsValid = true, Crafter = wizard, ItemCasterLevel = 7,
+                ScrollMetamagicFeats = new List<MetamagicFeatId> { MetamagicFeatId.HeightenSpell },
+                ScrollEffectiveSpellLevel = 4, ScrollHeightenToLevel = 4, ScrollSavedDC = 19,
+            };
+            ItemData heightenedScroll = CraftingExecutor.Execute(heightened, null).CraftedItem;
+            AssertTrue("Crafted heightened scroll exists", heightenedScroll != null && heightenedScroll.Scroll != null);
+            if (heightenedScroll != null && heightenedScroll.Scroll != null)
+                AssertEqual("Crafted heightened scroll bakes the item DC of 4th level, not the crafter's 19", 16, heightenedScroll.Scroll.SaveDC);
+        }
+        finally
+        {
+            CraftingValidator.DebugMode = oldDebug;
+        }
+    }
+
+    private static CharacterStats CreateScribe(string name, string className, int classLevel)
+    {
+        return new CharacterStats
+        {
+            CharacterName = name,
+            CharacterClass = className,
+            ClassLevels = new List<ClassLevelEntry> { new ClassLevelEntry(className, classLevel) },
+        };
     }
 
     // ============================== POTION PRICING ==============================

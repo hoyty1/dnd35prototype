@@ -277,7 +277,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.SILENCE,
                     Name = "Silence",
-                    Description = "Negates sound in 20-ft radius. Prevents spellcasting with verbal components. 1 round/level. PHB p.279",
+                    Description = "Negates sound in 20-ft radius. Prevents spellcasting with verbal components. 1 min./level (D). PHB p.279",
                     SpellLevel = 2, School = "Illusion",
                     ClassList = new[] { "Cleric" },
                     TargetType = SpellTargetType.SingleEnemy, // Can target creature or area
@@ -286,10 +286,11 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will", // If targeted on a creature
-                    BuffDurationRounds = 3,
-                    DurationType = DurationType.Rounds,
+                    BuffDurationRounds = 3, // legacy marker only: MetamagicData.CanExtend reads a nonzero value as "has a duration"; the duration is the fields below
+                    DurationType = DurationType.Minutes,
                     DurationValue = 1,
-                    DurationScalesWithLevel = true, // the code's long-standing 1 round/level (believed to be the SRD's; not verified); PHB p.279 prints 1 min./level; owner question SPL-003
+                    DurationScalesWithLevel = true, // 1 min./level (D), PHB p.279 (owner interpretation 2026-10-11, SPL-003: the owner's PHB line, not the SRD's 1 round/level the code used before)
+                    IsDismissible = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

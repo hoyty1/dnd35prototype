@@ -181,12 +181,13 @@ public static class CraftingExecutor
         switch (def.RequiredFeat)
         {
             case CraftingFeatType.ScribeScroll:
-                // Pass metamagic data from project if available
+                // The scroll's type and DC follow the scribe's class (DMG p.238) and the magic-item DC rule
+                // (CraftedScrollSaveDC, DMG p.214), never the crafter's own DC (ITM-008).
+                CharacterStats scribe = project != null ? project.Crafter : null;
                 if (project != null && project.ScrollMetamagicFeats != null && project.ScrollMetamagicFeats.Count > 0)
                     return CreateScroll(spell, casterLevel, project.ScrollMetamagicFeats,
-                        project.ScrollEffectiveSpellLevel, project.ScrollSavedDC,
-                        project.ScrollHeightenToLevel);
-                return CreateScroll(spell, casterLevel);
+                        project.ScrollEffectiveSpellLevel, project.ScrollHeightenToLevel, scribe);
+                return CreateScroll(spell, casterLevel, null, 0, -1, scribe);
 
             case CraftingFeatType.BrewPotion:
                 return CreatePotion(spell, casterLevel);
@@ -205,19 +206,67 @@ public static class CraftingExecutor
         }
     }
 
-    private static ItemData CreateScroll(SpellData spell, int casterLevel)
+    /// <summary>
+    /// The class a crafted scroll is scribed as: the scribe's casting class whose list (or domain) has the spell, as
+    /// <see cref="SpellSaveDCRules.ResolveCastingClass"/> picks it (the highest such class level). DMG p.238: the type of
+    /// scroll a character creates is set by his or her class. Null when there is no scribe (debug crafting) or none of
+    /// its classes can cast the spell; the scroll then takes the class lists (<see cref="ScrollData.DefaultItemSaveDC"/>).
+    /// A multiclass scribe cannot yet choose the class (ITM-079).
+    /// </summary>
+    public static string CraftedScrollClass(SpellData spell, CharacterStats scribe)
     {
-        return CreateScroll(spell, casterLevel, null, 0, 0, -1);
+        if (spell == null || scribe == null)
+            return null;
+        string cls = SpellSaveDCRules.ResolveCastingClass(scribe, spell);
+        return SpellSaveDCRules.GetClassSpellLevel(spell, cls) >= 0 ? cls : null;
+    }
+
+    /// <summary>True when the crafted scroll is arcane: the scribe's class is arcane (DMG p.238), else the class lists.</summary>
+    public static bool CraftedScrollIsArcane(SpellData spell, CharacterStats scribe)
+    {
+        string cls = CraftedScrollClass(spell, scribe);
+        return cls != null ? SpellSaveDCRules.IsArcaneClass(cls) : IsArcaneSpell(spell);
     }
 
     /// <summary>
-    /// Create a scroll with optional metamagic feats, saved DC, and effective spell level.
+    /// The save DC baked into a crafted scroll: the magic-item DC of DMG p.214 (10 + the spell level + the modifier of
+    /// the minimum ability score needed to cast that level) at <see cref="CraftedScrollDCLevel"/>. Never the crafter's
+    /// own spell DC: owner ruling 2026-10-11 (ITM-008).
+    /// </summary>
+    public static int CraftedScrollSaveDC(SpellData spell, CharacterStats scribe, int heightenToLevel = -1)
+    {
+        if (spell == null)
+            return 0;
+        return SpellSaveDCRules.ForMagicItem(CraftedScrollDCLevel(spell, scribe, heightenToLevel));
+    }
+
+    /// <summary>
+    /// The spell level <see cref="CraftedScrollSaveDC"/> uses: the spell's level for the class the scroll is scribed as
+    /// (<see cref="CraftedScrollClass"/>; DMG p.238-239, the level for the character who scribed it), or, without one,
+    /// the level on the scroll's arcane or divine list as <see cref="ScrollData.DefaultItemSaveDC"/>; raised to the
+    /// heightened level (<paramref name="heightenToLevel"/>, -1 when not heightened) when that is higher.
+    /// </summary>
+    public static int CraftedScrollDCLevel(SpellData spell, CharacterStats scribe, int heightenToLevel = -1)
+    {
+        if (spell == null)
+            return 0;
+        string cls = CraftedScrollClass(spell, scribe);
+        int level = cls != null
+            ? SpellSaveDCRules.GetClassSpellLevel(spell, cls)
+            : SpellSaveDCRules.GetItemSpellLevel(spell, IsArcaneSpell(spell));
+        return heightenToLevel > level ? heightenToLevel : level;
+    }
+
+    /// <summary>
+    /// Create a scroll with optional metamagic feats and effective spell level. Its type follows the scribe's class
+    /// and its save DC is <see cref="CraftedScrollSaveDC"/> (DMG p.214, p.238; ITM-008).
     /// </summary>
     private static ItemData CreateScroll(SpellData spell, int casterLevel,
-        List<MetamagicFeatId> metamagicFeats, int effectiveSpellLevel, int savedDC,
-        int heightenToLevel)
+        List<MetamagicFeatId> metamagicFeats, int effectiveSpellLevel,
+        int heightenToLevel, CharacterStats scribe)
     {
-        bool isArcane = IsArcaneSpell(spell);
+        bool isArcane = CraftedScrollIsArcane(spell, scribe);
+        int savedDC = CraftedScrollSaveDC(spell, scribe, heightenToLevel);
         bool hasMetamagic = metamagicFeats != null && metamagicFeats.Count > 0;
         int baseLevel = spell.SpellLevel;
         int effLevel = hasMetamagic ? effectiveSpellLevel : baseLevel;
@@ -242,8 +291,7 @@ public static class CraftingExecutor
             desc += $"\nMetamagic: {string.Join(", ", metamagicPrefix.Trim())}";
             desc += $"\nBase Spell Level: {baseLevel} → Effective Level: {effLevel}";
         }
-        if (savedDC > 0)
-            desc += $"\nSave DC: {savedDC} (baked at creation)";
+        desc += $"\nSave DC: {savedDC} (magic item, DMG p.214)";
         desc += "\n" + spell.Description;
 
         // Unified scroll data — single source of truth
@@ -272,7 +320,7 @@ public static class CraftingExecutor
         };
 
         Debug.Log($"[CraftingExecutor] Created scroll: {scroll.Name} (CL {casterLevel}, {scroll.ScrollType}" +
-            (hasMetamagic ? $", Eff.Lv {effLevel}, DC {savedDC}" : "") + ")");
+            (hasMetamagic ? $", Eff.Lv {effLevel}" : "") + $", DC {savedDC})");
         return scroll;
     }
 

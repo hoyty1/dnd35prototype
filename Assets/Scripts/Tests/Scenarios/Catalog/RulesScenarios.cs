@@ -5913,15 +5913,16 @@ namespace Tests.Scenarios
         /// SPL-002 and SPL-003: spell durations on both cast paths. The Quick Start cleric (Cleric 3, a Ui actor, so the PC
         /// pipeline; Silence prepared in its two non-domain 2nd-level slots) casts Silence (PHB p.279; Will negates) at a goblin
         /// in round 1 and again in round 2, while the first is still on: the Silence handler sets the target's flag and a
-        /// tracked effect for 1 round/level (the code's long-standing duration, believed to be the SRD's but not verified; PHB
-        /// p.279 prints 1 min./level, an owner question in SPL-003), and the recast keeps the longer duration (the same spell
-        /// does not stack) with the flag still on. The goblin gets a -30 save tweak so its Will save fails on every seed.
+        /// tracked effect for 1 min./level (PHB p.279; owner ruling 2026-10-11, SPL-003: 30 rounds at CL 3, where the code
+        /// used 1 round/level before), and the recast keeps the longer duration (the same spell does not stack) with the
+        /// flag still on. The scenario runs until round 32, the first round after the recast's 30 rounds. The goblin gets a
+        /// -30 save tweak so its Will save fails on every seed.
         /// evil_acolyte_test (Cleric 3; its prepared slots spawn empty, since its Daze is not a cleric spell, so Guidance is put
         /// into an empty orison slot) casts Guidance (PHB p.238: 1 minute) at the goblin beside it through the NPC cast
         /// executor: a generic tracked effect. Before SPL-002 Guidance set only the legacy rounds field and its effect started
         /// at 0 rounds and ended at the first round tick; before SPL-003 nothing ever ended the Silence flag, and the first
         /// version of the fix let a recast clear the flag it had just set. A scripted fighter's Assert step checks both every
-        /// round: Guidance has 10 - (round - 1) rounds left, and Silence is on, flag and tracked effect together, for its
+        /// round: Guidance has 10 - (round - 1) rounds left (none from round 11), and Silence is on, flag and tracked effect together, for its
         /// duration from the round-2 recast and off after. The Silence flag and handler run on the PC pipeline only (SPL-054).
         /// </summary>
         private static ScenarioDef SpellDurations()
@@ -5929,6 +5930,7 @@ namespace Tests.Scenarios
             var def = Rules("rules/spell-durations", "Spells last their PHB duration on the PC and NPC cast paths, and Silence ends (PHB p.176; SPL-002, SPL-003)")
                 .Covers("SPL-002", "SPL-003", "PHB p.176", "PHB p.238", "PHB p.279", "PC_NPC_PARITY")
                 .MaxRounds(SpellDurationMaxRounds)
+                .WallCap(300f)
                 .Pc("cleric", ActorSource.QuickStart("Cleric"), 5, 10, Control.Ui)
                 .Pc("fighter", ActorSource.QuickStart("Fighter"), 5, 12, Control.Scripted)
                 .Npc("acolyte", "evil_acolyte_test", 12, 10, Control.Scripted)
@@ -5952,13 +5954,13 @@ namespace Tests.Scenarios
                     Expect.StepStatus("cleric", 1, "Cast", 0, "done"),
                     Expect.StepStatus("acolyte", 1, "Cast", 0, "done"),
                     Expect.StepStatus("cleric", SpellDurationRecastRound, "Cast", 0, "done")))
-                .Expect("Every round's duration check holds (Guidance 1 minute through the NPC executor, PHB p.238; Silence 1 round/level through the PC pipeline, recast included)", Expect.AssertsPass())
+                .Expect("Every round's duration check holds (Guidance 1 minute through the NPC executor, PHB p.238; Silence 1 min./level through the PC pipeline, recast included)", Expect.AssertsPass())
                 .Expect("A Silence recast while the first lasts keeps the flag on (SPL-003)", v =>
                 {
                     TraceEvent recast = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(SpellDurationNotePrefix + "silence recast", StringComparison.Ordinal));
                     return recast != null ? ExpectResult.Pass(recast.Str("text")) : ExpectResult.Fail("no note says the recast Silence is on");
                 })
-                .Expect("Silence ends after 1 round/level from the recast: the flag and the tracked effect both go (SPL-003)", v =>
+                .Expect("Silence ends 1 min./level (30 rounds at CL 3) after the recast: the flag and the tracked effect both go (SPL-003)", v =>
                 {
                     TraceEvent ended = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "").StartsWith(SpellDurationNotePrefix + "silence ended", StringComparison.Ordinal));
                     return ended != null ? ExpectResult.Pass(ended.Str("text")) : ExpectResult.Fail("no note says Silence ended");
@@ -5966,8 +5968,9 @@ namespace Tests.Scenarios
                 .Build();
         }
 
-        private const int SpellDurationMaxRounds = 5;
         private const int SpellDurationRecastRound = 2;
+        /// <summary>The Quick Start cleric is CL 3, so Silence lasts 30 rounds (1 min./level); the last round checks it ended.</summary>
+        private const int SpellDurationMaxRounds = SpellDurationRecastRound + 3 * SpellDurationRules.RoundsPerMinute;
         private const string SpellDurationNotePrefix = "spell-duration ";
 
         /// <summary>Prepares <paramref name="spellId"/> in the first two non-domain slots of <paramref name="level"/>.</summary>
@@ -6014,7 +6017,7 @@ namespace Tests.Scenarios
             StatusEffectManager gob2Effects = ctx.Get("gob2").StatusEffectManager;
             int guidanceLeft = gob2Effects != null && gob2Effects.HasEffect(DND35e.Identifiers.SpellNames.GUIDANCE)
                 ? gob2Effects.GetRemainingRounds(DND35e.Identifiers.SpellNames.GUIDANCE) : 0;
-            int guidanceExpected = SpellDurationRules.RoundsPerMinute - (round - 1);
+            int guidanceExpected = Math.Max(0, SpellDurationRules.RoundsPerMinute - (round - 1));
             ctx.Note(SpellDurationNotePrefix + "round " + round + " guidance " + guidanceLeft + " (expected " + guidanceExpected + ")");
             if (guidanceLeft != guidanceExpected)
                 ok = false;
@@ -6024,6 +6027,13 @@ namespace Tests.Scenarios
             CharacterController gob = ctx.Get("gob");
             SpellData silence = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.SILENCE);
             int silenceRounds = SpellCastingHelper.CalculateDuration(silence, SpellDurationRules.CasterLevelFor(cleric, silence));
+            // SpellDurationMaxRounds assumes the Quick Start cleric's CL 3 (30 rounds); say so if that changes.
+            if (silenceRounds != 3 * SpellDurationRules.RoundsPerMinute)
+            {
+                ctx.Note(SpellDurationNotePrefix + "silence lasts " + silenceRounds + " rounds, but MaxRounds assumes CL 3 ("
+                    + (3 * SpellDurationRules.RoundsPerMinute) + " rounds); update SpellDurationMaxRounds");
+                ok = false;
+            }
             bool flag = gob.Stats.SilenceActive;
             bool tracked = gob.StatusEffectManager != null && gob.StatusEffectManager.HasEffect(DND35e.Identifiers.SpellNames.SILENCE);
             int trackedLeft = tracked ? gob.StatusEffectManager.GetRemainingRounds(DND35e.Identifiers.SpellNames.SILENCE) : 0;
@@ -6198,14 +6208,17 @@ namespace Tests.Scenarios
         /// handled); Ice Storm (TryResolveIceStormAoE, PHB p.243: 3d6 bludgeoning + 2d6 cold = 18 + 12) on a dummy immune
         /// to cold (only the 18 bludgeoning) and one with DR 10/magic (30); a gibbering mouther's acid spittle
         /// (AIService.TryExecuteRangedSpecialAttack, MM p.126: 1d4 acid, an extraordinary attack) on a dummy with acid
-        /// resistance 2 (2 of 4); Searing Light on that dummy, where SpellCaster.Cast deals nothing and the handler alone deals its damage (SPL-124); and a Warm Fire Shield's retribution (FireShieldReactionEffect, PHB p.230: 1d6 + CL 5 =
-        /// 11 fire) on the fire-immune dummy (0) and the fire-resistant one (1). Before SPL-004 each of these but the
-        /// breath (which had its own first-match resistance code) dealt its full rolled damage.
+        /// resistance 2 (2 of 4); Searing Light on that dummy, where SpellCaster.Cast deals nothing and the handler alone deals its damage (SPL-124); a Warm Fire Shield's retribution (FireShieldReactionEffect, PHB p.230: 1d6 + CL 5 =
+        /// 11 fire) on the fire-immune dummy (0) and the fire-resistant one (1); and Insect Plague's locust swarms
+        /// (TryResolveInsectPlagueSpell, PHB p.244: 2d6 = 12) on a plain dummy (12) and one with DR 5/magic (7): the
+        /// summoned swarms' damage is a nonmagical swarm attack that damage reduction reduces (MM p.316; owner
+        /// interpretation 2026-10-11, SPL-004). Before SPL-004 each of these but the breath (which had its own
+        /// first-match resistance code) dealt its full rolled damage, and until 2026-10-11 the swarms ignored DR.
         /// </summary>
         private static ScenarioDef SpellDamageMitigation()
         {
-            return Rules("rules/spell-damage-mitigation", "Spell, breath and special-attack damage takes immunity and resistance, not DR (MM p.307, p.314; SPL-004)")
-                .Covers("SPL-004", "SPL-124", "AI-006", "AI-040", "CMB-013", "MM p.307", "MM p.314", "PHB p.230", "PHB p.231", "PHB p.243", "PHB p.275", "PC_NPC_PARITY")
+            return Rules("rules/spell-damage-mitigation", "Spell, breath and special-attack damage takes immunity and resistance, not DR; summoned swarms take DR (MM p.307, p.314, p.316; SPL-004)")
+                .Covers("SPL-004", "SPL-124", "AI-006", "AI-040", "CMB-013", "MM p.307", "MM p.314", "MM p.316", "PHB p.230", "PHB p.231", "PHB p.243", "PHB p.244", "PHB p.275", "PC_NPC_PARITY")
                 .MaxRounds(1)
                 .Npc("dragon", "dragon_red_wyrmling", 10, 10, Control.Scripted)
                 .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 11, 10, Control.Idle)
@@ -6220,6 +6233,8 @@ namespace Tests.Scenarios
                 .Npc("dCold", "target_dummy", 13, 5, Control.Idle)
                 .Npc("dIceDr", "target_dummy", 14, 5, Control.Idle)
                 .Npc("dAcid", "target_dummy", 15, 5, Control.Idle)
+                .Npc("dSwarm", "target_dummy", 16, 5, Control.Idle)
+                .Npc("dSwarmDr", "target_dummy", 17, 5, Control.Idle)
                 .Hp("dLow", 5)
                 .Tweak("hero", c => { c.Stats.AddDamageResistance(DamageType.Fire, 10); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
                 .Tweak("hero2", c => c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"))
@@ -6231,12 +6246,13 @@ namespace Tests.Scenarios
                 .Tweak("dCold", c => { c.Stats.AddDamageImmunity(DamageType.Cold); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
                 .Tweak("dIceDr", c => { c.Stats.AddDamageReduction(10, DamageBypassTag.Magic); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
                 .Tweak("dAcid", c => { c.Stats.AddDamageResistance(DamageType.Acid, 2); c.Stats.Bonuses.Set("scenario:save-tweak", BonusTarget.AllSaves, BonusType.Untyped, -30, "scenario save tweak"); })
-                .Initiative("dragon", "hero2", "hero", "mage", "mouther", "dPlain", "dResist", "dImmune", "dDr", "dLow", "dCold", "dIceDr", "dAcid")
+                .Tweak("dSwarmDr", c => c.Stats.AddDamageReduction(5, DamageBypassTag.Magic))
+                .Initiative("dragon", "hero2", "hero", "mage", "mouther", "dPlain", "dResist", "dImmune", "dDr", "dLow", "dCold", "dIceDr", "dAcid", "dSwarm", "dSwarmDr")
                 .Force(10, 10, "Breath weapon damage", -1)
                 .Script("dragon", BreathAtHeroes)
                 .Turn("hero2", 1,
                     Step.Assert("The breath weapon's fire takes the fighter's fire resistance (MM p.314)", BreathMitigationCheck),
-                    Step.Assert("Spell and special-attack damage takes immunity and resistance and ignores DR (MM p.307)", SpellDamageMitigationChecks))
+                    Step.Assert("Spell and special-attack damage takes immunity and resistance and ignores DR (MM p.307); Insect Plague's swarms take DR (MM p.316)", SpellDamageMitigationChecks))
                 .Expect("The dragon breathed", v =>
                 {
                     TraceEvent n = v.Of("note").FirstOrDefault(e => (e.Str("text") ?? "") == DamageNotePrefix + "breath");
@@ -6340,6 +6356,19 @@ namespace Tests.Scenarios
                     + ", DamageDealt " + (searingResult != null ? searingResult.DamageDealt : -1));
                 ok &= searingHandled && Taken(ctx, "Searing Light handler", "dAcid", before, searingExpected)
                     && searingResult.DamageDealt == searingExpected;
+
+                // Insect Plague (PHB p.244): each swarm deals 2d6 (12 at maximum) as a nonmagical swarm attack, so DR 5/magic
+                // takes 5 (MM p.316; owner interpretation 2026-10-11, SPL-004); before, it was spell damage that ignored DR.
+                SpellData plague = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.INSECT_PLAGUE).Clone();
+                var swarmTargets = new[] { "dSwarm", "dSwarmDr" };
+                before = HpOf(ctx, swarmTargets);
+                args = new object[] { mage, plague, swarmTargets.Select(ctx.Get).ToList(), null, null };
+                System.Reflection.MethodInfo plagueHandler = typeof(GameManager).GetMethod("TryResolveInsectPlagueSpell", flags);
+                handled = plagueHandler != null && (bool)plagueHandler.Invoke(gm, args);
+                ctx.Note(DamageNotePrefix + "Insect Plague handled " + handled);
+                ok &= handled;
+                ok &= Taken(ctx, "Insect Plague", "dSwarm", before, 12);
+                ok &= Taken(ctx, "Insect Plague", "dSwarmDr", before, 7);
 
                 // Warm Fire Shield retribution: 1d6 + CL 5 = 11 fire, no save (PHB p.230).
                 CharacterController shielded = ctx.Get("hero2");

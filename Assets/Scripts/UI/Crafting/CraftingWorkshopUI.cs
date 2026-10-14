@@ -513,7 +513,7 @@ public class CraftingWorkshopUI : MonoBehaviour
             var spell = SpellDatabase.GetSpell(item.DynamicSpellId);
             if (spell != null)
             {
-                _currentProject.ScrollSavedDC = ExplainCrafterScrollDC(spell, null).Total;
+                _currentProject.ScrollSavedDC = CraftedScrollDC(spell, null).Total;
             }
         }
 
@@ -841,8 +841,8 @@ public class CraftingWorkshopUI : MonoBehaviour
         }
 
         // DC calculation differs for scrolls vs wands:
-        // Scrolls: the crafter's own spell DC (SpellSaveDCRules; owner question ITM-008)
-        // Wands: DC = 10 + SL + floor(SL/2) (minimum ability modifier, per DMG p.245)
+        // Scrolls and wands: the magic-item DC, 10 + SL + floor(SL/2) (the minimum ability modifier, DMG p.214; for
+        // scrolls owner ruling 2026-10-11, ITM-008: never the crafter's own DC)
         bool isWandCraft = _selectedItem != null && _selectedItem.RequiredFeat == CraftingFeatType.CraftWand;
         int heightenBonus = (_currentMetamagic.Has(MetamagicFeatId.HeightenSpell)
             && _currentMetamagic.HeightenToLevel > baseLevel)
@@ -862,10 +862,10 @@ public class CraftingWorkshopUI : MonoBehaviour
         }
         else
         {
-            // Scroll DC: the crafter's own spell DC (owner question ITM-008), through the shared rule
-            SpellSaveDCBreakdown crafterDC = ExplainCrafterScrollDC(spell, _currentMetamagic);
-            dc = crafterDC.Total;
-            dcLabel = $"Save DC: {crafterDC}";
+            // Scroll DC: the magic-item DC at the spell's level for the crafter's class (DMG p.214, p.238; ITM-008)
+            SpellSaveDCBreakdown scrollDC = CraftedScrollDC(spell, _currentMetamagic);
+            dc = scrollDC.Total;
+            dcLabel = $"Save DC: {scrollDC}";
         }
         _metamagicDCText.text = dcLabel;
 
@@ -893,13 +893,24 @@ public class CraftingWorkshopUI : MonoBehaviour
     }
 
     /// <summary>
-    /// A crafted scroll's baked DC: the crafter's own spell DC for that spell (class level, key ability, Spell Focus,
-    /// Heighten) through <see cref="SpellSaveDCRules"/>. DMG p.214 gives scrolls the magic-item DC instead; which one a
-    /// crafted scroll should use is the owner question in ITM-008.
+    /// A crafted scroll's baked DC: the magic-item DC of DMG p.214 (10 + the spell level + the minimum ability modifier
+    /// for that level), at the spell's level for the crafter's class or the heightened level, as
+    /// <see cref="CraftingExecutor.CraftedScrollSaveDC"/> bakes it; never the crafter's own DC (owner ruling 2026-10-11,
+    /// ITM-008).
     /// </summary>
-    private SpellSaveDCBreakdown ExplainCrafterScrollDC(SpellData spell, MetamagicData metamagic)
+    private SpellSaveDCBreakdown CraftedScrollDC(SpellData spell, MetamagicData metamagic)
     {
-        return SpellSaveDCRules.Explain(_crafterStats, spell, metamagic);
+        int heightenTo = metamagic != null && metamagic.Has(MetamagicFeatId.HeightenSpell) ? metamagic.HeightenToLevel : -1;
+        int level = CraftingExecutor.CraftedScrollDCLevel(spell, _crafterStats, heightenTo);
+        return new SpellSaveDCBreakdown
+        {
+            Total = CraftingExecutor.CraftedScrollSaveDC(spell, _crafterStats, heightenTo),
+            Source = "item",
+            SpellLevel = level,
+            CastingClass = CraftingExecutor.CraftedScrollClass(spell, _crafterStats),
+            Ability = "min",
+            AbilityModifier = level / 2,
+        };
     }
 
     /// <summary>
@@ -1001,8 +1012,8 @@ public class CraftingWorkshopUI : MonoBehaviour
                 _currentProject.ScrollEffectiveSpellLevel = effLevel;
                 _currentProject.ScrollHeightenToLevel = hasHeighten ? _currentMetamagic.HeightenToLevel : -1;
 
-                // The crafter's DC (ITM-008); only Heighten among the metamagic feats raises it
-                _currentProject.ScrollSavedDC = ExplainCrafterScrollDC(spell, _currentMetamagic).Total;
+                // The magic-item DC (DMG p.214, ITM-008); only Heighten among the metamagic feats raises it
+                _currentProject.ScrollSavedDC = CraftedScrollDC(spell, _currentMetamagic).Total;
 
                 // Recalculate cost using effective spell level
                 int casterLevel = _selectedItem.RequiredCasterLevel;
@@ -1046,7 +1057,7 @@ public class CraftingWorkshopUI : MonoBehaviour
             else
             {
                 _currentProject.ScrollEffectiveSpellLevel = baseLevel;
-                _currentProject.ScrollSavedDC = ExplainCrafterScrollDC(spell, null).Total;
+                _currentProject.ScrollSavedDC = CraftedScrollDC(spell, null).Total;
             }
         }
 

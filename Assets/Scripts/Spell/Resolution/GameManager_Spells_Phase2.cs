@@ -489,7 +489,9 @@ public partial class GameManager
 
         if (isUndead)
         {
-            // Acts like harm (PHB p.239): Will half, and a successful save cannot take the undead below 1 hp.
+            // Acts like harm (PHB p.239): Will half, and a successful save cannot take the undead below 1 hp. Owner
+            // interpretation 2026-10-11 (SPL-037): the 1 hp floor applies only after a successful save, so a failed
+            // save takes the full damage and can destroy the undead.
             bool saved;
             if (castResult != null)
             {
@@ -823,8 +825,8 @@ public partial class GameManager
 
     // ================================================================
     //  ALTER SELF — PHB p.197
-    //  Transmutation. Change form. +2 size STR (or DEX).
-    //  +10 Disguise. Duration: 10 min/level (D).
+    //  Transmutation. Change form; you keep your own ability scores.
+    //  +10 Disguise as a disguise. Duration: 10 min/level (D).
     // ================================================================
 
     private ActiveSpellEffect ApplyAlterSelfEffect(
@@ -850,12 +852,14 @@ public partial class GameManager
         sb.AppendLine("═══════════════════════════════════");
         sb.AppendLine($"🎭 {casterName} casts Alter Self!");
         sb.AppendLine($"  School: Transmutation | Level: 2 | Self");
-        sb.AppendLine($"  +2 size bonus to STR, +10 Disguise check bonus");
+        // PHB p.197: the caster keeps its own ability scores (no +2 Str; owner ruling 2026-10-11, SPL-037). The form's
+        // natural armor, natural weapons, movement and size are not modelled yet (SPL-135), so the effect is tracked only.
+        sb.AppendLine($"  Keeps own ability scores; the new form's traits are not modelled (SPL-135)");
         int dur = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
         sb.AppendLine($"  Duration: {dur} rounds ({SpellDurationRules.DescribeRounds(dur)})");
 
         if (effect != null)
-            sb.AppendLine($"  ✦ {target.Stats.CharacterName}: +2 size STR, altered form");
+            sb.AppendLine($"  ✦ {target.Stats.CharacterName}: altered form");
         else
             sb.AppendLine($"  ✦ Effect already active (stacking prevented)");
 

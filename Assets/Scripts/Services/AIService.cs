@@ -2668,6 +2668,7 @@ public class AIService : MonoBehaviour
         {
             SpellData spell = castable[i];
             if (spell == null || spell.SpellLevel >= maxLevel) continue;
+            if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell)) continue; // SPL-135
 
             float score = AISpellcastingStrategist.ScoreSpellComprehensive(
                 spell, caster, target, allCombatants, _gameManager);
@@ -2763,6 +2764,10 @@ public class AIService : MonoBehaviour
         {
             SpellData spell = castable[i];
             if (spell == null)
+                continue;
+
+            // A cast with no modelled effect wastes the action (Alter Self, SPL-135).
+            if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell))
                 continue;
 
             // ── Buff-already-active check ──

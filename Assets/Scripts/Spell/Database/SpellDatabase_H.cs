@@ -538,7 +538,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.HEAL,
                     Name = "Heal",
-                    Description = "Conjuration (Healing). Heals 10 HP/CL (max 150). Cures: ability damage, blinded, confused, dazed, dazzled, deafened, diseased, exhausted, fatigued, feebleminded, insanity, nauseated, sickened, stunned, poisoned. Does NOT cure negative levels. No effect on undead (use Harm). PHB p.239",
+                    Description = "Conjuration (Healing). Heals 10 HP/CL (max 150). Cures: ability damage, blinded, confused, dazed, dazzled, deafened, diseased, exhausted, fatigued, feebleminded, insanity, nauseated, sickened, stunned, poisoned. Does NOT cure negative levels. Against an undead creature it acts like harm: 10 damage/CL (max 150), Will half, and a successful save cannot take it below 1 hp. PHB p.239",
                     SpellLevel = 6, School = "Conjuration",
                     ClassList = new[] { "Cleric", "Druid" },
                     TargetType = SpellTargetType.SingleAlly,

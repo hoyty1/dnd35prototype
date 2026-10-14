@@ -167,7 +167,7 @@ Everything else goes through `TryApplySpellConsumableEffect`, which affects only
 Known deviations (details in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)):
 
 - On a healing wand (`HealHP`), the healing roll happens before `WandValidator` and the UMD check run. A failed check still heals and spends no charge.
-- Scrolls and wands use the DMG item DC, 10 + SL + SL/2 (`SpellSaveDCRules.ForMagicItem`, DMG p.214, since 2026-10-09) at the level on the item's arcane or divine list (prices still use the lowest level on any list, ITM-074), but scrolls crafted in the workshop bake in the crafter's own DC through the shared rule (ITM-008, owner question).
+- Scrolls and wands use the DMG item DC, 10 + SL + SL/2 (`SpellSaveDCRules.ForMagicItem`, DMG p.214, since 2026-10-09) at the level on the item's arcane or divine list (prices still use the lowest level on any list, ITM-074). Scrolls crafted in the workshop bake the item DC too (`CraftingExecutor.CraftedScrollSaveDC`, which the workshop label shows; heightened scrolls at the heightened level), never the crafter's own DC (owner ruling 2026-10-11, ITM-008); the crafted scroll's type and DC level follow the scribe's class (`CraftingExecutor.CraftedScrollClass`, DMG p.238-239: a wizard's Hold Person scroll is arcane at DC 14, a cleric's divine at DC 13), but its price and minimum caster level still use the template level (ITM-079).
 - Crafted potions cannot be used (see [Crafting](#crafting)).
 
 ## Enchantments and materials

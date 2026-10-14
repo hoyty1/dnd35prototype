@@ -155,16 +155,14 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.ALTER_SELF,
                     Name = "Alter Self",
-                    Description = "Transmutation. Assume form of a Small or Medium creature of your type. Gain +2 size bonus to STR (if larger form) or +2 size bonus to DEX (if smaller form). Gain natural attacks of new form. Do NOT gain extraordinary special attacks/qualities. +10 circumstance bonus to Disguise. Duration: 10 min/level (D). PHB p.197",
+                    Description = "Transmutation. Assume the form of a creature of your type within one size category of yours (max HD = caster level, 5 at most). You keep your own ability scores; you gain the form's size, natural armor, natural weapons and mundane movement, not its supernatural or spell-like abilities. +10 bonus on Disguise checks when used as a disguise. Duration: 10 min/level (D). PHB p.197",
                     SpellLevel = 2, School = "Transmutation",
                     ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffStatName = "STR",
-                    BuffStatBonus = 2, // Size bonus to STR (simplified — could be DEX if smaller)
-                    BuffBonusType = BonusType.Size,
-                    BonusTypeExplicitlySet = true,
+                    // No ability bonus: "You retain your own ability scores" (PHB p.197; the +2 Str the data gave was
+                    // removed by the owner ruling of 2026-10-11, SPL-037). The form's traits are not modelled (SPL-135).
                     DurationType = DurationType.Minutes,
                     DurationValue = 10,
                     DurationScalesWithLevel = true,

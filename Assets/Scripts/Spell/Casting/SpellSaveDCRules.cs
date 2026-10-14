@@ -317,6 +317,29 @@ public static class SpellSaveDCRules
         return best >= 0 ? best : spell.SpellLevel;
     }
 
+    /// <summary>True for the arcane casting classes (wizard, sorcerer, bard; PHB p.177): their scrolls are arcane (DMG p.238).</summary>
+    public static bool IsArcaneClass(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return false;
+        for (int i = 0; i < ArcaneItemClasses.Length; i++)
+            if (string.Equals(ArcaneItemClasses[i], className.Trim(), StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// The spell's level for <paramref name="className"/>: its class list level (Sor/Wiz share one list), else the
+    /// lowest domain level recorded for that class, else -1 (the class cannot cast it).
+    /// </summary>
+    public static int GetClassSpellLevel(SpellData spell, string className)
+    {
+        if (spell == null || string.IsNullOrWhiteSpace(className))
+            return -1;
+        int level = GetClassListLevel(spell, className);
+        return level >= 0 ? level : GetDomainLevel(spell, className);
+    }
+
     // ════════════════════════════════════════════════════════════
     //  Helpers
     // ════════════════════════════════════════════════════════════
