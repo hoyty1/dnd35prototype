@@ -67,6 +67,6 @@ public class WarriorClass : ICharacterClass
     public static bool HasBonusFeat(int level) => level >= 1;
 
     // Weapon and armor proficiency (all simple and martial weapons, all armor and shields; DMG p.109) lives in the
-    // CharacterStats class tables (HasSimpleWeaponProficiency and the rest, CHR-072). Tower shields are not granted
-    // pending an owner ruling (CHR-072).
+    // CharacterStats class tables (HasSimpleWeaponProficiency and the rest, CHR-072). "Shields" excludes tower shields
+    // (owner interpretation 2026-10-11, CHR-072; PHB p.101 Tower Shield Proficiency).
 }

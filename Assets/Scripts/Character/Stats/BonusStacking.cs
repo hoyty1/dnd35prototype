@@ -66,18 +66,19 @@ public struct TypedBonus
 /// <list type="number">
 /// <item>Modifiers from the same source do not stack: of one source, only the best bonus and the worst penalty apply
 /// (two Bless spells give +1, two Divine Favors the better one).</item>
-/// <item>Bonuses of the same type do not stack: only the highest applies. Exceptions: dodge bonuses stack, circumstance
-/// bonuses stack unless they arise from the same circumstance (the same source), and bonuses without a type stack with
-/// every bonus unless they come from the same source (<see cref="BonusTypeHelper.DoesStack"/>). Luck, morale,
+/// <item>Bonuses of the same type do not stack: only the highest applies. Exceptions: dodge and racial bonuses stack
+/// (PHB p.171; racial: owner interpretation 2026-10-11, CHR-019), circumstance bonuses stack unless they arise from the
+/// same circumstance (the same source), and bonuses without a type stack with every bonus unless they come from the
+/// same source (<see cref="BonusTypeHelper.DoesStack"/>). Luck, morale,
 /// enhancement, insight, sacred, profane, resistance, competence, deflection and the other named types never stack with
 /// themselves.</item>
 /// <item>Penalties follow the same principle (PHB p.171: "a character taking two or more penalties of the same type
-/// applies only the worst one"; glossary "modifier"): typed penalties of one type, only the worst; untyped, dodge and
-/// circumstance penalties from different sources add up.</item>
+/// applies only the worst one"; glossary "modifier"): typed penalties of one type, only the worst; untyped, dodge,
+/// racial and circumstance penalties from different sources add up.</item>
 /// <item>Bonuses and penalties of different types always stack, and a bonus and a penalty of the same type both apply.</item>
 /// </list>
-/// Racial bonuses follow <see cref="BonusTypeHelper.DoesStack"/> (they do not stack); whether PHB p.171 (racial
-/// bonuses stack) or DMG p.21 governs is an open owner question (CHR-019).
+/// For racial bonuses DMG p.21 states only the general rule, and the PHB p.171 text governs (owner interpretation
+/// 2026-10-11, CHR-019).
 /// </summary>
 public static class BonusStacking
 {

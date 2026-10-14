@@ -2312,10 +2312,10 @@ public partial class GameManager
         if (!isRanged)
         {
             int strMod = CharacterStats.GetModifier(attacker.Stats.STR);
-            // Two-handed weapons get 1.5x STR
+            // Two-handed weapons get 1-1/2 times a STR bonus; a penalty applies in full (PHB p.113-114; CMB-161)
             bool isTwoHanded = weapon != null && weapon.IsTwoHanded;
             if (isTwoHanded)
-                damage += Mathf.FloorToInt(strMod * 1.5f);
+                damage += CombatCalculationService.TwoHandedStrDamage(strMod);
             else
                 damage += strMod;
         }

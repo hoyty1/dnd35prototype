@@ -2450,14 +2450,17 @@ public static class GrappleDamageRulesTests
     {
         // MM p.312 natural weapon types, by name: bite B/P/S, claw and talon P/S, gore P, slap and slam B,
         // sting P, tentacle B; the MM dragon wing is a slam (MM p.68); an unarmed strike is B (PHB p.116).
-        // Sunder needs slashing or bludgeoning (PHB p.158; owner ruling 2026-10-08, CMB-102).
+        // Sunder needs slashing or bludgeoning (PHB p.158; owner ruling 2026-10-08, CMB-102). Names the list does
+        // not cover (owner interpretation 2026-10-11, CMB-138): hoof and head butt B, quills P, snakes as a bite,
+        // chain S.
         const DamageBypassTag B = DamageBypassTag.Bludgeoning, P = DamageBypassTag.Piercing, S = DamageBypassTag.Slashing;
         var expected = new (string name, DamageBypassTag types)[]
         {
             ("Bite", B | P | S), ("Bite (lion)", B | P | S), ("Claw", P | S), ("Claws", P | S), ("Foreclaw", P | S), ("Talons", P | S),
             ("Rake", P | S), ("Gore", P), ("Gore (goat)", P), ("Horn", P), ("Sting", P), ("Slam", B), ("Tail Slap", B),
             ("Tentacle", B), ("Tentacles", B), ("Wing", B), ("Unarmed Strike", B),
-            ("Hoof", DamageBypassTag.None), ("Incorporeal Touch", DamageBypassTag.None), (null, DamageBypassTag.None)
+            ("Hoof", B), ("Hooves", B), ("Head butt", B), ("Quills", P), ("Snakes", B | P | S), ("Chain", S),
+            ("Incorporeal Touch", DamageBypassTag.None), ("Light Ray", DamageBypassTag.None), (null, DamageBypassTag.None)
         };
         var wrong = new System.Collections.Generic.List<string>();
         foreach (var e in expected)
@@ -2466,13 +2469,14 @@ public static class GrappleDamageRulesTests
             if (actual != e.types)
                 wrong.Add($"{e.name ?? "<null>"}={actual}");
         }
-        Assert(wrong.Count == 0, "Natural attack damage types by name follow MM p.312" + (wrong.Count > 0 ? ": wrong " + string.Join(", ", wrong) : string.Empty));
+        Assert(wrong.Count == 0, "Natural attack damage types by name follow MM p.312 and the CMB-138 owner interpretation" + (wrong.Count > 0 ? ": wrong " + string.Join(", ", wrong) : string.Empty));
 
         Assert(NaturalAttackNamedCanSunder("Bite") && NaturalAttackNamedCanSunder("Claw") && NaturalAttackNamedCanSunder("Slam")
             && NaturalAttackNamedCanSunder("Tentacle") && NaturalAttackNamedCanSunder("Tail Slap")
             && !NaturalAttackNamedCanSunder("Gore") && !NaturalAttackNamedCanSunder("Sting") && !NaturalAttackNamedCanSunder("Horn")
-            && !NaturalAttackNamedCanSunder("Hoof"),
-            "Bites, claws, slams and tentacles can sunder; gores, stings and other piercing-only attacks cannot (PHB p.158)");
+            && NaturalAttackNamedCanSunder("Hoof") && NaturalAttackNamedCanSunder("Head butt") && NaturalAttackNamedCanSunder("Chain")
+            && NaturalAttackNamedCanSunder("Snakes") && !NaturalAttackNamedCanSunder("Quills"),
+            "Bites, claws, slams, tentacles, hooves, head butts, snakes and chains can sunder; gores, stings, quills and other piercing-only attacks cannot (PHB p.158; CMB-138)");
         Assert(new NaturalAttackDefinition { Name = "Unarmed Strike" }.IsUnarmedStrike && NaturalAttackNamedCanSunder("Unarmed Strike")
             && !new NaturalAttackDefinition { Name = "Slam" }.IsUnarmedStrike,
             "An 'Unarmed Strike' natural attack (the NPC monks) is bludgeoning and may sunder, as a PC's unarmed strike may (owner interpretation 2026-10-11, CMB-141)");
@@ -2489,12 +2493,10 @@ public static class GrappleDamageRulesTests
             && gnoll != null && gnoll.NaturalAttacks.Count > 0 && gnoll.NaturalAttacks[0].GetPhysicalDamageTypes() == S,
             "The weapon stand-ins in the data carry their weapon's types (bugbear morningstar B/P, gnoll battleaxe S; PHB p.116)");
 
-        // Every damaging natural attack in the creature data is classified, except the names filed under
-        // CMB-138 (no MM p.312 type: the owner classifies them) and the touches and rays that deal no
-        // physical damage.
+        // Every damaging natural attack in the creature data is classified (MM p.312, the MM entry, or the CMB-138
+        // owner interpretation 2026-10-11), except the touches and rays that deal no physical damage.
         var allowedUnclassified = new System.Collections.Generic.HashSet<string>
         {
-            "Hoof", "Head butt", "Quills", "Snakes", "Chain",
             "Incorporeal Touch", "Paralyzing Touch", "Light Ray", "Shock"
         };
         var unexpected = new System.Collections.Generic.SortedSet<string>();
@@ -2510,7 +2512,7 @@ public static class GrappleDamageRulesTests
                     unexpected.Add($"{def.Id}:{natural.Name}");
             }
         }
-        Assert(unexpected.Count == 0, "Every damaging natural attack in the data has a damage type or is filed under CMB-138"
+        Assert(unexpected.Count == 0, "Every damaging natural attack in the data has a damage type (MM p.312; CMB-138)"
             + (unexpected.Count > 0 ? ": " + string.Join(", ", unexpected) : string.Empty));
     }
 

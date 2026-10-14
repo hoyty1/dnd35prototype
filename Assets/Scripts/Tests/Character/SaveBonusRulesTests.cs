@@ -201,7 +201,7 @@ public static class SaveBonusRulesTests
         AssertEq(SaveRules.Modifier(d, SavingThrowType.Will, SaveContext.ForSpellId(SpellNames.HOLD_PERSON)), d.WillSave + 2,
             "Dwarf: +2 against spells");
         AssertEq(SaveRules.Modifier(d, SavingThrowType.Fortitude, SaveContext.ForSpellId(SpellNames.POISON)), d.FortitudeSave + 4,
-            "Dwarf: the Poison spell gives +4 (spell +2 and poison +2; PHB p.171 lets racial bonuses stack; DMG p.21 reads otherwise, owner question in CHR-019)");
+            "Dwarf: the Poison spell gives +4 (spell +2 and poison +2; PHB p.171 lets racial bonuses stack; owner interpretation 2026-10-11, CHR-019)");
     }
 
     private static void TestElfAndHalfElf()

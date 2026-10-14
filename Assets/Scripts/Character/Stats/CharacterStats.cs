@@ -54,7 +54,8 @@ public class NaturalAttackDefinition
     /// Physical damage types this natural attack deals, as the Bludgeoning, Piercing and Slashing flags
     /// of <see cref="DamageBypassTag"/>. None (the default) means "by the attack's name", per the MM p.312
     /// list (<see cref="GetDefaultPhysicalDamageTypes"/>); set it for an attack that list does not name.
-    /// Read through <see cref="GetPhysicalDamageTypes"/>. Today only sunder reads it (CMB-102).
+    /// Read through <see cref="GetPhysicalDamageTypes"/> by sunder (CMB-102) and the Improved Grab grapple damage
+    /// packet (CMB-148); the attack path still deals bludgeoning (CMB-140).
     /// </summary>
     public DamageBypassTag PhysicalDamageTypes = DamageBypassTag.None;
 
@@ -132,10 +133,12 @@ public class NaturalAttackDefinition
     /// piercing (an antler or horn, so "horn" too); slap or slam bludgeoning (a tail slap too); sting piercing;
     /// tentacle bludgeoning. The MM dragon entry (p.68) describes a wing attack as a slam, so "wing" is
     /// bludgeoning, and an unarmed strike is bludgeoning (PHB p.116 Table 7-5; it sunders as a light weapon,
-    /// <see cref="IsUnarmedStrike"/>). Matched case-insensitively on
-    /// the name without a parenthetical ("Bite (lion)"). Any other name returns None: touches, rays and other
-    /// attacks that deal no physical damage, and names the list does not cover (filed as CMB-138; set
-    /// <see cref="PhysicalDamageTypes"/> in the data once the owner classifies them).
+    /// <see cref="IsUnarmedStrike"/>). Names the MM p.312 list does not cover, where the creature's MM entry gives no
+    /// type either (owner interpretation 2026-10-11, CMB-138): a hoof and a head butt are bludgeoning, quills
+    /// piercing, a snake attack (the medusa's snakes) is a bite (bludgeoning, piercing and slashing), and a chain
+    /// (the chain devil's) slashing. A creature whose MM entry states a type sets <see cref="PhysicalDamageTypes"/>
+    /// in the data. Matched case-insensitively on the name without a parenthetical ("Bite (lion)"). Any other name
+    /// returns None: touches, rays and other attacks that deal no physical damage.
     /// </summary>
     public static DamageBypassTag GetDefaultPhysicalDamageTypes(string attackName)
     {
@@ -153,9 +156,25 @@ public class NaturalAttackDefinition
             || name == "wing" || name == "wings" || name == "unarmed strike")
             return DamageBypassTag.Bludgeoning;
 
+        // Owner interpretation 2026-10-11 (CMB-138): names the MM p.312 list does not cover.
+        if (name == "hoof" || name == "hooves" || name == "head butt" || name == "headbutt")
+            return DamageBypassTag.Bludgeoning;
+        if (name == "quill" || name == "quills")
+            return DamageBypassTag.Piercing;
+        if (name == "snake" || name == "snakes")
+            return DamageBypassTag.Bludgeoning | DamageBypassTag.Piercing | DamageBypassTag.Slashing;
+        if (name == "chain" || name == "chains")
+            return DamageBypassTag.Slashing;
+
         return DamageBypassTag.None;
     }
 
+    /// <summary>
+    /// This attack's Strength share of damage (MM p.312): the full modifier, 1/2 the bonus for a secondary attack, 1-1/2
+    /// times the bonus for a sole natural attack, rounded down. A Strength penalty is never halved or multiplied: it
+    /// applies in full, as on a weapon's off-hand or two-handed damage (PHB p.113-114, p.134; owner interpretation
+    /// 2026-10-11, CMB-161; the same helper as <see cref="CharacterStats.GetWeaponDamageModifier"/>).
+    /// </summary>
     public int GetDamageBonus(int strengthModifier)
     {
         switch (BonusDamageSource)
@@ -163,9 +182,9 @@ public class NaturalAttackDefinition
             case DamageBonusSource.Strength:
                 return strengthModifier;
             case DamageBonusSource.StrengthHalf:
-                return Mathf.FloorToInt(strengthModifier * 0.5f);
+                return CombatCalculationService.ApplyStrDamageMultiplier(strengthModifier, 0.5f);
             case DamageBonusSource.StrengthOneAndHalf:
-                return Mathf.FloorToInt(strengthModifier * 1.5f);
+                return CombatCalculationService.ApplyStrDamageMultiplier(strengthModifier, 1.5f);
             case DamageBonusSource.None:
             default:
                 return 0;
@@ -5748,8 +5767,9 @@ public class CharacterStats
     // paladin and the ranger have shields except tower shields, p.44, p.47; the sorcerer's list is CHR-075). NPC classes (DMG p.108-109, CHR-072): the
     // warrior and the aristocrat are proficient with all simple and martial weapons, all armor and shields; the adept
     // with simple weapons only; the expert with simple weapons and light armor, not shields; the commoner with one
-    // simple weapon (the one its entry carries, through ExtraWeaponProficiencies) and no armor. Whether the NPC
-    // classes' "shields" include tower shields is an open owner question (CHR-072), so they are not granted.
+    // simple weapon (the one its entry carries, through ExtraWeaponProficiencies) and no armor. "Shields" in the NPC
+    // class and creature type entries excludes tower shields, which are a separate proficiency (PHB p.101 Tower Shield
+    // Proficiency needs Shield Proficiency; owner interpretation 2026-10-11, CHR-072): only the fighter has them.
     private static readonly string[] SimpleWeaponClasses = { "Barbarian", "Bard", "Cleric", "Fighter", "Paladin", "Ranger", "Rogue", "Warrior", "Aristocrat", "Adept", "Expert" };
     private static readonly string[] MartialWeaponClasses = { "Barbarian", "Fighter", "Paladin", "Ranger", "Warrior", "Aristocrat" };
     private static readonly string[] LightArmorClasses = { "Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Paladin", "Ranger", "Rogue", "Warrior", "Aristocrat", "Expert" };
@@ -5820,7 +5840,10 @@ public class CharacterStats
         return CreatureShieldProficiency || HasAnyClass(ShieldClasses);
     }
 
-    /// <summary>Armor proficiency: tower shield (class only).</summary>
+    /// <summary>
+    /// Armor proficiency: tower shield, from a class that names it (the fighter, PHB p.38). An NPC class's or creature
+    /// type's "shields" does not include it (owner interpretation 2026-10-11, CHR-072; PHB p.101).
+    /// </summary>
     public bool HasTowerShieldProficiency()
     {
         return HasAnyClass(TowerShieldClasses);
@@ -6634,18 +6657,12 @@ public class CharacterStats
     // ========== DAMAGE MODIFIER HELPERS (D&D 3.5) ==========
 
     /// <summary>
-    /// Apply a Strength damage multiplier according to D&D 3.5 rules.
-    /// Bonuses are multiplied and rounded down; penalties are never multiplied.
+    /// Apply a Strength damage multiplier: a bonus is multiplied and rounded down, a penalty applies in full (PHB
+    /// p.113-114, p.134; owner interpretation 2026-10-11, CMB-161). Natural attacks use the same helper
+    /// (<see cref="NaturalAttackDefinition.GetDamageBonus"/>).
     /// </summary>
     private static int ApplyStrengthDamageMultiplier(int strengthMod, float multiplier)
-    {
-        if (strengthMod <= 0)
-        {
-            return strengthMod;
-        }
-
-        return Mathf.FloorToInt(strengthMod * multiplier);
-    }
+        => CombatCalculationService.ApplyStrDamageMultiplier(strengthMod, multiplier);
 
     /// <summary>
     /// Calculate the STR-based damage bonus for a weapon based on its DamageModifierType.
@@ -6696,7 +6713,8 @@ public class CharacterStats
 
     /// <summary>
     /// Get a descriptive string for the damage modifier type applied by a weapon.
-    /// Used in combat log display.
+    /// Used in combat log display. A Strength penalty is never halved or multiplied (CMB-161), so with a penalty the
+    /// off-hand and two-handed shares read plain "STR".
     /// </summary>
     /// <param name="weapon">The weapon being used</param>
     /// <param name="isOffHand">True if off-hand attack</param>
@@ -6705,7 +6723,8 @@ public class CharacterStats
         if (weapon != null && (weapon.NoStrengthToDamage || weapon.HasSpecialProperty("no_str_damage")))
             return "no STR modifier";
 
-        if (isOffHand) return "0.5× STR";
+        bool strPenalty = STRMod < 0;
+        if (isOffHand) return strPenalty ? "STR" : "0.5× STR";
 
         if (weapon == null) return "STR";
 
@@ -6717,9 +6736,9 @@ public class CharacterStats
                 if (weapon.IsThrown) return "thrown, STR";
                 return "STR";
             case DamageModifierType.StrengthOneAndHalf:
-                return "1.5× STR";
+                return strPenalty ? "STR" : "1.5× STR";
             case DamageModifierType.StrengthHalf:
-                return "0.5× STR";
+                return strPenalty ? "STR" : "0.5× STR";
             case DamageModifierType.Composite:
                 return $"composite +{weapon.CompositeRating}";
             default:

@@ -241,7 +241,14 @@ public static class RacialTraitRulesTests
 
             AssertEq(halfling.BuildAttackBonus(ogre, sling, true, null, false, 0, 1, false).RacialBonus, 1, "Halfling sling +1");
             AssertEq(halfling.BuildAttackBonus(ogre, dagger, true, null, false, 0, 1, false).RacialBonus, 1, "Halfling thrown dagger +1");
-            AssertEq(halfling.BuildAttackBonus(ogre, dagger, false, null, false, 0, 1, false).RacialBonus, 0, "Halfling dagger in melee +0");
+            AssertEq(halfling.BuildAttackBonus(ogre, dagger, false, null, false, 0, 1, false).RacialBonus, 0,
+                "Halfling dagger in melee +0: the bonus needs the weapon to be thrown (owner interpretation 2026-10-11, CHR-019)");
+            // The same rule for an NPC halfling (PC/NPC parity): +1 with a sling or a thrown dagger, +0 with the dagger in melee.
+            CharacterController halflingNpc = Controller(Npc("halfling_warrior"), made);
+            AssertEq(halflingNpc.BuildAttackBonus(ogre, sling, true, null, false, 0, 1, false).RacialBonus, 1, "halfling_warrior sling +1");
+            AssertEq(halflingNpc.BuildAttackBonus(ogre, dagger, true, null, false, 0, 1, false).RacialBonus, 1, "halfling_warrior thrown dagger +1");
+            AssertEq(halflingNpc.BuildAttackBonus(ogre, dagger, false, null, false, 0, 1, false).RacialBonus, 0,
+                "halfling_warrior dagger in melee +0 (owner interpretation 2026-10-11, CHR-019)");
             AssertEq(halfling.BuildAttackBonus(ogre, longbow, true, null, false, 0, 1, false).RacialBonus, 0, "Halfling longbow +0");
             AssertEq(human.BuildAttackBonus(ogre, sling, true, null, false, 0, 1, false).RacialBonus, 0, "Human sling +0");
             AssertEq(dwarf.BuildAttackBonus(orc, longsword, false, null, false, 0, 1, false).RacialBonus, 1, "Dwarf longsword vs orc +1 in the attack builder");

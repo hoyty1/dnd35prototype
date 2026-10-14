@@ -259,6 +259,7 @@ namespace Tests.Scenarios
             yield return S("spell-buff-dispatch", SpellBuffDispatch);
             yield return S("weapon-damage-modifier", WeaponDamageModifier);
             yield return S("critical-damage", CriticalDamage);
+            yield return S("strength-penalty-damage", StrengthPenaltyDamage);
             yield return S("condition-duration-turn-relative", ConditionDurationTurnRelative);
             yield return S("racial-traits", RacialTraits);
             yield return S("bonus-stacking", BonusStackingScenario);
@@ -6719,6 +6720,83 @@ namespace Tests.Scenarios
 
         private const string WeaponDamageNotePrefix = "cmb003 ";
 
+        // ── Strength penalty on damage (CMB-161) ──
+
+        /// <summary>
+        /// CMB-161 (owner interpretation 2026-10-11): a Strength penalty always applies in full to damage (PHB p.113-114,
+        /// p.134); only a bonus is halved for an off-hand or secondary attack or multiplied for a two-handed or sole natural
+        /// attack (MM p.312). Every actor has STR 6 (-2) and every d20 rolls a natural 20, so every attack hits (and
+        /// confirms; the expectation reads the per-roll modifier). "weak" (a Ui fighter, the PC Attack button) swings a
+        /// greatsword two-handed: -2, not 1-1/2 x -2 = -3. The wolf (NPC path, its one bite at 1-1/2 x STR, MM p.283):
+        /// -2, not -3. The black bear (NPC path, two primary claws and a secondary bite at 1/2 STR, MM p.269): -2 on every
+        /// attack, not -1 on the bite. Before the fix the natural attacks scaled the penalty (-3 on the wolf's bite, -1 on
+        /// the bear's bite).
+        /// </summary>
+        private static ScenarioDef StrengthPenaltyDamage()
+        {
+            return Rules("rules/strength-penalty-damage", "A Strength penalty applies in full to two-handed, sole natural and secondary natural attacks, PC and NPC (PHB p.113-114; MM p.312; CMB-161)")
+                .Covers("CMB-161", "PHB p.113", "PHB p.114", "PHB p.134", "MM p.312", "MM p.283", "MM p.269", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("weak", ActorSource.Stats(() => WeakFighter("Weakling")), 3, 3, Control.Ui)
+                .Pc("p1", ActorSource.Stats(() => Fighter("Target1", 3)), 13, 3, Control.Scripted)
+                .Pc("p2", ActorSource.Stats(() => Fighter("Target2", 3)), 13, 8, Control.Scripted)
+                .Npc("d1", "target_dummy", 4, 3, Control.Idle)
+                .Npc("bear", "black_bear", 12, 3, Control.Scripted)
+                .Npc("wolf", "wolf", 12, 8, Control.Scripted)
+                .Tweak("weak", EquipGreatsword)
+                .Tweak("p1", UnarmoredSturdyDummy)
+                .Tweak("p2", UnarmoredSturdyDummy)
+                .Tweak("d1", SturdyDummy)
+                .Tweak("bear", WeakenToStr6)
+                .Tweak("wolf", WeakenToStr6)
+                .Force(20, 20, null, -1)
+                .Initiative("weak", "bear", "wolf", "p1", "p2", "d1")
+                .Turn("weak", 1, Step.Assert("The weak fighter has STR 6 and a plain greatsword", ctx => StrengthIs(ctx, "weak", 6) && PlainWeapon(ctx, "weak", "Greatsword")), Step.Attack("d1"))
+                .Turn("bear", 1, Step.Assert("The black bear has STR 6", ctx => StrengthIs(ctx, "bear", 6)), Step.Attack("p1"))
+                .Turn("wolf", 1, Step.Assert("The wolf has STR 6", ctx => StrengthIs(ctx, "wolf", 6)), Step.Attack("p2"))
+                .Turn("p1", 1, Step.Pass())
+                .Turn("p2", 1, Step.Pass())
+                .Expect("Every setup check holds", Expect.AssertsPass())
+                .Expect("PC Attack button: greatsword two-handed at STR 6 adds -2, not -3, listed as plain STR (PHB p.113-114)",
+                    WeaponDamageTerms("weak", -2, "STR:-2"))
+                .Expect("NPC wolf: its sole bite at STR 6 adds -2, not -3, listed as plain STR (MM p.312; CMB-161)",
+                    WeaponDamageTerms("wolf", -2, "STR:-2"))
+                .Expect("NPC black bear: claws and the secondary bite at STR 6 all add -2, the bite not -1 (MM p.312; CMB-161)",
+                    WeaponDamageTerms("bear", -2, "STR:-2"))
+                .Expect("NPC black bear: the full attack hits with both claws (1d4) and the secondary bite (1d6), the bite at -2 (MM p.269; CMB-161)",
+                    HitsByDice("bear", -2, ("1d4", 2), ("1d6", 1)))
+                .Build();
+        }
+
+        /// <summary><see cref="Fighter"/> with STR 6 (-2).</summary>
+        private static CharacterStats WeakFighter(string name)
+        {
+            CharacterStats s = Fighter(name, 3);
+            s.STR = 6;
+            return s;
+        }
+
+        /// <summary>Removes the Fighter kit's off-hand items and wields a plain greatsword in both hands.</summary>
+        private static void EquipGreatsword(CharacterController c)
+        {
+            StripOffHand(c);
+            InventoryComponent inv = c.GetComponent<InventoryComponent>();
+            if (inv == null || inv.CharacterInventory == null)
+                return;
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(DND35e.Identifiers.ItemID.WeaponGreatsword), EquipSlot.RightHand);
+            inv.CharacterInventory.RecalculateStats();
+        }
+
+        /// <summary>Sets the creature's Strength to 6 (-2), so every damage roll carries a Strength penalty.</summary>
+        private static void WeakenToStr6(CharacterController c) => c.Stats.STR = 6;
+
+        private static bool StrengthIs(ScenarioContext ctx, string key, int str)
+        {
+            CharacterStats s = ctx.Get(key).Stats;
+            ctx.Note(WeaponDamageNotePrefix + key + " STR " + s.STR + " (mod " + s.STRMod + ")");
+            return s.STR == str && s.STRMod == -2;
+        }
+
         // ── Critical damage (CMB-004) ───────────────────────────────────
 
         /// <summary>
@@ -7334,6 +7412,32 @@ namespace Tests.Scenarios
         /// the critical multiplier on a confirmed critical, else 1; CMB-004), and damage dealt = weapon damage.
         /// Inconclusive when it never hit.
         /// </summary>
+        /// <summary>
+        /// Passes when <paramref name="attacker"/> hit at least the given number of times with each damage dice string (the
+        /// trace's "dice", e.g. "1d6" for a black bear's bite), each such hit adding <paramref name="wantMod"/>. Tells the
+        /// attacks of one natural sequence apart by their dice, since their trace weapon names do not.
+        /// </summary>
+        private static Func<TraceView, ExpectResult> HitsByDice(string attacker, int wantMod, params (string dice, int minHits)[] want)
+        {
+            return v =>
+            {
+                List<TraceEvent> hits = v.Attacks(attacker).Where(e => e.Bool("hit")).ToList();
+                if (hits.Count == 0)
+                    return ExpectResult.Inconclusive(attacker + " never hit");
+                string seen = string.Join(", ", hits.Select(h => h.Str("dice") + " " + h.Int("dmgMod", int.MinValue)));
+                foreach ((string dice, int minHits) in want)
+                {
+                    List<TraceEvent> withDice = hits.Where(h => h.Str("dice") == dice).ToList();
+                    if (withDice.Count < minHits)
+                        return ExpectResult.Fail(withDice.Count + " " + dice + " hit(s), expected at least " + minHits + " [" + seen + "]", hits[0].Seq);
+                    TraceEvent wrong = withDice.FirstOrDefault(h => h.Int("dmgMod", int.MinValue) != wantMod);
+                    if (wrong != null)
+                        return ExpectResult.Fail(dice + " hit added " + wrong.Int("dmgMod", int.MinValue) + ", expected " + wantMod + " [" + seen + "]", wrong.Seq);
+                }
+                return ExpectResult.Pass(hits.Count + " hit(s): " + seen, hits[0].Seq);
+            };
+        }
+
         private static Func<TraceView, ExpectResult> WeaponDamageTerms(string attacker, int wantMod, params string[] wantTerms)
         {
             return v =>

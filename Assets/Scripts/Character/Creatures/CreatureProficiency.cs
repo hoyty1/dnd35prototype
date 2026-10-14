@@ -25,7 +25,7 @@ using System.Collections.Generic;
 ///   A real commoner is proficient with one simple weapon (DMG p.109): the first simple weapon it carries.
 /// - Armor. Aberration, elemental, fey, giant, humanoid whose levels are racial HD, monstrous humanoid, outsider,
 ///   shapechanger and undead: the armor the entry describes it wearing and all lighter types, and shields when
-///   proficient with any armor. Animal (unless trained for war, not modelled: no creature wears barding), construct,
+///   proficient with any armor, tower shields excluded (owner interpretation 2026-10-11, CHR-072; PHB p.101). Animal (unless trained for war, not modelled: no creature wears barding), construct,
 ///   dragon, magical beast, ooze, plant and vermin: none. A humanoid with real class levels gets armor by class. The worn
 ///   armor is read from the definition, so a data error in its gear becomes a proficiency (hound_archon's full plate,
 ///   CRE-053).

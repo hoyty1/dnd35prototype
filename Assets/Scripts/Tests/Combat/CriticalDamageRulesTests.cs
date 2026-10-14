@@ -43,6 +43,7 @@ public static class CriticalDamageRulesTests
         TestCoupDeGraceMultipliesWeaponNotSneak();
         TestCoupDeGraceAddsRidersOnceLikeAnAttack();
         TestCoupDeGraceAgainstFortification();
+        TestCoupDeGraceAddsNoPowerAttack();
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -214,6 +215,42 @@ public static class CriticalDamageRulesTests
         {
             ScenarioHooks.RollFilter = saved;
             Cleanup(a, t);
+        }
+    }
+
+    // CMB-160 (owner interpretation 2026-10-11): Power Attack trades an attack roll penalty for damage (PHB p.98) and a
+    // coup de grace makes no attack roll (PHB p.153), so it adds nothing. The same greataxe as above with Power Attack 2
+    // set for the round: (6 + 4 STR) x 3 = 30, while its confirmed critical adds the +4 Power Attack: (6 + 8) x 3 = 42.
+    private static void TestCoupDeGraceAddsNoPowerAttack()
+    {
+        CharacterController a = null, t = null, t2 = null;
+        System.Func<int, string, int, int> saved = ScenarioHooks.RollFilter;
+        try
+        {
+            a = Create("PowerCoup", 16, new Vector2Int(0, 0));
+            t = CreateDefender(new Vector2Int(1, 0));
+            t2 = CreateDefender(new Vector2Int(0, 1));
+            a.Stats.Feats.Add("Power Attack");
+            Equip(a, ItemID.WeaponGreataxe, EquipSlot.RightHand);
+            a.SetPowerAttack(2);
+            t.ApplyCondition(CombatConditionType.Unconscious, 5, "Test");
+            ScenarioHooks.RollFilter = Forced(20, 6, 1);
+
+            SpecialAttackResult cdg = a.ExecuteSpecialAttack(SpecialAttackType.CoupDeGrace, t);
+            Assert(cdg != null && cdg.Success && cdg.WeaponDamageRoll.Multiplier == 3 && cdg.WeaponDamageRoll.StaticPerRoll == 4
+                   && cdg.WeaponDamageRoll.Total == 30,
+                "A coup de grace adds no Power Attack: (6 + 4 STR) x 3 = 30 (PHB p.98, p.153; owner interpretation 2026-10-11, CMB-160)",
+                cdg != null ? cdg.WeaponDamageRoll.Describe() + "; " + cdg.Log : "no result");
+
+            CombatResult hit = a.Attack(t2, false, 0, null);
+            Assert(hit != null && hit.CritConfirmed && hit.WeaponDamageBonus.PowerAttackBonus == 4 && hit.Damage == 42,
+                "The same Power Attack still adds +4 to an attack's critical: (6 + 8) x 3 = 42 (PHB p.98)",
+                hit != null ? $"confirmed {hit.CritConfirmed}, {hit.WeaponDamageBonus.Describe()}, damage {hit.Damage}" : "no result");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = saved;
+            Cleanup(a, t, t2);
         }
     }
 

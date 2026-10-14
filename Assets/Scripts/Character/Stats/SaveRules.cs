@@ -187,7 +187,7 @@ public static class SaveRules
     /// (MM p.103). NPCs of these races have them too (CRE-038). The ones that apply are added together: PHB p.171 names
     /// racial bonuses among the bonuses of one type that do stack, so a dwarf gets +4 against the Poison spell (spell
     /// and poison). DMG p.21 states only the general rule (same-type bonuses do not stack, except dodge and some
-    /// circumstance bonuses); which book governs is an open owner question (CHR-019).</item>
+    /// circumstance bonuses); the PHB text governs (owner interpretation 2026-10-11, CHR-019).</item>
     /// <item>Morale against fear: the halfling's +2 (PHB p.20), Remove Fear's +4 (PHB p.271), Bless's and Aid's +1
     /// (PHB p.205, p.196; <see cref="CharacterStats.FearMoraleSaveBonusFromSpells"/>), a paladin's Aura of Courage,
     /// +4 to each ally within 10 ft while she is conscious (PHB p.44, <see cref="AuraOfCourageBonus"/>), and Inspire
@@ -216,7 +216,8 @@ public static class SaveRules
         RaceData race = stats.Race;
         if (race != null)
         {
-            // Racial bonuses stack with each other (PHB p.171); owner question in CHR-019 (DMG p.21 reads otherwise).
+            // Racial bonuses stack with each other and with other save bonuses (PHB p.171; owner interpretation
+            // 2026-10-11, CHR-019: the PHB governs over the general rule of DMG p.21).
             int racial = 0;
             if (context.IsPoison) racial += Mathf.Max(0, race.SaveVsPoison);
             if (context.IsSpell) racial += Mathf.Max(0, race.SaveVsSpells);

@@ -112,8 +112,9 @@ public static class CombatCalculationService
 
     /// <summary>
     /// Apply the standard STR-to-damage multiplier.
-    /// D&amp;D 3.5e PHB p.113: 1× normal, 1.5× two-handed, 0.5× off-hand.
-    /// Negative STR mod always applied at 1×.
+    /// D&amp;D 3.5e PHB p.113-114, p.134: 1× normal, 1.5× two-handed, 0.5× off-hand; MM p.312 the same for sole and
+    /// secondary natural attacks. Only a bonus is scaled: a Strength penalty always applies in full (owner
+    /// interpretation 2026-10-11, CMB-161), for weapons and natural attacks alike.
     /// </summary>
     public static int ApplyStrDamageMultiplier(int strMod, float multiplier)
     {

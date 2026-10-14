@@ -136,8 +136,9 @@ public struct AttackBonusBreakdown
 /// a confirmed critical (PHB p.134 and p.140; CMB-004). Mount attacks and the Confused self-attack
 /// still roll their own damage without it (CMB-162).
 /// Rules applied: PHB p.134 (Strength to melee, thrown and sling damage; 1/2 in the off hand,
-/// 1-1/2 two-handed, a penalty never multiplied, CMB-161; a bow takes only a penalty, a composite bow its
-/// rating), PHB p.41 (full Strength in a flurry), MM p.312 (a natural attack's Strength share),
+/// 1-1/2 two-handed, a penalty applied in full and never halved or multiplied, owner interpretation 2026-10-11,
+/// CMB-161; a bow takes only a penalty, a composite bow its rating), PHB p.41 (full Strength in a flurry), MM p.312 (a
+/// natural attack's Strength share, with the same penalty rule),
 /// PHB p.98 (Power Attack, Point Blank Shot), p.102 (Weapon Specialization), p.29 (Inspire Courage),
 /// p.264 (Prayer), p.224 (Divine Favor), p.250 (Magic Fang), p.186 (Destruction domain smite, melee
 /// only), DMG p.224 (bane: +2 enhancement against its foe), DMG p.301 (Sickened: -2 weapon damage),

@@ -35,6 +35,7 @@ public static class WeaponDamageModifierTests
         TestOffHandHalfStrength();
         TestWeaponSpecializationAndSickened();
         TestNaturalAttackStrengthShare();
+        TestStrengthPenaltyAppliesInFull();
         TestTermsAddUpToTotal();
         TestAttackDamageIsDicePlusModifier();
         TestSmiteIsPerAttack();
@@ -219,6 +220,48 @@ public static class WeaponDamageModifierTests
             Assert(c.StrengthBonus == 1 && c.StrengthLabel == "0.5× STR", "A secondary claw adds 1/2 STR: +1 at STR 16 (MM p.312)", c.Describe());
         }
         finally { Cleanup(a); }
+    }
+
+    // CMB-161 (owner interpretation 2026-10-11): a Strength penalty always applies in full to damage (PHB p.113-114,
+    // p.134); only a bonus is halved or multiplied. STR 6 (-2): a sole bite (1-1/2 x STR), a secondary claw (1/2 STR),
+    // a greatsword two-handed and an off-hand shortsword all take -2. Before the fix the natural attacks scaled the
+    // penalty: -3 on the bite, -1 on the claw.
+    private static void TestStrengthPenaltyAppliesInFull()
+    {
+        var biteDef = new NaturalAttackDefinition { Name = "Bite", BonusDamageSource = DamageBonusSource.StrengthOneAndHalf };
+        var clawDef = new NaturalAttackDefinition { Name = "Claw", BonusDamageSource = DamageBonusSource.StrengthHalf };
+        Assert(biteDef.GetDamageBonus(-2) == -2 && clawDef.GetDamageBonus(-2) == -2 && clawDef.GetDamageBonus(-3) == -3,
+            "A natural attack's Strength share never scales a penalty: -2 sole bite, -2 and -3 secondary claw (CMB-161)",
+            $"bite {biteDef.GetDamageBonus(-2)}, claw {clawDef.GetDamageBonus(-2)} / {clawDef.GetDamageBonus(-3)}");
+        Assert(biteDef.GetDamageBonus(3) == 4 && clawDef.GetDamageBonus(3) == 1,
+            "A bonus is still scaled and rounded down: +4 sole bite, +1 secondary claw at +3 (MM p.312)");
+        Assert(CombatCalculationService.TwoHandedStrDamage(-3) == -3 && CombatCalculationService.OffHandStrDamage(-3) == -3,
+            "The shared helper applies a penalty in full two-handed and in the off hand (PHB p.113-114)");
+
+        CharacterController beast = null, weakling = null;
+        try
+        {
+            beast = Create("WeakBeast", 6, new Vector2Int(0, 0));
+            var bite = new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, IsPrimary = true };
+            var claw = new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, IsPrimary = false };
+            beast.Stats.SetNaturalAttacks(new List<NaturalAttackDefinition> { bite, claw });
+            WeaponDamageBreakdown b = beast.BuildWeaponDamageBonus(null, false, false, default(AttackCalculator.FeatModifiers), naturalAttack: bite);
+            WeaponDamageBreakdown c = beast.BuildWeaponDamageBonus(null, false, false, default(AttackCalculator.FeatModifiers), naturalAttack: claw);
+            Assert(b.StrengthBonus == -2, "STR 6: a sole bite takes the -2 penalty in full, not -3 (CMB-161)", b.Describe());
+            Assert(c.StrengthBonus == -2, "STR 6: a secondary claw takes the -2 penalty in full, not -1 (CMB-161)", c.Describe());
+
+            weakling = Create("WeakFighter", 6, new Vector2Int(2, 0));
+            ItemData greatsword = Equip(weakling, ItemID.WeaponGreatsword, EquipSlot.RightHand);
+            WeaponDamageBreakdown g = weakling.BuildWeaponDamageBonus(greatsword, false, false, default(AttackCalculator.FeatModifiers));
+            Assert(g.StrengthBonus == -2, "STR 6: a two-handed greatsword takes -2, not -3 (PHB p.113-114)", g.Describe());
+            ItemData shortsword = ItemDatabase.CloneItem(ItemID.WeaponShortsword);
+            WeaponDamageBreakdown o = weakling.BuildWeaponDamageBonus(shortsword, false, true, default(AttackCalculator.FeatModifiers));
+            Assert(o.StrengthBonus == -2, "STR 6: an off-hand weapon takes -2, not -1 (PHB p.113-114)", o.Describe());
+            Assert(b.StrengthLabel == "STR" && c.StrengthLabel == "STR" && g.StrengthLabel == "STR" && o.StrengthLabel == "STR",
+                "With a Strength penalty the damage breakdown names plain STR, no 1-1/2 or 1/2 multiplier (CMB-161)",
+                $"bite '{b.StrengthLabel}', claw '{c.StrengthLabel}', greatsword '{g.StrengthLabel}', off hand '{o.StrengthLabel}'");
+        }
+        finally { Cleanup(beast, weakling); }
     }
 
     // The listed terms add up to the total the attack adds.

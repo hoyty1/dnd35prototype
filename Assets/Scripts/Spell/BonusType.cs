@@ -1,8 +1,9 @@
 /// <summary>
 /// D&D 3.5e bonus types (PHB p.171 "Bonus Types"; DMG p.21 "Bonus Types"; PHB glossary).
 /// Used to enforce stacking rules: bonuses of the same type to the same statistic do NOT stack (only the highest
-/// applies), except dodge bonuses, circumstance bonuses from different circumstances and untyped bonuses from
-/// different sources (<see cref="BonusTypeHelper.DoesStack"/>, <see cref="BonusStacking"/>).
+/// applies), except dodge bonuses, racial bonuses (PHB p.171; owner interpretation 2026-10-11, CHR-019), circumstance
+/// bonuses from different circumstances and untyped bonuses from different sources
+/// (<see cref="BonusTypeHelper.DoesStack"/>, <see cref="BonusStacking"/>).
 /// </summary>
 using DND35e.Identifiers;
 public enum BonusType
@@ -136,10 +137,10 @@ public static class BonusTypeHelper
     /// Whether bonuses of this type from DIFFERENT sources stack with each other (all are applied rather than only the
     /// highest). Bonuses from the same source never stack, whatever their type (<see cref="BonusStacking"/>).
     ///
-    /// Returns true for Dodge, Untyped and Circumstance (PHB p.171-172; glossary "stack" p.313, "circumstance bonus"
-    /// p.306, "dodge bonus" p.307). Returns false for every named type, luck included (glossary "luck bonus" p.310).
-    /// Racial returns false (DMG p.21); PHB p.171 lists racial bonuses among those that stack, an open owner question
-    /// (CHR-019).
+    /// Returns true for Dodge, Untyped, Circumstance and Racial (PHB p.171-172; glossary "stack" p.313, "circumstance
+    /// bonus" p.306, "dodge bonus" p.307). Returns false for every other named type, luck included (glossary "luck
+    /// bonus" p.310). PHB p.171 names racial bonuses among those that stack; DMG p.21 states only the general rule, and
+    /// the PHB text governs (owner interpretation 2026-10-11, CHR-019).
     /// </summary>
     public static bool DoesStack(BonusType type)
     {
@@ -148,6 +149,7 @@ public static class BonusTypeHelper
             case BonusType.Dodge:
             case BonusType.Untyped:
             case BonusType.Circumstance:
+            case BonusType.Racial:
                 return true;
             default:
                 return false;

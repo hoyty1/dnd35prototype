@@ -228,7 +228,7 @@ public static class NpcProficiencyTests
             Assert(ProfWeapon(s, "longsword") && ProfArmor(s, "full_plate"),
                 cls + ": longsword and full plate through IsProficientWithWeapon/IsProficientWithArmor");
             Assert(!s.HasTowerShieldProficiency(),
-                cls + ": no tower shield until the owner rules on \"shields\" (CHR-072)");
+                cls + ": \"shields\" excludes tower shields (owner interpretation 2026-10-11, CHR-072; PHB p.101)");
         }
 
         CharacterStats adept = MakeChar("Adept");
@@ -296,7 +296,7 @@ public static class NpcProficiencyTests
             Assert(NotProfArmor(s, "full_plate"),
                 "ogre: not proficient with heavy armor it is not described wearing (MM p.310)");
             Assert(s.HasShieldProficiency() && !s.HasTowerShieldProficiency(),
-                "ogre: shields through its armor proficiency, no tower shield");
+                "ogre: shields through its armor proficiency, no tower shield (owner interpretation 2026-10-11, CHR-072)");
         }
         finally
         {

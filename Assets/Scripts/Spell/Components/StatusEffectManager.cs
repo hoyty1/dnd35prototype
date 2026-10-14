@@ -507,7 +507,8 @@ public class StatusEffectManager : MonoBehaviour
 
     /// <summary>
     /// The "power" of the active effects of one bonus type, by the PHB stacking rules: the sum over distinct spells for a
-    /// type that stacks (dodge, circumstance, untyped), else the highest; two copies of one spell count once.
+    /// type that stacks (dodge, racial, circumstance, untyped; <see cref="BonusTypeHelper.DoesStack"/>), else the
+    /// highest; two copies of one spell count once.
     /// </summary>
     public int GetTotalBonusOfType(BonusType type)
     {

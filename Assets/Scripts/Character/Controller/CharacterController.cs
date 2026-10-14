@@ -5541,7 +5541,7 @@ public class CharacterController : MonoBehaviour
         if (naturalAttack != null)
         {
             d.StrengthBonus = Stats.GetNaturalAttackDamageBonus(naturalAttack);
-            d.StrengthLabel = DescribeNaturalAttackStrength(naturalAttack.BonusDamageSource);
+            d.StrengthLabel = DescribeNaturalAttackStrength(naturalAttack.BonusDamageSource, Stats.STRMod);
         }
         else if (WeaponDisablesStrengthDamageBonuses(weapon))
         {
@@ -5570,12 +5570,14 @@ public class CharacterController : MonoBehaviour
         return d;
     }
 
-    private static string DescribeNaturalAttackStrength(DamageBonusSource source)
+    // A Strength penalty applies in full, never halved or multiplied (owner interpretation 2026-10-11, CMB-161), so with
+    // a penalty a sole or secondary natural attack's share reads plain "STR".
+    private static string DescribeNaturalAttackStrength(DamageBonusSource source, int strMod)
     {
         switch (source)
         {
-            case DamageBonusSource.StrengthOneAndHalf: return "1.5× STR";
-            case DamageBonusSource.StrengthHalf: return "0.5× STR";
+            case DamageBonusSource.StrengthOneAndHalf: return strMod < 0 ? "STR" : "1.5× STR";
+            case DamageBonusSource.StrengthHalf: return strMod < 0 ? "STR" : "0.5× STR";
             case DamageBonusSource.None: return "no STR modifier";
             default: return "STR";
         }
@@ -14155,8 +14157,8 @@ public class CharacterController : MonoBehaviour
 
         // The shared damage modifier (CMB-003): the same terms as a melee attack with this weapon or natural attack
         // (Strength share, enhancement, Weapon Specialization, morale, conditions). Power Attack trades an attack roll
-        // penalty for damage (PHB p.98) and a coup de grace makes no attack roll, so it is left out until the owner
-        // rules (CMB-160).
+        // penalty for damage (PHB p.98) and a coup de grace makes no attack roll (PHB p.153), so Power Attack adds
+        // nothing to it (owner interpretation 2026-10-11, CMB-160).
         NaturalAttackDefinition cdgNatural = ShouldUseInnateNaturalAttackProfile(weapon) ? Stats.GetPrimaryNaturalAttack() : null;
         AttackCalculator.FeatModifiers cdgFeats = cdgNatural != null ? default(AttackCalculator.FeatModifiers) : DamageOnlyFeatModifiers(weapon);
         WeaponDamageBreakdown cdgDamage = BuildWeaponDamageBonus(weapon, isRanged: false, isOffHand: false, cdgFeats,

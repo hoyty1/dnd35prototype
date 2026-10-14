@@ -122,6 +122,14 @@ public static class BonusStackingRulesTests
         Assert(BonusTypeHelper.DoesStack(BonusType.Dodge), "Dodge bonuses stack (PHB glossary p.307)");
         Assert(BonusTypeHelper.DoesStack(BonusType.Circumstance), "Circumstance bonuses from different circumstances stack (PHB glossary p.306)");
         Assert(BonusTypeHelper.DoesStack(BonusType.Untyped), "Untyped bonuses from different sources stack (PHB p.172)");
+        Assert(BonusTypeHelper.DoesStack(BonusType.Racial),
+            "Racial bonuses stack (PHB p.171 governs over DMG p.21; owner interpretation 2026-10-11, CHR-019)");
+        Assert(BonusStacking.Combine(new List<TypedBonus>
+            {
+                new TypedBonus(BonusType.Racial, 2, "Dwarf vs poison"),
+                new TypedBonus(BonusType.Racial, 2, "Dwarf vs spells")
+            }) == 4,
+            "Two racial bonuses from different sources add up: +2 and +2 = +4 (PHB p.171; CHR-019)");
         Assert(!BonusTypeHelper.DoesStack(BonusType.Enhancement) && !BonusTypeHelper.DoesStack(BonusType.Deflection)
                && !BonusTypeHelper.DoesStack(BonusType.Insight) && !BonusTypeHelper.DoesStack(BonusType.Sacred),
             "Named types (enhancement, deflection, insight, sacred, ...) do not stack (PHB p.171)");
