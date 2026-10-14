@@ -14,7 +14,11 @@ using UnityEngine;
 /// Defeat opens the defeat screen; its New Party button returns to character creation.
 /// Owner interpretations 2026-10-11 (CORE-038): a hostile creature charmed by or under the control of the party side is
 /// out of the hostile side, and when both sides are out at once the dying PCs roll their stabilization checks first
-/// (PHB p.145) and the party wins if any PC survives.
+/// (PHB p.145) and the party wins if any PC survives. Delegated RAW readings 2026-10-14 (CORE-038): the same predicate
+/// applies to the party side (a PC, ally or summon charmed by or under the control of the hostile side is out of the
+/// party side), Suggestion and Mass Suggestion are not control on either side, and "survives" means stable or better
+/// when the PHB p.145 roll-out ends; the PHB p.146 recovery of an untended stable character is post-combat recovery
+/// (CORE-015), not part of deciding the fight.
 /// </summary>
 public partial class GameManager
 {
@@ -26,7 +30,8 @@ public partial class GameManager
     /// <see cref="TurnPhase.CombatOver"/>, or one side is now out of the fight and this call ended the combat (only the
     /// party side out is a defeat, only the hostile side out a victory). When both sides are out at once, the dying PCs
     /// first roll their stabilization checks until each is stable or dead (PHB p.145), and the party wins if any PC
-    /// survives, else it is a defeat (owner interpretation 2026-10-11, CORE-038).
+    /// survives (stable or better), else it is a defeat (owner interpretation 2026-10-11; delegated RAW reading
+    /// 2026-10-14 for "survives", CORE-038).
     /// Callers stop their resolution when it returns true.
     /// </summary>
     public bool EvaluateCombatEnd(string sourceContext)
@@ -63,8 +68,10 @@ public partial class GameManager
     /// Both sides are out at once (owner interpretation 2026-10-11, CORE-038): every dying PC rolls its stabilization
     /// check round after round (PHB p.145: 10% on d% to become stable, else it loses 1 hit point; dead at -10) until it
     /// is stable or dead, as the fight would play out with nobody left standing. Returns whether any PC survives (is not
-    /// dead): a stable, unconscious, asleep or petrified PC survives. Only the party's PCs count; allies and summons do
-    /// not decide the fight.
+    /// dead): a stable, unconscious, asleep or petrified PC survives, and so does a PC the hostile side has charmed or
+    /// controls (it is alive). Only the party's PCs count; allies and summons do not decide the fight. Delegated RAW
+    /// reading 2026-10-14 (CORE-038): the decision ends with the PHB p.145 roll-out; the PHB p.146 hourly and daily
+    /// recovery rolls of an untended stable PC come afterwards, as post-combat recovery (CORE-015).
     /// </summary>
     private bool ResolvePartyDyingAfterBothSidesOut(string sourceContext)
     {
@@ -100,6 +107,14 @@ public partial class GameManager
     private bool IsOutOfHostileSideByPartyControl(CharacterController c)
         => CombatEndRules.IsControlledByTeam(c, CharacterTeam.Player, GetActiveConditions(c));
 
+    /// <summary>
+    /// The same predicate for the party side: a PC, ally or summon charmed by or under the control of a hostile-side
+    /// creature counts as out of the party side (delegated RAW reading 2026-10-14, CORE-038; PCs and NPCs follow
+    /// identical rules, owner 2026-10-07).
+    /// </summary>
+    private bool IsOutOfPartySideByHostileControl(CharacterController c)
+        => CombatEndRules.IsControlledByTeam(c, CharacterTeam.Enemy, GetActiveConditions(c));
+
     // Whether each side had an active member at some point in this combat: a side whose last creature was trapped,
     // destroyed or removed has no active member left but is still out (CombatEndRules.SideCounts).
     private bool _combatPartySideSeen;
@@ -126,7 +141,7 @@ public partial class GameManager
     /// </summary>
     public CombatEndRules.SideCounts GetCombatEndSides()
     {
-        CombatEndRules.SideCounts sides = CombatEndRules.Count(GetAllCharacters(), IsOutOfHostileSideByPartyControl);
+        CombatEndRules.SideCounts sides = CombatEndRules.Count(GetAllCharacters(), IsOutOfHostileSideByPartyControl, IsOutOfPartySideByHostileControl);
         if (CurrentPhase != TurnPhase.CombatOver)
         {
             _combatPartySideSeen |= sides.PlayersAll > 0;
@@ -226,14 +241,15 @@ public partial class GameManager
     }
 
     /// <summary>
-    /// Every party-side combatant is dead, dying or unconscious (and, when both sides went out at once, no PC survived
-    /// its dying rolls, CORE-038): end the combat and open the defeat screen (CORE-001).
+    /// Every party-side combatant is dead, dying or unconscious, or charmed by or under the control of the hostile side
+    /// (and, when both sides went out at once, no PC survived its dying rolls; CORE-038): end the combat and open the
+    /// defeat screen (CORE-001).
     /// </summary>
     private void HandleCombatDefeatDetected(string sourceContext, CombatEndRules.SideCounts sides)
     {
         Debug.Log($"[CombatEnd] Defeat detected | source={sourceContext} | frame={Time.frameCount} | phaseBefore={CurrentPhase} | party={sides.PlayersIn}/{sides.PlayersAll} in | enemies={sides.EnemiesIn}/{sides.EnemiesAll} in");
 
-        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("☠", "DEFEAT! Every hero is dead, dying or unconscious."));
+        CombatUI?.ShowCombatLog(CombatLogHelper.CriticalFailure("☠", "DEFEAT! Every hero is dead, dying or unconscious, or under the enemy's control."));
         CurrentPhase = TurnPhase.CombatOver;
         TurnDurations.ClearCurrentAnchor(); // effects created after the fight have no initiative count (CMB-006)
         CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
@@ -253,7 +269,7 @@ public partial class GameManager
         WaitingForDefeatChoice = true;
         CombatUI.ShowDefeatPanel(
             "DEFEAT",
-            "Every hero is dead, dying or unconscious.\nThe adventure is over for this party.",
+            "Every hero is dead, dying or unconscious, or under the enemy's control.\nThe adventure is over for this party.",
             StartNewPartyAfterDefeat,
             QuitAfterDefeat);
     }

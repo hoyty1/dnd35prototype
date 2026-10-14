@@ -83,6 +83,7 @@ public class DungeonEncounterTableEntry
                 BaseCreatureId = src.BaseCreatureId,
                 TemplateClass = src.TemplateClass,
                 TemplateLevel = src.TemplateLevel,
+                Advancement = src.Advancement,
                 Count = src.Count,
                 CountExpression = src.CountExpression, // Phase 5: carry over dice expression
                 CreatureTemplateIds = src.CreatureTemplateIds != null
@@ -135,7 +136,8 @@ public class DungeonEncounterTableEntry
     /// Convenience builder: entry with a classed creature.
     /// </summary>
     public static DungeonEncounterTableEntry Classed(int minRoll, int maxRoll, int el,
-        string creatureId, string className, int classLevel, int count = 1, string description = null)
+        string creatureId, string className, int classLevel, int count = 1, string description = null,
+        ClassAdvancement advancement = ClassAdvancement.Monster)
     {
         var entry = new DungeonEncounterTableEntry
         {
@@ -144,7 +146,7 @@ public class DungeonEncounterTableEntry
             EL = el,
             Description = description ?? $"{count}x {creatureId} {className} {classLevel}"
         };
-        entry.Creatures.Add(new EncounterCreatureEntry(creatureId, className, classLevel, count));
+        entry.Creatures.Add(new EncounterCreatureEntry(creatureId, className, classLevel, count) { Advancement = advancement });
         return entry;
     }
 

@@ -258,10 +258,14 @@ public static partial class NPCDatabase
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
-            STR = 16, DEX = 10, CON = 14, WIS = 12, INT = 8, CHA = 15,
+            // DMG p.118-120, the NPC paladin table and its sample 5th-level NPC paladin: an elite DMG chapter 4 NPC (DMG p.110;
+            // CRE-058, delegated RAW reading 2026-10-14): starting Str 14, Dex 8, Con 12, Int 10, Wis 13, Cha 15, Wis 14
+            // at 4th; humans have no adjustments.
+            STR = 14, DEX = 8, CON = 12, WIS = 14, INT = 10, CHA = 15,
             NaturalArmorBonus = 0,
             BaseSpeed = 4, // 20 ft in full plate
-            BaseHitDieHP = 40, // 5d10+10 average
+            BaseHitDieHP = 37, // DMG p.118 sample: 10 (maximum first die) + 4d10 averaged 22 + CON 5
+            FirstHitDieMaximized = true,
             BAB = 5, // Paladin 5: +5 (full BAB)
             NaturalAttacks = new List<NaturalAttackDefinition>(),
             CreatureTags = new List<string> { "Humanoid", "Human", "Paladin", "MM35" },

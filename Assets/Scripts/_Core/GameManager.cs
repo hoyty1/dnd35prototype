@@ -956,6 +956,10 @@ public partial class GameManager : MonoBehaviour
 
             RemoveAllConditions(pc);
             pc.ClearAllConditions();
+            // A hostile Dominate Person (stored as a Command Undead effect) ends with the other conditions under the
+            // CORE-015 full-rest stand-in; left in place it would keep the PC out of the party side in the next fight
+            // (CombatEndRules.IsControlledByTeam, CORE-038), and its duration never counts down (SPL-140).
+            pc.RemoveCommandUndeadEffect();
 
             pc.ClearDisguiseSelfEffect();
             pc.ClearExpeditiousRetreatEffect();

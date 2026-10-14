@@ -264,6 +264,7 @@ public static class DungeonEncounterTableData
             creature.BaseCreatureId = raceId;
             creature.TemplateClass = CapitalizeFirst(group.NpcClass);
             creature.TemplateLevel = group.NpcLevel;
+            creature.Advancement = group.Advancement;
         }
         else
         {
@@ -747,7 +748,7 @@ public static class DungeonEncounterTableData
         t.Entries.Add(DungeonEncounterTableEntry.Basic(83, 85, 5,
             "giant_constrictor_snake", 1, "1x Giant Constrictor Snake"));
         t.Entries.Add(DungeonEncounterTableEntry.Classed(86, 87, 5,
-            "hobgoblin", "Fighter", 5, 1, "1x Hobgoblin Fighter 5"));
+            "hobgoblin", "Fighter", 5, 1, "1x Hobgoblin Fighter 5", ClassAdvancement.DmgNpc));
         t.Entries.Add(DungeonEncounterTableEntry.Basic(88, 89, 5,
             "human_monk_5", 1, "1x Human Monk (5th level)"));
         t.Entries.Add(DungeonEncounterTableEntry.Basic(90, 90, 5,
@@ -807,7 +808,7 @@ public static class DungeonEncounterTableData
         t.Entries.Add(DungeonEncounterTableEntry.Basic(83, 86, 6,
             "giant_bombardier_beetle", 2, "2x Giant Bombardier Beetle"));
         t.Entries.Add(DungeonEncounterTableEntry.Classed(87, 90, 6,
-            "lizardfolk", "Druid", 5, 1, "1x Lizardfolk Druid 5"));
+            "lizardfolk", "Druid", 5, 1, "1x Lizardfolk Druid 5", ClassAdvancement.DmgNpc));
 
         t.Entries.Add(DungeonEncounterTableEntry.CascadeEntry(91, 100, CascadeDirection.Harder));
 
@@ -851,7 +852,7 @@ public static class DungeonEncounterTableData
         t.Entries.Add(DungeonEncounterTableEntry.Basic(59, 62, 7,
             "minotaur", 2, "2x Minotaur"));
         t.Entries.Add(DungeonEncounterTableEntry.Classed(63, 66, 7,
-            "ogre", "Barbarian", 4, 1, "1x Ogre Barbarian 4"));
+            "ogre", "Barbarian", 4, 1, "1x Ogre Barbarian 4", ClassAdvancement.PrintedSample));
         t.Entries.Add(DungeonEncounterTableEntry.Basic(67, 70, 7,
             "black_pudding", 1, "1x Black Pudding"));
         t.Entries.Add(DungeonEncounterTableEntry.Basic(71, 74, 7,

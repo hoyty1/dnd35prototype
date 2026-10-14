@@ -709,10 +709,11 @@ public class NPCDefinition
     public bool HasRacialHumanoidHitDice;
 
     /// <summary>
-    /// The first Hit Die in <see cref="BaseHitDieHP"/> is a maximized class die: set by
-    /// <see cref="CreatureClassEngine.ApplyClassToDefinition"/> when class levels replace a 1-HD humanoid's Hit Die (DMG
-    /// p.110: an elite character's first Hit Die is the maximum; whether a DMG-table class NPC is elite is an open owner
-    /// question, CRE-058). Every
+    /// The first Hit Die in <see cref="BaseHitDieHP"/> is at its maximum: set by
+    /// <see cref="CreatureClassEngine.ApplyClassToDefinition"/> when a PC class replaces a 1-HD humanoid's Hit Die (the
+    /// first class die), or when an elite DMG-table "NPC" row keeps its racial Hit Dice (the first racial die). DMG p.110:
+    /// an elite character's first Hit Die is the maximum; DMG-table NPC rows are elite, NPC classes are average
+    /// (delegated RAW readings 2026-10-14, CRE-058). Every
     /// other die of a total is averaged (MM totals average every die), so further class levels continue the averaged
     /// pool without it (<see cref="CreatureClassEngine.AveragedHalfPointDice"/>; owner interpretation 2026-10-11, CRE-041).
     /// </summary>

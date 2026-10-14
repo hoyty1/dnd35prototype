@@ -38,7 +38,9 @@ public static partial class NPCDatabase
             ReflexSaveOverride = SaveProgression.Poor,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
-            STR = 12, DEX = 10, CON = 14, WIS = 10, INT = 8, CHA = 10,
+            // MM p.246: Str 10, Dex 9 (the racial adjustments Dex -2, Con +4, Int -2 on the standard scores, which the
+            // elite DMG-table troglodyte cleric NPC reads; CRE-058).
+            STR = 10, DEX = 9, CON = 14, WIS = 10, INT = 8, CHA = 10,
             NaturalArmorBonus = 6,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

@@ -487,6 +487,19 @@ public static class NpcAlignmentGearTests
         CheckDefinitionAlignment("skeleton_warrior", Alignment.NeutralEvil, "MM p.226");
         CheckDefinitionAlignment("wight_dreadwalker", Alignment.LawfulEvil, "MM p.255");
         CheckDefinitionAlignment("human_paladin", Alignment.LawfulGood, "PHB p.43");
+        // Open MM alignment lines (delegated RAW readings 2026-10-14, CRE-056): an "Any" or "(any)" line keeps the base
+        // creature's alignment or axis; the ghost and vampire samples are human fighters (typically N, PHB p.13, p.104).
+        CheckDefinitionAlignment("ghost", Alignment.TrueNeutral, "MM p.117-118 Any: the base human fighter's N");
+        CheckDefinitionAlignment("vampire", Alignment.NeutralEvil, "MM p.252 Always evil (any): evil, the base's neutral law-chaos axis");
+        CheckDefinitionAlignment("vampire_spawn", Alignment.ChaoticEvil, "MM p.253 Always evil (any), no base: PHB p.104 Table 6-1 Vampires CE");
+        CheckDefinitionAlignment("lich", Alignment.NeutralEvil, "MM p.167 sample line");
+        CheckDefinitionAlignment("average_salamander", Alignment.NeutralEvil, "MM p.219 Usually evil (any), no base, no lawful or chaotic subtype");
+        // A class NPC takes its race's listed alignment (PHB p.104 Table 6-1 for PHB races); a human takes its class's
+        // typical one, N where the table lists none.
+        CheckDefinitionAlignment("human_monk_5", Alignment.LawfulNeutral, "PHB p.104 Table 6-1 Monks LN");
+        CheckDefinitionAlignment("elf_warrior", Alignment.ChaoticGood, "PHB p.104 Table 6-1 Elves CG");
+        CheckDefinitionAlignment("dwarf_warrior", Alignment.LawfulGood, "PHB p.104 Table 6-1 Dwarves LG");
+        CheckDefinitionAlignment("halfling_warrior", Alignment.TrueNeutral, "PHB p.104 Table 6-1 Halflings N");
     }
 
     private static void CheckSpawnAlignment(string npcId, Alignment expected, string cite)

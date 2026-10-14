@@ -17,14 +17,15 @@ using DND35e.Identifiers;
 /// A side is out when every active member is out and it has at least one active member, or had one earlier in this
 /// combat (<see cref="SideCounts.PlayersHadMembers"/>, so a side whose last creature was trapped, destroyed or
 /// removed is out). Sides are teams: the party, its allies and its summons are one side, every hostile creature the
-/// other; Neutral creatures belong to neither. Owner interpretations 2026-10-11 (CORE-038): a hostile creature charmed
-/// by a party-side creature or under its control (Charm Person and Charm Monster PHB p.209, Command Undead p.211,
-/// Dominate Person p.224, a domain's command of elementals, PHB p.159) counts as out of the hostile side
-/// (<see cref="IsControlledByTeam"/>); and when both sides are out at
-/// once, GameManager.EvaluateCombatEnd first rolls the dying PCs' stabilization checks (PHB p.145) and the party wins
-/// if any PC survives. A party-side creature controlled by the hostile side still counts for the party, and a creature
-/// under the party's Mass Suggestion (a compulsion, PHB p.173, p.285, that the game models with the Charmed condition) still
-/// counts for the hostile side (both open owner questions, CORE-038).
+/// other; Neutral creatures belong to neither. One control predicate for both sides (owner interpretation 2026-10-11,
+/// extended to the party side as a delegated RAW reading 2026-10-14, CORE-038): a creature charmed by, commanded by or
+/// under the control of a creature of the opposing side (Charm Person and Charm Monster PHB p.209, Command Undead
+/// p.211, Dominate Person p.224, a domain's command of elementals, PHB p.159) counts as out of its own side
+/// (<see cref="IsControlledByTeam"/>); it leaves its side and does not join the other. A creature under Suggestion or
+/// Mass Suggestion still counts for its side: suggestion is a compulsion that sets one course of activity, not a charm
+/// or control (PHB p.173, p.285; delegated RAW reading 2026-10-14). When both sides are out at once,
+/// GameManager.EvaluateCombatEnd first rolls the dying PCs' stabilization checks (PHB p.145) and the party wins if any PC
+/// is stable or better when they end; the PHB p.146 recovery belongs to the post-combat recovery (CORE-015).
 /// </summary>
 public static class CombatEndRules
 {
@@ -73,8 +74,9 @@ public static class CombatEndRules
     /// <paramref name="team"/> other than itself: its Command Undead or Dominate Person controller
     /// (<see cref="CharacterController.CommandUndeadController"/>), or the source of a Charmed or Commanded condition in
     /// <paramref name="conditions"/> (its tracked source, else the charm data's caster). A Charmed condition from Mass
-    /// Suggestion does not count: suggestion is a compulsion, not a charm or control (PHB p.173, p.285), and whether a
-    /// suggested creature is out of its side is an open owner question (CORE-038).
+    /// Suggestion does not count, on either side: suggestion is a compulsion that sets one course of activity, not a charm
+    /// or ongoing control (PHB p.173, p.285; delegated RAW reading 2026-10-14, CORE-038). The game models Mass Suggestion
+    /// with the Charmed condition (SPL-139); a suggested creature that leaves the fight is out through what it does.
     /// </summary>
     public static bool IsControlledByTeam(CharacterController c, CharacterTeam team, IEnumerable<ConditionService.ActiveCondition> conditions)
     {
@@ -110,9 +112,12 @@ public static class CombatEndRules
     /// <summary>
     /// Counts each side over <paramref name="combatants"/>, skipping inactive and Neutral creatures. A hostile creature
     /// for which <paramref name="outOfHostileSide"/> returns true (charmed by or under the control of the party side,
-    /// owner interpretation 2026-10-11, CORE-038) is counted as a member that is out.
+    /// owner interpretation 2026-10-11) and a party-side creature for which <paramref name="outOfPartySide"/> returns
+    /// true (charmed by or under the control of the hostile side, the same predicate applied to the party, delegated RAW
+    /// reading 2026-10-14; CORE-038) are counted as members that are out.
     /// </summary>
-    public static SideCounts Count(IEnumerable<CharacterController> combatants, System.Func<CharacterController, bool> outOfHostileSide = null)
+    public static SideCounts Count(IEnumerable<CharacterController> combatants, System.Func<CharacterController, bool> outOfHostileSide = null,
+        System.Func<CharacterController, bool> outOfPartySide = null)
     {
         var counts = new SideCounts();
         if (combatants == null)
@@ -127,6 +132,8 @@ public static class CombatEndRules
             if (c.Team == CharacterTeam.Player)
             {
                 counts.PlayersAll++;
+                if (inFight && outOfPartySide != null && outOfPartySide(c))
+                    inFight = false;
                 if (inFight) counts.PlayersIn++;
             }
             else

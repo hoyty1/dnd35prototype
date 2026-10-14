@@ -132,11 +132,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 193,
+      "passed": 235,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-004: BAB and base saves = racial HD by the creature type (MM Table 4-1) plus real class levels by the class tables (MM p.290, PHB p.59), against MM stat blocks (orc, goblin, hobgoblin, kobold, gnoll, bugbear, lizardfolk, troglodyte, ogre, ogre barbarian 4) and CreatureClassEngine class levels (1-HD humanoid Hit Die exchange, same-class merge); a dragon's injected sorcerer caster level adds no BAB or saves; the Lion's Shield dire lion through CreatureTypeProgressionDatabase.ApplyToStats; CRE-041: every definition with Toughness holds its MM total and spawns at it (ToughnessTotals), and a duergar fighter 2 keeps Toughness; spawns through InitializeNPCFromDefinition, so needs a scene GameManager"
+      "notes": "CRE-004: BAB and base saves = racial HD by the creature type (MM Table 4-1) plus real class levels by the class tables (MM p.290, PHB p.59), against MM stat blocks (orc, goblin, hobgoblin, kobold, gnoll, bugbear, lizardfolk, troglodyte, ogre, ogre barbarian 4) and CreatureClassEngine class levels (1-HD humanoid Hit Die exchange, same-class merge); a dragon's injected sorcerer caster level adds no BAB or saves; the Lion's Shield dire lion through CreatureTypeProgressionDatabase.ApplyToStats; CRE-041: every definition with Toughness holds its MM total and spawns at it (ToughnessTotals), and a duergar fighter 2 keeps Toughness; CRE-058 (delegated RAW readings 2026-10-14): elite DMG-table NPC rows (hobgoblin fighter 5, goblin rogue 5, lizardfolk druid 5: elite array by the DMG ch.4 tables, racial adjustments, increases, maximum first Hit Die, the first racial die when racial HD are kept), monster class levels (elite array, averaged dice; NPC classes average and keep a 1-HD humanoid's scores; printed-sample rows unchanged), a human class NPC's Table 6-1 alignment, class-legal alignments on every DMG table class row (CSV and hard-coded; the human and kobold rows have no base) and an elite spawn; spawns through InitializeNPCFromDefinition, so needs a scene GameManager"
     },
     {
       "type": "Tests.Character.CreatureTemplateOnceTests",
@@ -187,11 +187,11 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 34,
+      "passed": 38,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": ""
+      "notes": "CHR-004: PHB level thresholds, DMG Table 2-6 at each character's level, the DMG p.37 worked example; the blank cells by the delegated RAW reading of 2026-10-14 (* gives 0 with no floor, ** capped at CR level + 7, no encounter clamp, the 1st-3rd row read as 3rd)"
     },
     {
       "type": "Tests.Character.FatigueExhaustionTests",
@@ -231,11 +231,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 118,
+      "passed": 127,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-002, ITM-004: hand aliases (CanEquipIn, DirectEquip, EquipFromInventory, GetEquipped, Unequip, EquipStartingLoadout), the spawn's ranged-wield test (AIService.RoutesToRangedTurn), template alignments (celestial, fiendish MM p.31, p.108: law-chaos kept, owner interpretation 2026-10-11; an illegal base refused; every templated summon option on a legal base; CRE-057; skeleton, zombie MM p.226, p.266) and spawned alignment and gear through InitializeNPCFromDefinition, so needs a scene GameManager; CRE-056: every registered definition sets an alignment, 46 MM alignment spot checks (MM p.10-p.284; dragons by colour) and four more spawns (goblin, young blue dragon, wolf, fiendish dire bear)"
+      "notes": "CRE-002, ITM-004: hand aliases (CanEquipIn, DirectEquip, EquipFromInventory, GetEquipped, Unequip, EquipStartingLoadout), the spawn's ranged-wield test (AIService.RoutesToRangedTurn), template alignments (celestial, fiendish MM p.31, p.108: law-chaos kept, owner interpretation 2026-10-11; an illegal base refused; every templated summon option on a legal base; CRE-057; skeleton, zombie MM p.226, p.266) and spawned alignment and gear through InitializeNPCFromDefinition, so needs a scene GameManager; CRE-056: every registered definition sets an alignment, 46 MM alignment spot checks (MM p.10-p.284; dragons by colour) and four more spawns (goblin, young blue dragon, wolf, fiendish dire bear); the delegated RAW readings of 2026-10-14: ghost N, vampire NE, vampire spawn CE, lich and salamander NE, and four class NPC alignments by PHB Table 6-1"
     },
     {
       "type": "Tests.Character.NpcFeatDataTests",
@@ -571,11 +571,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 43,
+      "passed": 48,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CORE-011, CORE-034, CORE-037: the combat-end predicate (CombatEndRules) case by case; CORE-038: a hostile creature charmed by or under the control of the party side is out of the hostile side (owner interpretation 2026-10-11), a hero controlled by the hostile side still counts for the party, and a Mass Suggestion is not control (open owner questions). Play only: CharacterController.Init needs Awake (TST-009)."
+      "notes": "CORE-011, CORE-034, CORE-037: the combat-end predicate (CombatEndRules) case by case; CORE-038: a hostile creature charmed by or under the control of the party side is out of the hostile side (owner interpretation 2026-10-11), and since the delegated RAW readings of 2026-10-14 the same predicate on the party side (a hero charmed or dominated by the hostile side is out of the party side and not counted on the other) while a Mass Suggestion is control on neither side. Play only: CharacterController.Init needs Awake (TST-009)."
     },
     {
       "type": "Tests.Combat.CommandUndeadRulesTests",

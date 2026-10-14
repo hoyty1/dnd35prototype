@@ -30,6 +30,13 @@ public class EncounterCreatureEntry
     public int TemplateLevel;
 
     /// <summary>
+    /// How the class levels are applied (CRE-058): a DMG table row labelled "NPC" is an elite DMG chapter 4 NPC
+    /// (<see cref="ClassAdvancement.DmgNpc"/>), a row naming an MM stat block keeps the printed sample
+    /// (<see cref="ClassAdvancement.PrintedSample"/>), anything else is a monster given class levels.
+    /// </summary>
+    public ClassAdvancement Advancement = ClassAdvancement.Monster;
+
+    /// <summary>
     /// Optional creature templates to apply (e.g., "celestial", "fiendish", "skeleton").
     /// These are applied via CreatureTemplateRegistry at spawn time.
     /// </summary>

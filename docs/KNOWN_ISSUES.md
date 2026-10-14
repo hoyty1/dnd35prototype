@@ -29,18 +29,18 @@ Entries per section:
 | Section | Prefix | High | Med | Low | Total | Next ID |
 |---|---|---|---|---|---|---|
 | [Build, repo and tooling](issues/REPO.md) | REPO | 0 | 5 | 8 | 13 | REPO-019 |
-| [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-039 |
+| [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 15 | 33 | CORE-039 |
 | [Combat](issues/CMB.md) | CMB | 0 | 53 | 63 | 116 | CMB-172 |
 | [Grid and movement](issues/GRID.md) | GRID | 0 | 8 | 13 | 21 | GRID-023 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 2 | 61 | 61 | 124 | SPL-139 |
-| [Characters, feats and classes](issues/CHR.md) | CHR | 2 | 28 | 43 | 73 | CHR-081 |
-| [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 29 | 31 | 60 | CRE-069 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 2 | 62 | 62 | 126 | SPL-141 |
+| [Characters, feats and classes](issues/CHR.md) | CHR | 2 | 28 | 42 | 72 | CHR-081 |
+| [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 29 | 31 | 60 | CRE-070 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
 | [Items, store, crafting and treasure](issues/ITM.md) | ITM | 0 | 36 | 41 | 77 | ITM-084 |
 | [AI](issues/AI.md) | AI | 1 | 22 | 40 | 63 | AI-065 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-042 |
-| **All** | | 5 | 287 | 396 | 688 | |
+| **All** | | 5 | 288 | 395 | 688 | |
 
 ## Top issues
 

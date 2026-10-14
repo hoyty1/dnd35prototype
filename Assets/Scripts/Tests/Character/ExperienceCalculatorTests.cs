@@ -79,14 +79,21 @@ public static class ExperienceCalculatorTests
         // DMG p.38 note: above CR 20, double the award for a CR two lower.
         AssertAward(14, 21f, 50400f, "(double CR 19)");
         AssertAward(20, 22f, 12000f, "(double CR 20)");
-        // Blank cells (open owner question, CHR-004; recommendation until the owner rules): "*" gives 0 and "**" caps
-        // each monster at the award for a CR 7 above the row's level. The other reading of DMG p.39 (clamp the
-        // encounter's total to the row's minimum and maximum) is not applied.
+        // Blank cells (DMG p.38-40; delegated RAW reading 2026-10-14, CHR-004): "*" gives 0, with no row-minimum floor,
+        // and "**" caps each monster at the award for a CR 7 above the row's level. The DMG p.39 minimum and maximum
+        // fill only blank cells, one monster at a time; an encounter's printed cells are summed with no clamp.
         AssertAward(9, 1f, 0f, "(* cell)");
         AssertAward(9, 0.5f, 0f, "(* cell, fraction)");
         AssertAward(1, 11f, 10800f, "(** cell capped at CR 10)");
         AssertAward(4, 14f, 12800f, "(** cell capped at CR 11)");
         AssertAward(14, 22f, 50400f, "(** cell capped at CR 21, the doubling note past CR 20)");
+        AssertAward(10, 2f, 0f, "(* cell: a CR 2 monster gives a 10th-level character nothing, DMG p.39)");
+        // The shared 1st-3rd row reads as 3rd level: its printed CR 9 and 10 cells apply to a 1st-level character.
+        AssertAward(1, 9f, 7200f, "(printed CR 9 cell of the 1st-3rd row)");
+        AssertAward(1, 10f, 10800f, "(printed CR 10 cell of the 1st-3rd row)");
+        // No clamp on the encounter: two CR 12 monsters give a 4th-level character 2 x 12,800 base XP.
+        float twoCr12 = ExperienceCalculator.GetBaseXPAward(4, 12f) * 2f;
+        Assert(Mathf.Approximately(twoCr12, 25600f), "4th level vs two CR 12 monsters: 25,600 base XP, no encounter clamp (DMG p.37)", $"got {twoCr12}");
     }
 
     // Three 4th-level characters defeat a CR 4 monster: 1,200 / 3 = 400 each (the old CR - APL table gave 100).

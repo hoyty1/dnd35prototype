@@ -1266,7 +1266,11 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Fighter",
             CreatureType = "Undead",
-            CharacterAlignment = Alignment.ChaoticEvil,
+            // MM p.117-118: the ghost template and this sample read "Alignment: Any", and nothing in the template moves
+            // alignment, so the base creature's stands: a human fighter, typically neutral (PHB p.13: humans tend toward
+            // no alignment; PHB p.104 Table 6-1: Humans N, fighters unlisted). Delegated RAW reading 2026-10-14 (CRE-056).
+            // A neutral ghost is not a target for smite evil or Protection from Evil.
+            CharacterAlignment = Alignment.TrueNeutral,
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,

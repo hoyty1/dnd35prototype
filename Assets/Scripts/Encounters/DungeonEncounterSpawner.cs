@@ -165,8 +165,10 @@ public static class DungeonEncounterSpawner
             ICharacterClass classDef = ClassRegistry.GetClass(entry.TemplateClass);
             if (classDef != null)
             {
-                // The row names the class level, which a class-level sample base (ghost, vampire) already has.
-                CreatureClassEngine.ApplyEncounterClassLevel(def, classDef, entry.TemplateLevel);
+                // The row names the class level, which a class-level sample base (ghost, vampire) already has. A row
+                // labelled "NPC" is an elite DMG chapter 4 NPC and a row naming an MM stat block keeps the sample
+                // (entry.Advancement; CRE-058, delegated RAW readings 2026-10-14).
+                CreatureClassEngine.ApplyEncounterClassLevel(def, classDef, entry.TemplateLevel, entry.Advancement);
 
                 // Update display name to reflect class
                 def.Name = $"{baseDef.Name} {entry.TemplateClass} {entry.TemplateLevel}";

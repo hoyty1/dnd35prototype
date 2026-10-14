@@ -206,13 +206,17 @@ public class ExperienceCalculator : MonoBehaviour
     /// character of <paramref name="characterLevel"/>, before it is divided among the party.
     /// A CR below 1 earns the CR 1 award times that fraction (DMG p.37, monsters below CR 1).
     /// A CR above 20 earns double the award for a CR two lower (DMG p.38, note under the table).
-    /// The cells the table leaves blank are an open owner question (CHR-004), filled with its recommendation: a
-    /// monster 8 or more CRs below the level ("*") earns 0, and one 8 or more CRs above the row's level ("**") earns
-    /// the award for a CR exactly 7 above it: the row's largest cell for levels 1-13 and, for levels 14-20, the doubling
-    /// note's value past CR 20, so the award never drops as the CR rises. This caps each monster on its own; the DMG
-    /// p.39 guideline (the row's minimum and maximum are the least and most XP to give a group) can instead be read as
-    /// a clamp on the whole encounter's base total, which CHR-004 leaves to the owner. Levels above 20 use the
-    /// 20th-level row (epic play is out of scope).
+    /// The cells the table leaves blank (DMG p.38 notes, sent to the ad hoc awards of DMG p.39-40), by the delegated RAW
+    /// reading of 2026-10-14 (CHR-004): a monster 8 or more CRs below the level ("*") earns 0, since an encounter that
+    /// costs the party nothing earns no XP and the DMG p.39-40 example gives less than the row's minimum, so the minimum
+    /// is no floor (a fractional CR whose CR 1 cell is "*" earns 0 too, DMG p.37); a monster 8 or more CRs above the
+    /// row's level ("**") earns the award for a CR exactly 7 above it, the row's maximum being the most to give (DMG
+    /// p.39): the row's largest cell for levels 1-13 and, for levels 14-20, the doubling note's value past CR 20, so the
+    /// award never drops as the CR rises (DMG p.36). The DMG p.39 minimum and maximum govern only these blank cells, one
+    /// monster at a time: printed cells are summed with no clamp on the encounter (DMG p.37 steps 2-5; the table is
+    /// per single monster), so two CR 12 monsters give a 4th-level character 25,600 base XP. The gap is measured from
+    /// the row, so the shared 1st-3rd row reads as 3rd level (its printed CR 9 and 10 cells apply to a 1st-level
+    /// character). Levels above 20 use the 20th-level row (epic play is out of scope).
     /// </summary>
     public static float GetBaseXPAward(int characterLevel, float challengeRating)
     {

@@ -202,6 +202,9 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Undead",
+            // MM p.253-254: "Always evil (any)" with no base creature to inherit the law-chaos axis from, so PHB p.104
+            // Table 6-1 (Vampires: chaotic evil) gives the single value. Delegated RAW reading 2026-10-14 (CRE-056), low
+            // confidence: the judges split 1-1.
             CharacterAlignment = Alignment.ChaoticEvil,
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
@@ -252,7 +255,12 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Fighter",
             CreatureType = "Undead",
-            CharacterAlignment = Alignment.ChaoticEvil,
+            // MM p.252, p.254: "Always evil (any)": the template makes the creature evil and the base keeps its law-chaos
+            // component (both MM samples carry the line, the monk one too, which must be lawful). The base is a human
+            // fighter, typically neutral (PHB p.13, p.104 Table 6-1), so the vampire is neutral evil; the specific MM entry
+            // outranks Table 6-1's general "Vampires: CE" where a base is known (as for the CRE-057 "(any)" templates).
+            // Delegated RAW reading 2026-10-14 (CRE-056), low confidence: the judges split 1-1.
+            CharacterAlignment = Alignment.NeutralEvil,
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,

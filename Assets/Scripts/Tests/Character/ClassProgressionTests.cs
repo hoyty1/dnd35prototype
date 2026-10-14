@@ -208,19 +208,21 @@ public static class ClassProgressionTests
 
         // A monster with racial HD keeps them and adds the class (MM p.290, PHB p.59-60): its first class level is not
         // its first Hit Die, so the d12 joins the averaged pool (owner interpretation 2026-10-11, CRE-041): 4d8 + 1d12 average
-        // 24.5, rounded down 24, so the d12 adds 6 + CON 2 to the ogre's 29.
+        // 24.5, rounded down 24, so the d12 adds 6. A PC class gives the ogre the elite array (barbarian table Con 13 plus
+        // the ogre's +4 = 17, MM p.294; CRE-058), so every one of its dice now adds CON +3: the ogre's 29 becomes 33.
         NPCDefinition ogre = NPCDatabase.Get("ogre");
         if (ogre != null)
         {
             NPCDefinition barbarianOgre = ogre.Clone();
             CreatureClassEngine.ApplyClassToDefinition(barbarianOgre, ClassRegistry.GetClass("Barbarian"), 1);
-            Assert(barbarianOgre.HitDice == 5 && barbarianOgre.BaseHitDieHP == 29 + 6 + 2 && !barbarianOgre.FirstHitDieMaximized,
-                "Ogre barbarian 1: 5 HD (4d8 + 1d12, MM p.290), 29 + 8 hit points: an averaged d12, no maximum die (CRE-041)", $"HD {barbarianOgre.HitDice}, HP {barbarianOgre.BaseHitDieHP}");
+            Assert(barbarianOgre.HitDice == 5 && barbarianOgre.CON == 17 && barbarianOgre.BaseHitDieHP == 33 + 6 + 3 && !barbarianOgre.FirstHitDieMaximized,
+                "Ogre barbarian 1: 5 HD (4d8 + 1d12, MM p.290), CON 17, 33 + 9 hit points: an averaged d12, no maximum die (CRE-041, CRE-058)",
+                $"HD {barbarianOgre.HitDice}, CON {barbarianOgre.CON}, HP {barbarianOgre.BaseHitDieHP}");
 
             NPCDefinition barbarianOgre2 = ogre.Clone();
             CreatureClassEngine.ApplyClassToDefinition(barbarianOgre2, ClassRegistry.GetClass("Barbarian"), 2);
-            Assert(barbarianOgre2.BaseHitDieHP == 29 + 13 + 4,
-                "Ogre barbarian 2: 4d8 + 2d12 pooled 31 = 18 + 13, so the class adds 13 + 2 x CON 2 = 17", $"HP {barbarianOgre2.BaseHitDieHP}");
+            Assert(barbarianOgre2.BaseHitDieHP == 33 + 13 + 6,
+                "Ogre barbarian 2: 4d8 + 2d12 pooled 31 = 18 + 13, so the class adds 13 + 2 x CON 3 = 19 to 33", $"HP {barbarianOgre2.BaseHitDieHP}");
         }
 
         // Class levels continue the pool of a creature whose first die was maximized: the orc barbarian 2 (12, then an

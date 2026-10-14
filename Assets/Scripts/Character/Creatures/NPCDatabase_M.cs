@@ -870,10 +870,14 @@ public static partial class NPCDatabase
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
-            STR = 14, DEX = 16, CON = 12, WIS = 16, INT = 10, CHA = 8,
+            // DMG p.118-119, the NPC monk (Table 4-17) and its sample 5th-level NPC monk: an elite DMG chapter 4 NPC (DMG p.110; the DMG
+            // "5th-level human monk NPC" row, CRE-058, delegated RAW reading 2026-10-14): starting Str 14, Dex 13, Con 12,
+            // Int 10, Wis 15, Cha 8, Dex 14 at 4th; humans have no adjustments.
+            STR = 14, DEX = 14, CON = 12, WIS = 15, INT = 10, CHA = 8,
             NaturalArmorBonus = 1, // +1 AC class bonus at 5th
             BaseSpeed = 8, // 40 ft
-            BaseHitDieHP = 32, // 5d8+5 average
+            BaseHitDieHP = 31, // DMG p.118 sample: 8 (maximum first die) + 4d8 averaged 18 + CON 5
+            FirstHitDieMaximized = true,
             BAB = 3, // Monk 5: +3
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
@@ -894,7 +898,7 @@ public static partial class NPCDatabase
                 "Ki Strike (magic): unarmed strikes count as magic weapons",
                 "Purity of Body: immune to all diseases",
                 "Slow Fall 20 ft.",
-                "AC Bonus (Ex): +3 WIS mod + 1 class to AC when unarmored",
+                "AC Bonus (Ex): +2 WIS mod + 1 class to AC when unarmored",
                 "Unarmed Strike 1d8",
                 "Speed 40 ft."
             },

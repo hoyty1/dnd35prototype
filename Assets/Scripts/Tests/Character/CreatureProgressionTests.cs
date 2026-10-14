@@ -48,6 +48,9 @@ public static class CreatureProgressionTests
         TestApplyClassStacksOnRacialHitDice();
         TestApplyToStatsOutsideTheSpawn();
         TestToughnessTotalsAreMonsterManualTotals();
+        TestEliteDmgTableNpcs();
+        TestMonsterClassAdvancement();
+        TestEncounterClassRowAlignments();
 
         if (GameManager.Instance == null)
         {
@@ -66,6 +69,7 @@ public static class CreatureProgressionTests
             TestTemplates();
             TestNpcMatchesPc();
             TestToughnessSpawnsAtDefinitionTotal();
+            TestEliteNpcSpawn();
         }
 
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
@@ -229,8 +233,11 @@ public static class CreatureProgressionTests
         int conMod = ClassProgression.HitPointConstitutionModifier(def.CON);
         Assert(def.HitDice == 2 && def.Level == 2 && def.CharacterClass == "Adept",
             "goblin adept 2: 2 HD, all adept", $"HD {def.HitDice}, {def.CharacterClass} {def.Level}");
-        Assert(def.BaseHitDieHP == CreatureClassEngine.CalculateClassHP(6, conMod, 2),
-            "goblin adept 2: hit points from the adept dice alone (the goblin's 1d8 is gone)", $"got {def.BaseHitDieHP}");
+        Assert(def.BaseHitDieHP == CreatureClassEngine.CalculateClassHP(6, conMod, 2, firstLevelIsFirstHitDie: false) && !def.FirstHitDieMaximized,
+            "goblin adept 2: hit points from the adept dice alone (the goblin's 1d8 is gone), every die averaged: an NPC class is an average character (MM p.294, DMG p.110; CRE-058)",
+            $"got {def.BaseHitDieHP}, maximized {def.FirstHitDieMaximized}");
+        Assert(def.STR == goblin.STR && def.DEX == goblin.DEX && def.CON == goblin.CON && def.WIS == goblin.WIS,
+            "goblin adept 2 keeps the MM warrior's scores (already the nonelite array, MM p.7, p.294; CRE-058)");
         Assert(!def.BaseAttackBonusOverride.HasValue && def.ResolveRacialHitDice() == 0,
             "goblin adept 2: the goblin's BAB override and racial HD are gone");
         Assert(goblin.BaseHitDieHP == templateHp && goblin.BaseAttackBonusOverride == templateOverride && goblin.HitDice == 1,
@@ -308,8 +315,9 @@ public static class CreatureProgressionTests
         // (owner interpretation 2026-10-11, CRE-041).
         NPCDefinition noTotal = ogre.Clone();
         noTotal.BaseHitDieHP = 0;
-        int racial = ClassProgression.CreatureMaxHitPoints(0, 8, 4, noTotal.CON) + FeatManager.HitPointBonusForFeats(noTotal.Feats);
         CreatureClassEngine.ApplyClassToDefinition(noTotal, ClassRegistry.GetClass("Fighter"), 1);
+        // The racial average uses the rebuilt CON (elite array, CRE-058).
+        int racial = ClassProgression.CreatureMaxHitPoints(0, 8, 4, noTotal.CON) + FeatManager.HitPointBonusForFeats(noTotal.Feats);
         int conMod = ClassProgression.HitPointConstitutionModifier(noTotal.CON);
         Assert(noTotal.BaseHitDieHP == racial + CreatureClassEngine.CalculateClassHP(10, conMod, 1, firstLevelIsFirstHitDie: false, halfPointDiceBefore: 4),
             "no hit point total: the racial average (Toughness counted) is kept and an averaged class die is added", $"got {noTotal.BaseHitDieHP}, racial {racial}");
@@ -369,8 +377,8 @@ public static class CreatureProgressionTests
         SpawnTemplateAndCheck("gnoll", "gnoll (MM p.130)", 2, 1, 3, 0, 0, 4, 0, 0);
         SpawnTemplateAndCheck("bugbear", "bugbear (MM p.29)", 3, 2, 1, 3, 1, 2, 4, 1);
         SpawnTemplateAndCheck("lizardfolk", "lizardfolk (MM p.169)", 2, 1, 0, 3, 0, 1, 3, 0);
-        // The troglodyte data has DEX 10 (MM Dex 9, p.246), so only the base values are compared.
-        SpawnTemplateAndCheck("troglodyte", "troglodyte (MM p.246)", 2, 1, 3, 0, 0);
+        // The troglodyte data has the MM Str 10 and Dex 9 since 2026-10-14 (CRE-058), so its printed saves compare too.
+        SpawnTemplateAndCheck("troglodyte", "troglodyte (MM p.246)", 2, 1, 3, 0, 0, 5, -1, 0);
     }
 
     private static void TestOgre()
@@ -507,6 +515,218 @@ public static class CreatureProgressionTests
         { "zombie_bugbear", 42 }, { "zombie_human_commoner", 16 }, { "zombie_human_warrior", 16 },
         { "zombie_minotaur", 81 }, { "zombie_ogre", 55 }, { "zombie_owlbear", 68 }, { "zombie_troglodyte", 29 },
     };
+
+    private static bool Scores(NPCDefinition d, int str, int dex, int con, int intel, int wis, int cha)
+        => d.STR == str && d.DEX == dex && d.CON == con && d.INT == intel && d.WIS == wis && d.CHA == cha;
+
+    private static string ScoreText(NPCDefinition d) => $"{d.STR}/{d.DEX}/{d.CON}/{d.INT}/{d.WIS}/{d.CHA}";
+
+    /// <summary>
+    /// CRE-058, delegated RAW readings 2026-10-14: a DMG table row labelled "NPC" is an elite DMG chapter 4 NPC (DMG p.78
+    /// step 4, p.110): the elite array as the class table arranges it (DMG p.111-125) plus the racial adjustments (DMG
+    /// p.126-127) and the increases by Hit Dice (MM p.291), and the maximum on its first Hit Die: the first class die when
+    /// the class replaces a 1-HD humanoid's die, else the first racial die (DMG p.172-173), the rest pooled (CRE-041).
+    /// </summary>
+    private static void TestEliteDmgTableNpcs()
+    {
+        Debug.Log("--- Elite DMG-table NPCs: elite array, racial adjustments, maximum first Hit Die (DMG p.110; CRE-058) ---");
+
+        // "5th-level hobgoblin fighter NPC" (DMG p.80): fighter table Str 15, Dex 13, Con 14, Int 10, Wis 12, Cha 8; hobgoblin
+        // Dex +2, Con +2 (MM p.154); Str 16 at 4th level. 1d10 max + 4d10 pooled 22, CON +3 per die: 10 + 22 + 15 = 47.
+        NPCDefinition hob = Template("hobgoblin");
+        if (hob != null)
+        {
+            NPCDefinition d = hob.Clone();
+            CreatureClassEngine.ApplyEncounterClassLevel(d, ClassRegistry.GetClass("Fighter"), 5, ClassAdvancement.DmgNpc);
+            int feats = FeatManager.HitPointBonusForFeats(d.Feats);
+            Assert(Scores(d, 16, 15, 16, 10, 12, 8), "hobgoblin fighter 5 NPC: elite fighter scores 16/15/16/10/12/8", "got " + ScoreText(d));
+            Assert(d.BaseHitDieHP == 47 + feats && d.FirstHitDieMaximized && d.HitDice == 5,
+                "hobgoblin fighter 5 NPC: 47 hp, the first fighter die maximized", $"got {d.BaseHitDieHP}, maximized {d.FirstHitDieMaximized}, HD {d.HitDice}");
+            Assert(d.CharacterAlignment == Alignment.LawfulEvil, "hobgoblin fighter 5 NPC keeps the hobgoblin's LE (MM p.153; CRE-056)", "got " + d.CharacterAlignment);
+        }
+
+        // "5th-level goblin rogue NPC" (DMG p.80): rogue table 12/15/13/14/10/8, goblin Str -2, Dex +2, Cha -2 (MM p.134),
+        // Dex 18 at 4th level. 1d6 max + 4d6 pooled 14, CON +1 per die: 6 + 14 + 5 = 25.
+        NPCDefinition gob = Template("goblin");
+        if (gob != null)
+        {
+            NPCDefinition d = gob.Clone();
+            CreatureClassEngine.ApplyEncounterClassLevel(d, ClassRegistry.GetClass("Rogue"), 5, ClassAdvancement.DmgNpc);
+            Assert(Scores(d, 10, 18, 13, 14, 10, 6), "goblin rogue 5 NPC: elite rogue scores 10/18/13/14/10/6", "got " + ScoreText(d));
+            Assert(d.BaseHitDieHP == 25 + FeatManager.HitPointBonusForFeats(d.Feats) && d.FirstHitDieMaximized,
+                "goblin rogue 5 NPC: 25 hp, the first rogue die maximized", $"got {d.BaseHitDieHP}");
+        }
+
+        // "5th-level lizardfolk druid NPC" (DMG p.81): 2 humanoid HD kept beside the class (MM p.290). Druid table
+        // 10/14/13/12/15/8 plus the lizardfolk's Str +2, Con +2, Int -2 (MM score less 10 or 11, MM p.7), Wis 16 at its 4th
+        // Hit Die. The first racial die is maximized: 8 + (1 + 5)d8 pooled 27 + CON +2 x 7 = 49.
+        NPCDefinition liz = Template("lizardfolk");
+        if (liz != null)
+        {
+            NPCDefinition d = liz.Clone();
+            CreatureClassEngine.ApplyEncounterClassLevel(d, ClassRegistry.GetClass("Druid"), 5, ClassAdvancement.DmgNpc);
+            Assert(Scores(d, 12, 14, 15, 10, 16, 8), "lizardfolk druid 5 NPC: elite druid scores 12/14/15/10/16/8", "got " + ScoreText(d));
+            Assert(d.BaseHitDieHP == 49 + FeatManager.HitPointBonusForFeats(d.Feats) && d.FirstHitDieMaximized && d.HitDice == 7,
+                "lizardfolk druid 5 NPC: 49 hp, the first racial die maximized (DMG p.172-173)", $"got {d.BaseHitDieHP}, maximized {d.FirstHitDieMaximized}, HD {d.HitDice}");
+            Assert(d.CharacterAlignment == Alignment.TrueNeutral, "lizardfolk druid 5 NPC keeps the lizardfolk's N, legal for a druid (CRE-056)", "got " + d.CharacterAlignment);
+        }
+    }
+
+    /// <summary>
+    /// CRE-058, delegated RAW readings 2026-10-14: class levels outside the DMG NPC rows. A PC class gets the elite array
+    /// (MM p.294) but no maximized racial die (MM p.199 ogre barbarian); an NPC class averages every die and a 1-HD
+    /// humanoid keeps its MM warrior scores (MM p.294, DMG p.110); a row that names an MM sample whose base is not the
+    /// sample is built by the MM p.294 rule the sample follows and keeps the base's alignment.
+    /// </summary>
+    private static void TestMonsterClassAdvancement()
+    {
+        Debug.Log("--- Monsters given class levels: elite array for PC classes, averaged dice; printed-sample rows by the MM p.294 rule (CRE-058) ---");
+
+        // The same lizardfolk druid 5 outside the DMG NPC rows: elite scores, every die averaged: 11 + 2 (CON +2 now on both
+        // racial dice) + 5d8 pooled with 2 half points 22 + 5 x 2 = 45.
+        NPCDefinition liz = Template("lizardfolk");
+        if (liz != null)
+        {
+            NPCDefinition d = liz.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(d, ClassRegistry.GetClass("Druid"), 5);
+            Assert(Scores(d, 12, 14, 15, 10, 16, 8) && d.BaseHitDieHP == 45 + FeatManager.HitPointBonusForFeats(d.Feats) && !d.FirstHitDieMaximized,
+                "lizardfolk + druid 5 (not a DMG NPC row): elite scores, 45 hp, no maximized die", $"got {ScoreText(d)}, {d.BaseHitDieHP} hp");
+        }
+
+        // A goblin given adept 1 (QuickSpawnSystem): an NPC class, so its die is averaged and the scores stay.
+        NPCDefinition gob = Template("goblin");
+        if (gob != null)
+        {
+            NPCDefinition d = gob.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(d, ClassRegistry.GetClass("Adept"), 1);
+            int conMod = ClassProgression.HitPointConstitutionModifier(d.CON);
+            Assert(!d.FirstHitDieMaximized && d.BaseHitDieHP == ClassProgression.AveragedHitPoints(6, 1, conMod) + FeatManager.HitPointBonusForFeats(d.Feats)
+                   && Scores(d, gob.STR, gob.DEX, gob.CON, gob.INT, gob.WIS, gob.CHA),
+                "goblin + adept 1: averaged d6, the goblin's scores (MM p.294; CRE-058)", $"got {d.BaseHitDieHP} hp, {ScoreText(d)}");
+        }
+
+        // A DMG row naming an MM stat block ("1 ogre barbarian, 4th level", DMG p.81) on a base that is not the sample
+        // (no ogre_barbarian is registered, CRE-069): the levels follow the MM p.294 rule the MM p.199 sample itself
+        // follows, so barbarian scores 15/14/13/10/12/8 plus the ogre's +10/-2/+4/-4/0/-4 and the 8-HD increase on Con:
+        // Con 18 and the printed 79 hp (4d8 + 4d12 averaged 44, Con +4 x 8, Toughness +3), every die averaged; the ogre
+        // keeps its alignment line. Str is 25 against the printed 26 (the MM arranges the array its own way).
+        NPCDefinition ogre = Template("ogre");
+        if (ogre != null)
+        {
+            NPCDefinition d = ogre.Clone();
+            CreatureClassEngine.ApplyEncounterClassLevel(d, ClassRegistry.GetClass("Barbarian"), 4, ClassAdvancement.PrintedSample);
+            Assert(Scores(d, 25, 12, 18, 6, 12, 4) && d.BaseHitDieHP == 79 && !d.FirstHitDieMaximized && d.CharacterAlignment == ogre.CharacterAlignment,
+                "ogre barbarian 4 row (an MM sample row, sample not registered): MM p.294 rebuild, Con 18, 79 hp (MM p.199), every die averaged",
+                $"got {ScoreText(d)}, {d.BaseHitDieHP} hp, {d.CharacterAlignment}");
+        }
+
+        // A printed sample on a human base keeps its definition's alignment instead of the class's typical one
+        // (DMG p.78 step 4: the MM statistics block; the DMG p.81 half-dragon 4th-level fighter row).
+        NPCDefinition humanBase = Template("human_warrior");
+        if (humanBase != null)
+        {
+            // The clone carries a sample's own alignment (LE stands in for it; the fighter's typical one would be N).
+            NPCDefinition d = humanBase.Clone();
+            d.CharacterAlignment = Alignment.LawfulEvil;
+            CreatureClassEngine.ApplyEncounterClassLevel(d, ClassRegistry.GetClass("Fighter"), 4, ClassAdvancement.PrintedSample);
+            Assert(d.CharacterAlignment == Alignment.LawfulEvil && d.FirstHitDieMaximized,
+                "a human base given a printed-sample row keeps its own alignment; the replaced die is maximized (MM p.146 half-dragon fighter)",
+                $"got {d.CharacterAlignment}, maximized {d.FirstHitDieMaximized}");
+        }
+
+        // A human class NPC takes its class's typical alignment (PHB p.104 Table 6-1; CRE-056): barbarian CN, fighter N.
+        NPCDefinition human = Template("human_warrior");
+        if (human != null)
+        {
+            NPCDefinition barbarian = human.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(barbarian, ClassRegistry.GetClass("Barbarian"), 1);
+            NPCDefinition fighter = human.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(fighter, ClassRegistry.GetClass("Fighter"), 1);
+            Assert(barbarian.CharacterAlignment == Alignment.ChaoticNeutral && fighter.CharacterAlignment == Alignment.TrueNeutral,
+                "a human barbarian is CN and a human fighter N (PHB p.104 Table 6-1)", $"got {barbarian.CharacterAlignment}, {fighter.CharacterAlignment}");
+            Assert(Scores(barbarian, 15, 14, 13, 10, 12, 8) && barbarian.BaseHitDieHP == 13 + FeatManager.HitPointBonusForFeats(barbarian.Feats) && barbarian.FirstHitDieMaximized,
+                "a human barbarian 1: the barbarian table's scores (no human adjustment) and 12 + CON 1 hp", $"got {ScoreText(barbarian)}, {barbarian.BaseHitDieHP} hp");
+        }
+
+        // The hard-coded fallback table's "5th-level human monk NPC" and paladin rows spawn the hand-built entries, which
+        // are the DMG chapter 4 samples (DMG p.118: monk 5 31 hp, paladin 5 37 hp; elite, maximum first die).
+        NPCDefinition monk5 = Template("human_monk_5");
+        if (monk5 != null)
+            Assert(Scores(monk5, 14, 14, 12, 10, 15, 8) && monk5.BaseHitDieHP == 31 && monk5.FirstHitDieMaximized,
+                "human_monk_5 is the DMG p.118 sample NPC monk 5 (elite scores, 31 hp)", $"got {ScoreText(monk5)}, {monk5.BaseHitDieHP} hp");
+        NPCDefinition paladin5 = Template("human_paladin_5");
+        if (paladin5 != null)
+            Assert(Scores(paladin5, 14, 8, 12, 10, 14, 15) && paladin5.BaseHitDieHP == 37 && paladin5.FirstHitDieMaximized,
+                "human_paladin_5 is the DMG p.118 sample NPC paladin 5 (elite scores, 37 hp)", $"got {ScoreText(paladin5)}, {paladin5.BaseHitDieHP} hp");
+    }
+
+    /// <summary>
+    /// CRE-056, delegated RAW reading 2026-10-14: every class-levelled row of the DMG dungeon tables (the CSV and the
+    /// hard-coded fallback) spawns with an alignment its class allows (PHB p.24-49), since a class NPC takes its race's
+    /// listed alignment; and the "NPC" rows are elite while rows naming an MM sample keep it (CRE-058).
+    /// </summary>
+    private static void TestEncounterClassRowAlignments()
+    {
+        Debug.Log("--- DMG dungeon table class rows: class-legal alignments; NPC rows elite (CRE-056, CRE-058) ---");
+        var tables = new List<Dictionary<int, DungeonEncounterTable>> { DungeonEncounterTableManager.GetAllTables(), DungeonEncounterTableData.BuildAllTables() };
+        int checkedRows = 0, eliteRows = 0, sampleRows = 0;
+        var missing = new List<string>();
+        foreach (Dictionary<int, DungeonEncounterTable> set in tables)
+        {
+            if (set == null)
+                continue;
+            foreach (DungeonEncounterTable table in set.Values)
+            {
+                foreach (DungeonEncounterTableEntry entry in table.Entries)
+                {
+                    foreach (EncounterCreatureEntry creature in entry.Creatures)
+                    {
+                        if (!creature.HasClassLevels)
+                            continue;
+                        if (creature.Advancement == ClassAdvancement.DmgNpc) eliteRows++;
+                        if (creature.Advancement == ClassAdvancement.PrintedSample) sampleRows++;
+                        NPCDefinition baseDef = NPCDatabase.Get(creature.BaseCreatureId);
+                        ICharacterClass cls = ClassRegistry.GetClass(creature.TemplateClass);
+                        if (baseDef == null || cls == null)
+                        {
+                            missing.Add(creature.BaseCreatureId + " " + creature.TemplateClass);
+                            continue;
+                        }
+                        NPCDefinition d = baseDef.Clone();
+                        CreatureClassEngine.ApplyEncounterClassLevel(d, cls, creature.TemplateLevel, creature.Advancement);
+                        checkedRows++;
+                        Assert(AlignmentHelper.IsAlignmentValidForClass(d.CharacterAlignment, d.CharacterClass),
+                            $"L{table.DungeonLevel} {creature.BaseCreatureId} {creature.TemplateClass} {creature.TemplateLevel}: {d.CharacterAlignment} is legal for a {d.CharacterClass}");
+                    }
+                }
+            }
+        }
+        Assert(checkedRows >= 6 && eliteRows >= 6 && sampleRows >= 3,
+            "the class rows were checked: NPC rows marked elite, MM sample rows marked as samples",
+            $"checked {checkedRows}, elite {eliteRows}, samples {sampleRows}; no base: {string.Join(", ", missing)}");
+    }
+
+    /// <summary>The elite hobgoblin fighter 5 spawns at its definition total with its elite scores (CRE-058).</summary>
+    private static void TestEliteNpcSpawn()
+    {
+        NPCDefinition hob = Template("hobgoblin");
+        if (hob == null)
+            return;
+        NPCDefinition d = hob.Clone();
+        CreatureClassEngine.ApplyEncounterClassLevel(d, ClassRegistry.GetClass("Fighter"), 5, ClassAdvancement.DmgNpc);
+        CharacterController cc = Spawn(d, "elite_hobgoblin_fighter5");
+        try
+        {
+            // Base Fort +4 (fighter 5) + CON 16 (+3) = +7; Ref +1 + Dex 15 (+2) = +3; Will +1 + Wis 12 (+1) = +2.
+            CheckTotals(cc.Stats, "elite hobgoblin fighter 5", 7, 3, 2);
+            Assert(cc.Stats.TotalMaxHP == d.BaseHitDieHP && cc.Stats.STR == 16,
+                $"elite hobgoblin fighter 5 spawns with {d.BaseHitDieHP} hp and Str 16", $"got {cc.Stats.TotalMaxHP} hp, Str {cc.Stats.STR}");
+        }
+        finally
+        {
+            Cleanup(cc);
+        }
+    }
 
     private static void TestToughnessTotalsAreMonsterManualTotals()
     {

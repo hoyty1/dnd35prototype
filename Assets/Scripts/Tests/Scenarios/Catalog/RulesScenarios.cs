@@ -135,7 +135,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 149;
+        public const int Count = 152;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -262,6 +262,9 @@ namespace Tests.Scenarios
             yield return S("combat-end-tie-victory", () => CombatEndTie(true));
             yield return S("combat-end-tie-defeat", () => CombatEndTie(false));
             yield return S("combat-end-charmed-victory", CombatEndCharmedVictory);
+            yield return S("combat-end-charmed-defeat", CombatEndCharmedDefeat);
+            yield return S("combat-end-tie-charmed-survivor", CombatEndTieCharmedSurvivor);
+            yield return S("combat-end-domination-cleared-by-rest", CombatEndDominationClearedByRest);
             yield return S("xp-award-by-level", XPAwardByCharacterLevel);
             yield return S("xp-no-enemy-summons", XPNoEnemySummons);
             yield return S("large-encounter-goblins", LargeEncounterGoblins);
@@ -5310,6 +5313,140 @@ namespace Tests.Scenarios
                 .Build();
         }
 
+        /// <summary>
+        /// The same predicate for the party side (delegated RAW reading 2026-10-14, CORE-038; PCs and NPCs follow
+        /// identical rules, owner 2026-10-07): a hero charmed by the hostile side is out of the party side. The enchanter
+        /// (Scripted, the NPC turn path) casts Charm Person on the only hero, whose Will save is forced to a natural 1
+        /// (PHB p.209). The game declares the defeat with the hero at full HP and charmed; no one attacks.
+        /// </summary>
+        private static ScenarioDef CombatEndCharmedDefeat()
+        {
+            return Rules("rules/combat-end-charmed-defeat", "A hero charmed by the hostile side is out of the party side: charming the last hero loses the fight (PHB p.209; CORE-038, delegated RAW reading 2026-10-14)")
+                .Covers("CORE-038", "PHB p.209", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 4)), 8, 10, Control.Idle)
+                .Npc("enchanter", "evil_enchanter_test", 11, 10, Control.Scripted)
+                .Force(20, 1, SpellCaster.SavingThrowContext)
+                .Initiative("enchanter", "hero")
+                .Turn("enchanter", 1, Step.Cast(DND35e.Identifiers.SpellNames.CHARM_PERSON, "hero"), Step.EndTurn())
+                .Expect("The enchanter casts Charm Person and the hero's Will save fails", v =>
+                    v.Log("is charmed by").Count > 0
+                        ? ExpectResult.Pass("charm logged")
+                        : ExpectResult.Fail("no charm line logged"))
+                .Expect("The game declares the defeat itself", Expect.Outcome(Outcome.Defeat))
+                .Expect("Nobody attacks", Expect.None("attack", null))
+                .Expect("The defeat screen opened (its combat log line, CORE-001)", v =>
+                    v.Log("DEFEAT! Every hero is dead, dying or unconscious").Count > 0
+                        ? ExpectResult.Pass("defeat line logged")
+                        : ExpectResult.Fail("no defeat log line"))
+                .Expect("The hero ends the fight charmed, alive and at full HP", v =>
+                {
+                    JsonObj hero = v.Final("hero");
+                    if (hero == null) return ExpectResult.Fail("no final snapshot");
+                    bool ok = HasCond(hero, "Charmed") && hero.Get("hp") is int hp && hp > 0
+                        && !(hero.Get("st") is HPState st && st != HPState.Healthy);
+                    return ok ? ExpectResult.Pass("hero " + hero.Get("hp") + "/" + hero.Get("st") + " charmed")
+                              : ExpectResult.Fail("hero " + hero.Get("hp") + "/" + hero.Get("st") + " conds " + string.Join(",", (hero.Get("conds") as List<string>) ?? new List<string>()));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// Tie variant (CORE-038): the orc charms the hero and drops in the same moment (the step applies both, as the game
+        /// would if the charm landed as the orc fell), so both sides are out at once: the hero is out of the party side
+        /// (charmed by the hostile side, delegated RAW reading 2026-10-14) and the other PC is dying. The dying ally rolls
+        /// its stabilization checks (PHB p.145; every d% forced to 50, so it dies at -10). The charmed hero is alive, so a
+        /// PC survives and the party wins the tie (decided 2-1 on 2026-10-14: a charmed PC is alive and counts as the
+        /// surviving PC; the tie rule itself is unchanged).
+        /// </summary>
+        private static ScenarioDef CombatEndTieCharmedSurvivor()
+        {
+            return Rules("rules/combat-end-tie-charmed-survivor", "Both sides out at once with the last standing hero charmed: the charmed hero is alive and wins the tie (PHB p.145; CORE-038)")
+                .Covers("CORE-038", "PHB p.145", "PHB p.209", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 4)), 10, 10, Control.Scripted)
+                .Pc("ally", ActorSource.Stats(() => Fighter("Ally", 4)), 10, 12, Control.Idle)
+                .Npc("orc", "orc_warrior", 12, 10, Control.Idle)
+                .Hp("ally", -8)
+                .Force(100, 50, CharacterController.StabilizationCheckContext, -1)
+                .Initiative("hero", "ally", "orc")
+                .Turn("hero", 1,
+                    Step.Assert("The orc charms the hero and drops at once", ctx =>
+                    {
+                        CharacterController hero = ctx.Get("hero");
+                        CharacterController orc = ctx.Get("orc");
+                        var charm = new CharmedConditionData
+                        {
+                            Caster = orc, CasterName = orc.Stats.CharacterName, RemainingRounds = 10,
+                            SourceSpellId = DND35e.Identifiers.SpellNames.CHARM_PERSON, SourceEffectName = "Charm Person"
+                        };
+                        ctx.Gm.ApplyCondition(hero, CombatConditionType.Charmed, 10, source: orc, data: charm,
+                            sourceNameOverride: "Charm Person", sourceCategory: "Spell", sourceId: DND35e.Identifiers.SpellNames.CHARM_PERSON);
+                        orc.Stats.CurrentHP = -3;
+                        return ctx.Gm.HasCondition(hero, CombatConditionType.Charmed);
+                    }),
+                    Step.EndTurn())
+                .Expect("The charm setup ran", Expect.AssertsPass())
+                .Expect("The game declares the victory itself", Expect.Outcome(Outcome.Victory))
+                .Expect("The game logs that both sides are down and rolls the dying ally's stabilization on d% (PHB p.145)", v =>
+                {
+                    bool tie = v.Log("Both sides are down at once").Count > 0;
+                    int rolls = v.Log("Ally stabilization check: d%").Count;
+                    return tie && rolls == 2
+                        ? ExpectResult.Pass("tie line and " + rolls + " d% rolls")
+                        : ExpectResult.Fail("tie line " + tie + ", d% rolls " + rolls + " (expected 2)");
+                })
+                .Expect("The ally died at -10 and the charmed hero is alive", v =>
+                {
+                    JsonObj hero = v.Final("hero");
+                    JsonObj ally = v.Final("ally");
+                    if (hero == null || ally == null) return ExpectResult.Fail("no final snapshot");
+                    bool ok = ally.Get("st") is HPState ast && ast == HPState.Dead
+                        && HasCond(hero, "Charmed") && hero.Get("hp") is int hp && hp > 0;
+                    return ok ? ExpectResult.Pass("ally " + ally.Get("hp") + "/" + ally.Get("st") + ", hero " + hero.Get("hp") + " charmed")
+                              : ExpectResult.Fail("ally " + ally.Get("hp") + "/" + ally.Get("st") + ", hero " + hero.Get("hp") + "/" + hero.Get("st"));
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// CORE-038 review (2026-10-14): a hostile Dominate Person, which the game stores as a Command Undead effect on the
+        /// PC (`CharacterController.ActiveCommandUndeadEffect`), ends with the post-combat rest like a hostile Charm
+        /// (`GameManager.RestorePartyAfterCombat`, the CORE-015 full-rest stand-in); otherwise the next fight would count
+        /// the healthy PC out of the party side (`CombatEndRules.IsControlledByTeam`), since the effect's duration never
+        /// counts down (SPL-140). The hero's step dominates the hero for the orc, runs the party rest and then drops the
+        /// orc, all in one step so that no combat-end check runs in between.
+        /// </summary>
+        private static ScenarioDef CombatEndDominationClearedByRest()
+        {
+            return Rules("rules/combat-end-domination-cleared-by-rest", "A hostile domination on a PC ends with the post-combat rest, so it cannot hold the PC out of the party side in the next fight (CORE-038, CORE-015)")
+                .Covers("CORE-038", "CORE-015", "PHB p.224", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 4)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 12, 10, Control.Idle)
+                .Initiative("hero", "orc")
+                .Turn("hero", 1,
+                    Step.Assert("The orc dominates the hero (party side out), the party rest ends it, then the orc drops", ctx =>
+                    {
+                        CharacterController hero = ctx.Get("hero");
+                        CharacterController orc = ctx.Get("orc");
+                        var domination = new CommandUndeadEffectData { IsActive = true, DurationRemainingRounds = 100, CasterLevel = 9 };
+                        domination.SetCaster(orc);
+                        domination.SetControlledUndead(hero);
+                        hero.ApplyCommandUndeadEffect(domination);
+                        bool controlledBefore = CombatEndRules.IsControlledByTeam(hero, CharacterTeam.Enemy, null);
+                        ctx.Gm.Harness_RestorePartyAfterCombat();
+                        bool controlledAfter = CombatEndRules.IsControlledByTeam(hero, CharacterTeam.Enemy, null);
+                        bool cleared = hero.ActiveCommandUndeadEffect == null;
+                        orc.Stats.CurrentHP = -3;
+                        return controlledBefore && !controlledAfter && cleared;
+                    }),
+                    Step.EndTurn())
+                .Expect("The domination held the hero for the hostile side and the rest ended it", Expect.AssertsPass())
+                .Expect("The game declares the victory itself", Expect.Outcome(Outcome.Victory))
+                .Build();
+        }
+
         // ── Encounter spawning (ENC-001) ────────────────────────────────
 
         /// <summary>The five squares the default layout gives the first five creatures without a preset square.</summary>
@@ -5963,8 +6100,9 @@ namespace Tests.Scenarios
         /// Toughness, MM p.199: MaxHP 26 and TotalMaxHP, which adds feat hit points, 29), a CON 0 undead adds nothing (ghoul
         /// 2d12 = 13, MM p.119; it still spawns dead, CRE-044), an orc warrior given barbarian 2 through CreatureClassEngine
         /// spawns with its definition total, the maximum then an averaged d12 (the orc's Hit Die is exchanged for the class,
-        /// MM p.290, CRE-004), without CON again per level, and an ogre given barbarian 1 spawns with 29 + an averaged d12
-        /// pooled with its 4d8 (6) + CON 2 = 37, not a maximized die (owner interpretation 2026-10-11, CRE-041).
+        /// MM p.290, CRE-004), without CON again per level, and an ogre given barbarian 1 spawns with its 29 raised to 33 by
+        /// the elite array's CON 17 (MM p.294, CRE-058) + an averaged d12 pooled with its 4d8 (6) + CON 3 = 42, not a
+        /// maximized die (owner interpretation 2026-10-11, CRE-041).
         /// </summary>
         private static bool CreatureHitPointChecks(ScenarioContext ctx)
         {
@@ -6009,14 +6147,14 @@ namespace Tests.Scenarios
             }
             NPCDefinition ogreBarbarian = ogreTemplate.Clone();
             CreatureClassEngine.ApplyClassToDefinition(ogreBarbarian, ClassRegistry.GetClass("Barbarian"), 1);
-            ok &= ProgressionCheck(ctx, "ogre barbarian 1 definition HP: 29 + averaged d12 6 + CON 2 (CRE-041)", ogreBarbarian.BaseHitDieHP, 37);
+            ok &= ProgressionCheck(ctx, "ogre barbarian 1 definition HP: 33 (CON 17, elite array, CRE-058) + averaged d12 6 + CON 3 (CRE-041)", ogreBarbarian.BaseHitDieHP, 42);
             var ogreGo = new GameObject("ClassProgressionScenario_ogre_barbarian");
             CharacterController ogreCc = ogreGo.AddComponent<CharacterController>();
             try
             {
                 ctx.Gm.InitializeNPCFromDefinition(ogreCc, ogreBarbarian, new Vector2Int(-61, -61), null, null);
-                ok &= ProgressionCheck(ctx, "ogre barbarian 1 spawned TotalMaxHP (Toughness once)", ogreCc.Stats.TotalMaxHP, 37);
-                ok &= ProgressionCheck(ctx, "ogre barbarian 1 spawned at full HP", ogreCc.Stats.CurrentHP, 37);
+                ok &= ProgressionCheck(ctx, "ogre barbarian 1 spawned TotalMaxHP (Toughness once)", ogreCc.Stats.TotalMaxHP, 42);
+                ok &= ProgressionCheck(ctx, "ogre barbarian 1 spawned at full HP", ogreCc.Stats.CurrentHP, 42);
             }
             finally
             {

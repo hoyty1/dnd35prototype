@@ -41,6 +41,14 @@ public class ParsedCreatureGroup
     /// <summary>Whether this group is a class-leveled NPC.</summary>
     public bool IsNpc => !string.IsNullOrEmpty(NpcClass) && NpcLevel > 0;
 
+    /// <summary>
+    /// How the class levels apply (CRE-058, delegated RAW readings 2026-10-14): a row labelled "NPC" ("5th-level human
+    /// monk NPC", "dominated 5th-level human barbarian NPC") is an elite DMG chapter 4 NPC (DMG p.78 step 4, p.110); a
+    /// row naming an MM stat block without that label ("1 ogre barbarian, 4th level", "1 half-dragon 4th-level fighter",
+    /// "1 ghost, 5th-level fighter") is the printed sample (DMG p.78 step 4: use the MM).
+    /// </summary>
+    public ClassAdvancement Advancement = ClassAdvancement.Monster;
+
     /// <summary>Optional creature template IDs (e.g., "fiendish", "celestial", "half-dragon").</summary>
     public List<string> TemplateIds;
 
@@ -408,6 +416,7 @@ public static class EncounterDescriptionParser
             NpcRace = race,
             NpcClass = CapitalizeFirst(className),
             NpcLevel = level,
+            Advancement = ClassAdvancement.DmgNpc,
             Notes = notes,
             RawText = text
         };
@@ -433,6 +442,7 @@ public static class EncounterDescriptionParser
             NpcRace = race,
             NpcClass = CapitalizeFirst(className),
             NpcLevel = level,
+            Advancement = ClassAdvancement.DmgNpc,
             Notes = "dominated",
             RawText = text
         };
@@ -457,6 +467,7 @@ public static class EncounterDescriptionParser
             NpcRace = "human",
             NpcClass = CapitalizeFirst(className),
             NpcLevel = level,
+            Advancement = ClassAdvancement.PrintedSample,
             TemplateIds = new List<string> { "half-dragon" },
             RawText = text
         };
@@ -513,6 +524,7 @@ public static class EncounterDescriptionParser
             NpcRace = creature.ToLowerInvariant(),
             NpcClass = CapitalizeFirst(className),
             NpcLevel = level,
+            Advancement = ClassAdvancement.PrintedSample,
             Annotation = annotation,
             RawText = text
         };
@@ -539,6 +551,7 @@ public static class EncounterDescriptionParser
             NpcRace = creature,
             NpcClass = CapitalizeFirst(className),
             NpcLevel = level,
+            Advancement = ClassAdvancement.PrintedSample,
             RawText = text
         };
     }

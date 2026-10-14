@@ -260,7 +260,18 @@ public static class CombatEndRulesTests
             new ConditionService.ActiveCondition { Type = CombatConditionType.Charmed, RemainingRounds = 10, Source = wizard, SourceId = DND35e.Identifiers.SpellNames.MASS_SUGGESTION }
         };
         Assert(!CombatEndRules.IsControlledByTeam(foe, CharacterTeam.Player, suggestedByParty),
-            "A foe under the party's Mass Suggestion (Charmed in the game, a compulsion by RAW, PHB p.173, p.285) is not party-controlled (open owner question, CORE-038)");
+            "A foe under the party's Mass Suggestion (Charmed in the game, a compulsion by RAW, PHB p.173, p.285) is not party-controlled (delegated RAW reading 2026-10-14, CORE-038)");
+
+        // The same predicate for the party side (delegated RAW reading 2026-10-14, CORE-038): a hero charmed by a foe is
+        // controlled by the hostile side; one under a foe's Mass Suggestion is not.
+        var charmedByShaman = new List<ConditionService.ActiveCondition> { Condition(CombatConditionType.Charmed, shaman) };
+        var suggestedByShaman = new List<ConditionService.ActiveCondition>
+        {
+            new ConditionService.ActiveCondition { Type = CombatConditionType.Charmed, RemainingRounds = 10, Source = shaman, SourceId = DND35e.Identifiers.SpellNames.MASS_SUGGESTION }
+        };
+        Assert(CombatEndRules.IsControlledByTeam(hero, CharacterTeam.Enemy, charmedByShaman), "A hero charmed by a foe is controlled by the hostile side (PHB p.209)");
+        Assert(!CombatEndRules.IsControlledByTeam(hero, CharacterTeam.Enemy, charmedByParty), "A hero charmed by a party member is not controlled by the hostile side");
+        Assert(!CombatEndRules.IsControlledByTeam(hero, CharacterTeam.Enemy, suggestedByShaman), "A hero under a foe's Mass Suggestion is not controlled (a compulsion, PHB p.285; CORE-038)");
 
         var command = new CommandUndeadEffectData { IsActive = true, DurationRemainingRounds = 10, CasterLevel = 5 };
         command.SetCaster(wizard);
@@ -278,14 +289,23 @@ public static class CombatEndRulesTests
         s = CombatEndRules.Count(all);
         Assert(!s.EnemiesOut, "Without the control predicate the controlled foe still counts as in");
 
-        // A party member controlled by the hostile side still counts for the party (an open owner question, CORE-038).
+        // A party member controlled by the hostile side is out of the party side, by the same predicate (delegated RAW
+        // reading 2026-10-14, CORE-038): with the wizard dying, the dominated hero does not keep the party side in.
         var heroCommand = new CommandUndeadEffectData { IsActive = true, DurationRemainingRounds = 10, CasterLevel = 5 };
         heroCommand.SetCaster(shaman);
         heroCommand.SetControlledUndead(hero);
         hero.ApplyCommandUndeadEffect(heroCommand);
         wizard.Stats.CurrentHP = -2;
-        s = CombatEndRules.Count(all, c => CombatEndRules.IsControlledByTeam(c, CharacterTeam.Player, null));
-        Assert(!s.PlayersOut && s.PlayersIn == 1, $"A hero dominated by the hostile side still keeps the party side in (got {s.PlayersIn} in)");
+        foe.RemoveCommandUndeadEffect(); // the foe, no longer party-controlled, keeps the hostile side in
+        System.Func<CharacterController, bool> partyControls = c => CombatEndRules.IsControlledByTeam(c, CharacterTeam.Player, null);
+        System.Func<CharacterController, bool> hostileControls = c => CombatEndRules.IsControlledByTeam(c, CharacterTeam.Enemy, null);
+        s = CombatEndRules.Count(all, partyControls, hostileControls);
+        Assert(s.PlayersOut && s.PlayersAll == 2 && s.PlayersIn == 0 && !s.EnemiesOut,
+            $"A hero dominated by the hostile side is out of the party side; the party is out (got {s.PlayersIn}/{s.PlayersAll} in)");
+        s = CombatEndRules.Count(all, partyControls);
+        Assert(!s.PlayersOut && s.PlayersIn == 1, $"Without the party-side predicate the dominated hero still counts as in (got {s.PlayersIn} in)");
+        // It leaves its own side without joining the other: the hostile side's counts are unchanged.
+        Assert(s.EnemiesAll == 2, $"The dominated hero is not counted on the hostile side (got {s.EnemiesAll} hostile members)");
         foe.RemoveCommandUndeadEffect();
         hero.RemoveCommandUndeadEffect();
     }
