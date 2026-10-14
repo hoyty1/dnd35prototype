@@ -732,6 +732,39 @@ public class AIService : MonoBehaviour
     /// 5. Use breath weapon when available to hit most targets
     /// 6. Full melee attack as last resort
     /// </summary>
+    /// <summary>
+    /// A spell the dragon's cast-first step may choose (AI-037): never a 0-level spell, and with
+    /// <paramref name="buffsOnly"/> only a self or ally buff (an Illusion such as Mirror Image counts when it targets
+    /// the caster or an ally).
+    /// </summary>
+    internal static bool IsDragonCastFirstCandidate(SpellData spell, bool buffsOnly)
+    {
+        if (spell == null || spell.SpellLevel < 1)
+            return false;
+        if (!buffsOnly)
+            return true;
+        if (spell.EffectType == SpellEffectType.Buff)
+            return true;
+        return spell.EffectType == SpellEffectType.Illusion && AISpellcastingStrategist.IsAllyTargetedSpell(spell);
+    }
+
+    private bool HasAdjacentEnemy(CharacterController npc, List<CharacterController> allCombatants)
+    {
+        if (npc == null || allCombatants == null)
+            return false;
+        for (int i = 0; i < allCombatants.Count; i++)
+        {
+            CharacterController c = allCombatants[i];
+            if (c == null || c == npc || c.Stats == null || c.Stats.IsDead)
+                continue;
+            if (!_gameManager.IsEnemyTeamForAI(npc, c))
+                continue;
+            if (SquareGridUtils.GetDistance(npc.GridPosition, c.GridPosition) <= 1)
+                return true;
+        }
+        return false;
+    }
+
     private IEnumerator ExecuteDragonTurn(CharacterController npc, CharacterController target, DragonAIProfile dragonProfile)
     {
         if (npc == null || target == null || target.Stats == null || target.Stats.IsDead)
@@ -751,9 +784,15 @@ public class AIService : MonoBehaviour
         dragonProfile.BreathWeaponAimTarget = null;
 
         // ── Priority 1 & 2: Cast buff/attack spells if not in melee ──
+        // AI-037 (partial, 2026-10-14): since SPL-123 the NPC cast executor accepts a dragon's known spells, so this
+        // step used to win every turn with a cantrip (0-level spells never run out, SPL-138) in place of the breath or
+        // a full attack. Only a spell of 1st level or higher with a positive score is considered; while the breath is
+        // ready or an enemy is adjacent (a full attack is on), only a buff not yet active (SelectSpell skips active ones).
         if (!dragonProfile.IsTooCloseForCasting(npc, allCombatants, _gameManager))
         {
-            if (npc.Stats.IsSpellcaster && TryExecuteSpellcastAction(npc, target))
+            bool buffsOnly = (npc.HasBreathWeapon && npc.IsBreathWeaponReady) || HasAdjacentEnemy(npc, allCombatants);
+            Func<SpellData, bool> dragonCastFilter = s => IsDragonCastFirstCandidate(s, buffsOnly);
+            if (npc.Stats.IsSpellcaster && TryExecuteSpellcastAction(npc, target, dragonCastFilter, 0f))
             {
                 Debug.Log($"[AI][Dragon] {npc.Stats.CharacterName} cast a spell (priority 1/2).");
                 yield return new WaitForSeconds(0.8f);
@@ -2569,7 +2608,10 @@ public class AIService : MonoBehaviour
         return Mathf.Max(1, rangeSquares);
     }
 
-    private bool TryExecuteSpellcastAction(CharacterController caster, CharacterController fallbackTarget)
+    /// <param name="allow">Optional filter on the candidate spells (the dragon turn's cast-first step, AI-037); null allows all.</param>
+    /// <param name="minScore">A candidate must score above this to be chosen; the default keeps the old no-floor choice.</param>
+    private bool TryExecuteSpellcastAction(CharacterController caster, CharacterController fallbackTarget,
+        Func<SpellData, bool> allow = null, float minScore = float.NegativeInfinity)
     {
         if (_gameManager == null || caster == null || caster.Stats == null)
             return false;
@@ -2584,7 +2626,7 @@ public class AIService : MonoBehaviour
         List<SpellData> castableSpells = spellcasting != null ? spellcasting.GetCastablePreparedSpells() : null;
         int castableCount = castableSpells != null ? castableSpells.Count : 0;
 
-        SpellData spell = SelectSpell(caster, fallbackTarget);
+        SpellData spell = SelectSpell(caster, fallbackTarget, allow, minScore);
         if (spell == null)
         {
             Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} has no castable spell choice. castablePrepared={castableCount}");
@@ -2597,7 +2639,7 @@ public class AIService : MonoBehaviour
         if (defensiveResult == 0)
         {
             // Can't safely cast in melee — try a lower-level spell
-            SpellData altSpell = SelectLowerLevelAlternative(caster, fallbackTarget, spell.SpellLevel);
+            SpellData altSpell = SelectLowerLevelAlternative(caster, fallbackTarget, spell.SpellLevel, allow, minScore);
             if (altSpell != null)
             {
                 int altResult = AISpellcastingStrategist.EvaluateDefensiveCasting(caster, altSpell, allCombatants);
@@ -2649,7 +2691,8 @@ public class AIService : MonoBehaviour
     }
 
     /// <summary>Find a lower-level spell alternative when the primary choice is too risky in melee.</summary>
-    private SpellData SelectLowerLevelAlternative(CharacterController caster, CharacterController target, int maxLevel)
+    private SpellData SelectLowerLevelAlternative(CharacterController caster, CharacterController target, int maxLevel,
+        Func<SpellData, bool> allow = null, float minScore = float.NegativeInfinity)
     {
         if (caster == null || caster.Stats == null) return null;
 
@@ -2668,12 +2711,13 @@ public class AIService : MonoBehaviour
         {
             SpellData spell = castable[i];
             if (spell == null || spell.SpellLevel >= maxLevel) continue;
+            if (allow != null && !allow(spell)) continue; // AI-037
             if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell)) continue; // SPL-135
 
             float score = AISpellcastingStrategist.ScoreSpellComprehensive(
                 spell, caster, target, allCombatants, _gameManager);
 
-            if (score > bestScore)
+            if (score > minScore && score > bestScore)
             {
                 bestScore = score;
                 best = spell;
@@ -2722,7 +2766,13 @@ public class AIService : MonoBehaviour
         return HasCreatureTag(caster, "AI:MagicMissileOnly");
     }
 
-    public SpellData SelectSpell(CharacterController caster, CharacterController target)
+    /// <summary>
+    /// The highest-scoring castable spell, or null. <paramref name="allow"/> filters the candidates and a candidate
+    /// must score above <paramref name="minScore"/> (both used by the dragon turn's cast-first step, AI-037); the
+    /// defaults keep every caller's old choice.
+    /// </summary>
+    public SpellData SelectSpell(CharacterController caster, CharacterController target,
+        Func<SpellData, bool> allow = null, float minScore = float.NegativeInfinity)
     {
         if (caster == null || caster.Stats == null)
             return null;
@@ -2765,6 +2815,8 @@ public class AIService : MonoBehaviour
             SpellData spell = castable[i];
             if (spell == null)
                 continue;
+            if (allow != null && !allow(spell))
+                continue; // AI-037
 
             // A cast with no modelled effect wastes the action (Alter Self, SPL-135).
             if (AISpellcastingStrategist.HasNoModelledCombatEffect(spell))
@@ -2803,7 +2855,7 @@ public class AIService : MonoBehaviour
                     spell, caster, target, allCombatants, _gameManager);
             }
 
-            if (score > bestScore)
+            if (score > minScore && score > bestScore)
             {
                 bestScore = score;
                 best = spell;

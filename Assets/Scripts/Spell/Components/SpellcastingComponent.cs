@@ -2666,10 +2666,10 @@ public class SpellcastingComponent : MonoBehaviour
             }
         }
 
-        // ── Spontaneous caster check (Sorcerer/Bard) ──
-        if (IsSpontaneousCaster && SpontaneousData != null)
+        // ── Spontaneous caster check (Sorcerer/Bard): the same rule as the NPC executor's CanCast (SPL-123) ──
+        if (IsSpontaneousCaster)
         {
-            return SpontaneousData.CanCast(spell.SpellId, spell.SpellLevel);
+            return CanCast(spell);
         }
 
         // ── Prepared caster check (Wizard/Cleric/Druid) ──
@@ -2695,13 +2695,14 @@ public class SpellcastingComponent : MonoBehaviour
         var castable = new List<SpellData>();
 
         // ── Spontaneous caster: return all known spells that have available slots ──
-        if (IsSpontaneousCaster && SpontaneousData != null)
+        // The same predicate as the NPC cast executor and counterspelling (CanCast, SPL-123).
+        if (IsSpontaneousCaster)
         {
             var knownIds = SpontaneousData.GetAllKnownSpellIds();
             foreach (string spellId in knownIds)
             {
                 SpellData spell = SpellDatabase.GetSpell(spellId);
-                if (spell != null && SpontaneousData.CanCast(spellId, spell.SpellLevel))
+                if (spell != null && CanCast(spell))
                     castable.Add(spell);
             }
             return castable;
@@ -2754,10 +2755,24 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>
     /// Check if the character can cast a specific spell (has slots remaining).
     /// Cantrips are always castable if prepared (unlimited use).
+    /// One availability predicate for PCs and NPCs (SPL-123): the NPC cast executor and the counterspell
+    /// availability check (CharacterController.HasSpellAvailableForCounter) ask it directly; the PC combat menu's
+    /// Cast Spell button (ActionButtonPanel, through HasAnyCastablePreparedSpell) and the AI candidate list
+    /// (AIService.SelectSpell) go through <see cref="GetCastablePreparedSpells"/>, and the character sheet through
+    /// <see cref="CanCastSpell"/> (which adds the Silence test), both of which call it for a spontaneous caster.
     /// </summary>
     public bool CanCast(SpellData spell)
     {
-        if (spell == null || SlotsRemaining == null) return false;
+        if (spell == null) return false;
+
+        // A spontaneous caster (sorcerer, bard, a dragon casting as a sorcerer) casts any spell it knows
+        // by spending a slot of that level (PHB p.54, p.28; MM p.69). Its known spells and slots live in
+        // SpontaneousData, which CastSpellFromSlot spends from; the legacy SlotsRemaining view is empty
+        // until the first cast, so reading it refused every spell on the NPC path (SPL-123).
+        if (IsSpontaneousCaster)
+            return SpontaneousData.CanCast(spell.SpellId, spell.SpellLevel);
+
+        if (SlotsRemaining == null) return false;
         if (spell.SpellLevel >= SlotsRemaining.Length) return false;
 
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)

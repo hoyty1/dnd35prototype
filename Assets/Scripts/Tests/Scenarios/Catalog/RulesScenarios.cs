@@ -133,7 +133,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 139;
+        public const int Count = 142;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -266,6 +266,9 @@ namespace Tests.Scenarios
             yield return S("template-applied-once", TemplateAppliedOnce);
             yield return S("summon-creature-entries", SummonCreatureEntries);
             yield return S("spell-save-dc", SpellSaveDc);
+            yield return S("npc-cast-spontaneous", NpcCastSpontaneous);
+            yield return S("dragon-ai-breath-young", () => DragonAiBreathNotCantrip("rules/dragon-ai-breath-young", "dragon_red_young", 2));
+            yield return S("dragon-ai-breath-juvenile", () => DragonAiBreathNotCantrip("rules/dragon-ai-breath-juvenile", "dragon_red_juvenile", 4));
             yield return S("save-bonuses", SaveBonuses);
             yield return S("spell-durations", SpellDurations);
             yield return S("spell-damage-mitigation", SpellDamageMitigation);
@@ -6072,11 +6075,12 @@ namespace Tests.Scenarios
         /// (Sor/Wiz/Brd 1, Enchantment, Will negates, PHB p.209) at a goblin, and neutral_mage_test (Wizard 3, INT 16,
         /// WIS 14) casts Daze (Sor/Wiz/Brd 0, PHB p.217) at the Quick Start cleric through the NPC cast executor. The
         /// Quick Start sorcerer (Kael, CHA 17, WIS 13; given Spell Focus (Enchantment), since character creation never
-        /// sets the school, CHR-021, and Charm Person in place of Mage Armor) and bard (Lyric, CHA 16, WIS 10) cannot cast
-        /// on the NPC executor (SPL-123: SpellcastingComponent.CanCast ignores a spontaneous caster's known spells; an
-        /// XFail below), and the Ui driver casts only from prepared slots, so the Assert step resolves their Charm Person,
-        /// and the evil_acolyte_test cleric's (Cleric 3, WIS 16, INT 12, CHA 13) Hold Person (Clr 2, Sor/Wiz 3, Will
-        /// negates), through SpellCaster.Cast, the resolver the PC and NPC single-target pipelines share. Before SPL-001
+        /// sets the school, CHR-021, and Charm Person in place of Mage Armor) is Scripted, so he casts Charm Person at
+        /// the first goblin through the NPC cast executor too (refused before SPL-123, when SpellcastingComponent.CanCast
+        /// read the empty legacy slot view of a spontaneous caster), and his logged save must use DC 15. The Ui driver
+        /// casts only from prepared slots, so the Assert step resolves his and the bard's (Lyric, CHA 16, WIS 10) Charm
+        /// Person, and the evil_acolyte_test cleric's (Cleric 3, WIS 16, INT 12, CHA 13) Hold Person (Clr 2, Sor/Wiz 3,
+        /// Will negates), through SpellCaster.Cast, the resolver the PC and NPC single-target pipelines share. Before SPL-001
         /// SpellCaster.Cast used WIS for every non-wizard: Kael's DC was 13 and Lyric's 11; now 15 (10 + 1 + CHA 3 +
         /// Spell Focus 1) and 14. The Assert step also checks the handler DC helper (GameManager.GetSpellSaveDC, used by
         /// every GameManager spell handler): with the wizard's Hold Person as the pending cast and Heighten to 5th as the
@@ -6127,8 +6131,8 @@ namespace Tests.Scenarios
                 .Expect("The PC wizard's Charm Person and the NPC wizard's Daze ran", Expect.All(
                     Expect.StepStatus("wizard", 1, "Cast", 0, "done"),
                     Expect.StepStatus("mage", 1, "Cast", 0, "done")))
-                .ExpectXFail("SPL-123", "The Quick Start sorcerer casts a known spell through the NPC cast executor", Expect.StepStatus("sorc", 1, "Cast", 0, "done"))
-                .Expect("Each logged save rolls against the caster's own DC: 10 + class level + INT for both wizards (PHB p.177)", v =>
+                .Expect("The Quick Start sorcerer casts a known spell through the NPC cast executor (SPL-123)", Expect.StepStatus("sorc", 1, "Cast", 0, "done"))
+                .Expect("Each logged save rolls against the caster's own DC: 10 + class level + INT for both wizards, + CHA and Spell Focus for the sorcerer (PHB p.177, p.100)", v =>
                 {
                     List<TraceEvent> notes = v.Of("note").Where(e => (e.Str("text") ?? "").StartsWith(SpellDcNotePrefix, StringComparison.Ordinal)).ToList();
                     if (notes.Count == 0)
@@ -6154,6 +6158,113 @@ namespace Tests.Scenarios
                     return ExpectResult.Pass(string.Join(", ", got));
                 })
                 .Build();
+        }
+
+        // ── Spontaneous casters on the NPC cast executor (SPL-123) ────────
+
+        /// <summary>
+        /// SPL-123: a spontaneous caster casts any spell it knows by spending a slot of that level (PHB p.54 sorcerer,
+        /// p.28 bard), and a dragon of a spellcasting age casts as a sorcerer (MM p.69). Three Scripted casters take the
+        /// NPC cast executor (TryNPCPerformSpellCast, whose availability check is SpellcastingComponent.CanCast): the Quick
+        /// Start sorcerer (Kael, Sorcerer 3 in the Quick Start party) casts Magic Missile at a goblin in round 1 and Daze at another in round 2,
+        /// the Quick Start bard (Lyric, Bard 3) casts Charm Person at a third, and a juvenile red dragon (sorcerer caster
+        /// level 3, GameManager.NPCSetup's innate Sorcerer entry) casts Shield on itself. Before SPL-123 CanCast read the
+        /// legacy slot view, empty for a spontaneous caster, so every one of these casts was refused. Each 1st-level cast
+        /// must spend exactly one 1st-level slot of SpontaneousData (the Assert steps after the casts), and the dragon must
+        /// then have the Shield effect.
+        /// </summary>
+        private static ScenarioDef NpcCastSpontaneous()
+        {
+            return Rules("rules/npc-cast-spontaneous", "Sorcerers, bards and spellcasting dragons cast their known spells through the NPC cast executor (PHB p.54, p.28; MM p.69; SPL-123)")
+                .Covers("SPL-123", "PHB p.54", "PHB p.28", "MM p.69", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("sorc", ActorSource.QuickStart("Sorcerer"), 5, 10, Control.Scripted)
+                .Pc("bard", ActorSource.QuickStart("Bard"), 5, 12, Control.Scripted)
+                .Npc("gob1", "goblin", 8, 9, Control.Idle)
+                .Npc("gob2", "goblin", 8, 12, Control.Idle)
+                .Npc("gob3", "goblin", 8, 14, Control.Idle)
+                .Npc("dragon", "dragon_red_juvenile", 14, 11, Control.Scripted)
+                .Initiative("sorc", "bard", "dragon", "gob1", "gob2", "gob3")
+                .Turn("sorc", 1,
+                    Step.Assert("Kael is a spontaneous caster with every 1st-level slot unspent", ctx => SpontaneousSlotsSpent(ctx, "sorc", 0)),
+                    Step.Cast(DND35e.Identifiers.SpellNames.MAGIC_MISSILE, "gob1"),
+                    Step.Assert("Magic Missile spent one 1st-level slot", ctx => SpontaneousSlotsSpent(ctx, "sorc", 1)))
+                .Turn("sorc", 2, Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "gob3"))
+                .Turn("bard", 1,
+                    Step.Cast(DND35e.Identifiers.SpellNames.CHARM_PERSON, "gob2"),
+                    Step.Assert("Charm Person spent one 1st-level bard slot", ctx => SpontaneousSlotsSpent(ctx, "bard", 1)))
+                .Turn("dragon", 1,
+                    Step.Cast(DND35e.Identifiers.SpellNames.SHIELD, "dragon"),
+                    Step.Assert("Shield spent one 1st-level slot and protects the dragon", ctx =>
+                    {
+                        bool spent = SpontaneousSlotsSpent(ctx, "dragon", 1);
+                        GameManager gm = GameManager.Instance;
+                        bool shielded = gm != null && gm.HasActiveShieldSpellForAI(ctx.Get("dragon"));
+                        ctx.Note("npc-cast-spontaneous dragon Shield active: " + shielded);
+                        return spent && shielded;
+                    }))
+                .Expect("Every cast step ran on the NPC cast executor", Expect.All(
+                    Expect.StepStatus("sorc", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("sorc", 2, "Cast", 0, "done"),
+                    Expect.StepStatus("bard", 1, "Cast", 0, "done"),
+                    Expect.StepStatus("dragon", 1, "Cast", 0, "done")))
+                .Expect("Each cast spent its slot from the caster's spontaneous slots", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>
+        /// AI-037 since SPL-123: an AI-run (Control.Ai) red dragon of a spellcasting age (MM p.69) faces the idle Quick
+        /// Start party from 8 squares away. Once SPL-123 let the NPC cast executor accept a dragon's known spells, the
+        /// dragon turn's cast-first step (AIService.ExecuteDragonTurn) could spend every turn on a cantrip, which never
+        /// runs out (SPL-138), in place of its breath weapon or full attack. The young red (caster level 1) knows
+        /// cantrips only; the juvenile (caster level 3) also knows 1st- and 2nd-level spells. Each must breathe within
+        /// <paramref name="rounds"/> rounds and must never cast a 0-level spell. Not a rules test (this is AI choice), so
+        /// the expectations read the trace only: "cast" events (the NPC cast executor) and the breath weapon's log line.
+        /// </summary>
+        private static ScenarioDef DragonAiBreathNotCantrip(string id, string npcId, int rounds)
+        {
+            return Rules(id, "An AI-run spellcasting dragon at range breathes and never spends its turn on a cantrip (AI-037, SPL-123, SPL-138)")
+                .Covers("AI-037", "SPL-123", "SPL-138", "MM p.69")
+                .MaxRounds(rounds)
+                .Pc("fighter", ActorSource.QuickStart("Fighter"), 4, 8, Control.Idle)
+                .Pc("rogue", ActorSource.QuickStart("Rogue"), 4, 10, Control.Idle)
+                .Pc("cleric", ActorSource.QuickStart("Cleric"), 4, 12, Control.Idle)
+                .Pc("wizard", ActorSource.QuickStart("Wizard"), 4, 14, Control.Idle)
+                .Npc("dragon", npcId, 12, 10, Control.Ai)
+                .Initiative("dragon", "fighter", "rogue", "cleric", "wizard")
+                .Expect("The dragon's turns are AI turns", Expect.Controller("dragon", "ai"))
+                .Expect("The dragon casts no 0-level spell (AI-037)", Expect.None("cast", e => e.Str("by") == "dragon" && e.Int("level") == 0))
+                .Expect("The dragon breathes within " + rounds + " rounds (AI-037)", v =>
+                {
+                    List<TraceEvent> breaths = v.Log(@"unleashes a \d+-ft (cone|line) of");
+                    int casts = v.Of("cast").Count(e => e.Str("by") == "dragon");
+                    if (breaths.Count > 0)
+                        return ExpectResult.Pass(breaths.Count + " breath(s), first in round " + breaths[0].Round + "; " + casts + " cast(s)", breaths[0].Seq);
+                    if (ScenarioChecks.IsDownSnapshot(v.Final("dragon")))
+                        return ExpectResult.Inconclusive("the dragon was dropped");
+                    return ExpectResult.Fail("no breath in " + rounds + " rounds; " + casts + " cast(s)");
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// True when <paramref name="key"/> is a spontaneous caster whose 1st-level slots are its maximum less
+        /// <paramref name="spent"/>; notes the counts.
+        /// </summary>
+        private static bool SpontaneousSlotsSpent(ScenarioContext ctx, string key, int spent)
+        {
+            CharacterController c = ctx.Get(key);
+            SpellcastingComponent sc = c != null ? c.Spellcasting : null;
+            if (sc == null || !sc.IsSpontaneousCaster)
+            {
+                ctx.Note("npc-cast-spontaneous " + key + " is not a spontaneous caster");
+                return false;
+            }
+            int max = sc.SpontaneousData.GetMaxSlots(1);
+            int left = sc.SpontaneousData.GetSlotsRemaining(1);
+            ctx.Note("npc-cast-spontaneous " + key + " (" + sc.SpontaneousData.CasterClassName + " CL " + sc.SpontaneousData.CasterLevel
+                + ") 1st-level slots " + left + "/" + max + ", expected " + (max - spent));
+            return max > spent && left == max - spent;
         }
 
         // ── Save bonuses (CHR-018) ──────────────────────────────────────
@@ -6513,12 +6624,16 @@ namespace Tests.Scenarios
 
             ok &= HandlerHeightenCheck(ctx, hold);
 
-            // The real casts: notes the log expectation reads.
-            var real = new[] { ("wizard", charm), ("mage", daze) };
+            // The real casts: notes the log expectation reads. Each caster's key ability modifier (PHB p.177).
+            var real = new[]
+            {
+                ("wizard", charm, ctx.Get("wizard").Stats.INTMod), ("mage", daze, ctx.Get("mage").Stats.INTMod),
+                ("sorc", charm, ctx.Get("sorc").Stats.CHAMod),
+            };
             foreach (var row in real)
             {
                 CharacterStats s = ctx.Get(row.Item1).Stats;
-                int expected = 10 + row.Item2.SpellLevel + s.INTMod + FeatManager.GetSpellFocusDCBonus(s, row.Item2.School);
+                int expected = 10 + row.Item2.SpellLevel + row.Item3 + FeatManager.GetSpellFocusDCBonus(s, row.Item2.School);
                 int rule = SpellSaveDCRules.Compute(ctx.Get(row.Item1), row.Item2);
                 if (rule != expected)
                 {

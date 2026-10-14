@@ -312,7 +312,7 @@ Never casts (AI-002), never runs or double-moves, never uses Total Defense, Powe
 ### 5.2 `ExecuteDragonTurn` (655)
 
 1. Resets per-turn breath state on the profile instance (AI-017).
-2. If at most 2 enemies are adjacent (`IsTooCloseForCasting`) and `IsSpellcaster`: `TryExecuteSpellcastAction`; success ends the turn. No score floor, so cantrips can pre-empt breath every turn (AI-037).
+2. If at most 2 enemies are adjacent (`IsTooCloseForCasting`) and `IsSpellcaster`: `TryExecuteSpellcastAction` with the dragon filter `IsDragonCastFirstCandidate` and a score floor of 0 (2026-10-14, AI-037 partial): never a 0-level spell; while the breath is ready or an enemy is adjacent, only a self or ally buff not yet active. Success ends the turn. No expected-value comparison with the breath or a full attack (AI-037).
 3. Breath ready: `DragonAIProfile.FindBestBreathPosition` tries the current square plus every reachable placeable cell (A* per cell), and every enemy as the aim point; picks most enemy hits, then fewest ally hits (0 allowed, `MaxAcceptableAllyHits`), then not moving; needs at least 1 enemy (`MinEnemiesForBreath`). Moves if needed, re-evaluates from the actual square, breathes, then retreats one move if an enemy is adjacent (block duplicated, AI-020). Positioning ignores AoOs and multi-square footprints.
 4. If breath is not viable, falls through to melee with the move possibly already spent. Then charge (needs a full-round action), approach only if `HasMoveAction`, re-target, maneuver or attack.
 
@@ -475,7 +475,7 @@ An NPC gets a `SpellcastingComponent` only if `stats.IsSpellcaster` (a caster cl
 | evil_acolyte_test, gust_druid, mist_wizard | nothing |
 | lich (Wizard 11) | nothing: its list starts with 1st-level spells, every index lands in a slot of another level (SPL-015) |
 | vampire | nothing: `CharacterClass = "Fighter"` (CRE-030) |
-| 60 dragons | spontaneous Sorcerer via an injected class level; cantrips plus some 1st-4th level (CRE-016) |
+| 60 dragons | spontaneous Sorcerer via an injected class level; cantrips plus some 1st-4th level (CRE-016); castable on the NPC executor since 2026-10-14 (SPL-123: a scripted juvenile red dragon casts Shield in `rules/npc-cast-spontaneous`; AI-run, the young and juvenile red dragons breathe and cast no cantrip in `rules/dragon-ai-breath-young` and `-juvenile`, AI-037) |
 | Spellcaster/Caster-archetype monsters, DMG class-levelled casters, paladins | nothing (no lists; SLAs text only; ENC-021, CHR-024, CRE-062) |
 | human_cleric | the DMG p.114 sample cleric's prepared spells (5/5/4/3, Healing and Protection domains; CRE-062, 2026-10-14); but its AI is Humanoid on DefensiveMelee, and `AIService.ExecuteDefensiveMeleeTurn` never casts, so on its own turns it casts only when scripted (the NPC executor cast Prayer from a 3rd-level slot in `rules/prayer-cast`, 2026-10-14); when charmed (`charm_person_test`) it heals its charmer with a prepared cure spell (`CharmedBehaviorController.TryGetBestHealingSpell` through `TryNPCPerformSpellCastForAI`) |
 
@@ -487,11 +487,11 @@ So the casting AI is exercised today only by three test NPCs and the dragons.
 2. `AISpellcastingStrategist.EvaluateDefensiveCasting`: 2 = no adjacent non-ally; 1 = adjacent but estimated Concentration (DC 15 + level) ≥ 50%, or HP ≤ 25% with a Healing/Escape spell; 0 otherwise. 0 → try `SelectLowerLevelAlternative`, else abort. 1 → log, then cast. The roll happens at cast time (7.6): `ResolveNPCSpellcastProvocation` uses the real threat list (reach included, so a caster threatened only by a reach weapon also gets the choice) and `AISpellcastingStrategist.ShouldCastDefensively`, the same ≥ 50% or desperate-heal test.
 3. `SelectBestSpellTarget` → `TryNPCPerformSpellCastForAI`. False → the routine falls back to non-spell actions.
 
-There is no spell-versus-weapon comparison and no score floor: any castable spell with a valid target is cast. If the best spell is refused at cast time (Area), the caster does not try the second best.
+There is no spell-versus-weapon comparison and no score floor (except the dragon turn's filter and floor, 5.2, AI-037): any castable spell with a valid target is cast. If the best spell is refused at cast time (Area), the caster does not try the second best.
 
 ### 7.3 `SelectSpell` and scoring
 
-Candidates: `GetCastablePreparedSpells` (distinct prepared unused IDs; known spells with a slot for spontaneous casters; cantrips unlimited). Silence is not checked here or in `CanCast` (SPL-092). Buff/Illusion spells already active on the caster are skipped. Score = `SpellcasterAIProfile.ScoreSpell` for that family, else `AISpellcastingStrategist.ScoreSpellComprehensive`. Highest wins, even if negative.
+Candidates: `GetCastablePreparedSpells` (distinct prepared unused IDs; known spells with a slot for spontaneous casters; cantrips unlimited, SPL-138). `TryNPCPerformSpellCast` then asks `CanCast`, which gives the same answer for a spontaneous caster since 2026-10-14 (SPL-123). Silence is not checked here or in `CanCast` (SPL-092). Buff/Illusion spells already active on the caster are skipped. Score = `SpellcasterAIProfile.ScoreSpell` for that family, else `AISpellcastingStrategist.ScoreSpellComprehensive`. Highest wins, even if negative.
 
 `SpellcasterAIProfile.ScoreSpell` (AI/Profiles/SpellcasterAIProfile.cs:49): school priority ×10 (unlisted school = 10); AoE terms (+3 per enemy hit, -10 per ally casualty, -6 below minimum, -1000 unsafe; a null primary target counts as unsafe); single-target preference ±4-5; buff already active -1000; buff-first +4 above 65% HP; conserve 3rd+ level -1/-4; counter +2; utility -5; plus the strategist. Healer, Lich and Vampire add their own terms (Healer ±10-40 by action priority; Lich Necromancy/Control/save-or-die/dispel bonuses; Vampire Control/charm/hold bonuses).
 
@@ -555,7 +555,7 @@ The source of each condition comes from `ActiveCondition.Source`, then a typed p
 - 60 generated dragons (10 types × Wyrmling-Adult) plus hell_hound use `DragonAIProfile`. Turn order: cast (≤2 adjacent enemies), breath with positioning, melee (5.2).
 - **Breath execution** (`NPCExecuteBreathWeaponForAI`, NPCTurns.cs:1641): one damage roll (`DiceService`) for all targets; hits everything in the cone or line including allies (RAW); `D20 + save` with no natural 1/20 and no Evasion (AI-040), half on success, then a supernatural packet through `GameManager.DealDamage` (immunity, Protection from Energy, the best resistance, Fire Shield; no damage reduction, MM p.307; concentration and death; SPL-004) and one combat-end check after all targets. It spends no action. The cooldown is set but `TickBreathWeaponCooldown` has no callers, so each creature breathes at most once per spawn (AI-032).
 - **Frightful presence** (`ResolveFrightfulPresence`, 1570; Young Adult and Adult dragons, and the lich's "fear aura"): fires once per combat on the first attack or breath, not on charge; Manhattan-distance range; no "fewer HD than the dragon" filter; HD ≤4 panicked else shaken for 4d6 rounds; raw d20 save (AI-041). Panicked targets then lose their turns (CMB-075). MM (Dragons, Frightful Presence) triggers it on attacks and charges, and a creature that saves is immune for 24 hours.
-- Secondary (metallic) breath: AI-008. Dragon SLAs: CRE-015. Dragon cantrip loop: AI-037.
+- Secondary (metallic) breath: AI-008. Dragon SLAs: CRE-015. Dragon spell-versus-breath choice: AI-037.
 
 ### 8.3 Undead, animals, swarms
 
@@ -643,7 +643,7 @@ Filed in `issues/` while this doc was written; all are static readings, so confi
 | SPL-015 | The lich, evil_acolyte_test, gust_druid and mist_wizard prepare nothing (positional slot assignment plus the wizard 2nd-level cap) |
 | CRE-030 | The vampire is a Fighter, so it never gets a `SpellcastingComponent` |
 | ENC-021 | DMG class-levelled casters get caster AI but no spell lists |
-| AI-037 | Dragons cast before breathing with no score floor, so cantrips can pre-empt breath every turn |
+| AI-037 | Dragons compare no spell with their breath or full attack (cantrips and attack spells with the breath ready are filtered out since 2026-10-14; unused buffs still come first) |
 | AI-038 | Spellcaster-profile monsters on AggressiveMelee hold at about 6 squares; Vampire and Dragon range-2 tie |
 | AI-039 | Kiter retreat is not gated on a ranged weapon; weaponless ranged monsters oscillate |
 | AI-040 | Breath saves have no natural 1/20 or Evasion, and breath spends no action (damage is shared since SPL-004) |

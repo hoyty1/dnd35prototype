@@ -32,7 +32,7 @@ Entries per section:
 | [Runtime loop and core](issues/CORE.md) | CORE | 0 | 18 | 16 | 34 | CORE-039 |
 | [Combat](issues/CMB.md) | CMB | 0 | 52 | 62 | 114 | CMB-168 |
 | [Grid and movement](issues/GRID.md) | GRID | 1 | 8 | 11 | 20 | GRID-021 |
-| [Spells and metamagic](issues/SPL.md) | SPL | 3 | 60 | 61 | 124 | SPL-138 |
+| [Spells and metamagic](issues/SPL.md) | SPL | 2 | 61 | 61 | 124 | SPL-139 |
 | [Characters, feats and classes](issues/CHR.md) | CHR | 3 | 28 | 41 | 72 | CHR-080 |
 | [Creatures, templates and summoning](issues/CRE.md) | CRE | 0 | 28 | 30 | 58 | CRE-067 |
 | [Encounters](issues/ENC.md) | ENC | 0 | 7 | 15 | 22 | ENC-024 |
@@ -40,7 +40,7 @@ Entries per section:
 | [AI](issues/AI.md) | AI | 1 | 22 | 39 | 62 | AI-064 |
 | [UI](issues/UI.md) | UI | 0 | 12 | 38 | 50 | UI-052 |
 | [Tests](issues/TST.md) | TST | 0 | 8 | 27 | 35 | TST-042 |
-| **All** | | 10 | 281 | 388 | 679 | |
+| **All** | | 9 | 282 | 388 | 679 | |
 
 ## Top issues
 
@@ -48,5 +48,4 @@ The most impactful entries, mainly High. Repo breakers, soft-locks and crashes c
 
 | ID | Severity | Area | Summary | Player-visible |
 |---|---|---|---|---|
-| [SPL-123](issues/SPL.md) | High | Spells and metamagic | The NPC cast executor refuses every spell of a spontaneous caster, so AI-run spellcasting dragons, sorcerers and bards cast nothing | Yes |
 | [AI-001](issues/AI.md) | High | AI | NPCs never cast area spells, although AI scoring favours them | Yes |
