@@ -14,6 +14,17 @@
       "notes": "Pricing, costs, caster levels, XP and constants; since ITM-008 (owner ruling 2026-10-11) crafted scrolls bake the DMG p.214 magic-item DC at the spell's level for the scribe's class, and take the scroll type from that class (CraftingExecutor.CraftedScrollSaveDC; DMG p.238-239: wizard Hold Person 14 arcane, bard 13 arcane, cleric 13 divine, heightened, plain and heightened through CraftingExecutor.Execute in debug mode), never the crafter's DC."
     },
     {
+      "type": "Tests.Crafting.BrewedPotionRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 56,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "ITM-002 (PHB p.89, DMG p.229, p.286): a brewed potion is built by PotionFactory.BuildPotion as a store potion is (CraftingExecutor.CreatePotion): a healing spell becomes HealHP dice at the potion's caster level (CLW CL 3 1d8+3, CMW CL 3 equal to the store potion, Cure Minor Wounds a flat 1), any other spell a SpellEffect (Bull's Strength CL 3); price spell level x caster level x 50 gp; brewed potions stack per spell and caster level; the brew list drops personal-range spells (Shield). Drinking through GameManager.TryUseConsumableFromInventory out of combat on a spawned ogre: CLW heals 4 to 11 and uses one of a stack of two; Bull's Strength gives +4 Strength for 30 rounds (CL 3). Since the review fixes (2026-10-14): the store and both brew lists offer only PotionFactory.IsOfferedAsPotion spells (no Shield Other, Bless, Sleep, Spiritual Weapon, Ray of Enfeeblement or Magic Weapon; Inflict Light Wounds, Remove Disease and Lesser Restoration not until they resolve, ITM-080), every offered brewed and store potion resolves when drunk, Remove Disease and Lesser Restoration potions are never HealHP, a brewed potion equal to the store's takes the store id, a debug-brewed one gets the _debug id; brewing runs as a zero-cost paid project. Play only (spawns through InitializeNPCFromDefinition). Added 2026-10-14; 37 assertions, 37/37 in its first Play pass; 56/56 after the review fixes"
+    },
+    {
       "type": "Phase5IntegrationTests",
       "needs": "either",
       "skip": "",

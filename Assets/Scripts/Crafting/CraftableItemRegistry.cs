@@ -371,6 +371,10 @@ public static class CraftableItemRegistry
             if (string.IsNullOrEmpty(spellId)) continue;
             var spell = SpellDatabase.GetSpell(spellId);
             if (spell == null || spell.SpellLevel > CraftingConstants.PotionMaxSpellLevel) continue;
+            // The store's test (PotionFactory.IsOfferedAsPotion): no placeholder; a spell with a creature target, not
+            // personal range, an Area or Effect entry, or Shield Other (PHB p.89, DMG p.286); and one the drink path can
+            // resolve (ITM-080 lists the potions not offered yet).
+            if (!PotionFactory.IsOfferedAsPotion(spell)) continue;
 
             int spellLevel = spell.SpellLevel;
             int minCL = CraftingCostCalculator.MinimumCasterLevelForSpell(spellLevel);
@@ -476,6 +480,7 @@ public static class CraftableItemRegistry
         {
             if (spell == null || string.IsNullOrEmpty(spell.SpellId)) continue;
             if (spell.SpellLevel > CraftingConstants.PotionMaxSpellLevel) continue;
+            if (!PotionFactory.IsOfferedAsPotion(spell)) continue; // as the store: PHB p.89, DMG p.286; ITM-080
             int spellLevel = spell.SpellLevel;
             int minCL = CraftingCostCalculator.MinimumCasterLevelForSpell(spellLevel);
             int marketPrice = CraftingCostCalculator.PotionMarketPrice(spellLevel, minCL);

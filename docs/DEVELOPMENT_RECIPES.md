@@ -415,9 +415,9 @@ Usually no item code is needed: implement the spell ([Add a spell](#add-a-spell-
 Files: `Spell/Database/SpellDatabase_*.cs`, `Equipment/Inventory/ScrollFactory.cs`, `PotionFactory.cs`, `WandFactory.cs`, `ScrollValidator.cs`, `WandValidator.cs`, `Equipment/Items/ScrollData.cs`, `WandData.cs`, `ItemBuilder.cs`, `_Core/GameManager.cs`. Examples: f312e75, c857d9b, e9ef0ef, d80e7c1, 0982d08, 03a093d, 3e32bd8, 8758492, 4e2dd1a, 616bf32, 6bfa259.
 
 Pitfalls:
-- Store `spell.SpellId` in `ConsumableSpellName`. The legacy potions (`potion_cure_light_wounds`, `potion_healing`, `potion_shield_of_faith`) store display names and work only through the `GetSpellByName` fallback (03a093d fixed WandValidator calling it with an id).
+- Store `spell.SpellId` in `ConsumableSpellName` (all three factories and the crafted items do; the item tooltip shows the spell's name). The legacy potions (`potion_cure_light_wounds`, `potion_healing`, `potion_shield_of_faith`) store display names and work only through the `GetSpellByName` fallback (03a093d fixed WandValidator calling it with an id).
 - `PotionFactory` and `WandFactory` skip existing ids; `ScrollFactory` overwrites. So the legacy `potion_cure_light_wounds` wins over the factory one, with `ConsumableEffect = SpellEffect` (not HealHP).
-- An item with `ConsumableEffect` None fails with "has no implemented consumable effect yet". `CraftingExecutor.CreatePotion` never sets it, so crafted potions probably cannot be used (4e2dd1a fixed the same for scrolls; not verified in Play mode).
+- An item with `ConsumableEffect` None fails with "has no implemented consumable effect yet". Build potions with `PotionFactory.BuildPotion` (store and brewed potions both do since ITM-002, 2026-10-14) rather than by hand. A new potion kind needs the drink path to resolve it before `PotionFactory.CanResolveAsPotion` lets the store and brew list offer it (ITM-080).
 - Wand charges live in both `ItemData.CurrentCharges` and `WandData.CurrentCharges` (3e32bd8 fixed drift). Wand sell value is implemented twice, differently (`StoreInventory.GetSellPrice`, `EconomyService.GetSellPrice`).
 - Scroll and wand DC is `10 + SL + floor(SL/2)` (`SpellSaveDCRules.ForMagicItem`, DMG p.214) at the level on the item's arcane or divine list (`GetItemSpellLevel`); only Heighten raises it (616bf32, SPL-001). Consumable metamagic is applied in `BuildConsumableSpellVariant`.
 - Legacy `ItemID` scroll enums map to ids no factory creates (`scroll_magic_missile` vs `scroll_arcane_magic_missile`). Use the factory id strings.
@@ -453,7 +453,7 @@ Files: `Crafting/CraftableItemRegistry.cs`, `CraftingFeatType.cs`, `CraftingCons
 Pitfalls:
 - Weapon enhancement tiers require `"magic_weapon_greater"` (`CraftableItemRegistry.cs:262`), which does not exist (canonical: `SpellNames.GREATER_MAGIC_WEAPON` = `greater_magic_weapon`), so the prerequisite is always missing.
 - Crafting spends per-character `ComponentGold` (default 1000), not the party gold the store uses.
-- Crafted potions lack `ConsumableEffect` (see the scroll/potion recipe). Staves are never craftable until they exist as `ItemData`. The test wondrous items are craftable.
+- Brewed potions are built by `PotionFactory.BuildPotion`, and both brew lists offer only `PotionFactory.IsOfferedAsPotion` spells, the store's test (ITM-080 lists the potions not offered yet). Staves are never craftable until they exist as `ItemData`. The test wondrous items are craftable.
 - The workshop opens for the first party member with any crafting feat; the crafter cannot be chosen.
 
 # Creatures and encounters

@@ -2316,7 +2316,12 @@ public class ItemData
             }
             else if (ConsumableEffect == ConsumableEffectType.SpellEffect)
             {
+                // ConsumableSpellName holds the canonical spell ID on factory and crafted items; show the spell's name.
+                // The legacy hand-registered potions hold a display name (it has a space): show it as it is, so the
+                // lookup never logs a "spell not found" warning for them.
                 string spellLabel = string.IsNullOrEmpty(ConsumableSpellName) ? "Unknown Spell" : ConsumableSpellName;
+                if (!string.IsNullOrEmpty(ConsumableSpellName) && ConsumableSpellName.IndexOf(' ') < 0)
+                    spellLabel = SpellDatabase.GetSpell(ConsumableSpellName)?.Name ?? ConsumableSpellName;
                 string itemTypeLabel = IsStaff ? "Staff" : IsWand ? "Wand" : IsPotion ? "Potion" : IsScroll ? "Scroll" : "Spell Effect";
                 stats = $"{itemTypeLabel}: {spellLabel}";
 

@@ -2,13 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Generates potion ItemData entries for eligible spells in the SpellDatabase.
-/// Follows D&D 3.5e DMG potion creation rules:
+/// Follows D&D 3.5e potion creation rules (PHB p.89 Brew Potion, DMG p.229 and p.286):
 ///   - Only spells of level 0-3 can be made into potions
-///   - Spell must target one or more creatures or objects (no personal range)
-///   - Spell cannot be an area-only effect
+///   - The spell must target one or more creatures (no personal range, no Area or Effect entry, not Shield Other);
+///     see IsEligibleForPotion. Oils (object targets, DMG p.229) are not modelled (ITM-080).
+///   - The store and the brew list offer only potions the drink path can resolve (IsOfferedAsPotion)
 ///   - Price = SpellLevel × CasterLevel × 50 gp (0-level uses 0.5 → 25 gp at CL 1)
 ///   - Minimum CL = max(1, 2 × SpellLevel - 1)
 ///   - Anyone can drink a potion (no class restrictions, no ability score requirements)
@@ -57,7 +59,7 @@ public static class PotionFactory
                 continue;
             }
 
-            if (!IsEligibleForPotion(spell))
+            if (!IsOfferedAsPotion(spell))
             {
                 skippedCount++;
                 continue;
@@ -104,18 +106,39 @@ public static class PotionFactory
     // ── Eligibility ──
 
     /// <summary>
-    /// Determines if a spell is eligible for potion creation per D&D 3.5e DMG rules:
-    /// - Spell level 0-3 (checked separately via GetBestPotionSpellLevel)
-    /// - Must NOT be Personal range only
-    /// - Must target one or more creatures or objects (not area-only)
-    /// - Standard action or less to cast (casting time < 1 minute)
+    /// Spells of 3rd level or lower whose PHB entry has no creature Target line although the spell data gives them a
+    /// single target, so they cannot be brewed (PHB p.89: a potion holds a spell that targets one or more creatures).
+    /// Object targets (their DMG p.229 form is an oil, which is not modelled; ITM-080): Align Weapon (PHB p.197),
+    /// Continual Flame (p.213), Grease (p.237), Heat Metal (p.239), Keen Edge (p.246), Magic Weapon, Greater Magic
+    /// Weapon and Magic Vestment (p.251), Shrink Item (p.279). Effect entries: Flare (p.232), Produce Flame (p.265),
+    /// Spiritual Weapon (p.283). Area entries: Bane (p.203), Invisibility Sphere (p.245), Lullaby and the Magic Circles
+    /// (p.249), Silence (p.279), Sound Burst (p.281).
+    /// </summary>
+    private static readonly HashSet<string> NoCreatureTargetSpellIds = new HashSet<string>(StringComparer.Ordinal)
+    {
+        SpellNames.ALIGN_WEAPON, SpellNames.CONTINUAL_FLAME, SpellNames.GREASE, SpellNames.HEAT_METAL,
+        SpellNames.KEEN_EDGE, SpellNames.MAGIC_WEAPON, SpellNames.GREATER_MAGIC_WEAPON, SpellNames.MAGIC_VESTMENT,
+        SpellNames.SHRINK_ITEM,
+        SpellNames.FLARE, SpellNames.PRODUCE_FLAME, SpellNames.SPIRITUAL_WEAPON,
+        SpellNames.BANE, SpellNames.INVISIBILITY_SPHERE, SpellNames.LULLABY, SpellNames.MAGIC_CIRCLE_AGAINST_CHAOS,
+        SpellNames.MAGIC_CIRCLE_AGAINST_EVIL, SpellNames.MAGIC_CIRCLE_AGAINST_GOOD, SpellNames.MAGIC_CIRCLE_AGAINST_LAW,
+        SpellNames.SILENCE, SpellNames.SOUND_BURST,
+    };
+
+    /// <summary>
+    /// Whether the rules let <paramref name="spell"/> be a potion (its level is checked separately).
+    /// PHB p.89 (Brew Potion): a spell that targets one or more creatures. DMG p.286: never a personal-range spell
+    /// (Shield), and never a spell whose caster and target must differ (Shield Other), because the drinker is both.
+    /// The spell data has no Target/Effect/Area entry, so this rejects Area spells, ranged-touch spells (rays and
+    /// missiles have an Effect entry) and the listed NoCreatureTargetSpellIds. Every spell here casts in 1 full-round
+    /// action or less, so the DMG p.229 limit (casting time under 1 minute) never bites.
+    /// Remaining gap (ITM-080): Calm Animals and Halt Undead have a Targets line but are modelled as areas.
     /// </summary>
     public static bool IsEligibleForPotion(SpellData spell)
     {
         if (spell == null) return false;
 
-        // Must NOT be personal-range-only
-        // Personal range = Self target type with no other targeting options
+        // DMG p.286: personal range never exists as a potion.
         SpellRangeCategory range = spell.GetEffectiveRangeCategory();
         if (range == SpellRangeCategory.Personal)
             return false;
@@ -124,21 +147,70 @@ public static class PotionFactory
         if (spell.TargetType == SpellTargetType.Self && range != SpellRangeCategory.Touch)
             return false;
 
-        // Area-only spells cannot be potions (potions target the drinker only)
-        // However, spells that have BOTH single-target and area modes are allowed
-        // (e.g., Bless has AoE but targets allies — allowed as potion)
-        if (spell.TargetType == SpellTargetType.Area && spell.AoEShapeType != AoEShape.None)
-        {
-            // Pure area spells (like Fireball) can't be potions
-            // But buff-type AoE spells that target creatures (Bless, Prayer) can be
-            if (spell.EffectType == SpellEffectType.Damage)
-                return false;
-        }
+        // PHB p.89: an Area spell has no creature Target line (Bless, Sleep, Darkness, Daylight).
+        if (spell.TargetType == SpellTargetType.Area)
+            return false;
 
-        // Full-round action spells can still be potions (the potion itself is standard action to drink)
-        // But spells with casting time > 1 minute cannot (we don't track minute-long casting times yet)
+        // Rays and other ranged-touch missiles are Effect entries (Ray of Enfeeblement, Searing Light, Acid Arrow).
+        if (spell.IsRangedTouch)
+            return false;
+
+        // DMG p.286: the imbiber is both caster and target, so Shield Other cannot be a potion.
+        if (string.Equals(spell.SpellId, SpellNames.SHIELD_OTHER, StringComparison.Ordinal))
+            return false;
+
+        if (NoCreatureTargetSpellIds.Contains(spell.SpellId))
+            return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// Whether the drink path (GameManager.TryApplySpellConsumableEffect, or HealHP for a healing potion) can resolve
+    /// a potion of <paramref name="spell"/>: a spell that restores hit points, or a Buff, Debuff, Control or Illusion
+    /// spell (applied to the drinker through StatusEffectManager). Potions of Damage, Dispel, Utility, Escape, Summon,
+    /// Wall or Divination spells, and of healing spells that restore no hit points (Remove Disease), would fail or do
+    /// nothing when drunk, so they are not offered yet (ITM-080).
+    /// </summary>
+    public static bool CanResolveAsPotion(SpellData spell)
+    {
+        if (spell == null) return false;
+        switch (spell.EffectType)
+        {
+            case SpellEffectType.Healing:
+                return RestoresHitPoints(spell);
+            case SpellEffectType.Buff:
+            case SpellEffectType.Debuff:
+            case SpellEffectType.Control:
+            case SpellEffectType.Illusion:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="spell"/> is a healing spell that restores hit points (the cures, Cure Minor Wounds):
+    /// it has healing dice or a flat amount, is no placeholder, and has no handler that does something else instead.
+    /// Lesser Restoration (a placeholder whose 1d4 is ability points, PHB p.272) and Remove Disease or Remove
+    /// Paralysis (no hit points) do not, so a potion of one is never a HealHP potion.
+    /// </summary>
+    public static bool RestoresHitPoints(SpellData spell)
+    {
+        if (spell == null || spell.EffectType != SpellEffectType.Healing || spell.IsPlaceholder || spell.HealingResolvedByHandler)
+            return false;
+        SpellDice dice = SpellDiceRules.Healing(spell, 1);
+        return dice.HasDice || dice.Bonus > 0;
+    }
+
+    /// <summary>
+    /// Whether the store sells, and the brew list offers, a potion of <paramref name="spell"/>: not a placeholder,
+    /// allowed by the rules (IsEligibleForPotion) and resolvable when drunk (CanResolveAsPotion). Each caller checks
+    /// the spell level limit (3rd).
+    /// </summary>
+    public static bool IsOfferedAsPotion(SpellData spell)
+    {
+        return spell != null && !spell.IsPlaceholder && IsEligibleForPotion(spell) && CanResolveAsPotion(spell);
     }
 
     // ── Pricing ──
@@ -207,27 +279,39 @@ public static class PotionFactory
         if (ItemDatabase.HasItem(id))
             return;
 
-        string name = $"Potion of {spell.Name}";
-        string description = BuildPotionDescription(spell, spellLevel, casterLevel, priceGp);
+        ItemDatabase.RegisterPotionItem(BuildPotion(spell, id, spellLevel, casterLevel, priceGp));
+        _registeredPotionIds.Add(id);
+    }
 
-        // Pick icon color based on spell effect type
-        Color iconColor = GetPotionColor(spell);
+    /// <summary>
+    /// Builds a potion of <paramref name="spell"/> at <paramref name="casterLevel"/>: the one item shape shared by the
+    /// store potions this factory registers and the potions a Brew Potion crafter makes (CraftingExecutor, ITM-002), so
+    /// both are drunk through the same consumable path for any creature. DMG p.229: whoever drinks the potion is the
+    /// spell's target and the potion works at its own caster level, so a healing spell becomes HealHP dice at that level
+    /// (SpellDiceRules, SPL-005) and any other spell a SpellEffect resolved at that level. Potions stack (up to 20 per
+    /// slot) with others of the same <paramref name="id"/>. Never registers anything itself.
+    /// </summary>
+    public static ItemData BuildPotion(SpellData spell, string id, int spellLevel, int casterLevel, int priceGp)
+    {
+        if (spell == null)
+            return null;
 
+        casterLevel = Mathf.Max(1, casterLevel);
         ItemData potionItem = new ItemData
         {
             Id = id,
-            Name = name,
-            Description = description,
+            Name = $"Potion of {spell.Name}",
+            Description = BuildPotionDescription(spell, spellLevel, casterLevel, priceGp),
             Type = ItemType.Consumable,
             Slot = EquipSlot.None,
             ConsumableEffect = ConsumableEffectType.SpellEffect,
-            ConsumableSpellName = spell.Name,
+            ConsumableSpellName = spell.SpellId,   // Canonical spell ID (as scrolls and wands), not the display name
             ConsumableMinimumCasterLevel = casterLevel,
             ConsumableModifier = 0,
             BasePriceGp = priceGp,
             WeightLbs = 0.1f,
-            IconChar = "\u2697", // ⚗ alembic icon for potions
-            IconColor = iconColor,
+            IconChar = "\u2697", // alembic icon for potions
+            IconColor = GetPotionColor(spell),
             IsPotion = true,
             PotionSpellLevel = spellLevel,
             IsStackable = true,
@@ -235,8 +319,9 @@ public static class PotionFactory
             StackCount = 1
         };
 
-        // Copy healing data from spell if applicable
-        if (spell.EffectType == SpellEffectType.Healing)
+        // A spell that restores hit points becomes HealHP; any other spell (a Healing-typed one that restores none,
+        // such as Remove Disease, included) stays a SpellEffect resolved on the drinker.
+        if (RestoresHitPoints(spell))
         {
             // The potion's dice at its own caster level (DMG p.229; SpellDiceRules, SPL-005): CLW at CL 1 is 1d8+1.
             SpellDice dice = SpellDiceRules.Healing(spell, casterLevel);
@@ -254,8 +339,7 @@ public static class PotionFactory
             }
         }
 
-        ItemDatabase.RegisterPotionItem(potionItem);
-        _registeredPotionIds.Add(id);
+        return potionItem;
     }
 
     /// <summary>Generate a unique potion item ID from spell ID.</summary>

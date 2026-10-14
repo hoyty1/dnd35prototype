@@ -18,7 +18,7 @@ An item's kind is recorded in two ways: the `ItemType` enum and a set of bool fl
 | Kind | `Type` | Flag and payload | `Slot` | Created by |
 |---|---|---|---|---|
 | Weapon, armor, shield | Weapon / Armor / Shield | (none) | EitherHand (gauntlets: Hands) / legacy `Armor` (aliased to ArmorRobe) / LeftHand | `ItemDatabase.Register*`, `ItemMaterialFactory`, `EnchantmentFactory` |
-| Potion | Consumable | `IsPotion` | None | `PotionFactory`; 4 hand-registered in `ItemDatabase.RegisterConsumablesAndMisc`; `CraftingExecutor.CreatePotion` |
+| Potion | Consumable | `IsPotion` | None | `PotionFactory`; 4 hand-registered in `ItemDatabase.RegisterConsumablesAndMisc`; `CraftingExecutor.CreatePotion` (through `PotionFactory.BuildPotion`) |
 | Scroll | Consumable | `IsScroll`, `Scroll` (ScrollData) | None | `ScrollFactory`, `CraftingExecutor.CreateScroll` |
 | Wand | Consumable | `IsWand`, `Wand` (WandData) | None | `WandFactory`, `CraftingExecutor.CreateWand` |
 | Staff | (none) | `IsStaff`, `StaffId` | (none) | nothing; see Staves below |
@@ -168,7 +168,7 @@ Known deviations (details in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md)):
 
 - On a healing wand (`HealHP`), the healing roll happens before `WandValidator` and the UMD check run. A failed check still heals and spends no charge.
 - Scrolls and wands use the DMG item DC, 10 + SL + SL/2 (`SpellSaveDCRules.ForMagicItem`, DMG p.214, since 2026-10-09) at the level on the item's arcane or divine list (prices still use the lowest level on any list, ITM-074). Scrolls crafted in the workshop bake the item DC too (`CraftingExecutor.CraftedScrollSaveDC`, which the workshop label shows; heightened scrolls at the heightened level), never the crafter's own DC (owner ruling 2026-10-11, ITM-008); the crafted scroll's type and DC level follow the scribe's class (`CraftingExecutor.CraftedScrollClass`, DMG p.238-239: a wizard's Hold Person scroll is arcane at DC 14, a cleric's divine at DC 13), but its price and minimum caster level still use the template level (ITM-079).
-- Crafted potions cannot be used (see [Crafting](#crafting)).
+- Potions exist only for spells the drink path resolves (hit-point healing, Buff, Debuff, Control, Illusion; `PotionFactory.IsOfferedAsPotion`), and a potion's spell goes to `StatusEffectManager.AddEffect` rather than the cast's `ApplySpellBuff` dispatch; there are no oils (ITM-080).
 
 ## Enchantments and materials
 
@@ -284,8 +284,8 @@ Costs come from `CraftingCostCalculator.FromMarketPrice`: market/2 gp, market/25
 What each feat produces in practice:
 
 - **Scribe Scroll, Craft Wand:** work, including metamagic scrolls and wands with a baked DC.
+- **Brew Potion:** works. `CreatePotion` builds the potion with `PotionFactory.BuildPotion`, the builder of the store potions (spells that restore hit points as HealHP dice at the potion's caster level, others as a SpellEffect; ITM-002, fixed 2026-10-14). A brewed potion identical to the store's potion of that spell (`CraftingExecutor.MatchesStorePotion`) takes the store id `potion_<spellId>` and stacks with it; any other gets `crafted_potion_<spellId>_cl<N>`, so equal brewed potions stack. In debug mode a stackable crafted item's id gets `CraftingExecutor.DebugIdSuffix` (`_debug`) next to the `[DEBUG] ` name, so it never joins a paid stack. Both brew lists keep only spells that pass `PotionFactory.IsOfferedAsPotion`, the store's test (PHB p.89, DMG p.286; ITM-080). The potion is always made at the minimum caster level, and its gate, price and minimum caster level use `SpellData.SpellLevel` (ITM-079).
 - **Forge Ring, Craft Rod, Craft Wondrous Item:** produce catalog clones. There are no spell prerequisites, because `AddSpellPrereqsFromItemDescription` is an empty stub.
-- **Brew Potion:** the potion is created, but `CreatePotion` never sets `ConsumableEffect`, so drinking it fails.
 - **Craft Magic Arms and Armor:** never succeeds. All tiers are upgrades, and the UI never sets an upgrade target, so `Validate` stops at the upgrade-target check.
 - **Craft Staff:** lists nothing.
 

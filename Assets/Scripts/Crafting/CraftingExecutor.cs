@@ -13,6 +13,10 @@ using UnityEngine;
 /// </summary>
 public static class CraftingExecutor
 {
+    /// <summary>Appended in debug mode to the id of a stackable crafted item (a brewed potion), so a free debug item
+    /// never merges into a stack the party paid for.</summary>
+    public const string DebugIdSuffix = "_debug";
+
     /// <summary>Result of a crafting execution.</summary>
     public struct CraftingResult
     {
@@ -117,6 +121,9 @@ public static class CraftingExecutor
         if (debugMode)
         {
             craftedItem.Name = "[DEBUG] " + craftedItem.Name;
+            // Inventory.AddItem merges stacks by id: keep debug-brewed potions out of stacks the party paid for.
+            if (craftedItem.IsStackable && def.IsDynamic && !def.IsUpgrade && !string.IsNullOrEmpty(craftedItem.Id))
+                craftedItem.Id += DebugIdSuffix;
         }
 
         // ============================== ADD TO INVENTORY ==============================
@@ -324,24 +331,54 @@ public static class CraftingExecutor
         return scroll;
     }
 
+    /// <summary>
+    /// A brewed potion, built by <see cref="PotionFactory.BuildPotion"/> exactly as a store potion is, so it is drunk
+    /// through the same consumable path (healing spells as HealHP dice at the potion's caster level, others as a spell
+    /// effect on the drinker; DMG p.229) and stacks with potions brewed of the same spell at the same caster level
+    /// (ITM-002). Its price is the one the crafter paid for: spell level x caster level x 50 gp (PHB p.89). A brewed
+    /// potion identical to the store's potion of that spell (same effect, caster level, spell level and price) takes
+    /// the store id, so the two stack. The spell level is SpellData.SpellLevel, not the level on the brewer's class
+    /// list (ITM-079), and the caster level is the workshop's minimum (no choice yet; ITM-079).
+    /// </summary>
     private static ItemData CreatePotion(SpellData spell, int casterLevel)
     {
-        var potion = new ItemData
-        {
-            Id = $"crafted_potion_{spell.SpellId}_{System.Guid.NewGuid():N}",
-            Name = $"Potion of {spell.Name}",
-            Description = $"A magic potion of {spell.Name} (CL {casterLevel}). " + spell.Description,
-            Type = ItemType.Consumable,
-            Slot = EquipSlot.None,
-            IsPotion = true,
-            PotionSpellLevel = spell.SpellLevel,
-            ConsumableSpellName = spell.SpellId,
-            ConsumableMinimumCasterLevel = casterLevel,
-            BasePriceGp = CraftingCostCalculator.PotionMarketPrice(spell.SpellLevel, casterLevel)
-        };
+        int cl = Mathf.Max(1, casterLevel);
+        int spellLevel = spell.SpellLevel;
+        ItemData potion = PotionFactory.BuildPotion(spell, CraftedPotionId(spell.SpellId, cl), spellLevel, cl,
+            CraftingCostCalculator.PotionMarketPrice(spellLevel, cl));
+        if (potion != null && MatchesStorePotion(potion, spell.SpellId))
+            potion.Id = PotionFactory.GeneratePotionId(spell.SpellId);
 
-        Debug.Log($"[CraftingExecutor] Created potion: {potion.Name} (CL {casterLevel})");
+        Debug.Log($"[CraftingExecutor] Created potion: {potion?.Name} (CL {cl}, {potion?.ConsumableEffect}, id {potion?.Id})");
         return potion;
+    }
+
+    /// <summary>The item id of a brewed potion that differs from the store's: one per spell and caster level, so
+    /// equal brewed potions stack.</summary>
+    public static string CraftedPotionId(string spellId, int casterLevel)
+    {
+        string normalizedSpell = (spellId ?? "unknown").Trim().ToLowerInvariant().Replace(" ", "_");
+        return $"crafted_potion_{normalizedSpell}_cl{Mathf.Max(1, casterLevel)}";
+    }
+
+    /// <summary>Whether <paramref name="potion"/> is the same item as the store's factory potion of
+    /// <paramref name="spellId"/> (effect, linked spell, caster level, spell level and price), so it may share its id.</summary>
+    public static bool MatchesStorePotion(ItemData potion, string spellId)
+    {
+        if (potion == null)
+            return false;
+        string storeId = PotionFactory.GeneratePotionId(spellId);
+        if (!ItemDatabase.HasItem(storeId))
+            return false;
+        ItemData store = ItemDatabase.GetItem(storeId);
+        return store != null && store.IsPotion
+               && store.ConsumableEffect == potion.ConsumableEffect
+               && store.ConsumableSpellName == potion.ConsumableSpellName
+               && store.ConsumableMinimumCasterLevel == potion.ConsumableMinimumCasterLevel
+               && store.PotionSpellLevel == potion.PotionSpellLevel
+               && store.BasePriceGp == potion.BasePriceGp
+               && store.HealDiceCount == potion.HealDiceCount && store.HealDiceSides == potion.HealDiceSides
+               && store.HealBonus == potion.HealBonus && store.HealAmount == potion.HealAmount;
     }
 
     private static ItemData CreateWand(SpellData spell, int casterLevel)
