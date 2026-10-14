@@ -183,7 +183,7 @@ Project-specific conditions with no DMG counterpart: Asleep, Charmed, HideousLau
 
 ### 4.1 Owner interpretations of RAW silences
 
-Owner directive (2026-10-09): **no house rules; everything follows the rules as written** (PHB, DMG, MM). Where the books are silent or ambiguous, the owner rules on the question and the ruling is listed here with its date; the code labels it "owner interpretation", never "house rule". A ruling that contradicts a book rule does not belong here: fix it or file it as a deviation. Open owner questions stay in their issue entries.
+Owner directive (2026-10-09): **no house rules; everything follows the rules as written** (PHB, DMG, MM). Where the books are silent or ambiguous, the owner rules on the question, or (by the owner's delegation of 2026-10-11 and 2026-10-14) the maintainer applies the reading with the most textual support; either way the ruling is listed here with its date, and the owner may overrule a delegated reading. The code labels it "owner interpretation" or "delegated RAW reading", never "house rule". A ruling that contradicts a book rule does not belong here: fix it or file it as a deviation. Only possibly intentional deviations and design choices stay open as owner questions in their issue entries.
 
 | Interpretation (date) | Where it is labelled | What the books say |
 |---|---|---|
