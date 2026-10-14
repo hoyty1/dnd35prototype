@@ -224,15 +224,20 @@ public static class LycanthropeTemplate
         lycan.CON = baseCreature.CON + animal.ConMod;
         lycan.WIS = baseCreature.WIS + 2; // All lycanthropes gain +2 Wis
 
-        // ── HP: creature d8 HD + animal d8 HD with CON modifier ──
-        // Base creature HP + animal HD HP (with modified CON).
-        // Average d8 = 4.5. Use hybrid CON for animal HD portion.
-        int creatureConMod = (baseCreature.CON - 10) / 2;
-        int hybridConMod = (lycan.CON - 10) / 2;
+        // ── HP: creature HD + animal d8 HD with CON modifier ──
+        // Base creature HP + animal HD HP (with the hybrid CON). The animal dice join the creature's averaged pool and
+        // the pool is rounded down once (MM pooled average, owner interpretation 2026-10-11, CRE-041): a werewolf is 1d8+1 plus
+        // 2d8+6, 20 hp (MM p.175). A computed base total counts the base creature's feat hit points (Toughness), as an
+        // MM total does, because the lycanthrope keeps those feats and the spawn leaves them out of MaxHP
+        // (ClassProgression.ExcludeCountedFeatHitPoints, CRE-041).
+        int creatureConMod = ClassProgression.HitPointConstitutionModifier(baseCreature.CON);
+        int hybridConMod = ClassProgression.HitPointConstitutionModifier(lycan.CON);
         int creatureHP = baseCreature.BaseHitDieHP > 0
             ? baseCreature.BaseHitDieHP
-            : (int)(creatureHD * 4.5f) + (creatureHD * creatureConMod);
-        int animalHP = (int)(animal.AnimalHD * 4.5f) + (animal.AnimalHD * hybridConMod);
+            : ClassProgression.AveragedHitPoints(8, creatureHD, creatureConMod)
+              + FeatManager.HitPointBonusForFeats(baseCreature.Feats);
+        int animalHP = ClassProgression.AveragedHitPoints(8, animal.AnimalHD, hybridConMod,
+            CreatureClassEngine.AveragedHalfPointDice(baseCreature));
         lycan.BaseHitDieHP = creatureHP + animalHP;
 
         // ── BAB: add creature BAB + animal BAB ──

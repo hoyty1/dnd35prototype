@@ -1960,6 +1960,10 @@ public partial class GameManager : MonoBehaviour
                 raceName: data.RaceName
             );
 
+            // The dice after 1st level were averaged (ClassProgression.CreationHitPoints); later Average level-ups
+            // continue that pool (owner interpretation 2026-10-11, CRE-041).
+            stats.AveragedHalfPointHitDice = ClassProgression.CreationHalfPointDice(data.HitDie, baseCreationLevel);
+
             // Set alignment from character creation data
             stats.CharacterAlignment = data.ChosenAlignment;
 
@@ -2628,11 +2632,13 @@ public partial class GameManager : MonoBehaviour
             bonusDamage: 0,
             baseSpeed: 4,
             atkRange: 1,
-            baseHitDieHP: 22,
+            baseHitDieHP: ClassProgression.CreationHitPoints(10, 0, 3), // CON-free: d10 maximum, then the pooled average (CRE-041)
             raceName: "Dwarf"
         );
 
         pc1Stats.CharacterAlignment = Alignment.LawfulGood;
+        // Later Average level-ups continue the averaged pool of the dice after 1st level (CRE-041).
+        pc1Stats.AveragedHalfPointHitDice = ClassProgression.CreationHalfPointDice(10, 3);
 
         Debug.Log($"[GameManager] Aldric (Dwarf Fighter): STR {pc1Stats.STR} DEX {pc1Stats.DEX} CON {pc1Stats.CON} " +
                   $"WIS {pc1Stats.WIS} INT {pc1Stats.INT} CHA {pc1Stats.CHA} | " +
@@ -2668,11 +2674,12 @@ public partial class GameManager : MonoBehaviour
             bonusDamage: 0,
             baseSpeed: 5,
             atkRange: 1,
-            baseHitDieHP: 15,
+            baseHitDieHP: ClassProgression.CreationHitPoints(6, 0, 3),
             raceName: "Elf"
         );
 
         pc2Stats.CharacterAlignment = Alignment.ChaoticGood;
+        pc2Stats.AveragedHalfPointHitDice = ClassProgression.CreationHalfPointDice(6, 3);
 
         Debug.Log($"[GameManager] Lyra (Elf Rogue): STR {pc2Stats.STR} DEX {pc2Stats.DEX} CON {pc2Stats.CON} " +
                   $"WIS {pc2Stats.WIS} INT {pc2Stats.INT} CHA {pc2Stats.CHA} | " +
@@ -2725,11 +2732,12 @@ public partial class GameManager : MonoBehaviour
             bonusDamage: 0,
             baseSpeed: 6,   // Monk: 30 ft base + fast movement = 40 ft (8 sq) at level 3
             atkRange: 1,
-            baseHitDieHP: 18,
+            baseHitDieHP: ClassProgression.CreationHitPoints(8, 0, 3),
             raceName: "Human"
         );
 
         pc3Stats.CharacterAlignment = Alignment.LawfulNeutral;
+        pc3Stats.AveragedHalfPointHitDice = ClassProgression.CreationHalfPointDice(8, 3);
 
         Debug.Log($"[GameManager] Kael (Human Monk): STR {pc3Stats.STR} DEX {pc3Stats.DEX} CON {pc3Stats.CON} " +
                   $"WIS {pc3Stats.WIS} INT {pc3Stats.INT} CHA {pc3Stats.CHA} | " +
@@ -2776,11 +2784,12 @@ public partial class GameManager : MonoBehaviour
             bonusDamage: 0,
             baseSpeed: 8,   // Barbarian fast movement: 40 ft (8 squares)
             atkRange: 1,
-            baseHitDieHP: 28,
+            baseHitDieHP: ClassProgression.CreationHitPoints(12, 0, 3),
             raceName: "Half-Orc"
         );
 
         pc4Stats.CharacterAlignment = Alignment.ChaoticNeutral;
+        pc4Stats.AveragedHalfPointHitDice = ClassProgression.CreationHalfPointDice(12, 3);
 
         Debug.Log($"[GameManager] Grunk (Half-Orc Barbarian): STR {pc4Stats.STR} DEX {pc4Stats.DEX} CON {pc4Stats.CON} " +
                   $"WIS {pc4Stats.WIS} INT {pc4Stats.INT} CHA {pc4Stats.CHA} | " +
@@ -3667,6 +3676,10 @@ public partial class GameManager : MonoBehaviour
         bool allNpcsDead = sides.EnemiesOut;
         bool allPcsDead = sides.PlayersOut;
         bool isVictory = allNpcsDead && !allPcsDead;
+        // Both sides out when the initiative order runs dry before EvaluateCombatEnd decided: the same tie rule, the
+        // dying PCs roll first and the party wins if any PC survives (owner interpretation 2026-10-11, CORE-038).
+        if (allNpcsDead && allPcsDead && CurrentPhase != TurnPhase.CombatOver)
+            isVictory = ResolvePartyDyingAfterBothSidesOut("OnCombatEnded");
 
         Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)} | aliveEnemiesBefore={aliveEnemiesBefore} | allNpcsDead={allNpcsDead} | allPcsDead={allPcsDead} | victory={isVictory}");
 
@@ -3709,6 +3722,7 @@ public partial class GameManager : MonoBehaviour
         if (isVictory)
         {
             Debug.Log("[CombatEnd] OnCombatEnded detected victory; invoking loot collection.");
+            CaptureDefeatedEnemiesSnapshotForXP("OnCombatEnded.Victory", countPartyControlled: true);
             BeginPostCombatLootCollection();
             Debug.Log($"[LootFlow] OnCombatEnded post-invoke state | waitingLoot={WaitingForLootCollection} | lootUiAssigned={LootCollectionUI != null}");
         }

@@ -110,22 +110,22 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 179,
+      "passed": 206,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CHR-001, CHR-002, CHR-071: class hit die and BAB from ClassRegistry for every PHB and DMG class, CON once per Hit Die with a minimum of 1 (constructor, creation, level-up), Quick Start presets at 3rd level, Hit Dice after level-ups and for creatures, CON 0 as no score and creature max HP from the definition total (CRE-041, CRE-044), an orc barbarian 2 that exchanges the orc Hit Die (MM p.290, CRE-004) and an ogre barbarian 1; level-ups in GameSettings Average mode (restored afterwards)"
+      "notes": "CHR-001, CHR-002, CHR-071: class hit die and BAB from ClassRegistry for every PHB and DMG class, CON once per Hit Die with a minimum of 1 (constructor, creation, level-up), Quick Start presets at 3rd level, Hit Dice after level-ups and for creatures, CON 0 as no score and creature max HP from the definition total (CRE-044) with its Toughness counted once (CRE-041), the MM pooled average for averaged dice (owner interpretation 2026-10-11, CRE-041: creation, Average level-ups and the preview, creatures without a total, class levels), an orc barbarian 2 that exchanges the orc Hit Die (MM p.290, CRE-004) and ogre barbarians 1 and 2; level-ups in GameSettings Average mode (restored afterwards)"
     },
     {
       "type": "Tests.Character.CreatureProgressionTests",
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 119,
+      "passed": 193,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-004: BAB and base saves = racial HD by the creature type (MM Table 4-1) plus real class levels by the class tables (MM p.290, PHB p.59), against MM stat blocks (orc, goblin, hobgoblin, kobold, gnoll, bugbear, lizardfolk, troglodyte, ogre, ogre barbarian 4) and CreatureClassEngine class levels (1-HD humanoid Hit Die exchange, same-class merge); a dragon's injected sorcerer caster level adds no BAB or saves; the Lion's Shield dire lion through CreatureTypeProgressionDatabase.ApplyToStats; spawns through InitializeNPCFromDefinition, so needs a scene GameManager"
+      "notes": "CRE-004: BAB and base saves = racial HD by the creature type (MM Table 4-1) plus real class levels by the class tables (MM p.290, PHB p.59), against MM stat blocks (orc, goblin, hobgoblin, kobold, gnoll, bugbear, lizardfolk, troglodyte, ogre, ogre barbarian 4) and CreatureClassEngine class levels (1-HD humanoid Hit Die exchange, same-class merge); a dragon's injected sorcerer caster level adds no BAB or saves; the Lion's Shield dire lion through CreatureTypeProgressionDatabase.ApplyToStats; CRE-041: every definition with Toughness holds its MM total and spawns at it (ToughnessTotals), and a duergar fighter 2 keeps Toughness; spawns through InitializeNPCFromDefinition, so needs a scene GameManager"
     },
     {
       "type": "Tests.Character.DeityAlignmentRestrictionTests",
@@ -198,11 +198,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 63,
+      "passed": 67,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-002, ITM-004: hand aliases (CanEquipIn, DirectEquip, EquipFromInventory, GetEquipped, Unequip, EquipStartingLoadout), the spawn's ranged-wield test (AIService.RoutesToRangedTurn), template alignments on legal bases (celestial, fiendish MM p.31, p.108, law-chaos provisional, CRE-057; skeleton, zombie MM p.226, p.266) and spawned alignment and gear through InitializeNPCFromDefinition, so needs a scene GameManager"
+      "notes": "CRE-002, ITM-004: hand aliases (CanEquipIn, DirectEquip, EquipFromInventory, GetEquipped, Unequip, EquipStartingLoadout), the spawn's ranged-wield test (AIService.RoutesToRangedTurn), template alignments (celestial, fiendish MM p.31, p.108: law-chaos kept, owner interpretation 2026-10-11; an illegal base refused; every templated summon option on a legal base; CRE-057; skeleton, zombie MM p.226, p.266) and spawned alignment and gear through InitializeNPCFromDefinition, so needs a scene GameManager"
     },
     {
       "type": "Tests.Character.NpcFeatDataTests",
@@ -538,11 +538,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 31,
+      "passed": 43,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CORE-011, CORE-034, CORE-037: the combat-end predicate (CombatEndRules) case by case. Play only: CharacterController.Init needs Awake (TST-009)."
+      "notes": "CORE-011, CORE-034, CORE-037: the combat-end predicate (CombatEndRules) case by case; CORE-038: a hostile creature charmed by or under the control of the party side is out of the hostile side (owner interpretation 2026-10-11), a hero controlled by the hostile side still counts for the party, and a Mass Suggestion is not control (open owner questions). Play only: CharacterController.Init needs Awake (TST-009)."
     },
     {
       "type": "Tests.Combat.CommandUndeadRulesTests",

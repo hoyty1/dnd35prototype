@@ -8,8 +8,9 @@ namespace Tests.Character
 /// CRE-002 and ITM-004: a spawned creature gets its definition's alignment and the gear its NPC data lists under the
 /// MainHand, OffHand and Ranged aliases. Rules: MM entries give each creature an alignment (MM p.6); celestial
 /// creatures are always good (any) and fiendish ones always evil (any) (MM p.31, p.108), so the templates fix the
-/// good-evil component; keeping the base creature's law-chaos component is the code's provisional choice, pending
-/// the owner (CRE-057), and the checks use only legal bases (celestial: good or neutral; fiendish: nongood).
+/// good-evil component and the creature keeps the base creature's law-chaos component (owner interpretation
+/// 2026-10-11, CRE-057); an illegal base (celestial on an evil one, fiendish on a good one) is refused and keeps its
+/// base statistics, and every templated Summon Monster option has a legal base (its alignment comes from the PHB table).
 /// Skeletons and zombies are always neutral evil (MM p.226, p.266). Gear: MainHand is the right hand and OffHand the
 /// left hand (ItemData.ResolveHandAlias, also at the bottom inventory layer); a weapon listed under Ranged is held by
 /// a creature the AI runs through the ranged routine (AIService.RoutesToRangedTurn) and otherwise carried in the
@@ -312,8 +313,8 @@ public static class NpcAlignmentGearTests
         return CreatureTemplateRegistry.ApplyTemplatesClone(def);
     }
 
-    /// <summary>Legal bases only (MM p.31: celestial needs a good or neutral base; p.108: fiendish a nongood one). The
-    /// law-chaos result for a neutral base is the code's provisional choice, pending the owner (CRE-057).</summary>
+    /// <summary>MM p.31: celestial needs a good or neutral base; p.108: fiendish a nongood one. The templated creature keeps
+    /// the base's law-chaos component (owner interpretation 2026-10-11, CRE-057); an illegal base is refused.</summary>
     private static void TestOutsiderTemplates()
     {
         NPCDefinition celestialPaladin = WithTemplate("human_paladin_3", "celestial");
@@ -321,10 +322,52 @@ public static class NpcAlignmentGearTests
             "celestial template keeps an LG base LG (MM p.31)", celestialPaladin != null ? celestialPaladin.CharacterAlignment.ToString() : "");
         NPCDefinition celestialMonk = WithTemplate("human_monk_3", "celestial");
         Assert(celestialMonk != null && celestialMonk.CharacterAlignment == Alignment.LawfulGood,
-            "celestial template makes an LN base LG (MM p.31; law-chaos kept provisionally, CRE-057)", celestialMonk != null ? celestialMonk.CharacterAlignment.ToString() : "");
+            "celestial template makes an LN base LG (MM p.31; law-chaos kept, owner interpretation 2026-10-11, CRE-057)", celestialMonk != null ? celestialMonk.CharacterAlignment.ToString() : "");
         NPCDefinition fiendishOgre = WithTemplate("ogre", "fiendish");
         Assert(fiendishOgre != null && fiendishOgre.CharacterAlignment == Alignment.ChaoticEvil,
             "fiendish template keeps a CE base CE (MM p.108)", fiendishOgre != null ? fiendishOgre.CharacterAlignment.ToString() : "");
+
+        // Illegal bases are refused (owner ruling 2026-10-11, CRE-057): no template id, alignment, smite or mitigation.
+        NPCDefinition celestialOgre = WithTemplate("ogre", "celestial");
+        Assert(celestialOgre != null && celestialOgre.CharacterAlignment == Alignment.ChaoticEvil && !celestialOgre.GainsSmiteEvil
+            && (celestialOgre.AppliedTemplateIds == null || !celestialOgre.AppliedTemplateIds.Contains("celestial"))
+            && celestialOgre.DamageReductionAmount == NPCDatabase.Get("ogre").DamageReductionAmount,
+            "a celestial template on the CE ogre is refused: it stays a CE ogre without smite evil or DR (MM p.31)",
+            celestialOgre != null ? celestialOgre.CharacterAlignment + " smite " + celestialOgre.GainsSmiteEvil + " DR " + celestialOgre.DamageReductionAmount : "");
+        NPCDefinition fiendishPaladin = WithTemplate("human_paladin_3", "fiendish");
+        Assert(fiendishPaladin != null && fiendishPaladin.CharacterAlignment == Alignment.LawfulGood && !fiendishPaladin.GainsSmiteGood
+            && (fiendishPaladin.AppliedTemplateIds == null || !fiendishPaladin.AppliedTemplateIds.Contains("fiendish")),
+            "a fiendish template on the LG paladin is refused: it stays LG without smite good (MM p.108)",
+            fiendishPaladin != null ? fiendishPaladin.CharacterAlignment + " smite " + fiendishPaladin.GainsSmiteGood : "");
+        Assert(new CelestialTemplate().CanApplyTo(NPCDatabase.Get("human_monk_3")) && !new CelestialTemplate().CanApplyTo(NPCDatabase.Get("ogre"))
+            && new FiendishTemplate().CanApplyTo(NPCDatabase.Get("ogre")) && !new FiendishTemplate().CanApplyTo(NPCDatabase.Get("human_paladin_3")),
+            "CanApplyTo: celestial on LN yes, on CE no; fiendish on CE yes, on LG no");
+
+        // Every templated Summon Monster and Summon Nature's Ally option has a legal base (PHB p.285-287).
+        var wizard = new CharacterStats("Summon Tester", 17, "Wizard", 10, 10, 10, 10, 18, 10, 8, 0, 0, 4, 1, 0, 6, 1, 6);
+        var illegal = new List<string>();
+        int checkedOptions = 0;
+        for (int level = 1; level <= 9; level++)
+        {
+            foreach (bool sna in new[] { false, true })
+            {
+                foreach (SummonMonsterOption option in SummonMonsterLists.GetFilteredOptionsForListLevel(level, wizard, sna))
+                {
+                    if (option == null || string.IsNullOrWhiteSpace(option.TemplateId))
+                        continue;
+                    ICreatureTemplate template = CreatureTemplateRegistry.ResolveTemplates(new NPCDefinition { AppliedTemplateIds = new List<string> { option.TemplateId } })
+                        .Find(t => t is OutsiderTemplateBase);
+                    NPCDefinition baseDef = NPCDatabase.Get(option.NpcDefinitionId);
+                    if (!(template is OutsiderTemplateBase outsider) || baseDef == null)
+                        continue;
+                    checkedOptions++;
+                    if (!outsider.CanApplyTo(baseDef))
+                        illegal.Add(option.TemplateId + " " + option.NpcDefinitionId + " (" + baseDef.CharacterAlignment + ")");
+                }
+            }
+        }
+        Assert(checkedOptions > 0 && illegal.Count == 0,
+            $"every templated summon option has a legal base ({checkedOptions} checked)", string.Join(", ", illegal));
     }
 
     private static void TestUndeadTemplates()
@@ -398,7 +441,7 @@ public static class NpcAlignmentGearTests
         try
         {
             Assert(cc != null && cc.Stats != null && cc.Stats.CharacterAlignment == Alignment.LawfulGood && cc.Stats.HasTemplateSmiteEvil,
-                "a spawned celestial monk is LG (provisional, CRE-057) with smite evil",
+                "a spawned celestial monk is LG (law-chaos kept, owner interpretation 2026-10-11, CRE-057) with smite evil",
                 cc != null && cc.Stats != null ? cc.Stats.CharacterAlignment.ToString() : "");
         }
         finally

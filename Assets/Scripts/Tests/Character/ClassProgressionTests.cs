@@ -45,7 +45,9 @@ public static class ClassProgressionTests
             TestClassTables();
             TestMulticlassBab();
             TestConstructorConstitution();
+            TestPooledAverage();
             TestCreatureMaxHitPoints();
+            TestDefinitionTotalCountsToughness();
             TestCreationHitPoints();
             TestQuickStartPresets();
             TestLevelUpHitDieAndHitDice();
@@ -144,14 +146,46 @@ public static class ClassProgressionTests
             "Hit point CON modifier: 0 for no score or 0, the ability modifier otherwise");
     }
 
+    private static void TestPooledAverage()
+    {
+        Debug.Log("--- The MM pooled average: (sides + 1) / 2 per die, summed and rounded down once (owner interpretation 2026-10-11, CRE-041) ---");
+        var cases = new (int die, int count, int before, int expected, string what)[]
+        {
+            (8, 1, 0, 4, "1d8: 4.5 -> 4"),
+            (8, 2, 0, 9, "2d8: 9"),
+            (8, 3, 0, 13, "3d8: 13.5 -> 13"),
+            (8, 4, 0, 18, "4d8: 18 (ogre, MM p.199)"),
+            (8, 6, 0, 27, "6d8: 27 (troll, MM p.247)"),
+            (6, 5, 0, 17, "5d6: 17.5 -> 17 (satyr 5d6+5 = 22, MM p.219)"),
+            (10, 4, 0, 22, "4d10: 22"),
+            (12, 2, 0, 13, "2d12: 13 (human commoner zombie 2d12+3 = 16, MM p.267)"),
+            (12, 8, 0, 52, "8d12: 52 (ogre zombie 8d12+3 = 55, MM p.268)"),
+            (8, 1, 1, 5, "one more d8 on a pool holding a half point: 5"),
+            (12, 1, 4, 6, "a d12 on the ogre's 4d8 pool: 24.5 -> 24, so 6"),
+            (6, 2, 1, 7, "2d6 on a pool holding a half point: 3.5 + 3.5 + 0.5 -> 7"),
+            (8, 0, 3, 0, "no dice: 0"),
+        };
+        foreach (var c in cases)
+        {
+            int got = ClassProgression.PooledAverageHitDice(c.die, c.count, c.before);
+            Assert(got == c.expected, c.what, $"got {got}");
+        }
+        Assert(ClassProgression.HalfPointDiceAfter(8, 3, 1) == 4 && ClassProgression.HalfPointDiceAfter(3, 2, 1) == 1,
+            "Half-point dice: every even die adds one, an odd die none");
+        Assert(ClassProgression.AveragedHitPoints(8, 3, 2) == 19 && ClassProgression.AveragedHitPoints(4, 2, -4) == 2,
+            "Averaged hit points: 3d8 + 6 = 19; 2d4 - 8 stays at 1 per die");
+        Assert(ProgressionCalculator.CalculateAverageHpFromHitDice(8, 3) == 13, "The creature-type average is the pooled one (3d8 = 13)",
+            $"got {ProgressionCalculator.CalculateAverageHpFromHitDice(8, 3)}");
+    }
+
     private static void TestCreatureMaxHitPoints()
     {
         Debug.Log("--- Creature max HP: the definition total is final, CON not added again (PHB p.9; CHR-001, CRE-041) ---");
         Assert(ClassProgression.CreatureMaxHitPoints(29, 8, 4, 15) == 29, "Ogre total 29 (4d8+11, MM p.199) stays 29", $"got {ClassProgression.CreatureMaxHitPoints(29, 8, 4, 15)}");
         Assert(ClassProgression.CreatureMaxHitPoints(13, 12, 2, 0) == 13, "Ghoul total 13 with CON 0 stays 13", $"got {ClassProgression.CreatureMaxHitPoints(13, 12, 2, 0)}");
-        Assert(ClassProgression.CreatureMaxHitPoints(0, 8, 3, 14) == 18, "No total: 3 x (4 + 2) = 18", $"got {ClassProgression.CreatureMaxHitPoints(0, 8, 3, 14)}");
+        Assert(ClassProgression.CreatureMaxHitPoints(0, 8, 3, 14) == 19, "No total: 3d8 pooled 13 + 3 x 2 = 19 (CRE-041)", $"got {ClassProgression.CreatureMaxHitPoints(0, 8, 3, 14)}");
         Assert(ClassProgression.CreatureMaxHitPoints(0, 8, 3, 1) == 3, "No total, CON 1: at least 1 per Hit Die", $"got {ClassProgression.CreatureMaxHitPoints(0, 8, 3, 1)}");
-        Assert(ClassProgression.CreatureMaxHitPoints(0, 12, 2, CharacterStats.NO_SCORE) == 12, "No total, no CON: 2 x 6 = 12", $"got {ClassProgression.CreatureMaxHitPoints(0, 12, 2, CharacterStats.NO_SCORE)}");
+        Assert(ClassProgression.CreatureMaxHitPoints(0, 12, 2, CharacterStats.NO_SCORE) == 13, "No total, no CON: 2d12 pooled = 13 (CRE-041)", $"got {ClassProgression.CreatureMaxHitPoints(0, 12, 2, CharacterStats.NO_SCORE)}");
 
         // A 1-HD humanoid given class levels exchanges its Hit Die for them (MM p.290; CRE-004): max(1, die + CON) per
         // class die, CON counted once, and the orc's own 1d8 gone.
@@ -170,17 +204,53 @@ public static class ClassProgressionTests
         Assert(got == expected && barbarianOrc.HitDice == 2, $"Orc barbarian 2: 2 HD, (12 + {conMod}) + (6 + {conMod}) = {expected}", $"got {got}, HD {barbarianOrc.HitDice}");
         Assert(orc.BaseHitDieHP == templateTotal && orc.HitDice == 1, "The orc template is not changed by the clone", $"template {orc.BaseHitDieHP}");
 
-        // A monster with racial HD keeps them and adds the class (MM p.290): ogre 29 + barbarian 1 (12 + CON 2).
-        // The hit points are current behaviour, not RAW (CRE-041): the barbarian die is maximized although the ogre's
-        // racial HD came first; RAW gives an average die. Update this check when CRE-041 is fixed.
+        Assert(barbarianOrc.FirstHitDieMaximized, "The orc barbarian's first Hit Die is the maximized class die");
+
+        // A monster with racial HD keeps them and adds the class (MM p.290, PHB p.59-60): its first class level is not
+        // its first Hit Die, so the d12 joins the averaged pool (owner interpretation 2026-10-11, CRE-041): 4d8 + 1d12 average
+        // 24.5, rounded down 24, so the d12 adds 6 + CON 2 to the ogre's 29.
         NPCDefinition ogre = NPCDatabase.Get("ogre");
         if (ogre != null)
         {
             NPCDefinition barbarianOgre = ogre.Clone();
             CreatureClassEngine.ApplyClassToDefinition(barbarianOgre, ClassRegistry.GetClass("Barbarian"), 1);
-            Assert(barbarianOgre.HitDice == 5 && barbarianOgre.BaseHitDieHP == 29 + ClassProgression.HitPointsForHitDie(12, 2),
-                "Ogre barbarian 1: 5 HD (4d8 + 1d12, MM p.290), 29 + 14 hit points (current behaviour, CRE-041: max first class die; RAW is an average die)", $"HD {barbarianOgre.HitDice}, HP {barbarianOgre.BaseHitDieHP}");
+            Assert(barbarianOgre.HitDice == 5 && barbarianOgre.BaseHitDieHP == 29 + 6 + 2 && !barbarianOgre.FirstHitDieMaximized,
+                "Ogre barbarian 1: 5 HD (4d8 + 1d12, MM p.290), 29 + 8 hit points: an averaged d12, no maximum die (CRE-041)", $"HD {barbarianOgre.HitDice}, HP {barbarianOgre.BaseHitDieHP}");
+
+            NPCDefinition barbarianOgre2 = ogre.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(barbarianOgre2, ClassRegistry.GetClass("Barbarian"), 2);
+            Assert(barbarianOgre2.BaseHitDieHP == 29 + 13 + 4,
+                "Ogre barbarian 2: 4d8 + 2d12 pooled 31 = 18 + 13, so the class adds 13 + 2 x CON 2 = 17", $"HP {barbarianOgre2.BaseHitDieHP}");
         }
+
+        // Class levels continue the pool of a creature whose first die was maximized: the orc barbarian 2 (12, then an
+        // averaged d12 with no half point before) given one more barbarian level adds a d12 on a pool of one half point.
+        NPCDefinition barbarianOrc3 = barbarianOrc.Clone();
+        int before3 = barbarianOrc3.BaseHitDieHP;
+        CreatureClassEngine.ApplyClassToDefinition(barbarianOrc3, ClassRegistry.GetClass("Barbarian"), 1);
+        Assert(CreatureClassEngine.AveragedHalfPointDice(barbarianOrc) == 1 && barbarianOrc3.BaseHitDieHP == before3 + 7 + conMod,
+            "Orc barbarian 3: the third d12 adds 7 + CON (6.5 + 6.5 = 13 over the averaged dice)", $"HP {before3} -> {barbarianOrc3.BaseHitDieHP}");
+    }
+
+    private static void TestDefinitionTotalCountsToughness()
+    {
+        Debug.Log("--- A definition total counts Toughness; TotalMaxHP does not add it again (MM p.199; CRE-041) ---");
+        CharacterStats ogre = Build("Warrior", 4, 15, 29, race: null);
+        ogre.AdjustMaxHP(29 - ogre.MaxHP);
+        ogre.Feats.Add("Toughness");
+        Assert(ogre.TotalMaxHP == 32, "Before: MaxHP 29 + Toughness 3", $"got {ogre.TotalMaxHP}");
+        ClassProgression.ExcludeCountedFeatHitPoints(ogre, 29);
+        Assert(ogre.MaxHP == 26 && ogre.TotalMaxHP == 29 && ogre.CurrentHP == 26,
+            "After: MaxHP 26 without Toughness, TotalMaxHP the MM total 29", $"MaxHP {ogre.MaxHP}, TotalMaxHP {ogre.TotalMaxHP}, CurrentHP {ogre.CurrentHP}");
+        CharacterStats noTotal = Build("Warrior", 3, 14, 13, race: null);
+        noTotal.Feats.Add("Toughness");
+        int maxBefore = noTotal.MaxHP;
+        ClassProgression.ExcludeCountedFeatHitPoints(noTotal, 0);
+        Assert(noTotal.MaxHP == maxBefore && noTotal.TotalMaxHP == maxBefore + 3,
+            "Without a definition total the feat hit points stay on top", $"MaxHP {noTotal.MaxHP}, TotalMaxHP {noTotal.TotalMaxHP}");
+        Assert(FeatManager.HitPointBonusForFeats(new List<string> { "Toughness" }) == 3 && FeatManager.HitPointBonusForFeats(new List<string>()) == 0,
+            "Feat-list hit points: Toughness +3 (PHB p.101)");
+        Assert(ZombieTemplate.ToughnessHitPoints == 3, "A zombie's Toughness gives +3 whatever its Hit Dice (MM p.267)");
     }
 
     private static CharacterCreationData CreationData(string cls, string race, int con, int level)
@@ -210,14 +280,15 @@ public static class ClassProgressionTests
 
     private static void TestCreationHitPoints()
     {
-        Debug.Log("--- Creation hit points: maximum die at 1st level, CON once (PHB p.23; CHR-001) ---");
+        Debug.Log("--- Creation hit points: maximum die at 1st level, pooled average after, CON once (PHB p.23; CHR-001, CRE-041) ---");
         var cases = new (string cls, string race, int con, int level, int hp, string what)[]
         {
             ("Rogue", "Human", 10, 1, 6, "Rogue 1, CON 10: d6 = 6"),
             ("Fighter", "Human", 14, 1, 12, "Fighter 1, CON 14: 10 + 2 = 12 (was 14)"),
             ("Wizard", "Elf", 10, 1, 3, "Elf wizard 1, CON 10 - 2: 4 - 1 = 3"),
             ("Wizard", "Human", 3, 1, 1, "Wizard 1, CON 3: at least 1"),
-            ("Bard", "Human", 12, 3, 17, "Bard 3, CON 12: 7 + 5 + 5 = 17 (was 20 with CON twice)"),
+            ("Bard", "Human", 12, 3, 16, "Bard 3, CON 12: 7 + 2d6 pooled 7 + 2 = 16 (was 20 with CON twice, 17 rounding each die up)"),
+            ("Fighter", "Human", 12, 4, 30, "Fighter 4, CON 12: 11 + 3d10 pooled 16 + 3 = 30"),
         };
         foreach (var c in cases)
         {
@@ -230,20 +301,21 @@ public static class ClassProgressionTests
 
     private static void TestQuickStartPresets()
     {
-        Debug.Log("--- Quick Start presets at 3rd level: HP and BAB (CHR-001, CHR-002) ---");
+        Debug.Log("--- Quick Start presets at 3rd level: HP and BAB (CHR-001, CHR-002; pooled average after 1st level, CRE-041) ---");
         var presets = new (string cls, CharacterCreationData data, int hp, int bab)[]
         {
-            ("Fighter", FighterClass.GetQuickStartCharacter(), 31, 3),     // Dwarf, CON 16: 13 + 9 + 9
-            ("Rogue", RogueClass.GetQuickStartCharacter(), 14, 2),         // Elf, CON 10: 6 + 4 + 4
-            ("Cleric", ClericClass.GetQuickStartCharacter(), 24, 2),       // Human, CON 14: 10 + 7 + 7
-            ("Wizard", WizardClass.GetQuickStartCharacter(), 10, 1),       // Elf, CON 10: 4 + 3 + 3
-            ("Monk", MonkClass.GetQuickStartCharacter(), 21, 2),           // Human, CON 12: 9 + 6 + 6
-            ("Barbarian", BarbarianClass.GetQuickStartCharacter(), 35, 3), // Half-Orc, CON 16: 15 + 10 + 10
-            ("Sorcerer", SorcererClass.GetQuickStartCharacter(), 13, 1),   // Human, CON 12: 5 + 4 + 4
-            ("Ranger", RangerClass.GetQuickStartCharacter(), 21, 3),       // Human, CON 12: 9 + 6 + 6
-            ("Paladin", PaladinClass.GetQuickStartCharacter(), 28, 3),     // Human, CON 14: 12 + 8 + 8
-            ("Bard", BardClass.GetQuickStartCharacter(), 17, 2),           // Half-Elf, CON 12: 7 + 5 + 5
-            ("Druid", DruidClass.GetQuickStartCharacter(), 24, 2),         // Human, CON 14: 10 + 7 + 7
+            // 1st level maximum + CON, then 2 averaged dice pooled (2d10 11, 2d8 9, 2d6 7, 2d4 5, 2d12 13) + 2 x CON.
+            ("Fighter", FighterClass.GetQuickStartCharacter(), 30, 3),     // Dwarf, CON 16: 13 + 11 + 6
+            ("Rogue", RogueClass.GetQuickStartCharacter(), 13, 2),         // Elf, CON 10: 6 + 7
+            ("Cleric", ClericClass.GetQuickStartCharacter(), 23, 2),       // Human, CON 14: 10 + 9 + 4
+            ("Wizard", WizardClass.GetQuickStartCharacter(), 9, 1),        // Elf, CON 10: 4 + 5
+            ("Monk", MonkClass.GetQuickStartCharacter(), 20, 2),           // Human, CON 12: 9 + 9 + 2
+            ("Barbarian", BarbarianClass.GetQuickStartCharacter(), 34, 3), // Half-Orc, CON 16: 15 + 13 + 6
+            ("Sorcerer", SorcererClass.GetQuickStartCharacter(), 12, 1),   // Human, CON 12: 5 + 5 + 2
+            ("Ranger", RangerClass.GetQuickStartCharacter(), 20, 3),       // Human, CON 12: 9 + 9 + 2
+            ("Paladin", PaladinClass.GetQuickStartCharacter(), 27, 3),     // Human, CON 14: 12 + 11 + 4
+            ("Bard", BardClass.GetQuickStartCharacter(), 16, 2),           // Half-Elf, CON 12: 7 + 7 + 2
+            ("Druid", DruidClass.GetQuickStartCharacter(), 23, 2),         // Human, CON 14: 10 + 9 + 4
         };
         foreach (var p in presets)
         {
@@ -264,7 +336,8 @@ public static class ClassProgressionTests
     private static void TestLevelUpHitDieAndHitDice()
     {
         Debug.Log("--- Level-ups use the class hit die and add a Hit Die (PHB p.23, p.59, p.309; CHR-002, CHR-071) ---");
-        // Human, CON 12 (+1); Average mode: d6 4, d8 5, d4 3.
+        // Human, CON 12 (+1); Average mode, the MM pooled average over the averaged dice (owner interpretation 2026-10-11,
+        // CRE-041): d6 3 (3.5), then d8 5 (8.0 in all), then d6 3 (11.5 -> 11).
         CharacterStats s = Build("Rogue", 1, 12, 6);
         Assert(s.MaxHP == 7 && s.GetHitDice() == 1, "Rogue 1: 7 HP, 1 HD", $"got {s.MaxHP} HP, {s.GetHitDice()} HD");
         s.PendingLevelUps = 3;
@@ -272,19 +345,32 @@ public static class ClassProgressionTests
         Assert(s.GetHitDice() == 1, "Pending level-ups add no Hit Die", $"got {s.GetHitDice()}");
 
         s.ApplyPendingLevelUp("Rogue");
-        Assert(s.LastLevelUpHPGain == 5, "Rogue level-up: d6 average 4 + 1 (was a d8)", $"got {s.LastLevelUpHPGain}");
+        Assert(s.LastLevelUpHPGain == 4, "Rogue level-up: d6 pooled 3 + 1 (was a d8)", $"got {s.LastLevelUpHPGain}");
         Assert(s.HitDice == 2 && s.GetHitDice() == 2, "Rogue 2: 2 HD", $"got field {s.HitDice}, GetHitDice {s.GetHitDice()}");
         Assert(s.BaseAttackBonus == 1, "Rogue 2 BAB +1", $"got {s.BaseAttackBonus}");
 
         s.ApplyPendingLevelUp("Ranger");
-        Assert(s.LastLevelUpHPGain == 6, "Ranger level-up: d8 average 5 + 1 (was a d10)", $"got {s.LastLevelUpHPGain}");
+        Assert(s.LastLevelUpHPGain == 6, "Ranger level-up: d8 pooled 5 (3.5 + 4.5 = 8) + 1 (was a d10)", $"got {s.LastLevelUpHPGain}");
         Assert(s.GetHitDice() == 3, "Rogue 2 / Ranger 1: 3 HD", $"got {s.GetHitDice()}");
         Assert(s.BaseAttackBonus == 2, "Rogue 2 / Ranger 1 BAB +2 (1 + 1)", $"got {s.BaseAttackBonus}");
 
         s.ApplyPendingLevelUp("Bard");
-        Assert(s.LastLevelUpHPGain == 5, "Bard level-up: d6 average 4 + 1 (was a d8)", $"got {s.LastLevelUpHPGain}");
+        Assert(s.LastLevelUpHPGain == 4, "Bard level-up: d6 pooled 3 (11.5 -> 11) + 1 (was a d8)", $"got {s.LastLevelUpHPGain}");
         Assert(s.GetHitDice() == 4 && s.Level == 4, "Rogue 2 / Ranger 1 / Bard 1: 4 HD, level 4", $"got {s.GetHitDice()} HD, level {s.Level}");
-        Assert(s.MaxHP == 7 + 5 + 6 + 5, "Max HP 23 after three level-ups", $"got {s.MaxHP}");
+        Assert(s.MaxHP == 7 + 4 + 6 + 4 && s.AveragedHalfPointHitDice == 3, "Max HP 21 after three level-ups; 3 averaged dice in the pool",
+            $"got {s.MaxHP}, pool {s.AveragedHalfPointHitDice}");
+
+        // A character built at 3rd level continues the creation pool: a Quick Start-style bard 3 (two averaged d6, no
+        // half point left) levels up with a d6 that adds 3 (10.5 -> 10), then one that adds 4 (14 for four d6).
+        CharacterStats built = Build("Bard", 3, 12, 14);
+        built.AveragedHalfPointHitDice = ClassProgression.CreationHalfPointDice(6, 3);
+        built.PendingLevelUps = 2;
+        built.EnsureMulticlassDataInitialized();
+        built.ApplyPendingLevelUp("Bard");
+        int first = built.LastLevelUpHPGain;
+        built.ApplyPendingLevelUp("Bard");
+        Assert(ClassProgression.CreationHalfPointDice(6, 3) == 2 && first == 4 && built.LastLevelUpHPGain == 5,
+            "Bard 3 -> 5 in Average mode: d6 3 + 1, then d6 4 + 1 (4 averaged d6 = 14)", $"got {first}, {built.LastLevelUpHPGain}");
 
         var go = new GameObject("ClassProgressionTests_Target");
         try
@@ -308,9 +394,9 @@ public static class ClassProgressionTests
         s.PendingLevelUps = 1;
         s.EnsureMulticlassDataInitialized();
         s.ApplyPendingLevelUp("Wizard");
-        Assert(s.LastLevelUpHPGain == 1, "d4 average 3 - 4 still gives 1", $"got {s.LastLevelUpHPGain}");
+        Assert(s.LastLevelUpHPGain == 1, "d4 pooled 2 - 4 still gives 1", $"got {s.LastLevelUpHPGain}");
         ClassHitPointEntry e = s.HitPointGainsByClassLevel.Count > 0 ? s.HitPointGainsByClassLevel[s.HitPointGainsByClassLevel.Count - 1] : null;
-        Assert(e != null && e.HitDie == 4 && e.Roll == 3 && e.ConstitutionBonus == -4 && e.TotalGain == 1,
+        Assert(e != null && e.HitDie == 4 && e.Roll == 2 && e.ConstitutionBonus == -4 && e.TotalGain == 1,
             "The level-up record keeps the die result, the CON modifier and the clamped gain",
             e == null ? "no record" : $"d{e.HitDie} roll {e.Roll} CON {e.ConstitutionBonus} total {e.TotalGain}");
     }
@@ -327,10 +413,10 @@ public static class ClassProgressionTests
             s.EnsureMulticlassDataInitialized();
             c.Stats = s;
             LevelUpData data = LevelUpCalculator.CalculateLevelUp(c, 1, 2);
-            Assert(data.HPGained == 5, "Bard 1 -> 2 preview: d6 average 4 + 1", $"got {data.HPGained}");
+            Assert(data.HPGained == 4, "Bard 1 -> 2 preview: d6 pooled 3 + 1 (CRE-041)", $"got {data.HPGained}");
             Assert(data.NewBAB == 1, "Bard 1 -> 2 preview: BAB +1 (3/4)", $"got {data.NewBAB}");
             LevelUpCalculator.RecalculateForSelectedClass(data, "Ranger");
-            Assert(data.HPGained == 6 && data.NewBAB == 1, "Bard 1 + Ranger 1 preview: d8 average 5 + 1, BAB 0 + 1",
+            Assert(data.HPGained == 5 && data.NewBAB == 1, "Bard 1 + Ranger 1 preview: d8 pooled 4 + 1, BAB 0 + 1",
                 $"got {data.HPGained} HP, BAB {data.NewBAB}");
         }
         finally

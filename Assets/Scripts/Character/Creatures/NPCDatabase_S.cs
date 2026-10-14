@@ -642,7 +642,7 @@ public static partial class NPCDatabase
             NaturalArmorBonus = 0,
             SpellResistance = 12,
             BaseSpeed = 4,
-            BaseHitDieHP = 5,
+            BaseHitDieHP = 8, // MM p.132: 1d8+4 (8 hp), Toughness included (CRE-041)
             BAB = 1,
             NaturalAttacks = new List<NaturalAttackDefinition>(),
             CreatureTags = new List<string> { "Humanoid", "Gnome", "Svirfneblin", "MM35" },

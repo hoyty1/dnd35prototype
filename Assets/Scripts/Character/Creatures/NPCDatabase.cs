@@ -681,6 +681,16 @@ public class NPCDefinition
     public bool HasRacialHumanoidHitDice;
 
     /// <summary>
+    /// The first Hit Die in <see cref="BaseHitDieHP"/> is a maximized class die: set by
+    /// <see cref="CreatureClassEngine.ApplyClassToDefinition"/> when class levels replace a 1-HD humanoid's Hit Die (DMG
+    /// p.110: an elite character's first Hit Die is the maximum; whether a DMG-table class NPC is elite is an open owner
+    /// question, CRE-058). Every
+    /// other die of a total is averaged (MM totals average every die), so further class levels continue the averaged
+    /// pool without it (<see cref="CreatureClassEngine.AveragedHalfPointDice"/>; owner interpretation 2026-10-11, CRE-041).
+    /// </summary>
+    public bool FirstHitDieMaximized;
+
+    /// <summary>
     /// True when <see cref="CharacterClass"/> only stands in for racial Hit Dice (CRE-024), so it grants no class
     /// proficiency, BAB or saves; false when the levels are real class levels. Null derives it: an empty class, a class
     /// name with no registered definition (noble_djinni's "Outsider"), or a Warrior class on a creature that is not a
@@ -858,6 +868,7 @@ public class NPCDefinition
         clone.IsHumanoidForm = IsHumanoidForm;
         clone.ClassLevelsAreRacialHitDice = ClassLevelsAreRacialHitDice;
         clone.HasRacialHumanoidHitDice = HasRacialHumanoidHitDice;
+        clone.FirstHitDieMaximized = FirstHitDieMaximized;
 
         // Deep-clone monster special ability definitions
         clone.BreathWeapon = BreathWeapon?.Clone();

@@ -268,8 +268,11 @@ public class LionsShieldBehavior : SpecificItemBehavior
     public static CharacterStats BuildSummonStats(NPCDefinition def)
     {
         int hitDice = Mathf.Max(1, def.HitDice > 0 ? def.HitDice : def.Level);
-        // The definition total is final (CON included); the constructor's CON term is undone below (CHR-001).
-        int baseHp = def.BaseHitDieHP > 0 ? def.BaseHitDieHP : hitDice * 5;
+        // The definition total is final (CON included); the constructor's CON term is undone below (CHR-001). Without
+        // one, the type's pooled average die plus CON, as every spawn from a definition (CRE-041). No feats are added
+        // here, so TotalMaxHP adds no feat hit points to the total.
+        CreatureTypeProgression typeProgression = CreatureTypeProgressionDatabase.GetFromString(def.CreatureType);
+        int baseHp = ClassProgression.CreatureMaxHitPoints(def.BaseHitDieHP, typeProgression.HitDie, hitDice, def.CON);
         int resolvedBab = def.BAB > 0 ? def.BAB : (hitDice * 3 / 4);
 
         CharacterStats stats = new CharacterStats(

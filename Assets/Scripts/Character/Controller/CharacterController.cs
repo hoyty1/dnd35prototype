@@ -5203,8 +5203,13 @@ public class CharacterController : MonoBehaviour
         }
     }
 
+    /// <summary>DiceService context of the dying character's stabilization roll (a scenario can force it).</summary>
+    public const string StabilizationCheckContext = "Stabilization check";
+
     /// <summary>
-    /// D&D 3.5 end-of-turn dying progression (check first, then lose HP on failure).
+    /// D&D 3.5 end-of-turn dying progression (check first, then lose HP on failure): the dying character has a 10%
+    /// chance on d% to become stable, else it loses 1 hit point (PHB p.145; CHR-011). Also used for the PCs' dying rolls
+    /// when both sides are out at once (GameManager.EvaluateCombatEnd, CORE-038).
     /// </summary>
     public void ProcessEndOfTurnHPState()
     {
@@ -5220,17 +5225,15 @@ public class CharacterController : MonoBehaviour
             return;
         }
 
-        int roll = DiceService.D20("Stabilization check");
-        int conMod = Stats.CONMod;
-        int total = roll + conMod;
-        const int dc = 10;
+        int roll = DiceService.Percentile(StabilizationCheckContext);
+        const int stableChance = 10;
 
         if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
         {
-            GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Info("🎲", $"{Stats.CharacterName} stabilization check: d20({roll}) + CON({CharacterStats.FormatMod(conMod)}) = {total} vs DC {dc}"));
+            GameManager.Instance.CombatUI.ShowCombatLog(CombatLogHelper.Info("🎲", $"{Stats.CharacterName} stabilization check: d%({roll}) vs {stableChance} or less (PHB p.145)"));
         }
 
-        if (total >= dc)
+        if (roll <= stableChance)
         {
             SetHPState(HPState.Stable, emitLog: true);
             return;

@@ -108,8 +108,8 @@ public class CharacterCreationData
         HitDie = ClassProgression.GetHitDie(ClassName);
         BAB = ClassProgression.GetClassBaseAttackBonus(ClassName, safeLevel);
 
-        // HP: maximum die at 1st level, average die after that (the Quick Start shortcut), each die plus the CON
-        // modifier with a minimum of 1 (PHB p.9, p.23; CHR-001: CON is counted once).
+        // HP: maximum die at 1st level, the MM pooled average for the later dice (the Quick Start shortcut; owner interpretation
+        // 2026-10-11, CRE-041), each die plus the CON modifier with a minimum of 1 (PHB p.9, p.23; CHR-001: CON once).
         int conMod = CharacterStats.GetModifier(FinalCON);
         HP = ClassProgression.CreationHitPoints(HitDie, conMod, safeLevel);
         BaseHitDieHP = HP - conMod * safeLevel;

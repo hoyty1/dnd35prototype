@@ -10,7 +10,11 @@ namespace Tests.Combat
 /// stable, nonlethal damage above its HP, the Unconscious condition, asleep and petrified (PHB p.311, DMG p.301) count;
 /// regeneration or fast healing does not keep a downed creature in. A disabled creature is in: at 0 HP (PHB p.145), and
 /// with Diehard at negative HP, also after healing there (PHB p.93). A side is out when it has, or had in this combat,
-/// a member and none is in; Neutral creatures belong to neither side.
+/// a member and none is in; Neutral creatures belong to neither side. Owner interpretations 2026-10-11 (CORE-038): a
+/// hostile creature charmed by or under the control of a party-side creature (Charm Person PHB p.209, Command Undead
+/// p.211, Dominate Person p.224, a domain command) counts as out of the hostile side; a party member charmed by the
+/// hostile side still counts for the party. When both sides are out at once, the game rolls the dying PCs out
+/// (PHB p.145) before deciding; that path is covered by the rules/combat-end-tie-* scenarios.
 /// Play mode only: CharacterController.Init needs Awake (TST-009).
 /// </summary>
 public static class CombatEndRulesTests
@@ -43,6 +47,7 @@ public static class CombatEndRulesTests
             TestMissingCreatureIsOut();
             TestCountSidesAndNeutral();
             TestEmptySide();
+            TestControlledByParty();
         }
         finally
         {
@@ -204,7 +209,7 @@ public static class CombatEndRulesTests
 
         ally.Stats.CurrentHP = -1;
         s = CombatEndRules.Count(all);
-        Assert(s.PlayersOut && s.EnemiesOut, "Both sides out when the ally drops too (EvaluateCombatEnd treats this as a defeat, CORE-038)");
+        Assert(s.PlayersOut && s.EnemiesOut, "Both sides out when the ally drops too (EvaluateCombatEnd then rolls the dying PCs out and the party wins if one survives, CORE-038)");
 
         bystander.Stats.CurrentHP = -1;
         s = CombatEndRules.Count(new List<CharacterController> { bystander });
@@ -223,6 +228,66 @@ public static class CombatEndRulesTests
         s.EnemiesHadMembers = true;
         Assert(s.EnemiesOut, "A side that had a member earlier in the combat and has none left is out");
         Assert(!s.PlayersOut, "The party side with a healthy hero is in");
+    }
+
+    private static ConditionService.ActiveCondition Condition(CombatConditionType type, CharacterController source, object data = null)
+        => new ConditionService.ActiveCondition { Type = type, RemainingRounds = 10, Source = source, Data = data };
+
+    private static void TestControlledByParty()
+    {
+        var wizard = Create("CE_CtlWizard", CharacterTeam.Player);
+        var shaman = Create("CE_CtlShaman", CharacterTeam.Enemy);
+        var foe = Create("CE_CtlFoe", CharacterTeam.Enemy);
+        var hero = Create("CE_CtlHero", CharacterTeam.Player);
+
+        var charmedByParty = new List<ConditionService.ActiveCondition> { Condition(CombatConditionType.Charmed, wizard) };
+        var charmedByData = new List<ConditionService.ActiveCondition>
+        {
+            Condition(CombatConditionType.Charmed, null, new CharmedConditionData { Caster = wizard, CasterName = "CE_CtlWizard" })
+        };
+        var commandedByParty = new List<ConditionService.ActiveCondition> { Condition(CombatConditionType.Commanded, wizard) };
+        var charmedByFoe = new List<ConditionService.ActiveCondition> { Condition(CombatConditionType.Charmed, shaman) };
+        var shaken = new List<ConditionService.ActiveCondition> { Condition(CombatConditionType.Shaken, wizard) };
+
+        Assert(CombatEndRules.IsControlledByTeam(foe, CharacterTeam.Player, charmedByParty), "A foe charmed by a party member is party-controlled (PHB p.209)");
+        Assert(CombatEndRules.IsControlledByTeam(foe, CharacterTeam.Player, charmedByData), "The charm data's caster counts when the condition has no tracked source");
+        Assert(CombatEndRules.IsControlledByTeam(foe, CharacterTeam.Player, commandedByParty), "A foe commanded by a party cleric (domain command) is party-controlled");
+        Assert(!CombatEndRules.IsControlledByTeam(foe, CharacterTeam.Player, charmedByFoe), "A foe charmed by its own side is not party-controlled");
+        Assert(!CombatEndRules.IsControlledByTeam(foe, CharacterTeam.Player, shaken), "Another condition from a party member is not control");
+        Assert(!CombatEndRules.IsControlledByTeam(foe, CharacterTeam.Player, null), "No condition, no controller: not controlled");
+        var suggestedByParty = new List<ConditionService.ActiveCondition>
+        {
+            new ConditionService.ActiveCondition { Type = CombatConditionType.Charmed, RemainingRounds = 10, Source = wizard, SourceId = DND35e.Identifiers.SpellNames.MASS_SUGGESTION }
+        };
+        Assert(!CombatEndRules.IsControlledByTeam(foe, CharacterTeam.Player, suggestedByParty),
+            "A foe under the party's Mass Suggestion (Charmed in the game, a compulsion by RAW, PHB p.173, p.285) is not party-controlled (open owner question, CORE-038)");
+
+        var command = new CommandUndeadEffectData { IsActive = true, DurationRemainingRounds = 10, CasterLevel = 5 };
+        command.SetCaster(wizard);
+        command.SetControlledUndead(foe);
+        foe.ApplyCommandUndeadEffect(command);
+        Assert(CombatEndRules.IsControlledByTeam(foe, CharacterTeam.Player, null), "A foe under a party member's Command Undead or Dominate Person is party-controlled (PHB p.211, p.224)");
+
+        // Counting: the controlled foe is a member of the hostile side that is out; the healthy shaman keeps it in.
+        var all = new List<CharacterController> { wizard, hero, shaman, foe };
+        CombatEndRules.SideCounts s = CombatEndRules.Count(all, c => CombatEndRules.IsControlledByTeam(c, CharacterTeam.Player, null));
+        Assert(s.EnemiesAll == 2 && s.EnemiesIn == 1 && !s.EnemiesOut, $"The commanded foe counts as out; the shaman keeps the hostile side in (got {s.EnemiesAll}/{s.EnemiesIn})");
+        shaman.Stats.CurrentHP = -3;
+        s = CombatEndRules.Count(all, c => CombatEndRules.IsControlledByTeam(c, CharacterTeam.Player, null));
+        Assert(s.EnemiesOut && !s.PlayersOut, "With the shaman dying, the party-controlled foe at full HP does not keep the hostile side in (owner interpretation 2026-10-11, CORE-038)");
+        s = CombatEndRules.Count(all);
+        Assert(!s.EnemiesOut, "Without the control predicate the controlled foe still counts as in");
+
+        // A party member controlled by the hostile side still counts for the party (an open owner question, CORE-038).
+        var heroCommand = new CommandUndeadEffectData { IsActive = true, DurationRemainingRounds = 10, CasterLevel = 5 };
+        heroCommand.SetCaster(shaman);
+        heroCommand.SetControlledUndead(hero);
+        hero.ApplyCommandUndeadEffect(heroCommand);
+        wizard.Stats.CurrentHP = -2;
+        s = CombatEndRules.Count(all, c => CombatEndRules.IsControlledByTeam(c, CharacterTeam.Player, null));
+        Assert(!s.PlayersOut && s.PlayersIn == 1, $"A hero dominated by the hostile side still keeps the party side in (got {s.PlayersIn} in)");
+        foe.RemoveCommandUndeadEffect();
+        hero.RemoveCommandUndeadEffect();
     }
 }
 }

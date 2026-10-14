@@ -100,27 +100,69 @@ public static class ClassProgression
     }
 
     /// <summary>
-    /// The average result of one hit die, rounded up (d4 3, d6 4, d8 5, d10 6, d12 7). Used where the game
-    /// takes an average instead of a roll: Quick Start and preset characters after 1st level, the Average level-up
-    /// mode and the level-up preview. PHB p.23 has players roll; this is the game's own shortcut.
+    /// Hit points that <paramref name="count"/> averaged d<paramref name="hitDie"/> add to a pool of averaged Hit Dice
+    /// that already holds <paramref name="halfPointDiceBefore"/> dice whose average ends in a half point. Owner interpretation
+    /// 2026-10-11 (CRE-041), the MM pooled average: each die averages (sides + 1) / 2 (d8 4.5, d12 6.5), the averages
+    /// are summed over every averaged die of the creature and the sum is rounded down once (MM: ogre 4d8 = 18, troll
+    /// 6d8 = 27). So the result is the pool's rounded-down total after the new dice less the total before: 1d8 gives 4,
+    /// 2d8 9, 3d8 13, and one more d8 gives 5 to a pool holding one half point. Every Hit Die size is even, so each
+    /// averaged Hit Die carries a half point; an odd die (none in the PHB, DMG or MM) averages a whole number.
+    /// Used wherever the game takes an average instead of a roll: creatures without an MM total, class levels added to a
+    /// creature, Quick Start and preset characters after 1st level, the Average level-up mode and the level-up preview.
     /// </summary>
-    public static int AverageHitDieResult(int hitDie)
+    public static int PooledAverageHitDice(int hitDie, int count, int halfPointDiceBefore = 0)
     {
-        return Mathf.Max(1, hitDie / 2 + 1);
+        if (count <= 0)
+            return 0;
+
+        int safeDie = Mathf.Max(1, hitDie);
+        int whole = count * ((safeDie + 1) / 2);
+        if (safeDie % 2 != 0)
+            return whole;
+
+        int before = Mathf.Max(0, halfPointDiceBefore);
+        return whole + (before + count) / 2 - before / 2;
+    }
+
+    /// <summary>
+    /// The half-point dice in an averaged pool after <paramref name="count"/> averaged d<paramref name="hitDie"/> joined
+    /// a pool holding <paramref name="halfPointDiceBefore"/> (see <see cref="PooledAverageHitDice"/>).
+    /// </summary>
+    public static int HalfPointDiceAfter(int hitDie, int count, int halfPointDiceBefore)
+    {
+        int before = Mathf.Max(0, halfPointDiceBefore);
+        return Mathf.Max(1, hitDie) % 2 == 0 ? before + Mathf.Max(0, count) : before;
+    }
+
+    /// <summary>
+    /// Hit points of <paramref name="count"/> averaged d<paramref name="hitDie"/> with the CON modifier per die: the
+    /// pooled average (<see cref="PooledAverageHitDice"/>) plus CON per die, at least 1 hit point per die (PHB p.9, p.59).
+    /// </summary>
+    public static int AveragedHitPoints(int hitDie, int count, int conModifier, int halfPointDiceBefore = 0)
+    {
+        if (count <= 0)
+            return 0;
+        return Mathf.Max(count, PooledAverageHitDice(hitDie, count, halfPointDiceBefore) + conModifier * count);
     }
 
     /// <summary>
     /// Hit points of a character built at <paramref name="level"/> in one class: the maximum at 1st level (PHB p.23),
-    /// the average die after that, each die plus the CON modifier with a minimum of 1.
+    /// the pooled average for the later dice (owner interpretation 2026-10-11, CRE-041), each die plus the CON modifier with a
+    /// minimum of 1.
     /// </summary>
     public static int CreationHitPoints(int hitDie, int conModifier, int level)
     {
         int safeLevel = Mathf.Max(1, level);
-        int hp = HitPointsForHitDie(hitDie, conModifier);
-        if (safeLevel > 1)
-            hp += (safeLevel - 1) * HitPointsForHitDie(AverageHitDieResult(hitDie), conModifier);
-        return hp;
+        return HitPointsForHitDie(hitDie, conModifier) + AveragedHitPoints(hitDie, safeLevel - 1, conModifier);
     }
+
+    /// <summary>
+    /// The half-point dice in the averaged pool of a character built at <paramref name="level"/> in one class
+    /// (<see cref="CreationHitPoints"/>): every die after the first. <see cref="CharacterStats.AveragedHalfPointHitDice"/>
+    /// starts from it, so the Average level-up mode continues the same pool.
+    /// </summary>
+    public static int CreationHalfPointDice(int hitDie, int level)
+        => HalfPointDiceAfter(hitDie, Mathf.Max(1, level) - 1, 0);
 
     /// <summary>
     /// Adds the CON modifier once per Hit Die to a CON-free hit point total, with the PHB minimum of 1 hit point per
@@ -147,8 +189,11 @@ public static class ClassProgression
     /// Max hit points of a creature spawned from an <see cref="NPCDefinition"/> (CHR-001, CRE-041). A definition total
     /// (<paramref name="definitionTotal"/> above 0) is final: it is the MM statistics-block total, which already counts
     /// CON per Hit Die, plus whatever templates and <see cref="CreatureClassEngine"/> class levels added with CON per die.
-    /// Without one, the creature type's average die per Hit Die plus the CON modifier per Hit Die, minimum 1 per die.
-    /// Feat hit points (Toughness) are added on top by <see cref="CharacterStats.TotalMaxHP"/>.
+    /// Without one, the pooled average of the creature type's die over its Hit Dice (owner interpretation 2026-10-11, CRE-041;
+    /// <see cref="PooledAverageHitDice"/>) plus the CON modifier per Hit Die, minimum 1 per die. A definition total counts
+    /// the feat hit points (Toughness) the statistics block includes, so the spawn keeps
+    /// <see cref="CharacterStats.TotalMaxHP"/>, which adds feat hit points, at that total
+    /// (<see cref="ExcludeCountedFeatHitPoints"/>).
     /// </summary>
     public static int CreatureMaxHitPoints(int definitionTotal, int creatureHitDie, int hitDice, int conScore)
     {
@@ -156,7 +201,27 @@ public static class ClassProgression
             return definitionTotal;
 
         int safeHitDice = Mathf.Max(1, hitDice);
-        int averageDice = ProgressionCalculator.CalculateAverageHpFromHitDice(creatureHitDie, safeHitDice);
-        return ApplyConstitution(averageDice, safeHitDice, HitPointConstitutionModifier(conScore));
+        return AveragedHitPoints(creatureHitDie, safeHitDice, HitPointConstitutionModifier(conScore));
+    }
+
+    /// <summary>
+    /// For a creature whose max hit points are a definition total (<paramref name="definitionTotal"/> above 0): lowers
+    /// <see cref="CharacterStats.MaxHP"/> by the feat hit points <see cref="CharacterStats.TotalMaxHP"/> adds
+    /// (<see cref="FeatManager.GetTotalHPBonus"/>, Toughness +3, PHB p.101), because the MM total already counts them
+    /// (ogre 4d8+11 = 29 with Toughness, MM p.199; CRE-041). The creature's total max hit points then equal the
+    /// definition total. Call it after the definition's feats are on <paramref name="stats"/> and before
+    /// <see cref="FeatManager.ApplyPassiveFeats"/>; it also resets current hit points to the new maximum.
+    /// </summary>
+    public static void ExcludeCountedFeatHitPoints(CharacterStats stats, int definitionTotal)
+    {
+        if (stats == null || definitionTotal <= 0)
+            return;
+
+        int featHitPoints = FeatManager.GetTotalHPBonus(stats);
+        if (featHitPoints <= 0)
+            return;
+
+        stats.AdjustMaxHP(-featHitPoints);
+        stats.CurrentHP = stats.MaxHP;
     }
 }

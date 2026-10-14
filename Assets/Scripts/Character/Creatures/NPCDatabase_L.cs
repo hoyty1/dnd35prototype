@@ -173,7 +173,7 @@ public static partial class NPCDatabase
                 immuneToCold = true
             },
             BaseSpeed = 6,
-            BaseHitDieHP = 66,
+            BaseHitDieHP = 74, // MM p.166: 11d12+3 (74 hp), Toughness included (CRE-041)
             BAB = 5,
             FrightfulPresence = new FrightfulPresenceDefinition
             {

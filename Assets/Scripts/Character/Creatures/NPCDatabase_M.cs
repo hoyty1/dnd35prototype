@@ -130,7 +130,9 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Claw", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
             },
             BaseSpeed = speed,
-            BaseHitDieHP = 13, // 3d8 avg
+            // MM p.181-185: 3d8 (13 hp); the Toughness mephits (earth, ooze, salt, water) 3d8+6 (19 hp): CON +1 per die and
+            // Toughness +3, which the total counts (CRE-041).
+            BaseHitDieHP = id == "earth_mephit" || id == "ooze_mephit" || id == "salt_mephit" || id == "water_mephit" ? 19 : 13,
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Magic,
             DamageImmunities = immunities ?? new List<DamageType>(),

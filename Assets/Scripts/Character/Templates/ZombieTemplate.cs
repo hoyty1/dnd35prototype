@@ -20,6 +20,9 @@ using DND35e.Identifiers;
 /// </summary>
 public static class ZombieTemplate
 {
+    /// <summary>The bonus Toughness feat's hit points (PHB p.101: +3), whatever the zombie's Hit Dice (MM p.267).</summary>
+    public const int ToughnessHitPoints = 3;
+
     // ────────────────────────────────────────────
     //  Public API
     // ────────────────────────────────────────────
@@ -87,11 +90,11 @@ public static class ZombieTemplate
         zombie.CHA = 1;
 
         // ── HP from doubled d12 HD (no CON modifier for undead) ──
-        // Average d12 = 6.5. Toughness adds +3 HP for the first 3 HD, then +1/HD after.
-        // For simplicity, add Toughness as flat +3 HP.
-        int baseHP = (int)(doubledHD * 6.5f);
-        int toughnessHP = doubledHD <= 3 ? 3 : doubledHD; // Toughness: +3 if 3 HD or less, +1/HD otherwise
-        zombie.BaseHitDieHP = baseHP + toughnessHP;
+        // The MM pooled average, 6.5 per d12 summed and rounded down once (owner interpretation 2026-10-11, CRE-041), plus the
+        // bonus Toughness feat's +3 (PHB p.101; MM p.267: human commoner zombie 2d12+3 = 16, ogre zombie 8d12+3 = 55).
+        int baseHP = ClassProgression.PooledAverageHitDice(12, doubledHD);
+        zombie.BaseHitDieHP = baseHP + ToughnessHitPoints;
+        zombie.FirstHitDieMaximized = false;
 
         // ── BAB = 1/2 HD (Undead poor BAB, uses doubled HD) ──
         int bab = doubledHD / 2;
@@ -389,7 +392,7 @@ public static class ZombieTemplate
             slamDmg = $"{count}d{dice}";
         abilities.Add($"Slam ({slamDmg} + STR)");
 
-        abilities.Add($"Toughness (+{(doubledHD <= 3 ? 3 : doubledHD)} HP)");
+        abilities.Add($"Toughness (+{ToughnessHitPoints} HP)");
         abilities.Add($"CR {GetZombieCR(doubledHD)} ({originalHD} base HD → {doubledHD} zombie HD)");
 
         return abilities;
@@ -598,7 +601,7 @@ public static class ZombieFactory
         // 4 base HD → 8 zombie HD
         // STR 23 (21+2), DEX 6 (8-2)
         // Natural armor: 5 (base) + 3 (Large zombie increase) = 8
-        // HP: 8d12 + Toughness = 52 + 8 = 60
+        // HP: 8d12 + Toughness = 52 + 3 = 55 (MM p.268)
         // BAB: +4 (half of 8)
         // CR: 3
         zombie.Description = "A massive ogre corpse, towering and relentless. Its bloated form lurches forward " +
@@ -625,7 +628,7 @@ public static class ZombieFactory
         // 6 base HD → 12 zombie HD
         // STR 21 (19+2), DEX 8 (10-2)
         // Natural armor: 5 (base) + 3 (Large) = 8
-        // HP: 12d12 + Toughness = 78 + 12 = 90
+        // HP: 12d12 + Toughness = 78 + 3 = 81
         // BAB: +6 (half of 12)
         // CR: 4
         zombie.Description = "A hulking minotaur zombie, its horned skull lowered menacingly. " +
@@ -648,7 +651,7 @@ public static class ZombieFactory
         // 5 base HD → 10 zombie HD
         // STR 23 (21+2), DEX 10 (12-2)
         // Natural armor: 5 (base) + 3 (Large) = 8
-        // HP: 10d12 + Toughness = 65 + 10 = 75
+        // HP: 10d12 + Toughness = 65 + 3 = 68
         // BAB: +5 (half of 10)
         // CR: 3
         // Note: loses improved grab!

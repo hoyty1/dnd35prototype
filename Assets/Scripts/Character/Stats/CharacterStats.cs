@@ -283,6 +283,14 @@ public class CharacterStats
 
     public List<ClassHitPointEntry> HitPointGainsByClassLevel = new List<ClassHitPointEntry>();
 
+    /// <summary>
+    /// How many of this character's averaged Hit Dice carry a half point (every Hit Die size is even, so every averaged
+    /// die): the dice after 1st level of a character built above 1st level, plus each level-up in the Average mode.
+    /// Averaged dice form one pool rounded down once, the MM pooled average (owner interpretation 2026-10-11, CRE-041;
+    /// <see cref="ClassProgression.PooledAverageHitDice"/>), so an averaged d8 gives 4 and 5 by turns.
+    /// </summary>
+    public int AveragedHalfPointHitDice;
+
     [Header("Experience")]
     public int ExperiencePoints = 0;
 
@@ -4229,7 +4237,9 @@ public class CharacterStats
                 dieResult = UnityEngine.Random.Range(1, hitDieSize + 1);
                 break;
             case HPCalculationMode.Average:
-                dieResult = ClassProgression.AverageHitDieResult(hitDieSize);
+                // The MM pooled average over the character's averaged dice (owner interpretation 2026-10-11, CRE-041).
+                dieResult = ClassProgression.PooledAverageHitDice(hitDieSize, 1, AveragedHalfPointHitDice);
+                AveragedHalfPointHitDice = ClassProgression.HalfPointDiceAfter(hitDieSize, 1, AveragedHalfPointHitDice);
                 break;
             case HPCalculationMode.Maximum:
                 dieResult = hitDieSize;

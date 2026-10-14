@@ -669,7 +669,7 @@ public static partial class NPCDatabase
             STR = 11, DEX = 10, CON = 11, WIS = 10, INT = 10, CHA = 10,
             NaturalArmorBonus = 0,
             BaseSpeed = 6,
-            BaseHitDieHP = 4,
+            BaseHitDieHP = 7, // commoner d4 maximum at 1st level plus Toughness +3, which the total counts (CRE-041)
             BAB = 0,
             NaturalAttacks = new List<NaturalAttackDefinition>(),
             CreatureTags = new List<string> { "Humanoid", "Human", "MM35" },
@@ -751,7 +751,7 @@ public static partial class NPCDatabase
             STR = 17, DEX = 12, CON = 20, WIS = 10, INT = 2, CHA = 9,
             NaturalArmorBonus = 5,
             BaseSpeed = 4, // 20 ft
-            BaseHitDieHP = 52,
+            BaseHitDieHP = 55, // MM p.156: 5d10+28 (55 hp), Toughness included (CRE-041)
             BAB = 5,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
@@ -804,7 +804,7 @@ public static partial class NPCDatabase
             STR = 19, DEX = 12, CON = 20, WIS = 10, INT = 2, CHA = 9,
             NaturalArmorBonus = 7,
             BaseSpeed = 4,
-            BaseHitDieHP = 73,
+            BaseHitDieHP = 77, // MM p.156: 7d10+38 (77 hp), Toughness included (CRE-041)
             BAB = 7,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
@@ -857,7 +857,7 @@ public static partial class NPCDatabase
             STR = 21, DEX = 12, CON = 20, WIS = 10, INT = 2, CHA = 9,
             NaturalArmorBonus = 9,
             BaseSpeed = 4,
-            BaseHitDieHP = 94,
+            BaseHitDieHP = 97, // MM p.157: 9d10+48 (97 hp), Toughness included (CRE-041)
             BAB = 9,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {

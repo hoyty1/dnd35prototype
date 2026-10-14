@@ -68,7 +68,7 @@ public static class LevelUpCalculator
 
         int projectedClassLevel = stats.GetClassLevel(selected) + 1;
 
-        data.HPGained = EstimateHpGain(selected, stats.CONMod);
+        data.HPGained = EstimateHpGain(selected, stats.CONMod, stats.AveragedHalfPointHitDice);
         data.NewBAB = stats.BaseAttackBonus + EstimateBabGain(selected, projectedClassLevel);
         data.NewFortSave = stats.CONMod + EstimateProjectedBestSave(stats, selected, projectedClassLevel, SaveKind.Fort)
             + stats.FeatFortitudeBonus + stats.EffectSaveBonus(SavingThrowType.Fortitude) + stats.ConditionFortitudeModifier;
@@ -173,10 +173,11 @@ public static class LevelUpCalculator
         return Mathf.Max(0, newBab - oldBab);
     }
 
-    private static int EstimateHpGain(string className, int conMod)
+    /// <summary>The averaged gain: the next die of the character's pooled average (owner interpretation 2026-10-11, CRE-041).</summary>
+    private static int EstimateHpGain(string className, int conMod, int halfPointDiceBefore)
     {
         int hitDie = ClassProgression.GetHitDie(className);
-        return ClassProgression.HitPointsForHitDie(ClassProgression.AverageHitDieResult(hitDie), conMod);
+        return ClassProgression.HitPointsForHitDie(ClassProgression.PooledAverageHitDice(hitDie, 1, halfPointDiceBefore), conMod);
     }
 
     private static bool NeedsFeatAtLevel(int level)

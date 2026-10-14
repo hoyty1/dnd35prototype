@@ -76,6 +76,7 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
         target.IsHumanoidForm = source.IsHumanoidForm;
         target.ClassLevelsAreRacialHitDice = source.ClassLevelsAreRacialHitDice;
         target.HasRacialHumanoidHitDice = source.HasRacialHumanoidHitDice;
+        target.FirstHitDieMaximized = source.FirstHitDieMaximized;
 
         // Defenses
         target.DamageReductionAmount = source.DamageReductionAmount;

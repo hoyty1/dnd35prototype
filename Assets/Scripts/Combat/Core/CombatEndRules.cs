@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Who is still in the fight, for the end of combat (CORE-011, CORE-034, CORE-037; docs/systems/PC_NPC_PARITY.md,
@@ -16,8 +17,14 @@ using System.Collections.Generic;
 /// A side is out when every active member is out and it has at least one active member, or had one earlier in this
 /// combat (<see cref="SideCounts.PlayersHadMembers"/>, so a side whose last creature was trapped, destroyed or
 /// removed is out). Sides are teams: the party, its allies and its summons are one side, every hostile creature the
-/// other; Neutral creatures belong to neither. A creature under the other side's control still counts for its own
-/// team, and a tie is a defeat (both pending the owner, CORE-038).
+/// other; Neutral creatures belong to neither. Owner interpretations 2026-10-11 (CORE-038): a hostile creature charmed
+/// by a party-side creature or under its control (Charm Person and Charm Monster PHB p.209, Command Undead p.211,
+/// Dominate Person p.224, a domain's command of elementals, PHB p.159) counts as out of the hostile side
+/// (<see cref="IsControlledByTeam"/>); and when both sides are out at
+/// once, GameManager.EvaluateCombatEnd first rolls the dying PCs' stabilization checks (PHB p.145) and the party wins
+/// if any PC survives. A party-side creature controlled by the hostile side still counts for the party, and a creature
+/// under the party's Mass Suggestion (a compulsion, PHB p.173, p.285, that the game models with the Charmed condition) still
+/// counts for the hostile side (both open owner questions, CORE-038).
 /// </summary>
 public static class CombatEndRules
 {
@@ -61,8 +68,51 @@ public static class CombatEndRules
     public static bool IsActiveCombatant(CharacterController c)
         => c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null;
 
-    /// <summary>Counts each side over <paramref name="combatants"/>, skipping inactive and Neutral creatures.</summary>
-    public static SideCounts Count(IEnumerable<CharacterController> combatants)
+    /// <summary>
+    /// Whether <paramref name="c"/> is charmed by, commanded by or under the control of a creature on
+    /// <paramref name="team"/> other than itself: its Command Undead or Dominate Person controller
+    /// (<see cref="CharacterController.CommandUndeadController"/>), or the source of a Charmed or Commanded condition in
+    /// <paramref name="conditions"/> (its tracked source, else the charm data's caster). A Charmed condition from Mass
+    /// Suggestion does not count: suggestion is a compulsion, not a charm or control (PHB p.173, p.285), and whether a
+    /// suggested creature is out of its side is an open owner question (CORE-038).
+    /// </summary>
+    public static bool IsControlledByTeam(CharacterController c, CharacterTeam team, IEnumerable<ConditionService.ActiveCondition> conditions)
+    {
+        if (c == null)
+            return false;
+
+        CharacterController commander = c.CommandUndeadController;
+        if (commander != null && commander != c && commander.Team == team)
+            return true;
+
+        if (conditions == null)
+            return false;
+
+        foreach (ConditionService.ActiveCondition condition in conditions)
+        {
+            if (condition == null)
+                continue;
+            CombatConditionType type = ConditionRules.Normalize(condition.Type);
+            if (type != CombatConditionType.Charmed && type != CombatConditionType.Commanded)
+                continue;
+            if (condition.SourceId == SpellNames.MASS_SUGGESTION)
+                continue;
+            CharacterController source = condition.Source;
+            if (source == null && condition.Data is CharmedConditionData charm)
+                source = charm.Caster;
+            if (source != null && source != c && source.Team == team)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Counts each side over <paramref name="combatants"/>, skipping inactive and Neutral creatures. A hostile creature
+    /// for which <paramref name="outOfHostileSide"/> returns true (charmed by or under the control of the party side,
+    /// owner interpretation 2026-10-11, CORE-038) is counted as a member that is out.
+    /// </summary>
+    public static SideCounts Count(IEnumerable<CharacterController> combatants, System.Func<CharacterController, bool> outOfHostileSide = null)
     {
         var counts = new SideCounts();
         if (combatants == null)
@@ -82,6 +132,8 @@ public static class CombatEndRules
             else
             {
                 counts.EnemiesAll++;
+                if (inFight && outOfHostileSide != null && outOfHostileSide(c))
+                    inFight = false;
                 if (inFight) counts.EnemiesIn++;
             }
         }

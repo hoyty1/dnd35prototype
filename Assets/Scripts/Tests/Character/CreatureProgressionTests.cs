@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Tests.Character
@@ -46,6 +47,7 @@ public static class CreatureProgressionTests
         TestApplyClassReplacesHumanoidHitDie();
         TestApplyClassStacksOnRacialHitDice();
         TestApplyToStatsOutsideTheSpawn();
+        TestToughnessTotalsAreMonsterManualTotals();
 
         if (GameManager.Instance == null)
         {
@@ -63,6 +65,7 @@ public static class CreatureProgressionTests
             TestClassedNpcsFromData();
             TestTemplates();
             TestNpcMatchesPc();
+            TestToughnessSpawnsAtDefinitionTotal();
         }
 
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
@@ -233,6 +236,18 @@ public static class CreatureProgressionTests
         Assert(goblin.BaseHitDieHP == templateHp && goblin.BaseAttackBonusOverride == templateOverride && goblin.HitDice == 1,
             "goblin template unchanged");
 
+        // A replaced humanoid keeps its MM feat (CRE-058), so its new total counts Toughness like an MM total does, and
+        // the spawn leaves it out of MaxHP once (CRE-041).
+        NPCDefinition duergar = Template("duergar");
+        if (duergar != null)
+        {
+            NPCDefinition duergarFighter = duergar.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(duergarFighter, ClassRegistry.GetClass("Fighter"), 2);
+            int duergarCon = ClassProgression.HitPointConstitutionModifier(duergarFighter.CON);
+            Assert(duergarFighter.BaseHitDieHP == CreatureClassEngine.CalculateClassHP(10, duergarCon, 2) + 3,
+                "duergar fighter 2: the fighter dice plus Toughness +3 (CRE-041)", $"got {duergarFighter.BaseHitDieHP}");
+        }
+
         NPCDefinition gnoll = Template("gnoll");
         if (gnoll != null)
             Assert(!CreatureClassEngine.ClassLevelsReplaceHitDice(gnoll.Clone()), "gnoll (2 HD) keeps its racial HD beside a class (MM p.290)");
@@ -288,14 +303,16 @@ public static class CreatureProgressionTests
         Assert(CreatureClassEngine.ApplyEncounterClassLevel(ogreRow, ClassRegistry.GetClass("Barbarian"), 4) == 4 && ogreRow.HitDice == 8,
             "a row on a monster base (ogre, Warrior stand-in) adds all its class levels");
 
-        // A definition without a hit point total keeps its racial hit points when a class is added.
+        // A definition without a hit point total keeps its racial hit points when a class is added; like an MM total
+        // the racial total counts the ogre's Toughness, and the fighter die joins the averaged pool of its 4 racial dice
+        // (owner interpretation 2026-10-11, CRE-041).
         NPCDefinition noTotal = ogre.Clone();
         noTotal.BaseHitDieHP = 0;
-        int racial = ClassProgression.CreatureMaxHitPoints(0, 8, 4, noTotal.CON);
+        int racial = ClassProgression.CreatureMaxHitPoints(0, 8, 4, noTotal.CON) + FeatManager.HitPointBonusForFeats(noTotal.Feats);
         CreatureClassEngine.ApplyClassToDefinition(noTotal, ClassRegistry.GetClass("Fighter"), 1);
         int conMod = ClassProgression.HitPointConstitutionModifier(noTotal.CON);
-        Assert(noTotal.BaseHitDieHP == racial + CreatureClassEngine.CalculateClassHP(10, conMod, 1),
-            "no hit point total: the racial average is kept and the class hit points are added", $"got {noTotal.BaseHitDieHP}, racial {racial}");
+        Assert(noTotal.BaseHitDieHP == racial + CreatureClassEngine.CalculateClassHP(10, conMod, 1, firstLevelIsFirstHitDie: false, halfPointDiceBefore: 4),
+            "no hit point total: the racial average (Toughness counted) is kept and an averaged class die is added", $"got {noTotal.BaseHitDieHP}, racial {racial}");
     }
 
     private static void TestApplyToStatsOutsideTheSpawn()
@@ -467,6 +484,87 @@ public static class CreatureProgressionTests
         finally
         {
             Cleanup(cc);
+        }
+    }
+
+    // ── Toughness in hit point totals (CRE-041) ─────────────────────────
+
+    /// <summary>
+    /// The hit points of every definition whose feats list Toughness, from its MM statistics block (the MM total counts
+    /// Toughness, so the spawn leaves the feat out of MaxHP). A new Toughness entry must be added here after checking
+    /// its total against the MM. The MM totals of the minor xorn (MM p.261) and the bodak (MM p.28) and vampire (MM
+    /// p.250) samples leave Toughness out (the xorn's by an MM error; the two undead do not have the feat in the MM,
+    /// CRE-063). human_commoner is not in the MM: commoner d4 maximum plus Toughness.
+    /// </summary>
+    private static readonly Dictionary<string, int> ToughnessTotals = new Dictionary<string, int>
+    {
+        { "ankheg", 28 }, { "average_xorn", 48 }, { "bodak", 58 }, { "dire_ape", 35 }, { "dire_wolverine", 45 },
+        { "duergar", 9 }, { "earth_mephit", 19 }, { "elder_xorn", 130 }, { "gargoyle", 37 }, { "ghast", 29 },
+        { "giant_constrictor_snake", 63 }, { "girallon", 58 }, { "human_commoner", 7 }, { "hydra_5head", 55 },
+        { "hydra_7head", 77 }, { "hydra_9head", 97 }, { "lich", 74 }, { "minor_xorn", 22 }, { "mummy", 55 },
+        { "ogre", 29 }, { "ooze_mephit", 19 }, { "otyugh", 36 }, { "salt_mephit", 19 }, { "svirfneblin", 8 },
+        { "umber_hulk", 71 }, { "vampire", 32 }, { "vampire_spawn", 29 }, { "water_mephit", 19 },
+        { "zombie_bugbear", 42 }, { "zombie_human_commoner", 16 }, { "zombie_human_warrior", 16 },
+        { "zombie_minotaur", 81 }, { "zombie_ogre", 55 }, { "zombie_owlbear", 68 }, { "zombie_troglodyte", 29 },
+    };
+
+    private static void TestToughnessTotalsAreMonsterManualTotals()
+    {
+        Debug.Log("--- Definition totals of creatures with Toughness are the MM totals, Toughness included (CRE-041) ---");
+        int checkedCount = 0;
+        foreach (NPCDefinition def in NPCDatabase.AllNPCs)
+        {
+            if (def == null || def.Feats == null || !def.Feats.Contains("Toughness"))
+                continue;
+            checkedCount++;
+            if (!ToughnessTotals.TryGetValue(def.Id, out int mmTotal))
+            {
+                Assert(false, $"{def.Id} has Toughness and is in the audited MM totals", $"BaseHitDieHP {def.BaseHitDieHP}: check it against the MM and add it to ToughnessTotals");
+                continue;
+            }
+            Assert(def.BaseHitDieHP == mmTotal, $"{def.Id}: hit point total {mmTotal}, Toughness included", $"got {def.BaseHitDieHP}");
+        }
+        Assert(checkedCount == ToughnessTotals.Count, $"every audited Toughness entry is still registered with Toughness ({ToughnessTotals.Count})", $"found {checkedCount}");
+    }
+
+    private static void TestToughnessSpawnsAtDefinitionTotal()
+    {
+        Debug.Log("--- A creature with Toughness spawns at its definition total, not 3 above or below it (CRE-041) ---");
+        foreach (KeyValuePair<string, int> entry in ToughnessTotals)
+        {
+            NPCDefinition template = NPCDatabase.Get(entry.Key);
+            if (template == null)
+                continue;
+            CharacterController cc = Spawn(template.Clone(), entry.Key);
+            try
+            {
+                // An undead stored with CON 0 dies at spawn (CRE-044), so only its maximum is checked.
+                bool currentChecked = cc.Stats.CON != 0;
+                Assert(cc.Stats.TotalMaxHP == entry.Value && (!currentChecked || cc.Stats.CurrentHP == entry.Value),
+                    $"{entry.Key} spawns with {entry.Value} hp", $"got max {cc.Stats.TotalMaxHP}, current {cc.Stats.CurrentHP}");
+            }
+            finally
+            {
+                Cleanup(cc);
+            }
+        }
+
+        NPCDefinition duergar = NPCDatabase.Get("duergar");
+        if (duergar != null)
+        {
+            NPCDefinition def = duergar.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(def, ClassRegistry.GetClass("Fighter"), 2);
+            int expected = CreatureClassEngine.CalculateClassHP(10, ClassProgression.HitPointConstitutionModifier(def.CON), 2) + 3;
+            CharacterController cc = Spawn(def, "duergar_fighter2");
+            try
+            {
+                Assert(cc.Stats.TotalMaxHP == expected, $"duergar fighter 2 spawns with the fighter dice plus Toughness ({expected})",
+                    $"got {cc.Stats.TotalMaxHP}");
+            }
+            finally
+            {
+                Cleanup(cc);
+            }
         }
     }
 

@@ -860,7 +860,12 @@ public partial class GameManager
                 if (elemHD <= clericLevel / 2)
                 {
                     sb.AppendLine($"<color={color}>   {elemental.Stats.CharacterName} ({elemHD} HD) is commanded! (Under cleric's control)</color>");
-                    elemental.ApplyCondition(CombatConditionType.Commanded, 100, cleric.Stats.CharacterName);
+                    // With the cleric as the tracked source, so the combat end sees who commands it (CORE-038).
+                    if (_conditionService != null)
+                        ApplyCondition(elemental, CombatConditionType.Commanded, 100, source: cleric,
+                            sourceNameOverride: cleric.Stats.CharacterName, sourceCategory: "Domain");
+                    else
+                        elemental.ApplyCondition(CombatConditionType.Commanded, 100, cleric.Stats.CharacterName);
                 }
                 else
                 {

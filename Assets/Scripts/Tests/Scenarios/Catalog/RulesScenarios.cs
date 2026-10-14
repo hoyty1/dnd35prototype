@@ -98,14 +98,19 @@ namespace Tests.Scenarios
     /// Combat end (owner definition 2026-10-07; CORE-011, CORE-034, CORE-037, CORE-001): no RAW rule defines it. A
     /// creature is out when it is dead, dying or unconscious, a regenerating one too, and a petrified creature counts as
     /// unconscious (PHB p.311, DMG p.301); a disabled creature (0 HP, PHB p.145) is still in; a side is out when every
-    /// active member of its team is out, allies and summons included.
+    /// active member of its team is out, allies and summons included. Owner interpretations 2026-10-11 (CORE-038): when both
+    /// sides are out at once the dying PCs roll their stabilization checks (PHB p.145: 10% on d% each round, else 1 hit
+    /// point) until each is stable or dead, and the party wins if a PC survives; a hostile creature charmed by or under
+    /// the control of a party-side creature counts as out of the hostile side (Charm Person PHB p.209, Command Undead
+    /// p.211, Dominate Person p.224).
     /// Class progression (CHR-001, CHR-002, CHR-071; checked 2026-10-08): PHB p.22 Table 3-1 (BAB good = level,
     /// average = 3/4, poor = 1/2) and the class tables (bard d6 and 3/4 BAB p.27-28, ranger d8 and full BAB p.46-47);
-    /// p.9, p.23 and p.59 (each Hit Die adds its roll plus the CON modifier, minimum 1; maximum at 1st level); p.309 (HD =
+    /// p.9, p.23 and p.59 (each Hit Die adds its roll plus the CON modifier, minimum 1; maximum at 1st level; averaged
+    /// dice use the MM pooled average, owner interpretation 2026-10-11, CRE-041); p.309 (HD =
     /// character level for a character, total HD for a creature); p.217 (Daze: one humanoid of 4 HD or less). MM owlbear
     /// skeleton 5 HD (p.226: racial HD kept) and bugbear zombie 6 HD (p.267: racial HD doubled). Data checked
     /// 2026-10-08: neutral_mage_test (Wizard 3, Daze prepared x4), skeleton_owlbear, zombie_bugbear; Quick Start bard
-    /// (Half-Elf, CON 12) and ranger (Human, CON 12, no Toughness); ogre (MM p.199: 4d8+11 = 29), ghoul (MM p.119: 2d12 = 13,
+    /// (Half-Elf, CON 12) and ranger (Human, CON 12, no Toughness); ogre (MM p.199: 4d8+11 = 29, Toughness included), ghoul (MM p.119: 2d12 = 13,
     /// stored as CON 0) and orc_warrior (CON 12) for the NPC hit point checks.
     /// Critical damage (CMB-004, owner ruling 2026-10-08: RAW; checked 2026-10-09): PHB p.134 (multiplying damage: roll
     /// the damage with all modifiers that many times and total the rolls; extra dice such as sneak attack are never
@@ -125,7 +130,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 131;
+        public const int Count = 135;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -244,6 +249,9 @@ namespace Tests.Scenarios
             yield return S("combat-end-defeat-ally", CombatEndDefeatAlly);
             yield return S("combat-end-petrified-victory", () => CombatEndPetrified(false));
             yield return S("combat-end-petrified-defeat", () => CombatEndPetrified(true));
+            yield return S("combat-end-tie-victory", () => CombatEndTie(true));
+            yield return S("combat-end-tie-defeat", () => CombatEndTie(false));
+            yield return S("combat-end-charmed-victory", CombatEndCharmedVictory);
             yield return S("large-encounter-goblins", LargeEncounterGoblins);
             yield return S("large-encounter-sizes", LargeEncounterSizes);
             yield return S("ring-deflection", RingDeflection);
@@ -4890,6 +4898,112 @@ namespace Tests.Scenarios
             return b.Build();
         }
 
+        /// <summary>
+        /// Both sides out at once (owner interpretation 2026-10-11, CORE-038): a hero and an orc, both idle, both dying from
+        /// the start, so the first combat-end check finds both sides out. The game first rolls the hero's stabilization
+        /// checks (PHB p.145: 10% on d% to become stable, else 1 hit point lost; dead at -10), as the fight would play out
+        /// with nobody standing, and the party wins if the hero survives. Victory: the hero at -2 rolls a forced 5 and is
+        /// stable. Defeat: the hero at -8 fails every roll (a forced 50) and dies at -10, with the defeat screen
+        /// (CORE-001).
+        /// </summary>
+        private static ScenarioDef CombatEndTie(bool heroSurvives)
+        {
+            int startHp = heroSurvives ? -2 : -8;
+            ScenarioBuilder b = Rules(heroSurvives ? "rules/combat-end-tie-victory" : "rules/combat-end-tie-defeat",
+                    "Both sides out at once: the dying PCs roll to stabilize first and the party wins if one survives (PHB p.145; CORE-038, owner 2026-10-11)")
+                .Covers("CORE-038", "CHR-011", "PHB p.145", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 4)), 10, 10, Control.Idle)
+                .Npc("orc", "orc_warrior", 12, 10, Control.Idle)
+                .Hp("hero", startHp)
+                .Hp("orc", -3)
+                .Force(100, heroSurvives ? 5 : 50, CharacterController.StabilizationCheckContext, -1)
+                .Initiative("hero", "orc")
+                .Expect("The game declares the " + (heroSurvives ? "victory" : "defeat") + " itself",
+                    Expect.Outcome(heroSurvives ? Outcome.Victory : Outcome.Defeat))
+                .Expect("Nobody attacks: the fight ends at the first check", Expect.None("attack", null))
+                .Expect("The game logs that both sides are down and rolls the hero's stabilization on d% (PHB p.145)", v =>
+                {
+                    bool tie = v.Log("Both sides are down at once").Count > 0;
+                    int rolls = v.Log("Hero stabilization check: d%").Count;
+                    int expected = heroSurvives ? 1 : 2;
+                    return tie && rolls == expected
+                        ? ExpectResult.Pass("tie line and " + rolls + " d% roll(s)")
+                        : ExpectResult.Fail("tie line " + tie + ", d% rolls " + rolls + " (expected " + expected + ")");
+                })
+                .Expect(heroSurvives ? "The hero is stable at -2, not dead" : "The hero failed both rolls and is dead at -10", v =>
+                {
+                    JsonObj hero = v.Final("hero");
+                    if (hero == null) return ExpectResult.Fail("no final snapshot");
+                    bool ok = heroSurvives
+                        ? hero.Get("st") is HPState st && st == HPState.Stable && hero.Get("hp") is int hp && hp == -2
+                        : hero.Get("st") is HPState dst && dst == HPState.Dead && hero.Get("hp") is int dhp && dhp == -10;
+                    return ok ? ExpectResult.Pass("hero " + hero.Get("hp") + "/" + hero.Get("st"))
+                              : ExpectResult.Fail("hero " + hero.Get("hp") + "/" + hero.Get("st"));
+                });
+            if (!heroSurvives)
+                b.Expect("The defeat screen opened (its combat log line, CORE-001)", v =>
+                    v.Log("DEFEAT! Every hero is dead, dying or unconscious").Count > 0
+                        ? ExpectResult.Pass("defeat line logged")
+                        : ExpectResult.Fail("no defeat log line"));
+            return b.Build();
+        }
+
+        /// <summary>
+        /// A hostile creature charmed by the party counts as out of the hostile side (owner interpretation 2026-10-11,
+        /// CORE-038). The Quick Start wizard (Ui, Charm Person prepared in place of Enlarge Person) charms the only orc,
+        /// whose Will save is forced to a natural 1 (PHB p.209: a humanoid, Will negates). The game declares the victory
+        /// with the orc at full HP and charmed; no one attacks.
+        /// </summary>
+        private static ScenarioDef CombatEndCharmedVictory()
+        {
+            return Rules("rules/combat-end-charmed-victory", "A foe charmed by the party is out of the hostile side: charming the last foe wins the fight (PHB p.209; CORE-038, owner 2026-10-11)")
+                .Covers("CORE-038", "PHB p.209", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("wizard", ActorSource.QuickStart("Wizard"), 6, 10, Control.Ui)
+                .Npc("orc", "orc_warrior", 10, 10, Control.Idle)
+                .Tweak("wizard", c =>
+                {
+                    SpellcastingComponent sc = c.Spellcasting;
+                    if (sc == null || sc.SpellSlots == null)
+                        return;
+                    foreach (SpellSlot slot in sc.SpellSlots)
+                        if (slot != null && slot.PreparedSpell != null && slot.PreparedSpell.SpellId == DND35e.Identifiers.SpellNames.ENLARGE_PERSON)
+                        {
+                            slot.PreparedSpell = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.CHARM_PERSON).Clone();
+                            break;
+                        }
+                })
+                .Force(20, 1, SpellCaster.SavingThrowContext)
+                .Initiative("wizard", "orc")
+                .Turn("wizard", 1, Step.Cast(DND35e.Identifiers.SpellNames.CHARM_PERSON, "orc"), Step.EndTurn())
+                .Expect("The wizard casts Charm Person and the orc's Will save fails (the step itself is dropped when the fight ends inside it)", v =>
+                    v.Log("casts Charm Person!").Count > 0 && v.Log("is charmed by").Count > 0
+                        ? ExpectResult.Pass("cast and charm logged")
+                        : ExpectResult.Fail("no Charm Person cast or charm line logged"))
+                .Expect("The game declares the victory itself", Expect.Outcome(Outcome.Victory))
+                .Expect("Nobody attacks", Expect.None("attack", null))
+                .Expect("The charmed orc counts for the encounter's XP: the party overcame it (DMG p.36-37; CORE-038)", v =>
+                {
+                    GameManager gm = GameManager.Instance;
+                    if (gm == null) return ExpectResult.Inconclusive("no GameManager");
+                    List<CharacterController> defeated = gm.GetDefeatedEnemiesForXP();
+                    bool ok = defeated.Count == 1 && defeated[0] != null && defeated[0].Team == CharacterTeam.Enemy && !defeated[0].IsDead;
+                    return ok ? ExpectResult.Pass("XP list: " + defeated[0].Stats.CharacterName)
+                              : ExpectResult.Fail("XP list has " + defeated.Count + " creatures");
+                })
+                .Expect("The orc ends the fight charmed, alive and at full HP", v =>
+                {
+                    JsonObj orc = v.Final("orc");
+                    if (orc == null) return ExpectResult.Fail("no final snapshot");
+                    bool ok = HasCond(orc, "Charmed") && orc.Get("hp") is int hp && hp > 0
+                        && !(orc.Get("st") is HPState st && st != HPState.Healthy);
+                    return ok ? ExpectResult.Pass("orc " + orc.Get("hp") + "/" + orc.Get("st") + " charmed")
+                              : ExpectResult.Fail("orc " + orc.Get("hp") + "/" + orc.Get("st") + " conds " + string.Join(",", (orc.Get("conds") as List<string>) ?? new List<string>()));
+                })
+                .Build();
+        }
+
         // ── Encounter spawning (ENC-001) ────────────────────────────────
 
         /// <summary>The five squares the default layout gives the first five creatures without a preset square.</summary>
@@ -5401,7 +5515,8 @@ namespace Tests.Scenarios
         /// <summary>
         /// Every character with class levels uses the class definitions and the PHB hit point rule, and its Hit Dice follow
         /// its level-ups. Quick Start bard and ranger (level 3 through the real creation path): HP max die at 1st level and
-        /// average after, CON once per die (bard 7 + 5 + 5 = 17, ranger 9 + 6 + 6 = 21), BAB +2 and +3 (CHR-001, CHR-002).
+        /// the MM pooled average after (owner interpretation 2026-10-11, CRE-041), CON once per die (bard 7 + 2d6 7 + 2 = 16,
+        /// ranger 9 + 2d8 9 + 2 = 20), BAB +2 and +3 (CHR-001, CHR-002).
         /// Two Human bards built at 1st level and raised to 5 and 4 through ApplyPendingLevelUp: HD 5 and 4, BAB +3,
         /// every new die a d6 with CON +1 and a minimum of 1. A scripted Wizard 3 then casts Daze (4 HD or less) at both:
         /// the HD 5 bard is refused before the slot is spent, the HD 4 bard is a legal target (CHR-071). Templated undead
@@ -5410,8 +5525,8 @@ namespace Tests.Scenarios
         /// </summary>
         private static ScenarioDef ClassProgressionHpBabHd()
         {
-            return Rules("rules/class-progression", "Class HP, BAB and Hit Dice follow the class tables and every level-up (PHB p.9, p.22-23, p.59, p.309; CHR-001, CHR-002, CHR-071)")
-                .Covers("CHR-001", "CHR-002", "CHR-071", "PHB p.9", "PHB p.22", "PHB p.23", "PHB p.59", "PHB p.309", "PHB p.217", "PC_NPC_PARITY")
+            return Rules("rules/class-progression", "Class HP, BAB and Hit Dice follow the class tables and every level-up (PHB p.9, p.22-23, p.59, p.309; CHR-001, CHR-002, CHR-071, CRE-041)")
+                .Covers("CHR-001", "CHR-002", "CHR-071", "CRE-041", "PHB p.9", "PHB p.22", "PHB p.23", "PHB p.59", "PHB p.309", "PHB p.217", "PC_NPC_PARITY")
                 .MaxRounds(1)
                 .Pc("bard", ActorSource.QuickStart("Bard"), 3, 4, Control.Idle)
                 .Pc("ranger", ActorSource.QuickStart("Ranger"), 3, 6, Control.Idle)
@@ -5454,10 +5569,10 @@ namespace Tests.Scenarios
                 .Turn("hero4", 1, Step.Pass())
                 .Turn("mage", 1, Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "hero5"), Step.Cast(DND35e.Identifiers.SpellNames.DAZE, "hero4"))
                 .Expect("Every progression check holds", Expect.AssertsPass())
-                .Expect("Quick Start bard 3: BAB +2, HP 17 (d6, CON +1 once per die; PHB p.23, p.27)", v =>
-                    ActorIs(v, "bard", 3, 2, 17))
-                .Expect("Quick Start ranger 3: BAB +3, HP 21 (d8, CON +1 once per die; PHB p.23, p.46-47)", v =>
-                    ActorIs(v, "ranger", 3, 3, 21))
+                .Expect("Quick Start bard 3: BAB +2, HP 16 (d6, pooled average after 1st level, CON +1 once per die; PHB p.23, p.27; CRE-041)", v =>
+                    ActorIs(v, "bard", 3, 2, 16))
+                .Expect("Quick Start ranger 3: BAB +3, HP 20 (d8, pooled average after 1st level, CON +1 once per die; PHB p.23, p.46-47; CRE-041)", v =>
+                    ActorIs(v, "ranger", 3, 3, 20))
                 .Expect("Daze on the HD 5 bard is refused (4 HD or less, PHB p.217); on the HD 4 bard it is cast", Expect.All(
                     Expect.StepStatus("mage", 1, "Cast", 0, "refused"),
                     Expect.StepStatus("mage", 1, "Cast", 1, "done")))
@@ -5473,16 +5588,19 @@ namespace Tests.Scenarios
         }
 
         /// <summary>
-        /// NPC max HP counts CON once (CHR-001, CRE-041): an MM total is final (ogre 4d8+11 = 29, MM p.199; Toughness is
-        /// still added on top by TotalMaxHP, the rest of CRE-041), a CON 0 undead adds nothing (ghoul 2d12 = 13, MM p.119;
-        /// it still spawns dead, CRE-044), and an orc warrior given barbarian 2 through CreatureClassEngine spawns with its
-        /// definition total, max(1, die + CON) per barbarian die (the orc's Hit Die is exchanged for the class, MM p.290,
-        /// CRE-004), without CON again per level.
+        /// NPC max HP counts CON once (CHR-001) and Toughness once (CRE-041): an MM total is final (ogre 4d8+11 = 29 with
+        /// Toughness, MM p.199: MaxHP 26 and TotalMaxHP, which adds feat hit points, 29), a CON 0 undead adds nothing (ghoul
+        /// 2d12 = 13, MM p.119; it still spawns dead, CRE-044), an orc warrior given barbarian 2 through CreatureClassEngine
+        /// spawns with its definition total, the maximum then an averaged d12 (the orc's Hit Die is exchanged for the class,
+        /// MM p.290, CRE-004), without CON again per level, and an ogre given barbarian 1 spawns with 29 + an averaged d12
+        /// pooled with its 4d8 (6) + CON 2 = 37, not a maximized die (owner interpretation 2026-10-11, CRE-041).
         /// </summary>
         private static bool CreatureHitPointChecks(ScenarioContext ctx)
         {
-            bool ok = ProgressionCheck(ctx, "ogre MaxHP = MM total 29", ctx.Get("ogre").Stats.MaxHP, 29);
+            bool ok = ProgressionCheck(ctx, "ogre TotalMaxHP = MM total 29 (Toughness counted once)", ctx.Get("ogre").Stats.TotalMaxHP, 29);
+            ok &= ProgressionCheck(ctx, "ogre MaxHP = 29 less Toughness 3", ctx.Get("ogre").Stats.MaxHP, 26);
             ok &= ProgressionCheck(ctx, "ghoul (CON 0) MaxHP = MM total 13", ctx.Get("ghoul").Stats.MaxHP, 13);
+            ok &= ProgressionCheck(ctx, "ghoul TotalMaxHP = MM total 13", ctx.Get("ghoul").Stats.TotalMaxHP, 13);
 
             NPCDefinition template = NPCDatabase.Get("orc_warrior");
             if (template == null)
@@ -5501,7 +5619,7 @@ namespace Tests.Scenarios
             try
             {
                 ctx.Gm.InitializeNPCFromDefinition(cc, def, new Vector2Int(-60, -60), null, null);
-                ok &= ProgressionCheck(ctx, "orc barbarian 2 spawned MaxHP (CON once)", cc.Stats.MaxHP, def.BaseHitDieHP);
+                ok &= ProgressionCheck(ctx, "orc barbarian 2 spawned TotalMaxHP (CON once)", cc.Stats.TotalMaxHP, def.BaseHitDieHP);
                 ok &= ProgressionCheck(ctx, "orc barbarian 2 Hit Dice (MM p.290)", cc.Stats.GetHitDice(), 2);
                 ok &= ProgressionCheck(ctx, "orc barbarian 2 BAB (PHB p.25)", cc.Stats.BaseAttackBonus, 2);
             }
@@ -5510,6 +5628,30 @@ namespace Tests.Scenarios
                 if (ctx.Gm != null && ctx.Gm.Grid != null)
                     ctx.Gm.Grid.ClearCreatureOccupancy(cc);
                 UnityEngine.Object.DestroyImmediate(go);
+            }
+
+            NPCDefinition ogreTemplate = NPCDatabase.Get("ogre");
+            if (ogreTemplate == null)
+            {
+                ctx.Note("class-progression mismatch: ogre missing");
+                return false;
+            }
+            NPCDefinition ogreBarbarian = ogreTemplate.Clone();
+            CreatureClassEngine.ApplyClassToDefinition(ogreBarbarian, ClassRegistry.GetClass("Barbarian"), 1);
+            ok &= ProgressionCheck(ctx, "ogre barbarian 1 definition HP: 29 + averaged d12 6 + CON 2 (CRE-041)", ogreBarbarian.BaseHitDieHP, 37);
+            var ogreGo = new GameObject("ClassProgressionScenario_ogre_barbarian");
+            CharacterController ogreCc = ogreGo.AddComponent<CharacterController>();
+            try
+            {
+                ctx.Gm.InitializeNPCFromDefinition(ogreCc, ogreBarbarian, new Vector2Int(-61, -61), null, null);
+                ok &= ProgressionCheck(ctx, "ogre barbarian 1 spawned TotalMaxHP (Toughness once)", ogreCc.Stats.TotalMaxHP, 37);
+                ok &= ProgressionCheck(ctx, "ogre barbarian 1 spawned at full HP", ogreCc.Stats.CurrentHP, 37);
+            }
+            finally
+            {
+                if (ctx.Gm != null && ctx.Gm.Grid != null)
+                    ctx.Gm.Grid.ClearCreatureOccupancy(ogreCc);
+                UnityEngine.Object.DestroyImmediate(ogreGo);
             }
             return ok;
         }

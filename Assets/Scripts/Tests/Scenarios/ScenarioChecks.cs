@@ -527,14 +527,40 @@ namespace Tests.Scenarios
             Outcome outcome;
             if (enemiesOut && !playersOut)
                 outcome = Outcome.Victory;
-            else if (playersOut)
+            else if (playersOut && !enemiesOut)
                 outcome = Outcome.Defeat;
+            else if (playersOut)
+            {
+                // Both sides out at once: the game rolls out the PCs' dying and decides (owner interpretation 2026-10-11,
+                // CORE-038), so the outcome is the one it declared (HandleCombatVictoryDetected or ...DefeatDetected).
+                outcome = DeclaredOutcome(by, byText);
+            }
             else
             {
-                outcome = byText.IndexOf("Victory", StringComparison.Ordinal) >= 0 ? Outcome.Victory : Outcome.Defeat;
+                outcome = DeclaredOutcome(by, byText);
                 Violation(CombatEndEarly, (outcome == Outcome.Victory ? "victory" : "defeat") + " declared by " + byText + " while both sides have creatures in the fight: " + detail);
             }
             _job.Decide(outcome, "CombatOver by " + byText, haltNow: false);
+        }
+
+        /// <summary>
+        /// The outcome the game declared when it set CombatOver: the nearest of its victory or defeat handler frames in
+        /// <paramref name="by"/> (a caller name such as CheckCombatVictory further up does not count). Without a handler
+        /// frame, the old guess from the whole frame text.
+        /// </summary>
+        private static Outcome DeclaredOutcome(List<string> by, string byText)
+        {
+            if (by != null)
+            {
+                foreach (string frame in by)
+                {
+                    if (frame == "HandleCombatVictoryDetected")
+                        return Outcome.Victory;
+                    if (frame == "HandleCombatDefeatDetected")
+                        return Outcome.Defeat;
+                }
+            }
+            return byText.IndexOf("Victory", StringComparison.Ordinal) >= 0 ? Outcome.Victory : Outcome.Defeat;
         }
 
         // ── Logs, hooks, watchdog ───────────────────────────────────────

@@ -56,11 +56,18 @@ public static class FeatManager
     /// <summary>Get total HP bonus from feats (Toughness: +3 each).</summary>
     public static int GetTotalHPBonus(CharacterStats stats)
     {
+        return stats != null ? HitPointBonusForFeats(stats.Feats) : 0;
+    }
+
+    /// <summary>
+    /// Hit points that a feat list gives (Toughness +3, PHB p.101). Feats are bare names, so a Toughness taken twice
+    /// counts once (CHR-008). Also used for an <see cref="NPCDefinition"/>'s feats, whose hit point total counts them
+    /// (CRE-041).
+    /// </summary>
+    public static int HitPointBonusForFeats(ICollection<string> feats)
+    {
         int bonus = 0;
-        // Toughness can be taken multiple times. Count how many times.
-        // In our system, feats are stored as names, so Toughness counts as 1.
-        // For multiple Toughness, we'd need a count. For now, +3 per instance.
-        if (stats.HasFeat("Toughness"))
+        if (feats != null && feats.Contains("Toughness"))
             bonus += 3;
         return bonus;
     }

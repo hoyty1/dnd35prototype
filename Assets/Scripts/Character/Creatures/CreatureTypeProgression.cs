@@ -221,11 +221,12 @@ public static class ProgressionCalculator
         return racialHitDice <= 0 ? 0 : CalculateSave(progression, racialHitDice);
     }
 
+    /// <summary>
+    /// Average hit points of <paramref name="hitDiceCount"/> d<paramref name="hitDie"/> without CON: the MM pooled
+    /// average, rounded down once (owner interpretation 2026-10-11, CRE-041; <see cref="ClassProgression.PooledAverageHitDice"/>).
+    /// </summary>
     public static int CalculateAverageHpFromHitDice(int hitDie, int hitDiceCount)
     {
-        int safeDie = Mathf.Max(1, hitDie);
-        int safeCount = Mathf.Max(1, hitDiceCount);
-        int averageDieRoll = (safeDie + 1) / 2;
-        return averageDieRoll * safeCount;
+        return ClassProgression.PooledAverageHitDice(hitDie, Mathf.Max(1, hitDiceCount));
     }
 }

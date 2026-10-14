@@ -109,6 +109,7 @@ public abstract class LycanthropeTemplateBase : ICreatureTemplate
         target.IsHumanoidForm = source.IsHumanoidForm;
         target.ClassLevelsAreRacialHitDice = source.ClassLevelsAreRacialHitDice;
         target.HasRacialHumanoidHitDice = source.HasRacialHumanoidHitDice;
+        target.FirstHitDieMaximized = source.FirstHitDieMaximized;
 
         // Display
         target.SpecialAbilities = source.SpecialAbilities;

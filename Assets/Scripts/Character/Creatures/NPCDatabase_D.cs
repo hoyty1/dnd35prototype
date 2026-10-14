@@ -709,7 +709,7 @@ public static partial class NPCDatabase
             STR = 13, DEX = 11, CON = 14, WIS = 9, INT = 10, CHA = 4,
             NaturalArmorBonus = 0,
             BaseSpeed = 4,
-            BaseHitDieHP = 6,
+            BaseHitDieHP = 9, // MM p.91: 1d8+5 (9 hp), Toughness included (CRE-041)
             BAB = 1,
             Immunities = new CreatureImmunities { immuneToPoison = true },
             NaturalAttacks = new List<NaturalAttackDefinition>(),

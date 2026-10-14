@@ -94,21 +94,39 @@ public static class CreatureClassEngine
     }
 
     /// <summary>
-    /// Calculate average hit points for class levels.
-    /// First level: max hit die; subsequent levels: (hitDie + 1) / 2. Each die adds the CON modifier with a minimum
-    /// of 1 hit point per die (PHB p.9, p.23, p.59; ClassProgression.HitPointsForHitDie, CHR-001).
+    /// Hit points that <paramref name="classLevels"/> class levels add to a creature. The first class level gets the
+    /// maximum die only when it is the creature's first Hit Die (<paramref name="firstLevelIsFirstHitDie"/>: a 1-HD
+    /// humanoid whose Hit Die the class replaces, MM p.290; PHB p.22-23 and DMG p.110, elite characters get the maximum
+    /// first Hit Die, which treats a DMG-table class NPC as elite: open owner question, CRE-058); every other die is averaged with the MM pooled
+    /// average over the creature's averaged dice, rounded down once (owner interpretation 2026-10-11, CRE-041;
+    /// <see cref="ClassProgression.PooledAverageHitDice"/>), which continues a pool already holding
+    /// <paramref name="halfPointDiceBefore"/> half points. Each die adds the CON modifier, minimum 1 hit point per die
+    /// (PHB p.9, p.59). An ogre (4d8, a pool of 18) given barbarian 1 gets 6 + CON for the d12 (6.5 rounded down with
+    /// the pool), not 12 + CON.
     /// </summary>
-    public static int CalculateClassHP(int hitDie, int conModifier, int classLevels)
+    public static int CalculateClassHP(int hitDie, int conModifier, int classLevels, bool firstLevelIsFirstHitDie = true, int halfPointDiceBefore = 0)
     {
         if (classLevels <= 0) return 0;
 
-        int hp = ClassProgression.HitPointsForHitDie(hitDie, conModifier);
-        if (classLevels > 1)
-        {
-            int avgRoll = (hitDie + 1) / 2;
-            hp += ClassProgression.HitPointsForHitDie(avgRoll, conModifier) * (classLevels - 1);
-        }
-        return hp;
+        if (!firstLevelIsFirstHitDie)
+            return ClassProgression.AveragedHitPoints(hitDie, classLevels, conModifier, halfPointDiceBefore);
+
+        return ClassProgression.HitPointsForHitDie(hitDie, conModifier)
+            + ClassProgression.AveragedHitPoints(hitDie, classLevels - 1, conModifier, halfPointDiceBefore);
+    }
+
+    /// <summary>
+    /// The half-point dice in <paramref name="def"/>'s averaged hit point pool: every Hit Die is averaged (MM totals
+    /// average every die) except a first die maximized by a class that replaced a 1-HD humanoid's Hit Die
+    /// (<see cref="NPCDefinition.FirstHitDieMaximized"/>). Every Hit Die size is even, so each averaged die carries a
+    /// half point (CRE-041).
+    /// </summary>
+    public static int AveragedHalfPointDice(NPCDefinition def)
+    {
+        if (def == null)
+            return 0;
+        int dice = Mathf.Max(0, def.ResolveTotalHitDice());
+        return Mathf.Max(0, def.FirstHitDieMaximized ? dice - 1 : dice);
     }
 
     /// <summary>
@@ -184,14 +202,20 @@ public static class CreatureClassEngine
         // which adds nothing here.
         int priorLevelsInClass = replaces ? 0 : RealLevelsInClass(def, classDef);
         int classBAB = CalculateClassBAB(classDef.BABAtLevel3, levels);
-        int classHP = CalculateClassHP(classDef.HitDie, conMod, levels);
 
         if (replaces)
         {
+            // The class level is the creature's first Hit Die: the maximum, the rest averaged. DMG p.110: elite
+            // characters (PCs and the DMG ch.4 NPCs that the DMG encounter tables' "Race Class N" rows name) get the
+            // maximum on their first Hit Die; MM monsters are average characters and do not (open owner question, CRE-058).
+            int classHP = CalculateClassHP(classDef.HitDie, conMod, levels, firstLevelIsFirstHitDie: true);
             // MM p.290: the humanoid Hit Die, its attack bonus and its saves give way to the class.
             def.HitDice = Mathf.Max(1, levels);
             def.BAB = classBAB;
-            def.BaseHitDieHP = classHP;
+            // Like an MM total, the new total counts the definition's feat hit points (the replaced humanoid keeps its MM
+            // feat, CRE-058), which the spawn leaves out of MaxHP (ClassProgression.ExcludeCountedFeatHitPoints, CRE-041).
+            def.BaseHitDieHP = classHP + FeatManager.HitPointBonusForFeats(def.Feats);
+            def.FirstHitDieMaximized = true;
             def.BaseAttackBonusOverride = null;
             def.BABOverride = null;
             def.FortitudeSaveOverride = null;
@@ -206,11 +230,19 @@ public static class CreatureClassEngine
 
             // A definition without a hit point total (BaseHitDieHP 0) gets its racial total first, so the class HP
             // below adds to it instead of replacing it (ClassProgression.CreatureMaxHitPoints treats any total as final).
+            // Like an MM total it counts the definition's feat hit points (Toughness), which the spawn then leaves out
+            // of MaxHP (ClassProgression.ExcludeCountedFeatHitPoints, CRE-041).
             if (def.BaseHitDieHP <= 0)
             {
                 CreatureTypeProgression typeProgression = CreatureTypeProgressionDatabase.GetFromString(def.CreatureType);
-                def.BaseHitDieHP = ClassProgression.CreatureMaxHitPoints(0, typeProgression.HitDie, def.ResolveTotalHitDice(), def.CON);
+                def.BaseHitDieHP = ClassProgression.CreatureMaxHitPoints(0, typeProgression.HitDie, def.ResolveTotalHitDice(), def.CON)
+                    + FeatManager.HitPointBonusForFeats(def.Feats);
             }
+
+            // The creature already has Hit Dice, so no class die is its first: every class die joins the averaged pool
+            // of its existing dice (MM p.290-291, PHB p.59-60; owner interpretation 2026-10-11, CRE-041).
+            int classHP = CalculateClassHP(classDef.HitDie, conMod, levels, firstLevelIsFirstHitDie: false,
+                halfPointDiceBefore: AveragedHalfPointDice(def));
 
             def.HitDice = CalculateTotalHD(def.HitDice, levels);
             // Class BAB stacks with racial BAB (MM p.290). An explicit racial BAB override keeps standing for the racial
@@ -246,6 +278,6 @@ public static class CreatureClassEngine
 
         Debug.Log($"[CreatureClassEngine] Applied {classDef.ClassName} {levels} to {def.Name}: " +
                   $"HD {oldHD} → {def.HitDice}, BAB +{classBAB} (total +{def.BAB}), " +
-                  $"HP +{classHP} (total {def.BaseHitDieHP}), CR → {def.ChallengeRating}");
+                  $"HP total {def.BaseHitDieHP}, CR → {def.ChallengeRating}");
     }
 }

@@ -187,9 +187,10 @@ public class AnimalCompanionData
         HasMultiattack = AnimalCompanionProgression.HasMultiattack(edl);
         HasImprovedEvasion = AnimalCompanionProgression.HasImprovedEvasion(edl);
 
-        // Calculate HP: d8 per HD, average = 4.5/HD, use CON mod
-        int conMod = (CON - 10) / 2;
-        MaxHP = Mathf.Max(1, TotalHD * 4 + TotalHD * conMod); // Average HP
+        // HP: d8 per HD, the MM pooled average (4.5 per die, rounded down once; owner interpretation 2026-10-11, CRE-041) plus
+        // the CON modifier per die, minimum 1 per die.
+        int conMod = ClassProgression.HitPointConstitutionModifier(CON);
+        MaxHP = Mathf.Max(1, ClassProgression.AveragedHitPoints(8, TotalHD, conMod));
         if (CurrentHP <= 0 && IsAlive) CurrentHP = MaxHP;
 
         Debug.Log($"[Companion] {CustomName} (EDL {edl}): HD={TotalHD}, HP={CurrentHP}/{MaxHP}, " +

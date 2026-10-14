@@ -98,8 +98,9 @@ public static class SkeletonTemplate
         // STR stays the same
 
         // ── HP from d12 HD (no CON modifier for undead) ──
-        // Average d12 = 6.5, round down. Use standard d12 average.
-        skel.BaseHitDieHP = (int)(racialHD * 6.5f);
+        // The MM pooled average: 6.5 per d12, summed and rounded down once (owner interpretation 2026-10-11, CRE-041).
+        skel.BaseHitDieHP = ClassProgression.PooledAverageHitDice(12, racialHD);
+        skel.FirstHitDieMaximized = false;
 
         // ── BAB = 1/2 HD (Undead poor BAB) ──
         int bab = racialHD / 2;

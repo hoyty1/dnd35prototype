@@ -597,7 +597,7 @@ public static partial class NPCDatabase
             STR = 25, DEX = 17, CON = 13, WIS = 12, INT = 1, CHA = 2,
             NaturalArmorBonus = 4,
             BaseSpeed = 4, // 20 ft, climb 20 ft, swim 20 ft
-            BaseHitDieHP = 60,
+            BaseHitDieHP = 63, // MM p.280: 11d8+14 (63 hp), Toughness included (CRE-041)
             BAB = 8,
             HasImprovedGrab = true,
             ImprovedGrabTriggerAttackName = "Bite",

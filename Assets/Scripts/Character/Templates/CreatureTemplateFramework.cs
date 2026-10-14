@@ -89,16 +89,41 @@ public abstract class OutsiderTemplateBase : ICreatureTemplate
 
     protected abstract bool IsGoodTemplate { get; }
 
+    /// <summary>
+    /// Whether this template may be added to <paramref name="definition"/>: the celestial template only to a good or
+    /// neutral (nonevil) base (MM p.31), the fiendish template only to an evil or neutral (nongood) base (MM p.108). A
+    /// base with no alignment set (CRE-056) counts as neutral.
+    /// </summary>
+    public bool CanApplyTo(NPCDefinition definition)
+    {
+        if (definition == null)
+            return false;
+        Alignment baseAlignment = definition.CharacterAlignment;
+        return IsGoodTemplate ? !AlignmentHelper.IsEvil(baseAlignment) : !AlignmentHelper.IsGood(baseAlignment);
+    }
+
     public void ApplyToDefinition(NPCDefinition definition)
     {
         if (definition == null)
             return;
 
+        // An illegal base is refused: the definition stays untemplated (owner ruling 2026-10-11, CRE-057).
+        if (!CanApplyTo(definition))
+        {
+            Debug.LogWarning($"[CreatureTemplate] The {TemplateId} template cannot be added to {definition.Name} ({definition.CharacterAlignment}): " +
+                             (IsGoodTemplate ? "celestial needs a nonevil base (MM p.31)" : "fiendish needs a nongood base (MM p.108)") +
+                             "; the creature keeps its base statistics (CRE-057).");
+            if (definition.AppliedTemplateIds != null)
+                definition.AppliedTemplateIds.RemoveAll(id => string.Equals(id, TemplateId, StringComparison.OrdinalIgnoreCase));
+            return;
+        }
+
         AddTemplateId(definition, TemplateId);
 
-        // Alignment: always good (any) for celestial, always evil (any) for fiendish (MM p.31, p.108). Only the
-        // good-evil component is fixed; keeping the base creature's law-chaos component is a provisional default pending
-        // the owner, and an illegal base (celestial on evil, fiendish on good) is not refused (CRE-057).
+        // Alignment: always good (any) for celestial, always evil (any) for fiendish (MM p.31, p.108). The templates fix
+        // only the good-evil component; the creature keeps the base creature's law-chaos component (owner
+        // interpretation 2026-10-11, CRE-057): an LN monk becomes LG as a celestial, a neutral wolf NE as a fiendish one.
+        // A summoned creature then takes the Summon Monster table's alignment (PHB p.287; GameManager.SpawnSummonedCreature).
         definition.CharacterAlignment = AlignmentHelper.WithGoodEvilAxis(definition.CharacterAlignment, IsGoodTemplate);
 
         int hd = Mathf.Max(1, definition.HitDice > 0 ? definition.HitDice : definition.Level);

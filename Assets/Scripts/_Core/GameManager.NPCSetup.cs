@@ -692,8 +692,9 @@ public partial class GameManager
         // the class tables, summed by the same CharacterStats formulas a PC uses (MM p.290, PHB p.59; CRE-004).
         int resolvedBab = def.BaseAttackBonusOverride
             ?? ProgressionCalculator.CalculateRacialBAB(def.BABOverride ?? creatureProgression.BAB, def.ResolveRacialHitDice());
-        // The definition total is final (MM total, CON included, plus template and class-level HP); without one, the
-        // type's average die plus CON per Hit Die. The constructor's own CON term is replaced below (CHR-001, CRE-041).
+        // The definition total is final (MM total, CON and feats included, plus template and class-level HP); without
+        // one, the pooled average of the type's die plus CON per Hit Die. The constructor's own CON term is replaced
+        // below (CHR-001), and the feat hit points the total counts are left out of MaxHP (CRE-041).
         int creatureMaxHp = ClassProgression.CreatureMaxHitPoints(def.BaseHitDieHP, creatureProgression.HitDie, hitDice, def.CON);
         int computedBaseHitDieHp = creatureMaxHp;
 
@@ -734,6 +735,9 @@ public partial class GameManager
         if (!string.IsNullOrEmpty(def.WeaponFocusChoice))
             stats.WeaponFocusChoice = def.WeaponFocusChoice;
 
+        // The definition total already counts Toughness (MM totals do), so MaxHP leaves it out and TotalMaxHP, which
+        // adds feat hit points, equals the total (CRE-041).
+        ClassProgression.ExcludeCountedFeatHitPoints(stats, def.BaseHitDieHP);
         FeatManager.ApplyPassiveFeats(stats);
         stats.SourceNpcDefinitionId = def.Id;
         stats.ChallengeRating = def.ChallengeRating;
