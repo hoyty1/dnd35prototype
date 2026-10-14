@@ -461,7 +461,7 @@ Every special attack, special quality and spell-like ability above, merged by sh
 | **Immunity to sleep, paralysis and dragon energy** `ability_half_dragon_immunities` | missing; AI n/a | Half-dragon 4th-level fighter (human base) | passive; none |  |  | spellValue = 0 for sleep/paralysis/energy | P2 |
 | **Claws and bite** `ability_half_dragon_natural_attacks` | missing; AI no | Half-dragon 4th-level fighter (human base) | full attack; none | Full attack |  | addDPR = P(hit at -5) * (3.5 + StrMod/2) | P3 |
 | **Heat (Ex)** `ability_heat` | data only; AI no | Efreeti (genie) | part of attack; none | any melee | resist energy (fire) | 3.5 per hit | P2 |
-| **Hive Mind (Ex)** `ability_hive_mind` | missing; AI n/a | Formian taskmaster | passive; none | Passive |  | Defender: flankBonus = 0 unless all formians flanked. | P3 |
+| **Hive Mind (Ex)** `ability_hive_mind` | partial (2026-10-14: if one formian of a group is not flat-footed, none are, `HiveMind` tag, CMB-028; shared awareness, the flanking part and the queen range missing); AI n/a | Formian taskmaster | passive; none | Passive |  | Defender: flankBonus = 0 unless all formians flanked. | P3 |
 | **Hold breath** `ability_hold_breath` | missing; AI n/a | Crocodile (lizardfolk druid's animal companion) | none; none |  |  | none in dungeon play | P3 |
 | **Severable heads that regrow (Ex)** `ability_hydra_sever_heads` | missing; AI n/a | Hydra, eight-headed | PC sunder (standard); opposed sunder | PC with slashing weapon and Improved Sunder plus fire | Fire/acid | PC: DPR reduction per head 9.5*P(hit) vs regrowth risk | P3 |
 | **Immunity to fire** `ability_immunity_fire` | impl; AI n/a | Efreeti (genie) | passive; none |  |  | PC-side | P2 |

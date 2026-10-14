@@ -781,6 +781,17 @@
       "notes": "Play only: CharacterController.Init throws NullReferenceException in edit mode because Awake never ran (TST-009)."
     },
     {
+      "type": "Tests.Combat.FlatFootedRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 54,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CMB-028 (PHB p.137, p.26, p.50, p.92, p.93): flat-footed AC, touch AC and spell touch AC lose only the Dexterity bonus (a penalty stays, no other penalty) and the dodge bonuses; uncanny dodge for barbarian 2 and rogue 4, not barbarian 1 or rogue 3; AttackCalculator and CharacterConditions deny Dexterity; no AoOs while flat-footed except with Combat Reflexes; the combat start through TurnService and ConditionService: everyone flat-footed, each until its own first turn, a dead creature not. Also (review fixes, 2026-10-14): the spell touch AC equals TouchArmorClass when hasted and blinded; the combat start resets the AoO count and the Combat Reflexes cap (CMB-164); a NeverFlatFooted creature (minotaur, MM p.189) is skipped; the HiveMind formians (MM p.108) stop being flat-footed together, not a non-formian ally or a formian of the other side; the sneak attack test counts blinded and cowering but not another creature's feint mark. Play only (CharacterController.Init, TST-009). Added 2026-10-14; 54 assertions, 54/54 in Play mode on 2026-10-14"
+    },
+    {
       "type": "Tests.Combat.GhoulTouchRulesTests",
       "needs": "edit",
       "skip": "",

@@ -6887,7 +6887,9 @@ public class CharacterController : MonoBehaviour
 
         feintWindowConsumed = true;
 
-        if (target.HasCondition(CombatConditionType.FlatFooted))
+        // A flat-footed target is already denied its Dexterity bonus, unless it has uncanny dodge, which does not stop a
+        // feint (PHB p.137, p.155; CMB-028).
+        if (target.Stats.IsDexDeniedByFlatFooted)
         {
             note = "Feint window consumed: target already flat-footed (no extra DEX denial).";
             return false;
@@ -6985,7 +6987,9 @@ public class CharacterController : MonoBehaviour
             return true;
         }
 
-        if (target.HasCondition(CombatConditionType.FlatFooted))
+        // Flat-footed at the start of a battle (PHB p.137; CMB-028); uncanny dodge keeps the Dexterity bonus, so no sneak
+        // attack for it (PHB p.26, p.50).
+        if (target.Stats != null && target.Stats.IsDexDeniedByFlatFooted)
         {
             reason = "target is flat-footed";
             return true;
@@ -7000,6 +7004,24 @@ public class CharacterController : MonoBehaviour
         if (target.HasCondition(CombatConditionType.Paralyzed) || target.HasCondition(CombatConditionType.Helpless))
         {
             reason = "target is paralyzed/helpless";
+            return true;
+        }
+
+        // Every other condition that denies the Dexterity bonus to AC, the same test as the AC formulas (blinded, DMG
+        // p.300; cowering; pinned; asleep...), whether or not the target has a Dexterity bonus (PHB p.50). The global
+        // Feinted mark is skipped: a feint counts only for the feinting attacker (feintWindowConsumed above).
+        if (target.Stats != null && target.Stats.TryGetDexDenyingCondition(ignoreFeinted: true, out CombatConditionType dexDenyingCondition))
+        {
+            reason = "target is " + dexDenyingCondition.ToString().ToLowerInvariant() + " (DEX denied)";
+            return true;
+        }
+
+        // A grappling creature loses its Dexterity bonus to AC against opponents it is not grappling (PHB p.156), as in
+        // GetGrappleDexDeniedAgainstAttacker, whether or not it has a bonus to lose.
+        if (target.HasCondition(CombatConditionType.Grappled)
+            && !(target.TryGetGrappleState(out CharacterController sneakGrappleOpponent, out _, out _, out _) && sneakGrappleOpponent == this))
+        {
+            reason = "target is grappling someone else (DEX denied)";
             return true;
         }
 
@@ -7568,32 +7590,35 @@ public class CharacterController : MonoBehaviour
             result.FeintWindowNote = feintNote;
         }
 
-        // Racial dodge bonuses (CHR-019): the +4 against giants is in GetSituationalTargetArmorClass and the svirfneblin's
-        // +4 against all creatures in ArmorClass. A dodge bonus goes with the Dexterity bonus to AC (PHB p.15, p.136):
-        // when this attack alone denies the target its Dexterity bonus (an attacker it cannot see, a feint, a grapple or
-        // pin), both go too. A condition that denies Dexterity (flat-footed, stunned...) already left them out.
+        // Dodge bonuses: the racial ones (CHR-019: the +4 against giants is in GetSituationalTargetArmorClass and the
+        // svirfneblin's +4 against all creatures in ArmorClass) and the Dodge feat and Haste (CharacterStats.DodgeACBonus,
+        // in ArmorClass). A dodge bonus goes with the Dexterity bonus to AC, for any reason it is denied (PHB p.136, p.93,
+        // p.239): when this attack alone denies the target its Dexterity bonus (an attacker it cannot see, a feint, a
+        // grapple or pin), they go too. A condition that denies Dexterity (flat-footed, stunned...) already left them out.
         if (target != null && target.Stats != null)
         {
             int racialDodge = RacialTraitRules.DodgeACBonusAgainst(target.Stats, Stats);
-            if (racialDodge > 0)
+            int otherDodge = target.Stats.DodgeACBonus;
+            if (racialDodge > 0 || otherDodge > 0)
             {
                 bool grappledByAnother = target.HasCondition(CombatConditionType.Grappled)
                     && !(target.TryGetGrappleState(out CharacterController dodgeGrappleOpponent, out _, out _, out _) && dodgeGrappleOpponent == this);
                 bool attackDeniesDex = denyTargetDexFromInvisibility || blinkDenyDex || feintWindowConsumed
                     || target.HasCondition(CombatConditionType.Pinned) || grappledByAnother;
-                string dodgeNote;
+                string dodgeNote = null;
                 if (attackDeniesDex)
                 {
-                    targetAC -= racialDodge;
-                    dodgeNote = $"Racial dodge +{racialDodge} AC lost with the DEX bonus.";
+                    targetAC -= racialDodge + otherDodge;
+                    dodgeNote = $"Dodge +{racialDodge + otherDodge} AC lost with the DEX bonus.";
                 }
-                else
+                else if (racialDodge > 0)
                 {
                     dodgeNote = $"Racial dodge: +{racialDodge} AC against {(Stats != null ? Stats.CharacterName : name)}.";
                 }
-                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
-                    ? dodgeNote
-                    : $"{result.SpecialAttackNote} {dodgeNote}";
+                if (!string.IsNullOrEmpty(dodgeNote))
+                    result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                        ? dodgeNote
+                        : $"{result.SpecialAttackNote} {dodgeNote}";
             }
         }
 

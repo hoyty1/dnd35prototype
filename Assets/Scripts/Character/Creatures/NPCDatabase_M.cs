@@ -646,9 +646,10 @@ public static partial class NPCDatabase
             {
                 new NaturalAttackDefinition { Name = "Gore", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 2, IsPrimary = false }
             },
-            CreatureTags = new List<string> { "Monstrous Humanoid", "Darkvision60", "MM35" },
+            // NeverFlatFooted: natural cunning, never caught flat-footed (MM p.189; ConditionService.ApplyCombatStartFlatFooted, CMB-028).
+            CreatureTags = new List<string> { "Monstrous Humanoid", "Darkvision60", "MM35", CharacterStats.NeverFlatFootedTag },
             Feats = new List<string> { "Great Fortitude", "Power Attack", "Track" },
-            SpecialAbilities = new List<string> { "Powerful Charge (Ex): gore 4d6+6 on charge", "Natural Cunning (Ex): immune to maze spells, never gets lost", "Scent", "Darkvision 60 ft." },
+            SpecialAbilities = new List<string> { "Powerful Charge (Ex): gore 4d6+6 on charge", "Natural Cunning (Ex): immune to maze spells, never gets lost, never caught flat-footed", "Scent", "Darkvision 60 ft." },
             EquipmentIds = new List<EquipmentSlotPair>
             {
                 new EquipmentSlotPair("greataxe", EquipSlot.MainHand)

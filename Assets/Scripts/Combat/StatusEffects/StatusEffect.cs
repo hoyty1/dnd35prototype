@@ -398,9 +398,11 @@ public static class ConditionRules
             Type = CombatConditionType.FlatFooted,
             DisplayName = "Flat-Footed",
             ShortLabel = "FF",
-            Description = "Denied DEX to AC and cannot make AoOs.",
+            // PHB p.137: no Dexterity bonus to AC (a penalty stays) and no attacks of opportunity; no other AC penalty
+            // (the -2 this row carried was not RAW, CMB-028). Uncanny Dodge keeps the Dexterity bonus
+            // (CharacterStats.DeniedDexToAcByCondition) and Combat Reflexes allows AoOs (ThreatSystem.CanMakeAoO).
+            Description = "Denied DEX bonus to AC and cannot make AoOs (before its first turn of the battle).",
             StackingRule = ConditionStackingRule.Refresh,
-            ArmorClassModifier = -2,
             DeniesDexToAc = true,
             PreventsAoO = true,
             MovementMultiplier = 1f,

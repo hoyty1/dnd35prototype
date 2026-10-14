@@ -34,7 +34,7 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Fight defensively | Partial | cornered Frightened only | Yes | UI-007 |
 | Total defense | Never | no code | No | gap |
 | Cleave | Never | PC path only | Yes | CMB-017 |
-| Sneak attack | Auto | damage path; AI seeks flanks, not sneak attack | Auto | CMB-028 |
+| Sneak attack | Auto | damage path (flanking, or a target denied Dex, flat-footed before its first turn included since 2026-10-14); AI seeks flanks, not flat-footed or sneak-attackable targets | Auto | CMB-167 |
 | Nonlethal | Never | | Yes | |
 | Take AoOs | Auto | `ThreatSystem.ExecuteAoO` when something provokes, before the mover leaves the square; one movement AoO per mover per round (CMB-128 fixed 2026-10-08); third parties also take AoOs on the grapple moves (CMB-152, 2026-10-11); a bull rush push shares the pushed defender's round record (CMB-150, 2026-10-11) | Auto | CMB-151, CMB-152 |
 | Avoid provoking: movement | Partial | path scoring | | |

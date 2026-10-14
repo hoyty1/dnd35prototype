@@ -308,7 +308,7 @@ NPCs with PHB class levels share `CharacterStats` with PCs: human_monk_3/5/7, hu
   - Monk AC bonus (`MonkACBonus`, in the AC total) and Still Mind (`SaveRules`, on every save against an enchantment, CHR-018). Paladin Divine Grace (in every save total, `CharacterStats.GetSaveTotal`, CHR-018). Monk features use fixed low-level values (CHR-003).
   - Fast movement for monks and barbarians (`EffectiveSpeedFeet`).
   - Evasion for monk 2+, rogue 2+ and ranger 9+ (`SpellSaveResolver`).
-  - Sneak attack on a rogue's hit while flanking or against a target denied Dex. No creature is ever flat-footed at combat start (CMB-028).
+  - Sneak attack on a rogue's hit while flanking or against a target denied Dex. Every creature is flat-footed until its first turn of the battle (PHB p.137, 2026-10-14), so a rogue that acts first gets sneak attack against slower foes; uncanny dodge prevents it. An invisible rogue gets none (CMB-167).
   - Class bonus feats from `InitFeats`, plus the definition's `Feats`, through `FeatManager.ApplyPassiveFeats`.
   - Spellcasting, but only when the definition lists `KnownSpellIds` or `PreparedSpellSlotIds`. human_cleric and the paladins list none and cast nothing. The lich lists spells but prepares none (see [What enemy AI can and cannot use today](#what-enemy-ai-can-and-cannot-use-today)).
 - **Never apply:**

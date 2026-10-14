@@ -40,7 +40,7 @@ public class SwordOfSubtletyBehavior : SpecificItemBehavior
         if (target == null || Wielder == null) return false;
 
         // Check if target is denied Dex bonus (flat-footed, stunned, etc.)
-        bool targetDeniedDex = target.HasCondition(CombatConditionType.FlatFooted)
+        bool targetDeniedDex = (target.Stats != null && target.Stats.IsDexDeniedByFlatFooted) // uncanny dodge keeps it (CMB-028)
             || target.HasCondition(CombatConditionType.Stunned)
             || target.HasCondition(CombatConditionType.Paralyzed)
             || target.HasCondition(CombatConditionType.Blinded)

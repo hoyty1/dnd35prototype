@@ -351,6 +351,10 @@ public static class ThreatSystem
             for (int i = 0; i < character.Stats.ActiveConditions.Count; i++)
             {
                 CombatConditionType activeType = ConditionRules.Normalize(character.Stats.ActiveConditions[i].Type);
+                // A flat-footed creature makes no AoOs before its first turn of the battle, unless it has Combat
+                // Reflexes (PHB p.92, p.137; CMB-028).
+                if (activeType == CombatConditionType.FlatFooted && FeatManager.HasCombatReflexes(character.Stats))
+                    continue;
                 ConditionDefinition def = ConditionRules.GetDefinition(activeType);
                 if (def.PreventsAoO)
                 {

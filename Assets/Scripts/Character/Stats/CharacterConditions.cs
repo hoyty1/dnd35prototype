@@ -126,7 +126,9 @@ public class CharacterConditions : MonoBehaviour
     // Pinning is represented by grapple link state in CharacterController (not a combat condition enum value).
     public bool IsPinning => _character != null && _character.IsPinningOpponent();
 
-    public bool IsDexDenied => IsFlatFooted || IsFeinted || IsProne || IsStunned || IsPinned;
+    // Flat-footed denies the Dexterity bonus only without uncanny dodge (PHB p.137; CMB-028).
+    public bool IsDexDenied => (IsFlatFooted && (_character == null || _character.Stats == null || _character.Stats.IsDexDeniedByFlatFooted))
+        || IsFeinted || IsProne || IsStunned || IsPinned;
 
     public int GetConditionACModifier()
     {

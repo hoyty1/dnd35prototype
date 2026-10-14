@@ -3086,7 +3086,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        string conditionLabel = condition.Type.ToString();
+        string conditionLabel = normalizedType == CombatConditionType.FlatFooted ? "flat-footed" : condition.Type.ToString();
         string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
         Debug.Log($"[Condition] {msg}");
         CombatUI?.ShowCombatLog(CombatLogHelper.StatusEnd(msg));
@@ -3511,6 +3511,13 @@ public partial class GameManager : MonoBehaviour
         }
 
         Debug.Log($"[Initiative] Beginning initiative phase | activePCs={activePCs.Count} | activeNPCs={activeNPCs.Count}");
+
+        // Everyone is flat-footed until its first turn (PHB p.137; CMB-028), PCs and NPCs alike; set before the first turn
+        // starts, which TurnService.StartCombat does at once.
+        var combatants = new List<CharacterController>(activePCs);
+        combatants.AddRange(activeNPCs);
+        _conditionService?.ApplyCombatStartFlatFooted(combatants);
+        CombatUI?.ShowCombatLog(CombatLogHelper.Info("", "Every combatant is flat-footed until its first turn (no Dexterity bonus to AC, no attacks of opportunity)."));
 
         List<CharacterController> forcedFirst = GetForcedFirstInitiativeActors();
         _turnService?.StartCombat(activePCs, activeNPCs, IsPC, forcedFirst);

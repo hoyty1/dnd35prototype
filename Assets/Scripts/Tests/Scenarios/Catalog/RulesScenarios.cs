@@ -130,7 +130,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 135;
+        public const int Count = 136;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -267,6 +267,7 @@ namespace Tests.Scenarios
             yield return S("spell-buff-dispatch", SpellBuffDispatch);
             yield return S("weapon-damage-modifier", WeaponDamageModifier);
             yield return S("critical-damage", CriticalDamage);
+            yield return S("flat-footed-start", FlatFootedStart);
             yield return S("strength-penalty-damage", StrengthPenaltyDamage);
             yield return S("condition-duration-turn-relative", ConditionDurationTurnRelative);
             yield return S("racial-traits", RacialTraits);
@@ -536,7 +537,7 @@ namespace Tests.Scenarios
                 .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
                 .StartCondition("hero", CombatConditionType.Prone, -1)
                 .Tweak("hero", StripOffHand)
-                .Initiative("hero", "orc")
+                .Initiative("orc", "hero") // the orc acts first, so it is not flat-footed when the hero crawls (PHB p.137, CMB-028)
                 .Turn("hero", 1, Step.Move(10, 13), Step.Crawl(9, 10), Step.AnswerAoO(AoOAnswer.Proceed))
                 .Turn("orc", 1, Step.Pass())
                 .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
@@ -672,7 +673,7 @@ namespace Tests.Scenarios
                 .Pc("fighter", ActorSource.Stats(() => improved ? Fighter("Fighter", 6, "Improved Trip") : Fighter("Fighter", 6)), 10, 10, Control.Scripted)
                 .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
                 .Tweak("orc", SturdyDummy)
-                .Initiative("fighter", "orc")
+                .Initiative("orc", "fighter") // the orc acts first, so it is not flat-footed and can make its AoO (PHB p.137, CMB-028)
                 .Force(20, 20, "Trip touch attack")
                 .Force(20, succeed ? 18 : 2, "Trip Strength check")
                 .Force(20, succeed ? 2 : 18, "Trip defense check")
@@ -1120,7 +1121,7 @@ namespace Tests.Scenarios
                     SturdyDummy(c);
                 })
                 .Tweak("orc", SturdyDummy)
-                .Initiative("fighter", "orc")
+                .Initiative("orc", "fighter") // the orc acts first, so it is not flat-footed and can make its AoO (PHB p.137, CMB-028)
                 .Force(20, 20, "Trip touch attack")
                 .Force(20, 18, "Trip Strength check")
                 .Force(20, 2, "Trip defense check")
@@ -1195,7 +1196,7 @@ namespace Tests.Scenarios
                     c.Stats.CurrentHP = 1;
                 })
                 .Tweak("orc", SturdyDummy)
-                .Initiative("hero", "orc", "ally")
+                .Initiative("orc", "hero", "ally") // the orc acts first, so it is not flat-footed and can make its AoO (PHB p.137, CMB-028)
                 .Force(20, 20, "Trip touch attack")
                 .Force(20, 18, "Trip Strength check")
                 .Force(20, 2, "Trip defense check")
@@ -1240,7 +1241,7 @@ namespace Tests.Scenarios
                 .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 6)), 10, 10, Control.Ui)
                 .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
                 .Tweak("hero", StripOffHand)
-                .Initiative("hero", "orc")
+                .Initiative("orc", "hero") // the orc acts first, so it is not flat-footed and can make its AoO (PHB p.137, CMB-028)
                 .Force(20, 20, "Trip touch attack")
                 .Force(20, 18, "Trip Strength check")
                 .Force(20, 2, "Trip defense check")
@@ -1266,7 +1267,7 @@ namespace Tests.Scenarios
                 .MaxRounds(1)
                 .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), 10, 10, Control.Scripted)
                 .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
-                .Initiative("fighter", "orc")
+                .Initiative("orc", "fighter") // the orc acts first, so it is not flat-footed and can make its AoO (PHB p.137, CMB-028)
                 .Force(20, 20, "Disarm attack roll")
                 .Force(20, 1, "Disarm defense roll")
                 .Turn("fighter", 1, Step.Maneuver(SpecialAttackType.Disarm, "orc"))
@@ -1297,7 +1298,7 @@ namespace Tests.Scenarios
                 .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), 10, 10, Control.Scripted)
                 .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
                 .Npc("goblin", "goblin", 10, 11, Control.Scripted)
-                .Initiative("fighter", "orc", "goblin")
+                .Initiative("orc", "goblin", "fighter") // the threateners act first, so they are not flat-footed (PHB p.137, CMB-028)
                 .Force(20, 20, "Bull rush check")
                 .Force(20, 1, "Bull rush defense")
                 .Turn("fighter", 1, Step.Maneuver(SpecialAttackType.BullRushAttack, "orc"), Step.Maneuver(SpecialAttackType.BullRushAttack, "orc"))
@@ -1824,8 +1825,9 @@ namespace Tests.Scenarios
                     .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
                     .Tweak("hero", c => { StripOffHand(c); SturdyDummy(c); })
                     .Tweak("orc", SturdyDummy)
-                    .Initiative("orc", "hero")
+                    .Initiative("hero", "orc") // the hero acts first, so it is not flat-footed and can make its AoO (PHB p.137, CMB-028)
                     .CounterTripAnswer("hero", true)
+                    .Turn("hero", 1, Step.Pass())
                     .Turn("orc", 1, Step.Maneuver(SpecialAttackType.Trip, "hero"))
                     .Expect("The hero's turn is a Ui turn", Expect.Controller("hero", "ui"))
                     .Expect("The orc's trip step is done", Expect.StepStatus("orc", 1, "Maneuver", 0, "done"));
@@ -1836,7 +1838,7 @@ namespace Tests.Scenarios
                     .Npc("orc", "orc_berserker", 11, 10, Control.Scripted)
                     .Tweak("fighter", SturdyDummy)
                     .Tweak("orc", c => { SturdyDummy(c); c.Stats.Feats.Add("Improved Trip"); })
-                    .Initiative("fighter", "orc")
+                    .Initiative("orc", "fighter") // the orc acts first, so it is not flat-footed and can make its AoO (PHB p.137, CMB-028)
                     .Turn("fighter", 1, Step.Maneuver(SpecialAttackType.Trip, "orc"))
                     .Turn("orc", 1, Step.Pass())
                     .Expect("The fighter's trip step is done", Expect.StepStatus("fighter", 1, "Maneuver", 0, "done"));
@@ -1960,7 +1962,7 @@ namespace Tests.Scenarios
                 .MaxRounds(1)
                 .Pc("fighter", ActorSource.Stats(() => Fighter("Fighter", 6)), 10, 10, Control.Scripted)
                 .Npc("orc", "orc_grapple_drill", 11, 10, Control.Scripted)
-                .Initiative("fighter", "orc")
+                .Initiative("orc", "fighter") // the orc acts first, so it is not flat-footed and can make its AoO (PHB p.137, CMB-028)
                 .Force(20, 20, "Touch attack")
                 .Force(20, 20, "Grapple check", -1)
                 .Turn("fighter", 1, Step.Maneuver(SpecialAttackType.Grapple, "orc"))
@@ -2137,7 +2139,7 @@ namespace Tests.Scenarios
                     c.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 1, IsPrimary = true });
                     c.Stats.NaturalAttacks.Add(new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, IsPrimary = false });
                 })
-                .Initiative("fighter", "wolf", "clawwolf"))
+                .Initiative("wolf", "clawwolf", "fighter")) // the wolves act first, so they are not flat-footed (PHB p.137, CMB-028)
                 .Turn("fighter", 1,
                     Step.Assert("fixture: the MM wolf's data names the bite; both wolves have Trip (Ex); the second one's primary attack is a claw", ctx =>
                         ctx.Get("wolf").Stats.TripTriggerAttackName == "Bite" && ctx.Get("wolf").Stats.HasTripAttack
@@ -4809,13 +4811,15 @@ namespace Tests.Scenarios
         /// (disabled, still in: PHB p.145) away from it, both idle, against an AI orc berserker next to the hero. The
         /// first of them going down (the orc picks) does not end the fight while the other is still in; the defeat comes
         /// when the orc drops the second too, and the game opens its defeat screen (CORE-001), whose combat log line the
-        /// trace shows.
+        /// trace shows. The orc acts first, so the hero is flat-footed and makes no AoO as the orc leaves it in round 1
+        /// (PHB p.137, CMB-028); since that change the orc spends more rounds on the disabled goblin (trip, grapple,
+        /// coup de grace) before it turns to the hero, so the fight has 12 rounds (seed 1 ran out of 8, 2026-10-14).
         /// </summary>
         private static ScenarioDef CombatEndDefeatAlly()
         {
             return Rules("rules/combat-end-defeat-ally", "Defeat waits until every party-team member is out, a disabled ally included, then opens the defeat screen (CORE-037, CORE-001)")
                 .Covers("CORE-037", "CORE-001", "CORE-011", "PHB p.145", "PC_NPC_PARITY")
-                .MaxRounds(8)
+                .MaxRounds(12)
                 .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 1)), 10, 10, Control.Idle)
                 .Npc("ally", "goblin", 4, 10, Control.Idle, CharacterTeam.Player)
                 .Npc("orc", "orc_berserker", 11, 10, Control.Ai)
@@ -6976,7 +6980,7 @@ namespace Tests.Scenarios
         /// hits takes normal damage (MM p.317; CMB-064). Every d20 rolls a natural 20, so every attack threatens and
         /// confirms. "favored" (a Ui fighter, the PC Attack button) with Divine Favor and Power Attack 2: longsword
         /// 19-20/x2, +6 per roll, so 2d8 + 12. The orc warrior (NPC path): greataxe x3 with 1-1/2 x STR +4, so 3d12 + 12.
-        /// The Quick Start rogue (Scripted, NPC path) acts before its dummy, which is still flat-footed: its weapon damage is
+        /// The Quick Start rogue (Scripted, NPC path) acts before its dummy, which is still flat-footed (PHB p.137, CMB-028): its weapon damage is
         /// rolled twice with its modifier and its sneak attack dice are added once. "inspired" (Stats fighter, NPC path)
         /// attacks a zombie: the natural 20 is a threat and the confirmation (also a 20) succeeds, but the zombie is not
         /// subject to critical hits, so the damage is 1d8 + 4 once and only the weapon's critical-hit effects would apply
@@ -6986,7 +6990,7 @@ namespace Tests.Scenarios
         private static ScenarioDef CriticalDamage()
         {
             return Rules("rules/critical-damage", "A critical hit rolls the weapon damage with all its modifiers x times; sneak attack is added once; undead take normal damage (PHB p.134, p.140; MM p.317; CMB-004)")
-                .Covers("CMB-004", "CMB-064", "PHB p.134", "PHB p.140", "PHB p.98", "PHB p.224", "MM p.317", "PC_NPC_PARITY")
+                .Covers("CMB-004", "CMB-064", "CMB-028", "PHB p.134", "PHB p.137", "PHB p.140", "PHB p.98", "PHB p.224", "MM p.317", "PC_NPC_PARITY")
                 .MaxRounds(1)
                 .Pc("rogue", ActorSource.QuickStart("Rogue"), 3, 3, Control.Scripted)
                 .Pc("favored", ActorSource.Stats(() => Fighter("Favored", 3, "Power Attack")), 3, 8, Control.Ui)
@@ -7091,6 +7095,153 @@ namespace Tests.Scenarios
                         return ExpectResult.Fail(got + "; expected weapon damage " + Mathf.Max(1, baseRoll + mod), h.Seq);
                 }
                 return ExpectResult.Pass(hits.Count + " threat(s) on an immune target, normal damage", hits.Select(e => e.Seq).ToArray());
+            };
+        }
+
+        // ── Flat-footed at the start of a battle (CMB-028) ──────────────
+
+        private const string FlatFootedNotePrefix = "cmb028 ";
+
+        /// <summary>
+        /// CMB-028: every combatant is flat-footed until its first turn of the battle (PHB p.137): no Dexterity bonus to AC
+        /// and no attacks of opportunity; uncanny dodge keeps the Dexterity bonus (barbarian 2nd level, PHB p.26); Combat
+        /// Reflexes allows attacks of opportunity (PHB p.92). Each attacker attacks the same target in round 1, before the
+        /// target's first turn, and in round 2, after it: the AC rolled against must rise by the target's +3 Dexterity bonus
+        /// (DEX 16, no armor), and not at all for the barbarian. "hero" (a Ui fighter, the PC Attack button) attacks the NPC
+        /// orc "orcA"; the NPC orc "orcB" attacks the PC fighter "target"; the NPC orc "orcC" attacks the PC barbarian 2
+        /// "barb". The PC "runner" moves away from three NPC orcs in round 1: "guardEarly" has had its turn and takes its AoO,
+        /// "guardLate" has not and takes none, "reflex" has not but has Combat Reflexes and takes its AoO. Assert steps check
+        /// each target's state (flat-footed, DEX +3, uncanny dodge) right before each attack.
+        /// Before the fix nobody was ever flat-footed: the AC was the same in both rounds and "guardLate" took an AoO.
+        /// </summary>
+        private static ScenarioDef FlatFootedStart()
+        {
+            return Rules("rules/flat-footed-start", "Everyone is flat-footed until its first turn: no Dexterity bonus to AC, no AoOs; uncanny dodge and Combat Reflexes (PHB p.137; CMB-028)")
+                .Covers("CMB-028", "PHB p.137", "PHB p.26", "PHB p.92", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 3)), 3, 3, Control.Ui)
+                .Npc("orcA", "orc_warrior", 4, 3, Control.Scripted)
+                .Npc("orcB", "orc_warrior", 4, 7, Control.Scripted)
+                .Pc("target", ActorSource.Stats(() => Fighter("Target", 3)), 3, 7, Control.Scripted)
+                .Npc("orcC", "orc_warrior", 4, 11, Control.Scripted)
+                .Pc("barb", ActorSource.Stats(() => FlatFootedBarbarian("Barbarian")), 3, 11, Control.Scripted)
+                .Pc("runner", ActorSource.Stats(() => Fighter("Runner", 3)), 11, 10, Control.Scripted)
+                .Npc("guardEarly", "orc_warrior", 12, 10, Control.Scripted)
+                .Npc("guardLate", "orc_warrior", 10, 10, Control.Scripted)
+                .Npc("reflex", "orc_warrior", 11, 9, Control.Scripted)
+                .Tweak("hero", StripOffHand)
+                .Tweak("orcA", NimbleUnarmoredTarget)
+                .Tweak("target", NimbleUnarmoredTarget)
+                .Tweak("barb", NimbleUnarmoredTarget)
+                .Tweak("runner", SturdyDummy)
+                .Tweak("reflex", c => c.Stats.Feats.Add("Combat Reflexes"))
+                .Initiative("hero", "orcB", "orcC", "guardEarly", "runner", "orcA", "target", "barb", "guardLate", "reflex")
+                .Turn("hero", 1, Step.Assert("hero is not flat-footed on its turn; orcA is, with DEX +3 and no uncanny dodge",
+                        ctx => FlatFootedState(ctx, "hero", false, false, false) && FlatFootedState(ctx, "orcA", true, true, false)),
+                    Step.Attack("orcA"))
+                .Turn("hero", 2, Step.Assert("orcA is no longer flat-footed", ctx => FlatFootedState(ctx, "orcA", false, true, false)), Step.Attack("orcA"))
+                .Turn("orcB", 1, Step.Assert("target is flat-footed, DEX +3", ctx => FlatFootedState(ctx, "target", true, true, false)), Step.Attack("target"))
+                .Turn("orcB", 2, Step.Assert("target is no longer flat-footed", ctx => FlatFootedState(ctx, "target", false, true, false)), Step.Attack("target"))
+                .Turn("orcC", 1, Step.Assert("barb is flat-footed, DEX +3, with uncanny dodge", ctx => FlatFootedState(ctx, "barb", true, true, true)), Step.Attack("barb"))
+                .Turn("orcC", 2, Step.Assert("barb is no longer flat-footed", ctx => FlatFootedState(ctx, "barb", false, true, true)), Step.Attack("barb"))
+                .Turn("guardEarly", 0, Step.Pass())
+                .Turn("runner", 1, Step.Assert("guardEarly has acted; guardLate and reflex are still flat-footed",
+                        ctx => FlatFootedState(ctx, "guardEarly", false, false, false) && FlatFootedState(ctx, "guardLate", true, false, false)
+                            && FlatFootedState(ctx, "reflex", true, false, false)),
+                    Step.Move(11, 15))
+                .Turn("runner", 2, Step.Pass())
+                .Turn("orcA", 0, Step.Pass())
+                .Turn("target", 0, Step.Pass())
+                .Turn("barb", 0, Step.Pass())
+                .Turn("guardLate", 0, Step.Pass())
+                .Turn("reflex", 0, Step.Pass())
+                .Expect("Every setup check holds", Expect.AssertsPass())
+                .Expect("PC Attack button against a flat-footed NPC: the round-1 AC lacks the +3 Dexterity bonus (PHB p.137)",
+                    FlatFootedAcRise("hero", "orcA", 3))
+                .Expect("NPC attack against a flat-footed PC: the round-1 AC lacks the +3 Dexterity bonus (PHB p.137)",
+                    FlatFootedAcRise("orcB", "target", 3))
+                .Expect("Uncanny dodge: the flat-footed barbarian keeps its Dexterity bonus, the same AC in both rounds (PHB p.26)",
+                    FlatFootedAcRise("orcC", "barb", 0))
+                .Expect("The runner's move is done", Expect.StepStatus("runner", 1, "Move", 0, "done"))
+                .Expect("guardEarly, which has had its turn, takes its AoO (PHB p.137)",
+                    Expect.Count("aoo", e => e.Str("by") == "guardEarly" && e.Str("target") == "runner", 1, 1))
+                .Expect("guardLate, still flat-footed, takes no AoO (PHB p.137)",
+                    Expect.None("aoo", e => e.Str("by") == "guardLate"))
+                .Expect("reflex, flat-footed but with Combat Reflexes, takes its AoO (PHB p.92)",
+                    Expect.Count("aoo", e => e.Str("by") == "reflex" && e.Str("target") == "runner", 1, 1))
+                .Expect("No other AoO", Expect.Count("aoo", null, 2, 2))
+                .Expect("Each of the ten combatants stops being flat-footed in round 1, once", FlatFootedEndsInRoundOne(10))
+                .Build();
+        }
+
+        /// <summary>A Human barbarian 2 (uncanny dodge, PHB p.26): STR 14, DEX 12, CON 14; BAB through BaseAttackBonusOverride.</summary>
+        private static CharacterStats FlatFootedBarbarian(string name)
+        {
+            var s = new CharacterStats(
+                name: name, level: 2, characterClass: "Barbarian",
+                str: 14, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 10,
+                bab: 2, armorBonus: 0, shieldBonus: 0,
+                damageDice: 12, damageCount: 1, bonusDamage: 0,
+                baseSpeed: 6, atkRange: 1, baseHitDieHP: 24, raceName: "Human");
+            s.BaseAttackBonusOverride = 2;
+            return s;
+        }
+
+        /// <summary>An <see cref="UnarmoredSturdyDummy"/> with DEX 16 (+3 to AC, no armor to cap it).</summary>
+        private static void NimbleUnarmoredTarget(CharacterController c)
+        {
+            UnarmoredSturdyDummy(c);
+            c.Stats.BaseDEX = 16;
+            c.Stats.DEX = 16;
+        }
+
+        /// <summary>
+        /// Notes <paramref name="key"/>'s flat-footed state; true when it is flat-footed as expected, its DEX modifier is +3
+        /// (when <paramref name="checkDex"/>) and its uncanny dodge is as expected.
+        /// </summary>
+        private static bool FlatFootedState(ScenarioContext ctx, string key, bool flatFooted, bool checkDex, bool uncannyDodge)
+        {
+            CharacterController c = ctx.Get(key);
+            CharacterStats s = c.Stats;
+            bool ff = c.HasCondition(CombatConditionType.FlatFooted);
+            ctx.Note(FlatFootedNotePrefix + key + " r" + ctx.Gm.CurrentRound + " flatFooted " + ff + " dexMod " + s.DEXMod
+                + " dexToAc " + s.DexToArmorClass + " uncannyDodge " + s.HasUncannyDodge + " ac " + s.ArmorClass);
+            return ff == flatFooted && (!checkDex || s.DEXMod == 3) && s.HasUncannyDodge == uncannyDodge;
+        }
+
+        /// <summary>
+        /// <paramref name="attacker"/>'s round-2 attack on <paramref name="target"/> faced an AC exactly <paramref name="rise"/>
+        /// higher than its round-1 attack (the target flat-footed in round 1 only).
+        /// </summary>
+        private static Func<TraceView, ExpectResult> FlatFootedAcRise(string attacker, string target, int rise)
+        {
+            return v =>
+            {
+                List<TraceEvent> r1 = v.Attacks(attacker, target, false, 1);
+                List<TraceEvent> r2 = v.Attacks(attacker, target, false, 2);
+                if (r1.Count == 0 || r2.Count == 0)
+                    return ExpectResult.Inconclusive(attacker + " attacked " + target + " " + r1.Count + " time(s) in round 1 and " + r2.Count + " in round 2");
+                int ac1 = r1[0].Int("ac"), ac2 = r2[0].Int("ac");
+                string got = "round-1 AC " + ac1 + ", round-2 AC " + ac2;
+                return ac2 - ac1 == rise
+                    ? ExpectResult.Pass(got, r1[0].Seq, r2[0].Seq)
+                    : ExpectResult.Fail(got + "; expected a rise of " + rise, r1[0].Seq, r2[0].Seq);
+            };
+        }
+
+        /// <summary>Exactly <paramref name="actors"/> actors lose FlatFooted in round 1, each once, and nobody gains it during the fight.</summary>
+        private static Func<TraceView, ExpectResult> FlatFootedEndsInRoundOne(int actors)
+        {
+            return v =>
+            {
+                List<TraceEvent> ended = v.Conds(null, CombatConditionType.FlatFooted).Where(e => !e.Bool("added")).ToList();
+                List<string> keys = ended.Select(e => e.Str("actor")).ToList();
+                string got = "ended for [" + string.Join(",", keys) + "] in rounds [" + string.Join(",", ended.Select(e => e.Round)) + "]";
+                if (keys.Count != actors || keys.Distinct().Count() != actors || ended.Any(e => e.Round != 1))
+                    return ExpectResult.Fail(got + "; expected " + actors + " distinct actors, each once, in round 1", ended.Select(e => e.Seq).ToArray());
+                if (v.Conds(null, CombatConditionType.FlatFooted).Any(e => e.Bool("added") && e.Round >= 1))
+                    return ExpectResult.Fail(got + "; FlatFooted was applied again during the fight");
+                return ExpectResult.Pass(got, ended.Select(e => e.Seq).ToArray());
             };
         }
 

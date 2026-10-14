@@ -172,6 +172,92 @@ public class ConditionService : MonoBehaviour
         return expired;
     }
 
+    /// <summary>The source name of the flat-footed state every combatant has at the start of a battle (CMB-028).</summary>
+    public const string CombatStartFlatFootedSource = "Start of battle";
+
+    /// <summary>The source category of the combat-start flat-footed state (CMB-028).</summary>
+    public const string CombatStartSourceCategory = "CombatStart";
+
+    /// <summary>
+    /// The start of a battle, PC or NPC alike: every combatant is flat-footed until its first regular turn in the
+    /// initiative order (PHB p.137; CMB-028). The state has no duration and ends at the start of that turn
+    /// (<see cref="OnTurnStart"/>, as a start-of-turn condition), whether or not the creature can act then. Uncanny
+    /// dodge keeps the Dexterity bonus (CharacterStats.DeniedDexToAcByCondition) and Combat Reflexes allows attacks of
+    /// opportunity (ThreatSystem.CanMakeAoO); the creature is still flat-footed for everything else. A creature that
+    /// joins later (a summoned monster) acts at once on its summoner's turn (PHB p.285) and is not flat-footed.
+    /// Exceptions: a creature that is never caught flat-footed (CharacterStats.IsNeverFlatFooted, the minotaur's natural
+    /// cunning, MM p.189) is skipped, and formians with the hive mind (MM p.108) are flat-footed only while every formian
+    /// of their group is (<see cref="EndHiveMindFlatFootedIfAnyAware"/>; a group is the formians on one side of the
+    /// battle, with a queen assumed within 50 miles).
+    /// A new battle also starts a new round for attacks of opportunity: each combatant's count is reset and its cap set
+    /// (ThreatSystem.ResetAoOForTurn; 1 + Dexterity with Combat Reflexes, PHB p.92), so a creature does not carry spent
+    /// AoOs or a stale cap from the last battle into its flat-footed start (CMB-164).
+    /// Called by GameManager.StartCombat before the first turn; a surprise round, once there is one, would apply the
+    /// same state through this method.
+    /// </summary>
+    public void ApplyCombatStartFlatFooted(IReadOnlyList<CharacterController> combatants)
+    {
+        if (combatants == null)
+            return;
+
+        for (int i = 0; i < combatants.Count; i++)
+        {
+            CharacterController c = combatants[i];
+            if (!IsValidCharacter(c) || c.Stats.IsDead)
+                continue;
+
+            ThreatSystem.ResetAoOForTurn(c);
+
+            if (c.Stats.IsNeverFlatFooted)
+                continue;
+
+            ApplyCondition(c, CombatConditionType.FlatFooted, -1, source: null, expiresAtStartOfTurn: true,
+                sourceNameOverride: CombatStartFlatFootedSource, sourceCategory: CombatStartSourceCategory);
+        }
+
+        for (int i = 0; i < combatants.Count; i++)
+            EndHiveMindFlatFootedIfAnyAware(combatants[i], combatants);
+    }
+
+    /// <summary>
+    /// Formian hive mind (Ex), MM p.108: if one formian in a group is not flat-footed, none of them are. When
+    /// <paramref name="member"/> has the hive mind (CharacterStats.HiveMindTag) and some living hive-mind creature on its
+    /// side in <paramref name="pool"/> is not flat-footed, the combat-start flat-footed state ends for every hive-mind
+    /// creature on that side. Called after the combat start and at each turn start (OnTurnStart), PC or NPC alike.
+    /// </summary>
+    public void EndHiveMindFlatFootedIfAnyAware(CharacterController member, IReadOnlyList<CharacterController> pool)
+    {
+        if (!IsValidCharacter(member) || pool == null || !member.Stats.HasCreatureTag(CharacterStats.HiveMindTag))
+            return;
+
+        bool anyAware = false;
+        for (int i = 0; i < pool.Count && !anyAware; i++)
+        {
+            CharacterController other = pool[i];
+            if (IsHiveMindGroupMate(member, other) && !other.HasConditionDirect(CombatConditionType.FlatFooted))
+                anyAware = true;
+        }
+        if (!anyAware)
+            return;
+
+        for (int i = 0; i < pool.Count; i++)
+        {
+            CharacterController other = pool[i];
+            if (!IsHiveMindGroupMate(member, other))
+                continue;
+            SyncCharacter(other);
+            ActiveCondition existing = FindActiveCondition(other, CombatConditionType.FlatFooted);
+            if (existing == null || existing.SourceCategory != CombatStartSourceCategory)
+                continue;
+            if (RemoveCondition(other, CombatConditionType.FlatFooted))
+                OnConditionExpired?.Invoke(other, existing);
+        }
+    }
+
+    private static bool IsHiveMindGroupMate(CharacterController member, CharacterController other)
+        => IsValidCharacter(other) && !other.Stats.IsDead && other.Team == member.Team
+           && other.Stats.HasCreatureTag(CharacterStats.HiveMindTag);
+
     /// <summary>
     /// Start of <paramref name="actor"/>'s turn, PC or NPC alike: called once, from GameManager.OnTurnStarted, before
     /// the turn-skip check (CMB-006, CMB-075). Ends its start-of-turn conditions (ChargePenalty), runs the turn-start
@@ -184,6 +270,8 @@ public class ConditionService : MonoBehaviour
 
         SyncCharacter(actor);
         ExpireTurnBoundaryConditions(actor, expireAtStart: true);
+        // A formian whose combat-start flat-footed state just ended makes its whole group aware (MM p.108).
+        EndHiveMindFlatFootedIfAnyAware(actor, GetAllCharactersInternal());
         ResolveTurnStartEscapeChecks(actor);
 
         actor.Stats?.RefreshNegativeLevelState();

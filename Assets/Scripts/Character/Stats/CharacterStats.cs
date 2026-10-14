@@ -1291,24 +1291,50 @@ public class CharacterStats
         return total;
     }
 
-    public bool DeniedDexToAcByCondition
+    /// <summary>
+    /// True when a condition takes away this creature's Dexterity bonus to AC. Flat-footed does not while it has uncanny
+    /// dodge (PHB p.26, p.50, p.137; CMB-028); its other conditions still do (an immobilized creature loses it anyway).
+    /// The AC formulas keep a Dexterity penalty when the bonus is denied (PHB p.137: "Dexterity bonus to AC (if any)").
+    /// </summary>
+    public bool DeniedDexToAcByCondition => TryGetDexDenyingCondition(ignoreFeinted: false, out _);
+
+    /// <summary>
+    /// The first active condition that denies this creature its Dexterity bonus to AC, with the same uncanny dodge
+    /// exception as <see cref="DeniedDexToAcByCondition"/>. <paramref name="ignoreFeinted"/> skips the Feinted mark, which
+    /// the sneak attack test reads per attacker instead (CharacterController.IsTargetDeniedDexForSneakAttack).
+    /// </summary>
+    public bool TryGetDexDenyingCondition(bool ignoreFeinted, out CombatConditionType conditionType)
     {
-        get
+        conditionType = CombatConditionType.None;
+        for (int i = 0; i < ActiveConditions.Count; i++)
         {
-            for (int i = 0; i < ActiveConditions.Count; i++)
+            StatusEffect active = ActiveConditions[i];
+            if (active == null)
+                continue;
+
+            CombatConditionType normalized = ConditionRules.Normalize(active.Type);
+            if (normalized == CombatConditionType.FlatFooted && HasUncannyDodge)
+                continue;
+            if (ignoreFeinted && normalized == CombatConditionType.Feinted)
+                continue;
+
+            ConditionDefinition def = ConditionRules.GetDefinition(active.Type);
+            if (def.DeniesDexToAc)
             {
-                StatusEffect active = ActiveConditions[i];
-                if (active == null)
-                    continue;
-
-                ConditionDefinition def = ConditionRules.GetDefinition(active.Type);
-                if (def.DeniesDexToAc)
-                    return true;
+                conditionType = normalized;
+                return true;
             }
-
-            return false;
         }
+
+        return false;
     }
+
+    /// <summary>
+    /// Flat-footed (PHB p.137) and without uncanny dodge, so flat-footedness alone denies this creature its Dexterity
+    /// bonus to AC (CMB-028). The one test for the AC, sneak attack, feint and Sword of Subtlety readers; the flat-footed
+    /// state itself (no AoOs without Combat Reflexes, no Deflect Arrows) stays <c>HasCondition(FlatFooted)</c>.
+    /// </summary>
+    public bool IsDexDeniedByFlatFooted => HasNormalizedCondition(CombatConditionType.FlatFooted) && !HasUncannyDodge;
 
     /// <summary>Quick flags for common conditions.</summary>
     public bool IsProne => HasNormalizedCondition(CombatConditionType.Prone);
@@ -1415,10 +1441,12 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Uncanny Dodge: Cannot be caught flat-footed, retains DEX bonus to AC.
-    /// Gained at Barbarian level 2.
+    /// Uncanny dodge (Ex): barbarian 2nd level (PHB p.26) or rogue 4th level (PHB p.50). The creature keeps its
+    /// Dexterity bonus to AC while flat-footed (PHB p.137; read by DeniedDexToAcByCondition and IsDexDeniedByFlatFooted,
+    /// CMB-028); it is still flat-footed otherwise (no attacks of opportunity before its first turn).
     /// </summary>
-    public bool HasUncannyDodge => IsBarbarian && GetClassLevel("Barbarian") >= 2;
+    public bool HasUncannyDodge => (IsBarbarian && GetClassLevel("Barbarian") >= 2)
+        || (IsRogue && GetClassLevel("Rogue") >= 4);
 
     /// <summary>
     /// Trap Sense: Bonus on Reflex saves vs traps and dodge bonus to AC vs traps.
@@ -2615,6 +2643,29 @@ public class CharacterStats
     /// <summary>Creature type tags for this character (e.g., "Goblinoid", "Orc"). Used for racial attack bonuses.</summary>
     public List<string> CreatureTags = new List<string>();
 
+    /// <summary>True when <see cref="CreatureTags"/> holds <paramref name="tag"/> (case-insensitive, trimmed).</summary>
+    public bool HasCreatureTag(string tag)
+    {
+        if (CreatureTags == null || string.IsNullOrWhiteSpace(tag))
+            return false;
+        for (int i = 0; i < CreatureTags.Count; i++)
+        {
+            string t = CreatureTags[i];
+            if (t != null && string.Equals(t.Trim(), tag, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Creature tag: the creature is never caught flat-footed (minotaur, natural cunning, MM p.189).</summary>
+    public const string NeverFlatFootedTag = "NeverFlatFooted";
+
+    /// <summary>Creature tag: formian hive mind (MM p.108): if one formian in a group is not flat-footed, none are.</summary>
+    public const string HiveMindTag = "HiveMind";
+
+    /// <summary>Never flat-footed (<see cref="NeverFlatFootedTag"/>): skipped by ConditionService.ApplyCombatStartFlatFooted (CMB-028).</summary>
+    public bool IsNeverFlatFooted => HasCreatureTag(NeverFlatFootedTag);
+
 
     // ========== DAMAGE MITIGATION ==========
     /// <summary>Damage Reduction entries (e.g., DR 5/bludgeoning, DR 10/magic).</summary>
@@ -3724,21 +3775,43 @@ public class CharacterStats
     /// <summary>List of imbued spell data the target can cast.</summary>
     [NonSerialized] public List<ImbueSpellEntry> ImbuedSpells = new List<ImbueSpellEntry>();
 
+    /// <summary>
+    /// The Dexterity modifier this creature adds to AC, capped by its armor's maximum Dexterity bonus. A condition that
+    /// denies the Dexterity bonus (DeniedDexToAcByCondition: flat-footed without uncanny dodge, stunned, pinned, ...) takes
+    /// away only a bonus: a Dexterity penalty stays (PHB p.137; CMB-028). Shared by ArmorClass, TouchArmorClass and
+    /// SpellcastingComponent.GetTouchAC.
+    /// </summary>
+    public int DexToArmorClass
+    {
+        get
+        {
+            int dexToAC = DeniedDexToAcByCondition ? Mathf.Min(0, DEXMod) : DEXMod;
+            if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
+                dexToAC = MaxDexBonus;
+            return dexToAC;
+        }
+    }
+
+    /// <summary>
+    /// The dodge bonuses kept in the AC formulas: the Dodge feat and Haste's +1 (PHB p.93, p.239). A creature that loses
+    /// its Dexterity bonus to AC loses its dodge bonuses too (PHB p.93, Dodge; CMB-028). Racial dodge bonuses do the same
+    /// in RacialDodgeACBonus and RacialTraitRules; fighting defensively is added per attack and is not covered here.
+    /// </summary>
+    public int DodgeACBonus => DeniedDexToAcByCondition ? 0 : FeatACBonus + HasteACBonus;
+
     public int ArmorClass
     {
         get
         {
-            int dexToAC = DeniedDexToAcByCondition ? 0 : DEXMod;
-            if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
-                dexToAC = MaxDexBonus;
+            int dexToAC = DexToArmorClass;
             // Mage Armor is an armor bonus — it doesn't stack with worn armor.
             // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
             // Magic Vestment adds enhancement bonus to armor (stacks with base armor, not with other armor enhancements).
             int effectiveArmorBonus = Mathf.Max(ArmorBonus + MagicVestmentACBonus, SpellACBonus);
             // Natural armor enhancement: an amulet and Barkskin do not stack (PHB p.171, p.203); the higher applies.
             return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + NaturalArmorEnhancementBonus + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + EffectiveDeflectionBonus + ConditionACPenalty
-                   + HasteACBonus + SlowACPenalty + WondrousInsightACBonus + RacialDodgeACBonus;
+                   + MonkACBonus + DodgeACBonus + RageACPenalty + SpellRageACPenalty + EffectiveDeflectionBonus + ConditionACPenalty
+                   + SlowACPenalty + WondrousInsightACBonus + RacialDodgeACBonus;
         }
     }
 
@@ -3750,13 +3823,9 @@ public class CharacterStats
     {
         get
         {
-            int dexToAC = DeniedDexToAcByCondition ? 0 : DEXMod;
-            if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
-                dexToAC = MaxDexBonus;
-
-            return 10 + dexToAC + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + EffectiveDeflectionBonus + ConditionACPenalty
-                   + HasteACBonus + SlowACPenalty + RacialDodgeACBonus;
+            return 10 + DexToArmorClass + SizeModifier
+                   + MonkACBonus + DodgeACBonus + RageACPenalty + SpellRageACPenalty + EffectiveDeflectionBonus + ConditionACPenalty
+                   + SlowACPenalty + RacialDodgeACBonus;
         }
     }
 

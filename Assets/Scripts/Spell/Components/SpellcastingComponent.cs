@@ -2911,19 +2911,14 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Get touch AC of a target.
-    /// Touch AC excludes armor/shield bonuses but keeps DEX, size, deflection,
-    /// dodge-style feat AC, monk AC bonus, and rage AC modifiers.
+    /// Touch AC of a target for a spell touch attack: <see cref="CharacterStats.TouchArmorClass"/>, the same value weapon
+    /// touch attacks and domain powers use (no armor, shield or natural armor; Dexterity, size, deflection, dodge, monk,
+    /// rage, condition and Slow terms). A target denied its Dexterity bonus (flat-footed at the start of a battle,
+    /// stunned, ...) loses it and its dodge bonuses (CMB-028).
     /// </summary>
     public static int GetTouchAC(CharacterStats target)
     {
-        int dexToAC = target.DEXMod;
-        if (target.MaxDexBonus >= 0 && dexToAC > target.MaxDexBonus)
-            dexToAC = target.MaxDexBonus;
-
-        return 10 + dexToAC + target.SizeModifier + target.EffectiveDeflectionBonus
-               + target.FeatACBonus + target.MonkACBonus + target.RageACPenalty + target.SpellRageACPenalty
-               + target.RacialDodgeACBonus; // svirfneblin +4 dodge against all creatures (CHR-019)
+        return target.TouchArmorClass;
     }
 
     /// <summary>

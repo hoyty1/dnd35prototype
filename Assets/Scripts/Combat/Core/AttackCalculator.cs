@@ -612,8 +612,8 @@ public static class AttackCalculator
         if (isFlanking)
             return true;
 
-        // Flat-footed denies DEX
-        if (target.IsFlatFootedCondition)
+        // Flat-footed denies DEX, unless the target has uncanny dodge (PHB p.137; CMB-028)
+        if (target.Stats.IsDexDeniedByFlatFooted)
             return true;
 
         // Blink can deny DEX if target can't see invisible
