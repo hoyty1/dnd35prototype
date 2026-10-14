@@ -5308,11 +5308,11 @@ namespace Tests.Scenarios
         }
 
         /// <summary>True when <paramref name="got"/> equals <paramref name="want"/>; otherwise notes the mismatch.</summary>
-        private static bool AcCheck(ScenarioContext ctx, string what, int got, int want)
+        private static bool AcCheck(ScenarioContext ctx, string what, int got, int want, string notePrefix = "ring-deflection")
         {
             if (got == want)
                 return true;
-            ctx.Note("ring-deflection mismatch: " + what + ": got " + got + ", expected " + want);
+            ctx.Note(notePrefix + " mismatch: " + what + ": got " + got + ", expected " + want);
             return false;
         }
 
@@ -7390,6 +7390,16 @@ namespace Tests.Scenarios
         // ── Bonus stacking by the rules as written (owner directive 2026-10-09) ──
 
         private const string BonusStackingNotePrefix = "bonus-stacking ";
+        private const string StackingCheckPrefix = "bonus-stacking";
+
+        /// <summary>
+        /// Gives a Stats-built character its skill list (every skill at 0 ranks, its class skills marked), as a created
+        /// PC has: without it <c>GetSkillBonus</c> returns 0 for any skill (TST-039; CHR-067 for NPCs).
+        /// </summary>
+        internal static void GiveClassSkills(CharacterController c)
+        {
+            c.Stats.InitializeSkills(c.Stats.CharacterClass, c.Stats.Level);
+        }
 
         /// <summary>
         /// Bonus stacking, RAW (owner directive 2026-10-09; SPL-026, SPL-024, SPL-025). PHB p.171-172: bonuses of one type
@@ -7412,7 +7422,7 @@ namespace Tests.Scenarios
                 .MaxRounds(3)
                 .Pc("hero", ActorSource.Stats(() => Fighter("Stacking Fighter", 3)), 5, 10, Control.Scripted)
                 .Npc("goblin", "goblin", 6, 10, Control.Scripted)
-                .Tweak("hero", c => { StripOffHand(c); SturdyDummy(c); })
+                .Tweak("hero", c => { StripOffHand(c); SturdyDummy(c); GiveClassSkills(c); })
                 .Tweak("goblin", SturdyDummy)
                 .Initiative("hero", "goblin")
                 .Turn("hero", 1, Step.Attack("goblin"))
@@ -7421,7 +7431,7 @@ namespace Tests.Scenarios
                 {
                     CharacterController hero = ctx.Get("hero");
                     hero.StatusEffectManager.RemoveEffectsBySpellId(DND35e.Identifiers.SpellNames.HEROISM);
-                    bool ok = AcCheck(ctx, "effect attack bonus without Heroism (Bless +1 morale, luck +1)", hero.Stats.EffectAttackBonus, 2);
+                    bool ok = AcCheck(ctx, "effect attack bonus without Heroism (Bless +1 morale, luck +1)", hero.Stats.EffectAttackBonus, 2, StackingCheckPrefix);
                     ctx.Note(BonusStackingNotePrefix + "r3 hero " + hero.Stats.EffectAttackBonus);
                     return ok;
                 }), Step.Attack("goblin"))
@@ -7441,25 +7451,27 @@ namespace Tests.Scenarios
             CharacterStats s = hero.Stats;
             int willBefore = s.WillSave;
             int climbBefore = s.GetSkillBonus("Climb");
-            bool ok = AcCheck(ctx, "no effect attack bonus before the spells", s.EffectAttackBonus, 0);
-            ok &= AcCheck(ctx, "Bless applied", ApplySpell(ctx, hero, DND35e.Identifiers.SpellNames.BLESS) ? 1 : 0, 1);
-            ok &= AcCheck(ctx, "Heroism applied", ApplySpell(ctx, hero, DND35e.Identifiers.SpellNames.HEROISM) ? 1 : 0, 1);
-            ok &= AcCheck(ctx, "Divine Favor applied", ApplySpell(ctx, hero, DND35e.Identifiers.SpellNames.DIVINE_FAVOR) ? 1 : 0, 1);
+            bool ok = AcCheck(ctx, "the fighter has a Climb skill entry (InitializeSkills)", s.Skills.ContainsKey("Climb") ? 1 : 0, 1, StackingCheckPrefix);
+            ok &= AcCheck(ctx, "no effect attack bonus before the spells", s.EffectAttackBonus, 0, StackingCheckPrefix);
+            ok &= AcCheck(ctx, "Bless applied", ApplySpell(ctx, hero, DND35e.Identifiers.SpellNames.BLESS) ? 1 : 0, 1, StackingCheckPrefix);
+            ok &= AcCheck(ctx, "Heroism applied", ApplySpell(ctx, hero, DND35e.Identifiers.SpellNames.HEROISM) ? 1 : 0, 1, StackingCheckPrefix);
+            ok &= AcCheck(ctx, "Divine Favor applied", ApplySpell(ctx, hero, DND35e.Identifiers.SpellNames.DIVINE_FAVOR) ? 1 : 0, 1, StackingCheckPrefix);
             SpellData prayer = SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.PRAYER);
             ok &= AcCheck(ctx, "Prayer's ally effect added",
-                hero.StatusEffectManager.AddEffect(GameManager.PrayerEffectSpell(prayer, ally: true), "Scenario", 5, 5) != null ? 1 : 0, 1);
+                hero.StatusEffectManager.AddEffect(GameManager.PrayerEffectSpell(prayer, ally: true), "Scenario", 5, 5) != null ? 1 : 0, 1, StackingCheckPrefix);
             ok &= AcCheck(ctx, "Prayer's foe effect added",
-                goblin.StatusEffectManager.AddEffect(GameManager.PrayerEffectSpell(prayer, ally: false), "Scenario", 5, 5) != null ? 1 : 0, 1);
+                goblin.StatusEffectManager.AddEffect(GameManager.PrayerEffectSpell(prayer, ally: false), "Scenario", 5, 5) != null ? 1 : 0, 1, StackingCheckPrefix);
             ok &= AcCheck(ctx, "Bane added",
-                goblin.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.BANE).Clone(), "Scenario", 3) != null ? 1 : 0, 1);
+                goblin.StatusEffectManager.AddEffect(SpellDatabase.GetSpell(DND35e.Identifiers.SpellNames.BANE).Clone(), "Scenario", 3) != null ? 1 : 0, 1, StackingCheckPrefix);
 
-            ok &= AcCheck(ctx, "effect attack bonus (Heroism +2 morale over Bless +1; Divine Favor +1 and Prayer +1 luck count once)", s.EffectAttackBonus, 3);
-            ok &= AcCheck(ctx, "effect weapon damage bonus (two +1 luck bonuses)", s.EffectWeaponDamageBonus, 1);
-            ok &= AcCheck(ctx, "Will save rise (Heroism +2 morale, Prayer +1 luck)", s.WillSave - willBefore, 3);
+            ok &= AcCheck(ctx, "effect attack bonus (Heroism +2 morale over Bless +1; Divine Favor +1 and Prayer +1 luck count once)", s.EffectAttackBonus, 3, StackingCheckPrefix);
+            ok &= AcCheck(ctx, "effect weapon damage bonus (two +1 luck bonuses)", s.EffectWeaponDamageBonus, 1, StackingCheckPrefix);
+            ok &= AcCheck(ctx, "Will save rise (Heroism +2 morale, Prayer +1 luck)", s.WillSave - willBefore, 3, StackingCheckPrefix);
             ok &= AcCheck(ctx, "fear save over the plain Will save (Bless's +1 morale against fear is under Heroism's +2)",
-                SaveRules.Modifier(s, SavingThrowType.Will, SaveContext.Fear) - s.WillSave, 0);
-            ok &= AcCheck(ctx, "Climb rise (Heroism +2 morale, Prayer +1 luck)", s.GetSkillBonus("Climb") - climbBefore, 3);
-            ok &= AcCheck(ctx, "goblin effect attack modifier (Prayer -1 and Bane -1, untyped, different spells)", goblin.Stats.EffectAttackBonus, -2);
+                SaveRules.Modifier(s, SavingThrowType.Will, SaveContext.Fear) - s.WillSave, 0, StackingCheckPrefix);
+            ok &= AcCheck(ctx, "Climb rise (Heroism +2 morale, Prayer +1 luck)", s.GetSkillBonus("Climb") - climbBefore, 3, StackingCheckPrefix);
+            ok &= AcCheck(ctx, "Climb modifier from effects (Heroism +2 morale, Prayer +1 luck)", s.EffectSkillBonus("Climb"), 3, StackingCheckPrefix);
+            ok &= AcCheck(ctx, "goblin effect attack modifier (Prayer -1 and Bane -1, untyped, different spells)", goblin.Stats.EffectAttackBonus, -2, StackingCheckPrefix);
             ctx.Note(BonusStackingNotePrefix + "r2 hero " + s.EffectAttackBonus + " goblin " + goblin.Stats.EffectAttackBonus
                 + " applied " + s.Bonuses.Describe(BonusTarget.AttackRoll));
             return ok;
@@ -7473,7 +7485,8 @@ namespace Tests.Scenarios
         /// Stats fighter beside it and a goblin 30 ft away; human_cleric (Cleric 5) through the NPC cast executor, with a
         /// goblin beside it and a second Stats fighter 25 ft away. The Quick Start cleric has no 3rd-level slot, so the
         /// scenario prepares a clone of Prayer marked 2nd level in one of its 2nd-level slots (the slot level changes
-        /// nothing Prayer does); human_cleric gets Prayer in a 3rd-level slot. The fighter's round-1 Assert checks, after
+        /// nothing Prayer does); human_cleric (the DMG p.114 sample cleric's spells since CRE-062) gets Prayer in place of
+        /// a spell in one of its two regular 3rd-level slots. The fighter's round-1 Assert checks, after
         /// both casts: each caster and its ally +1 luck on attacks (and the fighter on weapon damage, Will and Climb),
         /// each foe -1 on attacks and Will. Before the fix the PC area path gave every creature in the burst a bonus-less
         /// effect and the NPC path a bonus-less self buff.
@@ -7502,12 +7515,16 @@ namespace Tests.Scenarios
                 .Build();
         }
 
-        /// <summary>Puts a clone of Prayer into the first non-domain prepared slot of <paramref name="slotLevel"/>, marked at that level.</summary>
+        /// <summary>
+        /// Puts a clone of Prayer into the first non-domain prepared slot of <paramref name="slotLevel"/>, marked at that
+        /// level. Throws (the job ends SetupFailed) when the actor has no spellcasting or no such slot, so a caster without
+        /// spells cannot pass for a failed Prayer (TST-040).
+        /// </summary>
         private static void PreparePrayerInSlot(CharacterController c, int slotLevel)
         {
             SpellcastingComponent sc = c.Spellcasting;
             if (sc == null || sc.SpellSlots == null)
-                return;
+                throw new InvalidOperationException(c.Stats.CharacterName + " has no spellcasting to prepare Prayer in");
             foreach (SpellSlot slot in sc.SpellSlots)
             {
                 if (slot != null && slot.Level == slotLevel && !slot.IsDomainSlot)
@@ -7518,6 +7535,7 @@ namespace Tests.Scenarios
                     return;
                 }
             }
+            throw new InvalidOperationException(c.Stats.CharacterName + " has no regular level-" + slotLevel + " slot for Prayer");
         }
 
         private static bool PrayerCastCheck(ScenarioContext ctx)
@@ -7526,19 +7544,19 @@ namespace Tests.Scenarios
             foreach (string key in new[] { "cleric", "fighter", "priest", "gob2" })
             {
                 CharacterStats s = ctx.Get(key).Stats;
-                ok &= AcCheck(ctx, key + " effect attack bonus (Prayer +1 luck)", s.EffectAttackBonus, 1);
-                ok &= AcCheck(ctx, key + " luck bonus on attacks", s.Bonuses.BestOfType(BonusTarget.AttackRoll, BonusType.Luck), 1);
+                ok &= AcCheck(ctx, key + " effect attack bonus (Prayer +1 luck)", s.EffectAttackBonus, 1, "prayer-cast");
+                ok &= AcCheck(ctx, key + " luck bonus on attacks", s.Bonuses.BestOfType(BonusTarget.AttackRoll, BonusType.Luck), 1, "prayer-cast");
             }
             foreach (string key in new[] { "gob1", "fighter2" })
             {
                 CharacterStats s = ctx.Get(key).Stats;
-                ok &= AcCheck(ctx, key + " effect attack modifier (Prayer -1)", s.EffectAttackBonus, -1);
-                ok &= AcCheck(ctx, key + " Will modifier from effects (Prayer -1)", s.EffectSaveBonus(SavingThrowType.Will), -1);
+                ok &= AcCheck(ctx, key + " effect attack modifier (Prayer -1)", s.EffectAttackBonus, -1, "prayer-cast");
+                ok &= AcCheck(ctx, key + " Will modifier from effects (Prayer -1)", s.EffectSaveBonus(SavingThrowType.Will), -1, "prayer-cast");
             }
             CharacterStats f = ctx.Get("fighter").Stats;
-            ok &= AcCheck(ctx, "fighter weapon damage (Prayer +1 luck)", f.EffectWeaponDamageBonus, 1);
-            ok &= AcCheck(ctx, "fighter Will modifier from effects (Prayer +1 luck)", f.EffectSaveBonus(SavingThrowType.Will), 1);
-            ok &= AcCheck(ctx, "fighter Climb modifier from effects (Prayer +1 luck)", f.EffectSkillBonus("Climb"), 1);
+            ok &= AcCheck(ctx, "fighter weapon damage (Prayer +1 luck)", f.EffectWeaponDamageBonus, 1, "prayer-cast");
+            ok &= AcCheck(ctx, "fighter Will modifier from effects (Prayer +1 luck)", f.EffectSaveBonus(SavingThrowType.Will), 1, "prayer-cast");
+            ok &= AcCheck(ctx, "fighter Climb modifier from effects (Prayer +1 luck)", f.EffectSkillBonus("Climb"), 1, "prayer-cast");
             ctx.Note("prayer-cast cleric " + ctx.Get("cleric").Stats.EffectAttackBonus + " fighter " + f.EffectAttackBonus
                 + " gob1 " + ctx.Get("gob1").Stats.EffectAttackBonus + " priest " + ctx.Get("priest").Stats.EffectAttackBonus
                 + " gob2 " + ctx.Get("gob2").Stats.EffectAttackBonus + " fighter2 " + ctx.Get("fighter2").Stats.EffectAttackBonus);

@@ -46,7 +46,7 @@ public static partial class SpellDatabase
                     Name = "Unholy Blight",
                     Description = "Burst of unholy power: 1d8/2 CL (max 5d8) vs good creatures + sickened 1d4 rounds. Will half damage and negates sicken. PHB p.297",
                     SpellLevel = 4, School = "Evocation",
-                    ClassList = new[] { "Cleric" },
+                    // Evil 4 only (PHB p.297): no class list; DomainDatabase gives the Evil domain entry (SPL-102).
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Damage,

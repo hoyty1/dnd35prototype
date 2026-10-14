@@ -628,6 +628,14 @@ public class NPCDefinition
     public List<string> KnownSpellIds = new List<string>();
     public List<string> PreparedSpellSlotIds = new List<string>();
 
+    /// <summary>
+    /// A cleric's two domains (PHB p.32), copied to <see cref="CharacterStats.ChosenDomains"/> at spawn so the shared
+    /// <c>SpellcastingComponent</c> gives the NPC its domain slots, and the stats their domain caster-level bonuses, as
+    /// for a PC (CRE-062). Activated granted powers have no AI executor and the other granted powers are partial
+    /// (CHR-070). An alignment domain must match the cleric's alignment (PHB p.32); nothing checks it yet (CHR-078).
+    /// </summary>
+    public List<string> ClericDomains = new List<string>();
+
     // Optional descriptive traits surfaced in tooltips/UI (e.g., "Darkvision 60 ft", "Smite Evil 1/day").
     public List<string> SpecialAbilities = new List<string>();
 
@@ -837,6 +845,9 @@ public class NPCDefinition
             : new List<string>();
         clone.PreparedSpellSlotIds = PreparedSpellSlotIds != null
             ? new List<string>(PreparedSpellSlotIds)
+            : new List<string>();
+        clone.ClericDomains = ClericDomains != null
+            ? new List<string>(ClericDomains)
             : new List<string>();
         clone.SpecialAbilities = SpecialAbilities != null
             ? new List<string>(SpecialAbilities)

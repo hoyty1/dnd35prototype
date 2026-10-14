@@ -215,6 +215,7 @@ public static class ZombieTemplate
         // ── Spells: None ──
         zombie.KnownSpellIds = new List<string>();
         zombie.PreparedSpellSlotIds = new List<string>();
+        zombie.ClericDomains = new List<string>();
 
         // ── CR ──
         zombie.ChallengeRating = GetZombieCR(doubledHD);

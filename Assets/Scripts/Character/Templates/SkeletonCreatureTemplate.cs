@@ -94,6 +94,7 @@ public sealed class SkeletonCreatureTemplate : ICreatureTemplate
         target.TripTriggerAttackName = source.TripTriggerAttackName;
         target.KnownSpellIds = source.KnownSpellIds;
         target.PreparedSpellSlotIds = source.PreparedSpellSlotIds;
+        target.ClericDomains = source.ClericDomains;
         target.SpellResistance = source.SpellResistance;
 
         // Display

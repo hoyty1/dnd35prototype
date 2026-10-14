@@ -1088,7 +1088,7 @@ public static partial class SpellDatabase
                     Description = "Rocky terrain sprouts spikes: 1d8 damage per 5 ft moved, Reflex DC 15 half. Half speed. 1 hour/level. PHB p.283",
                     SpellLevel = 4,
                     School = "Transmutation",
-                    ClassList = new string[] { "Cleric" },
+                    ClassList = new string[] { "Druid" }, // PHB p.283: Drd 4, Earth 4; the Earth domain entry comes from DomainDatabase (SPL-102)
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
                     AreaRadius = 4,

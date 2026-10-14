@@ -1408,6 +1408,17 @@
       "notes": ""
     },
     {
+      "type": "Tests.Magic.ClericSpellcastingRulesTests",
+      "needs": "play",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 96,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CRE-062 (2026-10-14): cleric spellcasting for PCs and NPCs through SpellcastingComponent: domain spells of levels 3-4 (PHB p.185-189), Cleric 5 slots 5/4+1/3+1/2+1 with Wis 17 (PHB p.31, p.8) and the whole cleric list known to 5th, auto-preparation of 3rd-level slots, a domain-only spell (Wall of Fire, Fire 4) only in a domain slot (PHB p.32), a domain slot taking only its own level's domain spell (Identify, Magic 2; Resist Energy, Fire 3), the level 3-4 domain-only and druid spells off the cleric list (SPL-102), the spawn warning's class test (Paladin 6 Wis 11, Adept) and the alignment-domain check (CHR-078), and the human_cleric spawn with the DMG p.114 sample cleric's domains, alignment, spontaneous cure casting and 5/5/4/3 prepared list; the spawn test goes through InitializeNPCFromDefinition, so needs a scene GameManager"
+    },
+    {
       "type": "Tests.Maneuvers.BullRushRulesTests",
       "needs": "play",
       "skip": "",

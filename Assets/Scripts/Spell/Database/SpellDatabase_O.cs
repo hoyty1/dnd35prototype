@@ -177,7 +177,7 @@ public static partial class SpellDatabase
                     Name = "Order's Wrath",
                     Description = "Burst of lawful power: 1d8/2 CL (max 5d8) vs chaotic creatures + dazed 1 round. Will half damage and negates daze. PHB p.258",
                     SpellLevel = 4, School = "Evocation",
-                    ClassList = new[] { "Cleric" },
+                    // Law 4 only (PHB p.258): no class list; DomainDatabase gives the Law domain entry (SPL-102).
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Damage,

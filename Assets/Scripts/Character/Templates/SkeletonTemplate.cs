@@ -248,6 +248,7 @@ public static class SkeletonTemplate
         // ── Spells: None ──
         skel.KnownSpellIds = new List<string>();
         skel.PreparedSpellSlotIds = new List<string>();
+        skel.ClericDomains = new List<string>();
 
         // ── CR ──
         skel.ChallengeRating = GetSkeletonCR(racialHD);

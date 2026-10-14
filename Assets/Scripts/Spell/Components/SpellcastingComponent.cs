@@ -745,8 +745,18 @@ public class SpellcastingComponent : MonoBehaviour
             Debug.Log("[Spellcasting] Cleric: no orison selection found, added all orisons.");
         }
 
-        foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Cleric", 1)) AddKnownSpellForClass(className, spell);
-        foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2)) AddKnownSpellForClass(className, spell);
+        // A cleric may prepare any spell of the cleric list (PHB p.32), so the whole list of every level of the slot
+        // table is available, not only 1st and 2nd (CRE-062, SPL-041). A spell whose cleric level differs from its
+        // base SpellLevel (Blindness/Deafness, Clr 3) is left out until slots read per-class levels (SPL-008), so that
+        // it is never prepared in a slot of its base level.
+        for (int spellLevel = 1; spellLevel < slots.Length; spellLevel++)
+        {
+            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Cleric", spellLevel))
+            {
+                if (spell != null && spell.SpellLevel == spellLevel)
+                    AddKnownSpellForClass(className, spell);
+            }
+        }
     }
 
     private void InitDruid(int level, string className = "Druid")
@@ -1429,18 +1439,21 @@ public class SpellcastingComponent : MonoBehaviour
         Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {className} spell slots");
     }
 
-    private bool IsDomainSpellForCharacter(SpellData spell)
+    /// <summary>
+    /// True when the spell is the domain spell of <paramref name="domainLevel"/> of one of the cleric's domains. A domain
+    /// slot of a level holds that level's domain spell (PHB p.32), whatever the spell's level on other lists: Identify
+    /// (Sor/Wiz 1) is the Magic domain's 2nd-level spell and Resist Energy (Sor/Wiz 2) the Fire domain's 3rd (CRE-062).
+    /// </summary>
+    private bool IsDomainSpellForCharacter(SpellData spell, int domainLevel)
     {
-        if (spell == null || Domains == null || Domains.Count == 0)
+        if (spell == null || spell.AvailableFor == null || Domains == null || Domains.Count == 0)
             return false;
 
-        for (int i = 0; i < Domains.Count; i++)
-        {
-            if (SpellDatabase.IsSpellInDomain(spell.SpellId, Domains[i]))
-                return true;
-        }
-
-        return false;
+        return spell.AvailableFor.Any(a =>
+            a != null &&
+            a.MatchesClass("Cleric") &&
+            a.Level == domainLevel &&
+            Domains.Any(d => a.MatchesDomain(d)));
     }
 
     private bool IsValidSpellForSlot(SpellData spell, SpellSlot slot, bool logOnFailure)
@@ -1448,22 +1461,24 @@ public class SpellcastingComponent : MonoBehaviour
         if (slot == null || spell == null)
             return true;
 
-        if (spell.SpellLevel != slot.Level)
+        if (slot.IsDomainSlot)
+        {
+            // The domain level, not the base SpellLevel, decides the slot (PHB p.32). The cast still reads SpellLevel
+            // for concentration and the log line, and the save DC takes the cleric-list level before the domain level
+            // (SpellSaveDCRules.GetClassSpellLevel), so a domain spell prepared above its base level is cast at that
+            // lower level (SPL-008).
+            if (!IsDomainSpellForCharacter(spell, slot.Level))
+            {
+                if (logOnFailure)
+                    Debug.LogWarning($"[Spellcasting] {spell.Name} is not a level {slot.Level} spell of any chosen domain for domain slot Lv{slot.Level}.");
+                return false;
+            }
+        }
+        else if (spell.SpellLevel != slot.Level)
         {
             if (logOnFailure)
                 Debug.LogWarning($"[Spellcasting] Cannot prepare level {spell.SpellLevel} spell in level {slot.Level} slot!");
             return false;
-        }
-
-        if (slot.IsDomainSlot)
-        {
-            bool validDomainSpell = IsDomainSpellForCharacter(spell);
-            if (!validDomainSpell)
-            {
-                if (logOnFailure)
-                    Debug.LogWarning($"[Spellcasting] {spell.Name} is not in any chosen domain for domain slot Lv{slot.Level}.");
-                return false;
-            }
         }
 
         // Wizard specialist slots: can only prepare spells from the specialist school.
@@ -1479,7 +1494,9 @@ public class SpellcastingComponent : MonoBehaviour
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(slot.CasterClassName) && !IsSpellKnownByClass(slot.CasterClassName, spell))
+        // A domain slot holds a spell of one of the cleric's domains, which need not be on the cleric list (PHB p.32:
+        // Wall of Fire, Fire domain 4), so the class-list check applies to the other slots only (CRE-062).
+        if (!slot.IsDomainSlot && !string.IsNullOrWhiteSpace(slot.CasterClassName) && !IsSpellKnownByClass(slot.CasterClassName, spell))
         {
             if (logOnFailure)
                 Debug.LogWarning($"[Spellcasting] {spell.Name} is not available for {slot.CasterClassName} slots.");
@@ -1536,8 +1553,9 @@ public class SpellcastingComponent : MonoBehaviour
         if (!IsValidSpellForSlot(spell, slot, logOnFailure: true))
             return false;
 
-        // Enforce class-specific availability (wizard spellbook vs class full-list casters).
-        if (spell != null && !string.IsNullOrWhiteSpace(slot.CasterClassName) && !IsSpellKnownByClass(slot.CasterClassName, spell))
+        // Enforce class-specific availability (wizard spellbook vs class full-list casters); a domain slot's spell was
+        // checked against the domains above (PHB p.32).
+        if (spell != null && !slot.IsDomainSlot && !string.IsNullOrWhiteSpace(slot.CasterClassName) && !IsSpellKnownByClass(slot.CasterClassName, spell))
         {
             Debug.LogWarning($"[Spellcasting] {spell.Name} is not in {slot.CasterClassName}'s available spell list!");
             return false;

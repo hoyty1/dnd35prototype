@@ -478,7 +478,7 @@ public static partial class SpellDatabase
                     Name = "Holy Smite",
                     Description = "Burst of holy power: 1d8/2 CL (max 5d8) vs evil creatures + blinded 1 round. Will half damage and negates blind. PHB p.241",
                     SpellLevel = 4, School = "Evocation",
-                    ClassList = new[] { "Cleric" },
+                    // Good 4 only (PHB p.241): no class list; DomainDatabase gives the Good domain entry (SPL-102).
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Damage,

@@ -567,6 +567,20 @@ public partial class GameManager
                 npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilFallbackEnemy");
             }
         }
+
+        // The overrides above may change a cleric's alignment, which decides its spontaneous casting (PHB p.32).
+        ApplyNpcSpontaneousCasting(npc.Stats);
+    }
+
+    /// <summary>
+    /// Sets an NPC cleric's spontaneous casting from its alignment (PHB p.32): good converts into cure spells, evil into
+    /// inflict spells; a neutral NPC has no recorded choice and converts none (CRE-062). Called at spawn and again after
+    /// the preset overrides, which may change the alignment.
+    /// </summary>
+    private static void ApplyNpcSpontaneousCasting(CharacterStats stats)
+    {
+        if (stats != null && stats.IsCleric)
+            stats.SpontaneousCasting = SpontaneousCastingHelper.GetDefaultForAlignment(stats.CharacterAlignment);
     }
 
     /// <summary>
@@ -970,9 +984,29 @@ public partial class GameManager
             Debug.Log($"[GameManager] Dragon {def.Name}: Injected Sorcerer CL {sorcererCL} for innate spellcasting ({def.KnownSpellIds.Count} spells known)");
         }
 
+        // A cleric's domains and spontaneous casting, as character creation sets them for a PC (PHB p.32): the domains
+        // give the domain slots and the passive domain effects (caster-level bonuses), the War domain its weapon feats
+        // through the same grant a PC gets (PHB p.191), and a good cleric converts prepared spells into cure spells, an
+        // evil one into inflict spells; a neutral NPC cleric has no choice recorded and converts none (CRE-062).
+        if (def.ClericDomains != null && def.ClericDomains.Count > 0)
+        {
+            stats.ChosenDomains = new List<string>(def.ClericDomains);
+            if (stats.ChosenDomains.Contains("War"))
+                GrantWarDomainFeats(stats);
+            foreach (string domain in stats.ChosenDomains)
+            {
+                if (!ClericDomainMatchesAlignment(domain, stats.CharacterAlignment))
+                    Debug.LogWarning($"[GameManager] {def.Name} ({def.Id}) has the {domain} domain, which a {stats.CharacterAlignment} cleric cannot take (PHB p.32, CHR-078).");
+            }
+        }
+        ApplyNpcSpontaneousCasting(stats);
+
         bool shouldInitSpellcasting = stats.IsSpellcaster
             && ((def.KnownSpellIds != null && def.KnownSpellIds.Count > 0)
                 || (def.PreparedSpellSlotIds != null && def.PreparedSpellSlotIds.Count > 0));
+
+        if (!shouldInitSpellcasting && NpcClassGrantsSpells(stats))
+            Debug.LogWarning($"[GameManager] {def.Name} ({def.Id}) has a spellcasting class level that grants spells but its definition lists none, so it spawns without spellcasting (CRE-062, ENC-021).");
 
         if (shouldInitSpellcasting)
         {
@@ -1010,6 +1044,42 @@ public partial class GameManager
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq " +
                   $"Type={stats.CreatureType} HD={stats.HitDice} RacialHD={stats.RacialHitDice} BABProg={stats.CreatureBABProgression} BAB={CharacterStats.FormatMod(stats.BaseAttackBonus)} " +
                   $"Saves(F/R/W)={stats.ClassFortSave}/{stats.ClassRefSave}/{stats.ClassWillSave}");
+    }
+
+    /// <summary>
+    /// False when <paramref name="domain"/> is an alignment domain (Chaos, Evil, Good, Law) that does not match
+    /// <paramref name="alignment"/>: a cleric may take one only if his alignment matches it (PHB p.32). Used to warn at
+    /// spawn about a definition that breaks this (CHR-078).
+    /// </summary>
+    internal static bool ClericDomainMatchesAlignment(string domain, Alignment alignment)
+    {
+        if (string.Equals(domain, "Good", StringComparison.OrdinalIgnoreCase)) return AlignmentHelper.IsGood(alignment);
+        if (string.Equals(domain, "Evil", StringComparison.OrdinalIgnoreCase)) return AlignmentHelper.IsEvil(alignment);
+        if (string.Equals(domain, "Law", StringComparison.OrdinalIgnoreCase)) return AlignmentHelper.IsLawful(alignment);
+        if (string.Equals(domain, "Chaos", StringComparison.OrdinalIgnoreCase)) return AlignmentHelper.IsChaotic(alignment);
+        return true;
+    }
+
+    /// <summary>
+    /// True when the creature has a class level that gives it spells per day: any level of a full caster class
+    /// (wizard, cleric, druid, sorcerer, bard; PHB chapter 3) or of the adept NPC class (DMG p.107); or paladin or
+    /// ranger level 6 or higher with Wisdom 11 or more (a base 1st-level spell from 6th level, PHB p.44 and p.48), or
+    /// level 4 or 5 with a Wisdom bonus (spells at those levels come only from bonus spells). A class spell needs Wisdom
+    /// 10 + spell level (PHB p.44, p.48). Used only to warn at spawn about a definition without spell lists (CRE-062).
+    /// </summary>
+    internal static bool NpcClassGrantsSpells(CharacterStats stats)
+    {
+        if (stats == null)
+            return false;
+        foreach (string full in new[] { "Wizard", "Cleric", "Druid", "Sorcerer", "Bard", "Adept" })
+        {
+            if (stats.GetClassLevel(full) > 0)
+                return true;
+        }
+        int partial = Math.Max(stats.GetClassLevel("Paladin"), stats.GetClassLevel("Ranger"));
+        if (partial >= 6 && stats.WIS >= 11)
+            return true;
+        return partial >= 4 && stats.WISMod >= 1;
     }
 
     private DND35.AI.AIProfile BuildRuntimeAIProfile(NPCDefinition def)

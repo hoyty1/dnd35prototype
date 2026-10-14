@@ -60,8 +60,8 @@ Status: **Used** = the AI chooses it; **Partial** = some routines or profiles, o
 | Bardic music | Never | no database bard; DMG Bard spawns get the Spellcaster profile | Yes (Inspire Courage only) | CHR-026; 11.8.7 |
 | Paladin Smite Evil | Never | text in `SpecialAbilities` only | **No**: `SmiteEvilData` is never assigned, and the Smite button runs template smite only and is visible only to characters with template smite, so a PC paladin has no smite control (UI/Combat/ActionButtonPanel.cs:692-698) | CHR-020, CRE-056; 11.8.7 |
 | Template smite (celestial or fiendish template) | Partial | enemy-side summons only, once (5.7) | Yes (Smite button; only controllable templated creatures, such as the template-test allies) | CMB-021, CRE-056 (targets whose data has no alignment); the damage bonus lands since CMB-003 (2026-10-09, not verified in Play mode) |
-| Destruction domain smite | Never | NPCs have no domains | Yes (Domain Power button; +4 attack and +cleric level damage since CHR-005, 2026-10-09, not verified in Play mode) | 11.8.7 |
-| Domain powers | Never | NPCs have no domains | Yes (Strength, Destruction, Death, Sun, Travel, Plant, Luck, elemental turning) | CHR-023, CHR-062 |
+| Destruction domain smite | Never | the AI has no executor for domain powers (NPC clerics have domains since CRE-062) | Yes (Domain Power button; +4 attack and +cleric level damage since CHR-005, 2026-10-09, not verified in Play mode) | 11.8.7 |
+| Domain powers | Never | the AI has no executor for domain powers (NPC clerics have domains since CRE-062) | Yes (Strength, Destruction, Death, Sun, Travel, Plant, Luck, elemental turning) | CHR-023, CHR-062 |
 | Lay on Hands, Wild Shape, Favored Enemy and other data-only class features | Never | | No | CHR-020, CHR-053 |
 | Single-target damage/debuff/control spell | Used | kiter, dragon, healer | Yes | AI-046 |
 | Area spells, metamagic | Never | refused at cast | Yes | AI-001; 11.8.2 |

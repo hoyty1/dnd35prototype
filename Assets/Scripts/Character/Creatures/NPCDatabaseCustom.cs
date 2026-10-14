@@ -920,6 +920,23 @@ public static partial class NPCDatabase
                 new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.LeftHand),
                 new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor)
             },
+            // Spells and domains of the DMG's sample 5th-level NPC cleric (DMG p.114: neutral good, Healing and
+            // Protection domains, 5/5/4/3 prepared with Wis 16; this cleric's Wis 17 gives the same bonus spells,
+            // PHB p.8). Slot order of SpellcastingComponent: orisons; then per level the regular slots, then the
+            // domain slot (CRE-062).
+            CharacterAlignment = Alignment.NeutralGood,
+            ClericDomains = new List<string> { "Healing", "Protection" },
+            PreparedSpellSlotIds = new List<string>
+            {
+                // 0 (5): detect magic, guidance x2, light, resistance
+                SpellNames.DETECT_MAGIC, SpellNames.GUIDANCE, SpellNames.GUIDANCE, SpellNames.LIGHT, SpellNames.RESISTANCE,
+                // 1st (3 + 1 Wis + Protection domain): bane, bless x2, shield of faith; sanctuary
+                SpellNames.BANE, SpellNames.BLESS, SpellNames.BLESS, SpellNames.SHIELD_OF_FAITH, SpellNames.SANCTUARY,
+                // 2nd (2 + 1 Wis + Healing domain): aid, bull's strength, sound burst; cure moderate wounds
+                SpellNames.AID, SpellNames.BULLS_STRENGTH, SpellNames.SOUND_BURST, SpellNames.CURE_MODERATE_WOUNDS,
+                // 3rd (1 + 1 Wis + Protection domain): dispel magic, magic circle against evil; protection from energy
+                SpellNames.DISPEL_MAGIC, SpellNames.MAGIC_CIRCLE_AGAINST_EVIL, SpellNames.PROTECTION_FROM_ENERGY
+            },
             CreatureTags = new List<string> { "Humanoid", "Human", "Good" },
             AIBehavior = NPCAIBehavior.DefensiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,

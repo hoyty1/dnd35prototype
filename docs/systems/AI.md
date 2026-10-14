@@ -476,7 +476,8 @@ An NPC gets a `SpellcastingComponent` only if `stats.IsSpellcaster` (a caster cl
 | lich (Wizard 11) | nothing: its list starts with 1st-level spells, every index lands in a slot of another level (SPL-015) |
 | vampire | nothing: `CharacterClass = "Fighter"` (CRE-030) |
 | 60 dragons | spontaneous Sorcerer via an injected class level; cantrips plus some 1st-4th level (CRE-016) |
-| Spellcaster/Caster-archetype monsters, DMG class-levelled casters, human_cleric, paladins | nothing (no lists; SLAs text only; ENC-021, CHR-024) |
+| Spellcaster/Caster-archetype monsters, DMG class-levelled casters, paladins | nothing (no lists; SLAs text only; ENC-021, CHR-024, CRE-062) |
+| human_cleric | the DMG p.114 sample cleric's prepared spells (5/5/4/3, Healing and Protection domains; CRE-062, 2026-10-14); but its AI is Humanoid on DefensiveMelee, and `AIService.ExecuteDefensiveMeleeTurn` never casts, so on its own turns it casts only when scripted (the NPC executor cast Prayer from a 3rd-level slot in `rules/prayer-cast`, 2026-10-14); when charmed (`charm_person_test`) it heals its charmer with a prepared cure spell (`CharmedBehaviorController.TryGetBestHealingSpell` through `TryNPCPerformSpellCastForAI`) |
 
 So the casting AI is exercised today only by three test NPCs and the dragons.
 

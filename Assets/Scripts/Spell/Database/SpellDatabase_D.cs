@@ -916,7 +916,7 @@ public static partial class SpellDatabase
                     Description = "Telepathic control over one animal. Will negates. 1 round/level. PHB p.224",
                     SpellLevel = 3,
                     School = "Enchantment",
-                    ClassList = new string[] { "Cleric" },
+                    ClassList = new string[] { "Druid" }, // PHB p.224: Animal 3, Drd 3; the Animal domain entry comes from DomainDatabase, not the cleric list (SPL-102)
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Debuff,

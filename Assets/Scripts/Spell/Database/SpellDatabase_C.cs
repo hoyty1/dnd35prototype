@@ -533,7 +533,7 @@ public static partial class SpellDatabase
                     Name = "Chaos Hammer",
                     Description = "Burst of chaotic power: 1d8/2 CL (max 5d8) vs lawful creatures + slowed 1d6 rounds. Will half damage and negates slow. PHB p.208",
                     SpellLevel = 4, School = "Evocation",
-                    ClassList = new[] { "Cleric" },
+                    // Chaos 4 only (PHB p.208): no class list; DomainDatabase gives the Chaos domain entry (SPL-102).
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Damage,
@@ -566,7 +566,7 @@ public static partial class SpellDatabase
                     Description = "Command up to 2 HD/level of plant creatures. Will negates. Duration 1 day/level. PHB p.211",
                     SpellLevel = 4,
                     School = "Transmutation",
-                    ClassList = new string[] { "Cleric" },
+                    AvailableFor = new List<SpellAvailability> { new SpellAvailability("Druid", 4), new SpellAvailability("Ranger", 3) }, // PHB p.211: Drd 4, Plant 4, Rgr 3; the Plant domain entry comes from DomainDatabase (SPL-102)
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Debuff,

@@ -344,7 +344,7 @@ public static partial class SpellDatabase
                     Description = "Vegetation in 100-ft radius becomes overgrown: movement quartered (×4 cost). Instantaneous. PHB p.262",
                     SpellLevel = 3,
                     School = "Transmutation",
-                    ClassList = new string[] { "Cleric" },
+                    ClassList = new string[] { "Druid", "Ranger" }, // PHB p.262: Drd 3, Plant 3, Rgr 3; the Plant domain entry comes from DomainDatabase (SPL-102)
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
                     AreaRadius = 20,
