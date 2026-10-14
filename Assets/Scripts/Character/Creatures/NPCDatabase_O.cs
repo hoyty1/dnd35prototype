@@ -35,6 +35,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Ooze",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.202)
             HitDice = 6,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -81,6 +82,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 1,
             SizeCategory = SizeCategory.Tiny,
             IsTallCreature = false,
@@ -115,6 +117,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 2,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,

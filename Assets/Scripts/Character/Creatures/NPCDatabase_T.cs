@@ -28,6 +28,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil, // usually chaotic evil (MM p.246)
             ClassLevelsAreRacialHitDice = true, // 2 humanoid racial HD, not warrior levels (MM p.246, p.310)
             EntryWeaponIds = new List<string> { "club", "javelin" }, // MM p.246: club and javelin; no armor
             HitDice = 2,
@@ -73,6 +74,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Giant",
+            CharacterAlignment = Alignment.ChaoticEvil, // usually chaotic evil (MM p.247)
             HitDice = 6,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = true,

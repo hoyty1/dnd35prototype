@@ -144,7 +144,7 @@ public static partial class NPCDatabase
             Level = 16,
             CharacterClass = "Warrior",
             CreatureType = "Magical Beast",
-            CharacterAlignment = Alignment.None,
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.211)
             HitDice = 16,
             SizeCategory = SizeCategory.Gargantuan,
             IsTallCreature = false,

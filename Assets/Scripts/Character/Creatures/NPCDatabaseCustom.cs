@@ -16,6 +16,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil, // goblin: usually neutral evil (MM p.133)
             HitDice = 2,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -54,6 +55,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil, // goblin: usually neutral evil (MM p.133)
             HitDice = 1,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -93,6 +95,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil, // goblin: usually neutral evil (MM p.133)
             HitDice = 1,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -141,6 +144,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Undead",
+            CharacterAlignment = Alignment.NeutralEvil, // skeletons: always neutral evil (MM p.226)
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,
             NaturalArmorBonus = 2,
@@ -182,6 +186,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Undead",
+            CharacterAlignment = Alignment.NeutralEvil, // skeletons: always neutral evil (MM p.226)
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
             NaturalArmorBonus = 2,
@@ -223,6 +228,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Undead",
+            CharacterAlignment = Alignment.LawfulEvil, // wight: always lawful evil (MM p.255)
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
             NaturalArmorBonus = 4,
@@ -264,6 +270,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Undead",
+            CharacterAlignment = Alignment.NeutralEvil, // zombies: always neutral evil (MM p.266)
             HitDice = 2,
             SizeCategory = SizeCategory.Medium,
             NaturalArmorBonus = 3,
@@ -305,6 +312,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Barbarian",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil, // orc: often chaotic evil (MM p.203); a barbarian may not be lawful (PHB p.24)
             HitDice = 3,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -345,6 +353,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil, // orc: often chaotic evil (MM p.203)
             HitDice = 3,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -383,6 +392,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 3,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -413,6 +423,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 2,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -442,6 +453,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 2,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -471,6 +483,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 1,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -512,6 +525,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Fighter",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulEvil, // hobgoblin: usually lawful evil (MM p.153)
             HitDice = 3,
             FortitudeSaveOverride = SaveProgression.Good,
             ReflexSaveOverride = SaveProgression.Poor,
@@ -554,6 +568,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Giant",
+            CharacterAlignment = Alignment.ChaoticEvil, // ogre: usually chaotic evil (MM p.199)
             HitDice = 4,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = true,
@@ -592,6 +607,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (dire animals, MM p.62-65)
             WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             HitDice = 6,
             SizeCategory = SizeCategory.Large,
@@ -641,6 +657,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 6,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -685,6 +702,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (dire animals, MM p.62-65)
             WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             HitDice = 6,
             SizeCategory = SizeCategory.Large,
@@ -728,6 +746,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 6,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -764,6 +783,7 @@ public static partial class NPCDatabase
             Level = 12,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (dire animals, MM p.62-65)
             WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
             HitDice = 12,
             SizeCategory = SizeCategory.Large,
@@ -805,6 +825,7 @@ public static partial class NPCDatabase
             Level = 2,          // 2 HD animal
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 2,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -876,6 +897,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Paladin",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.LawfulGood, // paladins are lawful good (PHB p.43)
             RaceName = "Human", // racial traits (CRE-038, CHR-019)
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
@@ -956,6 +978,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Wizard",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             STR = 8,
@@ -992,6 +1015,7 @@ public static partial class NPCDatabase
             Level = 10,
             CharacterClass = "Wizard",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil, // test fixture: the evil enchanter (CRE-056)
             HitDice = 10,
             SizeCategory = SizeCategory.Medium,
             STR = 8,
@@ -1031,6 +1055,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil, // goblin: usually neutral evil (MM p.133)
             HitDice = 4,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = true,
@@ -1066,6 +1091,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Rogue",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture: the neutral melee control (CRE-056)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             STR = 12,
@@ -1097,6 +1123,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Wizard",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture: the neutral caster control (CRE-056)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             STR = 10,
@@ -1126,6 +1153,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Cleric",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil, // test fixture: the evil caster control (CRE-056)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             STR = 10,
@@ -1162,6 +1190,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Wizard",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             STR = 10,
@@ -1195,6 +1224,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Wizard",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             STR = 8,
@@ -1228,6 +1258,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Rogue",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 2,
             SizeCategory = SizeCategory.Small,
             STR = 8,
@@ -1259,6 +1290,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Fighter",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 2,
             SizeCategory = SizeCategory.Medium,
             STR = 14,
@@ -1292,6 +1324,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Barbarian",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 2,
             SizeCategory = SizeCategory.Medium,
             STR = 16,
@@ -1323,6 +1356,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Giant",
+            CharacterAlignment = Alignment.ChaoticEvil, // ogre: usually chaotic evil (MM p.199)
             HitDice = 1,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = true,
@@ -1354,6 +1388,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Ranger",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 2,
             SizeCategory = SizeCategory.Medium,
             STR = 10,
@@ -1390,6 +1425,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Ranger",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
             STR = 12,
@@ -1422,6 +1458,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Ranger",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
             STR = 14,
@@ -1454,6 +1491,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Fighter",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
             STR = 16,
@@ -1486,6 +1524,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Rogue",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 4,
             SizeCategory = SizeCategory.Small,
             STR = 10,
@@ -1518,6 +1557,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Fighter",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
             STR = 14,
@@ -1550,6 +1590,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Ranger",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             STR = 10,
@@ -1585,6 +1626,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Commoner",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.TrueNeutral, // test fixture without a Monster Manual entry: neutral (CRE-056)
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,
             STR = 10,
@@ -1620,6 +1662,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil, // goblin: usually neutral evil (MM p.133)
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             STR = 6,

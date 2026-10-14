@@ -26,6 +26,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.237-239)
             HitDice = 4,
             BaseAttackBonusOverride = 3, // Monster Manual BAB +3
             SizeCategory = SizeCategory.Large, // Swarm occupies 2×2 space in this prototype
@@ -79,6 +80,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 1,
             SizeCategory = SizeCategory.Tiny,
             IsTallCreature = false,

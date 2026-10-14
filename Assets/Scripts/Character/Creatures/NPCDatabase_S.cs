@@ -41,6 +41,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Undead",
+            CharacterAlignment = Alignment.ChaoticEvil, // always chaotic evil (MM p.221)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
@@ -128,6 +129,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.237-239)
             HitDice = 2,
             BaseAttackBonusOverride = 1, // Monster Manual BAB +1
             SizeCategory = SizeCategory.Large, // Swarm occupies 2×2 space in this prototype
@@ -207,6 +209,7 @@ public static partial class NPCDatabase
             Level = Mathf.Max(1, hitDice),
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = Mathf.Max(1, hitDice),
             SizeCategory = size,
             IsTallCreature = false,
@@ -282,6 +285,7 @@ public static partial class NPCDatabase
             Level = Mathf.Max(1, hitDice),
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = Mathf.Max(1, hitDice),
             SizeCategory = size,
             IsTallCreature = false,
@@ -324,6 +328,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,

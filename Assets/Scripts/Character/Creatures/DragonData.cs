@@ -237,6 +237,34 @@ public static class DragonData
     }
 
     /// <summary>
+    /// The colour's alignment from its Monster Manual entry, the same at every age (CRE-056): black, red and white are
+    /// always chaotic evil (MM p.70, p.75, p.77), blue and green always lawful evil (p.72, p.74), brass and copper
+    /// always chaotic good (p.79, p.82), and bronze, gold and silver always lawful good (p.80, p.84, p.86).
+    /// </summary>
+    public static Alignment GetAlignment(DragonType type)
+    {
+        switch (type)
+        {
+            case DragonType.Black:
+            case DragonType.Red:
+            case DragonType.White:
+                return Alignment.ChaoticEvil;
+            case DragonType.Blue:
+            case DragonType.Green:
+                return Alignment.LawfulEvil;
+            case DragonType.Brass:
+            case DragonType.Copper:
+                return Alignment.ChaoticGood;
+            case DragonType.Bronze:
+            case DragonType.Gold:
+            case DragonType.Silver:
+                return Alignment.LawfulGood;
+            default:
+                return Alignment.None;
+        }
+    }
+
+    /// <summary>
     /// Get display name for an age category (e.g., "Very Young", "Young Adult").
     /// </summary>
     public static string GetAgeName(DragonAgeCategory age)

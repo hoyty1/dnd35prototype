@@ -42,6 +42,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 1,
             SizeCategory = SizeCategory.Tiny,
             IsTallCreature = false,
@@ -81,6 +82,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Outsider",
+            CharacterAlignment = Alignment.ChaoticEvil, // always chaotic evil (MM p.155)
             HitDice = 6,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = true,
@@ -123,6 +125,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Outsider",
+            CharacterAlignment = Alignment.LawfulEvil, // always lawful evil (MM p.152)
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -173,6 +176,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.152)
             HitDice = 3,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -207,6 +211,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = 6,
             SizeCategory = SizeCategory.Huge,
             IsTallCreature = false,

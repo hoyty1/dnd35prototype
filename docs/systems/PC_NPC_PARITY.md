@@ -61,7 +61,7 @@ Several forks key on controllability (`IsControllable`) where allegiance or the 
 | Perception of unseen creatures | NPC only | CMB-094 |
 | HP, dying, death | Mostly shared | CORE-015, AI-053 |
 | Damage mitigation | Shared (2026-10-09, SPL-004) | CMB-013, CMB-011 |
-| Stat derivation | Divergent by origin (BAB and base saves shared since 2026-10-08, CRE-004; averaged hit dice and creature HP totals shared since 2026-10-14, CRE-041) | CHR-070, CHR-067, CRE-056, CRE-058 |
+| Stat derivation | Divergent by origin (BAB and base saves shared since 2026-10-08, CRE-004; averaged hit dice and creature HP totals shared since 2026-10-14, CRE-041) | CHR-070, CHR-067, CRE-058 |
 | Equipment-derived stats | Shared | - |
 | Ammo, thrown weapons | Divergent | CMB-019, CMB-096 |
 | Equipment changes, pick up | Divergent / PC only | ITM-069, AI-054 |

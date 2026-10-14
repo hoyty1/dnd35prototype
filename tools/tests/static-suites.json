@@ -220,11 +220,11 @@
       "needs": "play",
       "skip": "",
       "expectThrow": "",
-      "passed": 67,
+      "passed": 118,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
-      "notes": "CRE-002, ITM-004: hand aliases (CanEquipIn, DirectEquip, EquipFromInventory, GetEquipped, Unequip, EquipStartingLoadout), the spawn's ranged-wield test (AIService.RoutesToRangedTurn), template alignments (celestial, fiendish MM p.31, p.108: law-chaos kept, owner interpretation 2026-10-11; an illegal base refused; every templated summon option on a legal base; CRE-057; skeleton, zombie MM p.226, p.266) and spawned alignment and gear through InitializeNPCFromDefinition, so needs a scene GameManager"
+      "notes": "CRE-002, ITM-004: hand aliases (CanEquipIn, DirectEquip, EquipFromInventory, GetEquipped, Unequip, EquipStartingLoadout), the spawn's ranged-wield test (AIService.RoutesToRangedTurn), template alignments (celestial, fiendish MM p.31, p.108: law-chaos kept, owner interpretation 2026-10-11; an illegal base refused; every templated summon option on a legal base; CRE-057; skeleton, zombie MM p.226, p.266) and spawned alignment and gear through InitializeNPCFromDefinition, so needs a scene GameManager; CRE-056: every registered definition sets an alignment, 46 MM alignment spot checks (MM p.10-p.284; dragons by colour) and four more spawns (goblin, young blue dragon, wolf, fiendish dire bear)"
     },
     {
       "type": "Tests.Character.NpcFeatDataTests",

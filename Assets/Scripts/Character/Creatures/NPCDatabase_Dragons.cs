@@ -139,6 +139,7 @@ public static partial class NPCDatabase
             Level = stats.HitDice,
             CharacterClass = "Warrior",
             CreatureType = "Dragon",
+            CharacterAlignment = DragonData.GetAlignment(template.Type), // the colour's MM alignment (CRE-056)
             HitDice = stats.HitDice,
             BABOverride = BABProgression.Good,
             FortitudeSaveOverride = SaveProgression.Good,

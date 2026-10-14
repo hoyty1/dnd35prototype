@@ -59,6 +59,7 @@ public static partial class NPCDatabase
             Level = 7,
             CharacterClass = "Outsider",
             CreatureType = "Outsider",
+            CharacterAlignment = Alignment.ChaoticGood, // always chaotic good (MM p.114)
             HitDice = 7,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = true,
@@ -122,6 +123,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Monstrous Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil, // usually chaotic evil (MM p.113)
             MaterialComposition = MaterialComposition.Stone,
             HitDice = 4,
             SizeCategory = SizeCategory.Medium,
@@ -163,6 +165,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Ooze",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.201)
             HitDice = 4,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -217,6 +220,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -260,6 +264,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,
@@ -297,6 +302,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil, // usually chaotic evil (MM p.130)
             ClassLevelsAreRacialHitDice = true, // 2 humanoid racial HD, not warrior levels (MM p.130, p.310)
             EntryWeaponIds = new List<string> { "battleaxe", "shortbow" }, // MM p.130; attacks through the battleaxe stand-in
             EntryArmorCategory = ArmorCategory.Light, // leather armor and heavy steel shield (MM p.130), not carried
@@ -336,6 +342,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.NeutralEvil, // usually neutral evil (MM p.133)
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,
@@ -380,6 +387,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Magical Beast",
+            CharacterAlignment = Alignment.NeutralGood, // usually neutral good (MM p.205)
             HitDice = 4,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -427,6 +435,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = 5,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -473,6 +482,7 @@ public static partial class NPCDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = 4,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = true,
@@ -1206,7 +1216,7 @@ public static partial class NPCDatabase
             Level = 7,
             CharacterClass = "Warrior",
             CreatureType = "Magical Beast",
-            CharacterAlignment = Alignment.None,
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.127)
             HitDice = 7,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = true,

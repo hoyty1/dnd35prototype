@@ -40,6 +40,7 @@ public static partial class NPCDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Aberration",
+            CharacterAlignment = Alignment.ChaoticNeutral, // usually chaotic neutral (MM p.36)
             HitDice = 6,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -154,6 +155,7 @@ public static partial class NPCDatabase
             Level = Mathf.Max(1, hitDice),
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = Mathf.Max(1, hitDice),
             SizeCategory = size,
             IsTallCreature = false,
@@ -197,6 +199,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -231,6 +234,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,

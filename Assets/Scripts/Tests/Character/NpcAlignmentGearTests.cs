@@ -6,7 +6,7 @@ namespace Tests.Character
 {
 /// <summary>
 /// CRE-002 and ITM-004: a spawned creature gets its definition's alignment and the gear its NPC data lists under the
-/// MainHand, OffHand and Ranged aliases. Rules: MM entries give each creature an alignment (MM p.6); celestial
+/// MainHand, OffHand and Ranged aliases. Rules: MM entries give each creature an alignment line (MM p.7); celestial
 /// creatures are always good (any) and fiendish ones always evil (any) (MM p.31, p.108), so the templates fix the
 /// good-evil component and the creature keeps the base creature's law-chaos component (owner interpretation
 /// 2026-10-11, CRE-057); an illegal base (celestial on an evil one, fiendish on a good one) is refused and keeps its
@@ -47,6 +47,8 @@ public static class NpcAlignmentGearTests
         TestGoodEvilAxis();
         TestOutsiderTemplates();
         TestUndeadTemplates();
+        TestEveryDefinitionHasAlignment();
+        TestMonsterManualAlignments();
 
         if (GameManager.Instance == null)
         {
@@ -395,6 +397,98 @@ public static class NpcAlignmentGearTests
             "the database's wolf skeleton is neutral evil", skeletonWolf != null ? skeletonWolf.CharacterAlignment.ToString() : "missing");
     }
 
+    // ── Monster Manual alignment data (CRE-056) ─────────────────────────
+
+    /// <summary>
+    /// Every registered definition sets an alignment: every Monster Manual entry has an alignment line (MM p.7), and an unset
+    /// alignment made smite, Protection from Evil, aligned weapons and the alignment spells ignore the creature
+    /// (CRE-056: 211 of 389 definitions had none on 2026-10-14). The check covers entries without a challenge rating too
+    /// (summon bases, presets and test fixtures), since they spawn as well.
+    /// </summary>
+    private static void TestEveryDefinitionHasAlignment()
+    {
+        var missing = new List<string>();
+        int total = 0, withCr = 0;
+        foreach (NPCDefinition def in NPCDatabase.AllNPCs)
+        {
+            if (def == null)
+                continue;
+            total++;
+            if (!string.IsNullOrEmpty(def.ChallengeRating))
+                withCr++;
+            if (def.CharacterAlignment == Alignment.None)
+                missing.Add(def.Id);
+        }
+        missing.Sort(System.StringComparer.Ordinal);
+        Assert(total > 0 && missing.Count == 0,
+            $"every registered NPC definition sets an alignment ({total} checked, {withCr} with a CR; MM p.7)",
+            missing.Count + " unaligned: " + string.Join(", ", missing.Count > 40 ? missing.GetRange(0, 40) : missing));
+    }
+
+    private static void CheckDefinitionAlignment(string npcId, Alignment expected, string cite)
+    {
+        NPCDefinition def = NPCDatabase.Get(npcId);
+        Assert(def != null && def.CharacterAlignment == expected, npcId + " is " + expected + " (" + cite + ")",
+            def != null ? "got " + def.CharacterAlignment : "missing");
+    }
+
+    /// <summary>Entries that had no alignment before CRE-056, checked against their Monster Manual alignment lines.</summary>
+    private static void TestMonsterManualAlignments()
+    {
+        // Dragons: the colour's alignment at every age (DragonData.GetAlignment).
+        CheckDefinitionAlignment("dragon_black_wyrmling", Alignment.ChaoticEvil, "MM p.70");
+        CheckDefinitionAlignment("dragon_blue_adult", Alignment.LawfulEvil, "MM p.72");
+        CheckDefinitionAlignment("dragon_green_juvenile", Alignment.LawfulEvil, "MM p.74");
+        CheckDefinitionAlignment("dragon_red_young", Alignment.ChaoticEvil, "MM p.75");
+        CheckDefinitionAlignment("dragon_white_very_young", Alignment.ChaoticEvil, "MM p.77");
+        CheckDefinitionAlignment("dragon_brass_young_adult", Alignment.ChaoticGood, "MM p.79");
+        CheckDefinitionAlignment("dragon_bronze_wyrmling", Alignment.LawfulGood, "MM p.80");
+        CheckDefinitionAlignment("dragon_copper_adult", Alignment.ChaoticGood, "MM p.82");
+        CheckDefinitionAlignment("dragon_gold_young", Alignment.LawfulGood, "MM p.84");
+        CheckDefinitionAlignment("dragon_silver_juvenile", Alignment.LawfulGood, "MM p.86");
+        // Humanoids, monstrous humanoids and giants.
+        CheckDefinitionAlignment("goblin", Alignment.NeutralEvil, "MM p.133");
+        CheckDefinitionAlignment("gnoll", Alignment.ChaoticEvil, "MM p.130");
+        CheckDefinitionAlignment("bugbear", Alignment.ChaoticEvil, "MM p.29");
+        CheckDefinitionAlignment("troglodyte", Alignment.ChaoticEvil, "MM p.246");
+        CheckDefinitionAlignment("gargoyle", Alignment.ChaoticEvil, "MM p.113");
+        CheckDefinitionAlignment("troll", Alignment.ChaoticEvil, "MM p.247");
+        // Outsiders.
+        CheckDefinitionAlignment("lemure", Alignment.LawfulEvil, "MM p.57");
+        CheckDefinitionAlignment("hell_hound", Alignment.LawfulEvil, "MM p.152");
+        CheckDefinitionAlignment("howler", Alignment.ChaoticEvil, "MM p.155");
+        CheckDefinitionAlignment("yeth_hound", Alignment.NeutralEvil, "MM p.261");
+        CheckDefinitionAlignment("lantern_archon", Alignment.LawfulGood, "MM p.16");
+        CheckDefinitionAlignment("noble_djinni", Alignment.ChaoticGood, "MM p.114");
+        CheckDefinitionAlignment("elder_xorn", Alignment.TrueNeutral, "MM p.261");
+        CheckDefinitionAlignment("air_mephit", Alignment.TrueNeutral, "MM p.181");
+        CheckDefinitionAlignment("steam_mephit", Alignment.TrueNeutral, "MM p.185");
+        // Undead, aberrations, magical beasts, oozes, elementals.
+        CheckDefinitionAlignment("allip", Alignment.NeutralEvil, "MM p.10");
+        CheckDefinitionAlignment("shadow", Alignment.ChaoticEvil, "MM p.221");
+        CheckDefinitionAlignment("wraith", Alignment.LawfulEvil, "MM p.258");
+        CheckDefinitionAlignment("cloaker", Alignment.ChaoticNeutral, "MM p.36");
+        CheckDefinitionAlignment("giant_eagle", Alignment.NeutralGood, "MM p.93");
+        CheckDefinitionAlignment("giant_owl", Alignment.NeutralGood, "MM p.205");
+        CheckDefinitionAlignment("ankheg", Alignment.TrueNeutral, "MM p.14");
+        CheckDefinitionAlignment("gelatinous_cube", Alignment.TrueNeutral, "MM p.201");
+        CheckDefinitionAlignment("medium_earth_elemental", Alignment.TrueNeutral, "MM p.95-100");
+        // Animals and vermin (always neutral, MM p.268, p.284), the variant helpers included.
+        CheckDefinitionAlignment("wolf_pack_hunter", Alignment.TrueNeutral, "MM p.283");
+        CheckDefinitionAlignment("wolf", Alignment.TrueNeutral, "summon alias of the wolf");
+        CheckDefinitionAlignment("dire_rat", Alignment.TrueNeutral, "MM p.64");
+        CheckDefinitionAlignment("monstrous_centipede_colossal", Alignment.TrueNeutral, "MM p.284");
+        CheckDefinitionAlignment("monstrous_scorpion_huge", Alignment.TrueNeutral, "MM p.284");
+        CheckDefinitionAlignment("monstrous_spider_tiny", Alignment.TrueNeutral, "MM p.284");
+        CheckDefinitionAlignment("viper_tiny", Alignment.TrueNeutral, "MM p.268");
+        // Custom entries built on MM creatures, and a class-bound fixture.
+        CheckDefinitionAlignment("hobgoblin_sergeant", Alignment.LawfulEvil, "MM p.153");
+        CheckDefinitionAlignment("orc_berserker", Alignment.ChaoticEvil, "MM p.203");
+        CheckDefinitionAlignment("skeleton_warrior", Alignment.NeutralEvil, "MM p.226");
+        CheckDefinitionAlignment("wight_dreadwalker", Alignment.LawfulEvil, "MM p.255");
+        CheckDefinitionAlignment("human_paladin", Alignment.LawfulGood, "PHB p.43");
+    }
+
     private static void CheckSpawnAlignment(string npcId, Alignment expected, string cite)
     {
         CharacterController cc = Spawn(npcId);
@@ -415,6 +509,9 @@ public static class NpcAlignmentGearTests
         CheckSpawnAlignment("elf_warrior", Alignment.ChaoticGood, "MM p.101");
         CheckSpawnAlignment("human_paladin_3", Alignment.LawfulGood, "PHB p.43");
         CheckSpawnAlignment("human_monk_3", Alignment.LawfulNeutral, "PHB p.40");
+        CheckSpawnAlignment("goblin", Alignment.NeutralEvil, "MM p.133; unaligned before CRE-056");
+        CheckSpawnAlignment("dragon_blue_young", Alignment.LawfulEvil, "MM p.72; unaligned before CRE-056");
+        CheckSpawnAlignment("wolf", Alignment.TrueNeutral, "MM p.283; unaligned before CRE-056");
 
         // A reused slot takes the new creature's alignment (CRE-046).
         CharacterController cc = Spawn("ogre");
@@ -434,6 +531,7 @@ public static class NpcAlignmentGearTests
     private static void TestSpawnedTemplateAlignments()
     {
         CheckSpawnAlignment("fiendish_wolf", Alignment.NeutralEvil, "wolf always neutral, MM p.283; fiendish, MM p.108");
+        CheckSpawnAlignment("fiendish_dire_bear", Alignment.NeutralEvil, "dire bear always neutral, MM p.63; fiendish, MM p.108");
         CheckSpawnAlignment("skeleton_wolf", Alignment.NeutralEvil, "MM p.226");
 
         NPCDefinition celestialMonk = WithTemplate("human_monk_3", "celestial");

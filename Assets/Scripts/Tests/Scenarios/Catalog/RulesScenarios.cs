@@ -126,11 +126,14 @@ namespace Tests.Scenarios
     /// initiative count it began on; the monk's 1-round stun example), DMG p.301 (Dazed: typically 1 round; Stunned).
     /// orc_grapple_drill as the two idle stun targets. Stunning Fist's own timing (PHB p.101) is in the static
     /// TurnDurationRulesTests, not here.
+    /// Monster alignment data (CRE-056; checked 2026-10-14): MM p.7 (the alignment line), the entries' lines for the
+    /// goblin p.133, gnoll p.130, lemure p.57, lantern archon p.16, red and gold dragons p.75 and p.84, elementals
+    /// p.95-100, mephits p.181; animals p.268 and vermin p.284 always neutral; PHB p.266 (Protection from Evil).
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 136;
+        public const int Count = 139;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -257,6 +260,7 @@ namespace Tests.Scenarios
             yield return S("ring-deflection", RingDeflection);
             yield return S("npc-proficiency", NpcProficiency);
             yield return S("npc-spawn-alignment-gear", NpcSpawnAlignmentGear);
+            yield return S("monster-alignment-data", MonsterAlignmentData);
             yield return S("class-progression", ClassProgressionHpBabHd);
             yield return S("creature-progression", CreatureProgression);
             yield return S("template-applied-once", TemplateAppliedOnce);
@@ -5192,7 +5196,6 @@ namespace Tests.Scenarios
                 .Pc("wearer", ActorSource.Stats(() => Fighter("Wearer", 3)), 5, 10, Control.Scripted)
                 .Npc("goblin", "goblin", 6, 10, Control.Scripted)
                 .Tweak("wearer", c => { StripOffHand(c); EquipProtectionRing(c, EquipSlot.LeftRing, 2); })
-                .Tweak("goblin", c => c.Stats.CharacterAlignment = Alignment.NeutralEvil)
                 .Initiative("wearer", "goblin")
                 .Turn("wearer", 1, Step.Assert("a Ring of Protection +2 adds exactly +2 to AC and touch AC, however often stats are recalculated", ctx =>
                 {
@@ -5418,6 +5421,72 @@ namespace Tests.Scenarios
                     v => SpawnAttackMeetsAc(v, "ogre", "greatclub", false, "npc-spawn expect-ac-evil="))
                 .Expect("The elf shoots its spawned longbow against the warden's plain AC (a good attacker; MM p.101)",
                     v => SpawnAttackMeetsAc(v, "elf", "longbow", true, "npc-spawn expect-ac-good="))
+                .Build();
+        }
+
+        // ── Monster Manual alignment data (CRE-056) ──
+
+        /// <summary>
+        /// Every registered NPC definition carries its Monster Manual alignment (CRE-056); before the fix 211 of 389 set
+        /// none and spawned unaligned, so smite, Protection from Evil, aligned weapons and the alignment spells ignored
+        /// them. Round 1: a Stats fighter (the warden) checks the spawned alignments of entries that had none: the goblin
+        /// (usually neutral evil, MM p.133), the gnoll (usually chaotic evil, MM p.130), the wolf (animals always
+        /// neutral, MM p.268), a red and a gold dragon wyrmling (always chaotic evil and always lawful good, MM p.75 and
+        /// p.84), the lemure (always lawful evil, MM p.57), the lantern archon (always lawful good, MM p.16), a medium
+        /// monstrous spider (vermin always neutral, MM p.284), a small fire elemental (usually neutral, MM p.95-100) and
+        /// an air mephit (usually neutral, MM p.181). It then takes Protection from Evil (PHB p.266: +2 deflection to AC
+        /// against attacks by evil creatures); the goblin attacks it with its morningstar against its AC plus the ward's
+        /// +2, with no alignment tweak (ring-deflection used to set the goblin evil by hand), and the neutral wolf bites
+        /// against the plain AC.
+        /// </summary>
+        private static ScenarioDef MonsterAlignmentData()
+        {
+            return Rules("rules/monster-alignment-data", "Monsters spawn with their Monster Manual alignment; Protection from Evil sees the evil goblin but not the neutral wolf (CRE-056)")
+                .Covers("CRE-056", "PHB p.266", "MM p.16", "MM p.57", "MM p.75", "MM p.84", "MM p.95", "MM p.130", "MM p.133", "MM p.181", "MM p.268", "MM p.284")
+                .MaxRounds(1)
+                .Pc("warden", ActorSource.Stats(() => Fighter("Warden", 3)), 10, 10, Control.Scripted)
+                .Npc("goblin", "goblin", 11, 10, Control.Scripted)
+                .Npc("wolf", "wolf", 9, 10, Control.Scripted)
+                .Npc("gnoll", "gnoll", 3, 3, Control.Idle)
+                .Npc("reddragon", "dragon_red_wyrmling", 6, 3, Control.Idle)
+                .Npc("golddragon", "dragon_gold_wyrmling", 9, 3, Control.Idle)
+                .Npc("lemure", "lemure", 12, 3, Control.Idle)
+                .Npc("archon", "lantern_archon", 15, 3, Control.Idle)
+                .Npc("spider", "monstrous_spider_medium", 3, 16, Control.Idle)
+                .Npc("elemental", "small_fire_elemental", 6, 16, Control.Idle)
+                .Npc("mephit", "air_mephit", 9, 16, Control.Idle)
+                .Tweak("warden", c => { StripOffHand(c); SturdyDummy(c); })
+                .Initiative("warden", "goblin", "wolf", "gnoll", "reddragon", "golddragon", "lemure", "archon", "spider", "elemental", "mephit")
+                .Turn("warden", 1, Step.Assert("spawned monsters carry their MM alignment; Protection from Evil is up", ctx =>
+                {
+                    bool ok = AlignmentIs(ctx, "goblin", Alignment.NeutralEvil);
+                    ok &= AlignmentIs(ctx, "gnoll", Alignment.ChaoticEvil);
+                    ok &= AlignmentIs(ctx, "wolf", Alignment.TrueNeutral);
+                    ok &= AlignmentIs(ctx, "reddragon", Alignment.ChaoticEvil);
+                    ok &= AlignmentIs(ctx, "golddragon", Alignment.LawfulGood);
+                    ok &= AlignmentIs(ctx, "lemure", Alignment.LawfulEvil);
+                    ok &= AlignmentIs(ctx, "archon", Alignment.LawfulGood);
+                    ok &= AlignmentIs(ctx, "spider", Alignment.TrueNeutral);
+                    ok &= AlignmentIs(ctx, "elemental", Alignment.TrueNeutral);
+                    ok &= AlignmentIs(ctx, "mephit", Alignment.TrueNeutral);
+
+                    CharacterController w = ctx.Get("warden");
+                    ok &= SpawnCheck(ctx, "Protection from Evil applied", ApplySpell(ctx, w, DND35e.Identifiers.SpellNames.PROTECTION_FROM_EVIL), "not applied");
+                    int evilIncrease = AlignmentProtectionRules.DeflectionAcIncrease(AlignmentProtectionRules.GetBenefitsAgainst(w, ctx.Get("goblin").Stats.CharacterAlignment), w.Stats);
+                    ok &= SpawnCheck(ctx, "the ward adds +2 AC against the goblin", evilIncrease == 2, evilIncrease);
+                    int neutralIncrease = AlignmentProtectionRules.DeflectionAcIncrease(AlignmentProtectionRules.GetBenefitsAgainst(w, ctx.Get("wolf").Stats.CharacterAlignment), w.Stats);
+                    ok &= SpawnCheck(ctx, "the ward adds nothing against the wolf", neutralIncrease == 0, neutralIncrease);
+                    ctx.Note("monster-alignment expect-ac-evil=" + (w.Stats.ArmorClass + evilIncrease));
+                    ctx.Note("monster-alignment expect-ac-neutral=" + w.Stats.ArmorClass);
+                    return ok;
+                }), Step.Pass())
+                .Turn("goblin", 1, Step.Attack("warden"))
+                .Turn("wolf", 1, Step.Attack("warden"))
+                .Expect("Every spawn check holds", Expect.AssertsPass())
+                .Expect("The goblin's morningstar meets the warden's AC plus the ward's +2 (PHB p.266; MM p.133)",
+                    v => SpawnAttackMeetsAc(v, "goblin", "morningstar", false, "monster-alignment expect-ac-evil="))
+                .Expect("The neutral wolf's bite meets the warden's plain AC (MM p.268)",
+                    v => SpawnAttackMeetsAc(v, "wolf", "", false, "monster-alignment expect-ac-neutral="))
                 .Build();
         }
 

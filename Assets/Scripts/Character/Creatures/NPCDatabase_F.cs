@@ -30,6 +30,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,

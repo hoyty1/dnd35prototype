@@ -31,6 +31,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Outsider",
+            CharacterAlignment = Alignment.NeutralEvil, // always neutral evil (MM p.261)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,

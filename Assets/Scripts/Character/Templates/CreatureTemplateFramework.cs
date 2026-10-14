@@ -150,7 +150,8 @@ public abstract class OutsiderTemplateBase : ICreatureTemplate
     /// <summary>
     /// Whether this template may be added to <paramref name="definition"/>: the celestial template only to a good or
     /// neutral (nonevil) base (MM p.31), the fiendish template only to an evil or neutral (nongood) base (MM p.108). A
-    /// base with no alignment set (CRE-056) counts as neutral.
+    /// base with no alignment set counts as neutral (every registered definition has one since the CRE-056 data fix;
+    /// NpcAlignmentGearTests checks it).
     /// </summary>
     public bool CanApplyTo(NPCDefinition definition)
     {

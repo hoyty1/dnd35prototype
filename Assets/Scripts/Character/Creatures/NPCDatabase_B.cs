@@ -43,6 +43,7 @@ public static partial class NPCDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,
@@ -77,6 +78,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.237-239)
             HitDice = 3,
             BaseAttackBonusOverride = 2, // Monster Manual BAB +2
             SizeCategory = SizeCategory.Large, // Swarm occupies 2×2 space in this prototype
@@ -130,6 +132,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            CharacterAlignment = Alignment.ChaoticEvil, // usually chaotic evil (MM p.29)
             ClassLevelsAreRacialHitDice = true, // 3 humanoid racial HD, not warrior levels (MM p.29, p.310)
             EntryWeaponIds = new List<string> { "morningstar", "javelin" }, // MM p.29; attacks through the morningstar stand-in
             EntryArmorCategory = ArmorCategory.Light, // leather armor and light wooden shield (MM p.29), not carried
@@ -169,6 +172,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -222,6 +226,7 @@ public static partial class NPCDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.284)
             HitDice = 2,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -263,6 +268,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -297,6 +303,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 5,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
@@ -330,6 +337,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
@@ -883,7 +891,7 @@ public static partial class NPCDatabase
             Level = 9,
             CharacterClass = "Warrior",
             CreatureType = "Magical Beast",
-            CharacterAlignment = Alignment.None,
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.30)
             HitDice = 9,
             SizeCategory = SizeCategory.Huge,
             IsTallCreature = false,

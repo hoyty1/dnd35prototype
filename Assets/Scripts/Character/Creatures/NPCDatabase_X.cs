@@ -160,7 +160,7 @@ public static partial class NPCDatabase
             Level = 15,
             CharacterClass = "Warrior",
             CreatureType = "Outsider",
-            CharacterAlignment = Alignment.None,
+            CharacterAlignment = Alignment.TrueNeutral, // usually neutral (MM p.261)
             HitDice = 15,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,

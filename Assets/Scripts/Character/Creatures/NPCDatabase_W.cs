@@ -30,6 +30,7 @@ public static partial class NPCDatabase
             Level = 5,
             CharacterClass = "Warrior",
             CreatureType = "Undead",
+            CharacterAlignment = Alignment.LawfulEvil, // always lawful evil (MM p.258)
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
@@ -70,6 +71,7 @@ public static partial class NPCDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.268)
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
