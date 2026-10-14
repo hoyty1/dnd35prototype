@@ -135,7 +135,7 @@ namespace Tests.Scenarios
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 148;
+        public const int Count = 149;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -250,6 +250,7 @@ namespace Tests.Scenarios
             yield return S("grapple-rake-ui", GrappleRakeUi);
             yield return S("improved-grab-hold-ui", ImprovedGrabHoldUi);
             yield return S("improved-grab-hold-ai", ImprovedGrabHoldAi);
+            yield return S("improved-grab-hold-damage-mode-ui", ImprovedGrabHoldDamageModeUi);
             yield return S("grapple-escape-move-aoo", () => GrappleEscapeMoveAoO(false));
             yield return S("grapple-escape-move-aoo-drop", () => GrappleEscapeMoveAoO(true));
             yield return S("grapple-drag-aoo-ui", GrappleDragAoOUi);
@@ -3855,7 +3856,7 @@ namespace Tests.Scenarios
         /// attack) grabs a Medium human on round 1 with its bite (forced 19s; the grab's grapple checks forced to 10, the
         /// lion +12 against +7) and fights the grapple with the AI from round 2. Each of its grapple turns begins grappling,
         /// so it rakes first (2 claws at +7, not subject to the -4 for grappling, MM p.314; the rake makes the turn a full
-        /// attack, owner interpretation 2026-10-11, CMB-144), then makes its one grapple action on the BAB ladder (PHB p.156;
+        /// attack, RAW by reading, CMB-144), then makes its one grapple action on the BAB ladder (PHB p.156;
         /// owner interpretation 2026-10-11, CMB-146): one natural attack, the claw (the AI picks the highest bonus,
         /// NaturalAttackChoice), at its normal bonus -4 for grappling.
         /// </summary>
@@ -4313,6 +4314,47 @@ namespace Tests.Scenarios
                     if (header == null) return ExpectResult.Fail("no hold Damage check in round 2");
                     TraceEvent dmg = v.Of("log").FirstOrDefault(e => e.Round == 2 && e.Seq > header.Seq && (e.Str("text") ?? "").Contains("Claws's damage"));
                     return dmg != null ? ExpectResult.Pass("hold damage", header.Seq, dmg.Seq) : ExpectResult.Fail("the Damage check dealt no claw damage", header.Seq);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// The PC side of the hold damage on a grapple check other than Damage (MM p.310; owner ruling 2026-10-14; delegated
+        /// RAW reading 2026-10-14 for nonlethal): a PC fighting with a bite and two claws (grapple +13) with Improved Grab on
+        /// its claw grabs a Small goblin (grapple -9) on round 1 and grapples normally. On round 2 its Pin button opens the
+        /// hold damage-mode menu; it picks nonlethal, so the pin check takes -4 and the won pin deals the claw's damage as
+        /// nonlethal damage (grapple dice forced to 10).
+        /// </summary>
+        private static ScenarioDef ImprovedGrabHoldDamageModeUi()
+        {
+            return ForceGrabDice(Rules("rules/improved-grab-hold-damage-mode-ui", "A PC grabber's won pin in a later round deals the claw's damage, made nonlethal at -4 in the hold damage-mode menu (MM p.310, PHB p.146, CMB-148)")
+                .Covers("CMB-148", "MM p.310", "PHB p.146", "PHB p.156", "PC_NPC_PARITY")
+                .MaxRounds(2)
+                .Pc("hero", ActorSource.Stats(() => NaturalManeuverBeast("Hero", NaturalPrimary("Bite"), NaturalSecondaryPair("Claw"))), 10, 10, Control.Ui)
+                .Npc("held", "goblin", 11, 10, Control.Scripted)
+                .Tweak("hero", c =>
+                {
+                    StripAllWeapons(c);
+                    c.Stats.HasImprovedGrab = true;
+                    c.Stats.ImprovedGrabTriggerAttackName = "Claw";
+                })
+                .Tweak("held", WeakGrappleGoblin)
+                .Initiative("hero", "held"))
+                .Turn("held", 0, Step.Pass())
+                .Turn("hero", 1, Step.NaturalAttack("held", "Claw"), Step.AnswerImprovedGrab("grapple"))
+                .Turn("hero", 2, Step.GrappleAction("Pin", "Nonlethal damage"))
+                .Expect("The hero's turns are Ui turns", Expect.Controller("hero", "ui"))
+                .Expect("Round 1: the claw hits and the grab is conducted normally", Expect.All(
+                    Expect.StepStatus("hero", 1, "NaturalAttack(Claw,held)", 0, "done"),
+                    Expect.StepStatus("hero", 1, "AnswerImprovedGrab(grapple)", 0, "done")))
+                .Expect("Round 2: the Pin step is done through the hold damage-mode menu", Expect.StepStatus("hero", 2, "GrappleAction(Pin", 0, "done"))
+                .Expect("Round 2: the pin check takes -4 for nonlethal hold damage, and the won pin deals the claw's damage as nonlethal (MM p.310, PHB p.146)", v =>
+                {
+                    TraceEvent penalty = v.Of("log").FirstOrDefault(e => e.Round == 2 && (e.Str("text") ?? "").Contains("Nonlethal damage with the Claw (Improved Grab)"));
+                    TraceEvent dmg = v.Of("log").FirstOrDefault(e => e.Round == 2 && (e.Str("text") ?? "").Contains("also deals the Claw's damage")
+                        && (e.Str("text") ?? "").Contains(" nonlethal ("));
+                    if (dmg == null) return ExpectResult.Fail("no nonlethal claw hold damage in round 2");
+                    return penalty != null ? ExpectResult.Pass(dmg.Str("text"), penalty.Seq, dmg.Seq) : ExpectResult.Fail("the -4 for nonlethal hold damage is not in the pin check", dmg.Seq);
                 })
                 .Build();
         }

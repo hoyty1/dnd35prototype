@@ -109,7 +109,6 @@ public class CombatUI : MonoBehaviour
     public Button GrappleLightWeaponAttackButton; // Grapple: attack with main-hand light weapon (Standard Action)
     public Button GrappleUnarmedAttackButton;     // Grapple: attack unarmed strike (Standard Action)
     public Button GrapplePinButton;             // Grapple: pin/maintain pin (Standard Action)
-    public Button GrappleBreakPinButton;        // Grapple: break pin (Standard Action)
     public Button GrappleEscapeArtistButton;    // Grapple: escape via Escape Artist (Standard Action)
     public Button GrappleEscapeCheckButton;     // Grapple: escape via opposed grapple (iterative grapple attack)
     public Button GrappleMoveButton;            // Grapple: move while grappling (Standard Action)

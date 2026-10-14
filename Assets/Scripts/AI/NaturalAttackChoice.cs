@@ -149,9 +149,7 @@ namespace DND35.AI
 
         private static bool IsImprovedGrabTrigger(CharacterStats stats, NaturalAttackDefinition natural)
         {
-            string trigger = string.IsNullOrWhiteSpace(stats.ImprovedGrabTriggerAttackName) ? "claw" : stats.ImprovedGrabTriggerAttackName;
-            return !string.IsNullOrWhiteSpace(natural.Name)
-                && natural.Name.IndexOf(trigger, System.StringComparison.OrdinalIgnoreCase) >= 0;
+            return stats.IsImprovedGrabTriggerAttackName(natural.Name);
         }
     }
 }

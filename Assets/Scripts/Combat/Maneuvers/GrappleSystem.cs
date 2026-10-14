@@ -124,11 +124,10 @@ public partial class GameManager
                 || action == GrappleActionType.EscapeArtist;
         }
 
-        // On the renewal turn, actions that resolve to nothing for the pinner are not offered (Break Pin: the
-        // pinner is not pinned; the two not-implemented stubs), so a misclick does not spend the attack (CMB-120).
+        // On the renewal turn, actions that resolve to nothing for the pinner are not offered (the two
+        // not-implemented stubs), so a misclick does not spend the attack (CMB-120).
         if (character.IsPinRenewalDue()
-            && (action == GrappleActionType.BreakPin
-                || action == GrappleActionType.DrawLightWeapon
+            && (action == GrappleActionType.DrawLightWeapon
                 || action == GrappleActionType.RetrieveSpellComponent))
         {
             return false;
@@ -164,7 +163,6 @@ public partial class GameManager
         actions.Add(GrappleActionType.AttackWithLightWeapon);
         actions.Add(GrappleActionType.AttackUnarmed);
         actions.Add(GrappleActionType.PinOpponent);
-        actions.Add(GrappleActionType.BreakPin);
         actions.Add(GrappleActionType.MoveHalfSpeed);
         actions.Add(GrappleActionType.UseOpponentWeapon);
         actions.Add(GrappleActionType.OpposedGrappleEscape);
@@ -232,7 +230,8 @@ public partial class GameManager
 
         if (actionType == GrappleActionType.UseOpponentWeapon)
         {
-            ShowUseOpponentWeaponHandSelectionMenu(pc);
+            if (!TryPromptImprovedGrabCheckDamageMode(pc, actionType, mode => ShowUseOpponentWeaponHandSelectionMenu(pc, mode)))
+                ShowUseOpponentWeaponHandSelectionMenu(pc);
             return true;
         }
 
@@ -242,7 +241,8 @@ public partial class GameManager
             return true;
         }
 
-        ExecuteGrappleAction(pc, actionType);
+        if (!TryPromptImprovedGrabCheckDamageMode(pc, actionType, mode => ExecuteGrappleAction(pc, actionType, mode)))
+            ExecuteGrappleAction(pc, actionType);
         return true;
     }
 
@@ -251,7 +251,6 @@ public partial class GameManager
     public void OnGrappleUnarmedAttackButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.AttackUnarmed);
 
     public void OnGrapplePinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.PinOpponent);
-    public void OnGrappleBreakPinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.BreakPin);
     public void OnGrappleEscapeArtistButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -1329,7 +1328,6 @@ public partial class GameManager
                     AddOption(GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} again (opposed grapple check; success holds the pin another round, failure ends it; any other action lets it end)");
                 else
                     AddOption(GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)");
-                AddOption(GrappleActionType.BreakPin, $"Break pin (opposed grapple check vs {opponent.Stats.CharacterName})");
                 if (actor.Stats != null && actor.Stats.HasRake)
                 {
                     // MM p.314 (CMB-144): the rake's claws need a turn begun grappling and a full attack (it spends the move action).
@@ -1423,7 +1421,8 @@ public partial class GameManager
 
         if (actionType == GrappleActionType.UseOpponentWeapon)
         {
-            ShowUseOpponentWeaponHandSelectionMenu(actor);
+            if (!TryPromptImprovedGrabCheckDamageMode(actor, actionType, mode => ShowUseOpponentWeaponHandSelectionMenu(actor, mode)))
+                ShowUseOpponentWeaponHandSelectionMenu(actor);
             return;
         }
 
@@ -1433,7 +1432,55 @@ public partial class GameManager
             return;
         }
 
-        ExecuteGrappleAction(actor, actionType);
+        if (!TryPromptImprovedGrabCheckDamageMode(actor, actionType, mode => ExecuteGrappleAction(actor, actionType, mode)))
+            ExecuteGrappleAction(actor, actionType);
+    }
+
+    /// <summary>
+    /// PC side of the Improved Grab hold damage on a grapple check other than the Damage action (MM p.310; owner ruling
+    /// 2026-10-14): when a won <paramref name="actionType"/> check would also deal the establishing attack's damage
+    /// (CharacterController.WouldGrappleActionDealImprovedGrabDamage: pin, move, use opponent's weapon or an escape from a
+    /// pin, in the rounds after the grab), the player picks the damage mode first, lethal or nonlethal at -4 on the check
+    /// (delegated RAW reading 2026-10-14, PHB p.146 and p.156), and <paramref name="onChosen"/> goes on with it. False,
+    /// with nothing shown, when no hold damage applies; the AI takes the lethal default (a null mode) on the same resolver.
+    /// </summary>
+    private bool TryPromptImprovedGrabCheckDamageMode(CharacterController actor, GrappleActionType actionType, Action<AttackDamageMode> onChosen)
+    {
+        if (actor == null || actor.Stats == null || CombatUI == null || !actor.WouldGrappleActionDealImprovedGrabDamage(actionType))
+            return false;
+
+        NaturalAttackDefinition holdAttack = actor.GetImprovedGrabDamageAttackForGrappleCheck();
+        string attackName = holdAttack != null && !string.IsNullOrWhiteSpace(holdAttack.Name) ? holdAttack.Name.Trim() : "grabbing attack";
+        var modes = new List<AttackDamageMode> { AttackDamageMode.Lethal, AttackDamageMode.Nonlethal };
+        var labels = new List<string>
+        {
+            $"Lethal damage ({attackName} damage if the check wins, Improved Grab; no grapple penalty)",
+            $"Nonlethal damage ({attackName} damage if the check wins; -4 penalty on your grapple check)"
+        };
+
+        BeginGrappleContextMenuDisplayLock(actor);
+        LogMenuFlow("TryPromptImprovedGrabCheckDamageMode:SHOW_MENU", actor, $"actionType={actionType}");
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI.ShowSpecialStyleSelectionMenu(
+            menuName: "GrappleHoldDamageModeMenu",
+            optionLabels: labels,
+            optionEnabledStates: new List<bool> { true, true },
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= modes.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                onChosen?.Invoke(modes[selectedIndex]);
+            },
+            onCancel: () =>
+            {
+                LogMenuFlow("TryPromptImprovedGrabCheckDamageMode:CANCEL", actor);
+                ShowActionChoices();
+            });
+        return true;
     }
 
     /// <summary>
@@ -1541,7 +1588,7 @@ public partial class GameManager
             });
     }
 
-    private void ShowUseOpponentWeaponHandSelectionMenu(CharacterController actor)
+    private void ShowUseOpponentWeaponHandSelectionMenu(CharacterController actor, AttackDamageMode? holdDamageMode = null)
     {
         LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:ENTER", actor);
 
@@ -1608,7 +1655,7 @@ public partial class GameManager
                     return;
                 }
 
-                ExecuteGrappleAction(actor, GrappleActionType.UseOpponentWeapon, null, options[selectedIndex].HandSlot);
+                ExecuteGrappleAction(actor, GrappleActionType.UseOpponentWeapon, holdDamageMode, options[selectedIndex].HandSlot);
             },
             onCancel: () =>
             {
@@ -1639,25 +1686,27 @@ public partial class GameManager
 
         BeginGrappleContextMenuDisplayLock(actor);
 
-        bool isMonk = actor.Stats.IsMonk;
-        // After an Improved Grab, the damage is that of the attack that established the hold, lethal by default
-        // (MM p.310, CMB-148); the same rule the resolver applies.
-        NaturalAttackDefinition holdAttack = actor.GetImprovedGrabDamageAttackForGrappleCheck();
-        var options = holdAttack != null
-            ? new List<(AttackDamageMode mode, string label)>
-            {
-                (AttackDamageMode.Lethal, $"Lethal damage ({holdAttack.Name} damage, Improved Grab; no grapple penalty)"),
-                (AttackDamageMode.Nonlethal, $"Nonlethal damage ({holdAttack.Name} damage; -4 penalty on your grapple check)")
-            }
-            : new List<(AttackDamageMode mode, string label)>
-            {
-                isMonk
-                    ? (AttackDamageMode.Lethal, "Lethal damage (Monk default, no grapple penalty)")
-                    : (AttackDamageMode.Nonlethal, "Nonlethal damage (default, no grapple penalty)"),
-                isMonk
-                    ? (AttackDamageMode.Nonlethal, "Nonlethal damage (Monk can choose this with no penalty)")
-                    : (AttackDamageMode.Lethal, "Lethal damage (-4 penalty on your grapple check)")
-            };
+        // The resolver's own rule (CharacterController.GetGrappleDamageModeRule): after an Improved Grab the establishing
+        // attack's damage, lethal by default, nonlethal at -4 (MM p.310, CMB-148); else unarmed strike damage, whose default
+        // and penalties follow the monk exception, Improved Unarmed Strike and a gauntlet (PHB p.156, p.96, p.118).
+        CharacterController.GrappleDamageModeRule rule = actor.GetGrappleDamageModeRule();
+        string source = rule.HoldAttack != null
+            ? $"{rule.HoldAttack.Name} damage, Improved Grab"
+            : (rule.Reason ?? "unarmed strike");
+        string Label(AttackDamageMode mode)
+        {
+            int penalty = mode == AttackDamageMode.Lethal ? rule.LethalPenalty : rule.NonlethalPenalty;
+            string head = mode == AttackDamageMode.Lethal ? "Lethal damage" : "Nonlethal damage";
+            string isDefault = mode == rule.DefaultMode ? "default, " : string.Empty;
+            string penaltyText = penalty != 0 ? $"{penalty} penalty on your grapple check" : "no grapple penalty";
+            return $"{head} ({source}; {isDefault}{penaltyText})";
+        }
+        AttackDamageMode other = rule.DefaultMode == AttackDamageMode.Lethal ? AttackDamageMode.Nonlethal : AttackDamageMode.Lethal;
+        var options = new List<(AttackDamageMode mode, string label)>
+        {
+            (rule.DefaultMode, Label(rule.DefaultMode)),
+            (other, Label(other))
+        };
 
         var labels = new List<string>(options.Count);
         foreach (var option in options)
@@ -1778,7 +1827,7 @@ public partial class GameManager
             + $"{grapplerName} grapple mod: {CharacterStats.FormatMod(grapplerGrappleMod)}";
     }
 
-    private SpecialAttackResult BuildAllowedGrappleEscapeResult(CharacterController escaper, CharacterController grappler)
+    private SpecialAttackResult BuildAllowedGrappleEscapeResult(CharacterController escaper, CharacterController grappler, bool pinOnly = false)
     {
         string escaperName = escaper != null && escaper.Stats != null ? escaper.Stats.CharacterName : "Escaper";
         string grapplerName = grappler != null && grappler.Stats != null ? grappler.Stats.CharacterName : "Grappler";
@@ -1791,7 +1840,9 @@ public partial class GameManager
             {
                 $"{escaperName} attempts to escape from grapple",
                 $"{grapplerName} chooses not to oppose the escape.",
-                $"{escaperName} escapes from grapple without an opposed check."
+                pinOnly
+                    ? $"{escaperName} escapes the pin without an opposed check, but the grapple continues."
+                    : $"{escaperName} escapes from grapple without an opposed check."
             })
         };
     }
@@ -1799,7 +1850,8 @@ public partial class GameManager
     private bool TryResolveOpposedGrappleEscapeWithPrompt(
         CharacterController escaper,
         int? iterativeAttackBonusOverride,
-        Action<SpecialAttackResult> onResolved)
+        Action<SpecialAttackResult> onResolved,
+        AttackDamageMode? holdDamageMode = null)
     {
         if (!ShouldPromptPlayerForGrappleEscapeOpposition(escaper, out CharacterController grappler))
             return false;
@@ -1824,9 +1876,10 @@ public partial class GameManager
             onConfirm: () =>
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{grapplerName} opposes the escape attempt!"));
+                // A pinned Improved Grab grabber's won escape from the pin also deals its hold damage (MM p.310, CMB-148).
                 SpecialAttackResult opposedResult = escaper.ResolveGrappleAction(
                     GrappleActionType.OpposedGrappleEscape,
-                    null,
+                    holdDamageMode,
                     null,
                     iterativeAttackBonusOverride);
                 onResolved?.Invoke(opposedResult);
@@ -1834,8 +1887,12 @@ public partial class GameManager
             onCancel: () =>
             {
                 CombatUI?.ShowCombatLog(CombatLogHelper.Warning("", $"{grapplerName} allows {escaperName} to escape."));
-                escaper.ReleaseGrappleState("escape allowed by grappler");
-                onResolved?.Invoke(BuildAllowedGrappleEscapeResult(escaper, grappler));
+                // A pinned escaper escapes only the pin; the grapple goes on (PHB p.156-157). Declining to oppose is not
+                // a won grapple check, so a pinned grabber deals no Improved Grab hold damage here (MM p.310).
+                bool pinOnly = escaper.EscapePinKeepingGrapple();
+                if (!pinOnly)
+                    escaper.ReleaseGrappleState("escape allowed by grappler");
+                onResolved?.Invoke(BuildAllowedGrappleEscapeResult(escaper, grappler, pinOnly));
             });
 
         return true;
@@ -1976,7 +2033,8 @@ public partial class GameManager
             && TryResolveOpposedGrappleEscapeWithPrompt(
                 actor,
                 usesIterativeAttack ? attackBonusUsed : (int?)null,
-                onResolved: result => FinalizeGrappleActionResolution(actor, actionType, result, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining, formerOpponent)))
+                onResolved: result => FinalizeGrappleActionResolution(actor, actionType, result, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining, formerOpponent),
+                grappleDamageModeOverride))
         {
             return;
         }
@@ -2189,8 +2247,6 @@ public partial class GameManager
 
         if (actorPinned)
         {
-            if (legalActions.Contains(GrappleActionType.BreakPin))
-                return GrappleActionType.BreakPin;
             if (legalActions.Contains(GrappleActionType.OpposedGrappleEscape))
                 return GrappleActionType.OpposedGrappleEscape;
             if (legalActions.Contains(GrappleActionType.EscapeArtist))
@@ -2327,12 +2383,6 @@ public partial class GameManager
                 return true;
             }
 
-            if (legalActions.Contains(GrappleActionType.BreakPin))
-            {
-                chosenAction = GrappleActionType.BreakPin;
-                return true;
-            }
-
             if (legalActions.Contains(GrappleActionType.OpposedGrappleEscape))
             {
                 chosenAction = GrappleActionType.OpposedGrappleEscape;
@@ -2353,12 +2403,6 @@ public partial class GameManager
 
         if (actorPinned)
         {
-            if (legalActions.Contains(GrappleActionType.BreakPin))
-            {
-                chosenAction = GrappleActionType.BreakPin;
-                return true;
-            }
-
             if (legalActions.Contains(GrappleActionType.OpposedGrappleEscape))
             {
                 chosenAction = GrappleActionType.OpposedGrappleEscape;
@@ -2440,11 +2484,6 @@ public partial class GameManager
 
             switch (actionType)
             {
-                case GrappleActionType.BreakPin:
-                    if (!actorPinned)
-                        return;
-                    break;
-
                 case GrappleActionType.DamageOpponent:
                 case GrappleActionType.AttackWithLightWeapon:
                 case GrappleActionType.AttackUnarmed:
@@ -2507,7 +2546,6 @@ public partial class GameManager
         TryAdd(GrappleActionType.PinOpponent);
         TryAdd(GrappleActionType.UseOpponentWeapon);
         TryAdd(GrappleActionType.MoveHalfSpeed);
-        TryAdd(GrappleActionType.BreakPin);
         TryAdd(GrappleActionType.OpposedGrappleEscape);
         TryAdd(GrappleActionType.EscapeArtist);
         TryAdd(GrappleActionType.ReleasePinnedOpponent);

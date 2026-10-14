@@ -46,7 +46,7 @@ namespace Tests.Scenarios
         public string MenuChoice { get; private set; }
 
         /// <summary>The grapple actions a Ui step can press (GrappleSystem buttons).</summary>
-        public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "BreakPin", "Attack", "Move" };
+        public static readonly string[] GrappleKinds = { "Pin", "ReleasePin", "Damage", "Escape", "Attack", "Move" };
 
         private Step(StepKind kind) { Kind = kind; }
 
@@ -87,8 +87,16 @@ namespace Tests.Scenarios
         /// <summary>A special attack. Scripted: TryNPCSpecialAttackByTypeForAI. Ui: the Special Attack menu, then the target square.</summary>
         public static Step Maneuver(SpecialAttackType type, string target, bool offHand = false)
             => new Step(StepKind.Maneuver) { ManeuverType = type, Target = target, OffHand = offHand };
-        /// <summary>Ui only: a grapple action button: Pin, ReleasePin, Damage, Escape or BreakPin (or Attack: use <see cref="GrappleAttack"/>).</summary>
+        /// <summary>Ui only: a grapple action button: Pin, ReleasePin, Damage, Escape or Move (or Attack: use <see cref="GrappleAttack"/>).</summary>
         public static Step GrappleAction(string kind) => new Step(StepKind.GrappleAction) { GrappleKind = kind };
+        /// <summary>
+        /// Ui only: a grapple check button (Pin, Escape or Move) by an Improved Grab grabber whose won check also deals the
+        /// grabbing attack's damage (MM p.310; CMB-148): the button opens the hold damage-mode menu, and the option whose
+        /// label starts with <paramref name="holdDamageOptionPrefix"/> ("Lethal damage" or "Nonlethal damage") is clicked.
+        /// A plain <see cref="GrappleAction"/> answers that menu "Lethal damage".
+        /// </summary>
+        public static Step GrappleAction(string kind, string holdDamageOptionPrefix)
+            => new Step(StepKind.GrappleAction) { GrappleKind = kind, MenuChoice = holdDamageOptionPrefix };
         /// <summary>
         /// Ui only: the grapple attack button (Attack Unarmed, or Natural Attack for a creature fighting with its natural
         /// attacks). With <paramref name="naturalAttackName"/>, the natural-attack menu option that starts with that name
@@ -814,6 +822,8 @@ namespace Tests.Scenarios
                         PickGrappleNaturalAttack(gm, s.NaturalAttackName);
                     else if (s.GrappleKind == "Damage")
                         PickGrappleDamageMode(gm, s.MenuChoice);
+                    else if (gm.CombatUI != null && gm.CombatUI.Harness_OpenSpecialStyleMenuName() == "GrappleHoldDamageModeMenu")
+                        PickGrappleDamageMode(gm, s.MenuChoice, "GrappleHoldDamageModeMenu");
                     // A won grapple move check, or a successful escape, opens the destination selection (CMB-152).
                     if (s.HasCell && gm.CurrentSubPhase == GameManager.PlayerSubPhase.Moving)
                         ClickIf(gm, GameManager.PlayerSubPhase.Moving, s.Cell);
@@ -949,7 +959,6 @@ namespace Tests.Scenarios
                 case "ReleasePin": gm.OnGrappleReleasePinButtonPressed(); break;
                 case "Damage": gm.OnGrappleDamageButtonPressed(); break;
                 case "Escape": gm.OnGrappleEscapeCheckButtonPressed(); break;
-                case "BreakPin": gm.OnGrappleBreakPinButtonPressed(); break;
                 case "Attack": gm.OnGrappleUnarmedAttackButtonPressed(); break;
                 case "Move": gm.OnGrappleMoveButtonPressed(); break;
             }
@@ -959,10 +968,10 @@ namespace Tests.Scenarios
         /// After the Grapple: Damage button: clicks the damage-mode option whose label starts with
         /// <paramref name="optionPrefix"/> (default "Lethal damage"); no menu (the action was refused): noted.
         /// </summary>
-        private void PickGrappleDamageMode(GameManager gm, string optionPrefix)
+        private void PickGrappleDamageMode(GameManager gm, string optionPrefix, string menuName = "GrappleDamageModeMenu")
         {
             string menu = gm.CombatUI != null ? gm.CombatUI.Harness_OpenSpecialStyleMenuName() : null;
-            if (menu != "GrappleDamageModeMenu")
+            if (menu != menuName)
             {
                 _awaitNote = "no damage-mode menu opened";
                 return;

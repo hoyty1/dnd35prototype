@@ -37,7 +37,6 @@ public class ActionButtonPanel : MonoBehaviour
     private Button GrappleLightWeaponAttackButton => _combatUI != null ? _combatUI.GrappleLightWeaponAttackButton : null;
     private Button GrappleUnarmedAttackButton => _combatUI != null ? _combatUI.GrappleUnarmedAttackButton : null;
     private Button GrapplePinButton => _combatUI != null ? _combatUI.GrapplePinButton : null;
-    private Button GrappleBreakPinButton => _combatUI != null ? _combatUI.GrappleBreakPinButton : null;
     private Button GrappleEscapeArtistButton => _combatUI != null ? _combatUI.GrappleEscapeArtistButton : null;
     private Button GrappleEscapeCheckButton => _combatUI != null ? _combatUI.GrappleEscapeCheckButton : null;
     private Button GrappleMoveButton => _combatUI != null ? _combatUI.GrappleMoveButton : null;
@@ -1049,9 +1048,6 @@ public class ActionButtonPanel : MonoBehaviour
             canPin
                 ? (context.PinRenewalDue ? $"Grapple: Pin Again ({context.IterativeTag})" : $"Grapple: Pin Opponent ({context.IterativeTag})")
                 : (pinBlockedByHold ? "Grapple: Pin (holder not grappled)" : "Grapple: Pin Opponent (No attacks left)")));
-
-        // Deprecated for current pin model: pinned creatures now use escape actions only.
-        states.Set(GrappleBreakPinButton, new ActionButtonState(false, false));
     }
 
     private void ComputeGrappleEscapeStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
@@ -1305,7 +1301,9 @@ public class ActionButtonPanel : MonoBehaviour
         if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
         if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
         if (UseItemButton != null) UseItemButton.gameObject.SetActive(false);
-        if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
+        // The damage-mode toggle stays: grapple attacks (natural attacks, the rake, unarmed strikes and light weapons)
+        // read the chosen mode, and a natural attack or rake may be made nonlethal at -4 (PHB p.146; delegated RAW
+        // reading 2026-10-14), so a grappling PC keeps the choice it has for any other attack.
         if (BreakWallButton != null) BreakWallButton.gameObject.SetActive(false);
         if (UseImbuedSpellButton != null) UseImbuedSpellButton.gameObject.SetActive(false);
         if (ControlFlamingSphereButton != null) ControlFlamingSphereButton.gameObject.SetActive(false);
@@ -1339,7 +1337,6 @@ public class ActionButtonPanel : MonoBehaviour
         if (GrappleLightWeaponAttackButton != null) GrappleLightWeaponAttackButton.gameObject.SetActive(false);
         if (GrappleUnarmedAttackButton != null) GrappleUnarmedAttackButton.gameObject.SetActive(false);
         if (GrapplePinButton != null) GrapplePinButton.gameObject.SetActive(false);
-        if (GrappleBreakPinButton != null) GrappleBreakPinButton.gameObject.SetActive(false);
         if (GrappleEscapeArtistButton != null) GrappleEscapeArtistButton.gameObject.SetActive(false);
         if (GrappleEscapeCheckButton != null) GrappleEscapeCheckButton.gameObject.SetActive(false);
         if (GrappleMoveButton != null) GrappleMoveButton.gameObject.SetActive(false);

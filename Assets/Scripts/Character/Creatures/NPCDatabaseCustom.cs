@@ -669,13 +669,13 @@ public static partial class NPCDatabase
                 new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
             },
-            BaseSpeed = 10,
+            BaseSpeed = 8, // 40 ft. (MM p.281)
             BaseHitDieHP = 45,
             CreatureTags = new List<string> { "Animal" },
             Feats = new List<string> { "Improved Natural Attack (bite)", "Improved Natural Attack (claw)" },
             HasScent = true,
             HasImprovedGrab = true,
-            ImprovedGrabTriggerAttackName = "Bite",
+            ImprovedGrabTriggerAttackName = "Claw,Bite", // MM p.281: "a claw or bite attack"
             HasPounce = true,
             HasRake = true,
             RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
@@ -688,9 +688,10 @@ public static partial class NPCDatabase
     }
 
     /// <summary>
-    /// Dire Tiger baseline definition.
-    /// Scenario-specific allegiance/control should be applied at spawn time in GameManager,
-    /// so the same NPC definition can be reused as either hostile or allied.
+    /// Dire Tiger (CR 8), MM p.65: Large animal, 16d8+48 (120 hp), speed 40 ft., AC 17 (-1 size, +2 Dex, +6 natural),
+    /// BAB +12, grapple +24; 2 claws +20 (2d4+8) and bite +14 (2d6+4); improved grab with the bite, pounce, rake +18
+    /// (2d4+4); Fort +13, Ref +12, Will +11. Scenario-specific allegiance/control is applied at spawn time in GameManager,
+    /// so the same definition serves as hostile or allied (ogre_battle_test).
     /// </summary>
     private static void RegisterDireTiger()
     {
@@ -699,37 +700,41 @@ public static partial class NPCDatabase
             Id = "dire_tiger",
             IsExceptionallyStable = true, // PHB p.154/157/158: more than two legs (MM)
             Name = "Dire Tiger",
-            Level = 6,
+            ChallengeRating = "8",
+            Level = 16,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
-            CharacterAlignment = Alignment.TrueNeutral, // always neutral (dire animals, MM p.62-65)
-            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.62-65 stat blocks; animal type MM p.306)
-            HitDice = 6,
+            CharacterAlignment = Alignment.TrueNeutral, // always neutral (MM p.65)
+            WillSaveOverride = SaveProgression.Good, // dire animals have a good Will save (MM p.65: Will +11 = 10 + Wis 1)
+            HitDice = 16,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
-            STR = 23, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 6,
-            BAB = 4,
-            NaturalArmorBonus = 3,
+            STR = 27, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 10,
+            BAB = 12,
+            NaturalArmorBonus = 6,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 2, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
             },
-            BaseSpeed = 10,
-            BaseHitDieHP = 45,
-            CreatureTags = new List<string> { "Animal" },
-            Feats = new List<string> { "Improved Natural Attack (bite)", "Improved Natural Attack (claw)", "Weapon Focus (claw)" },
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 120,
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            // As printed (MM p.65). Weapon Focus and Improved Natural Attack are inert 'Name (param)' entries (CHR-008).
+            Feats = new List<string> { "Alertness", "Improved Natural Attack (claw)", "Improved Natural Attack (bite)", "Run", "Stealthy", "Weapon Focus (claw)" },
             HasScent = true,
             HasImprovedGrab = true,
-            ImprovedGrabTriggerAttackName = "Bite",
+            ImprovedGrabTriggerAttackName = "Bite", // MM p.65: "must hit with its bite attack"
             HasPounce = true,
             HasRake = true,
-            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
+            // MM p.65 prints rake +18, one below BAB +12, Str +8 and size -1 (+19); the game rolls +19 (stat-block mismatch, CRE-045).
+            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 2, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
+            SpecialAbilities = new List<string> { "Improved Grab (Ex): bite hit starts a grapple", "Pounce (Ex): full attack with two rakes on a charge", "Rake 2d4+4 (attack +18)", "Scent", "Low-light vision", "Skills: Hide +7 (+11 in tall grass or undergrowth), Jump +14, Listen +6, Move Silently +11, Spot +7, Swim +10" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.9f, 0.72f, 0.38f, 1f),
             PanelColor = new Color(0.2f, 0.3f, 0.14f, 0.85f),
             NameColor = new Color(0.86f, 1f, 0.78f),
-            Description = "A massive prehistoric tiger with powerful claws, crushing bite, and deadly pounce/grab/rake follow-up."
+            Description = "Dire Tiger (CR 8). An immense prehistoric tiger: pounce, improved grab with its bite, and raking rear claws. MM 3.5e p.65."
         });
     }
 

@@ -573,7 +573,7 @@ public static partial class NPCDatabase
             BAB = 2,
             HasPounce = true,
             HasImprovedGrab = true,
-            ImprovedGrabTriggerAttackName = "Claw",
+            ImprovedGrabTriggerAttackName = "Bite", // MM p.274: "must hit with its bite attack"
             HasScent = true,
             HasRake = true,
             RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false },
@@ -584,7 +584,7 @@ public static partial class NPCDatabase
             },
             CreatureTags = new List<string> { "Animal", "MM35" },
             Feats = new List<string> { "Weapon Finesse" },
-            SpecialAbilities = new List<string> { "Pounce (Ex): full attack on charge", "Improved Grab (Ex): claw hit starts grapple", "Rake 1d3+1", "Scent", "Low-light vision", "Skills: Balance +8, Climb +11, Hide +8, Move Silently +8" },
+            SpecialAbilities = new List<string> { "Pounce (Ex): full attack on charge", "Improved Grab (Ex): bite hit starts grapple", "Rake 1d3+1", "Scent", "Low-light vision", "Skills: Balance +8, Climb +11, Hide +8, Move Silently +8" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.8f, 0.7f, 0.4f, 1f),
             PanelColor = new Color(0.28f, 0.22f, 0.1f, 0.85f),

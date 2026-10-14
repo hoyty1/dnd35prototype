@@ -495,8 +495,10 @@ public static partial class NPCDatabase
             BaseSpeed = 4, // 20 ft, swim 40 ft
             BaseHitDieHP = 13,
             BAB = 2,
-            HasRake = true,
-            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = false },
+            // MM p.228: the skum's rake is no grapple rake: it gains two rake attacks (+0, 1d6+2) when it attacks while
+            // swimming. The game has no swimming, so it has no rake (HasRake false); the data is kept for when it does.
+            HasRake = false,
+            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false },
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
@@ -504,7 +506,7 @@ public static partial class NPCDatabase
             },
             CreatureTags = new List<string> { "Aberration", "Aquatic", "Darkvision60", "MM35" },
             Feats = new List<string> { "Alertness" },
-            SpecialAbilities = new List<string> { "Rake 1d6+2 (when grappling)", "Swim 40 ft.", "Darkvision 60 ft." },
+            SpecialAbilities = new List<string> { "Rake (Ex): two rakes +0 (1d6+2) when it attacks while swimming (not modelled: no swimming)", "Swim 40 ft.", "Darkvision 60 ft." },
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.35f, 0.45f, 0.4f, 1f),
             PanelColor = new Color(0.1f, 0.16f, 0.12f, 0.85f),

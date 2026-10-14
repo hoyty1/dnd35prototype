@@ -560,7 +560,8 @@ public static partial class NPCDatabase
             ImprovedGrabTriggerAttackName = "Bite",
             HasScent = true,
             HasRake = true,
-            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 6, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = false },
+            // MM p.25: six claws, +15, 1d4+4: half the Strength bonus (+8).
+            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 6, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false },
             Immunities = new CreatureImmunities { immuneToElectricity = true },
             BreathWeapon = new BreathWeaponDefinition
             {

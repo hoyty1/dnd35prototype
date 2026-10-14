@@ -123,6 +123,12 @@ public static class GrappleDamageRulesTests
         TestImprovedGrabOneGrappleLinkPerCreature();
         TestImprovedGrabHoldDamageCheck();
         TestImprovedGrabDamageOnEveryWonGrappleCheck();
+        TestImprovedGrabDamageOnPinEscape();
+        TestAllowedPinEscapeKeepsGrapple();
+        TestImprovedGrabNonlethalHoldDamageOnEveryCheck();
+        TestGrappleDamageModeRuleUnarmedVariants();
+        TestNaturalAttackAndRakeNonlethalAtMinus4();
+        TestPounceGrabRakeCreatureData();
         TestRakeRefusedAgainstImprovedGrabHolder();
         TestHasteWeaponAndMixedAttackersGetOneHasteAttack();
         TestHasteNaturalManeuverReplacesHasteStep();
@@ -686,9 +692,6 @@ public static class GrappleDamageRulesTests
         Assert(pinResult != null && pinResult.Success, "CMB-120: initial pin succeeds before the no-op action test");
 
         attacker.StartNewTurn();
-        SpecialAttackResult breakPin = attacker.ResolveGrappleAction(GrappleActionType.BreakPin);
-        Assert(breakPin != null && !breakPin.Success && breakPin.Log != null && !breakPin.Log.Contains("does not pin"),
-            "CMB-120: Break Pin by a pinner resolves to nothing and does not let the due pin lapse");
         SpecialAttackResult draw = attacker.ResolveGrappleAction(GrappleActionType.DrawLightWeapon);
         Assert(draw != null && draw.Log != null && !draw.Log.Contains("does not pin"), "CMB-120: a not-implemented stub does not let the due pin lapse");
         Assert(defender.HasCondition(CombatConditionType.Pinned) && attacker.IsPinRenewalDue(), "CMB-120: after no-op actions the pin is still due for renewal");
@@ -696,10 +699,9 @@ public static class GrappleDamageRulesTests
         GameManager gm = GameManager.Instance;
         if (gm != null)
         {
-            Assert(!gm.CanUseGrappleAction(attacker, GrappleActionType.BreakPin)
-                && !gm.CanUseGrappleAction(attacker, GrappleActionType.DrawLightWeapon)
+            Assert(!gm.CanUseGrappleAction(attacker, GrappleActionType.DrawLightWeapon)
                 && !gm.CanUseGrappleAction(attacker, GrappleActionType.RetrieveSpellComponent),
-                "CMB-120: the renewal turn does not offer Break Pin or the not-implemented stubs");
+                "CMB-120: the renewal turn does not offer the not-implemented stubs");
             Assert(gm.CanUseGrappleAction(attacker, GrappleActionType.PinOpponent)
                 && gm.CanUseGrappleAction(attacker, GrappleActionType.ReleasePinnedOpponent),
                 "CMB-120: the renewal turn offers Pin again and Release");
@@ -955,10 +957,6 @@ public static class GrappleDamageRulesTests
         SpecialAttackResult retrieveResult = attacker.ResolveGrappleAction(GrappleActionType.RetrieveSpellComponent);
         Assert(retrieveResult != null && !retrieveResult.Success, "Pinner cannot retrieve a spell component while maintaining a pin");
         Assert(retrieveResult != null && retrieveResult.Log.Contains("Cannot retrieve component while pinning"), "Retrieve component block message is explicit while pinning");
-
-        SpecialAttackResult breakPinResult = attacker.ResolveGrappleAction(GrappleActionType.BreakPin);
-        Assert(breakPinResult != null && !breakPinResult.Success, "Pinner cannot break another person's pin while pinning");
-        Assert(breakPinResult != null && breakPinResult.Log.Contains("Cannot break pin while pinning"), "Break pin block message is explicit while pinning");
 
         SpecialAttackResult escapeResult = attacker.ResolveGrappleAction(GrappleActionType.EscapeArtist);
         Assert(escapeResult != null && !escapeResult.Success, "Pinner cannot escape while maintaining a pin");
@@ -3556,7 +3554,7 @@ public static class GrappleDamageRulesTests
 
     private static void TestGrappleRakeRules()
     {
-        // MM p.314 (owner interpretation 2026-10-11, CMB-144): rake claws only against a grappled foe, not subject to
+        // MM p.314 (RAW by reading 2026-10-14, CMB-144): rake claws only against a grappled foe, not subject to
         // the -4 for grappling; the creature must begin its turn grappling; the rake comes with a full attack; once a turn.
         var cat = CreateBiteClawsCreature("GrappleRake", 4, false);
         var control = CreateBiteClawsCreature("GrappleRakeControl", 4, false);
@@ -4146,6 +4144,292 @@ public static class GrappleDamageRulesTests
         {
             ScenarioHooks.RollFilter = null;
             Cleanup(grappler, grabbed, plain, plainTarget);
+        }
+    }
+
+    private static void TestImprovedGrabDamageOnPinEscape()
+    {
+        // Owner ruling 2026-10-14 (MM p.310, CMB-148): a pinned grabber's won escape from the pin, on its own turn in a later
+        // round, is a successful grapple check: it deals the hold damage and the grapple goes on (PHB p.156-157). An escape
+        // from the grapple itself ends the hold and deals none. (The dead Break Pin action is gone: the pinned creature's
+        // opposed escape is its check against the pin.)
+        var grabber = CreateBiteClawsCreature("PinEscapeGrabber", 11, false);
+        var grabbed = CreateHasteTarget("PinEscapeGrabbed");
+        var grabber2 = CreateBiteClawsCreature("FullEscapeGrabber", 11, false);
+        var grabbed2 = CreateHasteTarget("FullEscapeGrabbed");
+        int n = 0;
+        try
+        {
+            foreach (CharacterController c in new[] { grabber, grabber2 })
+            {
+                c.Stats.HasImprovedGrab = true;
+                c.Stats.ImprovedGrabTriggerAttackName = "Bite";
+                c.Stats.CurrentSizeCategory = SizeCategory.Large;
+            }
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? (n++ % 2 == 0 ? 20 : 1) : natural;
+            grabber.StartNewTurn();
+            SpecialAttackResult grab = grabber.ResolveImprovedGrabFreeAttempt(grabbed, grabber.GetNaturalAttackByWeaponName("Bite"));
+
+            // The grabbed creature pins the grabber on its turn: made strong for it (its check first: 20 against 1).
+            ConfigureVeryStrongGrappler(grabbed);
+            grabbed.StartNewTurn();
+            n = 0;
+            SpecialAttackResult pin = grabbed.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(grab != null && grab.Success && pin != null && pin.Success && grabber.IsPinned() && grabber.IsGrappling(),
+                "CMB-148: precondition: the grabbed creature pins the Improved Grab grabber");
+
+            grabber.StartNewTurn();
+            Assert(grabber.WouldGrappleActionDealImprovedGrabDamage(GrappleActionType.OpposedGrappleEscape)
+                && !grabber.WouldGrappleActionDealImprovedGrabDamage(GrappleActionType.EscapeArtist),
+                "CMB-148: a pinned grabber's opposed escape counts as a damaging grapple check; an Escape Artist check is no grapple check");
+            int hpBefore = grabbed.Stats.CurrentHP;
+            n = 0;
+            SpecialAttackResult escape = grabber.ResolveGrappleAction(GrappleActionType.OpposedGrappleEscape);
+            Assert(escape != null && escape.Success && !grabber.IsPinned() && grabber.IsGrappling() && grabbed.IsGrappling()
+                && escape.DamageDealt > 0 && grabbed.Stats.CurrentHP < hpBefore && escape.Log.Contains("also deals the Bite's damage"),
+                $"Owner ruling 2026-10-14: the grabber's won escape from the pin deals the bite's hold damage and the grapple goes on (dealt {escape?.DamageDealt})");
+
+            // Control: an escape from the grapple itself ends the hold and deals nothing.
+            n = 0;
+            grabber2.StartNewTurn();
+            grabber2.ResolveImprovedGrabFreeAttempt(grabbed2, grabber2.GetNaturalAttackByWeaponName("Bite"));
+            grabber2.StartNewTurn();
+            Assert(!grabber2.WouldGrappleActionDealImprovedGrabDamage(GrappleActionType.OpposedGrappleEscape),
+                "CMB-148: an unpinned grabber's escape from the grapple is not a damaging check (it ends the hold)");
+            int hp2 = grabbed2.Stats.CurrentHP;
+            n = 0;
+            SpecialAttackResult leave = grabber2.ResolveGrappleAction(GrappleActionType.OpposedGrappleEscape);
+            Assert(leave != null && leave.Success && !grabber2.IsGrappling() && leave.DamageDealt == 0 && grabbed2.Stats.CurrentHP == hp2,
+                "CMB-148: the grabber's escape from the grapple ends the hold with no hold damage");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Improved Grab pin-escape damage test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(grabber, grabbed, grabber2, grabbed2);
+        }
+    }
+
+    private static void TestAllowedPinEscapeKeepsGrapple()
+    {
+        // PHB p.156-157: escaping a pin leaves the escaper grappled. A pinner that lets the escape happen (the PC's
+        // "Allow Escape" answer in GameManager.TryResolveOpposedGrappleEscapeWithPrompt) ends only the pin; declining to
+        // oppose is no won grapple check, so no Improved Grab hold damage either.
+        var grabber = CreateBiteClawsCreature("AllowPinGrabber", 11, false);
+        var grabbed = CreateHasteTarget("AllowPinGrabbed");
+        int n = 0;
+        try
+        {
+            grabber.Stats.HasImprovedGrab = true;
+            grabber.Stats.ImprovedGrabTriggerAttackName = "Bite";
+            grabber.Stats.CurrentSizeCategory = SizeCategory.Large;
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? (n++ % 2 == 0 ? 20 : 1) : natural;
+            grabber.StartNewTurn();
+            SpecialAttackResult grab = grabber.ResolveImprovedGrabFreeAttempt(grabbed, grabber.GetNaturalAttackByWeaponName("Bite"));
+            ConfigureVeryStrongGrappler(grabbed);
+            grabbed.StartNewTurn();
+            n = 0;
+            SpecialAttackResult pin = grabbed.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(grab != null && grab.Success && pin != null && pin.Success && grabber.IsPinned(),
+                "CMB-148: precondition: the grabbed creature pins the grabber");
+
+            int hpBefore = grabbed.Stats.CurrentHP;
+            Assert(!grabbed.EscapePinKeepingGrapple() && grabber.IsPinned(),
+                "PHB p.157: the pinner is not pinned, so it has no pin to escape");
+            Assert(grabber.EscapePinKeepingGrapple() && !grabber.IsPinned() && grabber.IsGrappling() && grabbed.IsGrappling()
+                && grabbed.Stats.CurrentHP == hpBefore,
+                "PHB p.156-157: an allowed escape from a pin ends only the pin; the grapple goes on and no hold damage is dealt");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Allowed pin escape test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(grabber, grabbed);
+        }
+    }
+
+    private static void TestImprovedGrabNonlethalHoldDamageOnEveryCheck()
+    {
+        // Delegated RAW reading 2026-10-14 (PHB p.146, p.156; MM p.310): the hold damage is lethal by default and may be made
+        // nonlethal at -4 on every grapple check that deals it, not only the Damage action.
+        var grabber = CreateBiteClawsCreature("NonlethalHoldGrabber", 11, false);
+        var grabbed = CreateHasteTarget("NonlethalHoldGrabbed");
+        int n = 0;
+        try
+        {
+            grabber.Stats.HasImprovedGrab = true;
+            grabber.Stats.ImprovedGrabTriggerAttackName = "Bite";
+            grabber.Stats.CurrentSizeCategory = SizeCategory.Large;
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => ctx == "Grapple check" ? (n++ % 2 == 0 ? 20 : 1) : natural;
+            grabber.StartNewTurn();
+            grabber.ResolveImprovedGrabFreeAttempt(grabbed, grabber.GetNaturalAttackByWeaponName("Bite"));
+            grabber.StartNewTurn();
+
+            CharacterController.GrappleDamageModeRule rule = grabber.GetGrappleDamageModeRule();
+            Assert(rule.HoldAttack != null && rule.DefaultMode == AttackDamageMode.Lethal && rule.LethalPenalty == 0 && rule.NonlethalPenalty == -4,
+                "Delegated RAW reading 2026-10-14: the Damage action's hold damage is lethal by default, nonlethal at -4");
+
+            int baseMod = grabber.GetGrappleModifier();
+            int hpBefore = grabbed.Stats.CurrentHP;
+            int nonlethalBefore = grabbed.Stats.NonlethalDamage;
+            n = 0;
+            SpecialAttackResult pin = grabber.ResolveGrappleAction(GrappleActionType.PinOpponent, AttackDamageMode.Nonlethal);
+            Assert(pin != null && pin.Success && CheckMod(pin) == baseMod - 4 && grabbed.Stats.CurrentHP == hpBefore
+                && grabbed.Stats.NonlethalDamage > nonlethalBefore && pin.Log.Contains("nonlethal"),
+                $"Delegated RAW reading 2026-10-14: a won pin with nonlethal hold damage is rolled at -4 and deals nonlethal damage (check {CheckMod(pin)}, expected {baseMod - 4})");
+
+            // The next round the default is lethal with no penalty (a pin renewal, CMB-120).
+            grabber.StartNewTurn();
+            int hpBefore2 = grabbed.Stats.CurrentHP;
+            n = 0;
+            SpecialAttackResult pin2 = grabber.ResolveGrappleAction(GrappleActionType.PinOpponent);
+            Assert(pin2 != null && pin2.Success && CheckMod(pin2) == baseMod && grabbed.Stats.CurrentHP < hpBefore2 && pin2.Log.Contains("lethal"),
+                $"MM p.310: the hold damage of a won check is lethal by default with no penalty (check {CheckMod(pin2)}, expected {baseMod})");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Improved Grab nonlethal hold damage test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(grabber, grabbed);
+        }
+    }
+
+    private static void TestGrappleDamageModeRuleUnarmedVariants()
+    {
+        // PHB p.156 (unarmed strike damage, lethal at -4; the monk exception), p.96 (Improved Unarmed Strike: lethal or
+        // nonlethal at its option) and p.118 (a gauntlet strike is an unarmed attack that deals lethal damage): the rule the
+        // resolver and the PC menu share (delegated RAW readings 2026-10-14 for Improved Unarmed Strike and the gauntlet).
+        var plain = CreateTestCharacter("RulePlain", "Fighter");
+        var ius = CreateTestCharacter("RuleIus", "Fighter");
+        var gauntlet = CreateTestCharacter("RuleGauntlet", "Fighter");
+        var defender = CreateWeakDefender("RuleGauntletTarget");
+        try
+        {
+            ius.Stats.Feats.Add("Improved Unarmed Strike");
+#pragma warning disable CS0618 // the gauntlet has no ItemID enum entry
+            gauntlet.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.GAUNTLET), EquipSlot.Hands);
+#pragma warning restore CS0618
+
+            CharacterController.GrappleDamageModeRule p = plain.GetGrappleDamageModeRule();
+            CharacterController.GrappleDamageModeRule i = ius.GetGrappleDamageModeRule();
+            CharacterController.GrappleDamageModeRule g = gauntlet.GetGrappleDamageModeRule();
+            Assert(p.HoldAttack == null && p.DefaultMode == AttackDamageMode.Nonlethal && p.LethalPenalty == -4 && p.NonlethalPenalty == 0,
+                "PHB p.156: plain unarmed grapple damage is nonlethal by default, lethal at -4");
+            Assert(i.DefaultMode == AttackDamageMode.Lethal && i.LethalPenalty == 0 && i.NonlethalPenalty == 0 && i.Reason == "Improved Unarmed Strike feat",
+                "Delegated RAW reading 2026-10-14 (PHB p.96): with Improved Unarmed Strike the grapple damage is lethal by default and either mode has no penalty");
+            Assert(gauntlet.HasGauntletEquipped() && g.DefaultMode == AttackDamageMode.Lethal && g.LethalPenalty == 0 && g.NonlethalPenalty == 0
+                && g.Reason != null && g.Reason.Contains("gauntlet"),
+                "Delegated RAW reading 2026-10-14 (PHB p.118): with a gauntlet the grapple damage is lethal by default and either mode has no penalty, as the unarmed-strike attack");
+
+            ForceGrappleState(gauntlet, defender);
+            SpecialAttackResult result = gauntlet.ResolveGrappleAction(GrappleActionType.DamageOpponent);
+            Assert(result != null && result.CheckTotal == result.CheckRoll + gauntlet.GetGrappleModifier() && result.Log.Contains("lethal damage by default (gauntlet"),
+                "PHB p.118: a gauntlet wearer's default grapple damage is lethal with no -4");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Grapple damage-mode rule test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            Cleanup(plain, ius, gauntlet, defender);
+        }
+    }
+
+    private static void TestNaturalAttackAndRakeNonlethalAtMinus4()
+    {
+        // Delegated RAW reading 2026-10-14 (PHB p.146; MM p.312): a natural weapon deals lethal damage and, like any lethal
+        // melee weapon, may deal nonlethal damage at -4 on the attack roll; the rake's claws too.
+        var lethal = CreateBiteClawsCreature("NaturalLethal", 4, false);
+        var nonlethal = CreateBiteClawsCreature("NaturalNonlethal", 4, false);
+        var target = CreateHasteTarget("NaturalNonlethalTarget");
+        try
+        {
+            foreach (CharacterController c in new[] { lethal, nonlethal })
+            {
+                c.Stats.HasRake = true;
+                c.Stats.SetRakeAttack(new NaturalAttackDefinition { Name = "Rake", DamageDice = 4, DamageCount = 1, Count = 1, IsPrimary = true, BonusDamageSource = DamageBonusSource.StrengthHalf });
+            }
+            ScenarioHooks.RollFilter = (sides, ctx, natural) => sides == 20 ? 19 : natural;
+            nonlethal.SetAttackDamageMode(AttackDamageMode.Nonlethal);
+
+            FullAttackResult l = lethal.FullAttack(target, false, 0, null, null, startAttackIndex: 0, maxAttacks: 1);
+            int nonlethalBefore = target.Stats.NonlethalDamage;
+            FullAttackResult nl = nonlethal.FullAttack(target, false, 0, null, null, startAttackIndex: 0, maxAttacks: 1);
+            CombatResult la = l != null && l.Attacks.Count > 0 ? l.Attacks[0] : null;
+            CombatResult na = nl != null && nl.Attacks.Count > 0 ? nl.Attacks[0] : null;
+            Assert(la != null && na != null && la.AttackDamageMode == AttackDamageMode.Lethal && na.AttackDamageMode == AttackDamageMode.Nonlethal
+                && AttackModifier(na) == AttackModifier(la) - 4 && (!na.Hit || target.Stats.NonlethalDamage > nonlethalBefore),
+                $"Delegated RAW reading 2026-10-14: a nonlethal natural attack is rolled at -4 and deals nonlethal damage (lethal {AttackModifier(la)}, nonlethal {AttackModifier(na)})");
+
+            FullAttackResult lr = lethal.PerformRakeAttacks(target, false, 0, null);
+            FullAttackResult nr = nonlethal.PerformRakeAttacks(target, false, 0, null);
+            CombatResult lra = lr != null && lr.Attacks.Count > 0 ? lr.Attacks[0] : null;
+            CombatResult nra = nr != null && nr.Attacks.Count > 0 ? nr.Attacks[0] : null;
+            Assert(lra != null && nra != null && nra.AttackDamageMode == AttackDamageMode.Nonlethal && lra.AttackDamageMode == AttackDamageMode.Lethal
+                && AttackModifier(nra) == AttackModifier(lra) - 4,
+                $"Delegated RAW reading 2026-10-14: a nonlethal rake claw is rolled at -4 (lethal {AttackModifier(lra)}, nonlethal {AttackModifier(nra)})");
+        }
+        catch (System.Exception ex)
+        {
+            Assert(false, $"Natural nonlethal test threw {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            ScenarioHooks.RollFilter = null;
+            Cleanup(lethal, nonlethal, target);
+        }
+    }
+
+    private static void TestPounceGrabRakeCreatureData()
+    {
+        // MM data (2026-10-14): Improved Grab triggers (leopard bite p.274, tiger claw or bite p.281, dire tiger bite p.65),
+        // the dire tiger's MM p.65 block, the behir's rake at half Strength (p.25) and the skum's swimming rake (p.228).
+        NPCDatabase.Init();
+        NPCDefinition tiger = NPCDatabase.Get("tiger");
+        NPCDefinition leopard = NPCDatabase.Get("leopard");
+        NPCDefinition dire = NPCDatabase.Get("dire_tiger");
+        NPCDefinition behir = NPCDatabase.Get("behir");
+        NPCDefinition skum = NPCDatabase.Get("skum");
+        var probe = CreateTestCharacter("TriggerProbe", "Fighter");
+        try
+        {
+            probe.Stats.ImprovedGrabTriggerAttackName = tiger != null ? tiger.ImprovedGrabTriggerAttackName : null;
+            Assert(tiger != null && probe.Stats.IsImprovedGrabTriggerAttackName("Claw") && probe.Stats.IsImprovedGrabTriggerAttackName("Bite")
+                && !probe.Stats.IsImprovedGrabTriggerAttackName("Rake"),
+                "MM p.281: the tiger's Improved Grab follows a claw or a bite hit");
+            probe.Stats.ImprovedGrabTriggerAttackName = null;
+            Assert(probe.Stats.IsImprovedGrabTriggerAttackName("Claws") && !probe.Stats.IsImprovedGrabTriggerAttackName("Bite"),
+                "Improved Grab trigger: no name defaults to the claw");
+            Assert(leopard != null && leopard.ImprovedGrabTriggerAttackName == "Bite", "MM p.274: the leopard's Improved Grab follows its bite");
+
+            NaturalAttackDefinition claw = dire != null ? dire.NaturalAttacks.Find(a => a.Name == "Claw") : null;
+            NaturalAttackDefinition bite = dire != null ? dire.NaturalAttacks.Find(a => a.Name == "Bite") : null;
+            Assert(dire != null && dire.HitDice == 16 && dire.BaseHitDieHP == 120 && dire.SizeCategory == SizeCategory.Large
+                && dire.STR == 27 && dire.DEX == 15 && dire.CON == 17 && dire.CHA == 10 && dire.NaturalArmorBonus == 6 && dire.BaseSpeed == 8
+                && claw != null && claw.Count == 2 && claw.DamageCount == 2 && claw.DamageDice == 4 && claw.IsPrimary && claw.BonusDamageSource == DamageBonusSource.Strength
+                && bite != null && bite.DamageCount == 2 && bite.DamageDice == 6 && !bite.IsPrimary && bite.BonusDamageSource == DamageBonusSource.StrengthHalf
+                && dire.RakeAttack != null && dire.RakeAttack.DamageCount == 2 && dire.RakeAttack.DamageDice == 4 && dire.RakeAttack.Count == 2
+                && dire.RakeAttack.BonusDamageSource == DamageBonusSource.StrengthHalf && dire.ImprovedGrabTriggerAttackName == "Bite"
+                && dire.HasPounce && dire.Feats.Contains("Weapon Focus (claw)") && dire.Feats.Contains("Run") && dire.Feats.Contains("Stealthy"),
+                "MM p.65: the dire tiger is its own Large 16 HD block (Str 27, claws 2d4+8, bite 2d6+4, rake 2d4+4, natural armor +6, its feats)");
+            Assert(behir != null && behir.RakeAttack != null && behir.RakeAttack.Count == 6 && behir.RakeAttack.BonusDamageSource == DamageBonusSource.StrengthHalf,
+                "MM p.25: the behir's six rakes deal 1d4+4, half its Strength bonus");
+            Assert(skum != null && !skum.HasRake && skum.RakeAttack != null && skum.RakeAttack.Count == 2,
+                "MM p.228: the skum's rake is a swimming rake, not a grapple rake (no swimming in the game, so no rake)");
+        }
+        finally
+        {
+            Cleanup(probe);
         }
     }
 

@@ -33,7 +33,6 @@ public enum GrappleActionType
     AttackWithLightWeapon,
     AttackUnarmed,
     PinOpponent,
-    BreakPin,
     MoveHalfSpeed,
     UseOpponentWeapon,
     DisarmSmallObject,
@@ -108,6 +107,7 @@ public class GrappleCheckResult
 
     public string CharacterName;
     public readonly List<string> MiscBreakdown = new List<string>();
+    private readonly List<int> _miscValues = new List<int>();
 
     public void AddMiscModifier(int value, string source)
     {
@@ -116,7 +116,10 @@ public class GrappleCheckResult
 
         MiscModifier += value;
         if (!string.IsNullOrEmpty(source))
+        {
             MiscBreakdown.Add(source);
+            _miscValues.Add(value);
+        }
     }
 
     private static string FormatSigned(int value)
@@ -133,7 +136,9 @@ public class GrappleCheckResult
         sb.AppendLine($"  STR modifier: {FormatSigned(StrengthModifier)}");
         sb.AppendLine($"  Size modifier: {FormatSigned(SizeModifier)}");
 
-        if (MiscModifier != 0)
+        // Listed whenever a modifier is named, also when they cancel out (Improved Grapple +4 and the -4 for nonlethal
+        // Improved Grab hold damage).
+        if (MiscModifier != 0 || MiscBreakdown.Count > 0)
         {
             if (MiscBreakdown.Count == 1)
                 sb.AppendLine($"  Misc modifiers: {FormatSigned(MiscModifier)} ({MiscBreakdown[0]})");
@@ -141,7 +146,7 @@ public class GrappleCheckResult
             {
                 sb.AppendLine($"  Misc modifiers: {FormatSigned(MiscModifier)}");
                 for (int i = 0; i < MiscBreakdown.Count; i++)
-                    sb.AppendLine($"    - {MiscBreakdown[i]}");
+                    sb.AppendLine($"    - {MiscBreakdown[i]} ({FormatSigned(_miscValues[i])})");
             }
         }
 
@@ -1447,8 +1452,11 @@ public class CharacterController : MonoBehaviour
             PenaltySource = string.Empty
         };
 
+        // A natural weapon deals lethal damage; like any melee weapon that deals lethal damage it may deal nonlethal
+        // damage at -4 on the attack roll (PHB p.146; MM p.312 treats natural weapons as weapons; delegated RAW reading
+        // 2026-10-14). Default lethal (GetDefaultAttackDamageModeForWeapon); the creature's chosen mode applies.
         if (isInnateNaturalAttack)
-            return profile;
+            return GetNaturalWeaponDamageModeProfile(selectedNonlethal);
 
         if (isUnarmedStrike)
         {
@@ -1485,6 +1493,24 @@ public class CharacterController : MonoBehaviour
 
         return profile;
     }
+
+    /// <summary>
+    /// The damage mode of an attack roll with a natural weapon (PHB p.146: a lethal melee weapon deals nonlethal damage
+    /// at -4 on the attack roll; delegated RAW reading 2026-10-14): lethal with no penalty, or nonlethal at -4.
+    /// </summary>
+    private static DamageModeAttackProfile GetNaturalWeaponDamageModeProfile(bool nonlethal)
+    {
+        return nonlethal
+            ? new DamageModeAttackProfile { DealNonlethalDamage = true, AttackPenalty = -4, PenaltySource = "Using nonlethal damage with a natural weapon" }
+            : new DamageModeAttackProfile { DealNonlethalDamage = false, AttackPenalty = 0, PenaltySource = string.Empty };
+    }
+
+    /// <summary>
+    /// The damage mode of the rake's claw attacks (MM p.314), natural weapons like any other: the creature's chosen
+    /// mode this round, lethal by default (<see cref="GetNaturalWeaponDamageModeProfile"/>).
+    /// </summary>
+    private DamageModeAttackProfile GetRakeDamageModeProfile()
+        => GetNaturalWeaponDamageModeProfile(_attackDamageModeManuallySetThisRound && CurrentAttackDamageMode == AttackDamageMode.Nonlethal);
 
     /// <summary>
     /// Resolve base unarmed strike damage for this character.
@@ -6379,6 +6405,8 @@ public class CharacterController : MonoBehaviour
         // CMB-144): leave the Grappled row's attack modifier out; every other condition still applies.
         int conditionAttackPenalty = Stats.ConditionAttackPenalty - GetGrappledConditionAttackModifier();
         int solidFogAtkPenalty = Stats.SolidFogMeleeAttackPenalty; // rake is always melee
+        // A natural weapon may deal nonlethal damage at -4 like any lethal melee weapon (PHB p.146; delegated RAW reading 2026-10-14).
+        DamageModeAttackProfile rakeDamageMode = GetRakeDamageModeProfile();
 
         for (int i = 0; i < attackCount; i++)
         {
@@ -6387,7 +6415,8 @@ public class CharacterController : MonoBehaviour
 
             // D&D 3.5e: rake attacks use PRIMARY attack bonuses (no -5 secondary penalty)
             int baseBonus = Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier;
-            int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + armorNonProfPenalty + conditionAttackPenalty + solidFogAtkPenalty;
+            int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + armorNonProfPenalty + conditionAttackPenalty + solidFogAtkPenalty
+                + rakeDamageMode.AttackPenalty;
             int hpBeforeAtk = target.Stats.CurrentHP;
 
             Stats.GetScaledNaturalAttackDamage(rakeAttack, out int damageCount, out int damageDice);
@@ -6410,9 +6439,9 @@ public class CharacterController : MonoBehaviour
                 critMult,
                 null,
                 situationalTargetAcBonus: 0,
-                dealNonlethalDamage: false,
-                damageModeAttackPenalty: 0,
-                damageModePenaltySource: string.Empty);
+                dealNonlethalDamage: rakeDamageMode.DealNonlethalDamage,
+                damageModeAttackPenalty: rakeDamageMode.AttackPenalty,
+                damageModePenaltySource: rakeDamageMode.PenaltySource);
 
             atk.WeaponName = string.IsNullOrWhiteSpace(rakeAttack.Name) ? "Rake" : rakeAttack.Name;
             atk.BreakdownBAB = baseBonus;
@@ -9448,7 +9477,7 @@ public class CharacterController : MonoBehaviour
     /// The natural attack whose damage this creature's successful grapple checks deal (MM p.310, CMB-148): the attack that
     /// established the grapple through its Improved Grab, from the round after it was established ("successive rounds");
     /// null otherwise (the Damage action then deals unarmed strike damage). The Damage action deals it in place of the
-    /// unarmed strike; a won pin, move, use-opponent's-weapon or break-pin check adds it (AppendImprovedGrabCheckDamage).
+    /// unarmed strike; a won pin, move, use-opponent's-weapon or pin-escape check adds it (AppendImprovedGrabCheckDamage).
     /// Shared by the resolver, the PC damage menu and the AI.
     /// </summary>
     public NaturalAttackDefinition GetImprovedGrabDamageAttackForGrappleCheck()
@@ -9457,6 +9486,73 @@ public class CharacterController : MonoBehaviour
             return null;
 
         return _turnsStartedCount > link.EstablishedAtControllerTurnStart ? link.EstablishingAttack : null;
+    }
+
+    /// <summary>The damage-mode rule of this creature's Damage grapple action (<see cref="GetGrappleDamageModeRule"/>).</summary>
+    public struct GrappleDamageModeRule
+    {
+        /// <summary>The Improved Grab establishing attack whose damage the check deals, or null (unarmed strike damage).</summary>
+        public NaturalAttackDefinition HoldAttack;
+        public AttackDamageMode DefaultMode;
+        /// <summary>The grapple check modifier for lethal damage (0 or -4).</summary>
+        public int LethalPenalty;
+        /// <summary>The grapple check modifier for nonlethal damage (0 or -4).</summary>
+        public int NonlethalPenalty;
+        /// <summary>Why the default is lethal with no penalty, for the log and the menu; null for the plain unarmed strike.</summary>
+        public string Reason;
+    }
+
+    /// <summary>
+    /// The damage mode of the Damage grapple action, shared by the resolver (the DamageOpponent case of
+    /// ResolveGrappleActionCore), the PC damage-mode menu (GameManager.ShowGrappleDamageModeMenu) and the AI:
+    /// after an Improved Grab, the establishing natural attack's damage, lethal by default and nonlethal at -4 (MM p.310;
+    /// PHB p.146; delegated RAW reading 2026-10-14). Otherwise unarmed strike damage (PHB p.156): nonlethal by default,
+    /// lethal at -4; a monk's lethal by default and nonlethal with no penalty (PHB p.156 exception); with Improved
+    /// Unarmed Strike either mode with no penalty, lethal by default (PHB p.96: lethal or nonlethal at its option;
+    /// delegated RAW reading 2026-10-14); with a gauntlet as the unarmed-strike attack code treats it (PHB p.118: a
+    /// gauntlet strike is an unarmed attack that deals lethal damage; ResolveDamageModeAttackProfileCore): lethal by
+    /// default, either mode with no penalty (delegated RAW reading 2026-10-14).
+    /// </summary>
+    public GrappleDamageModeRule GetGrappleDamageModeRule()
+    {
+        NaturalAttackDefinition holdAttack = GetImprovedGrabDamageAttackForGrappleCheck();
+        if (holdAttack != null)
+        {
+            return new GrappleDamageModeRule
+            {
+                HoldAttack = holdAttack,
+                DefaultMode = AttackDamageMode.Lethal,
+                LethalPenalty = 0,
+                NonlethalPenalty = -4,
+                Reason = $"Improved Grab: the {holdAttack.Name} that established the hold, MM p.310"
+            };
+        }
+
+        string reason = Stats != null && Stats.IsMonk
+            ? "Monk exception"
+            : FeatManager.HasImprovedUnarmedStrike(Stats)
+                ? "Improved Unarmed Strike feat"
+                : HasGauntletEquipped()
+                    ? "gauntlet: a lethal unarmed strike, PHB p.118"
+                    : null;
+        if (reason != null)
+        {
+            return new GrappleDamageModeRule
+            {
+                DefaultMode = AttackDamageMode.Lethal,
+                LethalPenalty = 0,
+                NonlethalPenalty = 0,
+                Reason = reason
+            };
+        }
+
+        return new GrappleDamageModeRule
+        {
+            DefaultMode = AttackDamageMode.Nonlethal,
+            LethalPenalty = -4,
+            NonlethalPenalty = 0,
+            Reason = null
+        };
     }
 
     /// <summary>
@@ -9774,7 +9870,8 @@ public class CharacterController : MonoBehaviour
         Standard,
         ResistGrapple,
         EscapeGrapple,
-        BreakPin,
+        /// <summary>A pinned creature's opposed check to escape the pin (PHB p.156-157; Grease's +10 to escape a pin, PHB p.237).</summary>
+        EscapePin,
         ResistPin
     }
 
@@ -9800,7 +9897,7 @@ public class CharacterController : MonoBehaviour
                 case GrappleCheckContext.EscapeGrapple:
                     candidate = effect.GreasedArmorGrappleEscapeBonus;
                     break;
-                case GrappleCheckContext.BreakPin:
+                case GrappleCheckContext.EscapePin:
                     candidate = effect.GreasedArmorBreakPinBonus;
                     break;
                 case GrappleCheckContext.ResistPin:
@@ -10188,6 +10285,10 @@ public class CharacterController : MonoBehaviour
         if (holdPenalty != 0)
             result.AddMiscModifier(holdPenalty, "Improved Grab hold with one body part (MM p.310)");
 
+        // Nonlethal Improved Grab hold damage on this check (ResolveGrappleAction; delegated RAW reading 2026-10-14).
+        if (_improvedGrabCheckModifier != 0)
+            result.AddMiscModifier(_improvedGrabCheckModifier, _improvedGrabCheckModifierLabel ?? "Nonlethal Improved Grab damage");
+
         int greasedArmorBonus = GetGreasedArmorGrappleBonus(context);
         if (greasedArmorBonus > 0)
         {
@@ -10200,8 +10301,8 @@ public class CharacterController : MonoBehaviour
                 case GrappleCheckContext.EscapeGrapple:
                     label = "Greased armor (escape grapple)";
                     break;
-                case GrappleCheckContext.BreakPin:
-                    label = "Greased armor (break pin)";
+                case GrappleCheckContext.EscapePin:
+                    label = "Greased armor (escape pin)";
                     break;
                 case GrappleCheckContext.ResistPin:
                     label = "Greased armor (resist pin)";
@@ -10359,33 +10460,45 @@ public class CharacterController : MonoBehaviour
             lapseLog = LetDuePinLapse();
         }
 
-        // MM p.310 (CMB-148): in the rounds after an Improved Grab, the grabber's won pin, move, use-opponent's-weapon and
-        // break-pin checks also deal the establishing attack's damage (the Damage action deals it itself).
-        NaturalAttackDefinition grabDamageAttack = IsImprovedGrabDamagingGrappleCheck(actionType) ? GetImprovedGrabDamageAttackForGrappleCheck() : null;
+        // MM p.310 (CMB-148; owner ruling 2026-10-14): in the rounds after an Improved Grab, the grabber's other won grapple
+        // checks on its own turn also deal the establishing attack's damage (the Damage action deals it itself): pin, move,
+        // use opponent's weapon, and an escape from a pin (the grapple goes on). Lethal by default; nonlethal at -4 on the
+        // check (delegated RAW reading 2026-10-14, PHB p.146 and p.156), chosen with grappleDamageModeOverride.
+        NaturalAttackDefinition grabDamageAttack = WouldGrappleActionDealImprovedGrabDamage(actionType) ? GetImprovedGrabDamageAttackForGrappleCheck() : null;
         CharacterController grabDamageTarget = null;
+        bool grabDamageNonlethal = grabDamageAttack != null && grappleDamageModeOverride == AttackDamageMode.Nonlethal;
         if (grabDamageAttack != null)
             IsInAnyGrappleLink(out grabDamageTarget);
 
-        SpecialAttackResult result = ResolveGrappleActionCore(actionType, grappleDamageModeOverride, opponentWeaponHandSlotOverride, iterativeAttackBonusOverride,
-            naturalAttackIndex, naturalAttackIsHasteExtra);
+        SpecialAttackResult result;
+        _improvedGrabCheckModifier = grabDamageNonlethal ? -4 : 0;
+        _improvedGrabCheckModifierLabel = grabDamageNonlethal ? $"Nonlethal damage with the {grabDamageAttack.Name} (Improved Grab)" : null;
+        try
+        {
+            result = ResolveGrappleActionCore(actionType, grappleDamageModeOverride, opponentWeaponHandSlotOverride, iterativeAttackBonusOverride,
+                naturalAttackIndex, naturalAttackIsHasteExtra);
+        }
+        finally
+        {
+            _improvedGrabCheckModifier = 0;
+            _improvedGrabCheckModifierLabel = null;
+        }
         if (grabDamageAttack != null)
-            AppendImprovedGrabCheckDamage(result, grabDamageTarget, grabDamageAttack);
+            AppendImprovedGrabCheckDamage(result, grabDamageTarget, grabDamageAttack, grabDamageNonlethal);
         if (result != null && !string.IsNullOrEmpty(lapseLog))
             result.Log = string.IsNullOrEmpty(result.Log) ? lapseLog : lapseLog + "\n\n" + result.Log;
         return result;
     }
 
     /// <summary>
-    /// True for a grapple action that resolves to nothing for a pinner (no check, no attack): Break Pin (a pinner
-    /// is not pinned), the Draw a Light Weapon, Retrieve a Spell Component and Disarm Small Object stubs (CMB-033),
-    /// and the weapon attacks it cannot make. Such an action does not cost a due pin (CMB-120).
+    /// True for a grapple action that resolves to nothing for a pinner (no check, no attack): the Draw a Light Weapon,
+    /// Retrieve a Spell Component and Disarm Small Object stubs (CMB-033), and the weapon attacks it cannot make. Such
+    /// an action does not cost a due pin (CMB-120).
     /// </summary>
     private bool IsGrappleActionNoOpForPinner(GrappleActionType actionType)
     {
         switch (actionType)
         {
-            case GrappleActionType.BreakPin:
-                return !IsPinned();
             case GrappleActionType.DrawLightWeapon:
             case GrappleActionType.RetrieveSpellComponent:
             case GrappleActionType.DisarmSmallObject:
@@ -10416,6 +10529,20 @@ public class CharacterController : MonoBehaviour
     public string LetDuePinLapseIfDue()
     {
         return IsPinRenewalDue() ? LetDuePinLapse() : string.Empty;
+    }
+
+    /// <summary>
+    /// Ends the pin on this pinned character and keeps the grapple going: escaping a pin leaves the escaper grappled
+    /// (PHB p.156-157). Used when the pinner lets the escape happen without opposing it. False when this character is
+    /// not the pinned creature of a grapple link (nothing changes then).
+    /// </summary>
+    public bool EscapePinKeepingGrapple()
+    {
+        if (!IsPinned() || !TryGetGrappleLink(this, out GrappleLink link) || link == null || link.PinnedCharacter != this)
+            return false;
+
+        ClearPinnedState(link);
+        return true;
     }
 
     /// <summary>Ends a pin whose round is up (CMB-120) and returns the log line; empty when nothing was pinned.</summary>
@@ -10521,32 +10648,52 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// The grapple actions whose won check is "a successful grapple check" of the grabber other than the Damage action,
-    /// which deals the establishing attack's damage itself: pin, move, use opponent's weapon and break pin (MM p.310,
-    /// CMB-148). Escaping is left out: it ends the hold. Owner interpretation 2026-10-11: only the checks the creature
-    /// makes on its own turn count, not the opposed checks it rolls against the held creature's actions.
+    /// which deals the establishing attack's damage itself (MM p.310, CMB-148): pin, move, use opponent's weapon, and an
+    /// opposed escape made while this creature is pinned, which ends only the pin (PHB p.156-157) and is a grapple check
+    /// it makes on its own turn. An escape from the grapple itself is left out: it ends the hold (and an Escape Artist
+    /// check is no grapple check). Owner ruling 2026-10-14 (RULES_COVERAGE 4.1): only the grapple checks the grabber makes
+    /// on its own turn in the rounds after the grab count, not the opposed checks it rolls against the held creature's actions.
     /// </summary>
-    private static bool IsImprovedGrabDamagingGrappleCheck(GrappleActionType actionType)
+    private static bool IsImprovedGrabDamagingGrappleCheck(GrappleActionType actionType, bool actorPinned)
         => actionType == GrappleActionType.PinOpponent
             || actionType == GrappleActionType.MoveHalfSpeed
             || actionType == GrappleActionType.UseOpponentWeapon
-            || actionType == GrappleActionType.BreakPin;
+            || (actionType == GrappleActionType.OpposedGrappleEscape && actorPinned);
+
+    /// <summary>
+    /// True when a won <paramref name="actionType"/> check by this creature now would also deal its Improved Grab hold
+    /// damage (<see cref="IsImprovedGrabDamagingGrappleCheck"/> and <see cref="GetImprovedGrabDamageAttackForGrappleCheck"/>):
+    /// the PC grapple buttons then ask for the damage mode (lethal, or nonlethal at -4 on the check), as the Damage action does.
+    /// </summary>
+    public bool WouldGrappleActionDealImprovedGrabDamage(GrappleActionType actionType)
+        => IsImprovedGrabDamagingGrappleCheck(actionType, IsPinned()) && GetImprovedGrabDamageAttackForGrappleCheck() != null;
+
+    /// <summary>
+    /// The extra modifier on this creature's own grapple check while <see cref="ResolveGrappleAction"/> resolves a check
+    /// that deals nonlethal Improved Grab hold damage: -4 (delegated RAW reading 2026-10-14: PHB p.146 puts the -4 for
+    /// nonlethal damage with a lethal weapon on the roll that deals it, PHB p.156 on the grapple check), else 0.
+    /// </summary>
+    private int _improvedGrabCheckModifier;
+    private string _improvedGrabCheckModifierLabel;
 
     /// <summary>
     /// MM p.310 (CMB-148): each successful grapple check the grabber makes in the rounds after its Improved Grab
-    /// automatically deals the damage of the attack that established the hold, lethal. Appends that damage to the result
-    /// of a won pin, move, use-opponent's-weapon or break-pin check (the Damage action deals it itself).
+    /// automatically deals the damage of the attack that established the hold, lethal unless the grabber chose nonlethal
+    /// (at -4 on the check). Appends that damage to the result of a won pin, move, use-opponent's-weapon or pin-escape
+    /// check (the Damage action deals it itself).
     /// </summary>
-    private void AppendImprovedGrabCheckDamage(SpecialAttackResult result, CharacterController opponent, NaturalAttackDefinition establishingAttack)
+    private void AppendImprovedGrabCheckDamage(SpecialAttackResult result, CharacterController opponent, NaturalAttackDefinition establishingAttack, bool nonlethal)
     {
         if (result == null || !result.Success || establishingAttack == null || opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
             return;
 
         int hpBefore = opponent.Stats.CurrentHP;
-        GrappleCheckDamageRoll roll = RollAndApplyGrappleCheckDamage(opponent, establishingAttack, nonlethal: false);
+        GrappleCheckDamageRoll roll = RollAndApplyGrappleCheckDamage(opponent, establishingAttack, nonlethal);
         result.DamageDealt += roll.Final;
         result.TargetKilled = opponent.Stats.IsDead;
+        string mode = nonlethal ? "nonlethal" : "lethal";
         string line = $"Improved Grab: the successful grapple check also deals the {establishingAttack.Name}'s damage (MM p.310): "
-            + $"{roll.DiceCount}d{roll.DiceSides} + [{roll.Bonus.Describe()}] = {roll.Raw} lethal ({opponent.Stats.CharacterName} takes {roll.Final}) [Rolls: {string.Join(", ", roll.Rolls)}]. "
+            + $"{roll.DiceCount}d{roll.DiceSides} + [{roll.Bonus.Describe()}] = {roll.Raw} {mode} ({opponent.Stats.CharacterName} takes {roll.Final}) [Rolls: {string.Join(", ", roll.Rolls)}]. "
             + $"HP: {hpBefore} -> {opponent.Stats.CurrentHP}";
         result.Log = string.IsNullOrEmpty(result.Log) ? line : result.Log + "\n\n" + line;
     }
@@ -10696,7 +10843,8 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, context: GrappleCheckContext.EscapeGrapple);
+                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride,
+                    context: isPinned ? GrappleCheckContext.EscapePin : GrappleCheckContext.EscapeGrapple);
                 GrappleCheckResult oppCheck = opponent.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
 
                 bool success = DoesAttackerWinGrappleCheck(myCheck, oppCheck);
@@ -10750,7 +10898,7 @@ public class CharacterController : MonoBehaviour
                     {
                         ManeuverName = "Grapple Damage",
                         Success = false,
-                        Log = $"{Stats.CharacterName} is pinned and cannot deal grapple damage until they break the pin."
+                        Log = $"{Stats.CharacterName} is pinned and cannot deal grapple damage until they escape the pin."
                     };
                 }
 
@@ -10764,30 +10912,19 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                // MM p.310 (CMB-148): a creature whose Improved Grab established this grapple deals the damage of the attack
-                // that established it with each successful grapple check in later rounds (no constrict here). That is a
-                // natural weapon, lethal by default; nonlethal costs -4 (PHB p.146). Otherwise unarmed strike damage, and
-                // lethal unarmed damage costs -4 unless monk or Improved Unarmed Strike (PHB p.156).
-                NaturalAttackDefinition holdAttack = GetImprovedGrabDamageAttackForGrappleCheck();
+                // The damage-mode rule of the Damage action (GetGrappleDamageModeRule, shared with the PC menu): after an
+                // Improved Grab the establishing natural attack's damage (MM p.310, CMB-148; no constrict here), lethal by
+                // default, nonlethal at -4; otherwise unarmed strike damage (PHB p.156).
+                GrappleDamageModeRule damageRule = GetGrappleDamageModeRule();
+                NaturalAttackDefinition holdAttack = damageRule.HoldAttack;
+                string grappleDamageRuleReason = damageRule.Reason;
 
-                bool isMonk = Stats != null && Stats.IsMonk;
-                bool hasImprovedUnarmedStrike = FeatManager.HasImprovedUnarmedStrike(Stats);
-                bool usesMonkOrIusException = holdAttack == null && (isMonk || hasImprovedUnarmedStrike);
-                string grappleDamageRuleReason = holdAttack != null
-                    ? $"Improved Grab: the {holdAttack.Name} that established the hold, MM p.310"
-                    : (isMonk
-                        ? "Monk exception"
-                        : (hasImprovedUnarmedStrike ? "Improved Unarmed Strike feat" : null));
-
-                AttackDamageMode selectedMode = grappleDamageModeOverride
-                    ?? ((holdAttack != null || usesMonkOrIusException) ? AttackDamageMode.Lethal : AttackDamageMode.Nonlethal);
+                AttackDamageMode selectedMode = grappleDamageModeOverride ?? damageRule.DefaultMode;
                 bool dealNonlethalDamage = selectedMode == AttackDamageMode.Nonlethal;
-                int grappleCheckPenalty = holdAttack != null
-                    ? (dealNonlethalDamage ? -4 : 0)
-                    : ((!usesMonkOrIusException && !dealNonlethalDamage) ? -4 : 0);
+                int grappleCheckPenalty = dealNonlethalDamage ? damageRule.NonlethalPenalty : damageRule.LethalPenalty;
                 string grappleCheckPenaltyLabel = grappleCheckPenalty == 0
                     ? null
-                    : (holdAttack != null ? $"Nonlethal damage with the {holdAttack.Name}" : "Lethal damage without Monk/Improved Unarmed Strike");
+                    : (holdAttack != null ? $"Nonlethal damage with the {holdAttack.Name}" : "Lethal damage with an unarmed strike (PHB p.156)");
 
                 GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, grappleCheckPenalty, grappleCheckPenaltyLabel);
                 GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
@@ -10808,11 +10945,11 @@ public class CharacterController : MonoBehaviour
                     ? $"Deals the {holdAttack.Name}'s damage, lethal by default ({grappleDamageRuleReason})."
                     : (grappleDamageRuleReason != null
                         ? $"Deals lethal damage by default ({grappleDamageRuleReason})."
-                        : "Deals nonlethal damage by default (no Monk/Improved Unarmed Strike exception).");
+                        : "Deals nonlethal damage by default (unarmed strike, PHB p.156).");
                 string penaltyRuleSummary = grappleCheckPenalty != 0
                     ? (holdAttack != null
                         ? $"Applies -4 penalty for choosing nonlethal damage with the {holdAttack.Name} (PHB p.146)."
-                        : "Applies -4 penalty for choosing lethal damage without Monk/Improved Unarmed Strike exception.")
+                        : "Applies -4 penalty for choosing lethal damage with an unarmed strike (PHB p.156).")
                     : (grappleDamageRuleReason != null
                         ? $"No penalty ({grappleDamageRuleReason})."
                         : "No penalty (nonlethal default).");
@@ -10939,60 +11076,6 @@ public class CharacterController : MonoBehaviour
                     Log = log
                 };
             }
-            case GrappleActionType.BreakPin:
-            {
-                if (!isPinned)
-                {
-                    return new SpecialAttackResult
-                    {
-                        ManeuverName = "Break Pin",
-                        Success = false,
-                        Log = $"{Stats.CharacterName} is not pinned."
-                    };
-                }
-
-                if (opponent == null || opponent.Stats == null || Stats == null)
-                {
-                    return new SpecialAttackResult
-                    {
-                        ManeuverName = "Break Pin",
-                        Success = false,
-                        Log = "No valid grapple opponent."
-                    };
-                }
-
-                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, context: GrappleCheckContext.BreakPin);
-                GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
-
-                bool success = DoesAttackerWinGrappleCheck(myCheck, oppCheck);
-                if (success && TryGetGrappleLink(this, out GrappleLink link))
-                {
-                    ClearPinnedState(link);
-                }
-
-                string outcomeLine = success
-                    ? $"{Stats.CharacterName} breaks the pin from {opponent.Stats.CharacterName}!"
-                    : $"{Stats.CharacterName} fails to break the pin.";
-
-                string log = string.Join("\n\n", new[]
-                {
-                    $"{Stats.CharacterName} attempts to break pin from {opponent.Stats.CharacterName}",
-                    myCheck.GetBreakdown(),
-                    oppCheck.GetBreakdown(),
-                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total, success) + "\n" + outcomeLine
-                });
-
-                return new SpecialAttackResult
-                {
-                    ManeuverName = "Break Pin",
-                    Success = success,
-                    CheckRoll = myCheck.BaseRoll,
-                    CheckTotal = myCheck.Total,
-                    OpposedRoll = oppCheck.BaseRoll,
-                    OpposedTotal = oppCheck.Total,
-                    Log = log
-                };
-            }
             case GrappleActionType.MoveHalfSpeed:
             {
                 if (isPinned)
@@ -11016,7 +11099,8 @@ public class CharacterController : MonoBehaviour
                 }
 
                 int myRoll = DiceService.D20("Grapple opposed check (attacker)");
-                int myBaseModifier = GetGrappleModifier();
+                // GetGrappleModifier plus the -4 of nonlethal Improved Grab hold damage when chosen (ResolveGrappleAction).
+                int myBaseModifier = GetGrappleModifier() + _improvedGrabCheckModifier;
 
                 bool isOneVsOne = grappleOpponents.Count == 1;
                 bool movingPinnedOpponent = isOneVsOne && grappleOpponents[0] != null && grappleOpponents[0].HasCondition(CombatConditionType.Pinned);
@@ -11032,6 +11116,9 @@ public class CharacterController : MonoBehaviour
                 {
                     pinnedMoveBonus > 0
                         ? $"{Stats.CharacterName} gains +4 on grapple check for moving a pinned opponent in a 1v1 grapple."
+                        : string.Empty,
+                    _improvedGrabCheckModifier != 0
+                        ? $"{Stats.CharacterName} takes {_improvedGrabCheckModifier} on the grapple check: {_improvedGrabCheckModifierLabel}."
                         : string.Empty,
                     BuildD20Formula($"{Stats.CharacterName} grapple check", myRoll, myFormulaModifier, myTotal)
                 };
@@ -11158,7 +11245,8 @@ public class CharacterController : MonoBehaviour
         if (opponent == null || opponent.Stats == null || Stats == null)
             return false;
 
-        myModifier = GetStrictOpposedGrappleModifierForUseOpponentWeapon(myBaseAttackBonusOverride);
+        // Plus the -4 of nonlethal Improved Grab hold damage when chosen (ResolveGrappleAction).
+        myModifier = GetStrictOpposedGrappleModifierForUseOpponentWeapon(myBaseAttackBonusOverride) + _improvedGrabCheckModifier;
         oppModifier = opponent.GetStrictOpposedGrappleModifierForUseOpponentWeapon();
 
         myRoll = DiceService.D20("Grapple move check (self)");
@@ -11257,6 +11345,7 @@ public class CharacterController : MonoBehaviour
         {
             $"{Stats.CharacterName} attempts to use opponent's {opponentWeapon.Name}.",
             string.IsNullOrEmpty(selectionNote) ? string.Empty : selectionNote,
+            _improvedGrabCheckModifier != 0 ? $"{Stats.CharacterName} takes {_improvedGrabCheckModifier} on the grapple check: {_improvedGrabCheckModifierLabel}." : string.Empty,
             BuildD20Formula($"{Stats.CharacterName} grapple check", myRoll, myModifier, myTotal),
             BuildD20Formula($"{opponent.Stats.CharacterName} grapple check", oppRoll, oppModifier, oppTotal),
             BuildOpposedResultLine(Stats.CharacterName, myTotal, opponent.Stats.CharacterName, oppTotal, grappleSuccess)
@@ -11829,10 +11918,11 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    // ----- Rake in a grapple (MM p.314; owner interpretation 2026-10-11, CMB-144) -----
+    // ----- Rake in a grapple (MM p.314; RAW by reading 2026-10-14, CMB-144: "extra" attacks need a full attack, PHB p.143) -----
     // A monster with rake gains (usually two) extra claw attacks it can use only against a grappled foe, not subject to
     // the -4 for attacking in a grapple. It must begin its turn grappling to rake: it cannot begin a grapple and rake
-    // in the same turn (a pounce at the end of a charge is the exception, resolved by the charge itself). The rake
+    // in the same turn (a pounce at the end of a charge is the exception, resolved by the charge itself, and its rakes need
+    // no grapple: MM p.313 Pounce; delegated RAW reading 2026-10-14). The rake
     // comes with a full attack, so it makes the turn a full attack: the move action is spent if the turn was not one
     // already. Once a turn. The one rake rule for PCs (the grapple action menu) and the AI (AI_GrappleRestrictedTurn).
 

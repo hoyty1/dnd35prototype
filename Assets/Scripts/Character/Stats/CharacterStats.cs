@@ -2608,10 +2608,33 @@ public class CharacterStats
     public bool ManyshotActive;
 
     /// <summary>
-    /// Optional attack-name filter for Improved Grab triggers (e.g., "Bite", "Claw").
-    /// If empty, Improved Grab defaults to claw-based triggers.
+    /// Optional attack-name filter for Improved Grab triggers (e.g., "Bite", "Claw"). Several attacks are separated by a
+    /// comma (the tiger's "claw or bite", MM p.281: "Claw,Bite"). If empty, Improved Grab defaults to claw-based triggers.
+    /// Read through <see cref="IsImprovedGrabTriggerAttackName"/>.
     /// </summary>
     public string ImprovedGrabTriggerAttackName;
+
+    /// <summary>
+    /// True when a hit with the attack named <paramref name="attackName"/> triggers this creature's Improved Grab (MM
+    /// p.310: the attack its entry names): the name contains one of the comma-separated <see cref="ImprovedGrabTriggerAttackName"/>
+    /// entries ("claw" when none), ignoring case. The one test of the PC and NPC grab paths and the AI's attack choice.
+    /// </summary>
+    public bool IsImprovedGrabTriggerAttackName(string attackName)
+    {
+        if (string.IsNullOrWhiteSpace(attackName))
+            return false;
+
+        string triggers = string.IsNullOrWhiteSpace(ImprovedGrabTriggerAttackName) ? "claw" : ImprovedGrabTriggerAttackName;
+        string[] names = triggers.Split(',', '|');
+        for (int i = 0; i < names.Length; i++)
+        {
+            string trigger = names[i].Trim();
+            if (trigger.Length > 0 && attackName.IndexOf(trigger, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// The largest size Improved Grab can seize when the creature's MM entry names one (for example the choker's

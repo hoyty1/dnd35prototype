@@ -95,7 +95,7 @@ public sealed class AttackPool
 
     /// <summary>
     /// The creature was grappling when this turn began: a rake needs it (MM p.314: it cannot begin a grapple and rake
-    /// in the same turn; owner interpretation 2026-10-11, CMB-144). Set by <see cref="CharacterController.StartNewTurn"/>.
+    /// in the same turn; CMB-144). Set by <see cref="CharacterController.StartNewTurn"/>.
     /// </summary>
     public bool BeganTurnGrappling { get; private set; }
 

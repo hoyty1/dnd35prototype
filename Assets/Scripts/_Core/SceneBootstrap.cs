@@ -776,8 +776,6 @@ public class SceneBootstrap : MonoBehaviour
             "Grapple: Attack Unarmed", new Color(0.62f, 0.2f, 0.36f));
         combatUI.GrapplePinButton = CreateGridButton(btnGrid.transform, "GrapplePinBtn",
             "Grapple: Pin Opponent", new Color(0.5f, 0.24f, 0.56f));
-        combatUI.GrappleBreakPinButton = CreateGridButton(btnGrid.transform, "GrappleBreakPinBtn",
-            "Grapple: Break Pin", new Color(0.44f, 0.3f, 0.58f));
         combatUI.GrappleEscapeArtistButton = CreateGridButton(btnGrid.transform, "GrappleEscapeArtistBtn",
             "Grapple: Escape Artist", new Color(0.35f, 0.34f, 0.62f));
         combatUI.GrappleEscapeCheckButton = CreateGridButton(btnGrid.transform, "GrappleEscapeCheckBtn",
@@ -1150,8 +1148,6 @@ public class SceneBootstrap : MonoBehaviour
             ui.GrappleUnarmedAttackButton.onClick.AddListener(() => GameManager.Instance.OnGrappleUnarmedAttackButtonPressed());
         if (ui.GrapplePinButton != null)
             ui.GrapplePinButton.onClick.AddListener(() => GameManager.Instance.OnGrapplePinButtonPressed());
-        if (ui.GrappleBreakPinButton != null)
-            ui.GrappleBreakPinButton.onClick.AddListener(() => GameManager.Instance.OnGrappleBreakPinButtonPressed());
         if (ui.GrappleEscapeArtistButton != null)
             ui.GrappleEscapeArtistButton.onClick.AddListener(() => GameManager.Instance.OnGrappleEscapeArtistButtonPressed());
         if (ui.GrappleEscapeCheckButton != null)

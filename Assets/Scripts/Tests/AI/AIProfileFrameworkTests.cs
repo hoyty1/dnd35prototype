@@ -522,7 +522,7 @@ namespace Tests.AI
                                      && tiger.HasPounce
                                      && tiger.HasImprovedGrab
                                      && tiger.HasRake
-                                     && string.Equals(tiger.ImprovedGrabTriggerAttackName, "Bite", StringComparison.OrdinalIgnoreCase)
+                                     && string.Equals(tiger.ImprovedGrabTriggerAttackName, "Claw,Bite", StringComparison.OrdinalIgnoreCase) // MM p.281: claw or bite
                                      && tigerNaturalAttackCount == 3
                                      && tigerClaw != null
                                      && tigerClaw.IsPrimary

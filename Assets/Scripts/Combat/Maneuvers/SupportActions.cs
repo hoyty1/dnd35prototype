@@ -1436,11 +1436,7 @@ public partial class GameManager
         if (attacker?.Stats == null || attack == null || string.IsNullOrWhiteSpace(attack.WeaponName))
             return false;
 
-        string triggerAttackName = attacker.Stats.ImprovedGrabTriggerAttackName;
-        if (string.IsNullOrWhiteSpace(triggerAttackName))
-            triggerAttackName = "claw";
-
-        return attack.WeaponName.IndexOf(triggerAttackName, StringComparison.OrdinalIgnoreCase) >= 0;
+        return attacker.Stats.IsImprovedGrabTriggerAttackName(attack.WeaponName);
     }
 
     /// <summary>
@@ -1603,6 +1599,7 @@ public partial class GameManager
                     pounceResult = charger.FullAttack(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null,
                         hasteNaturalAttackIndex: pounceHasteNaturalAttackIndex);
 
+                    // A pounce's rakes need no grapple (MM p.313 Pounce; delegated RAW reading 2026-10-14, CMB-144).
                     if (charger.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
                         pounceRakeResult = charger.PerformRakeAttacks(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
                 }
@@ -1611,6 +1608,7 @@ public partial class GameManager
                     charger.Stats.Bonuses.Set(CharacterStats.ChargeBonusSource, BonusTarget.AttackRoll, BonusType.Untyped, 0);
                 }
 
+                // MM p.310 resolves Improved Grab right after its triggering hit; here it follows the whole pounce (CMB-169).
                 bool improvedGrabAttempted = false;
                 bool improvedGrabSucceeded = false;
 
@@ -2000,6 +1998,7 @@ public partial class GameManager
                     flankPartner != null ? flankPartner.Stats.CharacterName : null, null,
                     hasteNaturalAttackIndex: ChooseHasteNaturalAttackIndexForAI(npc, target));
 
+                // A pounce's rakes need no grapple (MM p.313 Pounce; delegated RAW reading 2026-10-14, CMB-144).
                 if (npc.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
                 {
                     pounceRakeResult = npc.PerformRakeAttacks(target, isFlankingCharge, flankingBonus,
@@ -2045,6 +2044,7 @@ public partial class GameManager
                 // Trip (Ex) after the trigger attack's hit, as on any full attack, before Improved Grab (CMB-125).
                 TryResolveFreeTripFromAttackResults(npc, target, pounceResult.Attacks, CalculateRangeInfo(npc, target));
 
+                // MM p.310 resolves Improved Grab right after its triggering hit; here it follows the whole pounce (CMB-169).
                 bool improvedGrabAttempted = false;
                 bool improvedGrabSucceeded = false;
                 for (int i = 0; i < pounceResult.Attacks.Count; i++)
