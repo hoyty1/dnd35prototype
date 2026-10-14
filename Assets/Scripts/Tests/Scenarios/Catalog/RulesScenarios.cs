@@ -129,11 +129,13 @@ namespace Tests.Scenarios
     /// Monster alignment data (CRE-056; checked 2026-10-14): MM p.7 (the alignment line), the entries' lines for the
     /// goblin p.133, gnoll p.130, lemure p.57, lantern archon p.16, red and gold dragons p.75 and p.84, elementals
     /// p.95-100, mephits p.181; animals p.268 and vermin p.284 always neutral; PHB p.266 (Protection from Evil).
+    /// XP awards (CHR-004; checked 2026-10-14): DMG p.36-37 (steps 1-6, monsters below CR 1), Table 2-6 on p.38; MM
+    /// p.29 (bugbear CR 2) and p.203 (orc warrior CR 1/2).
     /// </summary>
     public static class RulesScenarios
     {
         /// <summary>The number of definitions <see cref="All"/> yields (docs/TESTING.md 3.4); a short catalog is a load error.</summary>
-        public const int Count = 146;
+        public const int Count = 148;
 
         [ScenarioSource]
         public static IEnumerable<ScenarioDef> All()
@@ -259,6 +261,8 @@ namespace Tests.Scenarios
             yield return S("combat-end-tie-victory", () => CombatEndTie(true));
             yield return S("combat-end-tie-defeat", () => CombatEndTie(false));
             yield return S("combat-end-charmed-victory", CombatEndCharmedVictory);
+            yield return S("xp-award-by-level", XPAwardByCharacterLevel);
+            yield return S("xp-no-enemy-summons", XPNoEnemySummons);
             yield return S("large-encounter-goblins", LargeEncounterGoblins);
             yield return S("large-encounter-sizes", LargeEncounterSizes);
             yield return S("ring-deflection", RingDeflection);
@@ -5093,6 +5097,103 @@ namespace Tests.Scenarios
                         ? ExpectResult.Pass("defeat line logged")
                         : ExpectResult.Fail("no defeat log line"));
             return b.Build();
+        }
+
+        /// <summary>
+        /// CHR-004 (DMG p.36-38, Table 2-6): each character's XP is looked up at its own level and the sum divided by the
+        /// party size. A 3rd- and a 5th-level fighter (Scripted, the NPC turn path) each drop a foe left at 1 hp (every
+        /// d20 forced to 19): a bugbear (CR 2) and an orc warrior (CR 1/2, DMG p.37: half the CR 1 award). The 3rd-level
+        /// fighter earns (600 + 150) / 2 = 375 XP and the 5th-level one (500 + 150) / 2 = 325 XP; the old table keyed
+        /// by CR minus the party's average level gave both (150 + 50) / 2 = 100.
+        /// </summary>
+        private static ScenarioDef XPAwardByCharacterLevel()
+        {
+            return Rules("rules/xp-award-by-level", "Combat XP is looked up at each character's own level and split by party size (DMG p.36-38, Table 2-6; CHR-004)")
+                .Covers("CHR-004", "DMG p.37", "DMG p.38")
+                .MaxRounds(1)
+                .Pc("high", ActorSource.Stats(() => Fighter("High", 5)), 10, 10, Control.Scripted)
+                .Pc("low", ActorSource.Stats(() => Fighter("Low", 3)), 10, 12, Control.Scripted)
+                .Npc("bugbear", "bugbear", 11, 10, Control.Idle)
+                .Npc("orc", "orc_warrior", 11, 12, Control.Idle)
+                .Tweak("bugbear", c => c.Stats.CurrentHP = 1)
+                .Tweak("orc", c => c.Stats.CurrentHP = 1)
+                .Force(20, 19, null, -1)
+                .Initiative("high", "low", "bugbear", "orc")
+                .Turn("high", 1, Step.Attack("bugbear"), Step.EndTurn())
+                .Turn("low", 1, Step.Attack("orc"), Step.EndTurn())
+                .Expect("The game declares the victory itself", Expect.Outcome(Outcome.Victory))
+                .Expect("Both foes count for the encounter's XP", v =>
+                {
+                    GameManager gm = GameManager.Instance;
+                    if (gm == null) return ExpectResult.Inconclusive("no GameManager");
+                    List<CharacterController> defeated = gm.GetDefeatedEnemiesForXP();
+                    return defeated.Count == 2
+                        ? ExpectResult.Pass("XP list: " + string.Join(", ", defeated.Select(d => d.Stats.CharacterName + " CR " + d.Stats.ChallengeRating)))
+                        : ExpectResult.Fail("XP list has " + defeated.Count + " creatures");
+                })
+                .Expect("Each fighter's award is looked up at its own level: 3rd 375 XP, 5th 325 XP (DMG p.37-38)", v =>
+                {
+                    GameManager gm = GameManager.Instance;
+                    if (gm == null) return ExpectResult.Inconclusive("no GameManager");
+                    List<CharacterController> party = gm.GetPartyForXP();
+                    ExperienceCalculator.CombatXPResult r = ExperienceCalculator.PreviewXPForCombat(party, gm.GetDefeatedEnemiesForXP());
+                    int Award(string name)
+                    {
+                        CharacterController c = party.FirstOrDefault(p => p.Stats.CharacterName == name);
+                        return c != null && r.CharacterXPAward.TryGetValue(c, out int xp) ? xp : -1;
+                    }
+                    int low = Award("Low"), high = Award("High");
+                    string detail = "party " + r.PartySize + ", Low " + low + ", High " + high;
+                    return r.PartySize == 2 && low == 375 && high == 325 ? ExpectResult.Pass(detail) : ExpectResult.Fail(detail);
+                })
+                .Build();
+        }
+
+        /// <summary>
+        /// DMG p.37: no XP for creatures an enemy summons, since the summoner's CR covers them (CHR-004 review). Through
+        /// the game's own summon spawn (GameManager.SpawnSummonedCreature, the path PC and NPC Summon Monster share) the
+        /// orc gets a fiendish raven on its side, which is then killed; the fighter (Scripted, the NPC turn path) drops
+        /// the orc (left at 1 hp, every d20 forced to 19). The victory snapshot sees both on the hostile side out of the
+        /// fight, and only the orc may count for XP.
+        /// </summary>
+        private static ScenarioDef XPNoEnemySummons()
+        {
+            return Rules("rules/xp-no-enemy-summons", "A creature an enemy summoned earns no XP (DMG p.37)")
+                .Covers("CHR-004", "DMG p.37", "PHB p.287", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("hero", ActorSource.Stats(() => Fighter("Hero", 3)), 10, 10, Control.Scripted)
+                .Npc("orc", "orc_warrior", 11, 10, Control.Idle)
+                .Tweak("orc", c => c.Stats.CurrentHP = 1)
+                .Force(20, 19, null, -1)
+                .Initiative("hero", "orc")
+                .Turn("hero", 1,
+                    Step.Assert("The orc's summon joins the hostile side, marked as summoned, and is killed", ctx =>
+                    {
+                        CharacterStats wizard = new CharacterStats("Scenario Wizard", 1, "Wizard", 10, 10, 10, 10, 10, 10, 0, 0, 0, 6, 1, 0, 6, 1, 8);
+                        SummonMonsterOption option = SummonMonsterLists.GetFilteredOptionsForListLevel(1, wizard, false)
+                            .FirstOrDefault(o => o.DisplayName == "Raven");
+                        if (option == null) { ctx.Note("xp-no-enemy-summons: no Raven option"); return false; }
+                        CharacterController summon = ctx.Gm.Harness_SpawnSummonedCreature(ctx.Get("orc"), new Vector2Int(13, 13), option);
+                        if (summon == null || summon.Stats == null) { ctx.Note("xp-no-enemy-summons: no summon spawned"); return false; }
+                        summon.Stats.CurrentHP = -10;
+                        bool ok = summon.Team == CharacterTeam.Enemy && summon.WasSummoned
+                            && CombatEndRules.IsActiveCombatant(summon) && CombatEndRules.IsOutOfFight(summon);
+                        ctx.Note("xp-no-enemy-summons summon=" + summon.Stats.CharacterName + " team=" + summon.Team
+                                 + " wasSummoned=" + summon.WasSummoned + " outOfFight=" + CombatEndRules.IsOutOfFight(summon));
+                        return ok;
+                    }),
+                    Step.Attack("orc"), Step.EndTurn())
+                .Expect("The game declares the victory itself", Expect.Outcome(Outcome.Victory))
+                .Expect("The summon setup ran", Expect.AssertsPass())
+                .Expect("Only the orc counts for XP, not the creature it summoned (DMG p.37)", v =>
+                {
+                    GameManager gm = GameManager.Instance;
+                    if (gm == null) return ExpectResult.Inconclusive("no GameManager");
+                    List<CharacterController> defeated = gm.GetDefeatedEnemiesForXP();
+                    string detail = "XP list: " + string.Join(", ", defeated.Select(d => d.Stats.CharacterName + (d.WasSummoned ? " (summoned)" : "")));
+                    return defeated.Count == 1 && !defeated[0].WasSummoned ? ExpectResult.Pass(detail) : ExpectResult.Fail(detail);
+                })
+                .Build();
         }
 
         /// <summary>

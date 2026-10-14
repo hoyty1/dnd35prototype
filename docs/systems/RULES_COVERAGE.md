@@ -68,7 +68,7 @@ Paths are relative to `Assets/Scripts/`.
 
 | Area | Status | Dev. | Note | Docs | Key IDs |
 |---|---|---|---|---|---|
-| Ch.2 Experience awards | Partial | deviates | Awards keyed only by CR minus APL (300 XP for CR = APL at any level), kill-only, shared with dead PCs; several levels per award allowed. PHB level thresholds are correct | [ENCOUNTERS 6.2](ENCOUNTERS.md#62-xp) | CHR-004, ENC-013 |
+| Ch.2 Experience awards | Partial | deviates | Table 2-6 by each character's level and CR, split by party size (since 2026-10-14; the blank cells 8 or more CRs apart are an open owner question, CHR-004). Only creatures dropped or controlled by the party count, never an enemy's summons (DMG p.37); several levels per award allowed (CHR-080, PHB p.58). PHB level thresholds are correct | [ENCOUNTERS 6.2](ENCOUNTERS.md#62-xp) | CHR-004, CHR-080 |
 | Ch.3 Random encounters and EL | Partial | deviates | Dungeon tables for levels 1-8 (253 rows) with cascades; about 13% of rows spawn nothing; five EL formulas; every creature of any group size spawns on free grid squares (ENC-001 fixed 2026-10-08), in a fixed layout. No wilderness tables, wandering-monster checks, encounter distance or surprise | [ENCOUNTERS 8](ENCOUNTERS.md#8-dmg-coverage) | ENC-002, ENC-003, ENC-013, CMB-028 |
 | Ch.3 Treasure | Partial | deviates | Table 3-5 rolled by EL after every fight. Items become sell-only placeholders; MM treasure ratings and NPC gear offset ignored | [ENCOUNTERS 6.1](ENCOUNTERS.md#61-treasure) | ITM-016 |
 | Ch.3 Traps, dungeon terrain, hazards | Missing | | No traps, no map terrain, no environmental hazards; only spell-created zones | [combat: grid](../architecture/combat-and-grid.md#grid) | GRID-002 |
@@ -239,7 +239,7 @@ These change outcomes in normal play. Each is a bug (owner directive 2026-10-09:
 | Scorching Ray fires one ray at every caster level; Shatter hits any creature at 1d6; Chill Touch is one touch | PHB ch.11 | SPL-125, SPL-126, SPL-127 |
 | Wizards and druids stop at 2nd-level spells (clerics reach 5th since 2026-10-14) | PHB ch.3 class tables | SPL-041 |
 | Healing removes nonlethal damage first | PHB ch.8 | CHR-011 |
-| XP award does not scale with character level | DMG ch.2 | CHR-004 |
+| One XP award can raise a character several levels | PHB p.58 | CHR-080 |
 | Automatic full rest and revival after every victory | PHB ch.8 natural healing; PHB ch.10 resting | CORE-015 |
 | Encounter Level from five different formulas | DMG ch.3 | ENC-013 |
 | Spawned monsters with class levels lack class feats, skills and spells | MM templates, "Improving Monsters" | CRE-058 |
@@ -279,6 +279,6 @@ Items 1-6 are also the prerequisites for deeper enemy AI: an AI that scores opti
 10. **DMG encounter generation (every encounter).** Make every table row resolve, one EL module with the DMG doubling rule (any group size already spawns on the grid, ENC-001 fixed 2026-10-08). Start: ENC-002, ENC-003, ENC-013; [ENCOUNTERS 9](ENCOUNTERS.md#9-gaps-and-backlog-toward-dmg-fidelity).
 11. **Conditions data cleanup (most fights).** Remove the double-counted modifiers, fix the non-RAW rows, add Blown Away and Incorporeal or delete them, let PCs and NPCs act under Nauseated, Panicked, Turned and Pinned (the shared turn-skip gate). Start: [section 3](#3-conditions-dmg-ch8); CMB-066, CMB-067, CMB-068, CMB-069, CMB-070, CMB-072, SPL-090, CMB-054, CMB-075.
 12. **Class features (every fight for the affected classes).** Paladin smite and lay on hands (Smite Evil also needs per-day uses that the post-combat full rest does not reset, CORE-015; every spawned NPC has alignment data since the CRE-056 data fix of 2026-10-14), Ranger favored enemy and combat style, Druid wild shape and companion, Bard songs, Monk scaling, Turn Undead by class level with rebuke, inert feats. Start: CHR-020, CORE-015, CHR-026, CHR-003, CMB-016, CMB-026, CHR-021, CMB-022, CMB-023.
-13. **Between-battle loop (every encounter boundary).** A campaign state with a clock, rest choices with PHB natural healing, real death and defeat, daily recovery, XP by character level. Start: [PARTY_MANAGEMENT 4](PARTY_MANAGEMENT.md#4-gaps-and-backlog) items 1-4; CORE-015, CHR-004.
+13. **Between-battle loop (every encounter boundary).** A campaign state with a clock, rest choices with PHB natural healing, real death and defeat, daily recovery, one level per XP award (XP by character level since 2026-10-14). Start: [PARTY_MANAGEMENT 4](PARTY_MANAGEMENT.md#4-gaps-and-backlog) items 1-4; CORE-015, CHR-080.
 14. **Terrain and visibility (most fights).** Difficult terrain cost, line of sight and line of effect for all attacks and spells, cover, reachable movement highlight, Tiny-creature reach, movement modes. Start: GRID-002, GRID-009, GRID-003, GRID-005, GRID-006.
 15. **Magic items in play (most fights after a few levels).** Real treasure items, special abilities, item activation, PHB action costs for item use, and NPC consumables. Start: ITM-016, ITM-023, ITM-019, ITM-005, AI-009; [MAGIC_ITEMS 11](MAGIC_ITEMS.md#11-gaps-and-backlog-toward-dmg-fidelity).

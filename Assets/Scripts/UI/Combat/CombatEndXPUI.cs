@@ -19,7 +19,7 @@ public class CombatEndXPUI : MonoBehaviour
     public void ShowXPAwards(ExperienceCalculator.CombatXPResult xpResult, Action onComplete = null)
     {
         Debug.Log("[XP UI] ShowXPAwards called");
-        Debug.Log($"[XP UI] XP Result: {(xpResult != null ? xpResult.TotalXPPerCharacter : 0)} XP per character");
+        Debug.Log($"[XP UI] XP Result: {(xpResult != null ? xpResult.CharacterXPAward.Count : 0)} characters awarded");
         Debug.Log($"[XP UI] Callback is null: {onComplete == null}");
 
         if (xpResult == null)
@@ -329,8 +329,6 @@ public class CombatEndXPUI : MonoBehaviour
             Destroy(_contentParent.GetChild(i).gameObject);
 
         CreateText(_contentParent, "EXPERIENCE GAINED", 28, FontStyle.Bold, new Color(1f, 0.92f, 0.45f));
-        CreateText(_contentParent, $"Average Party Level: {xpResult.AveragePartyLevel:F1}", 18, FontStyle.Normal, Color.white);
-
         CreateText(_contentParent, "Enemies Defeated:", 20, FontStyle.Bold, new Color(0.72f, 0.88f, 1f));
         if (xpResult.Awards.Count == 0)
         {
@@ -341,18 +339,14 @@ public class CombatEndXPUI : MonoBehaviour
             for (int i = 0; i < xpResult.Awards.Count; i++)
             {
                 ExperienceCalculator.XPAward award = xpResult.Awards[i];
-                string line = $"• {award.EnemyName} (CR {ChallengeRatingUtils.Format(award.ChallengeRating)}): {award.XPTotal} XP";
-                CreateText(_contentParent, line, 16, FontStyle.Normal, Color.white);
+                CreateText(_contentParent, $"• {award.EnemyName} (CR {ChallengeRatingUtils.Format(award.ChallengeRating)})", 16, FontStyle.Normal, Color.white);
             }
         }
 
         CreateSeparator(_contentParent);
 
-        int totalEncounterXP = xpResult.Awards.Sum(a => a.XPTotal);
-        int partySize = Mathf.Max(1, xpResult.CharacterXPGained.Count);
-        CreateText(_contentParent, $"Total Encounter XP: {totalEncounterXP}", 19, FontStyle.Bold, new Color(1f, 0.95f, 0.35f));
-        CreateText(_contentParent, $"Party Size: {partySize}", 17, FontStyle.Normal, Color.white);
-        CreateText(_contentParent, $"XP per Character: {totalEncounterXP} / {partySize} = {xpResult.TotalXPPerCharacter}", 21, FontStyle.Bold, Color.yellow);
+        int partySize = Mathf.Max(1, xpResult.PartySize);
+        CreateText(_contentParent, $"Party Size: {partySize} (each award is looked up at the character's own level, DMG Table 2-6)", 17, FontStyle.Normal, Color.white);
 
         CreateText(_contentParent, "Character XP:", 20, FontStyle.Bold, new Color(0.72f, 1f, 0.74f));
         if (xpResult.CharacterXPGained.Count == 0)
@@ -366,11 +360,15 @@ public class CombatEndXPUI : MonoBehaviour
                 CharacterController character = kvp.Key;
                 int gained = kvp.Value;
                 bool leveledUp = xpResult.CharacterLeveledUp.ContainsKey(character) && xpResult.CharacterLeveledUp[character];
+                int level = xpResult.CharacterLevel.TryGetValue(character, out int lv) ? lv : 0;
+                int baseXp = xpResult.CharacterBaseXP.TryGetValue(character, out int bx) ? bx : 0;
+                int share = xpResult.CharacterXPAward.TryGetValue(character, out int sh) ? sh : gained;
 
                 string charName = character != null && character.Stats != null ? character.Stats.CharacterName : "Unknown";
+                string gainText = gained != share ? $", multiclass XP penalty: +{gained} XP" : $": +{gained} XP";
                 string levelUpTag = leveledUp ? " ⭐ LEVEL UP! ⭐" : string.Empty;
                 Color textColor = leveledUp ? new Color(0.58f, 1f, 0.58f) : Color.white;
-                CreateText(_contentParent, $"• {charName}: +{gained} XP{levelUpTag}", 16, FontStyle.Normal, textColor);
+                CreateText(_contentParent, $"• {charName} (level {level}): {baseXp} / {partySize} = {share} XP{gainText}{levelUpTag}", 16, FontStyle.Normal, textColor);
             }
         }
 

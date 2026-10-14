@@ -1619,6 +1619,17 @@ public class CharacterController : MonoBehaviour
 
     private const float GrappleAlternateVisibilitySeconds = 1f;
 
+    /// <summary>
+    /// Whether this creature was brought into the fight by a summoning effect (Summon Monster, Summon Nature's Ally, the
+    /// greater lion's shield). Set by every summon registration path and kept after the summon trackers drop it (death
+    /// cleanup, despawn), so combat XP can leave it out: DMG p.37, a creature an enemy summons is part of that enemy's CR
+    /// and earns no XP of its own. Cleared by <see cref="ResetForNewCreature"/>.
+    /// </summary>
+    public bool WasSummoned { get; private set; }
+
+    /// <summary>Marks this creature as summoned (<see cref="WasSummoned"/>).</summary>
+    public void MarkAsSummoned() => WasSummoned = true;
+
 
     // ========== D&D 3.5e HP STATE ==========
     private HPState _currentHPState = HPState.Healthy;
@@ -4271,7 +4282,7 @@ public class CharacterController : MonoBehaviour
     /// maneuver memory, feat toggles, the attack damage mode, ability-zero bookkeeping, diseases and poisons, every
     /// innate monster ability (regeneration, incorporeal, breath weapons, frightful presence, engulf, stench, aura,
     /// ranged special attack, blood drain, terrain manipulation, acid spray cooldown), last-known
-    /// positions, HP state, AI profile and target priority, displayed race, tags, shield-bash AC suppression, sprite
+    /// positions, the summoned flag, HP state, AI profile and target priority, displayed race, tags, shield-bash AC suppression, sprite
     /// tint and visibility, running coroutines, and every component outside <see cref="SlotReuseKeptComponentTypes"/>
     /// (concentration is ended first, so an effect it holds on another creature ends). Stats stay until the spawn's
     /// Init replaces them; links other characters and services keep to this controller are cleared by the GameManager
@@ -4311,6 +4322,7 @@ public class CharacterController : MonoBehaviour
         _incomingFeintSources.Clear();
         _turnsStartedCount = 0;
         _lastKnownTargetPositions.Clear();
+        WasSummoned = false;
 
         // Spell-effect records kept on the controller (their stat changes went to the old stats).
         ActiveDisguiseSelfEffect = null;

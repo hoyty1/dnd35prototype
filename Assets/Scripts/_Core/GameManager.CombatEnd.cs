@@ -166,6 +166,11 @@ public partial class GameManager
         if (character.Team != CharacterTeam.Enemy)
             return;
 
+        // DMG p.37: no XP for creatures enemies summon or otherwise add to their forces with magic; the summoner's CR
+        // already covers them. Read from the creature's own flag, which outlives the summon trackers.
+        if (character.WasSummoned)
+            return;
+
         bool outOfFight = CombatEndRules.IsOutOfFight(character);
         if (!outOfFight && !(countPartyControlled && CombatEndRules.IsActiveCombatant(character) && IsOutOfHostileSideByPartyControl(character)))
             return;

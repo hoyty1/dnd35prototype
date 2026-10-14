@@ -178,7 +178,8 @@ Multiclassing caveats:
 
 ```
 combat ends
-  GameManager.LootCollection.cs:206  ExperienceCalculator.CalculateXPForCombat(party, defeated)
+  GameManager.ShowPostCombatXPFlow  ExperienceCalculator.CalculateXPForCombat(GetPartyForXP(), defeated)
+     -> PreviewXPForCombat              per PC: Table 2-6 at its own level, summed, / party size
      -> per PC: Stats.AddExperience(xp)        multiclass penalty; sets Level, PendingLevelUps += n
   GameManager.CheckAndShowLevelUps -> ShowLevelUpUISequence -> LevelUpUI.ShowForCharacter
      -> LevelUpCalculator.CalculateLevelUp     preview: HP, BAB, saves, skill points, feat slots
@@ -188,7 +189,7 @@ combat ends
   repeat while PendingLevelUps > 0
 ```
 
-- Award: XPTable keyed by clamp(round(CR - APL), -8, 12), divided by party size. CR = APL is 300 XP at any level; the DMG scales by level **[KI]**. `ExperienceCalculator.GetXPForLevel(n) = 1000 * n(n-1)/2`.
+- Award (DMG p.36-38, CHR-004 fixed 2026-10-14): `ExperienceCalculator.PreviewXPForCombat` looks up each defeated creature on DMG Table 2-6 (`GetBaseXPAward`) at each character's own level (`GetAwardLevel`), leaving out creatures an enemy summoned (`CharacterController.WasSummoned`, DMG p.37), sums and divides by the party size, rounding down once; `CalculateXPForCombat` awards the shares through `AddExperience`. The table's blank cells are an open owner question (CHR-004); one award can raise several levels (CHR-080) **[KI]**. `ExperienceCalculator.GetXPForLevel(n) = 1000 * n(n-1)/2`.
 - XP raises `Level` immediately, but class levels, HP and features arrive only when the UI applies each pending level.
 - `ApplyPendingLevelUp` (CharacterStats.cs:3554) also records `HitPointGainsByClassLevel`, refreshes class-skill flags and the XP penalty, and refreshes spell slots through SpellcastingComponent.
 - Feat cadence: general at total level 1, 3, 6, 9...; Fighter bonus at Fighter 1, 2 and even levels; Wizard at 5/10/15/20; Monk at 1, 2, 6.

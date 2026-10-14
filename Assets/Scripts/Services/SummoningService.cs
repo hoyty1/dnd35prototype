@@ -235,6 +235,7 @@ public class SummoningService : MonoBehaviour
         };
 
         _activeSummons.Add(newSummon);
+        summon.MarkAsSummoned();
 
         if (summon.Team == CharacterTeam.Player)
             _summonedAllies.Add(summon);

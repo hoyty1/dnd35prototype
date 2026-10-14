@@ -179,19 +179,7 @@ public partial class GameManager
 
         CaptureDefeatedEnemiesSnapshotForXP("PostLoot.XPFlow");
 
-        List<CharacterController> partyMembers = new List<CharacterController>();
-        if (PCs != null)
-        {
-            for (int i = 0; i < PCs.Count; i++)
-            {
-                CharacterController pc = PCs[i];
-                if (pc == null || pc.Stats == null || !IsActiveCombatant(pc))
-                    continue;
-
-                partyMembers.Add(pc);
-            }
-        }
-
+        List<CharacterController> partyMembers = GetPartyForXP();
         List<CharacterController> defeatedEnemies = GetDefeatedEnemiesForXP();
         Debug.Log($"[LootFlow] Found {defeatedEnemies.Count} defeated enemies");
         Debug.Log($"[XP] Preparing post-combat XP flow | party={partyMembers.Count} | defeatedTracked={defeatedEnemies.Count}");
@@ -204,7 +192,7 @@ public partial class GameManager
         }
 
         ExperienceCalculator.CombatXPResult xpResult = ExperienceCalculator.Instance.CalculateXPForCombat(partyMembers, defeatedEnemies);
-        Debug.Log($"[LootFlow] XP calculated: {xpResult.TotalXPPerCharacter} per character");
+        Debug.Log($"[LootFlow] XP calculated for {xpResult.CharacterXPAward.Count} characters");
 
         CombatEndXPUI xpUi = FindOrCreateXPUI();
         if (xpUi == null)
@@ -239,6 +227,28 @@ public partial class GameManager
                 ContinueToRestAndNextCombat();
             });
         });
+    }
+
+    /// <summary>
+    /// The characters an encounter's XP is divided among (DMG p.37 step 4): every active PC. Each one's award is
+    /// looked up at its own level (ExperienceCalculator.PreviewXPForCombat, CHR-004).
+    /// </summary>
+    public List<CharacterController> GetPartyForXP()
+    {
+        List<CharacterController> partyMembers = new List<CharacterController>();
+        if (PCs == null)
+            return partyMembers;
+
+        for (int i = 0; i < PCs.Count; i++)
+        {
+            CharacterController pc = PCs[i];
+            if (pc == null || pc.Stats == null || !IsActiveCombatant(pc))
+                continue;
+
+            partyMembers.Add(pc);
+        }
+
+        return partyMembers;
     }
 
     private CombatEndXPUI FindOrCreateXPUI()

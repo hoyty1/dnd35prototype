@@ -346,6 +346,7 @@ public partial class GameManager
 
         NPCs.Add(summon);
         _npcAIBehaviors.Add(summonDef.AIBehavior);
+        summon.MarkAsSummoned(); // after InitializeNPCFromDefinition, whose slot reset clears it
 
         if (summon.Team == CharacterTeam.Player)
             _summonedAllies.Add(summon);

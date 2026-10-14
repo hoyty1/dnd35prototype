@@ -10403,6 +10403,7 @@ public partial class GameManager : MonoBehaviour
         };
 
         _activeSummons.Add(scenarioSummon);
+        summon.MarkAsSummoned();
 
         if (summon.Team == CharacterTeam.Player)
             _summonedAllies.Add(summon);

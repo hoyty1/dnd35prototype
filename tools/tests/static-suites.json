@@ -187,7 +187,7 @@
       "needs": "either",
       "skip": "",
       "expectThrow": "",
-      "passed": 6,
+      "passed": 34,
       "failed": 0,
       "flakyFailures": 0,
       "knownFailures": [],
