@@ -86,7 +86,7 @@ public static partial class NPCDatabase
             IsTallCreature = false,
             STR = 15, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
             BAB = 1,
-            NaturalArmorBonus = 3,
+            NaturalArmorBonus = 4, // MM p.272: AC 16 (+2 Dex, +4 natural)
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
                 new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }

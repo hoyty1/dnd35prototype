@@ -126,8 +126,8 @@ public static class PoisonDatabase
             Name = "Giant Bee Poison",
             Type = PoisonType.Injury,
             FortitudeDC = 11,
-            InitialDamage = Damage(AbilityType.DEX, "1d4"),
-            SecondaryDamage = Damage(AbilityType.DEX, "1d4"),
+            InitialDamage = Damage(AbilityType.CON, "1d4"), // MM p.284: 1d4 Con initial and secondary
+            SecondaryDamage = Damage(AbilityType.CON, "1d4"),
             PriceInGold = 0,
             Description = "Venom delivered by a giant bee sting."
         };

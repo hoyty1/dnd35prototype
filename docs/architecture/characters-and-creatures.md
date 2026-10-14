@@ -210,7 +210,7 @@ Conventions: IDs are lowercase snake_case (`dragon_red_young`, `monstrous_spider
 Counts (static, not verified at runtime; the log line "[NPCDatabase] Initialized with N NPC types" is authoritative): about 389 unique IDs, including 46 custom, 60 dragons, 8 skeletons, 7 zombies and 8 lycanthropes; 87 encounter presets (55 core, 15 dragon, 5 skeleton, 5 zombie, 7 lycanthrope).
 
 **ID collisions.** `Register` (L212) and `RegisterExternal` overwrite silently, so the last registration in `Init` order wins:
-- Summon aliases run last and replace real entries: badger, giant_bee, riding_dog, owl and raven become clones of dire_badger, dire_bat, dog, eagle and eagle **[KI]**. Only the `wolf` alias adds a new ID.
+- Summon aliases run last in `Init`; the only one is `wolf` (a clone of wolf_pack_hunter), and `RegisterSummonAlias` skips an ID that already has an entry, so badger, giant_bee, riding_dog, owl and raven keep their own MM entries (CRE-003, fixed 2026-10-14).
 - dretch (two registrations in NPCDatabase_D.cs), monstrous_centipede_medium (C vs M), monstrous_scorpion_small and monstrous_spider_small (M vs S), skeleton_archer (custom vs SkeletonFactory).
 - Same creature under two IDs: large_viper / viper_large, huge_monstrous_centipede / monstrous_centipede_huge.
 
@@ -218,7 +218,7 @@ Grep for `"<new_id>"` (not only `Id = "<new_id>"`: the monstrous centipede/scorp
 
 ### From definition to live combatant
 
-`GameManager.InitializeNPCFromDefinition` (_Core/GameManager.NPCSetup.cs, `internal`) is the only path that turns an NPCDefinition into a combatant. It has two call sites (SetupEnemyEncounter and SpawnSummonedCreature) and three entry paths; the test presets and the scenario harness (`Harness_SpawnEnemies`) go through SetupEnemyEncounter. Encounter spawns reuse the pre-placed `GameManager.NPCs` objects that SceneBootstrap builds once (slots beyond the enemy count are deactivated); summons create a new GameObject with a CharacterController. `LionsShieldBehavior` builds its lion through its own copy of the setup on a new GameObject (CRE-005).
+`GameManager.InitializeNPCFromDefinition` (_Core/GameManager.NPCSetup.cs, `internal`) is the only path that turns an NPCDefinition into a combatant. It has two call sites (SetupEnemyEncounter and SpawnSummonedCreature) and three entry paths; the test presets and the scenario harness (`Harness_SpawnEnemies`) go through SetupEnemyEncounter, and the harness reaches SpawnSummonedCreature through `Harness_SpawnSummonedCreature`. Encounter spawns reuse the pre-placed `GameManager.NPCs` objects that SceneBootstrap builds once (slots beyond the enemy count are deactivated); summons create a new GameObject with a CharacterController. `LionsShieldBehavior` builds its lion through its own copy of the setup on a new GameObject (CRE-005).
 
 ```
 encounter:  SetupEnemyEncounter (NPCSetup.cs:128) -> NPCDatabase.Get -> BuildEncounterDefinitionForSpawn

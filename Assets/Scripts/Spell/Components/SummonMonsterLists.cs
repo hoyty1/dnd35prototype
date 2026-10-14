@@ -490,10 +490,10 @@ public static class SummonMonsterLists
             new SummonMonsterOption { DisplayName = "Eagle", NpcDefinitionId = "eagle" },
             new SummonMonsterOption { DisplayName = "Monkey", NpcDefinitionId = "monkey" },
             new SummonMonsterOption { DisplayName = "Octopus", NpcDefinitionId = "octopus" },              // Aquatic
-            new SummonMonsterOption { DisplayName = "Owl", NpcDefinitionId = "owl" },                       // Note: owl alias uses eagle stats — fix in Phase 6
+            new SummonMonsterOption { DisplayName = "Owl", NpcDefinitionId = "owl" },                       // MM p.277 owl (CRE-003)
             // MISSING: Porpoise — needs NPCDatabase entry (aquatic, swim-only)
             new SummonMonsterOption { DisplayName = "Snake, Small Viper", NpcDefinitionId = "viper_small" },
-            new SummonMonsterOption { DisplayName = "Wolf", NpcDefinitionId = "wolf" },                     // Alias → wolf_pack_hunter
+            new SummonMonsterOption { DisplayName = "Wolf", NpcDefinitionId = "wolf" },                     // Alias of wolf_pack_hunter (MM p.283)
         };
     }
 

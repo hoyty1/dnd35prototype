@@ -235,20 +235,26 @@ public static partial class NPCDatabase
         _npcs.Remove(id);
     }
 
+    /// <summary>
+    /// Summon-list IDs that have no entry of their own. Only <c>wolf</c> (the MM p.283 wolf, stored as
+    /// wolf_pack_hunter) needs one. The badger, riding_dog, owl, raven and giant_bee IDs that the Summon Monster
+    /// lists (PHB p.287), wondrous items and presets name are their own Monster Manual entries (MM p.268, p.272,
+    /// p.277, p.278, p.284), so they have no alias (CRE-003).
+    /// </summary>
     private static void RegisterSummonCreatureAliases()
     {
         RegisterSummonAlias("wolf", "wolf_pack_hunter", "Wolf");
-        RegisterSummonAlias("badger", "dire_badger", "Badger");
-
-        // These IDs are used by external validation scripts; map to closest existing summon baselines.
-        RegisterSummonAlias("riding_dog", "dog", "Riding Dog");
-        RegisterSummonAlias("owl", "eagle", "Owl");
-        RegisterSummonAlias("raven", "eagle", "Raven");
-        RegisterSummonAlias("giant_bee", "dire_bat", "Giant Bee");
     }
 
     private static void RegisterSummonAlias(string aliasId, string sourceId, string overrideName = null)
     {
+        // An alias never replaces a real entry: the ID would otherwise get another creature's statistics (CRE-003).
+        if (_npcs.ContainsKey(aliasId))
+        {
+            Debug.LogWarning($"[NPCDatabase] Summon alias '{aliasId}' skipped: an entry with that ID already exists.");
+            return;
+        }
+
         NPCDefinition source = Get(sourceId);
         if (source == null)
             return;

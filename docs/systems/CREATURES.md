@@ -16,7 +16,7 @@ Nothing below was checked in Play mode. Counts come from running `NPCDatabase.In
 | True dragons, 10 types x 6 ages | 60 | DragonData.cs + NPCDatabase_Dragons.cs (`BuildDragonDefinition`) |
 | Pre-templated undead and lycanthropes | 23 | SkeletonFactory (8), ZombieFactory (7), LycanthropeFactory (8) |
 | Custom, test and scenario NPCs | 45 | NPCDatabaseCustom.cs (46 registrations; its `skeleton_archer` is overwritten by SkeletonFactory) |
-| Summon aliases | 6 | `NPCDatabase.RegisterSummonCreatureAliases`. 5 of them overwrite real entries (CRE-003); only `wolf` is a new ID |
+| Summon aliases | 1 | `NPCDatabase.RegisterSummonCreatureAliases`: `wolf` (a clone of wolf_pack_hunter, the MM p.283 wolf). `RegisterSummonAlias` skips an ID that already has an entry; the five aliases that overwrote badger, riding_dog, owl, raven and giant_bee were removed 2026-10-14 (CRE-003) |
 | **Total** | **389** | |
 
 NPCDatabaseCustom.cs is not only test data. brown_bear, dire_bear, dire_tiger, dire_wolf, tiger and wolf_pack_hunter (the MM wolf) live there too.
@@ -46,9 +46,9 @@ The Dragon row includes the wyvern. The "Humanoid" 11+ entry is werewolf_lord (C
 
 ### Coverage notes
 
-- **Random-encounter pool.** `RandomEncounterSystem.BuildCandidates` keeps only NPCs that have a parseable CR and no "SummonBase", "SummonAlias" or "Summoned" tag, and whose ID does not contain "summon". That leaves 295 candidates. The tag filter also removes 48 entries that have a CR: the 5 aliases with a CR (badger, giant_bee, owl, raven, riding_dog) and 43 real creatures tagged "SummonBase" because they were added for summon lists: ape, bison, black_bear, boar, crocodile, hell_hound, hippogriff, lantern_archon, satyr, unicorn, wolverine, all small and medium elementals, all 10 mephits, noble_djinni and others. They can never appear in a CR/EL-generated encounter (ENC-020).
+- **Random-encounter pool.** `RandomEncounterSystem.BuildCandidates` keeps only NPCs that have a parseable CR and no "SummonBase", "SummonAlias" or "Summoned" tag, and whose ID does not contain "summon". That leaves 300 candidates (counted in the editor on 2026-10-14, after CRE-003 made badger, giant_bee, owl, raven and riding_dog their own MM entries instead of summon aliases). The tag filter also removes 43 entries that have a CR, all real creatures tagged "SummonBase" because they were added for summon lists: ape, bison, black_bear, boar, crocodile, hell_hound, hippogriff, lantern_archon, satyr, unicorn, wolverine, all small and medium elementals, all 10 mephits, noble_djinni and others. They can never appear in a CR/EL-generated encounter (ENC-020).
 - **Missing CR.** octopus, small_viper and monstrous_centipede_medium (the summon version from NPCDatabase_M.cs wins the ID collision) have no ChallengeRating. Neither do the MM animals in the custom file (brown_bear, dire_bear, dire_tiger, tiger, wolf_pack_hunter). None of them can be generated randomly. They still give XP: the live award (`ExperienceCalculator.GetChallengeRating`, called from GameManager.LootCollection.cs) falls back to CR = character level when the CR does not parse; only the `TotalEncounterXPDefeated` statistic in `GameManager.RegisterCombatLoopCompletion` skips them. Conversely, xp_pinata_goblin (CR 15) and mirror_image_test_goblin are random candidates.
-- **ID collisions and duplicates:** CRE-003 and CRE-022 (dretch, the monstrous vermin sizes, skeleton_archer; large_viper/viper_large).
+- **ID collisions and duplicates:** CRE-022 (dretch, the monstrous vermin sizes, skeleton_archer; large_viper/viper_large). Summon aliases no longer overwrite entries (CRE-003, fixed 2026-10-14).
 - **Alignment.** Spawned NPCs get their definition's `CharacterAlignment` (CRE-002, fixed 2026-10-08), but 212 of the 389 registered definitions set none and spawn unaligned, among them all 60 dragons, the animals and vermin, the goblin and the gnoll (CRE-056; counted in the editor on 2026-10-08).
 - **Movement modes.** There are no fly, swim, climb or burrow fields. `BaseSpeed` is in 5-ft squares and the fastest mode is folded into it. A "Fly" tag is read in only a few places, and the "Aquatic" tag is read nowhere, so octopus, large_shark and crocodile walk on land.
 - **Class levels.** 334 of the 389 runtime entries carry `CharacterClass = "Warrior"` as a placeholder for racial HD (CRE-024). See section 7 for the side effects.
@@ -255,13 +255,13 @@ All missing entries are aquatic. The SNA gaps are CRE-021. Octopus and large_sha
 - **Control.** Allied summons are spawned controllable (`ConfigureTeamControl(team, controllable: alliedToPlayer)`) and take full player turns. The right-click menu (`ShowSummonContextMenu`) sets `SummonCommandType.AttackNearest` or `ProtectCaster`, or dismisses the summon. Commands are refused for Summon Swarm and non-controllable summons, so in practice they do nothing (CRE-032). `AI_SummonedCreature` (GameManager.NPCTurns.cs) runs only for non-controllable summons. It targets by command via `AIService.SelectSummonTarget`, retreats at 30% HP or below, advances, trips, smites once and attacks. Its smite (`TryExecuteSummonSmiteAttack`: +CHA mod +2 to hit, +Level +2 damage) differs from the 3.5e values (+CHA mod to hit, +HD damage) in `GameManager.ExecuteTemplateSmiteAttack`, Combat/Special/TemplateSmiteSystem.cs (a GameManager partial, not a class).
 
 **Known summoning issues.**
-- Aliases overwrite badger, giant_bee, riding_dog, owl and raven, so SM I and II and SNA I's owl get the wrong stat blocks (CRE-003). The wolf alias is fine; wolf_pack_hunter matches the MM wolf.
 - `large_viper` (SM III, poisonous) and `viper_large` (SNA III, poison as text only) are the same creature (CRE-022).
 - Despawned summons pile up in `NPCs` (CRE-006). The Lion's Shield lion uses the orphaned `SummoningService` (CRE-005).
+- Templated vermin summons (the celestial giant bee, fire beetle, bombardier beetle; the fiendish monstrous vermin, praying mantis and wasp) stay mindless and immune to mind-affecting spells, because the template neither clears `IsMindless` nor makes them magical beasts (CRE-008). The celestial giant bee does not die after its first successful sting (CRE-065), and the fiendish raven counts as 1 HD instead of 1/4 (CRE-066).
 - The Ring of Djinni Calling only sets a flag. Bag of Tricks, elemental gems and figurines are data and tooltips only. No item summons are live.
 - **NPCs cannot summon.** `AISpellcastingStrategist` scores summon spells, but `SpawnSummonedCreature` is reachable only from the player targeting flow. Summon Monster's EffectType is Buff, not Summon, so the strategist's `EffectType == Summon` checks miss it anyway.
 - **Smaller problems.** The selection dialog says "SUMMON MONSTER" for SNA too. Rangers get only SNA I (the PHB gives SNA I-IV). Staff stubs use `summon_natures_ally_vi`/`summon_monster_ix`, which do not match the regex. Fire elemental burn and unicorn SLAs are text only.
-- **Tests.** `summon_monster_test` preset; Tests/Magic/SummonMonsterAlignmentRulesTests.cs and SummonMonster3CreaturesTests.cs. There are no SNA tests. Tests read `_activeSummons` by reflection, so renaming that field breaks them silently.
+- **Tests.** `summon_monster_test` preset; Tests/Magic/SummonMonsterAlignmentRulesTests.cs, SummonMonster3CreaturesTests.cs and Tests/Character/SummonCreatureEntryTests.cs; the rules scenario `rules/summon-creature-entries` spawns SM I-II and SNA I options through the real `SpawnSummonedCreature` (harness wrapper `Harness_SpawnSummonedCreature`). SNA is tested only by that scenario's SNA I owl and the option-ID check of `SummonCreatureEntryTests`. Tests read `_activeSummons` by reflection, so renaming that field breaks them silently.
 
 ## 7. NPC classes and NPCs by level
 
@@ -339,7 +339,6 @@ Ordered by impact on "fights play like 3.5e".
 
 1. **Spawn correctness first.**
    - Give every definition its MM alignment (CRE-056; the spawn copies it since CRE-002 was fixed).
-   - Delete the overwriting summon aliases (CRE-003).
    - Change Undead to Poor BAB (CRE-009).
    - Fix celestial and fiendish to MM values (CRE-008).
 2. **Make existing ability data execute.**

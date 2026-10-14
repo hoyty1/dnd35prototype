@@ -585,6 +585,34 @@ public partial class GameManager
         }
     }
 
+    /// <summary>
+    /// The game's summon spawn, <see cref="SpawnSummonedCreature"/>, the one path a PC's and an NPC's Summon Monster or
+    /// Summon Nature's Ally takes: template, runtime id and name, tags, team, alignment and Augment Summoning. The creature
+    /// joins <see cref="NPCs"/> and the summon trackers but not the initiative order or the active summon list (the cast
+    /// pipeline adds those). Pair with <see cref="Harness_DespawnSummon"/>.
+    /// </summary>
+    internal CharacterController Harness_SpawnSummonedCreature(CharacterController caster, Vector2Int cell, SummonMonsterOption option)
+    {
+        return SpawnSummonedCreature(caster, cell, option);
+    }
+
+    /// <summary>
+    /// Takes a summon made by <see cref="Harness_SpawnSummonedCreature"/> out of play at once: off the grid, out of the
+    /// summon trackers, the initiative order, <see cref="NPCs"/> and the parallel AI behaviour list (AI-015), then a
+    /// deferred Destroy.
+    /// </summary>
+    internal void Harness_DespawnSummon(CharacterController summon)
+    {
+        if (summon == null)
+            return;
+
+        _activeSummons.RemoveAll(s => s != null && s.Controller == summon);
+        _summonedAllies.Remove(summon);
+        _summonedEnemies.Remove(summon);
+        _turnService?.RemoveFromInitiative(summon);
+        Harness_RemoveSpawnedController(summon);
+    }
+
     private void Harness_RemoveSpawnedController(CharacterController cc)
     {
         if (cc == null)

@@ -260,6 +260,7 @@ namespace Tests.Scenarios
             yield return S("class-progression", ClassProgressionHpBabHd);
             yield return S("creature-progression", CreatureProgression);
             yield return S("template-applied-once", TemplateAppliedOnce);
+            yield return S("summon-creature-entries", SummonCreatureEntries);
             yield return S("spell-save-dc", SpellSaveDc);
             yield return S("save-bonuses", SaveBonuses);
             yield return S("spell-durations", SpellDurations);
@@ -5762,6 +5763,122 @@ namespace Tests.Scenarios
                 }))
                 .Expect("Every template is applied once at spawn", Expect.AssertsPass())
                 .Build();
+        }
+
+        /// <summary>
+        /// The creature IDs of the Summon Monster lists (PHB p.287) spawn their own Monster Manual creatures (CRE-003).
+        /// Before the fix a summon alias registered last replaced badger, riding_dog, owl, raven and giant_bee with
+        /// clones of dire_badger, dog, eagle and the Large dire_bat. Through the encounter spawn the five plain entries
+        /// match MM p.268, p.272, p.277, p.278 and p.284 (size, HD, hp, Str, Dex, natural armor, first natural attack);
+        /// through the game's summon spawn (GameManager.SpawnSummonedCreature, called through the harness partial with the
+        /// party fighter as caster) the celestial owl, badger, giant bee and riding dog, the fiendish raven and Summon
+        /// Nature's Ally I's plain owl keep their base creature's size, HD and attacks, join the caster's team, carry the
+        /// template's alignment and smite, and are despawned again. Template-dependent figures (Str, Con, hp) are left to
+        /// CRE-008. PCs and NPCs share this path.
+        /// </summary>
+        private static ScenarioDef SummonCreatureEntries()
+        {
+            return Rules("rules/summon-creature-entries", "Summon-list IDs spawn their own MM creatures, not alias clones (MM p.268, p.272, p.277, p.278, p.284; CRE-003)")
+                .Covers("CRE-003", "MM p.268", "MM p.272", "MM p.277", "MM p.278", "MM p.284", "PHB p.287", "PC_NPC_PARITY")
+                .MaxRounds(1)
+                .Pc("dummy", ActorSource.Stats(() => Fighter("Dummy", 1)), 10, 10, Control.Scripted)
+                .Npc("badger", "badger", 16, 4, Control.Idle)
+                .Npc("ridingdog", "riding_dog", 16, 7, Control.Idle)
+                .Npc("owl", "owl", 16, 10, Control.Idle)
+                .Npc("raven", "raven", 16, 12, Control.Idle)
+                .Npc("bee", "giant_bee", 16, 14, Control.Idle)
+                .Initiative("dummy", "badger", "ridingdog", "owl", "raven", "bee")
+                .Turn("dummy", 1, Step.Assert("The summon-list IDs spawn their own MM stat blocks, plain and templated", ctx =>
+                {
+                    bool ok = true;
+                    // Encounter spawn of the plain entries.
+                    ok &= SummonEntryCheck(ctx, "badger (MM p.268)", ctx.Get("badger").Stats, SizeCategory.Small, 1, 6, 8, 17, 1, "Claw", 2);
+                    ok &= SummonEntryCheck(ctx, "riding dog (MM p.272)", ctx.Get("ridingdog").Stats, SizeCategory.Medium, 2, 13, 15, 15, 4, "Bite", 6);
+                    ok &= SummonEntryCheck(ctx, "owl (MM p.277)", ctx.Get("owl").Stats, SizeCategory.Tiny, 1, 4, 4, 17, 2, "Talons", 4);
+                    ok &= SummonEntryCheck(ctx, "raven (MM p.278)", ctx.Get("raven").Stats, SizeCategory.Tiny, 1, 1, 1, 15, 0, "Claws", 2);
+                    ok &= SummonEntryCheck(ctx, "giant bee (MM p.284)", ctx.Get("bee").Stats, SizeCategory.Medium, 3, 13, 11, 14, 2, "Sting", 4);
+                    // The summon definition path, with each option's template.
+                    ok &= SummonOptionCheck(ctx, 1, false, "Owl", "celestial", SizeCategory.Tiny, 1, "Talons", 4, 17);
+                    ok &= SummonOptionCheck(ctx, 1, false, "Badger", "celestial", SizeCategory.Small, 1, "Claw", 2, 17);
+                    ok &= SummonOptionCheck(ctx, 1, false, "Raven", "fiendish", SizeCategory.Tiny, 1, "Claws", 2, null);
+                    ok &= SummonOptionCheck(ctx, 2, false, "Giant Bee", "celestial", SizeCategory.Medium, 3, "Sting", 4, 14);
+                    ok &= SummonOptionCheck(ctx, 2, false, "Riding Dog", "celestial", SizeCategory.Medium, 2, "Bite", 6, 15);
+                    ok &= SummonOptionCheck(ctx, 1, true, "Owl", null, SizeCategory.Tiny, 1, "Talons", 4, 17);
+                    ctx.Note("summon-creature-entries owl-size=" + ctx.Get("owl").Stats.CurrentSizeCategory
+                             + " bee-hd=" + ctx.Get("bee").Stats.GetHitDice() + " badger-hp=" + ctx.Get("badger").Stats.MaxHP);
+                    return ok;
+                }))
+                .Expect("Every summon-list ID spawns its own MM creature", Expect.AssertsPass())
+                .Build();
+        }
+
+        /// <summary>Checks a spawned creature's size, HD, max hp, Str, Dex (each when given), natural armor and first natural attack.</summary>
+        private static bool SummonEntryCheck(ScenarioContext ctx, string what, CharacterStats s, SizeCategory size, int hd,
+            int? hp, int? str, int? dex, int? naturalArmor, string attackName, int attackDice)
+        {
+            var bad = new List<string>();
+            if (s.CurrentSizeCategory != size) bad.Add("size " + s.CurrentSizeCategory + " (want " + size + ")");
+            if (s.GetHitDice() != hd) bad.Add("HD " + s.GetHitDice() + " (want " + hd + ")");
+            if (hp.HasValue && s.MaxHP != hp.Value) bad.Add("hp " + s.MaxHP + " (want " + hp.Value + ")");
+            if (str.HasValue && s.STR != str.Value) bad.Add("Str " + s.STR + " (want " + str.Value + ")");
+            if (dex.HasValue && s.DEX != dex.Value) bad.Add("Dex " + s.DEX + " (want " + dex.Value + ")");
+            if (naturalArmor.HasValue && s.NaturalArmorBonus != naturalArmor.Value) bad.Add("natural armor " + s.NaturalArmorBonus + " (want " + naturalArmor.Value + ")");
+            NaturalAttackDefinition first = s.NaturalAttacks != null && s.NaturalAttacks.Count > 0 ? s.NaturalAttacks[0] : null;
+            if (first == null || first.Name != attackName || first.DamageDice != attackDice)
+                bad.Add("attack " + (first == null ? "none" : first.Name + " 1d" + first.DamageDice) + " (want " + attackName + " 1d" + attackDice + ")");
+            if (bad.Count == 0)
+                return true;
+            ctx.Note("summon-creature-entries mismatch: " + what + ": " + string.Join(", ", bad));
+            return false;
+        }
+
+        /// <summary>
+        /// Spawns a summon option's creature off the grid through the game's own GameManager.SpawnSummonedCreature (harness
+        /// wrapper), checks its base creature's figures, team, alignment and template smite, then despawns it.
+        /// </summary>
+        private static bool SummonOptionCheck(ScenarioContext ctx, int listLevel, bool naturesAlly, string displayName, string templateId,
+            SizeCategory size, int hd, string attackName, int attackDice, int? dex)
+        {
+            string what = (naturesAlly ? "SNA " : "SM ") + listLevel + " " + displayName;
+            // A wizard is unrestricted by alignment (PHB p.287), so every option is offered.
+            CharacterStats wizard = new CharacterStats("Scenario Wizard", 1, "Wizard", 10, 10, 10, 10, 10, 10, 0, 0, 0, 6, 1, 0, 6, 1, 8);
+            SummonMonsterOption option = SummonMonsterLists.GetFilteredOptionsForListLevel(listLevel, wizard, naturesAlly)
+                .FirstOrDefault(o => o.DisplayName == displayName);
+            if (option == null || option.TemplateId != templateId)
+            {
+                ctx.Note("summon-creature-entries mismatch: " + what + ": option " + (option == null ? "missing" : "template " + option.TemplateId));
+                return false;
+            }
+            // The game's own summon spawn, with the scenario's party fighter as the caster, off the grid.
+            CharacterController caster = ctx.Get("dummy");
+            CharacterController cc = ctx.Gm.Harness_SpawnSummonedCreature(caster, new Vector2Int(-60, -60), option);
+            if (cc == null || cc.Stats == null)
+            {
+                ctx.Note("summon-creature-entries mismatch: " + what + ": SpawnSummonedCreature returned no creature");
+                return false;
+            }
+            try
+            {
+                bool ok = SummonEntryCheck(ctx, what, cc.Stats, size, hd, null, null, dex, null, attackName, attackDice);
+                var bad = new List<string>();
+                if (cc.Team != caster.Team) bad.Add("team " + cc.Team + " (want the caster's " + caster.Team + ")");
+                Alignment al = cc.Stats.CharacterAlignment;
+                if (templateId == "celestial" && !AlignmentHelper.IsGood(al)) bad.Add("alignment " + al + " (want good)");
+                if (templateId == "fiendish" && !AlignmentHelper.IsEvil(al)) bad.Add("alignment " + al + " (want evil)");
+                // The template's smite (MM p.31, p.108) shows it was applied; a plain summon has neither.
+                if (cc.Stats.HasTemplateSmiteEvil != (templateId == "celestial")) bad.Add("smite evil " + cc.Stats.HasTemplateSmiteEvil);
+                if (cc.Stats.HasTemplateSmiteGood != (templateId == "fiendish")) bad.Add("smite good " + cc.Stats.HasTemplateSmiteGood);
+                if (bad.Count > 0)
+                {
+                    ctx.Note("summon-creature-entries mismatch: " + what + ": " + string.Join(", ", bad));
+                    ok = false;
+                }
+                return ok;
+            }
+            finally
+            {
+                ctx.Gm.Harness_DespawnSummon(cc);
+            }
         }
 
         /// <summary>Passes when the traced actor has the Hit Dice, racial Hit Dice, BAB and base saves given.</summary>

@@ -139,6 +139,17 @@
       "notes": "CRE-001: a template is applied to a creature once (MM p.291, p.293): every factory-built skeleton, zombie and lycanthrope entry records its template in BakedTemplateIds and passes through CreatureTemplateRegistry.ApplyTemplatesClone unchanged, and every entry naming one of those templates has it baked; a second registry call changes no templated database entry; human warrior skeleton Dex 13 (MM p.226), bugbear zombie 6 HD, Str 17, Dex 10 (MM p.267); fiendish_wolf applies its requested template once; a refused celestial template (CRE-057) is not baked; Clone copies the list; a factory template (SkeletonTemplate.Apply and the skeleton adapter) keeps a template baked before it in both lists. Pure data, no scene"
     },
     {
+      "type": "Tests.Character.SummonCreatureEntryTests",
+      "needs": "either",
+      "skip": "",
+      "expectThrow": "",
+      "passed": 52,
+      "failed": 0,
+      "flakyFailures": 0,
+      "knownFailures": [],
+      "notes": "CRE-003: the summon-list IDs badger, riding_dog, owl, raven and giant_bee are their own MM entries (MM p.268, p.272, p.277, p.278, p.284: size, CR, HD and hp, abilities, natural armor, attacks, feats; the giant bee mindless with its 1d4 Con poison), not summon-alias clones; wolf (MM p.283) is the only alias; every Summon Monster and Summon Nature's Ally option names its own entry; NPCDatabase.RegisterSummonAlias never replaces an existing entry (reflection; restores the owl if it did). Pure data, no scene"
+    },
+    {
       "type": "Tests.Character.DeityAlignmentRestrictionTests",
       "needs": "either",
       "skip": "",

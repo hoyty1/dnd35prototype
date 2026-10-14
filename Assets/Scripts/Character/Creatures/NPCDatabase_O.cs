@@ -77,7 +77,7 @@ public static partial class NPCDatabase
         {
             Id = "owl",
             Name = "Owl",
-            ChallengeRating = "1/3",
+            ChallengeRating = "1/4", // MM p.277
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -93,8 +93,8 @@ public static partial class NPCDatabase
             BaseSpeed = 2,
             BaseHitDieHP = 4,
             CreatureTags = new List<string> { "Animal", "MM35", "Fly" },
-            Feats = new List<string> { "Weapon Finesse" },
-            SpecialAbilities = new List<string> { "Low-light vision", "Fly 40 ft (average)", "Skills: Listen +14, Move Silently +17, Spot +6" },
+            Feats = new List<string> { "Alertness", "Weapon Finesse" }, // MM p.277: Alertness, Weapon Finesse (bonus)
+            SpecialAbilities = new List<string> { "Low-light vision", "Fly 40 ft (average)", "Skills: Listen +16, Move Silently +17, Spot +8 (+16 in shadowy illumination)" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.76f, 0.7f, 0.6f, 1f),
             PanelColor = new Color(0.2f, 0.16f, 0.12f, 0.85f),

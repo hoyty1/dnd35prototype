@@ -91,8 +91,8 @@ public static partial class NPCDatabase
             BaseSpeed = 2,
             BaseHitDieHP = 1,
             CreatureTags = new List<string> { "Animal", "MM35", "Fly" },
-            Feats = new List<string> { "Weapon Finesse" },
-            SpecialAbilities = new List<string> { "Low-light vision", "Fly 40 ft (average)", "Skills: Listen +3, Spot +5" },
+            Feats = new List<string> { "Alertness", "Weapon Finesse" }, // MM p.278: Alertness, Weapon Finesse (bonus)
+            SpecialAbilities = new List<string> { "Low-light vision", "Fly 40 ft (average)", "Skills: Listen +5, Spot +7" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.24f, 0.24f, 0.28f, 1f),
             PanelColor = new Color(0.1f, 0.1f, 0.14f, 0.85f),

@@ -56,9 +56,9 @@ public static partial class NPCDatabase
             BaseSpeed = 6,
             BaseHitDieHP = 6,
             CreatureTags = new List<string> { "Animal", "MM35", "Burrow" },
-            Feats = new List<string> { "Agile", "Track", "Multiattack" },
+            Feats = new List<string> { "Track", "Multiattack" }, // MM p.268: Multiattack, Track (bonus)
             HasScent = true,
-            SpecialAbilities = new List<string> { "Low-light vision", "Scent", "Rage (as barbarian)", "Burrow 10 ft", "Skills: Balance +5, Escape Artist +9, Listen +3, Spot +3" },
+            SpecialAbilities = new List<string> { "Low-light vision", "Scent", "Rage (as barbarian)", "Burrow 10 ft", "Skills: Escape Artist +7, Listen +3, Spot +3" },
             AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.62f, 0.55f, 0.52f, 1f),
             PanelColor = new Color(0.22f, 0.19f, 0.18f, 0.85f),
@@ -172,9 +172,10 @@ public static partial class NPCDatabase
             HitDice = 3,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
-            STR = 11, DEX = 11, CON = 14, WIS = 10, INT = 1, CHA = 9,
+            // MM p.284: Str 11, Dex 14, Con 11, Int -, Wis 12, Cha 9; AC 14 (+2 Dex, +2 natural); 3d8 (13 hp); no feats.
+            STR = 11, DEX = 14, CON = 11, WIS = 12, INT = CharacterStats.NO_SCORE, CHA = 9,
             BAB = 2,
-            NaturalArmorBonus = 4,
+            NaturalArmorBonus = 2,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
                 new NaturalAttackDefinition
@@ -189,13 +190,14 @@ public static partial class NPCDatabase
                     PoisonOnHitId = "giant_bee_poison"
                 }
             },
-            BaseSpeed = 4,
-            BaseHitDieHP = 19,
+            BaseSpeed = 4, // 20 ft., fly 80 ft. (good)
+            BaseHitDieHP = 13, // 3d8
+            IsMindless = true,
+            Immunities = ImmunityPresets.MindlessImmunities(),
             CreatureTags = new List<string> { "Vermin", "MM35", "Fly" },
-            Feats = new List<string> { "Weapon Finesse" },
             SpecialAbilities = new List<string>
             {
-                "Poison (Fort DC 11; initial 1d4 Dex; secondary 1d4 Dex)",
+                "Poison (Fort DC 11; initial 1d4 Con; secondary 1d4 Con)",
                 "Fly 80 ft (good)",
                 "Darkvision 60 ft",
                 "Vermin traits",
@@ -205,7 +207,7 @@ public static partial class NPCDatabase
             SpriteColor = new Color(0.95f, 0.78f, 0.2f, 1f),
             PanelColor = new Color(0.24f, 0.18f, 0.06f, 0.85f),
             NameColor = new Color(1f, 0.92f, 0.62f),
-            Description = "Monster Manual giant bee. Flying vermin with a venomous sting that inflicts Dexterity damage."
+            Description = "Monster Manual giant bee. Flying vermin whose sting deals Constitution damage (MM p.284); a bee that stings successfully dies, which is not modelled yet (CRE-065)."
         });
     }
 
